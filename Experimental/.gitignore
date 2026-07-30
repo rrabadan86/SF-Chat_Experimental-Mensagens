@@ -6,6 +6,8 @@ logs/
 chrome-profile/
 whatsapp-chrome-data/
 evo-chrome-data/
+instagram-chrome-data/
+instagram-login-*.png
 # Credenciais (conta de serviço do Google) — NUNCA versionar
 service-account.json
 *service-account*.json
