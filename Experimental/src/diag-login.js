@@ -43,8 +43,9 @@ async function snapshot(page, rotulo) {
     await scraper.login();
     await snapshot(scraper.page, 'DEPOIS DO LOGIN');
 
-    // Repete a MESMA navegação que o fluxo real faz
-    const url = `${config.evo.url}/${config.evo.experimentalPath}`;
+    // Usa o domínio autenticado (evo-abc-sec) capturado no login
+    const base = scraper.appOrigin || config.evo.url;
+    const url = `${base}/${config.evo.experimentalPath}`;
     console.log(`\n➡️  Navegando (page.goto) para: ${url}`);
     await scraper.page.goto(url, { waitUntil: 'networkidle2' });
     await scraper.sleep(4000);

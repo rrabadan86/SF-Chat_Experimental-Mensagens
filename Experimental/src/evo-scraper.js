@@ -45,6 +45,10 @@ class EvoScraper {
   constructor() {
     this.browser = null;
     this.page = null;
+    // Domínio real do app após o login (ex.: evo-abc-sec.w12app.com.br).
+    // O authToken fica no localStorage DESSE domínio — todas as navegações
+    // seguintes precisam usá-lo, senão a sessão "cai" para a tela de login.
+    this.appOrigin = null;
   }
 
   /**
@@ -224,6 +228,17 @@ class EvoScraper {
     );
 
     await this.sleep(3000);
+
+    // O EVO redireciona para o domínio real do app após o login
+    // (ex.: evo5 -> evo-abc-sec). Capturamos esse domínio para navegar as
+    // próximas páginas NELE — é onde o evo.authToken vive no localStorage.
+    try {
+      this.appOrigin = new URL(this.page.url()).origin;
+      console.log(`   🔗 Domínio autenticado: ${this.appOrigin}`);
+    } catch (_) {
+      this.appOrigin = null;
+    }
+
     console.log('✅ Login realizado com sucesso!');
   }
 
@@ -231,7 +246,10 @@ class EvoScraper {
    * Navega para a página de aulas experimentais
    */
   async navigateToExperimental() {
-    const url = `${config.evo.url}/${config.evo.experimentalPath}`;
+    // Usa o domínio autenticado capturado no login (evo-abc-sec), não o de
+    // entrada (evo5) — senão a sessão cai por causa do localStorage isolado.
+    const base = this.appOrigin || config.evo.url;
+    const url = `${base}/${config.evo.experimentalPath}`;
     console.log(`📋 Navegando para aulas experimentais...`);
 
     await this.page.goto(url, { waitUntil: 'networkidle2' });
