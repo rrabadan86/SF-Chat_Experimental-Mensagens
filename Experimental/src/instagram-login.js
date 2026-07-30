@@ -83,8 +83,9 @@ async function estaLogado(page) {
     await sleep(5000);
 
     // Aceita cookies se aparecer
-    await clicarPorTexto(page, ['permitir todos os cookies', 'allow all cookies', 'permitir todos']);
-    await sleep(1500);
+    await clicarPorTexto(page, ['permitir todos os cookies', 'allow all cookies', 'permitir todos', 'aceitar', 'accept']);
+    await sleep(2000);
+    await shot(page, 'instagram-login-2-loginpage.png');
 
     // Se pediram um código de verificação (2FA/challenge) numa execução anterior:
     if (CODE) {
@@ -99,8 +100,30 @@ async function estaLogado(page) {
         console.log('⚠️  --code informado, mas não achei o campo de código nesta tela.');
       }
     } else {
-      // 3) Preenche usuário e senha
-      await page.waitForSelector('input[name="username"]', { timeout: 30000 });
+      // 3) Espera o formulário aparecer (até 40s), com diagnóstico se falhar.
+      let temCampo = false;
+      const deadline = Date.now() + 40000;
+      while (Date.now() < deadline) {
+        temCampo = await page.$('input[name="username"]').then(Boolean);
+        if (temCampo) break;
+        await clicarPorTexto(page, ['permitir todos os cookies', 'allow all cookies', 'aceitar', 'accept', 'agora nao', 'not now']);
+        await sleep(2000);
+      }
+      if (!temCampo) {
+        const info = await page.evaluate(() => ({
+          url: location.href,
+          txt: (document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 400),
+          inputs: Array.from(document.querySelectorAll('input')).map(i => i.name || i.type),
+        }));
+        console.log('⚠️  Campo de usuário não apareceu.');
+        console.log('   URL :', info.url);
+        console.log('   Inputs na página:', JSON.stringify(info.inputs));
+        console.log('   Texto:', JSON.stringify(info.txt));
+        await shot(page, 'instagram-login-2b-sem-campo.png');
+        throw new Error('formulário de login não apareceu — veja instagram-login-2b-sem-campo.png');
+      }
+
+      // 4) Preenche usuário e senha
       await page.type('input[name="username"]', IG_USERNAME, { delay: 60 });
       await page.type('input[name="password"]', IG_PASSWORD, { delay: 60 });
       await shot(page, 'instagram-login-2-preenchido.png');
