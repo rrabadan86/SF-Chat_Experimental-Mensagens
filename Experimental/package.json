@@ -1,0 +1,25 @@
+{
+  "name": "slimfit-experimental-confirmation",
+  "version": "1.0.0",
+  "description": "Automação de confirmação de aulas experimentais via WhatsApp - Studio Slimfit Setor Bueno",
+  "main": "src/scheduler.js",
+  "scripts": {
+    "start": "node src/scheduler.js",
+    "test:scrape": "node src/run-now.js scrape",
+    "test:morning": "node src/run-now.js morning",
+    "test:afternoon": "node src/run-now.js afternoon",
+    "test:whatsapp": "node src/run-now.js whatsapp"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "googleapis": "^173.0.0",
+    "koffi": "^2.16.0",
+    "node-cron": "^3.0.3",
+    "puppeteer": "^24.6.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "github:Vgshots/whatsapp-web.js-my-enhancements#my-feature"
+  }
+}

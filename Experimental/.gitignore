@@ -1,0 +1,9 @@
+node_modules/
+.env
+whatsapp-session/
+logs/
+# Perfis de navegador (contêm dados sensíveis: cookies, sessões, logins)
+chrome-profile/
+whatsapp-chrome-data/
+# Screenshots de debug
+debug-*.png

@@ -1,0 +1,19 @@
+{
+  "executadoEm": "29/07/2026, 08:02:03",
+  "resultados": [
+    {
+      "nome": "Ana Theodora Machado Telles Rassi",
+      "grupos": [
+        {
+          "grupo": "Circuito Slim",
+          "ok": true
+        },
+        {
+          "grupo": "SlimFit 16h30 - Ter/Qui",
+          "ok": true
+        }
+      ],
+      "status": "processado"
+    }
+  ]
+}

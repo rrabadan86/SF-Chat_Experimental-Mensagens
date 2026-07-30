@@ -1,0 +1,35 @@
+{
+  "executadoEm": "30/07/2026, 07:00:09",
+  "resultados": [
+    {
+      "username": "joanizanunes",
+      "full_name": "Joaniza Nunes",
+      "status": "sent"
+    },
+    {
+      "username": "jancarlabarbosa",
+      "full_name": "Jancarla Barbosa",
+      "status": "sent"
+    },
+    {
+      "username": "marianavelosoadv",
+      "full_name": "Mariana Veloso | Advogada Previdenciária",
+      "status": "sent"
+    },
+    {
+      "username": "marcelocampospereira823",
+      "full_name": "MarceloCamposPereira",
+      "status": "unavailable"
+    },
+    {
+      "username": "paulaaraujomarcolinoadvogada",
+      "full_name": "Paula Araújo Marcolino",
+      "status": "sent"
+    },
+    {
+      "username": "jessicaas.lima",
+      "full_name": "Jéssica Lima",
+      "status": "sent"
+    }
+  ]
+}

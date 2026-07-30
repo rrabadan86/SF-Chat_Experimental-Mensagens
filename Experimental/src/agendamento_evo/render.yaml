@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: slimfit-aula-experimental
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn formulario_web.app:app --workers 1 --timeout 120 --bind 0.0.0.0:$PORT
+    envVars:
+      - key: EVO_BASE_URL
+        value: https://evo-integracao-api.w12app.com.br
+      - key: EVO_DNS
+        sync: false
+      - key: EVO_TOKEN
+        sync: false
+      - key: EVO_BRANCH_ID
+        sync: false
+      - key: EVO_DDI
+        value: "55"
+      - key: EVO_ACTIVITY_ID
+        sync: false
+      - key: EVO_SERVICE_ID
+        value: "128"
+      - key: EVO_PAYMENT
+        value: ""
+      - key: FORM_DAYS
+        value: "10"
+      - key: FORM_MAX_OCUPACAO
+        value: "7"
+      - key: FORM_OUTBOX_TOKEN
+        sync: false

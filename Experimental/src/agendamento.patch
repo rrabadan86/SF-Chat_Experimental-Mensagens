@@ -1,0 +1,1480 @@
+From 6577da8714893c63ba802b12e75db00c205095db Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 3 Jul 2026 21:28:42 +0000
+Subject: [PATCH] Add EVO experimental-class scheduling integration
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Integração que, a partir dos dados da aluna (nome, e-mail, telefone e
+horário), faz no EVO: cadastro do prospect (idempotente), venda da aula
+experimental e agendamento no horário — via o endpoint
+/api/v1/activities/schedule/experimental-class.
+
+Proteção de lotação: checa vagas (capacity/ocupation/experimentalClassSlots)
+antes de agendar e trata a recusa do EVO na hora. Quando a turma está cheia,
+avisa o WhatsApp do Studio (POST /send-message do ZEE) com nome+telefone da
+aluna e o horário tentado, para a recepção dar andamento manual; a resposta
+também traz horários alternativos com vaga.
+
+- evo_agendamento/: cliente EVO (Basic auth), cliente ZEE (contatos/mensagens/
+  tags), orquestrador (book_experimental, notify_studio_full) e utilitários.
+- run_agendamento.py: CLI (services / slots / book / from-zee).
+- tests/test_offline.py: 7 testes sem rede (util, capacidade, fluxo, aviso).
+- .github/workflows/agendamento.yml, env.example, requirements.txt,
+  README_AGENDAMENTO.md, .gitignore.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AgkAw4yjTAtojvzM7hovkD
+---
+ .github/workflows/agendamento.yml |  69 ++++++++++
+ .gitignore                        |  16 +++
+ README_AGENDAMENTO.md             | 103 ++++++++++++++
+ env.example                       |  40 ++++++
+ evo_agendamento/__init__.py       |  15 ++
+ evo_agendamento/config.py         |  64 +++++++++
+ evo_agendamento/evo_client.py     | 182 ++++++++++++++++++++++++
+ evo_agendamento/orchestrator.py   | 185 +++++++++++++++++++++++++
+ evo_agendamento/util.py           | 119 ++++++++++++++++
+ evo_agendamento/zee_client.py     | 120 ++++++++++++++++
+ requirements.txt                  |   1 +
+ run_agendamento.py                | 204 +++++++++++++++++++++++++++
+ tests/test_offline.py             | 222 ++++++++++++++++++++++++++++++
+ 13 files changed, 1340 insertions(+)
+ create mode 100644 .github/workflows/agendamento.yml
+ create mode 100644 .gitignore
+ create mode 100644 README_AGENDAMENTO.md
+ create mode 100644 evo_agendamento/__init__.py
+ create mode 100644 evo_agendamento/config.py
+ create mode 100644 evo_agendamento/evo_client.py
+ create mode 100644 evo_agendamento/orchestrator.py
+ create mode 100644 evo_agendamento/util.py
+ create mode 100644 evo_agendamento/zee_client.py
+ create mode 100644 run_agendamento.py
+ create mode 100644 tests/test_offline.py
+
+diff --git a/.github/workflows/agendamento.yml b/.github/workflows/agendamento.yml
+new file mode 100644
+index 0000000..a5d3f0b
+--- /dev/null
++++ b/.github/workflows/agendamento.yml
+@@ -0,0 +1,69 @@
++name: Agendamento aula experimental (ZEE → EVO)
++
++# Modo automático: puxa contatos marcados no ZEE e agenda a aula experimental no EVO.
++# Também pode ser disparado manualmente (workflow_dispatch) informando os dados.
++on:
++  # schedule:
++  #   - cron: "*/15 * * * *"   # a cada 15 min (habilite quando o fluxo ZEE estiver pronto)
++  workflow_dispatch:
++    inputs:
++      name:
++        description: "Nome completo da aluna"
++        required: false
++      email:
++        description: "E-mail"
++        required: false
++      phone:
++        description: "Telefone (só números)"
++        required: false
++      when:
++        description: "Horário escolhido (ex.: 2026-07-10 19:00)"
++        required: false
++      contact_id:
++        description: "contactId no ZEE (modo from-zee)"
++        required: false
++
++jobs:
++  agendar:
++    runs-on: ubuntu-latest
++    timeout-minutes: 10
++
++    env:
++      EVO_BASE_URL: ${{ secrets.EVO_BASE_URL }}
++      EVO_DNS: ${{ secrets.EVO_DNS }}
++      EVO_TOKEN: ${{ secrets.EVO_TOKEN }}
++      EVO_BRANCH_ID: ${{ secrets.EVO_BRANCH_ID }}
++      EVO_ACTIVITY: ${{ secrets.EVO_ACTIVITY }}
++      EVO_SERVICE: ${{ secrets.EVO_SERVICE }}
++      EVO_ACTIVITY_ID: ${{ secrets.EVO_ACTIVITY_ID }}
++      EVO_SERVICE_ID: ${{ secrets.EVO_SERVICE_ID }}
++      ZEE_BASE_URL: ${{ secrets.ZEE_BASE_URL }}
++      ZEE_TOKEN: ${{ secrets.ZEE_TOKEN }}
++      ZEE_AUTH_HEADER: ${{ secrets.ZEE_AUTH_HEADER }}
++      ZEE_AUTH_SCHEME: ${{ secrets.ZEE_AUTH_SCHEME }}
++
++    steps:
++      - name: Checkout
++        uses: actions/checkout@v4
++
++      - name: Set up Python
++        uses: actions/setup-python@v5
++        with:
++          python-version: "3.11"
++
++      - name: Install deps
++        run: python -m pip install requests python-dotenv
++
++      - name: Agendar (from-zee ou book, conforme inputs)
++        run: |
++          if [ -n "${{ inputs.contact_id }}" ]; then
++            python run_agendamento.py from-zee \
++              --contact-id "${{ inputs.contact_id }}" \
++              ${{ inputs.when && format('--when "{0}"', inputs.when) || '' }}
++          else
++            python run_agendamento.py book \
++              --name "${{ inputs.name }}" \
++              --email "${{ inputs.email }}" \
++              --phone "${{ inputs.phone }}" \
++              --when "${{ inputs.when }}"
++          fi
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..628d4e0
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,16 @@
++# Segredos e ambiente
++.env
++.env.*
++!env.example
++
++# Python
++__pycache__/
++*.py[cod]
++.venv/
++venv/
++.pytest_cache/
++
++# Playwright / execução
++pw_state/
++export_nextsoft_*.xlsx
++_tmp_export_*.xlsx
+diff --git a/README_AGENDAMENTO.md b/README_AGENDAMENTO.md
+new file mode 100644
+index 0000000..b25133b
+--- /dev/null
++++ b/README_AGENDAMENTO.md
+@@ -0,0 +1,103 @@
++# Agendamento de aula experimental no EVO
++
++Integração que faz, na API do **EVO** (W12 / abcevo), a partir dos dados de uma aluna
++(nome, e-mail, telefone e horário escolhido):
++
++1. **Cadastro** (prospect) — idempotente (não duplica se já existir).
++2. **Venda da aula experimental** + **agendamento** no horário — em uma única chamada.
++
++O passo 2 usa o endpoint `POST /api/v1/activities/schedule/experimental-class`, que
++*"cria a aula experimental, vende o serviço e matricula o prospect"*.
++
++## Instalação
++
++```bash
++pip install -r requirements.txt          # requests + python-dotenv já bastam para isto
++cp env.example .env                       # e preencha as variáveis EVO_*
++```
++
++## Configuração (mínima)
++
++No `.env` (ou como secrets no GitHub Actions):
++
++```
++EVO_DNS=seu-dns-da-academia        # usuário do Basic Auth
++EVO_TOKEN=sua-secret-key           # senha do Basic Auth
++EVO_BRANCH_ID=                     # só em chave multi-filial
++EVO_ACTIVITY=Pilates               # nome da atividade da aula experimental
++EVO_SERVICE=Aula Experimental      # nome do serviço vendido para liberar a aula
++```
++
++> Descubra os nomes/ids certos com os comandos `services` e `slots` abaixo.
++
++## Uso
++
++Descobrir o serviço de aula experimental e os horários disponíveis:
++
++```bash
++python run_agendamento.py services
++python run_agendamento.py slots --date 2026-07-10
++```
++
++Agendar (modo pronto, sem depender do ZEE):
++
++```bash
++python run_agendamento.py book \
++  --name "Maria Silva" --email maria@ex.com --phone 62999998888 \
++  --when "2026-07-10 19:00" --activity "Pilates" --service "Aula Experimental"
++```
++
++Se `EVO_ACTIVITY` / `EVO_SERVICE` estiverem no `.env`, pode omitir `--activity/--service`.
++
++## Turma lotada (limite de vagas)
++
++Cada turma tem um limite (ex.: 9). Antes de agendar, a integração consulta as vagas
++(`capacity`/`ocupation`/`experimentalClassSlots`) e, se o horário escolhido estiver cheio
++— ou se o EVO recusar por lotação no momento do agendamento — ela **avisa o WhatsApp do
++Studio** para a recepção dar andamento manual:
++
++```
++⚠️ Aula experimental SEM VAGA
++Aluna: Maria da Silva (62999998888)
++Horário tentado: 2026-07-10 19:00
++Ação: entrar em contato e sugerir outro horário.
++Horários com vaga: 2026-07-11 19:00 (2 vaga(s)); ...
++```
++
++Configure o número do Studio em `ZEE_STUDIO_PHONE` (ou `--studio-phone`). O envio usa
++`POST /send-message` do ZEE, então precisa de `ZEE_TOKEN` válido. A saída do comando vira
++`{"status":"turma_lotada","studioNotified":true,"alternatives":[...]}` (exit code 3).
++Se `ZEE_STUDIO_PHONE`/`ZEE_TOKEN` não estiverem configurados, a lista de alternativas
++ainda é retornada no JSON (para a IA do ZEE reagir), mas nenhum WhatsApp é enviado.
++
++## Modo automático (puxar do ZEE)
++
++```bash
++python run_agendamento.py from-zee --contact-id <uuid> --when "2026-07-10 19:00"
++```
++
++- Nome e telefone vêm estruturados do contato do ZEE.
++- **E-mail e horário**: lidos do `metadata` do contato (se a IA do ZEE gravar lá —
++  chaves `ZEE_META_EMAIL_KEY` / `ZEE_META_WHEN_KEY`) ou informados via `--email/--when`.
++- Pendências para o modo automático ficar 100%:
++  1. Confirmar o **esquema de autenticação do ZEE** (`ZEE_AUTH_HEADER` / `ZEE_AUTH_SCHEME`).
++  2. Fazer a IA do ZEE **salvar e-mail e horário no metadata** do contato (ou passá-los na chamada).
++
++## Estrutura
++
++```
++evo_agendamento/
++  config.py        # variáveis de ambiente
++  evo_client.py    # cliente EVO (Basic auth) — cadastro, serviços, horários, agendamento
++  zee_client.py    # cliente ZEE (contatos, threads, resumo, tags)
++  orchestrator.py  # book_experimental(): cadastro + venda + agendamento
++  util.py          # datas, telefone, nome, e-mail
++run_agendamento.py # CLI (services / slots / book / from-zee)
++tests/test_offline.py  # testes sem rede
++```
++
++## Testes
++
++```bash
++python -m tests.test_offline
++```
+diff --git a/env.example b/env.example
+index ca273f1..f295774 100644
+--- a/env.example
++++ b/env.example
+@@ -24,3 +24,43 @@ APPNEXT_LOJA_ID_DESTINO=
+ # RCLONE_CONFIG_GDRIVE_SERVICE_ACCOUNT_FILE deve conter o JSON da SA em BASE64.
+ RCLONE_TOKEN=
+ RCLONE_CONFIG_GDRIVE_SERVICE_ACCOUNT_FILE=
++
++# ============================================================
++# === Agendamento de aula experimental no EVO (run_agendamento.py) ===
++# ============================================================
++# --- EVO (W12 / abcevo) ---
++# Auth Basic: usuário = DNS da academia, senha = Secret Key.
++EVO_BASE_URL=https://evo-integracao-api.w12app.com.br
++EVO_DNS=
++EVO_TOKEN=
++EVO_BRANCH_ID=            # obrigatório só em chave multi-filial
++EVO_DDI=55
++
++# Identifique a aula experimental por NOME ou por ID (rode "python run_agendamento.py
++# services" e "... slots --date AAAA-MM-DD" pra descobrir os valores):
++EVO_ACTIVITY=            # nome da atividade, ex.: Pilates
++EVO_SERVICE=             # nome do serviço "aula experimental"
++EVO_ACTIVITY_ID=         # alternativa ao nome
++EVO_SERVICE_ID=          # alternativa ao nome
++
++# --- ZEE (só no modo from-zee) ---
++ZEE_BASE_URL=https://magic.zee.tech/api/v1
++ZEE_TOKEN=
++# Esquema de auth do ZEE (confirme no botão "Authorize" da doc).
++# Ex.: Authorization: Bearer <token>. Se o header carregar o token cru, deixe ZEE_AUTH_SCHEME vazio.
++ZEE_AUTH_HEADER=Authorization
++ZEE_AUTH_SCHEME=Bearer
++# Chaves do metadata do contato onde a IA do ZEE grava e-mail e horário (se gravar):
++ZEE_META_EMAIL_KEY=email
++ZEE_META_WHEN_KEY=horario
++# Tags do fluxo automático (opcional):
++ZEE_TAG_TODO=
++ZEE_TAG_DONE=
++
++# --- Turma lotada: avisar o WhatsApp do Studio (recepção resolve manual) ---
++# Número (só dígitos, com DDI) que recebe o aviso quando não há vaga.
++# Padrão já é o número do Studio; sobrescreva só se mudar.
++ZEE_STUDIO_PHONE=5562985508065
++ZEE_STUDIO_NAME=Studio
++# (Opcional) Personalizar a mensagem. Placeholders: {name} {phone} {when} {alternatives}
++# ZEE_FULL_MSG_TEMPLATE=
+diff --git a/evo_agendamento/__init__.py b/evo_agendamento/__init__.py
+new file mode 100644
+index 0000000..8e27b90
+--- /dev/null
++++ b/evo_agendamento/__init__.py
+@@ -0,0 +1,15 @@
++# Integração ZEE -> EVO: cadastro, venda e agendamento de aula experimental.
++from .evo_client import EvoClient, EvoError
++from .zee_client import ZeeClient, ZeeError
++from .orchestrator import book_experimental, BookingResult, TurmaLotadaError, list_alternatives
++
++__all__ = [
++    "EvoClient",
++    "EvoError",
++    "ZeeClient",
++    "ZeeError",
++    "book_experimental",
++    "BookingResult",
++    "TurmaLotadaError",
++    "list_alternatives",
++]
+diff --git a/evo_agendamento/config.py b/evo_agendamento/config.py
+new file mode 100644
+index 0000000..d260457
+--- /dev/null
++++ b/evo_agendamento/config.py
+@@ -0,0 +1,64 @@
++# Configuração via variáveis de ambiente (.env).
++# Nada de segredo fica no código: DNS/token do EVO e token do ZEE vêm do ambiente.
++import os
++
++from dotenv import load_dotenv
++
++load_dotenv()
++
++
++def _clean(name: str, default: str = "") -> str:
++    return (os.getenv(name, default) or "").strip()
++
++
++# ================= EVO =================
++# Base URL oficial (campo servers[0].url do swagger). Note o "-api" no host.
++EVO_BASE_URL = _clean("EVO_BASE_URL", "https://evo-integracao-api.w12app.com.br").rstrip("/")
++# Autenticação Basic: usuário = DNS da academia, senha = Secret Key.
++EVO_DNS = _clean("EVO_DNS")
++EVO_TOKEN = _clean("EVO_TOKEN")
++# Filial (opcional; obrigatório apenas em chaves multi-filial).
++EVO_BRANCH_ID = _clean("EVO_BRANCH_ID")
++EVO_DDI = _clean("EVO_DDI", "55")
++EVO_TIMEOUT = int(_clean("EVO_TIMEOUT", "30"))
++
++# Padrões da aula experimental (usados quando não informados na chamada).
++# Você pode identificar por NOME (activity/service) ou por ID (idActivity/idService).
++EVO_ACTIVITY = _clean("EVO_ACTIVITY")          # nome da atividade, ex.: "Pilates"
++EVO_SERVICE = _clean("EVO_SERVICE")            # nome do serviço "aula experimental"
++EVO_ACTIVITY_ID = _clean("EVO_ACTIVITY_ID")    # id da atividade (alternativa ao nome)
++EVO_SERVICE_ID = _clean("EVO_SERVICE_ID")      # id do serviço (alternativa ao nome)
++
++# ================= ZEE =================
++# A doc do ZEE não trazia o host base explícito; ajuste se necessário.
++ZEE_BASE_URL = _clean("ZEE_BASE_URL", "https://magic.zee.tech/api/v1").rstrip("/")
++ZEE_TOKEN = _clean("ZEE_TOKEN")
++# Esquema de autenticação do ZEE (veja no botão "Authorize" da doc).
++# Ex.: header "Authorization" com scheme "Bearer" -> "Authorization: Bearer <token>".
++# Se o ZEE usar um header próprio com o token cru, defina ZEE_AUTH_SCHEME="".
++ZEE_AUTH_HEADER = _clean("ZEE_AUTH_HEADER", "Authorization")
++ZEE_AUTH_SCHEME = os.getenv("ZEE_AUTH_SCHEME", "Bearer").strip()
++ZEE_TIMEOUT = int(_clean("ZEE_TIMEOUT", "30"))
++
++# Tags usadas no fluxo automático (pull do ZEE):
++#  - ZEE_TAG_TODO: marca contatos que fecharam aula experimental e devem ser agendados.
++#  - ZEE_TAG_DONE: aplicada após agendar com sucesso (idempotência: não repete).
++ZEE_TAG_TODO = _clean("ZEE_TAG_TODO")
++ZEE_TAG_DONE = _clean("ZEE_TAG_DONE")
++
++# Chaves do metadata do contato de onde ler e-mail e horário escolhido (se a IA salvar lá).
++ZEE_META_EMAIL_KEY = _clean("ZEE_META_EMAIL_KEY", "email")
++ZEE_META_WHEN_KEY = _clean("ZEE_META_WHEN_KEY", "horario")
++
++# Quando a turma está lotada: avisar o WhatsApp do Studio (recepção resolve manual).
++# Padrão: número do Studio (só dígitos, com DDI). Sobrescreva via env se mudar.
++ZEE_STUDIO_PHONE = _clean("ZEE_STUDIO_PHONE", "5562985508065")
++ZEE_STUDIO_NAME = _clean("ZEE_STUDIO_NAME", "Studio")
++# Template da mensagem ao Studio. Placeholders: {name} {phone} {when} {alternatives}
++ZEE_FULL_MSG_TEMPLATE = os.getenv(
++    "ZEE_FULL_MSG_TEMPLATE",
++    "⚠️ Aula experimental SEM VAGA\n"
++    "Aluna: {name} ({phone})\n"
++    "Horário tentado: {when}\n"
++    "Ação: entrar em contato e sugerir outro horário.{alternatives}",
++)
+diff --git a/evo_agendamento/evo_client.py b/evo_agendamento/evo_client.py
+new file mode 100644
+index 0000000..17501e5
+--- /dev/null
++++ b/evo_agendamento/evo_client.py
+@@ -0,0 +1,182 @@
++# Cliente da API do EVO (W12 / abcevo).
++# Doc: https://evo-integracao.w12app.com.br/swagger  |  Auth: Basic (DNS + Secret Key).
++import logging
++
++import requests
++from requests.auth import HTTPBasicAuth
++
++from . import config
++from .util import fmt_date_evo, fmt_datetime_evo, only_digits
++
++log = logging.getLogger("evo")
++
++
++class EvoError(RuntimeError):
++    """Erro retornado pela API do EVO (com as mensagens quando disponíveis)."""
++
++
++class EvoClient:
++    def __init__(self, dns=None, token=None, base_url=None, branch_id=None, timeout=None):
++        self.base_url = (base_url or config.EVO_BASE_URL).rstrip("/")
++        dns = dns if dns is not None else config.EVO_DNS
++        token = token if token is not None else config.EVO_TOKEN
++        if not dns or not token:
++            raise EvoError("EVO_DNS e EVO_TOKEN são obrigatórios (Basic auth).")
++        self.auth = HTTPBasicAuth(dns, token)
++        _branch = branch_id if branch_id is not None else config.EVO_BRANCH_ID
++        self.branch_id = int(_branch) if str(_branch).strip() else None
++        self.timeout = timeout or config.EVO_TIMEOUT
++        self.session = requests.Session()
++
++    # --------------- baixo nível ---------------
++    def _request(self, method, path, params=None, json=None):
++        url = f"{self.base_url}{path}"
++        resp = self.session.request(
++            method, url,
++            params=_drop_empty(params), json=json, auth=self.auth,
++            timeout=self.timeout, headers={"Accept": "application/json"},
++        )
++        if not resp.ok:
++            raise EvoError(f"EVO {method} {path} -> HTTP {resp.status_code}: {_error_detail(resp)}")
++        if resp.status_code == 204 or not resp.content:
++            return None
++        try:
++            return resp.json()
++        except ValueError:
++            return resp.text
++
++    def _bid(self, branch_id):
++        return branch_id if branch_id is not None else self.branch_id
++
++    # --------------- prospects (cadastro) ---------------
++    def find_prospects(self, email=None, phone=None):
++        """Busca prospects por e-mail e/ou telefone. Retorna lista (pode ser vazia)."""
++        params = {"take": 50}
++        if email:
++            params["email"] = email
++        if phone:
++            params["phone"] = only_digits(phone)
++        data = self._request("GET", "/api/v1/prospects", params=params) or []
++        return data if isinstance(data, list) else []
++
++    def create_prospect(self, name, last_name=None, email=None, phone=None,
++                        ddi=None, branch_id=None, notes=None):
++        """Cadastra um prospect (aluno em potencial). Retorna idProspect."""
++        body = {
++            "name": name,
++            "lastName": last_name,
++            "email": email,
++            "cellphone": only_digits(phone),
++            "ddi": ddi or config.EVO_DDI,
++            "notes": notes,
++        }
++        bid = self._bid(branch_id)
++        if bid:
++            body["idBranch"] = bid
++        data = self._request("POST", "/api/v1/prospects", json=_drop_empty(body))
++        id_prospect = (data or {}).get("idProspect")
++        if not id_prospect:
++            raise EvoError(f"Cadastro não retornou idProspect: {data!r}")
++        log.info("Prospect criado: idProspect=%s (%s)", id_prospect, name)
++        return id_prospect
++
++    def get_or_create_prospect(self, name, last_name=None, email=None, phone=None,
++                               ddi=None, branch_id=None):
++        """Idempotência: reaproveita prospect existente (por e-mail, depois telefone)
++        ou cria um novo. Retorna (idProspect, criado?)."""
++        for key, val in (("email", email), ("phone", phone)):
++            if not val:
++                continue
++            found = self.find_prospects(**{key: val})
++            if found and found[0].get("idProspect"):
++                idp = found[0]["idProspect"]
++                log.info("Prospect já existe (%s=%s): idProspect=%s", key, val, idp)
++                return idp, False
++        return self.create_prospect(name, last_name, email, phone, ddi, branch_id), True
++
++    # --------------- serviços / horários (descoberta) ---------------
++    def list_services(self, experimental_only=False, branch_id=None):
++        """Lista serviços. Com experimental_only=True, filtra os que liberam aula
++        experimental (flag experimentalClass)."""
++        params = {"take": 50, "showActivities": True}
++        bid = self._bid(branch_id)
++        if bid:
++            params["idBranch"] = bid
++        data = self._request("GET", "/api/v1/service", params=params) or []
++        if experimental_only:
++            data = [s for s in data if s.get("experimentalClass")]
++        return data
++
++    def list_activities(self, search="", branch_id=None):
++        """Lista atividades (aulas) da academia."""
++        params = {"take": 50, "search": search}
++        bid = self._bid(branch_id)
++        if bid:
++            params["idBranch"] = bid
++        return self._request("GET", "/api/v1/activities", params=params) or []
++
++    def list_experimental_schedule(self, date, show_full_week=True, branch_id=None):
++        """Horários que aceitam aula experimental a partir de uma data.
++        Retorna itens com allowExperimentalClass / experimentalClassSlots / activityDate."""
++        params = {
++            "experimentalClass": True,
++            "date": fmt_date_evo(date),
++            "showFullWeek": show_full_week,
++            "onlyAvailables": True,
++        }
++        bid = self._bid(branch_id)
++        if bid:
++            params["idBranch"] = bid
++        return self._request("GET", "/api/v1/activities/schedule", params=params) or []
++
++    # --------------- agendamento da aula experimental ---------------
++    def book_experimental_class(self, id_prospect, activity_date, activity=None,
++                                service=None, id_activity=None, id_service=None,
++                                branch_id=None, activity_exist=None):
++        """Cria a aula experimental, vende o serviço e matricula o prospect.
++        Um único endpoint cobre venda + agendamento. Retorna idActivitySession.
++
++        Identifique a atividade/serviço por nome (activity/service) OU por id
++        (id_activity/id_service). activity_date: 'yyyy-MM-dd HH:mm' (ou datetime)."""
++        params = {
++            "idProspect": int(id_prospect),
++            "activityDate": fmt_datetime_evo(activity_date),
++            "activity": activity,
++            "service": service,
++        }
++        if id_activity:
++            params["idActivity"] = int(id_activity)
++        if id_service:
++            params["idService"] = int(id_service)
++        if activity_exist is not None:
++            params["activityExist"] = bool(activity_exist)
++        bid = self._bid(branch_id)
++        if bid:
++            params["idBranch"] = bid
++        data = self._request("POST", "/api/v1/activities/schedule/experimental-class", params=params)
++        id_session = (data or {}).get("idActivitySession")
++        log.info("Aula experimental agendada: idActivitySession=%s (prospect=%s, %s)",
++                 id_session, id_prospect, params["activityDate"])
++        return id_session
++
++
++# ---------------- helpers de módulo ----------------
++def _drop_empty(d):
++    if not d:
++        return d
++    return {k: v for k, v in d.items() if v not in (None, "")}
++
++
++def _error_detail(resp):
++    try:
++        data = resp.json()
++        if isinstance(data, dict):
++            if data.get("mensagens"):
++                return "; ".join(str(m) for m in data["mensagens"])
++            if data.get("message"):
++                return str(data["message"])
++            if data.get("detail"):
++                return str(data["detail"])
++    except ValueError:
++        pass
++    return (resp.text or "").strip()[:500]
+diff --git a/evo_agendamento/orchestrator.py b/evo_agendamento/orchestrator.py
+new file mode 100644
+index 0000000..7634e46
+--- /dev/null
++++ b/evo_agendamento/orchestrator.py
+@@ -0,0 +1,185 @@
++# Orquestração: dados da aluna -> cadastro + venda + agendamento no EVO.
++import logging
++from dataclasses import dataclass, field
++from typing import List, Optional
++
++from . import config
++from .evo_client import EvoClient, EvoError
++from .util import (
++    fmt_datetime_evo, same_slot, session_free_spots, session_has_room,
++    session_start_datetime, split_name,
++)
++
++log = logging.getLogger("orquestrador")
++
++# Trechos de mensagem do EVO que indicam turma sem vaga (fonte da verdade é o EVO).
++_LOTADA_HINTS = ("lotad", "capacidad", "cheia", "esgotad", "sem vaga", "vagas", "limite")
++
++
++@dataclass
++class BookingResult:
++    id_prospect: int
++    id_activity_session: Optional[int]
++    prospect_created: bool
++    activity: str
++    service: str
++    when: str
++
++
++class TurmaLotadaError(RuntimeError):
++    """A turma do horário escolhido está sem vaga. Traz horários alternativos."""
++
++    def __init__(self, when, alternatives=None):
++        self.when = when
++        self.alternatives = alternatives or []
++        msg = f"Turma de {when} sem vaga."
++        if self.alternatives:
++            opcoes = ", ".join(a["when"] for a in self.alternatives[:5])
++            msg += f" Horários com vaga: {opcoes}"
++        super().__init__(msg)
++
++
++def notify_studio_full(zee, name, phone, when, alternatives=None,
++                       studio_phone=None, template=None):
++    """Avisa o WhatsApp do Studio que a aluna tentou agendar e a turma está cheia,
++    para a recepção dar andamento manual. Retorna True se enviou."""
++    studio_phone = studio_phone or config.ZEE_STUDIO_PHONE
++    if not studio_phone:
++        log.warning("Turma lotada, mas ZEE_STUDIO_PHONE não configurado: aviso não enviado.")
++        return False
++    alt_txt = ""
++    if alternatives:
++        opcoes = "; ".join(f"{a['when']} ({a.get('freeSpots')} vaga(s))" for a in alternatives[:5])
++        alt_txt = f"\nHorários com vaga: {opcoes}"
++    msg = (template or config.ZEE_FULL_MSG_TEMPLATE).format(
++        name=name or "(sem nome)",
++        phone=phone or "(sem telefone)",
++        when=when,
++        alternatives=alt_txt,
++    )
++    zee.notify_phone(studio_phone, msg, name=config.ZEE_STUDIO_NAME)
++    log.info("Studio avisado (%s): aluna %s sem vaga em %s", studio_phone, name, when)
++    return True
++
++
++def list_alternatives(evo, when, activity=None, branch_id=None, limit=5):
++    """Horários futuros que ainda aceitam aula experimental (com vaga)."""
++    sessoes = evo.list_experimental_schedule(when, show_full_week=True, branch_id=branch_id)
++    out = []
++    for s in sessoes:
++        if not session_has_room(s):
++            continue
++        if activity and activity.lower() not in (s.get("name") or "").lower():
++            continue
++        start = session_start_datetime(s)
++        if start is None:
++            continue
++        out.append({
++            "when": start.strftime("%Y-%m-%d %H:%M"),
++            "activity": s.get("name"),
++            "idConfiguration": s.get("idConfiguration"),
++            "freeSpots": session_free_spots(s),
++            "_start": start,
++        })
++    out.sort(key=lambda a: a["_start"])
++    for a in out:
++        a.pop("_start", None)
++    return out[:limit]
++
++
++def book_experimental(
++    name: str,
++    when,                       # datetime ou string (horário escolhido)
++    email: str = None,
++    phone: str = None,
++    activity: str = None,       # nome da atividade (default: EVO_ACTIVITY)
++    service: str = None,        # nome do serviço da aula experimental (default: EVO_SERVICE)
++    id_activity=None,           # ou por id (default: EVO_ACTIVITY_ID)
++    id_service=None,            # ou por id (default: EVO_SERVICE_ID)
++    branch_id=None,
++    check_capacity: bool = True,   # checa vaga antes e sugere alternativas se lotar
++    evo: EvoClient = None,
++) -> BookingResult:
++    """Executa o fluxo completo no EVO:
++      1) get_or_create_prospect (cadastro idempotente)
++      2) (opcional) checa se a turma do horário tem vaga
++      3) book_experimental_class (vende o serviço + agenda no horário escolhido)
++
++    Se a turma estiver lotada (limite de vagas), levanta TurmaLotadaError com a
++    lista de horários alternativos que ainda têm vaga.
++    """
++    evo = evo or EvoClient()
++
++    activity = activity or config.EVO_ACTIVITY or None
++    service = service or config.EVO_SERVICE or None
++    id_activity = id_activity or (config.EVO_ACTIVITY_ID or None)
++    id_service = id_service or (config.EVO_SERVICE_ID or None)
++
++    if not (activity or id_activity):
++        raise ValueError("Informe a atividade (activity/EVO_ACTIVITY ou id_activity/EVO_ACTIVITY_ID).")
++    if not (service or id_service):
++        raise ValueError("Informe o serviço da aula experimental (service/EVO_SERVICE ou id_service/EVO_SERVICE_ID).")
++
++    # Checagem prévia de vaga (UX): evita cadastrar/tentar quando já está claramente cheio.
++    if check_capacity:
++        sessoes = evo.list_experimental_schedule(when, show_full_week=True, branch_id=branch_id)
++        match = next((s for s in sessoes if same_slot(s, when)
++                      and (not activity or activity.lower() in (s.get("name") or "").lower())), None)
++        if match is not None and not session_has_room(match):
++            raise TurmaLotadaError(
++                fmt_datetime_evo(when),
++                alternatives=list_alternatives(evo, when, activity, branch_id),
++            )
++
++    first, last = split_name(name)
++
++    id_prospect, created = evo.get_or_create_prospect(
++        name=first, last_name=last, email=email, phone=phone, branch_id=branch_id,
++    )
++
++    # O EVO é a fonte da verdade: se a última vaga sumiu entre a checagem e agora,
++    # ele recusa; capturamos e devolvemos alternativas em vez de um erro cru.
++    try:
++        id_session = evo.book_experimental_class(
++            id_prospect=id_prospect,
++            activity_date=when,
++            activity=activity,
++            service=service,
++            id_activity=id_activity,
++            id_service=id_service,
++            branch_id=branch_id,
++        )
++    except EvoError as e:
++        if check_capacity and any(h in str(e).lower() for h in _LOTADA_HINTS):
++            raise TurmaLotadaError(
++                fmt_datetime_evo(when),
++                alternatives=list_alternatives(evo, when, activity, branch_id),
++            ) from e
++        raise
++
++    return BookingResult(
++        id_prospect=id_prospect,
++        id_activity_session=id_session,
++        prospect_created=created,
++        activity=activity or f"id={id_activity}",
++        service=service or f"id={id_service}",
++        when=fmt_datetime_evo(when),
++    )
++
++
++def booking_data_from_contact(contact: dict, summary: str = None):
++    """Extrai (nome, telefone, e-mail, horário) de um contato do ZEE.
++
++    Nome e telefone vêm estruturados. E-mail e horário: primeiro tenta o
++    metadata do contato (a IA do ZEE pode gravar lá); se não houver, tenta o
++    e-mail no texto do resumo/conversa. O horário, se não estiver no metadata,
++    não é adivinhado — precisa ser informado."""
++    from .util import extract_email
++
++    contact = contact or {}
++    meta = contact.get("metadata") or {}
++    name = contact.get("name") or contact.get("displayName")
++    phone = contact.get("phone")
++    email = meta.get(config.ZEE_META_EMAIL_KEY) or extract_email(summary or "")
++    when = meta.get(config.ZEE_META_WHEN_KEY)
++    return {"name": name, "phone": phone, "email": email, "when": when}
+diff --git a/evo_agendamento/util.py b/evo_agendamento/util.py
+new file mode 100644
+index 0000000..531ae0e
+--- /dev/null
++++ b/evo_agendamento/util.py
+@@ -0,0 +1,119 @@
++# Funções auxiliares compartilhadas (datas, telefone, nome).
++import re
++from datetime import datetime
++
++
++def only_digits(value) -> str:
++    """Mantém apenas dígitos (telefone). Retorna '' se vazio/None."""
++    if not value:
++        return ""
++    return re.sub(r"\D+", "", str(value))
++
++
++def parse_datetime(value) -> datetime:
++    """Aceita datetime ou string em vários formatos e devolve um datetime.
++
++    Formatos aceitos: ISO ('2026-07-10T19:00'), '2026-07-10 19:00',
++    'dd/mm/aaaa HH:MM' e 'dd/mm/aaaa HH:MM:SS'.
++    """
++    if isinstance(value, datetime):
++        return value
++    s = str(value).strip()
++    # ISO (com ou sem segundos / 'T')
++    try:
++        return datetime.fromisoformat(s.replace("Z", "").strip())
++    except ValueError:
++        pass
++    for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S",
++                "%Y-%m-%d %H:%M", "%d/%m/%Y", "%Y-%m-%d"):
++        try:
++            return datetime.strptime(s, fmt)
++        except ValueError:
++            continue
++    raise ValueError(f"Data/hora não reconhecida: {value!r}")
++
++
++def fmt_datetime_evo(value) -> str:
++    """Formato aceito pelo EVO no agendamento: 'yyyy-MM-dd HH:mm'."""
++    return parse_datetime(value).strftime("%Y-%m-%d %H:%M")
++
++
++def fmt_date_evo(value) -> str:
++    """Formato de data (sem hora) para filtros do EVO: 'yyyy-MM-dd'."""
++    return parse_datetime(value).strftime("%Y-%m-%d")
++
++
++def split_name(full_name: str):
++    """Divide 'Nome Completo' em (primeiro nome, sobrenome) para o EVO."""
++    parts = (full_name or "").strip().split()
++    if not parts:
++        return "", None
++    if len(parts) == 1:
++        return parts[0], None
++    return parts[0], " ".join(parts[1:])
++
++
++_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
++
++
++def extract_email(text: str):
++    """Extrai o primeiro e-mail de um texto livre (fallback quando não vem estruturado)."""
++    if not text:
++        return None
++    m = _EMAIL_RE.search(text)
++    return m.group(0) if m else None
++
++
++# ---------------- disponibilidade de turma (aula experimental) ----------------
++def session_start_datetime(sess: dict):
++    """Datetime de início de um horário retornado pelo EVO.
++
++    Usa activityDate (que já traz a hora); se vier só a data, combina com startTime."""
++    raw = sess.get("activityDate")
++    if not raw:
++        return None
++    try:
++        dt = parse_datetime(raw)
++    except (ValueError, TypeError):
++        return None
++    start = sess.get("startTime")
++    if dt.hour == 0 and dt.minute == 0 and start:
++        try:
++            h, m = str(start).split(":")[:2]
++            dt = dt.replace(hour=int(h), minute=int(m))
++        except (ValueError, TypeError):
++            pass
++    return dt
++
++
++def session_free_spots(sess: dict):
++    """Vagas restantes na turma (min entre capacidade geral e vagas de experimental).
++    Retorna None quando a capacidade é ilimitada/desconhecida."""
++    capacity = sess.get("capacity")
++    ocupation = sess.get("ocupation") or 0
++    exp_slots = sess.get("experimentalClassSlots")
++    livres = []
++    if capacity is not None:
++        livres.append(max(capacity - ocupation, 0))
++    if exp_slots is not None:
++        livres.append(max(exp_slots, 0))
++    return min(livres) if livres else None
++
++
++def session_has_room(sess: dict) -> bool:
++    """True se a turma aceita aula experimental e ainda tem vaga."""
++    if not sess.get("allowExperimentalClass"):
++        return False
++    livres = session_free_spots(sess)
++    return livres is None or livres > 0
++
++
++def same_slot(sess: dict, when) -> bool:
++    """True se o horário da sessão bate com o desejado (mesma data e HH:MM)."""
++    start = session_start_datetime(sess)
++    if start is None:
++        return False
++    alvo = parse_datetime(when)
++    return (start.date() == alvo.date()
++            and start.hour == alvo.hour
++            and start.minute == alvo.minute)
+diff --git a/evo_agendamento/zee_client.py b/evo_agendamento/zee_client.py
+new file mode 100644
+index 0000000..cb7b45c
+--- /dev/null
++++ b/evo_agendamento/zee_client.py
+@@ -0,0 +1,120 @@
++# Cliente da API do ZEE (IA de primeiro atendimento / WhatsApp CRM).
++# Só é usado no modo automático (puxar dados do ZEE). O agendamento em si é no EVO.
++#
++# ATENÇÃO: o esquema de autenticação exato do ZEE ainda precisa ser confirmado
++# (botão "Authorize" da doc). Por isso o header/scheme são configuráveis via env
++# (ZEE_AUTH_HEADER / ZEE_AUTH_SCHEME / ZEE_TOKEN).
++import logging
++
++import requests
++
++from . import config
++
++log = logging.getLogger("zee")
++
++
++class ZeeError(RuntimeError):
++    pass
++
++
++class ZeeClient:
++    def __init__(self, token=None, base_url=None, auth_header=None, auth_scheme=None, timeout=None):
++        self.base_url = (base_url or config.ZEE_BASE_URL).rstrip("/")
++        token = token if token is not None else config.ZEE_TOKEN
++        if not token:
++            raise ZeeError("ZEE_TOKEN é obrigatório para o modo automático.")
++        header = auth_header or config.ZEE_AUTH_HEADER
++        scheme = auth_scheme if auth_scheme is not None else config.ZEE_AUTH_SCHEME
++        value = f"{scheme} {token}".strip() if scheme else token
++        self.headers = {header: value, "Accept": "application/json"}
++        self.timeout = timeout or config.ZEE_TIMEOUT
++        self.session = requests.Session()
++
++    def _request(self, method, path, params=None, json=None):
++        url = f"{self.base_url}{path}"
++        resp = self.session.request(method, url, params=params, json=json,
++                                    headers=self.headers, timeout=self.timeout)
++        if not resp.ok:
++            raise ZeeError(f"ZEE {method} {path} -> HTTP {resp.status_code}: {(resp.text or '')[:500]}")
++        if resp.status_code == 204 or not resp.content:
++            return None
++        try:
++            return resp.json()
++        except ValueError:
++            return resp.text
++
++    # GET /contact?phone=&contactId=
++    def get_contact(self, phone=None, contact_id=None):
++        params = {}
++        if phone:
++            params["phone"] = phone
++        if contact_id:
++            params["contactId"] = contact_id
++        return self._request("GET", "/contact", params=params)
++
++    # GET /threads?contactId=&status=&startDate=&endDate=&page=&pageSize=
++    def list_threads(self, contact_id=None, status=None, start_date=None, end_date=None,
++                     page=None, page_size=None):
++        params = {
++            "contactId": contact_id, "status": status,
++            "startDate": start_date, "endDate": end_date,
++            "page": page, "pageSize": page_size,
++        }
++        params = {k: v for k, v in params.items() if v not in (None, "")}
++        return self._request("GET", "/threads", params=params) or []
++
++    # GET /summary/{contactId}?threadId=
++    def get_summary(self, contact_id, thread_id=None):
++        params = {"threadId": thread_id} if thread_id else None
++        data = self._request("GET", f"/summary/{contact_id}", params=params) or {}
++        return data.get("summary") if isinstance(data, dict) else None
++
++    # GET /messages/{threadId}
++    def get_messages(self, thread_id, page=None, page_size=None):
++        params = {k: v for k, v in {"page": page, "pageSize": page_size}.items() if v}
++        return self._request("GET", f"/messages/{thread_id}", params=params) or {}
++
++    # PUT /set-contact-tag  { contactId, tags: [] }
++    def set_contact_tag(self, contact_id, tags, override=False):
++        if isinstance(tags, str):
++            tags = [tags]
++        return self._request(
++            "PUT", "/set-contact-tag",
++            params={"overrideTags": override},
++            json={"contactId": contact_id, "tags": tags},
++        )
++
++    # POST /contact  -> cria contato (retorna { id, ... })
++    def create_contact(self, phone, name=None):
++        from .util import only_digits
++        body = {"phone": only_digits(phone), "provider": "z-api"}
++        if name:
++            body["name"] = name
++        return self._request("POST", "/contact", json=body)
++
++    def resolve_contact_id(self, phone=None, contact_id=None, name=None, create=True):
++        """Retorna o contactId a partir de um telefone (busca; se não existir, cria)."""
++        if contact_id:
++            return contact_id
++        contact = None
++        try:
++            contact = self.get_contact(phone=phone)
++        except ZeeError:
++            contact = None
++        if contact and contact.get("id"):
++            return contact["id"]
++        if not create:
++            return None
++        created = self.create_contact(phone, name=name) or {}
++        return created.get("id")
++
++    # POST /send-message/{contactId}  body: { text }
++    def send_message(self, contact_id, text):
++        return self._request("POST", f"/send-message/{contact_id}", json={"text": text})
++
++    def notify_phone(self, phone, text, name=None):
++        """Envia uma mensagem de WhatsApp para um número (resolve o contactId antes)."""
++        contact_id = self.resolve_contact_id(phone=phone, name=name)
++        if not contact_id:
++            raise ZeeError(f"Não consegui resolver contactId para o telefone {phone}.")
++        return self.send_message(contact_id, text)
+diff --git a/requirements.txt b/requirements.txt
+index f74811b..5266064 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -2,3 +2,4 @@ python-dotenv==1.0.1
+ playwright==1.47.0
+ pandas==2.2.2
+ openpyxl==3.1.5
++requests==2.32.3
+diff --git a/run_agendamento.py b/run_agendamento.py
+new file mode 100644
+index 0000000..054312d
+--- /dev/null
++++ b/run_agendamento.py
+@@ -0,0 +1,204 @@
++#!/usr/bin/env python3
++"""Agendamento de aula experimental no EVO.
++
++Modos:
++  book       Agenda direto a partir dos dados informados (nome, e-mail, telefone,
++             horário). É o modo pronto pra uso — não depende do ZEE.
++  slots      Lista horários que aceitam aula experimental (descoberta).
++  services   Lista os serviços marcados como "aula experimental" no EVO.
++  from-zee   Puxa os dados de um contato do ZEE e agenda no EVO.
++             (Depende de ZEE_TOKEN e de a IA salvar e-mail/horário no metadata.)
++
++Exemplos:
++  python run_agendamento.py services
++  python run_agendamento.py slots --date 2026-07-10
++  python run_agendamento.py book --name "Maria Silva" --email maria@x.com \\
++      --phone 62999998888 --when "2026-07-10 19:00" \\
++      --activity "Pilates" --service "Aula Experimental"
++  python run_agendamento.py from-zee --contact-id <uuid> --when "2026-07-10 19:00"
++"""
++import argparse
++import json
++import logging
++import sys
++
++from evo_agendamento import EvoClient, TurmaLotadaError, ZeeClient, book_experimental, config
++from evo_agendamento.orchestrator import booking_data_from_contact, notify_studio_full
++
++
++def _setup_log(verbose):
++    logging.basicConfig(
++        level=logging.DEBUG if verbose else logging.INFO,
++        format="[%(asctime)s] %(name)s %(levelname)s: %(message)s",
++        datefmt="%H:%M:%S",
++    )
++
++
++def cmd_services(args):
++    evo = EvoClient()
++    servicos = evo.list_services(experimental_only=not args.all)
++    for s in servicos:
++        print(f"  idService={s.get('idService')}  {s.get('nameService')!r}  "
++              f"experimentalClass={s.get('experimentalClass')}  valor={s.get('value')}")
++    if not servicos:
++        print("Nenhum serviço encontrado (tente --all).")
++
++
++def cmd_slots(args):
++    evo = EvoClient()
++    slots = evo.list_experimental_schedule(args.date, show_full_week=not args.day_only)
++    for a in slots:
++        if not a.get("allowExperimentalClass"):
++            continue
++        print(f"  {a.get('activityDate')}  {a.get('name')!r}  "
++              f"idConfiguration={a.get('idConfiguration')}  "
++              f"vagasExperimental={a.get('experimentalClassSlots')}  "
++              f"ocupação={a.get('ocupation')}/{a.get('capacity')}")
++
++
++def cmd_book(args):
++    try:
++        result = book_experimental(
++            name=args.name, when=args.when, email=args.email, phone=args.phone,
++            activity=args.activity, service=args.service,
++            id_activity=args.id_activity, id_service=args.id_service,
++            branch_id=args.branch,
++        )
++    except TurmaLotadaError as e:
++        _finish_full(e, name=args.name, phone=args.phone, studio_phone=args.studio_phone)
++        return
++    _print_result(result)
++
++
++def _finish_full(err: TurmaLotadaError, name, phone, studio_phone=None):
++    """Turma lotada: avisa o WhatsApp do Studio (recepção resolve manual) e reporta."""
++    studio_phone = studio_phone or config.ZEE_STUDIO_PHONE
++    notified = False
++    note = None
++    if studio_phone and config.ZEE_TOKEN:
++        try:
++            zee = ZeeClient()
++            notified = notify_studio_full(
++                zee, name=name, phone=phone, when=err.when,
++                alternatives=err.alternatives, studio_phone=studio_phone,
++            )
++        except Exception as ex:  # não deixa o aviso derrubar o processo
++            note = f"falha ao avisar o Studio: {ex}"
++            logging.getLogger("zee").warning(note)
++    elif studio_phone and not config.ZEE_TOKEN:
++        note = "ZEE_STUDIO_PHONE definido, mas ZEE_TOKEN ausente: aviso não enviado."
++    else:
++        note = "ZEE_STUDIO_PHONE não configurado: aviso não enviado."
++
++    payload = {
++        "status": "turma_lotada",
++        "when": err.when,
++        "aluna": {"name": name, "phone": phone},
++        "studioNotified": notified,
++        "studioPhone": studio_phone or None,
++        "note": note,
++        "message": str(err),
++        "alternatives": err.alternatives,
++    }
++    print(json.dumps(payload, ensure_ascii=False, indent=2))
++    sys.exit(3)
++
++
++def cmd_from_zee(args):
++    zee = ZeeClient()
++    contact = zee.get_contact(contact_id=args.contact_id, phone=args.phone)
++    summary = None
++    try:
++        summary = zee.get_summary(args.contact_id) if args.contact_id else None
++    except Exception as e:  # resumo é só fallback pra achar e-mail
++        logging.getLogger("zee").warning("Sem resumo: %s", e)
++
++    data = booking_data_from_contact(contact, summary)
++    # CLI pode sobrescrever o que veio do ZEE:
++    name = args.name or data["name"]
++    email = args.email or data["email"]
++    phone = args.phone or data["phone"]
++    when = args.when or data["when"]
++
++    faltando = [k for k, v in {"name": name, "when": when}.items() if not v]
++    if faltando:
++        print(f"Faltam dados obrigatórios do ZEE: {', '.join(faltando)}. "
++              f"Informe via --{'/ --'.join(faltando)} ou configure o metadata no ZEE.",
++              file=sys.stderr)
++        sys.exit(2)
++
++    try:
++        result = book_experimental(
++            name=name, when=when, email=email, phone=phone,
++            activity=args.activity, service=args.service,
++            id_activity=args.id_activity, id_service=args.id_service, branch_id=args.branch,
++        )
++    except TurmaLotadaError as e:
++        _finish_full(e, name=name, phone=phone, studio_phone=args.studio_phone)
++        return
++    if args.done_tag:
++        try:
++            zee.set_contact_tag(contact.get("id") or args.contact_id, args.done_tag)
++        except Exception as e:
++            logging.getLogger("zee").warning("Não consegui aplicar a tag de concluído: %s", e)
++    _print_result(result)
++
++
++def _print_result(result):
++    print("\n=== Aula experimental agendada ===")
++    print(json.dumps(result.__dict__, ensure_ascii=False, indent=2))
++
++
++def build_parser():
++    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
++    p.add_argument("-v", "--verbose", action="store_true")
++    sub = p.add_subparsers(dest="cmd", required=True)
++
++    ps = sub.add_parser("services", help="lista serviços de aula experimental")
++    ps.add_argument("--all", action="store_true", help="lista todos os serviços, não só experimentais")
++    ps.set_defaults(func=cmd_services)
++
++    pl = sub.add_parser("slots", help="lista horários com aula experimental")
++    pl.add_argument("--date", required=True, help="data base (yyyy-MM-dd)")
++    pl.add_argument("--day-only", action="store_true", help="só o dia (padrão: semana toda)")
++    pl.set_defaults(func=cmd_slots)
++
++    def add_booking_args(sp):
++        sp.add_argument("--name", help="nome completo da aluna")
++        sp.add_argument("--email")
++        sp.add_argument("--phone")
++        sp.add_argument("--when", help="horário escolhido (ex.: '2026-07-10 19:00')")
++        sp.add_argument("--activity", help="nome da atividade (ou use EVO_ACTIVITY)")
++        sp.add_argument("--service", help="nome do serviço da aula experimental (ou EVO_SERVICE)")
++        sp.add_argument("--id-activity", type=int)
++        sp.add_argument("--id-service", type=int)
++        sp.add_argument("--branch", type=int, help="idBranch (multi-filial)")
++        sp.add_argument("--studio-phone", help="WhatsApp do Studio p/ avisar quando lotar "
++                                               "(ou use ZEE_STUDIO_PHONE)")
++
++    pb = sub.add_parser("book", help="agenda a partir dos dados informados")
++    add_booking_args(pb)
++    pb.set_defaults(func=cmd_book)
++
++    pz = sub.add_parser("from-zee", help="puxa dados do ZEE e agenda no EVO")
++    add_booking_args(pz)
++    pz.add_argument("--contact-id", help="contactId no ZEE")
++    pz.add_argument("--done-tag", help="tag a aplicar no ZEE após agendar")
++    pz.set_defaults(func=cmd_from_zee)
++
++    return p
++
++
++def main():
++    parser = build_parser()
++    args = parser.parse_args()
++    _setup_log(args.verbose)
++    try:
++        args.func(args)
++    except Exception as e:
++        logging.getLogger("main").error("Falhou: %s", e)
++        sys.exit(1)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/tests/test_offline.py b/tests/test_offline.py
+new file mode 100644
+index 0000000..055621f
+--- /dev/null
++++ b/tests/test_offline.py
+@@ -0,0 +1,222 @@
++"""Testes offline (sem rede): validam util e a montagem das chamadas ao EVO.
++
++Rode:  python -m tests.test_offline   (ou:  pytest tests/ )
++"""
++import os
++
++# Credenciais fake só para o EvoClient construir sem erro.
++os.environ.setdefault("EVO_DNS", "academia-teste")
++os.environ.setdefault("EVO_TOKEN", "secret-teste")
++
++from evo_agendamento import EvoClient, TurmaLotadaError, book_experimental  # noqa: E402
++from evo_agendamento.util import (  # noqa: E402
++    extract_email, fmt_date_evo, fmt_datetime_evo, only_digits, parse_datetime,
++    same_slot, session_free_spots, session_has_room, split_name,
++)
++
++
++def test_util():
++    assert only_digits("(62) 99999-8888") == "62999998888"
++    assert split_name("Maria da Silva") == ("Maria", "da Silva")
++    assert split_name("Maria") == ("Maria", None)
++    assert fmt_datetime_evo("2026-07-10 19:00") == "2026-07-10 19:00"
++    assert fmt_datetime_evo("10/07/2026 19:00") == "2026-07-10 19:00"
++    assert fmt_datetime_evo("2026-07-10T19:00") == "2026-07-10 19:00"
++    assert fmt_date_evo("2026-07-10 19:00") == "2026-07-10"
++    assert extract_email("meu email eh maria@ex.com, ok?") == "maria@ex.com"
++    assert parse_datetime("2026-07-10").year == 2026
++    print("test_util OK")
++
++
++class _FakeResp:
++    def __init__(self, status=200, payload=None):
++        self.status_code = status
++        self.ok = 200 <= status < 300
++        self._payload = payload if payload is not None else {}
++        self.content = b"x"
++        self.text = str(payload)
++
++    def json(self):
++        return self._payload
++
++
++def test_book_flow_builds_correct_calls():
++    calls = []
++
++    responses = {
++        ("GET", "/api/v1/prospects"): [],                       # não existe -> cria
++        ("POST", "/api/v1/prospects"): {"idProspect": 4242},
++        ("POST", "/api/v1/activities/schedule/experimental-class"): {"idActivitySession": 9001},
++    }
++
++    evo = EvoClient()
++
++    def fake_request(method, url, params=None, json=None, auth=None, timeout=None, headers=None):
++        # deriva o path a partir da url
++        path = url.replace(evo.base_url, "")
++        calls.append({"method": method, "path": path, "params": params, "json": json})
++        return _FakeResp(200, responses[(method, path)])
++
++    evo.session.request = fake_request  # injeta o stub
++
++    result = book_experimental(
++        name="Maria da Silva",
++        when="2026-07-10 19:00",
++        email="maria@ex.com",
++        phone="(62) 99999-8888",
++        activity="Pilates",
++        service="Aula Experimental",
++        branch_id=7,
++        check_capacity=False,
++        evo=evo,
++    )
++
++    # 1) buscou prospect por e-mail
++    assert calls[0]["method"] == "GET" and calls[0]["path"] == "/api/v1/prospects"
++    assert calls[0]["params"]["email"] == "maria@ex.com"
++
++    # 2) criou prospect com nome dividido, telefone só dígitos, ddi e branch
++    post_prospect = next(c for c in calls if c["path"] == "/api/v1/prospects" and c["method"] == "POST")
++    body = post_prospect["json"]
++    assert body["name"] == "Maria" and body["lastName"] == "da Silva"
++    assert body["cellphone"] == "62999998888"
++    assert body["ddi"] == "55"
++    assert body["idBranch"] == 7
++    assert "" not in body.values()  # _drop_empty tirou vazios
++
++    # 3) agendou a experimental com os params certos
++    book = next(c for c in calls if c["path"] == "/api/v1/activities/schedule/experimental-class")
++    p = book["params"]
++    assert p["idProspect"] == 4242
++    assert p["activityDate"] == "2026-07-10 19:00"
++    assert p["activity"] == "Pilates"
++    assert p["service"] == "Aula Experimental"
++    assert p["idBranch"] == 7
++
++    assert result.id_prospect == 4242
++    assert result.id_activity_session == 9001
++    assert result.prospect_created is True
++    print("test_book_flow_builds_correct_calls OK")
++
++
++def test_book_reuses_existing_prospect():
++    calls = []
++    evo = EvoClient()
++
++    def fake_request(method, url, params=None, json=None, auth=None, timeout=None, headers=None):
++        path = url.replace(evo.base_url, "")
++        calls.append({"method": method, "path": path, "params": params})
++        if method == "GET" and path == "/api/v1/prospects":
++            return _FakeResp(200, [{"idProspect": 555}])   # já existe
++        if path == "/api/v1/activities/schedule/experimental-class":
++            return _FakeResp(200, {"idActivitySession": 1})
++        raise AssertionError(f"Chamada inesperada: {method} {path}")
++
++    evo.session.request = fake_request
++    result = book_experimental(
++        name="Ana", when="2026-07-10 19:00", email="ana@ex.com",
++        activity="Yoga", service="Experimental", check_capacity=False, evo=evo,
++    )
++    assert result.id_prospect == 555
++    assert result.prospect_created is False
++    assert not any(c["method"] == "POST" and c["path"] == "/api/v1/prospects" for c in calls)
++    print("test_book_reuses_existing_prospect OK")
++
++
++def test_capacity_helpers():
++    cheia = {"allowExperimentalClass": True, "capacity": 9, "ocupation": 9, "experimentalClassSlots": 2}
++    com_vaga = {"allowExperimentalClass": True, "capacity": 9, "ocupation": 5, "experimentalClassSlots": 2}
++    sem_exp = {"allowExperimentalClass": False, "capacity": 9, "ocupation": 0}
++    assert session_free_spots(cheia) == 0 and not session_has_room(cheia)
++    assert session_free_spots(com_vaga) == 2 and session_has_room(com_vaga)   # min(4, 2)
++    assert not session_has_room(sem_exp)
++    slot = {"activityDate": "2026-07-10T19:00:00", "startTime": "19:00"}
++    assert same_slot(slot, "2026-07-10 19:00")
++    assert not same_slot(slot, "2026-07-10 20:00")
++    print("test_capacity_helpers OK")
++
++
++def test_book_raises_when_full_with_alternatives():
++    evo = EvoClient()
++    schedule = [
++        {"name": "Pilates", "activityDate": "2026-07-10T19:00:00", "startTime": "19:00",
++         "allowExperimentalClass": True, "capacity": 9, "ocupation": 9, "experimentalClassSlots": 0,
++         "idConfiguration": 1},
++        {"name": "Pilates", "activityDate": "2026-07-11T19:00:00", "startTime": "19:00",
++         "allowExperimentalClass": True, "capacity": 9, "ocupation": 3, "experimentalClassSlots": 2,
++         "idConfiguration": 2},
++    ]
++
++    def fake_request(method, url, params=None, json=None, auth=None, timeout=None, headers=None):
++        path = url.replace(evo.base_url, "")
++        if method == "GET" and path == "/api/v1/activities/schedule":
++            return _FakeResp(200, schedule)
++        raise AssertionError(f"Não deveria chamar {method} {path} com a turma lotada")
++
++    evo.session.request = fake_request
++
++    try:
++        book_experimental(name="Maria", when="2026-07-10 19:00", email="m@x.com",
++                          activity="Pilates", service="Experimental", evo=evo)
++        raise AssertionError("Deveria ter levantado TurmaLotadaError")
++    except TurmaLotadaError as e:
++        assert e.alternatives and e.alternatives[0]["when"] == "2026-07-11 19:00"
++        assert e.alternatives[0]["freeSpots"] == 2
++    print("test_book_raises_when_full_with_alternatives OK")
++
++
++def test_notify_studio_full_builds_message():
++    from evo_agendamento.orchestrator import notify_studio_full
++
++    sent = {}
++
++    class FakeZee:
++        def notify_phone(self, phone, text, name=None):
++            sent["phone"] = phone
++            sent["text"] = text
++            sent["name"] = name
++            return {"statusCode": 0}
++
++    ok = notify_studio_full(
++        FakeZee(),
++        name="Maria da Silva", phone="62999998888", when="2026-07-10 19:00",
++        alternatives=[{"when": "2026-07-11 19:00", "freeSpots": 2}],
++        studio_phone="5562985508065",
++    )
++    assert ok is True
++    assert sent["phone"] == "5562985508065"
++    assert "Maria da Silva" in sent["text"]
++    assert "62999998888" in sent["text"]
++    assert "2026-07-10 19:00" in sent["text"]
++    assert "2026-07-11 19:00" in sent["text"]      # alternativa incluída
++    print("test_notify_studio_full_builds_message OK")
++
++
++def test_notify_studio_skips_without_phone():
++    from evo_agendamento import config
++    from evo_agendamento.orchestrator import notify_studio_full
++
++    class FakeZee:
++        def notify_phone(self, *a, **k):
++            raise AssertionError("não deveria enviar sem studio_phone")
++
++    # Sem número (nem arg nem config) -> não envia, retorna False.
++    original = config.ZEE_STUDIO_PHONE
++    config.ZEE_STUDIO_PHONE = ""
++    try:
++        assert notify_studio_full(FakeZee(), name="X", phone="1", when="2026-07-10 19:00",
++                                  studio_phone="") is False
++    finally:
++        config.ZEE_STUDIO_PHONE = original
++    print("test_notify_studio_skips_without_phone OK")
++
++
++if __name__ == "__main__":
++    test_util()
++    test_capacity_helpers()
++    test_book_flow_builds_correct_calls()
++    test_book_reuses_existing_prospect()
++    test_book_raises_when_full_with_alternatives()
++    test_notify_studio_full_builds_message()
++    test_notify_studio_skips_without_phone()
++    print("\nTodos os testes offline passaram. ✅")
+-- 
+2.43.0
+

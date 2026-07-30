@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.env
+web_outbox.jsonl
+web_puxados.json
