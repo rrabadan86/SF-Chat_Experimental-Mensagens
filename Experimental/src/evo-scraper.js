@@ -84,11 +84,24 @@ class EvoScraper {
 
     await this.page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
 
-    // Aguarda possível challenge do Cloudflare (até 10s)
+    // Aguarda possível challenge do Cloudflare e o redirecionamento do SPA
+    // (ex.: slimfit -> evo5). Durante esse redirect o contexto de execução pode
+    // ser destruído, então lemos o conteúdo de forma resiliente (com retry).
     await this.sleep(5000);
 
-    // Verifica se passou pelo Cloudflare
-    const pageContent = await this.page.content();
+    let pageContent = '';
+    for (let tentativa = 1; tentativa <= 5; tentativa++) {
+      try {
+        pageContent = await this.page.content();
+        break;
+      } catch (e) {
+        // "Execution context was destroyed" = navegação/redirect em andamento.
+        // Espera o SPA assentar e tenta de novo.
+        console.log(`   ⏳ Página redirecionando, aguardando (${tentativa}/5)...`);
+        await this.sleep(2000);
+      }
+    }
+
     if (pageContent.includes('you have been blocked') || pageContent.includes('Cloudflare')) {
       console.log('⚠️  Cloudflare detectado, aguardando resolução...');
       await this.sleep(10000);
