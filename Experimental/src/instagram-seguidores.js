@@ -27,6 +27,43 @@ const EDGE_PATHS = [
 const EDGE_USER_DATA = process.env.BOT_EDGE_WA || 'C:\\SlimfitBot\\edge-wa';
 const { execSync, spawn } = require('child_process');
 
+// ─── Suporte a Linux / VPS ─────────────────────────────────
+const IS_LINUX = process.platform === 'linux';
+// Perfil dedicado do Instagram no Linux (guarda a sessão logada do IG).
+const IG_PROFILE_DIR = process.env.IG_PROFILE_DIR ||
+  path.resolve(__dirname, '..', 'instagram-chrome-data');
+const IG_HEADLESS = process.env.HEADLESS !== 'false';
+
+// Lança o Chromium do Puppeteer com o perfil dedicado do Instagram (Linux).
+async function launchInstagramChromium() {
+  console.log(`🐧 Abrindo Chromium com perfil do Instagram (${IG_HEADLESS ? 'headless' : 'com tela'})...`);
+  const browser = await puppeteer.launch({
+    headless: IG_HEADLESS ? 'new' : false,
+    executablePath: process.env.CHROMIUM_PATH || undefined,
+    userDataDir: IG_PROFILE_DIR,
+    defaultViewport: null,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+      '--window-size=1366,900',
+      '--lang=pt-BR',
+    ],
+  });
+  // Os jobs chamam browser.disconnect() no fim; no Linux isso precisa FECHAR o
+  // Chromium (liberar o perfil). browser.close() chama disconnect() internamente,
+  // então uma trava evita a recursão infinita.
+  const realClose = browser.close.bind(browser);
+  let fechando = false;
+  browser.disconnect = async () => {
+    if (fechando) return;
+    fechando = true;
+    try { await realClose(); } catch (_) {}
+  };
+  return browser;
+}
+
 // Arquivo onde a lista de seguidores conhecidos é salva
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
 const DB_FILE = path.join(DATA_DIR, 'instagram-seguidores.json');
@@ -35,6 +72,10 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ─── Conexão com o Edge (perfil logado no Instagram) ──────
 async function connectEdge() {
+  if (IS_LINUX) {
+    return await launchInstagramChromium();
+  }
+
   console.log('🔄 Fechando Edge existente...');
   try { execSync('taskkill /F /IM msedge.exe', { stdio: 'ignore' }); } catch (e) { /* nenhum aberto */ }
   await sleep(3000);
@@ -251,12 +292,14 @@ async function main() {
 // Exporta funções e constantes para reuso (ex: instagram-boasvindas.js)
 module.exports = {
   connectEdge,
+  launchInstagramChromium,
   coletarSeguidores,
   carregarConhecidos,
   salvarConhecidos,
   sleep,
   IG_USERNAME,
   IG_EDGE_PROFILE,
+  IG_PROFILE_DIR,
   DATA_DIR,
   DB_FILE,
 };
