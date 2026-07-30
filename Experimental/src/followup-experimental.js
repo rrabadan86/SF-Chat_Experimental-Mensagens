@@ -98,7 +98,15 @@ async function connectEdgeWhatsApp() {
     const page = sender.page;
     // Os jobs chamam browser.disconnect() no finally; no Linux isso precisa
     // FECHAR o Chromium (senão o perfil fica travado para o próximo job).
-    browser.disconnect = () => sender.close();
+    // browser.close() chama disconnect() internamente, então uma trava evita
+    // a recursão infinita.
+    const realClose = browser.close.bind(browser);
+    let fechando = false;
+    browser.disconnect = async () => {
+      if (fechando) return;
+      fechando = true;
+      try { await realClose(); } catch (_) {}
+    };
     console.log('✅ WhatsApp pronto (Linux/Chromium)!\n');
     return { browser, page };
   }
