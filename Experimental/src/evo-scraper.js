@@ -52,8 +52,17 @@ class EvoScraper {
    */
   async init() {
     console.log('🌐 Iniciando browser (stealth mode)...');
+    const path = require('path');
+    // HEADLESS=false (recomendado no Linux via xvfb-run) reproduz o navegador
+    // "com tela" que o EVO espera. Perfil persistente guarda cookies/sessão,
+    // exatamente como o Edge no Windows — evita cair no login a cada navegação.
+    const headless = process.env.HEADLESS !== 'false';
+    const userDataDir = process.env.EVO_PROFILE_DIR ||
+      path.resolve(__dirname, '..', 'evo-chrome-data');
     this.browser = await puppeteer.launch({
-      headless: 'new',
+      headless,
+      userDataDir,
+      executablePath: process.env.CHROMIUM_PATH || undefined,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -105,6 +114,28 @@ class EvoScraper {
     if (pageContent.includes('you have been blocked') || pageContent.includes('Cloudflare')) {
       console.log('⚠️  Cloudflare detectado, aguardando resolução...');
       await this.sleep(10000);
+    }
+
+    // Aguarda o formulário de login RENDERIZAR de fato. O Angular do EVO demora
+    // e varia no headless (às vezes a página fica sem inputs por vários segundos).
+    // Se não aparecer, recarrega e tenta de novo (até 3x).
+    const formSelectors = ['input#usuario', 'input[type="email"]', 'input[type="text"]', 'input[type="password"]'];
+    let formReady = false;
+    for (let tent = 1; tent <= 3 && !formReady; tent++) {
+      const deadline = Date.now() + 30000;
+      while (Date.now() < deadline) {
+        formReady = await this.page.evaluate(
+          (sels) => sels.some((s) => { const el = document.querySelector(s); return !!(el && el.offsetWidth > 0); }),
+          formSelectors
+        );
+        if (formReady) break;
+        await this.sleep(1000);
+      }
+      if (!formReady) {
+        console.log(`   ⏳ Formulário de login ainda não renderizou, recarregando (${tent}/3)...`);
+        try { await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (_) {}
+        await this.sleep(4000);
+      }
     }
 
     // Debug screenshot
@@ -205,9 +236,36 @@ class EvoScraper {
 
     await this.page.goto(url, { waitUntil: 'networkidle2' });
     await this.sleep(4000);
+
+    // Se a sessão caiu para a tela de login (comum ao recarregar o app deep-link),
+    // refaz o login e volta para a página de experimentais.
+    if (await this.isOnLoginPage()) {
+      console.log('   🔐 Sessão caiu na tela de login. Refazendo login...');
+      await this.login();
+      await this.page.goto(url, { waitUntil: 'networkidle2' });
+      await this.sleep(4000);
+    }
+
     // O EVO às vezes abre uma pesquisa de satisfação (NPS) por cima da tela,
     // bloqueando os cliques. Fecha logo após carregar.
     await this.dismissSurveyModal();
+  }
+
+  /**
+   * Detecta se a página atual é a tela de login do EVO.
+   */
+  async isOnLoginPage() {
+    try {
+      return await this.page.evaluate(() => {
+        const hash = location.hash || '';
+        if (/acesso|autentica/i.test(hash)) return true;
+        const txt = document.body ? (document.body.innerText || '') : '';
+        const temSenha = !!document.querySelector('input[type="password"]');
+        return temSenha && /Que bom ter voc|Esqueci a senha/i.test(txt);
+      });
+    } catch (_) {
+      return false;
+    }
   }
 
   /**
