@@ -5,5 +5,9 @@ logs/
 # Perfis de navegador (contêm dados sensíveis: cookies, sessões, logins)
 chrome-profile/
 whatsapp-chrome-data/
+evo-chrome-data/
+# Credenciais (conta de serviço do Google) — NUNCA versionar
+service-account.json
+*service-account*.json
 # Screenshots de debug
 debug-*.png
