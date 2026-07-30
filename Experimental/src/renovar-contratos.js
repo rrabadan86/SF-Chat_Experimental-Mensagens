@@ -438,10 +438,18 @@ async function enviarWhatsApp(clientes) {
     `${process.env.LOCALAPPDATA}\\Microsoft\\Edge\\Application\\msedge.exe`,
   ];
   const EDGE_USER_DATA = process.env.BOT_EDGE_FIN || 'C:\\SlimfitBot\\edge-fin';
+  const IS_LINUX = process.platform === 'linux';
   let browser = null, page = null;
 
   try {
-    try {
+    // No VPS: usa a MESMA sessão do WhatsApp do Studio (whatsapp-chrome-data),
+    // conforme pedido — sem número/perfil "Financeiro" separado.
+    if (IS_LINUX) {
+      const { connectWhatsApp } = require('./aniversariantes-mes-grupo');
+      ({ browser, page } = await connectWhatsApp());
+    }
+
+    if (!browser) try {
       browser = await puppeteer.connect({ browserURL: CDP_URL, defaultViewport: null });
       console.log('✅ Conectado ao Edge (SlimFit Financeiro)!');
      } catch (e) {
@@ -474,20 +482,24 @@ async function enviarWhatsApp(clientes) {
       if (!browser) throw new Error('Não foi possível conectar ao Edge SlimFit Financeiro.');
     }
 
-    const pages = await browser.pages();
-    page = pages.find(p => p.url().includes('web.whatsapp.com')) || null;
     if (!page) {
-      page = await browser.newPage();
-      await page.goto('https://web.whatsapp.com', { waitUntil: 'networkidle2', timeout: 60000 });
+      const pages = await browser.pages();
+      page = pages.find(p => p.url().includes('web.whatsapp.com')) || null;
+      if (!page) {
+        page = await browser.newPage();
+        await page.goto('https://web.whatsapp.com', { waitUntil: 'networkidle2', timeout: 60000 });
+      }
     }
 
-    console.log('⏳ Aguardando WhatsApp Web...');
-    await page.waitForFunction(
-      () => document.querySelector('[data-testid="chat-list"]') || document.querySelector('#pane-side'),
-      { timeout: 60000 }
-    );
-    await sleep(2000);
-    console.log('✅ WhatsApp Web pronto!\n');
+    if (!IS_LINUX) {
+      console.log('⏳ Aguardando WhatsApp Web...');
+      await page.waitForFunction(
+        () => document.querySelector('[data-testid="chat-list"]') || document.querySelector('#pane-side'),
+        { timeout: 60000 }
+      );
+      await sleep(2000);
+      console.log('✅ WhatsApp Web pronto!\n');
+    }
 
     const resultados = { enviadas: 0, falhas: 0, puladas: 0 };
     for (const cliente of clientes) {
