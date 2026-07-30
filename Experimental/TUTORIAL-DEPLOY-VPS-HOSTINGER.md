@@ -34,6 +34,59 @@ QR, autostart) seguindo os passos abaixo.
 
 ---
 
+## ✅ Configuração real validada no VPS (RESUMO DEFINITIVO)
+
+> Esta seção reflete **exatamente o que foi testado e funcionou** em produção
+> no VPS. Se houver divergência com as etapas detalhadas abaixo, **vale isto aqui.**
+
+**Decisões-chave descobertas durante a migração:**
+
+1. **Rodar com tela virtual (Xvfb), não headless puro.** O EVO (Angular) é
+   instável em headless. Instale `xvfb` e rode tudo via `xvfb-run`. No `.env`:
+   **`HEADLESS=false`**.
+2. **Domínio do EVO:** o login ocorre em `evo5` e o app redireciona para
+   `evo-abc-sec.w12app.com.br` (onde vive o `authToken`). O código agora
+   **captura esse domínio automaticamente** — só garanta `EVO_URL=https://evo5.w12app.com.br`.
+3. **Scheduler 24/7:** gerenciado pelo **PM2** via o wrapper **`scheduler-vps.sh`**
+   (que já embrulha em `xvfb-run`).
+
+**Sequência que funcionou (resumo):**
+```bash
+# 1. Sistema
+timedatectl set-timezone America/Sao_Paulo
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs build-essential python3
+apt install -y xvfb <libs-do-chromium>          # ver Etapa 3
+
+# 2. Código + deps
+cd ~/SF-Chat_Experimental-Mensagens/Experimental && npm install
+
+# 3. .env  (EVO_URL=evo5, HEADLESS=false)  — ver Etapa 4
+
+# 4. Login WhatsApp (QR no terminal)
+xvfb-run -a node src/run-now.js whatsapp
+
+# 5. Testes
+xvfb-run -a node src/run-now.js scrape
+xvfb-run -a node src/run-now.js whatsapp 5562XXXXXXXXX 08:00 Teste
+
+# 6. 24/7 com PM2 + autostart
+npm install -g pm2
+pm2 start ./scheduler-vps.sh --name slimfit-exp --interpreter bash --time
+pm2 save && pm2 startup systemd -u root --hp /root   # rode a linha que ele imprimir
+```
+
+**Operação do dia a dia:**
+```bash
+pm2 status                       # ver se está online
+pm2 logs slimfit-exp             # logs ao vivo
+pm2 restart slimfit-exp          # reiniciar
+# atualizar código do GitHub:
+cd ~/SF-Chat_Experimental-Mensagens && git pull origin claude/slimfit-official-repo-q71zdd
+cd Experimental && npm install && pm2 restart slimfit-exp
+```
+
+---
+
 ## ✅ Etapa 0 — Acesso ao servidor e atualização (JÁ FEITO)
 
 Registro do que já foi executado — mantido aqui para referência/repetição.
