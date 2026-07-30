@@ -20,6 +20,7 @@ const { buscarAlunasAniversario } = require('./planilha-aniversarios');
 
 const GRUPO = process.env.GRUPO_EQUIPE || 'SlimFit Equipe 💪';
 const CDP_URL = 'http://127.0.0.1:9226';
+const IS_LINUX = process.platform === 'linux';
 const EDGE_PROFILE = 'Default';
 const EDGE_USER_DATA = process.env.BOT_EDGE_WA || 'C:\\SlimfitBot\\edge-wa';
 const EDGE_PATHS = [
@@ -62,6 +63,20 @@ function montarMensagem(alunasDoMes, mes) {
 
 // ─── Conecta no Edge dedicado (mesmo perfil das confirmações) ───
 async function connectWhatsApp() {
+  if (IS_LINUX) {
+    // No VPS reaproveita o WhatsAppSender (Chromium com a sessão salva do Studio).
+    const WhatsAppSender = require('./whatsapp-sender');
+    const sender = new WhatsAppSender();
+    await sender.init();
+    const browser = sender.browser;
+    const page = sender.page;
+    // Os jobs chamam browser.disconnect() no finally; no Linux isso precisa
+    // FECHAR o Chromium (senão o perfil fica travado para o próximo job).
+    browser.disconnect = () => sender.close();
+    console.log('✅ WhatsApp pronto (Linux/Chromium)!\n');
+    return { browser, page };
+  }
+
   console.log('🔄 Fechando Edge existente...');
   try { execSync('taskkill /F /T /IM msedge.exe', { stdio: 'ignore' }); } catch (e) {}
   await sleep(3000);

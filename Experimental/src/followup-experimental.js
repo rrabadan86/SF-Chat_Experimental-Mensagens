@@ -17,6 +17,7 @@ const EDGE_PATHS = [
 // Perfil DEDICADO do bot (pasta isolada) — evita conflito com o Edge pessoal
 const EDGE_USER_DATA = process.env.BOT_EDGE_WA || 'C:\\SlimfitBot\\edge-wa';
 const EDGE_PROFILE = 'Default';
+const IS_LINUX = process.platform === 'linux';
 const { execSync } = require('child_process');
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -88,6 +89,20 @@ function getAudioPath(professorStr) {
  * Abre o Edge se não estiver rodando.
  */
 async function connectEdgeWhatsApp() {
+  if (IS_LINUX) {
+    // No VPS reaproveita o WhatsAppSender (Chromium com a sessão salva do Studio).
+    const WhatsAppSender = require('./whatsapp-sender');
+    const sender = new WhatsAppSender();
+    await sender.init();
+    const browser = sender.browser;
+    const page = sender.page;
+    // Os jobs chamam browser.disconnect() no finally; no Linux isso precisa
+    // FECHAR o Chromium (senão o perfil fica travado para o próximo job).
+    browser.disconnect = () => sender.close();
+    console.log('✅ WhatsApp pronto (Linux/Chromium)!\n');
+    return { browser, page };
+  }
+
   let browser = null;
 
   // Sempre fecha o Edge antes de abrir com porta de debug
