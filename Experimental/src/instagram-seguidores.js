@@ -119,7 +119,7 @@ async function coletarSeguidores(page) {
   // 1b. Verifica se está LOGADO
   const deslogado = await page.evaluate(() => {
     if (location.href.includes('/accounts/login')) return true;
-    if (document.querySelector('input[name="username"]')) return true;
+    if (document.querySelector('input[name="username"], input[name="email"], input[name="pass"]')) return true;
     const body = (document.body.innerText || '').toLowerCase();
     if (body.includes('entrar com o facebook') || body.includes('log in with facebook')) return true;
     return false;

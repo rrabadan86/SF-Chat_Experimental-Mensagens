@@ -46,7 +46,7 @@ async function clicarPorTexto(page, textos) {
 async function estaLogado(page) {
   return page.evaluate(() => {
     if (location.href.includes('/accounts/login')) return false;
-    if (document.querySelector('input[name="username"]')) return false;
+    if (document.querySelector('input[name="username"], input[name="email"], input[name="pass"]')) return false;
     // Ícones/elementos que só aparecem logado
     const temNav = document.querySelector('svg[aria-label="Página inicial"], svg[aria-label="Home"], a[href="/"] svg');
     const body = (document.body.innerText || '').toLowerCase();
@@ -101,10 +101,13 @@ async function estaLogado(page) {
       }
     } else {
       // 3) Espera o formulário aparecer (até 40s), com diagnóstico se falhar.
+      // O Instagram nomeia os campos como name="email" (usuário) e name="pass".
+      const SEL_USER = 'input[name="username"], input[name="email"]';
+      const SEL_PASS = 'input[name="password"], input[name="pass"]';
       let temCampo = false;
       const deadline = Date.now() + 40000;
       while (Date.now() < deadline) {
-        temCampo = await page.$('input[name="username"]').then(Boolean);
+        temCampo = await page.$(SEL_USER).then(Boolean);
         if (temCampo) break;
         await clicarPorTexto(page, ['permitir todos os cookies', 'allow all cookies', 'aceitar', 'accept', 'agora nao', 'not now']);
         await sleep(2000);
@@ -124,9 +127,9 @@ async function estaLogado(page) {
       }
 
       // 4) Preenche usuário e senha
-      await page.type('input[name="username"]', IG_USERNAME, { delay: 60 });
-      await page.type('input[name="password"]', IG_PASSWORD, { delay: 60 });
-      await shot(page, 'instagram-login-2-preenchido.png');
+      await page.type(SEL_USER, IG_USERNAME, { delay: 60 });
+      await page.type(SEL_PASS, IG_PASSWORD, { delay: 60 });
+      await shot(page, 'instagram-login-3-preenchido.png');
 
       await clicarPorTexto(page, ['entrar', 'log in', 'iniciar sesion']);
       // fallback: submit
