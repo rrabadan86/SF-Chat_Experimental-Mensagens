@@ -1,0 +1,21 @@
+# Segredos — NUNCA subir
+.env
+_env
+*.env
+*token*
+*secret*
+*.key
+
+# Dependências e lixo (não precisam ir)
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Sessão do WhatsApp e dados locais
+.wwebjs_auth/
+edge-wa/
+*.jsonl
+sofia-estado.txt
+sofia-pausa-min.txt
