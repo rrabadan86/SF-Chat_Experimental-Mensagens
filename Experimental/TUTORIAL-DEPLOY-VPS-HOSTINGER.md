@@ -20,12 +20,12 @@ O código da pasta `Experimental/` **foi escrito para Windows**. Ele:
   e `edge://version`;
 - Usa `koffi` + `kernel32.dll` (`keep-awake.js`) para impedir o Windows de suspender.
 
-**No VPS (Linux) não existe Edge de desktop nem interface gráfica.** Por isso a
-migração tem **duas partes**:
-
-1. **Preparar o servidor** (Node, Chromium, dependências, fuso, autostart) — este tutorial.
-2. **Adaptar a camada de navegador** para rodar **Chromium headless no Linux** (Etapa 6).
-   Sem essa adaptação o `scheduler.js` sobe, mas o envio de WhatsApp falha.
+**No VPS (Linux) não existe Edge de desktop nem interface gráfica.** Boa notícia:
+a **adaptação de código já foi feita** — o `whatsapp-sender.js` agora é
+multiplataforma (Windows usa Edge; Linux usa Chromium headless do Puppeteer,
+com o QR de login impresso no terminal). Veja a Etapa 6. Portanto a migração é,
+na prática, só **preparar o servidor** (Node, Chromium, dependências, `.env`,
+QR, autostart) seguindo os passos abaixo.
 
 > 🔒 **Aviso sobre o WhatsApp Web:** ao logar a sessão de um IP/localização nova
 > (o VPS fica em Boston-EUA), o WhatsApp pode pedir reconfirmação ou sinalizar
@@ -137,6 +137,10 @@ EVO_PASSWORD=sua_senha
 # ─── Navegador (LINUX headless) ────────────────────────────
 # true = sem janela (obrigatório no VPS). Só use false em PC com tela.
 HEADLESS=true
+# (Opcional) pasta da sessão do WhatsApp. Padrão: ./whatsapp-chrome-data
+# WA_PROFILE_DIR=/root/wa-profile
+# (Opcional) usar Chromium do sistema em vez do do Puppeteer:
+# CHROMIUM_PATH=/usr/bin/chromium-browser
 
 # ─── Google Sheets / Service Account (se usar as planilhas) ─
 # Cole o JSON da service account em UMA linha, ou aponte para um arquivo.
@@ -177,54 +181,44 @@ npx puppeteer browsers install chrome
 
 ---
 
-## 🧩 Etapa 6 — Adaptar a camada de navegador para Linux (CRÍTICO)
+## 🧩 Etapa 6 — Camada de navegador para Linux (JÁ IMPLEMENTADA ✅)
 
-Esta é a única mudança de **código** necessária. Hoje `src/whatsapp-sender.js` e
-alguns scripts (`enviar_confirmacoes.js`, `instagram-seguidores.js`, etc.) abrem
-o **Edge do Windows**. No VPS não há Edge — precisamos que eles usem o
-**Chromium do Puppeteer em modo headless**.
+**Esta adaptação já está no código** — não precisa editar nada. O
+`src/whatsapp-sender.js` agora é **multiplataforma**:
 
-Há duas formas de fazer isso:
+- **No Windows:** continua conectando ao **Microsoft Edge** exatamente como antes
+  (comportamento 100% preservado).
+- **No Linux (VPS):** detecta `process.platform === 'linux'` e lança o
+  **Chromium do próprio Puppeteer em modo headless**, com perfil dedicado em
+  `whatsapp-chrome-data/` e as flags de servidor (`--no-sandbox`,
+  `--disable-dev-shm-usage`, etc.). Nada do fluxo do Edge (`taskkill`,
+  `edge://version`, verificação de perfil) roda no Linux.
+- **QR de login:** no Linux o QR é impresso **no terminal em ASCII** (via
+  `qrcode-terminal`) e também salvo como `whatsapp-qr.png` (fallback para baixar
+  via `scp`). Assim dá para escanear pelo SSH.
+- **`keep-awake.js`:** vira um *no-op* fora do Windows (o VPS não suspende).
 
-### Opção A (recomendada) — Lançar o Chromium do Puppeteer
+O que você controla pelo `.env` (Etapa 4):
 
-Em vez de `puppeteer.connect()` a um Edge externo, o sender deve `puppeteer.launch()`
-o Chromium próprio, com um diretório de perfil dedicado e flags de servidor:
+| Variável | Efeito |
+|----------|--------|
+| `HEADLESS=true` | Chromium sem janela (padrão e obrigatório no VPS) |
+| `WA_PROFILE_DIR` | (opcional) pasta da sessão do WhatsApp — padrão: `whatsapp-chrome-data/` |
+| `CHROMIUM_PATH` | (opcional) usar um Chromium do sistema em vez do do Puppeteer |
 
-```js
-// Exemplo do que o launch precisa no Linux (dentro do whatsapp-sender.js):
-this.browser = await puppeteer.launch({
-  headless: process.env.HEADLESS !== 'false',   // true no VPS
-  userDataDir: process.env.WA_PROFILE_DIR || '/root/wa-profile',
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-  ],
-});
-```
+> **Opcional — Chromium do sistema:** se preferir não usar o Chromium que o
+> Puppeteer baixa, instale um e aponte o `.env`:
+> ```bash
+> apt install -y chromium-browser
+> which chromium-browser            # ex.: /usr/bin/chromium-browser
+> ```
+> `.env`: `CHROMIUM_PATH=/usr/bin/chromium-browser`
 
-Os trechos específicos de Windows (`killEdge()` com `taskkill`, `EDGE_PATHS`,
-`edge://version`, `verifyProfile()`) passam a **não** ser chamados no Linux.
-
-### Opção B — Instalar Chromium do sistema e apontar o `executablePath`
-
-```bash
-apt install -y chromium-browser   # ou: snap install chromium
-which chromium-browser            # ex.: /usr/bin/chromium-browser
-```
-
-E no launch: `executablePath: '/usr/bin/chromium-browser'`.
-
-> ✅ **Sugestão:** eu (Claude) posso aplicar a Opção A automaticamente — criando
-> um "modo Linux" no `whatsapp-sender.js` que preserva 100% do comportamento
-> Windows atual e só troca a forma de abrir o navegador quando `process.platform
-> === 'linux'`. Assim o mesmo repositório roda nos dois lugares. É só pedir.
-
-Sobre o `keep-awake.js` (kernel32.dll): no Linux ele deve virar um "no-op"
-(não faz nada). Como já está dentro de `try/catch`, ele não derruba o scheduler,
-mas o ideal é detectar o SO e pular a chamada.
+> ⚠️ **Nota:** outros scripts auxiliares que também abrem o Edge
+> (`enviar_confirmacoes.js`, `instagram-seguidores.js`, etc.) ainda são
+> Windows-only. O fluxo principal de **confirmação de aulas experimentais**
+> (scheduler → `whatsapp-sender.js`) já roda no Linux. Os demais serão
+> adaptados sob demanda, quando forem necessários no VPS.
 
 ---
 
@@ -405,7 +399,7 @@ pip install flask requests           # + o que o formulario_web usar
 - [ ] Libs do Chromium (Etapa 3)
 - [ ] Criar `.env` (Etapa 4)
 - [ ] `npm install` (Etapa 5)
-- [ ] **Adaptar navegador p/ Linux** (Etapa 6) ← peça ao Claude p/ aplicar
+- [x] **Navegador multiplataforma** (Etapa 6) — já implementado no código
 - [ ] Escanear QR do WhatsApp (Etapa 7)
 - [ ] Testes `scrape` / `morning` (Etapa 8)
 - [ ] PM2 + autostart (Etapa 9)

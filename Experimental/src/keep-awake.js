@@ -28,6 +28,12 @@ let refreshInterval;
  * Também mantém o display ligado para que o browser possa renderizar.
  */
 function enable() {
+  // Recurso exclusivo do Windows (SetThreadExecutionState via kernel32.dll).
+  // No Linux/VPS o servidor não suspende, então é um no-op silencioso.
+  if (process.platform !== 'win32') {
+    console.log('🔋 Keep-Awake: ignorado (não é Windows — VPS não suspende).');
+    return false;
+  }
   try {
     kernel32 = koffi.load('kernel32.dll');
     SetThreadExecutionState = kernel32.func(

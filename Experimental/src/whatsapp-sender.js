@@ -16,6 +16,24 @@ const EDGE_PATHS = [
 const EDGE_USER_DATA = process.env.BOT_EDGE_WA || 'C:\\SlimfitBot\\edge-wa';
 const EDGE_PROFILE = 'Default';
 
+// ─── Suporte a Linux / VPS headless ────────────────────────
+// No Windows o bot conecta ao Microsoft Edge de desktop (comportamento
+// original, preservado 100%). No Linux (VPS Hostinger, sem tela nem Edge)
+// lançamos o Chromium do próprio Puppeteer em modo headless, com um perfil
+// dedicado que guarda a sessão do WhatsApp. Nada do fluxo do Edge roda no Linux.
+const path = require('path');
+const IS_LINUX = process.platform === 'linux';
+// Pasta que guarda a sessão do WhatsApp no Linux (equivalente ao perfil do Edge).
+const WA_PROFILE_DIR = process.env.WA_PROFILE_DIR ||
+  path.resolve(__dirname, '..', 'whatsapp-chrome-data');
+// HEADLESS=false só faz sentido em máquina com tela; no VPS deixe true (padrão).
+const WA_HEADLESS = process.env.HEADLESS !== 'false';
+// Opcional: apontar para um Chromium do sistema (ex.: /usr/bin/chromium-browser).
+// Vazio = usa o Chromium que o Puppeteer baixa no `npm install`.
+const CHROMIUM_PATH = process.env.CHROMIUM_PATH || undefined;
+// Onde salvar o QR como imagem (fallback caso o QR ASCII não caiba no terminal).
+const QR_IMAGE_PATH = path.resolve(__dirname, '..', 'whatsapp-qr.png');
+
 class WhatsAppSender {
   constructor() {
     this.browser = null;
@@ -30,49 +48,61 @@ class WhatsAppSender {
   async init() {
     if (this.ready) return;
 
-    // 1. Tenta conectar ao Edge já aberto
-    let connected = await this.tryConnect();
+    let connected = false;
 
-    // 2. Se conectou, VERIFICA se é o perfil correto (SlimFit)
-    if (connected) {
-      const isCorrectProfile = await this.verifyProfile();
-      if (!isCorrectProfile) {
-        console.log('⚠️  Edge está aberto com perfil ERRADO! Fechando e reabrindo com perfil SlimFit...');
-        try { this.browser.disconnect(); } catch (e) { /* ignore */ }
-        this.browser = null;
-        connected = false;
-        // Mata o Edge para reabrir com perfil correto
-        await this.killEdge();
+    if (IS_LINUX) {
+      // ─── VPS headless: lança o Chromium do Puppeteer ─────────
+      // Sem Edge, sem taskkill, sem verificação de perfil do Edge.
+      connected = await this.launchChromiumLinux();
+      if (!connected) {
+        throw new Error('Não foi possível iniciar o Chromium no Linux. Confira as libs da Etapa 3 do tutorial.');
       }
-    }
+    } else {
+      // ─── Windows: fluxo original com Microsoft Edge ──────────
+      // 1. Tenta conectar ao Edge já aberto
+      connected = await this.tryConnect();
 
-    // 3. Se não conseguiu (ou perfil errado), abre o Edge com perfil SlimFit.
-    //    IMPORTANTE: relança o Edge (mata + reabre) a cada ciclo, porque às vezes
-    //    um processo antigo do Edge impede a porta de depuração de abrir. Só tentar
-    //    reconectar não resolve — é preciso reabrir o Edge de fato.
-    if (!connected) {
-      for (let ciclo = 1; ciclo <= 3 && !connected; ciclo++) {
-        console.log(`📱 Abrindo Edge com perfil SlimFit (ciclo ${ciclo}/3)...`);
-        await this.launchEdge(); // já mata o Edge antes de abrir
-
-        for (let i = 0; i < 4 && !connected; i++) {
-          await this.sleep(3000);
-          connected = await this.tryConnect();
-          if (!connected) console.log(`   Tentativa ${i + 1}/4 de conexão (ciclo ${ciclo})...`);
-        }
-      }
-
-      // Verifica perfil novamente após abrir
+      // 2. Se conectou, VERIFICA se é o perfil correto (SlimFit)
       if (connected) {
         const isCorrectProfile = await this.verifyProfile();
         if (!isCorrectProfile) {
-          throw new Error(`ABORTADO: Edge abriu com perfil errado. Esperado: ${EDGE_PROFILE}. NÃO vou enviar mensagens pelo perfil errado.`);
+          console.log('⚠️  Edge está aberto com perfil ERRADO! Fechando e reabrindo com perfil SlimFit...');
+          try { this.browser.disconnect(); } catch (e) { /* ignore */ }
+          this.browser = null;
+          connected = false;
+          // Mata o Edge para reabrir com perfil correto
+          await this.killEdge();
         }
       }
-    }
 
-    if (!connected) {
-      throw new Error('Não foi possível conectar ao Edge. Verifique se ele está instalado.');
+      // 3. Se não conseguiu (ou perfil errado), abre o Edge com perfil SlimFit.
+      //    IMPORTANTE: relança o Edge (mata + reabre) a cada ciclo, porque às vezes
+      //    um processo antigo do Edge impede a porta de depuração de abrir. Só tentar
+      //    reconectar não resolve — é preciso reabrir o Edge de fato.
+      if (!connected) {
+        for (let ciclo = 1; ciclo <= 3 && !connected; ciclo++) {
+          console.log(`📱 Abrindo Edge com perfil SlimFit (ciclo ${ciclo}/3)...`);
+          await this.launchEdge(); // já mata o Edge antes de abrir
+
+          for (let i = 0; i < 4 && !connected; i++) {
+            await this.sleep(3000);
+            connected = await this.tryConnect();
+            if (!connected) console.log(`   Tentativa ${i + 1}/4 de conexão (ciclo ${ciclo})...`);
+          }
+        }
+
+        // Verifica perfil novamente após abrir
+        if (connected) {
+          const isCorrectProfile = await this.verifyProfile();
+          if (!isCorrectProfile) {
+            throw new Error(`ABORTADO: Edge abriu com perfil errado. Esperado: ${EDGE_PROFILE}. NÃO vou enviar mensagens pelo perfil errado.`);
+          }
+        }
+      }
+
+      if (!connected) {
+        throw new Error('Não foi possível conectar ao Edge. Verifique se ele está instalado.');
+      }
     }
 
 // 4. Procura aba do WhatsApp Web já aberta e garante que seja a ÚNICA
@@ -115,12 +145,19 @@ class WhatsAppSender {
     // 6. Aguarda a tela de chats carregar (e lida agressivamente com o "Usar Aqui")
     console.log('⏳ Aguardando WhatsApp Web ficar pronto (lidando com recarregamento e "Usar aqui")...');
 
-    const maxWaitTime = 60000;
+    // No Linux o primeiro login precisa de tempo para o operador escanear o QR.
+    const maxWaitTime = IS_LINUX ? 180000 : 60000;
     const checkInterval = 2000;
     let elapsedTime = 0;
     let isReady = false;
 
     while (elapsedTime < maxWaitTime && !isReady) {
+      // No Linux, se a tela ainda está no QR, mostra o QR no terminal (ASCII)
+      // e salva um PNG de fallback, para permitir escanear via SSH.
+      if (IS_LINUX && !isReady) {
+        await this.renderQrIfPresent();
+      }
+
       try {
         isReady = await this.page.evaluate(() => {
           // 6.1 Clique agressivo no botão de reassumir a sessão. O WhatsApp novo
@@ -269,6 +306,82 @@ class WhatsAppSender {
         return false;
       });
     } catch (e) { return false; }
+  }
+
+  /**
+   * LINUX (VPS headless): lança o Chromium do próprio Puppeteer com um perfil
+   * dedicado que guarda a sessão do WhatsApp. Não usa Edge nem CDP externo.
+   */
+  async launchChromiumLinux() {
+    try {
+      console.log(`🐧 Iniciando Chromium headless (${WA_HEADLESS ? 'headless' : 'com tela'})...`);
+      console.log(`   Perfil/sessão: ${WA_PROFILE_DIR}`);
+
+      this.browser = await puppeteer.launch({
+        headless: WA_HEADLESS ? 'new' : false,
+        executablePath: CHROMIUM_PATH,          // undefined = Chromium do Puppeteer
+        userDataDir: WA_PROFILE_DIR,
+        defaultViewport: null,
+        args: [
+          '--no-sandbox',                       // obrigatório rodando como root no VPS
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',            // evita crash por /dev/shm pequeno
+          '--disable-gpu',
+          '--no-first-run',
+          '--no-default-browser-check',
+          '--window-size=1280,900',
+        ],
+      });
+
+      console.log('✅ Chromium iniciado!');
+      this._qrLastRef = null; // controla para não repintar o mesmo QR
+      return true;
+    } catch (err) {
+      console.error(`❌ Falha ao iniciar o Chromium: ${err.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * LINUX: se a tela de login (QR) estiver visível, imprime o QR no terminal
+   * em ASCII (para escanear via SSH) e salva um PNG de fallback. Só repinta
+   * quando o QR muda, para não poluir o log.
+   */
+  async renderQrIfPresent() {
+    try {
+      if (!this.page) return;
+
+      // O WhatsApp Web guarda o conteúdo do QR no atributo data-ref do container.
+      const ref = await this.page.evaluate(() => {
+        const el = document.querySelector('[data-ref]') ||
+                   document.querySelector('canvas[aria-label*="scan" i]')?.closest('[data-ref]');
+        return el ? el.getAttribute('data-ref') : null;
+      });
+
+      if (!ref) return;                 // não está na tela de QR
+      if (ref === this._qrLastRef) return; // mesmo QR, já mostrado
+      this._qrLastRef = ref;
+
+      console.log('\n📲 Escaneie o QR abaixo no WhatsApp do celular:');
+      console.log('   (WhatsApp → Aparelhos conectados → Conectar um aparelho)\n');
+      try {
+        const qrcodeTerminal = require('qrcode-terminal');
+        qrcodeTerminal.generate(ref, { small: true });
+      } catch (e) {
+        console.log('   (qrcode-terminal indisponível — use a imagem abaixo)');
+      }
+
+      // Fallback: salva um PNG do QR para baixar via scp se o ASCII não servir.
+      try {
+        const qrEl = await this.page.$('[data-ref]');
+        if (qrEl) {
+          await qrEl.screenshot({ path: QR_IMAGE_PATH });
+          console.log(`\n🖼️  QR também salvo em: ${QR_IMAGE_PATH}`);
+        }
+      } catch (e) { /* screenshot é só um extra */ }
+    } catch (e) {
+      // A página pode estar em transição; ignora e tenta no próximo ciclo.
+    }
   }
 
   /**
@@ -460,13 +573,19 @@ class WhatsAppSender {
   }
 
   /**
-   * Desconecta do Edge (NÃO fecha o Edge)
+   * Windows: apenas desconecta do Edge (deixa o Edge aberto).
+   * Linux: fecha o Chromium que nós mesmos lançamos (senão fica processo órfão).
    */
   async close() {
     if (this.browser) {
-      console.log('📱 Desconectando do Edge...');
       try {
-        this.browser.disconnect();
+        if (IS_LINUX) {
+          console.log('📱 Fechando o Chromium...');
+          await this.browser.close();
+        } else {
+          console.log('📱 Desconectando do Edge...');
+          this.browser.disconnect();
+        }
       } catch (e) { /* ignore */ }
       this.browser = null;
       this.page = null;
