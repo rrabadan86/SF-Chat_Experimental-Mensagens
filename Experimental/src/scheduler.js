@@ -327,6 +327,13 @@ function checkMissedCrons() {
 // responder em `timeoutMs` (padrão 180s), assume "n" (não executa) e segue —
 // assim o Watchdog nunca fica travado esperando resposta.
 function perguntarUsuario(pergunta, timeoutMs = 180000) {
+  // Sem terminal interativo (ex.: rodando sob PM2/Xvfb no VPS) não há como
+  // responder. Pula o job perdido automaticamente ("n"), sem esperar nem
+  // poluir o log com a contagem regressiva.
+  if (!process.stdin.isTTY) {
+    console.log(`${pergunta}→ ambiente não interativo: assumindo "n" (não executar jobs perdidos).`);
+    return Promise.resolve(false);
+  }
   return new Promise(resolve => {
     let done = false;
     let remaining = Math.ceil(timeoutMs / 1000);
