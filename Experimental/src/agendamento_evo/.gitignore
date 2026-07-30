@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
 .env
+.venv/
 web_outbox.jsonl
 web_puxados.json
