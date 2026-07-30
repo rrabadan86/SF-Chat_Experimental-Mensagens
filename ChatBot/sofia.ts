@@ -385,7 +385,7 @@ function carregarPrompt(): string {
 
 // MODELO DA CONVERSA: Haiku 4.5 (rápido e barato) dá conta do roteiro da Sofia.
 // Se notar a Sofia escorregando em alguma regra, troque para "claude-sonnet-5".
-const MODELO_CONVERSA = "claude-haiku-4-5-20251001";
+const MODELO_CONVERSA = "claude-sonnet-5";
 // MODELO DA EXTRAÇÃO: Sonnet, por precisão (roda 1x por agendamento, custo mínimo).
 const MODELO_EXTRACAO = "claude-sonnet-5";
 
