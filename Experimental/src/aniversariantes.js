@@ -18,6 +18,7 @@ const MSG_SUFIXO  = '! 🥳🎉\n\nMuitas felicidades, saúde e sucesso!!! Que e
 
 // WhatsApp: perfil DEDICADO do bot (pasta isolada), porta 9226 (mesmo do follow-up)
 const CDP_URL = 'http://127.0.0.1:9226';
+const IS_LINUX = process.platform === 'linux';
 const EDGE_PROFILE = 'Default';
 
 // Modo simulação por padrão. Use --enviar para realmente mandar nos grupos.
@@ -273,6 +274,25 @@ async function buscarAniversariantesHoje() {
 
 // ─── WhatsApp: conecta ao Edge Profile 1 (SlimFit) ─────────
 async function connectWhatsApp() {
+  if (IS_LINUX) {
+    // No VPS reaproveita o WhatsAppSender (Chromium com a sessão salva do Studio).
+    const WhatsAppSender = require('./whatsapp-sender');
+    const sender = new WhatsAppSender();
+    await sender.init();
+    const browser = sender.browser;
+    const page = sender.page;
+    // browser.close() chama disconnect() internamente; trava evita recursão.
+    const realClose = browser.close.bind(browser);
+    let fechando = false;
+    browser.disconnect = async () => {
+      if (fechando) return;
+      fechando = true;
+      try { await realClose(); } catch (_) {}
+    };
+    console.log('✅ WhatsApp pronto (Linux/Chromium)!\n');
+    return { browser, page };
+  }
+
   console.log('🔄 Fechando Edge existente...');
   try { execSync('taskkill /F /T /IM msedge.exe', { stdio: 'ignore' }); } catch (e) {}
   await sleep(3000);
