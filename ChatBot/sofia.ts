@@ -17,6 +17,7 @@
  * ══════════════════════════════════════════════════════════════════════════
  */
 
+import "dotenv/config";
 import { query, tool, createSdkMcpServer, type ClaudeAgentOptions } from "@anthropic-ai/claude-agent-sdk";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";

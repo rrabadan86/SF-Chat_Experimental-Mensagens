@@ -1,0 +1,11 @@
+node_modules/
+.env
+# Sessão do WhatsApp da Sofia (whatsapp-web.js / LocalAuth) — dados sensíveis
+.wwebjs_auth/
+.wwebjs_cache/
+sofia-chrome-data/
+# Memória e estado em runtime
+sofia-memoria.json
+sofia-estado.txt
+# Backups do editor
+*.bak.txt
