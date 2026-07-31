@@ -51,11 +51,14 @@ async function comRetry<T>(fn: () => Promise<T>, tentativas = 5): Promise<T> {
 // ══════════════════════════════════════════════════════════════════════════
 // 1) LINKS E MÍDIAS
 // ══════════════════════════════════════════════════════════════════════════
+// URLs das imagens. Para TROCAR sem mexer no código, defina no .env:
+//   MIDIA_GRADE_IMG, MIDIA_GRADE_LINK, MIDIA_PRECOS_IMG, MIDIA_PRECOS_LINK
+// Se não definir no .env, usa os valores padrão abaixo.
 const MIDIAS = {
-  grade_imagem: "https://storage.zee.tech/tenants/7a8c9d8e-7208-4a26-87c2-6662c8f962e4/prompt-media/b57c13a0-e544-4df4-99ed-b27cc9cd8859.jpeg",
-  grade_link: "https://drive.google.com/file/d/1wgAvctcQZJVNcka59KcV_FjLDetScCM8/view?usp=sharing",
-  precos_imagem: "https://storage.zee.tech/tenants/7a8c9d8e-7208-4a26-87c2-6662c8f962e4/prompt-media/63436026-ab4a-4b0f-b6fd-b02f8d4cf037.png",
-  precos_link: "https://drive.google.com/file/d/14Em2I3-O7-BJvI51P8na7YS2pVvVOUAZ/view?usp=sharing",
+  grade_imagem: process.env.MIDIA_GRADE_IMG || "https://storage.zee.tech/tenants/7a8c9d8e-7208-4a26-87c2-6662c8f962e4/prompt-media/b57c13a0-e544-4df4-99ed-b27cc9cd8859.jpeg",
+  grade_link: process.env.MIDIA_GRADE_LINK || "https://drive.google.com/file/d/1wgAvctcQZJVNcka59KcV_FjLDetScCM8/view?usp=sharing",
+  precos_imagem: process.env.MIDIA_PRECOS_IMG || "https://storage.zee.tech/tenants/7a8c9d8e-7208-4a26-87c2-6662c8f962e4/prompt-media/63436026-ab4a-4b0f-b6fd-b02f8d4cf037.png",
+  precos_link: process.env.MIDIA_PRECOS_LINK || "https://drive.google.com/file/d/14Em2I3-O7-BJvI51P8na7YS2pVvVOUAZ/view?usp=sharing",
 };
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -67,7 +70,7 @@ const HORARIOS_PERMITIDOS: Record<number, string[]> = {
   2: ["07:00", "08:15", "09:30", "16:30", "18:15", "19:30"],
   3: ["05:45", "07:00", "08:15", "09:30", "14:00", "16:15"],
   4: ["07:00", "08:15", "09:30", "16:30", "18:15", "19:30"],
-  5: ["05:45", "07:00", "08:15", "09:30", "16:15"],
+  5: ["05:45", "07:00", "08:15", "09:30", "14:00", "16:15"],
   6: ["08:30", "09:45"],
 };
 const DIAS = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
