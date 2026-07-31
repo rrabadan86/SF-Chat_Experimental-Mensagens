@@ -1,0 +1,4 @@
+grade_imagem=https://storage.zee.tech/tenants/7a8c9d8e-7208-4a26-87c2-6662c8f962e4/prompt-media/b57c13a0-e544-4df4-99ed-b27cc9cd8859.jpeg
+grade_link=https://drive.google.com/file/d/1wgAvctcQZJVNcka59KcV_FjLDetScCM8/view?usp=sharing
+precos_imagem=https://storage.zee.tech/tenants/7a8c9d8e-7208-4a26-87c2-6662c8f962e4/prompt-media/63436026-ab4a-4b0f-b6fd-b02f8d4cf037.png
+precos_link=https://drive.google.com/file/d/14Em2I3-O7-BJvI51P8na7YS2pVvVOUAZ/view?usp=sharing

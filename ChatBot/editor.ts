@@ -32,6 +32,26 @@ function gravarPausaMin(n) { fs.writeFileSync(PAUSA_FILE, String(n), "utf-8"); }
 
 function lerArquivo(p) { try { return fs.readFileSync(p, "utf-8"); } catch { return ""; } }
 
+// ── Mídias (URLs das imagens de preços e grade) ──────────────────────────────
+const MIDIAS_FILE = path.join(process.cwd(), "sofia-midias.txt");
+function lerMidias() {
+  const d = { grade_imagem: "", grade_link: "", precos_imagem: "", precos_link: "" };
+  try {
+    for (const l of fs.readFileSync(MIDIAS_FILE, "utf-8").split("\n")) {
+      const i = l.indexOf("=");
+      if (i > 0) { const k = l.slice(0, i).trim(); if (k in d) d[k] = l.slice(i + 1).trim(); }
+    }
+  } catch {}
+  return d;
+}
+function gravarMidias(m) {
+  const txt = "grade_imagem=" + (m.grade_imagem || "") + "\n"
+    + "grade_link=" + (m.grade_link || "") + "\n"
+    + "precos_imagem=" + (m.precos_imagem || "") + "\n"
+    + "precos_link=" + (m.precos_link || "") + "\n";
+  fs.writeFileSync(MIDIAS_FILE, txt, "utf-8");
+}
+
 // ── parse do prompt em seções (por linhas que começam com "# ") ────────────────
 function parseSecoes(texto) {
   const linhas = texto.replace(/\r\n/g, "\n").split("\n");
@@ -74,6 +94,10 @@ function pagina(aviso) {
   aviso = aviso || "";
   const secoes = parseSecoes(lerArquivo(PROMPT_FILE));
   const extracao = lerArquivo(EXTRACAO_FILE);
+  const mid = lerMidias();
+  const inpMidia = (nome, valor) => '<input type="text" name="' + nome + '" value="' + esc(valor)
+    + '" style="width:100%;padding:10px;border:1px solid #cbd2d9;border-radius:8px;'
+    + 'font-family:ui-monospace,monospace;font-size:13px;margin-bottom:6px;">';
 
   const camposConversa = secoes.map((s, i) => {
     const rows = Math.min(16, Math.max(4, s.corpo.split("\n").length + 1));
@@ -121,6 +145,13 @@ function pagina(aviso) {
 + '<div class="secao-titulo">&#128279; Script de integração (dados enviados ao EVO)</div>'
 + '<div class="card extra"><label>Extração do resumo (nome, e-mail, dia, hora)</label>'
 + '<textarea name="extracao" spellcheck="false" rows="12">' + esc(extracao) + '</textarea></div>'
++ '<div class="secao-titulo">&#128247; Imagens (troque as URLs quando atualizar a tabela/grade)</div>'
++ '<div class="card">'
++ '<label>Imagem da TABELA DE PREÇOS (URL)</label>' + inpMidia("precos_imagem", mid.precos_imagem)
++ '<label>Link (Google Drive) da tabela de preços</label>' + inpMidia("precos_link", mid.precos_link)
++ '<label>Imagem da GRADE DE HORÁRIOS (URL)</label>' + inpMidia("grade_imagem", mid.grade_imagem)
++ '<label>Link (Google Drive) da grade</label>' + inpMidia("grade_link", mid.grade_link)
++ '</div>'
 + '<div class="barra"><button class="salvar" type="submit">&#128190; Salvar tudo</button>'
 + '<button class="restaurar" type="submit" formaction="/restaurar" '
 + 'onclick="return confirm(\'Restaurar a versão anterior de TODOS os campos?\')">&#8617; Restaurar anterior</button></div>'
@@ -161,6 +192,14 @@ const servidor = http.createServer(async (req, res) => {
     // salva o tempo de pausa do atendimento humano (com limites de segurança)
     const pm = Math.max(1, Math.min(1440, parseInt(params.get("pausaMin") || "30", 10) || 30));
     gravarPausaMin(pm);
+
+    // salva as URLs das imagens (preços/grade)
+    gravarMidias({
+      grade_imagem: (params.get("grade_imagem") || "").trim(),
+      grade_link: (params.get("grade_link") || "").trim(),
+      precos_imagem: (params.get("precos_imagem") || "").trim(),
+      precos_link: (params.get("precos_link") || "").trim(),
+    });
 
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(pagina("Salvo! As próximas conversas já vão usar estas configurações."));

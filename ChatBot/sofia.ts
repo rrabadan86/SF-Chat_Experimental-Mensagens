@@ -51,14 +51,27 @@ async function comRetry<T>(fn: () => Promise<T>, tentativas = 5): Promise<T> {
 // ══════════════════════════════════════════════════════════════════════════
 // 1) LINKS E MÍDIAS
 // ══════════════════════════════════════════════════════════════════════════
-// URLs das imagens. Para TROCAR sem mexer no código, defina no .env:
-//   MIDIA_GRADE_IMG, MIDIA_GRADE_LINK, MIDIA_PRECOS_IMG, MIDIA_PRECOS_LINK
-// Se não definir no .env, usa os valores padrão abaixo.
+// URLs das imagens. Editáveis pela telinha (editor) via arquivo sofia-midias.txt.
+// Ordem de prioridade: sofia-midias.txt → variável de ambiente → padrão abaixo.
+function lerMidias(): Record<string, string> {
+  try {
+    const txt = fs.readFileSync(path.join(process.cwd(), "sofia-midias.txt"), "utf-8");
+    const m: Record<string, string> = {};
+    for (const l of txt.split("\n")) {
+      const i = l.indexOf("=");
+      if (i > 0) m[l.slice(0, i).trim()] = l.slice(i + 1).trim();
+    }
+    return m;
+  } catch {
+    return {};
+  }
+}
+const _mid = lerMidias();
 const MIDIAS = {
-  grade_imagem: process.env.MIDIA_GRADE_IMG || "https://storage.zee.tech/tenants/7a8c9d8e-7208-4a26-87c2-6662c8f962e4/prompt-media/b57c13a0-e544-4df4-99ed-b27cc9cd8859.jpeg",
-  grade_link: process.env.MIDIA_GRADE_LINK || "https://drive.google.com/file/d/1wgAvctcQZJVNcka59KcV_FjLDetScCM8/view?usp=sharing",
-  precos_imagem: process.env.MIDIA_PRECOS_IMG || "https://storage.zee.tech/tenants/7a8c9d8e-7208-4a26-87c2-6662c8f962e4/prompt-media/63436026-ab4a-4b0f-b6fd-b02f8d4cf037.png",
-  precos_link: process.env.MIDIA_PRECOS_LINK || "https://drive.google.com/file/d/14Em2I3-O7-BJvI51P8na7YS2pVvVOUAZ/view?usp=sharing",
+  grade_imagem: _mid.grade_imagem || process.env.MIDIA_GRADE_IMG || "https://storage.zee.tech/tenants/7a8c9d8e-7208-4a26-87c2-6662c8f962e4/prompt-media/b57c13a0-e544-4df4-99ed-b27cc9cd8859.jpeg",
+  grade_link: _mid.grade_link || process.env.MIDIA_GRADE_LINK || "https://drive.google.com/file/d/1wgAvctcQZJVNcka59KcV_FjLDetScCM8/view?usp=sharing",
+  precos_imagem: _mid.precos_imagem || process.env.MIDIA_PRECOS_IMG || "https://storage.zee.tech/tenants/7a8c9d8e-7208-4a26-87c2-6662c8f962e4/prompt-media/63436026-ab4a-4b0f-b6fd-b02f8d4cf037.png",
+  precos_link: _mid.precos_link || process.env.MIDIA_PRECOS_LINK || "https://drive.google.com/file/d/14Em2I3-O7-BJvI51P8na7YS2pVvVOUAZ/view?usp=sharing",
 };
 
 // ══════════════════════════════════════════════════════════════════════════
