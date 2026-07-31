@@ -439,8 +439,11 @@ export async function responderComMemoria(telefone: string, mensagem: string): P
 
   // Conversa NOVA → injeta o prompt lido do arquivo agora (pega edições recentes).
   // Conversa retomada → mantém a sessão (o prompt já está embutido nela).
+  // IMPORTANTE: reaplicamos o systemPrompt em TODA mensagem (inclusive nas retomadas).
+  // Sem isso, a partir da 2ª mensagem a Sofia perdia as regras (defletir preço, inventar
+  // "franquia" etc.), porque o resume não estava mantendo o system prompt.
   const opcoesDaVez: ClaudeAgentOptions = conversa.sessionId
-    ? { ...options, resume: conversa.sessionId }
+    ? { ...options, resume: conversa.sessionId, systemPrompt: carregarPrompt() }
     : { ...options, systemPrompt: carregarPrompt() };
 
   let resposta = "";
