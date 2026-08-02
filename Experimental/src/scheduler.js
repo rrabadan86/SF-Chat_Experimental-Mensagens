@@ -384,19 +384,28 @@ async function main() {
   // ─── Impedir suspensão/hibernação do Windows ──────────────
   keepAwake.enable();
 
-  // Libera keep-awake quando o processo encerrar
-  const cleanup = () => {
+  // ─── Cliente ÚNICO e PERSISTENTE do WhatsApp ──────────────
+  // Sobe UMA vez aqui e fica autenticado em memória. TODOS os jobs reaproveitam
+  // esta mesma sessão (nada de abrir/fechar navegador a cada envio — era isso
+  // que derrubava a sessão). No shutdown, destroy() salva a sessão com segurança.
+  const wa = require('./wa-client');
+
+  const cleanup = async () => {
     keepAwake.disable();
+    try { await wa.destroy(); } catch (_) { /* ignore */ }
     process.exit(0);
   };
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
 
-  // (Removido) O teste de conexão com WhatsApp no boot foi retirado de propósito:
-  // ele abria/matava o Edge várias vezes logo na inicialização, deixando a porta
-  // 9222 em estado inconsistente e atrapalhando os jobs. Cada job já testa e abre
-  // sua própria conexão no horário programado.
-  console.log('ℹ️  Conexão com WhatsApp será aberta por cada job no seu horário.\n');
+  console.log('📱 Iniciando o cliente único do WhatsApp (aguardando "ready")...');
+  try {
+    await wa.initWhatsApp(); // resolve no evento 'ready' (WhatsApp Web sincronizado)
+    console.log('✅ WhatsApp pronto — jobs liberados para disparar.\n');
+  } catch (e) {
+    logError('Falha ao iniciar o cliente do WhatsApp', e);
+    console.log('⚠️  Seguindo assim mesmo; os jobs vão tentar reconectar.\n');
+  }
 
   // ─── Verifica jobs perdidos antes de agendar ─────────────
   const missedJobs = checkMissedCrons();

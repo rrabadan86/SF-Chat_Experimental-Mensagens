@@ -63,27 +63,12 @@ function montarMensagem(alunasDoMes, mes) {
 
 // ─── Conecta no Edge dedicado (mesmo perfil das confirmações) ───
 async function connectWhatsApp() {
-  if (IS_LINUX) {
-    // No VPS reaproveita o WhatsAppSender (Chromium com a sessão salva do Studio).
-    const WhatsAppSender = require('./whatsapp-sender');
-    const sender = new WhatsAppSender();
-    await sender.init();
-    const browser = sender.browser;
-    const page = sender.page;
-    // Os jobs chamam browser.disconnect() no finally; no Linux isso precisa
-    // FECHAR o Chromium (senão o perfil fica travado para o próximo job).
-    // browser.close() chama disconnect() internamente, então uma trava evita
-    // a recursão infinita.
-    const realClose = browser.close.bind(browser);
-    let fechando = false;
-    browser.disconnect = async () => {
-      if (fechando) return;
-      fechando = true;
-      try { await realClose(); } catch (_) {}
-    };
-    console.log('✅ WhatsApp pronto (Linux/Chromium)!\n');
-    return { browser, page };
-  }
+  // Cliente ÚNICO persistente (wa-client.js): garante que está 'ready' e devolve
+  // um "browser" cujo disconnect() é no-op — o cliente compartilhado NUNCA fecha
+  // aqui. Os jobs continuam chamando browser.disconnect() no finally (inofensivo).
+  const wa = require('./wa-client');
+  await wa.initWhatsApp();
+  return { browser: { disconnect() {} }, page: null };
 
   console.log('🔄 Fechando Edge existente...');
   try { execSync('taskkill /F /T /IM msedge.exe', { stdio: 'ignore' }); } catch (e) {}
@@ -151,6 +136,19 @@ async function connectWhatsApp() {
 
 // ─── Abre um grupo pelo nome e envia um texto (com quebras de linha) ───
 async function enviarTextoNoGrupo(page, nomeGrupo, texto) {
+  // page é ignorado (compat). Envia pelo cliente único (whatsapp-web.js).
+  {
+    const wa = require('./wa-client');
+    try {
+      await wa.sendGrupo(nomeGrupo, texto);
+      console.log(`   ✅ Enviado no grupo "${nomeGrupo}"`);
+      return true;
+    } catch (e) {
+      console.log(`   ⚠️  Falha ao enviar no grupo "${nomeGrupo}": ${e.message}`);
+      return false;
+    }
+  }
+  // ── (código antigo via DOM abaixo fica inacessível) ──
   // 1. Clica na caixa de busca e procura o grupo (sem emoji, casa melhor)
   const consulta = nomeGrupo.replace(/[^\p{L}\p{N}\s]/gu, '').trim();
   const buscaCoords = await page.evaluate(() => {

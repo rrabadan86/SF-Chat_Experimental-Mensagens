@@ -100,6 +100,13 @@ async function esperarConversaPronta(page, timeoutMs = 45000) {
 
 // Envia UMA mensagem usando uma page do WhatsApp Web já aberta/conectada.
 async function enviarUma(page, phone, texto) {
+  // page ignorado (compat). Envia pelo cliente único (whatsapp-web.js).
+  {
+    const wa = require('./wa-client');
+    await wa.sendTexto(phone, texto);
+    return;
+  }
+  // ── (código antigo via page abaixo fica inacessível) ──
   const number = normalizar(phone);
   await page.goto(
     `https://web.whatsapp.com/send?phone=${number}&text=${encodeURIComponent(texto)}`,

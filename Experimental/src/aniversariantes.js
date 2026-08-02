@@ -274,23 +274,12 @@ async function buscarAniversariantesHoje() {
 
 // ─── WhatsApp: conecta ao Edge Profile 1 (SlimFit) ─────────
 async function connectWhatsApp() {
-  if (IS_LINUX) {
-    // No VPS reaproveita o WhatsAppSender (Chromium com a sessão salva do Studio).
-    const WhatsAppSender = require('./whatsapp-sender');
-    const sender = new WhatsAppSender();
-    await sender.init();
-    const browser = sender.browser;
-    const page = sender.page;
-    // browser.close() chama disconnect() internamente; trava evita recursão.
-    const realClose = browser.close.bind(browser);
-    let fechando = false;
-    browser.disconnect = async () => {
-      if (fechando) return;
-      fechando = true;
-      try { await realClose(); } catch (_) {}
-    };
-    console.log('✅ WhatsApp pronto (Linux/Chromium)!\n');
-    return { browser, page };
+  // Cliente ÚNICO persistente (wa-client.js): garante 'ready' e devolve um
+  // "browser" cujo disconnect() é no-op (o cliente compartilhado nunca fecha aqui).
+  {
+    const wa = require('./wa-client');
+    await wa.initWhatsApp();
+    return { browser: { disconnect() {} }, page: null };
   }
 
   console.log('🔄 Fechando Edge existente...');

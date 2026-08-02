@@ -1,545 +1,39 @@
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-const { exec } = require('child_process');
-
-puppeteer.use(StealthPlugin());
-
-const CDP_URL = 'http://127.0.0.1:9226';
-const EDGE_PATHS = [
-  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-  `${process.env.LOCALAPPDATA}\\Microsoft\\Edge\\Application\\msedge.exe`,
-];
-// Perfil DEDICADO do bot (pasta isolada) — evita conflito com o Edge pessoal.
-// O Edge só permite 1 instância por pasta; como esta é exclusiva do bot,
-// o Edge dele sempre abre limpo com a porta de depuração funcionando.
-const EDGE_USER_DATA = process.env.BOT_EDGE_WA || 'C:\\SlimfitBot\\edge-wa';
-const EDGE_PROFILE = 'Default';
-
-// ─── Suporte a Linux / VPS headless ────────────────────────
-// No Windows o bot conecta ao Microsoft Edge de desktop (comportamento
-// original, preservado 100%). No Linux (VPS Hostinger, sem tela nem Edge)
-// lançamos o Chromium do próprio Puppeteer em modo headless, com um perfil
-// dedicado que guarda a sessão do WhatsApp. Nada do fluxo do Edge roda no Linux.
-const path = require('path');
-const IS_LINUX = process.platform === 'linux';
-// Pasta que guarda a sessão do WhatsApp no Linux (equivalente ao perfil do Edge).
-const WA_PROFILE_DIR = process.env.WA_PROFILE_DIR ||
-  path.resolve(__dirname, '..', 'whatsapp-chrome-data');
-// HEADLESS=false só faz sentido em máquina com tela; no VPS deixe true (padrão).
-const WA_HEADLESS = process.env.HEADLESS !== 'false';
-// Opcional: apontar para um Chromium do sistema (ex.: /usr/bin/chromium-browser).
-// Vazio = usa o Chromium que o Puppeteer baixa no `npm install`.
-const CHROMIUM_PATH = process.env.CHROMIUM_PATH || undefined;
-// Onde salvar o QR como imagem (fallback caso o QR ASCII não caiba no terminal).
-const QR_IMAGE_PATH = path.resolve(__dirname, '..', 'whatsapp-qr.png');
+/**
+ * whatsapp-sender.js — ADAPTADOR sobre o cliente único (wa-client.js).
+ *
+ * Mantido por compatibilidade: os jobs continuam usando `new WhatsAppSender()`,
+ * mas por baixo TUDO passa pelo MESMO cliente persistente (whatsapp-web.js).
+ * Nada de abrir/fechar o navegador a cada envio — era isso que derrubava a
+ * sessão. init() só garante que o cliente está pronto; close() é no-op.
+ */
+const wa = require('./wa-client');
 
 class WhatsAppSender {
   constructor() {
-    this.browser = null;
-    this.page = null;
     this.ready = false;
+    this.page = null; // compat: jobs antigos liam .page; hoje não é usado
   }
 
-  /**
-   * Conecta ao Edge existente ou abre um novo com depuração remota.
-   * Encontra ou abre a aba do WhatsApp Web automaticamente.
-   */
   async init() {
-    if (this.ready) return;
-
-    let connected = false;
-
-    if (IS_LINUX) {
-      // ─── VPS headless: lança o Chromium do Puppeteer ─────────
-      // Sem Edge, sem taskkill, sem verificação de perfil do Edge.
-      connected = await this.launchChromiumLinux();
-      if (!connected) {
-        throw new Error('Não foi possível iniciar o Chromium no Linux. Confira as libs da Etapa 3 do tutorial.');
-      }
-    } else {
-      // ─── Windows: fluxo original com Microsoft Edge ──────────
-      // 1. Tenta conectar ao Edge já aberto
-      connected = await this.tryConnect();
-
-      // 2. Se conectou, VERIFICA se é o perfil correto (SlimFit)
-      if (connected) {
-        const isCorrectProfile = await this.verifyProfile();
-        if (!isCorrectProfile) {
-          console.log('⚠️  Edge está aberto com perfil ERRADO! Fechando e reabrindo com perfil SlimFit...');
-          try { this.browser.disconnect(); } catch (e) { /* ignore */ }
-          this.browser = null;
-          connected = false;
-          // Mata o Edge para reabrir com perfil correto
-          await this.killEdge();
-        }
-      }
-
-      // 3. Se não conseguiu (ou perfil errado), abre o Edge com perfil SlimFit.
-      //    IMPORTANTE: relança o Edge (mata + reabre) a cada ciclo, porque às vezes
-      //    um processo antigo do Edge impede a porta de depuração de abrir. Só tentar
-      //    reconectar não resolve — é preciso reabrir o Edge de fato.
-      if (!connected) {
-        for (let ciclo = 1; ciclo <= 3 && !connected; ciclo++) {
-          console.log(`📱 Abrindo Edge com perfil SlimFit (ciclo ${ciclo}/3)...`);
-          await this.launchEdge(); // já mata o Edge antes de abrir
-
-          for (let i = 0; i < 4 && !connected; i++) {
-            await this.sleep(3000);
-            connected = await this.tryConnect();
-            if (!connected) console.log(`   Tentativa ${i + 1}/4 de conexão (ciclo ${ciclo})...`);
-          }
-        }
-
-        // Verifica perfil novamente após abrir
-        if (connected) {
-          const isCorrectProfile = await this.verifyProfile();
-          if (!isCorrectProfile) {
-            throw new Error(`ABORTADO: Edge abriu com perfil errado. Esperado: ${EDGE_PROFILE}. NÃO vou enviar mensagens pelo perfil errado.`);
-          }
-        }
-      }
-
-      if (!connected) {
-        throw new Error('Não foi possível conectar ao Edge. Verifique se ele está instalado.');
-      }
-    }
-
-// 4. Procura aba do WhatsApp Web já aberta e garante que seja a ÚNICA
-    const pages = await this.browser.pages();
-    this.page = null;
-    let abasWhatsApp = [];
-
-    for (const p of pages) {
-      try {
-        if (p.url().includes('web.whatsapp.com')) {
-          abasWhatsApp.push(p);
-        }
-      } catch (e) { /* ignora abas com erro */ }
-    }
-
-    if (abasWhatsApp.length > 0) {
-      this.page = abasWhatsApp[0]; // Pega a primeira que achou
-      console.log('✅ Aba do WhatsApp Web encontrada!');
-
-      // Se tiver outras abas do WhatsApp abertas, FECHA elas para evitar conflito
-      if (abasWhatsApp.length > 1) {
-        console.log(`🧹 Encontrei ${abasWhatsApp.length} abas do WhatsApp. Fechando as duplicadas...`);
-        for (let i = 1; i < abasWhatsApp.length; i++) {
-          try { await abasWhatsApp[i].close(); } catch(e) {}
-        }
-      }
-    }
-
-    // 5. Se não encontrou, abre uma nova; se encontrou, traz pra frente e recarrega
-    if (!this.page) {
-      console.log('📱 Abrindo nova aba do WhatsApp Web...');
-      this.page = await this.browser.newPage();
-      await this.page.goto('https://web.whatsapp.com', { waitUntil: 'networkidle2', timeout: 60000 });
-    } else {
-      console.log('🔄 Acordando a aba e recarregando para evitar inatividade...');
-      await this.page.bringToFront();
-      await this.page.reload({ waitUntil: 'networkidle2', timeout: 60000 }).catch(() => {});
-    }
-
-    // 6. Aguarda a tela de chats carregar (e lida agressivamente com o "Usar Aqui")
-    console.log('⏳ Aguardando WhatsApp Web ficar pronto (lidando com recarregamento e "Usar aqui")...');
-
-    // No Linux o primeiro login precisa de tempo para o operador escanear o QR.
-    const maxWaitTime = IS_LINUX ? 180000 : 60000;
-    const checkInterval = 2000;
-    let elapsedTime = 0;
-    let isReady = false;
-
-    while (elapsedTime < maxWaitTime && !isReady) {
-      // No Linux, se a tela ainda está no QR, mostra o QR no terminal (ASCII)
-      // e salva um PNG de fallback, para permitir escanear via SSH.
-      if (IS_LINUX && !isReady) {
-        await this.renderQrIfPresent();
-      }
-
-      try {
-        isReady = await this.page.evaluate(() => {
-          // 6.1 Clique agressivo no botão de reassumir a sessão. O WhatsApp novo
-          //     usa "Usar nesta janela"; versões antigas usavam "Usar aqui"/"Use here".
-          const alvos = ['usar nesta janela', 'usar aqui', 'use here', 'usar aquí',
-                         'continuar aqui', 'continue here', 'use aqui'];
-          const elements = Array.from(document.querySelectorAll('button, div[role="button"], [role="button"], span, div, a'));
-          const btnUsarAqui = elements.find(el => {
-              if (el.offsetWidth <= 0 || el.offsetHeight <= 0) return false;
-              const text = (el.innerText || el.textContent || '').trim().toLowerCase();
-              return alvos.includes(text);
-          });
-
-          if (btnUsarAqui) {
-              (btnUsarAqui.closest('button, [role="button"]') || btnUsarAqui).click();
-              return false; // Clicou, então retorna falso para o robô esperar a tela recarregar
-          }
-
-          // 6.2 Verifica os seletores principais de "está logado e pronto"
-          const chatList = document.querySelector('[data-testid="chat-list"]');
-          const paneSide = document.querySelector('#pane-side');
-          const ariaList = document.querySelector('[aria-label="Lista de conversas"]');
-          const divTab3 = document.querySelector('div[data-tab="3"]');
-
-          return !!(chatList || paneSide || ariaList || divTab3);
-        });
-      } catch (e) {
-        // Ignora erros normais de transição de página durante o reload
-      }
-
-      if (!isReady) {
-        await this.sleep(checkInterval);
-        elapsedTime += checkInterval;
-      }
-    }
-    
-    if (!isReady) {
-        throw new Error('Timeout: WhatsApp Web não carregou a lista de conversas após 60 segundos.');
-    }
-
-    await this.sleep(2000);
-    this.ready = true;
-    console.log('✅ WhatsApp Web pronto!\n');  }
-
-  /**
-   * Verifica se o Edge conectado está usando o perfil SlimFit.
-   * Usa CDP para checar o profile-directory do browser.
-   * NUNCA permite enviar mensagens pelo perfil errado.
-   */
-  async verifyProfile() {
-    try {
-      // Método 1: Verificar via edge://version (mais confiável)
-      const pages = await this.browser.pages();
-      let versionPage = null;
-      let createdPage = false;
-
-      // Procura uma aba edge://version já aberta
-      for (const p of pages) {
-        try {
-          if (p.url().includes('edge://version')) {
-            versionPage = p;
-            break;
-          }
-        } catch (e) { /* ignore */ }
-      }
-
-      // Se não tem, abre uma temporária
-      if (!versionPage) {
-        versionPage = await this.browser.newPage();
-        createdPage = true;
-        await versionPage.goto('edge://version', { waitUntil: 'domcontentloaded', timeout: 10000 });
-        await this.sleep(1000);
-      }
-
-      // Extrai o "Profile Path" da página edge://version
-      const profilePath = await versionPage.evaluate(() => {
-        const rows = document.querySelectorAll('tr, td, span');
-        for (const el of rows) {
-          const text = el.textContent || '';
-          // Procura a linha "Profile Path" ou "Caminho do perfil"
-          if (text.includes('Profile Path') || text.includes('Caminho do perfil') || text.includes('Perfil')) {
-            // O valor está no próximo elemento ou na mesma linha
-            const match = text.match(/(?:Profile Path|Caminho do perfil)[:\s]*(.*)/i);
-            if (match) return match[1].trim();
-          }
-        }
-        // Fallback: procura pelo conteúdo completo
-        const bodyText = document.body.innerText;
-        const profileMatch = bodyText.match(/(?:Profile Path|Caminho do perfil)\s+(.+?)[\n\r]/i);
-        return profileMatch ? profileMatch[1].trim() : null;
-      });
-
-      // Fecha a aba temporária
-      if (createdPage && versionPage) {
-        try { await versionPage.close(); } catch (e) { /* ignore */ }
-      }
-
-      if (profilePath) {
-        const profileName = profilePath.split(/[\\\/]/).pop();
-		const isSlimFit = profileName === EDGE_PROFILE;
-        if (isSlimFit) {
-          console.log(`✅ Perfil verificado: SlimFit (${EDGE_PROFILE})`);
-        } else {
-          console.log(`❌ PERFIL ERRADO detectado! Path: ${profilePath}`);
-          console.log(`   Esperado: ${EDGE_PROFILE} (SlimFit)`);
-        }
-        return isSlimFit;
-      }
-
-      // Método 2 (fallback): Verificar via CDP Browser.getVersion
-      // Se não conseguiu via edge://version, tenta CDP
-      console.log('⚠️  Não conseguiu verificar perfil via edge://version, usando fallback CDP...');
-      const cdpPages = await this.browser.pages();
-      if (cdpPages.length > 0) {
-        const client = await cdpPages[0].target().createCDPSession();
-        const { userAgent } = await client.send('Browser.getVersion');
-        await client.detach();
-        // Nota: userAgent não contém perfil, então vamos checar o user-data-dir
-        // via args de linha de comando
-      }
-
-      // Se nenhum método funcionou, assume que está errado (segurança)
-      console.log('⚠️  Não foi possível verificar o perfil. Por segurança, será reaberto.');
-      return false;
-    } catch (err) {
-      console.log(`⚠️  Erro ao verificar perfil: ${err.message}. Por segurança, será reaberto.`);
-      return false;
-    }
+    await wa.initWhatsApp(); // idempotente — o scheduler já subiu o cliente
+    this.ready = wa.isReady();
+    if (!this.ready) console.log('⚠️  WhatsApp ainda não está "ready".');
+    return this.ready;
   }
 
-  /**
-   * Se aparecer o aviso "WhatsApp aberto em outra janela", clica em
-   * "Usar nesta janela" para reassumir a sessão. Retorna true se clicou.
-   */
-  async claimSession() {
-    try {
-      return await this.page.evaluate(() => {
-        const alvos = ['usar nesta janela', 'usar aqui', 'use here', 'usar aquí',
-                       'continuar aqui', 'continue here', 'use aqui'];
-        const els = Array.from(document.querySelectorAll('button, div[role="button"], [role="button"], span, div, a'));
-        for (const el of els) {
-          if (el.offsetWidth <= 0 || el.offsetHeight <= 0) continue;
-          const t = (el.innerText || el.textContent || '').trim().toLowerCase();
-          if (alvos.includes(t)) { (el.closest('button, [role="button"]') || el).click(); return true; }
-        }
-        return false;
-      });
-    } catch (e) { return false; }
-  }
-
-  /**
-   * LINUX (VPS headless): lança o Chromium do próprio Puppeteer com um perfil
-   * dedicado que guarda a sessão do WhatsApp. Não usa Edge nem CDP externo.
-   */
-  async launchChromiumLinux() {
-    try {
-      console.log(`🐧 Iniciando Chromium headless (${WA_HEADLESS ? 'headless' : 'com tela'})...`);
-      console.log(`   Perfil/sessão: ${WA_PROFILE_DIR}`);
-
-      this.browser = await puppeteer.launch({
-        headless: WA_HEADLESS ? 'new' : false,
-        executablePath: CHROMIUM_PATH,          // undefined = Chromium do Puppeteer
-        userDataDir: WA_PROFILE_DIR,
-        defaultViewport: null,
-        args: [
-          '--no-sandbox',                       // obrigatório rodando como root no VPS
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',            // evita crash por /dev/shm pequeno
-          '--disable-gpu',
-          '--no-first-run',
-          '--no-default-browser-check',
-          '--window-size=1280,900',
-        ],
-      });
-
-      console.log('✅ Chromium iniciado!');
-      this._qrLastRef = null; // controla para não repintar o mesmo QR
-      return true;
-    } catch (err) {
-      console.error(`❌ Falha ao iniciar o Chromium: ${err.message}`);
-      return false;
-    }
-  }
-
-  /**
-   * LINUX: se a tela de login (QR) estiver visível, imprime o QR no terminal
-   * em ASCII (para escanear via SSH) e salva um PNG de fallback. Só repinta
-   * quando o QR muda, para não poluir o log.
-   */
-  async renderQrIfPresent() {
-    try {
-      if (!this.page) return;
-
-      // O WhatsApp Web guarda o conteúdo do QR no atributo data-ref do container.
-      const ref = await this.page.evaluate(() => {
-        const el = document.querySelector('[data-ref]') ||
-                   document.querySelector('canvas[aria-label*="scan" i]')?.closest('[data-ref]');
-        return el ? el.getAttribute('data-ref') : null;
-      });
-
-      if (!ref) return;                 // não está na tela de QR
-      if (ref === this._qrLastRef) return; // mesmo QR, já mostrado
-      this._qrLastRef = ref;
-
-      console.log('\n📲 Escaneie o QR abaixo no WhatsApp do celular:');
-      console.log('   (WhatsApp → Aparelhos conectados → Conectar um aparelho)\n');
-      try {
-        const qrcodeTerminal = require('qrcode-terminal');
-        qrcodeTerminal.generate(ref, { small: true });
-      } catch (e) {
-        console.log('   (qrcode-terminal indisponível — use a imagem abaixo)');
-      }
-
-      // Fallback: salva um PNG do QR para baixar via scp se o ASCII não servir.
-      try {
-        const qrEl = await this.page.$('[data-ref]');
-        if (qrEl) {
-          await qrEl.screenshot({ path: QR_IMAGE_PATH });
-          console.log(`\n🖼️  QR também salvo em: ${QR_IMAGE_PATH}`);
-        }
-      } catch (e) { /* screenshot é só um extra */ }
-    } catch (e) {
-      // A página pode estar em transição; ignora e tenta no próximo ciclo.
-    }
-  }
-
-  /**
-   * Tenta conectar ao Edge via CDP
-   */
-  async tryConnect() {
-    try {
-      this.browser = await puppeteer.connect({
-        browserURL: CDP_URL,
-        defaultViewport: null,
-      });
-      console.log('✅ Conectado ao Edge!');
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /**
-   * Mata todos os processos do Edge
-   */
-  async killEdge() {
-    const { execSync } = require('child_process');
-    try {
-      // /T mata também os processos-filho do Edge (evita sobrar processo que
-      // segura o perfil e impede a porta de depuração de abrir)
-      execSync('taskkill /F /T /IM msedge.exe', { stdio: 'ignore' });
-      console.log('🔪 Edge fechado.');
-    } catch (e) {
-      // Sem processos do Edge para matar
-    }
-    await this.sleep(5000); // espera o Edge morrer de vez antes de reabrir
-  }
-
-  /**
-   * Abre o Edge com depuração remota, SEMPRE usando o perfil SlimFit.
-   * Mata qualquer Edge existente antes para garantir o perfil correto.
-   */
-  async launchEdge() {
-    const fs = require('fs');
-    const { spawn } = require('child_process');
-
-    // Encontra o executável do Edge
-    let edgePath = null;
-    for (const p of EDGE_PATHS) {
-      if (fs.existsSync(p)) {
-        edgePath = p;
-        break;
-      }
-    }
-
-    if (!edgePath) {
-      throw new Error('Microsoft Edge não encontrado.');
-    }
-
-    // SEMPRE mata processos do Edge antes de abrir com perfil correto
-    await this.killEdge();
-
-    console.log(`🌐 Abrindo Edge (perfil SlimFit - ${EDGE_PROFILE})...`);
-
-    const child = spawn(edgePath, [
-      '--remote-debugging-port=9226',
-      '--remote-debugging-address=127.0.0.1', // força a porta no IP exato que o script busca
-      '--remote-allow-origins=*',             // Chromium 111+ rejeita o WebSocket do DevTools sem isso
-      `--user-data-dir=${EDGE_USER_DATA}`,
-      `--profile-directory=${EDGE_PROFILE}`,
-      '--no-first-run',
-      '--no-default-browser-check',
-      'https://web.whatsapp.com',             // abre direto no WhatsApp, sem restaurar sessão antiga
-    ], {
-      detached: true,
-      stdio: 'ignore',
-    });
-    child.unref();
-
-    // Aguarda Edge iniciar
-    await this.sleep(5000);
-  }
-
-  /**
-   * Envia uma mensagem via WhatsApp Web
-   */
   async sendMessage(phoneNumber, message) {
-    if (!this.ready) {
-      console.error('❌ WhatsApp Web não está pronto.');
-      return false;
-    }
-
-    let number = phoneNumber.replace(/\D/g, '');
-    if (!number.startsWith('55')) {
-      number = '55' + number;
-    }
-
     try {
-      const encodedMsg = encodeURIComponent(message);
-      const url = `https://web.whatsapp.com/send?phone=${number}&text=${encodedMsg}`;
-
-      console.log(`   📨 Enviando para ${phoneNumber}...`);
-      await this.page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-
-      await this.sleep(3000);
-
-      // Se o WhatsApp pedir para reassumir a sessão ("Usar nesta janela"), clica.
-      if (await this.claimSession()) {
-        console.log('   🔄 Sessão reassumida ("Usar nesta janela").');
-        await this.sleep(3000);
-      }
-
-      // Verifica erro de número inválido
-      const hasError = await this.page.evaluate(() => {
-        const body = document.body.textContent || '';
-        return body.includes('número de telefone inválido') ||
-               body.includes('invalid phone') ||
-               body.includes('Phone number shared via url is invalid');
-      });
-
-      if (hasError) {
-        console.log(`   ⚠️  Número ${number} inválido ou não encontrado`);
-        return false;
-      }
-
-      // Aguarda botão de enviar
-      await this.page.waitForFunction(
-        () => {
-          return document.querySelector('[data-testid="send"], [aria-label="Enviar"], button[aria-label="Send"]') ||
-                 document.querySelector('[data-testid="conversation-compose-box-input"], div[contenteditable="true"][data-tab="10"]');
-        },
-        { timeout: 15000 }
-      );
-
-      await this.sleep(1500);
-
-      // Clica no botão ENVIAR
-      const sent = await this.page.evaluate(() => {
-        const sendBtn = document.querySelector('[data-testid="send"], [aria-label="Enviar"], button[aria-label="Send"]');
-        if (sendBtn) { sendBtn.click(); return true; }
-        return false;
-      });
-
-      if (!sent) {
-        await this.page.keyboard.press('Enter');
-      }
-
-      await this.sleep(3000);
+      await wa.sendTexto(phoneNumber, message);
       console.log(`   ✅ Mensagem enviada para ${phoneNumber}`);
       return true;
     } catch (error) {
-      console.error(`   ❌ Erro ao enviar para ${phoneNumber}:`, error.message);
+      console.error(`   ❌ Erro ao enviar para ${phoneNumber}: ${error.message}`);
       return false;
     }
   }
 
-  /**
-   * Envia mensagens para uma lista de alunos
-   */
   async sendBulkMessages(students, messageBuilder) {
     const results = { sent: 0, failed: 0, skipped: 0, details: [] };
-
     console.log(`\n📨 Enviando ${students.length} mensagem(ns)...\n`);
 
     for (const student of students) {
@@ -551,6 +45,7 @@ class WhatsAppSender {
       }
 
       const message = messageBuilder(student.name, student.time);
+      console.log(`   📨 Enviando para ${student.name} (${student.phone})...`);
       const success = await this.sendMessage(student.phone, message);
 
       if (success) {
@@ -561,37 +56,17 @@ class WhatsAppSender {
         results.details.push({ name: student.name, phone: student.phone, status: 'failed' });
       }
 
-      // Pausa de 10s entre mensagens (natural)
-      await this.sleep(10000);
+      // Pausa natural entre mensagens (8-10s)
+      await this.sleep(8000 + Math.floor(Math.random() * 2000));
     }
 
     return results;
   }
 
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
+  sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
-  /**
-   * Windows: apenas desconecta do Edge (deixa o Edge aberto).
-   * Linux: fecha o Chromium que nós mesmos lançamos (senão fica processo órfão).
-   */
-  async close() {
-    if (this.browser) {
-      try {
-        if (IS_LINUX) {
-          console.log('📱 Fechando o Chromium...');
-          await this.browser.close();
-        } else {
-          console.log('📱 Desconectando do Edge...');
-          this.browser.disconnect();
-        }
-      } catch (e) { /* ignore */ }
-      this.browser = null;
-      this.page = null;
-      this.ready = false;
-    }
-  }
+  // Compat: NÃO fecha o cliente compartilhado (ele vive enquanto o app roda).
+  async close() { /* no-op */ }
 }
 
 module.exports = WhatsAppSender;

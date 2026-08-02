@@ -89,28 +89,13 @@ function getAudioPath(professorStr) {
  * Abre o Edge se não estiver rodando.
  */
 async function connectEdgeWhatsApp() {
-  if (IS_LINUX) {
-    // No VPS reaproveita o WhatsAppSender (Chromium com a sessão salva do Studio).
-    const WhatsAppSender = require('./whatsapp-sender');
-    const sender = new WhatsAppSender();
-    await sender.init();
-    const browser = sender.browser;
-    const page = sender.page;
-    // Os jobs chamam browser.disconnect() no finally; no Linux isso precisa
-    // FECHAR o Chromium (senão o perfil fica travado para o próximo job).
-    // browser.close() chama disconnect() internamente, então uma trava evita
-    // a recursão infinita.
-    const realClose = browser.close.bind(browser);
-    let fechando = false;
-    browser.disconnect = async () => {
-      if (fechando) return;
-      fechando = true;
-      try { await realClose(); } catch (_) {}
-    };
-    console.log('✅ WhatsApp pronto (Linux/Chromium)!\n');
-    return { browser, page };
-  }
+  // Cliente ÚNICO persistente (wa-client.js): garante 'ready' e devolve um
+  // "browser" cujo disconnect() é no-op (o cliente compartilhado nunca fecha aqui).
+  const wa = require('./wa-client');
+  await wa.initWhatsApp();
+  return { browser: { disconnect() {} }, page: null };
 
+  // ── (código antigo do Edge/Chromium abaixo fica inacessível) ──
   let browser = null;
 
   // Sempre fecha o Edge antes de abrir com porta de debug
@@ -460,6 +445,22 @@ async function sendAudioFile(page, audioPath) {
  * Envia texto + áudio para um número.
  */
 async function sendFollowupMessage(page, phoneNumber, text, audioPath) {
+  // page ignorado (compat). Envia pelo cliente único: texto + áudio (como voz).
+  {
+    const wa = require('./wa-client');
+    try {
+      await wa.sendTexto(phoneNumber, text);
+      if (audioPath) {
+        await sleep(1500);
+        await wa.sendMidia(phoneNumber, audioPath, { comoVoz: true });
+      }
+      return true;
+    } catch (e) {
+      console.log(`   ⚠️  Falha no follow-up para ${phoneNumber}: ${e.message}`);
+      return false;
+    }
+  }
+  // ── (código antigo via page abaixo fica inacessível) ──
   let number = phoneNumber.replace(/\D/g, '');
   if (!number.startsWith('55')) number = '55' + number;
 

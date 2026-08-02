@@ -509,15 +509,8 @@ async function enviarWhatsApp(clientes) {
       if (!numero.startsWith('55')) numero = '55' + numero;
       console.log(`📨 Enviando para ${cliente.nome} (${numero})...`);
       try {
-        await page.goto(`https://web.whatsapp.com/send?phone=${numero}&text=${encodeURIComponent(mensagem)}`, { waitUntil: 'networkidle2', timeout: 30000 });
-        await sleep(3000);
-        const temErro = await page.evaluate(() => document.body.textContent.includes('número de telefone inválido') || document.body.textContent.includes('invalid phone'));
-        if (temErro) { console.log(`   ⚠️  Número inválido`); resultados.falhas++; continue; }
-        await page.waitForFunction(() => document.querySelector('[data-testid="send"]') || document.querySelector('[aria-label="Enviar"]'), { timeout: 15000 });
-        await sleep(1500);
-        const enviou = await page.evaluate(() => { const btn = document.querySelector('[data-testid="send"], [aria-label="Enviar"]'); if (btn) { btn.click(); return true; } return false; });
-        if (!enviou) await page.keyboard.press('Enter');
-        await sleep(4000);
+        const wa = require('./wa-client');
+        await wa.sendTexto(numero, mensagem);
         console.log(`   ✅ Enviada!`);
         resultados.enviadas++;
       } catch (err) { console.log(`   ❌ Erro: ${err.message}`); resultados.falhas++; }
