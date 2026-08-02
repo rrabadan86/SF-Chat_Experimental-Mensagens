@@ -6,6 +6,9 @@ logs/
 chrome-profile/
 whatsapp-chrome-data/
 evo-chrome-data/
+wwebjs_auth/
+.wwebjs_auth/
+.wwebjs_cache/
 instagram-chrome-data/
 instagram-login-*.png
 # Credenciais (conta de serviço do Google) — NUNCA versionar
