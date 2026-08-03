@@ -65,24 +65,44 @@ function initWhatsApp() {
       console.log('\n📲 Escaneie o QR no WhatsApp do número (Aparelhos conectados → Conectar um aparelho):\n');
       qrcodeTerminal.generate(qr, { small: true });
     });
-    let nAuth = 0;
-    client.on('authenticated', () => { nAuth++; log(`🔐 Autenticado (${nAuth}).`); });
-    client.on('auth_failure', (m) => log('❌ auth_failure: ' + m));
-    client.on('loading_screen', (percent, message) => log(`⏳ carregando ${percent}% ${message || ''}`));
-    client.on('change_state', (s) => log('🔄 estado: ' + s));
-    client.on('ready', () => {
+    let resolvido = false;
+    const marcarPronto = (via) => {
+      if (resolvido) return;
+      resolvido = true;
       pronto = true;
-      log('✅ WhatsApp PRONTO (ready) — pode disparar.');
+      log(`✅ WhatsApp PRONTO (${via}) — pode disparar.`);
       iniciarKeepAlive();
       resolve(client);
-    });
+    };
+
+    let nAuth = 0;
+    let poll = null;
+    const iniciarPoll = () => {
+      if (poll) return;
+      // Fallback robusto: alguns casos carregam 100% e autenticam, mas o evento
+      // 'ready' não dispara. Então verificamos o estado real com getState().
+      poll = setInterval(async () => {
+        if (resolvido) { clearInterval(poll); return; }
+        try {
+          const s = await client.getState();
+          log('estado(check): ' + s);
+          if (s === 'CONNECTED') { clearInterval(poll); marcarPronto('getState CONNECTED'); }
+        } catch (_) { /* ainda inicializando o Store */ }
+      }, 5000);
+    };
+
+    client.on('authenticated', () => { nAuth++; log(`🔐 Autenticado (${nAuth}).`); iniciarPoll(); });
+    client.on('auth_failure', (m) => log('❌ auth_failure: ' + m));
+    client.on('loading_screen', (percent, message) => { log(`⏳ carregando ${percent}% ${message || ''}`); if (Number(percent) >= 100) iniciarPoll(); });
+    client.on('change_state', (s) => { log('🔄 estado: ' + s); if (s === 'CONNECTED') marcarPronto('change_state CONNECTED'); });
+    client.on('ready', () => marcarPronto('evento ready'));
     client.on('disconnected', (motivo) => {
       pronto = false;
       log('⚠️  Desconectado: ' + motivo);
     });
-    // Alerta se demorar demais para ficar pronto (ajuda a diagnosticar versão da lib)
+
     setTimeout(() => {
-      if (!pronto) log('⚠️  90s sem "ready". Pode ser incompatibilidade da versão da whatsapp-web.js com o WhatsApp Web.');
+      if (!pronto) log('⚠️  Ainda sem "ready" após 90s (o fallback getState continua tentando).');
     }, 90000);
   });
 
