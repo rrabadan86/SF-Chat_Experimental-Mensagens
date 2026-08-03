@@ -54,12 +54,16 @@ function montarMensagem(cats, dataStr) {
   const fecharam = cats.fecharam
     .slice()
     .map(c => `• ${c.name}${c.contrato ? ' — ' + c.contrato : ''}`);
+  const rescisoes = (cats.rescisoes || [])
+    .slice()
+    .map(c => `• ${c.name}${c.contrato ? ' — ' + c.contrato : ''}`);
 
   return `📋 *Resumo do dia — ${dataStr}*\n\n`
     + bloco('🔁 *Reposições*', reposicoes, 'nenhuma reposição hoje') + '\n\n'
     + bloco('✅ *Experimentais que fizeram aula*', fizeram, 'nenhuma') + '\n\n'
     + bloco('❌ *Experimentais que faltaram*', faltaram, 'nenhuma') + '\n\n'
-    + bloco('🎉 *Fechou contrato*', fecharam, 'nenhum fechamento hoje');
+    + bloco('🎉 *Fechou contrato*', fecharam, 'nenhum fechamento hoje') + '\n\n'
+    + bloco('✂️ *Rescisões*', rescisoes, 'nenhuma rescisão hoje');
 }
 
 async function coletar(dataStr) {
@@ -95,6 +99,15 @@ async function coletar(dataStr) {
       console.log(`   ⚠️  Falha ao ler contratos do dia: ${e.message}`);
     }
 
+    // 4) Rescisões do dia (Gerencial > Cancelamentos)
+    let rescisoes = [];
+    try {
+      const rs = await scraper.getRescisoesDoDia(dataStr);
+      rescisoes = rs.map(r => ({ name: r.nome, contrato: r.contrato }));
+    } catch (e) {
+      console.log(`   ⚠️  Falha ao ler rescisões do dia: ${e.message}`);
+    }
+
     // Descarta lançamentos de teste (ex.: "ZeeTech Experimental") nas experimentais.
     const ehTeste = (c) => /zeetech|\bteste\b/i.test(c.name || '');
     return {
@@ -102,6 +115,7 @@ async function coletar(dataStr) {
       fizeram: todas.filter(c => fezAula(c) && !ehTeste(c)),
       faltaram: todas.filter(c => faltou(c) && !ehTeste(c)),
       fecharam,
+      rescisoes,
     };
   } finally {
     await scraper.close();
@@ -131,14 +145,14 @@ async function runResumoDia() {
     }
   }
   if (!cats) throw ultimoErro;
-  console.log(`   🔁 Reposições: ${cats.reposicoes.length} | ✅ Fizeram: ${cats.fizeram.length} | ❌ Faltaram: ${cats.faltaram.length} | 🎉 Fecharam: ${cats.fecharam.length}\n`);
+  console.log(`   🔁 Reposições: ${cats.reposicoes.length} | ✅ Fizeram: ${cats.fizeram.length} | ❌ Faltaram: ${cats.faltaram.length} | 🎉 Fecharam: ${cats.fecharam.length} | ✂️ Rescisões: ${(cats.rescisoes || []).length}\n`);
 
   const msg = montarMensagem(cats, dataStr);
   console.log('─── Mensagem ─────────────────────────────────────');
   console.log(msg);
   console.log('──────────────────────────────────────────────────\n');
 
-  const totalRelevante = cats.reposicoes.length + cats.fizeram.length + cats.faltaram.length + cats.fecharam.length;
+  const totalRelevante = cats.reposicoes.length + cats.fizeram.length + cats.faltaram.length + cats.fecharam.length + (cats.rescisoes || []).length;
   if (totalRelevante === 0) {
     console.log('📭 Nada de experimental/reposição hoje — NÃO enviei (evita resumo vazio).\n');
     return { enviado: false, total: 0 };

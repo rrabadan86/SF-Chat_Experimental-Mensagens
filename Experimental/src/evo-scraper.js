@@ -1566,6 +1566,168 @@ class EvoScraper {
     return uniq;
   }
 
+  /**
+   * Lê as RESCISÕES (cancelamentos) do dia (Gerencial > Cancelamentos).
+   * Passos: define De/Até = data e clica na lupa (sem checkbox). Lê a grid
+   * (Nome + Sobrenome + Contrato). Retorna [{ nome, contrato }].
+   */
+  async getRescisoesDoDia(dataStr) {
+    const fs = require('fs');
+    const path = require('path');
+    const DATA_DIR = path.resolve(__dirname, '..', 'data');
+    const base = this.appOrigin || config.evo.url;
+    const url = `${base}/#/app/slimfit/15/evo3/-Gerencial-Gerencial-Index-CANCELAMENTOS`;
+
+    console.log('\n═══════════════════════════════════════');
+    console.log(`✂️  Rescisões do dia (${dataStr}) — Gerencial > Cancelamentos`);
+    console.log('═══════════════════════════════════════\n');
+
+    await this.page.goto(url, { waitUntil: 'networkidle2' });
+    await this.sleep(6000);
+    if (await this.isOnLoginPage()) {
+      await this.login();
+      await this.page.goto(url, { waitUntil: 'networkidle2' });
+      await this.sleep(6000);
+    }
+    await this.dismissSurveyModal();
+
+    const acharFrame = async () => {
+      for (const f of this.page.frames()) {
+        try {
+          const ok = await f.evaluate(() => {
+            const t = (document.body && document.body.innerText || '').toLowerCase();
+            return /cancelamento|cancelado por|meses de perman|considerar transferidos|valor perdido/.test(t);
+          });
+          if (ok) return f;
+        } catch (_) { /* frame carregando */ }
+      }
+      return null;
+    };
+    let frame = null;
+    for (let i = 0; i < 30 && !frame; i++) { frame = await acharFrame(); if (!frame) await this.sleep(1500); }
+    if (!frame) { console.log('   ⚠️  Não achei o iframe de Cancelamentos.'); return []; }
+    console.log(`   🖼️  Frame: ${frame.url()}`);
+
+    // De/Até = data (campos visíveis, digitando — datepicker legado).
+    const dateHandles = await frame.$$('input');
+    for (const h of dateHandles) {
+      let info;
+      try { info = await h.evaluate(el => ({ vis: !!(el.offsetWidth || el.offsetHeight), val: el.value || '', ro: !!el.readOnly })); }
+      catch (_) { continue; }
+      if (!info.vis || !/\d{2}\/\d{2}\/\d{4}/.test(info.val)) continue;
+      try {
+        await h.click({ clickCount: 3 });
+        await this.sleep(150);
+        if (info.ro) {
+          await h.evaluate((el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); el.dispatchEvent(new Event('blur', { bubbles: true })); }, dataStr);
+        } else {
+          await this.page.keyboard.down('Control'); await this.page.keyboard.press('KeyA'); await this.page.keyboard.up('Control');
+          await this.page.keyboard.press('Backspace');
+          await this.page.keyboard.type(dataStr, { delay: 40 });
+          await this.page.keyboard.press('Escape');
+          await h.evaluate((el) => { el.dispatchEvent(new Event('change', { bubbles: true })); el.dispatchEvent(new Event('blur', { bubbles: true })); });
+        }
+      } catch (_) { /* segue */ }
+    }
+    const lidos = await frame.$$eval('input', els => els.filter(e => (e.offsetWidth || e.offsetHeight) && /\d{2}\/\d{2}\/\d{4}/.test(e.value || '')).map(e => e.value));
+    console.log(`   📅 De/Até → valores visíveis: ${JSON.stringify(lidos)}`);
+    await this.sleep(600);
+
+    // Clica na lupa (pesquisar).
+    const lupou = await frame.evaluate(() => {
+      const cand = Array.from(document.querySelectorAll('button, a, input[type="submit"], input[type="button"], i, span, [role="button"]'));
+      for (const el of cand) {
+        if (el.offsetWidth <= 0 && el.offsetHeight <= 0) continue;
+        const meta = (((el.getAttribute && ((el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.className || '') + ' ' + (el.value || ''))) || '') + ' ' + (el.textContent || '')).toLowerCase();
+        if (/pesquis|buscar|search|lupa|fa-search|glyphicon-search|mdi-magnify/.test(meta)) { (el.closest('button, a, [role="button"], input') || el).click(); return true; }
+      }
+      return false;
+    });
+    console.log(lupou ? '   🔍 Lupa clicada' : '   ⚠️  Lupa não encontrada');
+    await this.sleep(6000);
+    frame = (await acharFrame()) || frame;
+
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      await this.page.screenshot({ path: path.join(DATA_DIR, 'rescisoes-debug.png'), fullPage: true }).catch(() => {});
+      const gh = await frame.evaluate(() => { const t = document.querySelector('table'); return t ? t.outerHTML.slice(0, 20000) : '(sem table)'; });
+      fs.writeFileSync(path.join(DATA_DIR, 'rescisoes-grid.html'), gh, 'utf8');
+    } catch (_) { /* ignore */ }
+
+    const lerPagina = () => frame.evaluate(() => {
+      const norm = (s) => (s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      let best = null, mx = -1;
+      for (const t of document.querySelectorAll('table')) {
+        const hs = Array.from(t.querySelectorAll('th')).map(x => norm(x.textContent));
+        if (!hs.some(h => h === 'nome') || !hs.some(h => h.includes('contrato'))) continue;
+        const n = t.querySelectorAll('tbody tr, tr').length;
+        if (n > mx) { mx = n; best = t; }
+      }
+      if (!best) return { rows: [], info: '', headers: [] };
+      const ths = Array.from(best.querySelectorAll('th')).map(x => (x.textContent || '').trim());
+      const hn = ths.map(norm);
+      const iNome = hn.findIndex(h => h === 'nome');
+      const iSob = hn.findIndex(h => h.includes('sobrenome'));
+      let iContrato = hn.findIndex(h => h === 'contrato');
+      if (iContrato < 0) iContrato = hn.findIndex(h => h.includes('contrato'));
+      const body = best.querySelector('tbody') || best;
+      const trs = Array.from(body.querySelectorAll('tr')).filter(tr => tr.querySelectorAll('td').length);
+      const rows = [];
+      for (const tr of trs) {
+        const tds = Array.from(tr.querySelectorAll('td')).map(td => (td.innerText || '').trim());
+        const joined = tds.join(' | ');
+        if (/total geral|^total\b|colaborador:/i.test(joined)) continue;
+        const nome = ((iNome >= 0 ? tds[iNome] : '') + ' ' + (iSob >= 0 ? tds[iSob] : '')).trim();
+        const contrato = iContrato >= 0 ? tds[iContrato] : '';
+        if (!nome) continue;
+        rows.push({ nome, contrato });
+      }
+      const info = (document.body.innerText.match(/Exibindo\s+itens?\s+\d+\s*-\s*\d+\s+de\s+\d+/i) || [''])[0];
+      return { rows, info, headers: ths };
+    });
+
+    const proxima = async () => {
+      const range = () => frame.evaluate(() => ((document.body.innerText.match(/Exibindo\s+itens?\s+(\d+)\s*-\s*(\d+)\s+de\s+(\d+)/i) || []).slice(1).join(',')));
+      const antes = await range();
+      const clicou = await frame.evaluate(() => {
+        for (const el of Array.from(document.querySelectorAll('a, button, span, li, i, [role="button"]'))) {
+          if (el.offsetWidth <= 0 && el.offsetHeight <= 0) continue;
+          const t = (el.textContent || '').trim();
+          const cls = ((el.className || '') + ' ' + (el.getAttribute && (el.getAttribute('title') || '') || '')).toLowerCase();
+          const isNext = t === '›' || t === '>' || /(\bnext\b|proxim|caret-right|chevron-right|fa-angle-right)/.test(cls);
+          if (!isNext) continue;
+          if (/disabled/i.test(cls) || (el.closest && el.closest('.disabled, [aria-disabled="true"]'))) return false;
+          (el.closest('a, button, [role="button"], li') || el).click(); return true;
+        }
+        return false;
+      });
+      if (!clicou) return false;
+      await this.sleep(2500);
+      const depois = await range();
+      return !!(depois && depois !== antes);
+    };
+
+    const out = [];
+    let pagina = 1;
+    while (pagina <= 20) {
+      const { rows, info, headers } = await lerPagina();
+      if (pagina === 1) console.log(`   📋 Colunas: ${headers.join(' | ') || '(?)'}`);
+      console.log(`   📄 Página ${pagina}: ${rows.length} rescisão(ões) ${info ? '(' + info + ')' : ''}`);
+      for (const r of rows) {
+        console.log(`      ✂️  ${r.nome} — ${r.contrato}`);
+        out.push({ nome: r.nome, contrato: r.contrato });
+      }
+      if (!(await proxima())) break;
+      frame = (await acharFrame()) || frame;
+      pagina++;
+    }
+
+    const seen = new Set(), uniq = [];
+    for (const r of out) { const k = (r.nome.toLowerCase()) + '|' + (r.contrato.toLowerCase()); if (!seen.has(k)) { seen.add(k); uniq.push(r); } }
+    console.log(`   ✂️  ${uniq.length} rescisão(ões) no dia\n`);
+    return uniq;
+  }
+
   async close() {
     if (this.browser) {
       console.log('🔒 Fechando browser...');
