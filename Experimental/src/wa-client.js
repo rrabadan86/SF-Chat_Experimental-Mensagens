@@ -158,12 +158,47 @@ async function sendMidia(telefone, urlOuCaminho, { legenda = '', comoVoz = false
   });
 }
 
-/** Acha um grupo pelo NOME (exato; senão parcial). */
+/**
+ * Lista LEVE de grupos [{ id, name }] lida direto do Store, SEM serializar cada
+ * chat. O client.getChats() do whatsapp-web.js serializa tudo (metadata do grupo
+ * + migração de LID por participante) e estoura um erro minificado ('r') se um
+ * único grupo tiver estrutura problemática. Aqui só lemos id e nome.
+ */
+async function listarGrupos() {
+  const page = client.pupPage;
+  if (!page) throw new Error('página do WhatsApp indisponível');
+  return page.evaluate(() => {
+    let arr = [];
+    try { arr = window.require('WAWebCollections').Chat.getModelsArray() || []; }
+    catch (_) { arr = []; }
+    const out = [];
+    for (const c of arr) {
+      try {
+        const id = (c.id && c.id._serialized) ? c.id._serialized : String(c.id);
+        const isGroup = (c.id && c.id.server === 'g.us') || !!c.groupMetadata || c.isGroup;
+        if (!isGroup) continue;
+        const name = c.name || c.formattedTitle || (c.contact && c.contact.name) || '';
+        out.push({ id, name });
+      } catch (_) { /* pula grupo problemático */ }
+    }
+    return out;
+  });
+}
+
+/** Acha um grupo pelo NOME (exato; senão parcial). Retorna { id, name } ou null. */
 async function acharGrupo(nomeGrupo) {
   const alvo = (nomeGrupo || '').trim().toLowerCase();
-  const chats = await client.getChats();
-  return chats.find((c) => c.isGroup && (c.name || '').trim().toLowerCase() === alvo)
-      || chats.find((c) => c.isGroup && (c.name || '').toLowerCase().includes(alvo))
+  let grupos = [];
+  try { grupos = await listarGrupos(); }
+  catch (_) {
+    // fallback para a API padrão (mais pesada) se a leitura leve falhar
+    try {
+      const chats = await client.getChats();
+      grupos = chats.filter((c) => c.isGroup).map((c) => ({ id: c.id._serialized, name: c.name || '' }));
+    } catch (e2) { throw new Error('listar grupos falhou: ' + (e2 && e2.message)); }
+  }
+  return grupos.find((g) => (g.name || '').trim().toLowerCase() === alvo)
+      || grupos.find((g) => (g.name || '').toLowerCase().includes(alvo))
       || null;
 }
 
@@ -171,13 +206,13 @@ async function sendGrupo(nomeGrupo, texto) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
   const g = await acharGrupo(nomeGrupo);
   if (!g) throw new Error('Grupo não encontrado: ' + nomeGrupo);
-  return client.sendMessage(g.id._serialized, texto);
+  return client.sendMessage(g.id, texto);
 }
 
 /**
  * Retorna os grupos EM COMUM com um contato (mesma pessoa nos dois lados).
- * Usa a API nativa do whatsapp-web.js (getCommonGroups) — bem mais confiável
- * do que raspar o painel "grupos em comum" do WhatsApp Web.
+ * Usa a API nativa do whatsapp-web.js (getCommonGroups) e resolve os nomes pela
+ * lista leve (sem getChatById, que serializa e pode estourar 'r').
  * → [{ id: '...@g.us', name: 'Nome do grupo' }]
  */
 async function getCommonGroups(telefone) {
@@ -185,12 +220,18 @@ async function getCommonGroups(telefone) {
   const id = await resolverId(telefone);
   let comuns = [];
   try { comuns = await client.getCommonGroups(id); } catch (_) { comuns = []; }
+
+  // mapa id → nome (leve), para rotular sem serializar cada grupo
+  let nomePorId = {};
+  try {
+    const lista = await listarGrupos();
+    for (const g of lista) nomePorId[g.id] = g.name;
+  } catch (_) { /* segue sem nomes */ }
+
   const out = [];
   for (const g of (comuns || [])) {
     const gid = (g && g._serialized) ? g._serialized : String(g);
-    let nome = '';
-    try { const chat = await client.getChatById(gid); nome = chat.name || ''; } catch (_) { /* segue sem nome */ }
-    out.push({ id: gid, name: nome });
+    out.push({ id: gid, name: nomePorId[gid] || '' });
   }
   return out;
 }
@@ -199,6 +240,7 @@ async function getCommonGroups(telefone) {
  * Envia num grupo MARCANDO (@) uma pessoa. Monta o texto como
  *   textoAntes + @<pessoa> + textoDepois
  * e passa a menção nativa (o número tem que estar no texto E em mentions).
+ * Envia direto por client.sendMessage(groupId, ...) — sem getChatById.
  */
 async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMencionado) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
@@ -210,13 +252,9 @@ async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMenc
   const user = mid.replace(/@.*/, '');                     // só dígitos p/ o token @
   const texto = `${textoAntes || ''}@${user}${textoDepois || ''}`;
 
-  let chat;
-  try { chat = await client.getChatById(groupId); }
-  catch (e) { throw new Error('getChatById: ' + (e && e.message)); }
-
   // Formato atual do whatsapp-web.js: mentions = array de IDs (strings).
   try {
-    return await chat.sendMessage(texto, { mentions: [mid] });
+    return await client.sendMessage(groupId, texto, { mentions: [mid] });
   } catch (e) {
     throw new Error('sendMessage(mention): ' + (e && e.message));
   }
@@ -246,7 +284,7 @@ async function destroy() {
 
 module.exports = {
   initWhatsApp, isReady, getClient,
-  sendTexto, sendMidia, sendGrupo, acharGrupo,
+  sendTexto, sendMidia, sendGrupo, acharGrupo, listarGrupos,
   getCommonGroups, sendGrupoComMencao,
   iniciarKeepAlive, destroy, toChatId, MessageMedia,
 };

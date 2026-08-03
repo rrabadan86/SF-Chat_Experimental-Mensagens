@@ -571,7 +571,7 @@ async function testeGrupo(nomeGrupo, numeroMarcar, nomePessoa) {
   // Acha o grupo pelo nome.
   const g = await wa.acharGrupo(nomeGrupo);
   if (!g) { console.log(`\n⚠️  Grupo "${nomeGrupo}" não encontrado.`); return; }
-  const gid = g.id._serialized;
+  const gid = g.id;
   console.log(`   Grupo encontrado: ${g.name} (${gid})`);
 
   // 1) Envia um texto SIMPLES primeiro (isola: o envio no grupo funciona?)
