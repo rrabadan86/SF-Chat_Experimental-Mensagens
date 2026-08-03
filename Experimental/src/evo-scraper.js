@@ -1439,32 +1439,36 @@ class EvoScraper {
       fs.writeFileSync(path.join(DATA_DIR, 'contratos-form.html'), formHtml, 'utf8');
     } catch (_) { /* ignore */ }
 
-    // Marca o checkbox "Contrato" da coluna TIPO. Estratégia por TEXTO: acha o
-    // elemento cujo texto é exatamente "Contrato" e pega o checkbox associado
-    // (dentro, irmão, célula anterior, ou o mais próximo subindo o container).
+    // Marca o checkbox "Contrato" (Tipo) por GEOMETRIA: acha o elemento cujo
+    // TEXTO DIRETO é "Contrato" e marca o checkbox na mesma linha, logo à
+    // esquerda dele (o evo3 separa o rótulo do input no DOM).
     const cbInfo = await frame.evaluate(() => {
-      const alvo = 'contrato';
-      const nodes = Array.from(document.querySelectorAll('label, span, td, div, li, a, b, font'))
-        .filter(e => (e.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase() === alvo);
+      const textoDireto = (e) => { let s = ''; for (const n of e.childNodes) if (n.nodeType === 3) s += n.textContent; return s.replace(/\s+/g, ' ').trim(); };
+      const nodes = Array.from(document.querySelectorAll('*')).filter(e => /^contrato$/i.test(textoDireto(e)));
+      const cbs = Array.from(document.querySelectorAll('input[type="checkbox"]'));
       for (const node of nodes) {
         let cb = node.querySelector && node.querySelector('input[type="checkbox"]');
-        if (!cb && node.previousElementSibling && node.previousElementSibling.matches
-          && node.previousElementSibling.matches('input[type="checkbox"]')) cb = node.previousElementSibling;
-        if (!cb) { const td = node.closest && node.closest('td'); if (td && td.previousElementSibling) cb = td.previousElementSibling.querySelector('input[type="checkbox"]'); }
-        if (!cb) { let p = node.parentElement, hops = 0; while (p && hops < 3 && !cb) { cb = p.querySelector('input[type="checkbox"]'); p = p.parentElement; hops++; } }
-        if (cb) { if (!cb.checked) cb.click(); return { ok: true, id: cb.id || cb.name || '(sem id)', tag: node.tagName }; }
+        if (!cb) {
+          const r = node.getBoundingClientRect();
+          if (r.width || r.height) {
+            let best = null, bd = 1e9;
+            for (const c of cbs) {
+              const cr = c.getBoundingClientRect();
+              if (!(cr.width || cr.height)) continue;
+              if (Math.abs((cr.top + cr.height / 2) - (r.top + r.height / 2)) > 16) continue; // mesma linha
+              const dist = r.left - cr.left; // checkbox à esquerda do texto
+              if (dist >= -2 && dist < bd) { bd = dist; best = c; }
+            }
+            cb = best;
+          }
+        }
+        if (cb) { if (!cb.checked) cb.click(); return { ok: true, texto: textoDireto(node), jaEstava: cb.checked }; }
       }
-      // diagnóstico: textos ao lado de cada checkbox (via célula seguinte)
-      const diag = Array.from(document.querySelectorAll('input[type="checkbox"]')).map(cb => {
-        const td = cb.closest && cb.closest('td');
-        return (td && td.nextElementSibling && td.nextElementSibling.textContent.trim())
-          || (cb.parentElement && cb.parentElement.textContent.replace(/\s+/g, ' ').trim()) || '';
-      });
-      return { ok: false, diag };
+      return { ok: false, nNodes: nodes.length, nCbs: cbs.length, amostras: nodes.slice(0, 6).map(textoDireto) };
     });
     console.log(cbInfo.ok
-      ? `   ☑️  Checkbox "Contrato" marcado (id=${cbInfo.id}, via <${cbInfo.tag}>)`
-      : `   ⚠️  "Contrato" não encontrado por texto. Vizinhos dos checkboxes: ${JSON.stringify(cbInfo.diag)}`);
+      ? `   ☑️  Checkbox "Contrato" marcado (texto="${cbInfo.texto}")`
+      : `   ⚠️  "Contrato" não encontrado. nós="${cbInfo.nNodes}" checkboxes="${cbInfo.nCbs}" amostras=${JSON.stringify(cbInfo.amostras)}`);
     await this.sleep(800);
 
     // Clica na lupa (pesquisar).
