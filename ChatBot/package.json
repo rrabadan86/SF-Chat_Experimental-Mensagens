@@ -3,7 +3,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",
     "@anthropic-ai/sdk": "^0.115.0",
     "dotenv": "^16.4.7",
-    "whatsapp-web.js": "^1.26.0",
+    "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js#main",
     "qrcode-terminal": "^0.12.0",
     "zod": "^4.4.3"
   }

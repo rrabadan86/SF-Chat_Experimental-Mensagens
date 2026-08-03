@@ -20,6 +20,6 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "github:Vgshots/whatsapp-web.js-my-enhancements#my-feature"
+    "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js#main"
   }
 }
