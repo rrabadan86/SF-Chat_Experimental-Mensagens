@@ -211,8 +211,14 @@ if (require.main === module) {
     if (testeNum) {
       log('Enviando mensagem de teste para ' + testeNum + '...');
       try {
-        await sendTexto(testeNum, 'Teste do cliente único SlimFit ✅ (whatsapp-web.js)');
-        log('🎉 Mensagem de teste enviada!');
+        const msg = await sendTexto(testeNum, 'Teste do cliente único SlimFit ✅ (whatsapp-web.js)');
+        log('📨 Enfileirada, aguardando entrega...');
+        // Espera a entrega REAL antes de encerrar (senão o destroy corta o envio).
+        await new Promise((r) => setTimeout(r, 8000));
+        try {
+          const ack = msg && typeof msg.ack !== 'undefined' ? msg.ack : '?';
+          log('🎉 Mensagem de teste enviada! (ack=' + ack + ')');
+        } catch (_) { log('🎉 Mensagem de teste enviada!'); }
       } catch (e) {
         log('❌ Falha no envio de teste: ' + e.message);
       }
