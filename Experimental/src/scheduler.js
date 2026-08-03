@@ -546,23 +546,28 @@ async function main() {
   log(`📅 Job RENOVAÇÃO agendado: ${config.schedule.renewal} (17:00 segunda)`);
   console.log('   → Contratos vencendo na semana (envia pelo perfil Financeiro)');
 
-  // Schedule: 07:00 todos os dias → Boas-vindas a novos seguidores do Instagram
-  cron.schedule(config.schedule.instagram, () => {
-    log('⏰ Cron disparado: Instagram boas-vindas');
-    if (jobRunning) { log('⚠️  Instagram ignorado — outro job em execução'); return; }
-    jobRunning = true;
-    const start = new Date();
-    require('./instagram-boasvindas').runBoasVindas()
-      .then(() => log('✅ Instagram boas-vindas concluído'))
-      .catch(err => logError('Instagram boas-vindas', err))
-      .finally(() => {
-        jobRunning = false;
-        log(`⏱️  Instagram finalizado em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
-      });
-  }, { timezone: 'America/Sao_Paulo' });
-
-  log(`📅 Job INSTAGRAM agendado: ${config.schedule.instagram} (07:00 todos os dias)`);
-  console.log('   → Boas-vindas a novos seguidores (perfil logado no Instagram)');
+  // Schedule: 07:00 todos os dias → Boas-vindas a novos seguidores do Instagram.
+  // DESLIGADO por padrão: a Meta bloqueia o navegador do VPS com 429. Religue
+  // com IG_ENABLED=true no .env quando tiver solução (PC de casa ou proxy).
+  if (process.env.IG_ENABLED === 'true') {
+    cron.schedule(config.schedule.instagram, () => {
+      log('⏰ Cron disparado: Instagram boas-vindas');
+      if (jobRunning) { log('⚠️  Instagram ignorado — outro job em execução'); return; }
+      jobRunning = true;
+      const start = new Date();
+      require('./instagram-boasvindas').runBoasVindas()
+        .then(() => log('✅ Instagram boas-vindas concluído'))
+        .catch(err => logError('Instagram boas-vindas', err))
+        .finally(() => {
+          jobRunning = false;
+          log(`⏱️  Instagram finalizado em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
+        });
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job INSTAGRAM agendado: ${config.schedule.instagram} (07:00 todos os dias)`);
+    console.log('   → Boas-vindas a novos seguidores (perfil logado no Instagram)');
+  } else {
+    log('⏸️  Job INSTAGRAM DESLIGADO (defina IG_ENABLED=true no .env para religar)');
+  }
 
   // Schedule: 08:00 todos os dias → Parabéns às aniversariantes nos grupos
   cron.schedule(config.schedule.aniversariantes, () => {
