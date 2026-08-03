@@ -654,6 +654,24 @@ async function main() {
   log(`📅 Job RESUMO SEMANA agendado: ${config.schedule.resumoSemana} (16:30 sexta)`);
   console.log('   → Resumo da semana das experimentais no grupo "SlimFit Equipe"');
 
+  // Schedule: 06:10 toda segunda → Alunas ausentes há 10+ dias no grupo da equipe
+  cron.schedule(config.schedule.ausentes10, () => {
+    log('⏰ Cron disparado: Ausentes 10 dias');
+    if (jobRunning) { log('⚠️  Ausentes 10 dias ignorado — outro job em execução'); return; }
+    jobRunning = true;
+    const start = new Date();
+    require('./ausentes-10-dias').runAusentes10Dias()
+      .then(() => log('✅ Ausentes 10 dias concluído'))
+      .catch(err => logError('Ausentes 10 dias', err))
+      .finally(() => {
+        jobRunning = false;
+        log(`⏱️  Ausentes 10 dias finalizado em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
+      });
+  }, { timezone: 'America/Sao_Paulo' });
+
+  log(`📅 Job AUSENTES 10 DIAS agendado: ${config.schedule.ausentes10} (06:10 segunda)`);
+  console.log('   → Alunas ativas ausentes há 10+ dias no grupo "SlimFit Equipe"');
+
   // A cada 15 min → envia as confirmações de aula experimental (fila ZEE/EVO + formulário)
   cron.schedule('*/15 * * * *', () => {
     log('⏰ Cron disparado: Confirmação Aula Experimental');
