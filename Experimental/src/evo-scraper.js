@@ -1403,18 +1403,34 @@ class EvoScraper {
     if (!frame) { console.log('   ⚠️  Não achei o iframe de Vendas.'); return []; }
     console.log(`   🖼️  Frame: ${frame.url()}`);
 
-    // Define De/Até = data (os 2 inputs com valor em formato DD/MM/AAAA).
-    const nDatas = await frame.evaluate((val) => {
-      const ins = Array.from(document.querySelectorAll('input')).filter(i => /\d{2}\/\d{2}\/\d{4}/.test(i.value || ''));
-      for (const i of ins) {
-        i.focus(); i.value = val;
-        i.dispatchEvent(new Event('input', { bubbles: true }));
-        i.dispatchEvent(new Event('change', { bubbles: true }));
-        i.dispatchEvent(new Event('blur', { bubbles: true }));
-      }
-      return ins.length;
-    }, dataStr);
-    console.log(`   📅 Datas (De/Até) definidas em ${nDatas} campo(s) para ${dataStr}`);
+    // Define De/Até = data DIGITANDO só nos campos VISÍVEIS (datepicker legado).
+    // Setar todos os inputs (inclusive ocultos) corrompia o valor submetido.
+    const dateHandles = await frame.$$('input');
+    let setCount = 0;
+    for (const h of dateHandles) {
+      let info;
+      try { info = await h.evaluate(el => ({ vis: !!(el.offsetWidth || el.offsetHeight), val: el.value || '', ro: !!el.readOnly })); }
+      catch (_) { continue; }
+      if (!info.vis || !/\d{2}\/\d{2}\/\d{4}/.test(info.val)) continue;
+      try {
+        await h.click({ clickCount: 3 });
+        await this.sleep(150);
+        if (info.ro) {
+          await h.evaluate((el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); el.dispatchEvent(new Event('blur', { bubbles: true })); }, dataStr);
+        } else {
+          await this.page.keyboard.down('Control'); await this.page.keyboard.press('KeyA'); await this.page.keyboard.up('Control');
+          await this.page.keyboard.press('Backspace');
+          await this.page.keyboard.type(dataStr, { delay: 40 });
+          await this.page.keyboard.press('Escape');
+          await h.evaluate((el) => { el.dispatchEvent(new Event('change', { bubbles: true })); el.dispatchEvent(new Event('blur', { bubbles: true })); });
+        }
+        setCount++;
+      } catch (_) { /* segue */ }
+    }
+    const lidos = await frame.$$eval('input', els => els
+      .filter(e => (e.offsetWidth || e.offsetHeight) && /\d{2}\/\d{2}\/\d{4}/.test(e.value || ''))
+      .map(e => e.value));
+    console.log(`   📅 De/Até digitadas em ${setCount} campo(s) → valores visíveis: ${JSON.stringify(lidos)}`);
 
     // Salva o HTML do formulário para inspeção (checkboxes, datas).
     try {
@@ -1459,8 +1475,9 @@ class EvoScraper {
       return { ok: false, rotulos };
     });
     console.log(cbInfo.ok
-      ? `   ☑️  Checkbox "Contrato" marcado (${cbInfo.marcado})`
+      ? `   ☑️  Checkbox "Contrato" marcado (${cbInfo.marcado}) | rótulos: ${JSON.stringify(cbInfo.rotulos)}`
       : `   ⚠️  Checkbox "Contrato" não encontrado. Rótulos vistos: ${JSON.stringify(cbInfo.rotulos)}`);
+    await this.sleep(800);
 
     // Clica na lupa (pesquisar).
     const lupou = await frame.evaluate(() => {
