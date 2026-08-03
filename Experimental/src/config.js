@@ -35,7 +35,7 @@ const config = {
 
   // Áudios de follow-up (pasta e mapeamento professora → arquivo)
   audio: {
-    dir: process.env.AUDIO_DIR || 'G:\\Meu Drive\\2. Empresas\\2. SlimFit\\WPP',
+    dir: process.env.AUDIO_DIR || require('path').resolve(__dirname, '..', 'audios'),
     map: {
       taynara: 'A-Tay-Pós',
       luiza:   'A-Luiza-Pós',
