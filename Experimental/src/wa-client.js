@@ -60,7 +60,9 @@ function initWhatsApp() {
   if (initPromise) return initPromise;
   client = criarClient();
 
-  initPromise = new Promise((resolve) => {
+  let rejectInit = null;
+  initPromise = new Promise((resolve, reject) => {
+    rejectInit = reject;
     client.on('qr', (qr) => {
       console.log('\n📲 Escaneie o QR no WhatsApp do número (Aparelhos conectados → Conectar um aparelho):\n');
       qrcodeTerminal.generate(qr, { small: true });
@@ -106,7 +108,18 @@ function initWhatsApp() {
     }, 90000);
   });
 
-  client.initialize();
+  client.initialize().catch((e) => {
+    const msg = (e && e.message) || String(e);
+    if (/already running/i.test(msg)) {
+      log('❌ Já existe uma sessão do WhatsApp aberta para este perfil.');
+      log('   → Provavelmente o scheduler no PM2. Pare-o antes de rodar scripts standalone:');
+      log('     pm2 stop slimfit-exp   (e depois: pm2 start slimfit-exp)');
+    } else {
+      log('❌ Falha ao inicializar o WhatsApp: ' + msg);
+    }
+    initPromise = null; // permite nova tentativa depois
+    if (rejectInit) rejectInit(new Error(msg));
+  });
   return initPromise;
 }
 
