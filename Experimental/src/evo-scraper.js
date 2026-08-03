@@ -1212,12 +1212,32 @@ class EvoScraper {
     await this.dismissSurveyModal();
     await this.sleep(1500);
 
+    // Troca para a visão do DIA (senão lê a semana toda) e garante que é HOJE.
+    const clicarBotao = async (rotulo) => {
+      const ok = await this.page.evaluate((rotulo) => {
+        const alvo = rotulo.trim().toUpperCase();
+        const els = Array.from(document.querySelectorAll('button, a, span, div, li'));
+        for (const el of els) {
+          if ((el.textContent || '').trim().toUpperCase() !== alvo) continue;
+          if (el.offsetWidth <= 0 && el.offsetHeight <= 0) continue;
+          (el.closest('button, a, [role="button"], li') || el).click();
+          return true;
+        }
+        return false;
+      }, rotulo);
+      return ok;
+    };
+    console.log(`   ${await clicarBotao('DIA') ? '📆 Visão DIA' : '⚠️  botão DIA não achado'}`);
+    await this.sleep(2500);
+    await clicarBotao('HOJE');
+    await this.sleep(2500);
+
     try {
       if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
       await this.page.screenshot({ path: path.join(DATA_DIR, 'grade-debug.png'), fullPage: true }).catch(() => {});
     } catch (_) { /* ignore */ }
 
-    // 1) Detecta os "cards" de horário do dia (texto começando com HH:MM - HH:MM).
+    // 1) Detecta os "cards" de horário do dia (na visão DIA há 1 aula por horário).
     const slots = await this.page.evaluate(() => {
       const out = [];
       for (const el of Array.from(document.querySelectorAll('div, a, li, td'))) {
@@ -1226,15 +1246,15 @@ class EvoScraper {
         const m = t.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
         if (!m) continue;
         const r = el.getBoundingClientRect();
-        if (r.width <= 0 || r.height <= 0) continue;
-        out.push({ horario: m[1], x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), sig: t.replace(/\s+/g, ' ').slice(0, 60) });
+        if (r.width <= 0 || r.height <= 0 || r.width > 700) continue; // ignora contêineres largos
+        out.push({ horario: m[1], x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) });
       }
-      // dedup por horario+assinatura
+      // na visão DIA dedup por horário (1 aula por horário)
       const seen = new Set(), uniq = [];
-      for (const s of out) { const k = s.horario + '|' + s.sig; if (!seen.has(k)) { seen.add(k); uniq.push(s); } }
+      for (const s of out) { if (!seen.has(s.horario)) { seen.add(s.horario); uniq.push(s); } }
       return uniq;
     });
-    console.log(`   🕒 ${slots.length} horário(s) detectado(s): ${slots.map(s => s.horario).join(', ') || '(nenhum)'}`);
+    console.log(`   🕒 ${slots.length} horário(s) hoje: ${slots.map(s => s.horario).join(', ') || '(nenhum)'}`);
 
     const reposicoes = [];
     let dumpFeito = false;
@@ -1263,27 +1283,38 @@ class EvoScraper {
           } catch (_) { /* ignore */ }
         }
 
-        // lê participantes marcados como reposição (badge "R" / texto "Reposição")
-        const achados = await this.page.evaluate((horario) => {
+        // lê participantes: nome vem do link (a.truncate). Reposição = badge "R"
+        // no avatar da linha (ou texto "(Reposição)" no popover da linha).
+        const info = await this.page.evaluate((horario) => {
           const res = [];
-          // linhas de participante: elementos com "Marcar ausência" ou avatar+nome
-          const linhas = Array.from(document.querySelectorAll('li, tr, div'))
-            .filter(el => el.children.length > 0 && el.children.length <= 12);
-          for (const el of linhas) {
-            const txt = (el.innerText || '').replace(/\s+/g, ' ').trim();
-            if (!txt || txt.length > 120) continue;
-            const ehRepo = /\(reposi/i.test(txt) || /\breposi[çc][ãa]o\b/i.test(txt)
-              || Array.from(el.querySelectorAll('*')).some(n => (n.textContent || '').trim() === 'R' && n.children.length === 0);
-            if (!ehRepo) continue;
-            // extrai um nome plausível (texto com 2+ palavras alfabéticas)
-            const nomeMatch = txt.match(/([A-Za-zÀ-ú][A-Za-zÀ-ú'.]+(?:\s+[A-Za-zÀ-ú'.]+){1,5})/);
-            const nome = nomeMatch ? nomeMatch[1].replace(/\b(Reposi[çc][ãa]o|Matr[íi]cula|Fiti|CL|Marcar aus[êe]ncia)\b/gi, '').trim() : '';
-            if (nome && nome.length >= 5) res.push({ nome, horario });
+          let totalParticipantes = 0;
+          const badges = new Set();
+          const anchors = Array.from(document.querySelectorAll('a.truncate, a.primary, a.no-margin'));
+          for (const a of anchors) {
+            const nome = (a.textContent || '').trim();
+            if (!nome || nome.length < 5) continue;
+            if (/marcar|fechar|reabrir|enviar|adicionar|hist[óo]rico/i.test(nome)) continue;
+            totalParticipantes++;
+            const row = a.closest('li, tr') || a.parentElement?.parentElement || a.parentElement;
+            let ehRepo = false;
+            if (row) {
+              // badge do avatar: elemento-folha com 1-2 letras (R, A, CL...)
+              for (const n of Array.from(row.querySelectorAll('*'))) {
+                if (n.children.length === 0) {
+                  const t = (n.textContent || '').trim();
+                  if (t.length >= 1 && t.length <= 2 && /^[A-Za-z]+$/.test(t)) badges.add(t.toUpperCase());
+                  if (t.toUpperCase() === 'R') ehRepo = true;
+                }
+              }
+              if (/\(reposi|reposi[çc][ãa]o/i.test(row.innerText || '')) ehRepo = true;
+            }
+            if (ehRepo) res.push({ nome, horario });
           }
-          return res;
+          return { res, totalParticipantes, badges: Array.from(badges) };
         }, s.horario);
 
-        for (const a of achados) reposicoes.push(a);
+        console.log(`      • ${s.horario}: ${info.totalParticipantes} presente(s), ${info.res.length} reposição | badges: ${info.badges.join(',') || '-'}`);
+        for (const a of info.res) reposicoes.push(a);
 
         // fecha o painel (×, FECHAR ou ESC)
         await this.page.evaluate(() => {
