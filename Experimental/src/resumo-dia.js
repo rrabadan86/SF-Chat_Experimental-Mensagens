@@ -119,7 +119,18 @@ async function runResumoDia() {
   console.log('╚═══════════════════════════════════════════════════╝');
   console.log(`   Grupo: ${GRUPO} | data: ${dataStr} | ${DRY ? '🧪 DRY (não envia)' : '🚀 ENVIO'}\n`);
 
-  const cats = await coletar(dataStr);
+  // Retry: o login do EVO às vezes dá timeout por instabilidade. Tenta até 3x.
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let cats, ultimoErro;
+  for (let i = 1; i <= 3; i++) {
+    try { cats = await coletar(dataStr); break; }
+    catch (e) {
+      ultimoErro = e;
+      console.log(`   ⚠️  Tentativa ${i}/3 falhou: ${e.message}`);
+      if (i < 3) { console.log('   ⏳ aguardando 30s antes de tentar de novo...'); await sleep(30000); }
+    }
+  }
+  if (!cats) throw ultimoErro;
   console.log(`   🔁 Reposições: ${cats.reposicoes.length} | ✅ Fizeram: ${cats.fizeram.length} | ❌ Faltaram: ${cats.faltaram.length} | 🎉 Fecharam: ${cats.fecharam.length}\n`);
 
   const msg = montarMensagem(cats, dataStr);
