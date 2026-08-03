@@ -1183,6 +1183,131 @@ class EvoScraper {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  /**
+   * Lê as REPOSIÇÕES do dia na tela Grade > Horários.
+   * A grade mostra os horários do dia; ao abrir um horário, os participantes de
+   * reposição vêm marcados (badge "R" / texto "Reposição"). Retorna
+   * [{ nome, horario }]. Instrumentado: salva debug-grade.png e, do 1º horário
+   * aberto, data/grade-modal.html para ajuste fino dos seletores.
+   */
+  async getReposicoesGrade(dataStr) {
+    const fs = require('fs');
+    const path = require('path');
+    const DATA_DIR = path.resolve(__dirname, '..', 'data');
+    const base = this.appOrigin || config.evo.url;
+    const url = `${base}/#/app/slimfit/15/grade/horarios`;
+
+    console.log('\n═══════════════════════════════════════');
+    console.log(`🗓️  Reposições do dia (${dataStr}) — Grade > Horários`);
+    console.log('═══════════════════════════════════════\n');
+
+    await this.page.goto(url, { waitUntil: 'networkidle2' });
+    await this.sleep(5000);
+    if (await this.isOnLoginPage()) {
+      console.log('   🔐 Sessão caiu na tela de login. Refazendo login...');
+      await this.login();
+      await this.page.goto(url, { waitUntil: 'networkidle2' });
+      await this.sleep(5000);
+    }
+    await this.dismissSurveyModal();
+    await this.sleep(1500);
+
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      await this.page.screenshot({ path: path.join(DATA_DIR, 'grade-debug.png'), fullPage: true }).catch(() => {});
+    } catch (_) { /* ignore */ }
+
+    // 1) Detecta os "cards" de horário do dia (texto começando com HH:MM - HH:MM).
+    const slots = await this.page.evaluate(() => {
+      const out = [];
+      for (const el of Array.from(document.querySelectorAll('div, a, li, td'))) {
+        if (el.children.length > 8) continue;
+        const t = (el.innerText || '').trim();
+        const m = t.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
+        if (!m) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) continue;
+        out.push({ horario: m[1], x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), sig: t.replace(/\s+/g, ' ').slice(0, 60) });
+      }
+      // dedup por horario+assinatura
+      const seen = new Set(), uniq = [];
+      for (const s of out) { const k = s.horario + '|' + s.sig; if (!seen.has(k)) { seen.add(k); uniq.push(s); } }
+      return uniq;
+    });
+    console.log(`   🕒 ${slots.length} horário(s) detectado(s): ${slots.map(s => s.horario).join(', ') || '(nenhum)'}`);
+
+    const reposicoes = [];
+    let dumpFeito = false;
+
+    for (let i = 0; i < slots.length; i++) {
+      const s = slots[i];
+      try {
+        await this.page.mouse.click(s.x, s.y);
+        await this.sleep(2500);
+
+        // espera o painel "PRESENTES" abrir
+        await this.page.waitForFunction(
+          () => /presentes|marcar aus[êe]ncia|ocupa[çc][ãa]o/i.test(document.body.innerText || ''),
+          { timeout: 6000 }
+        ).catch(() => {});
+
+        if (!dumpFeito) {
+          try {
+            const html = await this.page.evaluate(() => {
+              const cand = Array.from(document.querySelectorAll('div,section')).find(d => /presentes/i.test(d.innerText || '') && d.innerText.length < 4000);
+              return (cand ? cand.outerHTML : document.body.outerHTML).slice(0, 25000);
+            });
+            fs.writeFileSync(path.join(DATA_DIR, 'grade-modal.html'), html, 'utf8');
+            dumpFeito = true;
+            console.log('   🧷 Dump do 1º horário salvo em data/grade-modal.html');
+          } catch (_) { /* ignore */ }
+        }
+
+        // lê participantes marcados como reposição (badge "R" / texto "Reposição")
+        const achados = await this.page.evaluate((horario) => {
+          const res = [];
+          // linhas de participante: elementos com "Marcar ausência" ou avatar+nome
+          const linhas = Array.from(document.querySelectorAll('li, tr, div'))
+            .filter(el => el.children.length > 0 && el.children.length <= 12);
+          for (const el of linhas) {
+            const txt = (el.innerText || '').replace(/\s+/g, ' ').trim();
+            if (!txt || txt.length > 120) continue;
+            const ehRepo = /\(reposi/i.test(txt) || /\breposi[çc][ãa]o\b/i.test(txt)
+              || Array.from(el.querySelectorAll('*')).some(n => (n.textContent || '').trim() === 'R' && n.children.length === 0);
+            if (!ehRepo) continue;
+            // extrai um nome plausível (texto com 2+ palavras alfabéticas)
+            const nomeMatch = txt.match(/([A-Za-zÀ-ú][A-Za-zÀ-ú'.]+(?:\s+[A-Za-zÀ-ú'.]+){1,5})/);
+            const nome = nomeMatch ? nomeMatch[1].replace(/\b(Reposi[çc][ãa]o|Matr[íi]cula|Fiti|CL|Marcar aus[êe]ncia)\b/gi, '').trim() : '';
+            if (nome && nome.length >= 5) res.push({ nome, horario });
+          }
+          return res;
+        }, s.horario);
+
+        for (const a of achados) reposicoes.push(a);
+
+        // fecha o painel (×, FECHAR ou ESC)
+        await this.page.evaluate(() => {
+          const bs = Array.from(document.querySelectorAll('button, a, span, i, [role="button"]'));
+          for (const b of bs) {
+            const t = (b.textContent || '').trim().toLowerCase();
+            const lbl = (b.getAttribute && (b.getAttribute('aria-label') || '') || '').toLowerCase();
+            if (t === 'fechar' || t === '×' || t === '✕' || lbl.includes('fechar') || lbl.includes('close')) { b.click(); return; }
+          }
+        });
+        await this.page.keyboard.press('Escape').catch(() => {});
+        await this.sleep(1200);
+      } catch (e) {
+        console.log(`   ⚠️  Horário ${s.horario}: ${e.message}`);
+      }
+    }
+
+    // dedup por nome+horario
+    const seen = new Set(), uniq = [];
+    for (const r of reposicoes) { const k = (r.nome.toLowerCase()) + '|' + r.horario; if (!seen.has(k)) { seen.add(k); uniq.push(r); } }
+    console.log(`   🔁 ${uniq.length} reposição(ões) encontrada(s)\n`);
+    return uniq;
+  }
+
   async close() {
     if (this.browser) {
       console.log('🔒 Fechando browser...');

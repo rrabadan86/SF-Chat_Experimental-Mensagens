@@ -30,7 +30,6 @@ const DRY = process.argv.includes('--dry');
 const argData = (process.argv.find(a => a.startsWith('--data=')) || '').split('=')[1];
 
 const norm = (s) => (s || '').trim().toLowerCase();
-const ehReposicao = (c) => /reposi/.test(norm(c.activity)) || /reposi/.test(norm(c.status)) || /reposi/.test(norm(c.contrato));
 const fezAula = (c) => /presen|realizad/.test(norm(c.status));
 const faltou = (c) => norm(c.status) === 'falta' || /\bfalta\b/.test(norm(c.status));
 
@@ -65,25 +64,32 @@ async function coletar(dataStr) {
   try {
     await scraper.init();
     await scraper.login();
+
+    // 1) Experimentais do dia (agenda de experimentais): fizeram / faltaram / fecharam
     await scraper.navigateToExperimental();
     await scraper.changeDateFilter(dataStr);
     await scraper.sleep(3000);
     const todas = await scraper.extractClassList();
-    console.log(`   Total de linhas na agenda: ${todas.length}`);
-
-    // diagnóstico: atividades/status distintos (ajuda a localizar "reposição")
-    const atividades = [...new Set(todas.map(c => c.activity).filter(Boolean))];
+    console.log(`   Total de linhas na agenda de experimentais: ${todas.length}`);
     const statuses = [...new Set(todas.map(c => c.status).filter(Boolean))];
-    console.log(`   🔎 Atividades: ${atividades.join(', ') || '(nenhuma)'}`);
-    console.log(`   🔎 Status: ${statuses.join(', ') || '(nenhum)'}`);
+    console.log(`   🔎 Status vistos: ${statuses.join(', ') || '(nenhum)'}`);
 
-    const reposicoes = todas.filter(ehReposicao);
-    const experimentais = todas.filter(c => !ehReposicao(c));
+    // 2) Reposições do dia (tela Grade > Horários) → [{ nome, horario }]
+    let reposicoes = [];
+    try {
+      const reps = await scraper.getReposicoesGrade(dataStr);
+      reposicoes = reps.map(r => ({ name: r.nome, time: r.horario }));
+    } catch (e) {
+      console.log(`   ⚠️  Falha ao ler reposições na Grade: ${e.message}`);
+    }
+
     return {
       reposicoes,
-      fizeram: experimentais.filter(fezAula),
-      faltaram: experimentais.filter(faltou),
-      fecharam: experimentais.filter(c => c.virouAluna),
+      fizeram: todas.filter(fezAula),
+      faltaram: todas.filter(faltou),
+      // NOTA: hoje só pega experimentais que fecharam. A dona quer TODAS as
+      // alunas que fecharam contrato no dia (fonte diferente) — pendente.
+      fecharam: todas.filter(c => c.virouAluna),
     };
   } finally {
     await scraper.close();
