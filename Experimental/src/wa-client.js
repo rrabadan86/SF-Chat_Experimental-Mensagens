@@ -187,9 +187,21 @@ module.exports = {
 
 // ── Standalone: escanear o QR pela 1ª vez e deixar a sessão salva ────────────
 if (require.main === module) {
+  const testeNum = process.argv[2]; // opcional: node src/wa-client.js 5562XXXXXXXXX
   console.log('🐧 Iniciando cliente do WhatsApp (aguarde o QR)...');
-  initWhatsApp().then(() => {
+  initWhatsApp().then(async () => {
     log('Sessão ativa e salva em: ' + AUTH_DIR);
+    if (testeNum) {
+      log('Enviando mensagem de teste para ' + testeNum + '...');
+      try {
+        await sendTexto(testeNum, 'Teste do cliente único SlimFit ✅ (whatsapp-web.js)');
+        log('🎉 Mensagem de teste enviada!');
+      } catch (e) {
+        log('❌ Falha no envio de teste: ' + e.message);
+      }
+      await destroy();
+      process.exit(0);
+    }
     log('Pode deixar rodando, ou Ctrl+C — a sessão fica salva para o scheduler usar.');
   });
   const sair = async () => { await destroy(); process.exit(0); };
