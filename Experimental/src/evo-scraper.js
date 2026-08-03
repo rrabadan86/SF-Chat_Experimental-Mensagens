@@ -1446,29 +1446,34 @@ class EvoScraper {
       const textoDireto = (e) => { let s = ''; for (const n of e.childNodes) if (n.nodeType === 3) s += n.textContent; return s.replace(/\s+/g, ' ').trim(); };
       const nodes = Array.from(document.querySelectorAll('*')).filter(e => /^contrato$/i.test(textoDireto(e)));
       const cbs = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+      // Cada checkbox é estilizado (iCheck): o input real é 0×0. Sobe até o
+      // wrapper VISÍVEL (o quadradinho clicável) e usa o rect dele.
+      const proxies = cbs.map((cb) => {
+        let el = cb, r = cb.getBoundingClientRect(), hops = 0;
+        while (!(r.width || r.height) && el.parentElement && hops < 3) { el = el.parentElement; r = el.getBoundingClientRect(); hops++; }
+        return { cb, box: el, r };
+      }).filter((p) => p.r.width || p.r.height);
       for (const node of nodes) {
-        let cb = node.querySelector && node.querySelector('input[type="checkbox"]');
-        if (!cb) {
-          const r = node.getBoundingClientRect();
-          if (r.width || r.height) {
-            let best = null, bd = 1e9;
-            for (const c of cbs) {
-              const cr = c.getBoundingClientRect();
-              if (!(cr.width || cr.height)) continue;
-              if (Math.abs((cr.top + cr.height / 2) - (r.top + r.height / 2)) > 16) continue; // mesma linha
-              const dist = r.left - cr.left; // checkbox à esquerda do texto
-              if (dist >= -2 && dist < bd) { bd = dist; best = c; }
-            }
-            cb = best;
-          }
+        const r = node.getBoundingClientRect();
+        if (!(r.width || r.height)) continue;
+        let best = null, bd = 1e9;
+        for (const p of proxies) {
+          if (Math.abs((p.r.top + p.r.height / 2) - (r.top + r.height / 2)) > 16) continue; // mesma linha
+          const dist = r.left - p.r.left;                 // wrapper à esquerda do texto
+          if (dist >= -2 && dist < 60 && dist < bd) { bd = dist; best = p; }
         }
-        if (cb) { if (!cb.checked) cb.click(); return { ok: true, texto: textoDireto(node), jaEstava: cb.checked }; }
+        if (!best) continue;
+        if (!best.cb.checked) {
+          try { best.box.click(); } catch (_) { /* segue */ }
+          if (!best.cb.checked) { try { best.cb.click(); } catch (_) {} best.cb.checked = true; best.cb.dispatchEvent(new Event('change', { bubbles: true })); best.cb.dispatchEvent(new Event('click', { bubbles: true })); }
+        }
+        return { ok: true, texto: textoDireto(node), dist: Math.round(bd), checked: best.cb.checked };
       }
-      return { ok: false, nNodes: nodes.length, nCbs: cbs.length, amostras: nodes.slice(0, 6).map(textoDireto) };
+      return { ok: false, nNodes: nodes.length, nCbs: cbs.length, nProxies: proxies.length };
     });
     console.log(cbInfo.ok
-      ? `   ☑️  Checkbox "Contrato" marcado (texto="${cbInfo.texto}")`
-      : `   ⚠️  "Contrato" não encontrado. nós="${cbInfo.nNodes}" checkboxes="${cbInfo.nCbs}" amostras=${JSON.stringify(cbInfo.amostras)}`);
+      ? `   ☑️  Checkbox "Contrato" marcado (dist=${cbInfo.dist}px, checked=${cbInfo.checked})`
+      : `   ⚠️  "Contrato" não achou wrapper. nós=${cbInfo.nNodes} checkboxes=${cbInfo.nCbs} proxies=${cbInfo.nProxies}`);
     await this.sleep(800);
 
     // Clica na lupa (pesquisar).
