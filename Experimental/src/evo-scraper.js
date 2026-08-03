@@ -1416,22 +1416,51 @@ class EvoScraper {
     }, dataStr);
     console.log(`   📅 Datas (De/Até) definidas em ${nDatas} campo(s) para ${dataStr}`);
 
-    // Marca o checkbox "Contrato" (exato, não "Contrato adicional").
-    const marcou = await frame.evaluate(() => {
-      for (const lb of Array.from(document.querySelectorAll('label'))) {
-        if ((lb.textContent || '').trim().toLowerCase() === 'contrato') {
-          let cb = null; const forId = lb.getAttribute('for');
-          if (forId) cb = document.getElementById(forId);
-          if (!cb) cb = lb.querySelector('input[type="checkbox"]');
-          if (!cb) { const p = lb.previousElementSibling, n = lb.nextElementSibling;
-            if (p && p.matches && p.matches('input[type="checkbox"]')) cb = p;
-            else if (n && n.matches && n.matches('input[type="checkbox"]')) cb = n; }
-          if (cb) { if (!cb.checked) cb.click(); return true; }
-        }
+    // Salva o HTML do formulário para inspeção (checkboxes, datas).
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      const formHtml = await frame.evaluate(() => (document.body ? document.body.outerHTML.slice(0, 45000) : ''));
+      fs.writeFileSync(path.join(DATA_DIR, 'contratos-form.html'), formHtml, 'utf8');
+    } catch (_) { /* ignore */ }
+
+    // Marca o checkbox "Contrato" (exato, não "Contrato adicional"). O rótulo de
+    // cada checkbox é buscado de forma "justa" (label[for], label-pai, ou o
+    // texto imediatamente ao lado), pra não confundir com os vizinhos.
+    const cbInfo = await frame.evaluate(() => {
+      const rotuloJusto = (cb) => {
+        const id = cb.id;
+        let l = id ? document.querySelector(`label[for="${id}"]`) : null;
+        if (l) return l.textContent.trim();
+        l = cb.closest('label');
+        if (l) return l.textContent.trim();
+        let n = cb.nextSibling;
+        while (n && n.nodeType === 3 && !n.textContent.trim()) n = n.nextSibling;
+        if (n && n.textContent && n.textContent.trim()) return n.textContent.trim();
+        if (cb.nextElementSibling) return cb.nextElementSibling.textContent.trim();
+        if (cb.parentElement) return cb.parentElement.textContent.trim();
+        return '';
+      };
+      const cbs = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+      const rotulos = cbs.map(rotuloJusto);
+      // 1º: rótulo exatamente "contrato"
+      for (let i = 0; i < cbs.length; i++) {
+        if (rotulos[i].toLowerCase() === 'contrato') { if (!cbs[i].checked) cbs[i].click(); return { ok: true, marcado: 'contrato', rotulos }; }
       }
-      return false;
+      // 2º: contém "contrato" e não "adicional"
+      for (let i = 0; i < cbs.length; i++) {
+        const t = rotulos[i].toLowerCase();
+        if (/\bcontrato\b/.test(t) && !/adicional/.test(t)) { if (!cbs[i].checked) cbs[i].click(); return { ok: true, marcado: rotulos[i], rotulos }; }
+      }
+      // 3º: por id/name contendo "contrato"
+      for (const cb of cbs) {
+        const meta = ((cb.id || '') + ' ' + (cb.name || '')).toLowerCase();
+        if (/contrato/.test(meta) && !/adicional/.test(meta)) { if (!cb.checked) cb.click(); return { ok: true, marcado: 'via id/name', rotulos }; }
+      }
+      return { ok: false, rotulos };
     });
-    console.log(marcou ? '   ☑️  Checkbox "Contrato" marcado' : '   ⚠️  Checkbox "Contrato" não encontrado');
+    console.log(cbInfo.ok
+      ? `   ☑️  Checkbox "Contrato" marcado (${cbInfo.marcado})`
+      : `   ⚠️  Checkbox "Contrato" não encontrado. Rótulos vistos: ${JSON.stringify(cbInfo.rotulos)}`);
 
     // Clica na lupa (pesquisar).
     const lupou = await frame.evaluate(() => {
