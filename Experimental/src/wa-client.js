@@ -60,8 +60,11 @@ function initWhatsApp() {
       console.log('\n📲 Escaneie o QR no WhatsApp do número (Aparelhos conectados → Conectar um aparelho):\n');
       qrcodeTerminal.generate(qr, { small: true });
     });
-    client.on('authenticated', () => log('🔐 Autenticado (sessão salva).'));
+    let nAuth = 0;
+    client.on('authenticated', () => { nAuth++; log(`🔐 Autenticado (${nAuth}).`); });
     client.on('auth_failure', (m) => log('❌ auth_failure: ' + m));
+    client.on('loading_screen', (percent, message) => log(`⏳ carregando ${percent}% ${message || ''}`));
+    client.on('change_state', (s) => log('🔄 estado: ' + s));
     client.on('ready', () => {
       pronto = true;
       log('✅ WhatsApp PRONTO (ready) — pode disparar.');
@@ -72,6 +75,10 @@ function initWhatsApp() {
       pronto = false;
       log('⚠️  Desconectado: ' + motivo);
     });
+    // Alerta se demorar demais para ficar pronto (ajuda a diagnosticar versão da lib)
+    setTimeout(() => {
+      if (!pronto) log('⚠️  90s sem "ready". Pode ser incompatibilidade da versão da whatsapp-web.js com o WhatsApp Web.');
+    }, 90000);
   });
 
   client.initialize();
