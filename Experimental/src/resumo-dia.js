@@ -86,13 +86,22 @@ async function coletar(dataStr) {
       console.log(`   ⚠️  Falha ao ler reposições na Grade: ${e.message}`);
     }
 
+    // 3) Contratos fechados no dia (Gerencial > Vendas) — TODAS as alunas
+    let fecharam = [];
+    try {
+      const contratos = await scraper.getContratosDoDia(dataStr);
+      fecharam = contratos.map(c => ({ name: c.nome, contrato: c.contrato }));
+    } catch (e) {
+      console.log(`   ⚠️  Falha ao ler contratos do dia: ${e.message}`);
+    }
+
+    // Descarta lançamentos de teste (ex.: "ZeeTech Experimental") nas experimentais.
+    const ehTeste = (c) => /zeetech|\bteste\b/i.test(c.name || '');
     return {
       reposicoes,
-      fizeram: todas.filter(fezAula),
-      faltaram: todas.filter(faltou),
-      // NOTA: hoje só pega experimentais que fecharam. A dona quer TODAS as
-      // alunas que fecharam contrato no dia (fonte diferente) — pendente.
-      fecharam: todas.filter(c => c.virouAluna),
+      fizeram: todas.filter(c => fezAula(c) && !ehTeste(c)),
+      faltaram: todas.filter(c => faltou(c) && !ehTeste(c)),
+      fecharam,
     };
   } finally {
     await scraper.close();

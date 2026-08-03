@@ -1359,6 +1359,184 @@ class EvoScraper {
     return uniq;
   }
 
+  /**
+   * Lê os CONTRATOS fechados no dia (Gerencial > Vendas detalhadas).
+   * Passos: define De/Até = data, marca o checkbox "Contrato", clica na lupa e
+   * lê a grid (Nome + Sobrenome + Item/contrato). Retorna [{ nome, contrato }].
+   * A tela é o legado "evo3" (iframe), igual à de Faltantes.
+   */
+  async getContratosDoDia(dataStr) {
+    const fs = require('fs');
+    const path = require('path');
+    const DATA_DIR = path.resolve(__dirname, '..', 'data');
+    const base = this.appOrigin || config.evo.url;
+    const url = `${base}/#/app/slimfit/15/evo3/-Gerencial-Gerencial-Index-VENDAS`;
+
+    console.log('\n═══════════════════════════════════════');
+    console.log(`💳 Contratos fechados no dia (${dataStr}) — Gerencial > Vendas`);
+    console.log('═══════════════════════════════════════\n');
+
+    await this.page.goto(url, { waitUntil: 'networkidle2' });
+    await this.sleep(6000);
+    if (await this.isOnLoginPage()) {
+      await this.login();
+      await this.page.goto(url, { waitUntil: 'networkidle2' });
+      await this.sleep(6000);
+    }
+    await this.dismissSurveyModal();
+
+    // Espera o iframe legado (evo3) com o formulário de vendas.
+    const acharFrame = async () => {
+      for (const f of this.page.frames()) {
+        try {
+          const ok = await f.evaluate(() => {
+            const t = (document.body && document.body.innerText || '').toLowerCase();
+            return /vendas detalhadas|data da venda|colaborador venda|considerar especiais/.test(t);
+          });
+          if (ok) return f;
+        } catch (_) { /* frame carregando */ }
+      }
+      return null;
+    };
+    let frame = null;
+    for (let i = 0; i < 30 && !frame; i++) { frame = await acharFrame(); if (!frame) await this.sleep(1500); }
+    if (!frame) { console.log('   ⚠️  Não achei o iframe de Vendas.'); return []; }
+    console.log(`   🖼️  Frame: ${frame.url()}`);
+
+    // Define De/Até = data (os 2 inputs com valor em formato DD/MM/AAAA).
+    const nDatas = await frame.evaluate((val) => {
+      const ins = Array.from(document.querySelectorAll('input')).filter(i => /\d{2}\/\d{2}\/\d{4}/.test(i.value || ''));
+      for (const i of ins) {
+        i.focus(); i.value = val;
+        i.dispatchEvent(new Event('input', { bubbles: true }));
+        i.dispatchEvent(new Event('change', { bubbles: true }));
+        i.dispatchEvent(new Event('blur', { bubbles: true }));
+      }
+      return ins.length;
+    }, dataStr);
+    console.log(`   📅 Datas (De/Até) definidas em ${nDatas} campo(s) para ${dataStr}`);
+
+    // Marca o checkbox "Contrato" (exato, não "Contrato adicional").
+    const marcou = await frame.evaluate(() => {
+      for (const lb of Array.from(document.querySelectorAll('label'))) {
+        if ((lb.textContent || '').trim().toLowerCase() === 'contrato') {
+          let cb = null; const forId = lb.getAttribute('for');
+          if (forId) cb = document.getElementById(forId);
+          if (!cb) cb = lb.querySelector('input[type="checkbox"]');
+          if (!cb) { const p = lb.previousElementSibling, n = lb.nextElementSibling;
+            if (p && p.matches && p.matches('input[type="checkbox"]')) cb = p;
+            else if (n && n.matches && n.matches('input[type="checkbox"]')) cb = n; }
+          if (cb) { if (!cb.checked) cb.click(); return true; }
+        }
+      }
+      return false;
+    });
+    console.log(marcou ? '   ☑️  Checkbox "Contrato" marcado' : '   ⚠️  Checkbox "Contrato" não encontrado');
+
+    // Clica na lupa (pesquisar).
+    const lupou = await frame.evaluate(() => {
+      const cand = Array.from(document.querySelectorAll('button, a, input[type="submit"], input[type="button"], i, span, [role="button"]'));
+      for (const el of cand) {
+        if (el.offsetWidth <= 0 && el.offsetHeight <= 0) continue;
+        const meta = (((el.getAttribute && ((el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.className || '') + ' ' + (el.value || ''))) || '') + ' ' + (el.textContent || '')).toLowerCase();
+        if (/pesquis|buscar|search|lupa|fa-search|glyphicon-search|mdi-magnify/.test(meta)) { (el.closest('button, a, [role="button"], input') || el).click(); return true; }
+      }
+      return false;
+    });
+    console.log(lupou ? '   🔍 Lupa clicada' : '   ⚠️  Lupa não encontrada');
+    await this.sleep(6000);
+    frame = (await acharFrame()) || frame;
+
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      await this.page.screenshot({ path: path.join(DATA_DIR, 'contratos-debug.png'), fullPage: true }).catch(() => {});
+      const gh = await frame.evaluate(() => { const t = document.querySelector('table'); return t ? t.outerHTML.slice(0, 20000) : '(sem table)'; });
+      fs.writeFileSync(path.join(DATA_DIR, 'contratos-grid.html'), gh, 'utf8');
+    } catch (_) { /* ignore */ }
+
+    // Lê a grid (paginando). Colunas: Tipo|Id|Nome|Sobrenome|Item|... Pula
+    // linhas de grupo ("Colaborador:") e de total.
+    const lerPagina = () => frame.evaluate(() => {
+      const norm = (s) => (s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      let best = null, mx = -1;
+      for (const t of document.querySelectorAll('table')) {
+        const hs = Array.from(t.querySelectorAll('th')).map(x => norm(x.textContent));
+        if (!hs.some(h => h.includes('nome')) || !hs.some(h => h.includes('item'))) continue;
+        const n = t.querySelectorAll('tbody tr, tr').length;
+        if (n > mx) { mx = n; best = t; }
+      }
+      if (!best) return { rows: [], info: '', headers: [] };
+      const ths = Array.from(best.querySelectorAll('th')).map(x => (x.textContent || '').trim());
+      const hn = ths.map(norm);
+      const iNome = hn.findIndex(h => h === 'nome' || h.includes('nome'));
+      const iSob = hn.findIndex(h => h.includes('sobrenome'));
+      const iItem = hn.findIndex(h => h.includes('item'));
+      const body = best.querySelector('tbody') || best;
+      const trs = Array.from(body.querySelectorAll('tr')).filter(tr => tr.querySelectorAll('td').length);
+      const rows = [];
+      for (const tr of trs) {
+        const tds = Array.from(tr.querySelectorAll('td')).map(td => (td.innerText || '').trim());
+        const joined = tds.join(' | ');
+        if (/colaborador:|total geral|^total\b/i.test(joined)) continue;
+        const nome = ((iNome >= 0 ? tds[iNome] : '') + ' ' + (iSob >= 0 ? tds[iSob] : '')).trim();
+        const item = iItem >= 0 ? tds[iItem] : '';
+        if (!nome || !item) continue;
+        rows.push({ nome, item });
+      }
+      const info = (document.body.innerText.match(/Exibindo\s+itens?\s+\d+\s*-\s*\d+\s+de\s+\d+/i) || [''])[0];
+      return { rows, info, headers: ths };
+    });
+
+    const proxima = async () => {
+      const range = () => frame.evaluate(() => ((document.body.innerText.match(/Exibindo\s+itens?\s+(\d+)\s*-\s*(\d+)\s+de\s+(\d+)/i) || []).slice(1).join(',')));
+      const antes = await range();
+      const clicou = await frame.evaluate(() => {
+        for (const el of Array.from(document.querySelectorAll('a, button, span, li, i, [role="button"]'))) {
+          if (el.offsetWidth <= 0 && el.offsetHeight <= 0) continue;
+          const t = (el.textContent || '').trim();
+          const cls = ((el.className || '') + ' ' + (el.getAttribute && (el.getAttribute('title') || '') || '')).toLowerCase();
+          const isNext = t === '›' || t === '>' || /(\bnext\b|proxim|caret-right|chevron-right|fa-angle-right)/.test(cls);
+          if (!isNext) continue;
+          if (/disabled/i.test(cls) || (el.closest && el.closest('.disabled, [aria-disabled="true"]'))) return false;
+          (el.closest('a, button, [role="button"], li') || el).click(); return true;
+        }
+        return false;
+      });
+      if (!clicou) return false;
+      await this.sleep(2500);
+      const depois = await range();
+      return !!(depois && depois !== antes);
+    };
+
+    const extrairContrato = (item) => {
+      let m = /contrato\s*[-–]\s*([\s\S]+?)\s*[-–]\s*in[íi]cio\s*em/i.exec(item);
+      if (m) return m[1].trim();
+      return String(item).replace(/^\s*contrato\s*[-–]\s*/i, '').replace(/\s*[-–]\s*in[íi]cio.*$/i, '').trim();
+    };
+
+    const out = [];
+    let pagina = 1;
+    while (pagina <= 20) {
+      const { rows, info, headers } = await lerPagina();
+      if (pagina === 1) console.log(`   📋 Colunas: ${headers.join(' | ') || '(?)'}`);
+      console.log(`   📄 Página ${pagina}: ${rows.length} contrato(s) ${info ? '(' + info + ')' : ''}`);
+      for (const r of rows) {
+        const contrato = extrairContrato(r.item);
+        console.log(`      🎉 ${r.nome} — ${contrato}`);
+        out.push({ nome: r.nome, contrato });
+      }
+      if (!(await proxima())) break;
+      frame = (await acharFrame()) || frame;
+      pagina++;
+    }
+
+    // dedup por nome+contrato
+    const seen = new Set(), uniq = [];
+    for (const r of out) { const k = (r.nome.toLowerCase()) + '|' + (r.contrato.toLowerCase()); if (!seen.has(k)) { seen.add(k); uniq.push(r); } }
+    console.log(`   💳 ${uniq.length} contrato(s) fechado(s) no dia\n`);
+    return uniq;
+  }
+
   async close() {
     if (this.browser) {
       console.log('🔒 Fechando browser...');
