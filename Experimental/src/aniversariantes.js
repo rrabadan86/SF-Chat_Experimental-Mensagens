@@ -71,8 +71,9 @@ async function buscarAniversariantesHoje() {
   console.log('═══════════════════════════════════════════════════\n');
 
   const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--window-size=1366,900'],
+    headless: process.env.HEADLESS === 'false' ? false : 'new',
+    executablePath: process.env.CHROMIUM_PATH || undefined,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--window-size=1366,900'],
     defaultViewport: { width: 1366, height: 900 },
   });
   const page = await browser.newPage();
@@ -564,13 +565,17 @@ async function testeGrupo(nomeGrupo, numeroMarcar, nomePessoa) {
   console.log(`   Grupo: "${nomeGrupo}"`);
   console.log(`   Marcando: ${nomePessoa ? '"' + nomePessoa + '"' : ''} (${numeroMarcar})\n`);
 
-  const { browser, page } = await connectWhatsApp();
+  const wa = require('./wa-client');
+  await wa.initWhatsApp();
   try {
     console.log('📨 Enviando mensagem de teste...');
-    const ok = await enviarParabensNoGrupo(page, nomeGrupo, numeroMarcar, nomePessoa || '');
-    console.log(ok ? '\n✅ Teste enviado! Confira o grupo.' : '\n⚠️  Não consegui enviar (veja os avisos acima).');
-  } finally {
-    try { browser.disconnect(); } catch (e) {}
+    // Acha o grupo pelo nome e envia marcando a pessoa (menção nativa).
+    const g = await wa.acharGrupo(nomeGrupo);
+    if (!g) { console.log(`\n⚠️  Grupo "${nomeGrupo}" não encontrado.`); return; }
+    await wa.sendGrupoComMencao(g.id._serialized, MSG_PREFIXO, MSG_SUFIXO, numeroMarcar);
+    console.log('\n✅ Teste enviado! Confira o grupo.');
+  } catch (e) {
+    console.log(`\n⚠️  Não consegui enviar: ${e.message}`);
   }
 }
 
@@ -599,7 +604,8 @@ async function main() {
   console.log(`\n🎂 ${aniversariantes.length} aniversariante(s) hoje:\n`);
   aniversariantes.forEach((a, i) => console.log(`  ${i + 1}. ${a.nome} — ${a.telefone || '⚠️ sem telefone'}`));
 
-  const { browser, page } = await connectWhatsApp();
+  const wa = require('./wa-client');
+  await wa.initWhatsApp(); // cliente único persistente (não abre/fecha nada)
   const resultados = [];
 
   try {
@@ -607,30 +613,38 @@ async function main() {
       console.log(`\n👤 ${aniv.nome}...`);
       if (!aniv.telefone) { console.log('   ⏭️  Sem telefone — pulando'); resultados.push({ nome: aniv.nome, grupos: [], status: 'sem-telefone' }); continue; }
 
-      const grupos = await getGruposEmComum(page, aniv.telefone);
-      console.log(`   👥 ${grupos.length} grupo(s) em comum: ${grupos.join(', ') || '(nenhum)'}`);
+      // Grupos em comum via API nativa (getCommonGroups) → [{ id, name }]
+      let grupos = [];
+      try { grupos = await wa.getCommonGroups(aniv.telefone); }
+      catch (e) { console.log(`   ⚠️  Erro ao buscar grupos: ${e.message}`); }
+      console.log(`   👥 ${grupos.length} grupo(s) em comum: ${grupos.map(g => g.name || g.id).join(', ') || '(nenhum)'}`);
 
       if (grupos.length === 0) { resultados.push({ nome: aniv.nome, grupos: [], status: 'sem-grupos' }); continue; }
 
       if (!MODO_ENVIO) {
         console.log('   🧪 Simulação — não enviei nada.');
-        resultados.push({ nome: aniv.nome, grupos, status: 'simulado' });
+        resultados.push({ nome: aniv.nome, grupos: grupos.map(g => g.name || g.id), status: 'simulado' });
         continue;
       }
 
       const enviados = [];
       for (const g of grupos) {
-        console.log(`   📨 Enviando no grupo "${g}"...`);
+        const rotulo = g.name || g.id;
+        console.log(`   📨 Enviando no grupo "${rotulo}"...`);
         let ok = false;
-        try { ok = await enviarParabensNoGrupo(page, g, aniv.telefone, aniv.nome); }
-        catch (e) { console.log(`      ❌ Erro: ${e.message}`); }
-        enviados.push({ grupo: g, ok });
+        try {
+          // Monta: MSG_PREFIXO + @<aniversariante> + MSG_SUFIXO (menção nativa)
+          await wa.sendGrupoComMencao(g.id, MSG_PREFIXO, MSG_SUFIXO, aniv.telefone);
+          ok = true;
+          console.log(`      ✅ Enviado no grupo "${rotulo}"`);
+        } catch (e) { console.log(`      ❌ Erro: ${e.message}`); }
+        enviados.push({ grupo: rotulo, ok });
         await sleep(8000); // pausa entre grupos
       }
       resultados.push({ nome: aniv.nome, grupos: enviados, status: 'processado' });
     }
   } finally {
-    try { browser.disconnect(); } catch (e) {}
+    // cliente persistente permanece vivo para os outros jobs
   }
 
   // Resumo

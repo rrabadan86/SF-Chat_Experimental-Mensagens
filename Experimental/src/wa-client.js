@@ -174,6 +174,42 @@ async function sendGrupo(nomeGrupo, texto) {
   return client.sendMessage(g.id._serialized, texto);
 }
 
+/**
+ * Retorna os grupos EM COMUM com um contato (mesma pessoa nos dois lados).
+ * Usa a API nativa do whatsapp-web.js (getCommonGroups) — bem mais confiável
+ * do que raspar o painel "grupos em comum" do WhatsApp Web.
+ * → [{ id: '...@g.us', name: 'Nome do grupo' }]
+ */
+async function getCommonGroups(telefone) {
+  if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
+  const id = await resolverId(telefone);
+  let comuns = [];
+  try { comuns = await client.getCommonGroups(id); } catch (_) { comuns = []; }
+  const out = [];
+  for (const g of (comuns || [])) {
+    const gid = (g && g._serialized) ? g._serialized : String(g);
+    let nome = '';
+    try { const chat = await client.getChatById(gid); nome = chat.name || ''; } catch (_) { /* segue sem nome */ }
+    out.push({ id: gid, name: nome });
+  }
+  return out;
+}
+
+/**
+ * Envia num grupo MARCANDO (@) uma pessoa. Monta o texto como
+ *   textoAntes + @<pessoa> + textoDepois
+ * e passa a menção nativa (o número tem que estar no texto E em mentions).
+ */
+async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMencionado) {
+  if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
+  const mid = await resolverId(telefoneMencionado);
+  const contato = await client.getContactById(mid);
+  const user = (contato && contato.id && contato.id.user) ? contato.id.user : mid.replace(/@.*/, '');
+  const texto = `${textoAntes || ''}@${user}${textoDepois || ''}`;
+  const chat = await client.getChatById(groupId);
+  return chat.sendMessage(texto, { mentions: [contato] });
+}
+
 /** Keep-alive: mantém o WebSocket quente (getState) a cada ~2h. */
 function iniciarKeepAlive(horas = 2) {
   if (keepAliveTimer) return;
@@ -199,6 +235,7 @@ async function destroy() {
 module.exports = {
   initWhatsApp, isReady, getClient,
   sendTexto, sendMidia, sendGrupo, acharGrupo,
+  getCommonGroups, sendGrupoComMencao,
   iniciarKeepAlive, destroy, toChatId, MessageMedia,
 };
 

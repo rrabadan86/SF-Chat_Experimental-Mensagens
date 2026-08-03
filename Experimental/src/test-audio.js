@@ -32,9 +32,14 @@ function acharAudio(professorStr) {
   const pref = config.audio.map[firstName];
   if (!pref) return null;
   const dir = config.audio.dir;
+  const extensions = ['.ogg', '.opus', '.oga', '.m4a', '.aac', '.mp3', '.wav'];
   try {
-    for (const f of fs.readdirSync(dir)) {
-      if (f.toLowerCase().startsWith(pref.toLowerCase())) return path.join(dir, f);
+    const files = fs.readdirSync(dir);
+    for (const ext of extensions) {
+      for (const f of files) {
+        const lower = f.toLowerCase();
+        if (lower.startsWith(pref.toLowerCase()) && lower.endsWith(ext)) return path.join(dir, f);
+      }
     }
   } catch (_) { /* pasta inacessível */ }
   return null;

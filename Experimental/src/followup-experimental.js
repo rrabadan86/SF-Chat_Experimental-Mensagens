@@ -62,19 +62,23 @@ function getAudioPath(professorStr) {
 
   const audioDir = config.audio.dir;
 
-  // Tenta com extensões comuns
-  const extensions = ['.mp3', '.ogg', '.m4a', '.aac', '.wav', '.opus', '.oga'];
+  // Prioriza formatos que o WhatsApp aceita como MENSAGEM DE VOZ (ogg/opus).
+  // MP3 enviado como voz gera "arquivo de áudio com problema" — fica por último.
+  const extensions = ['.ogg', '.opus', '.oga', '.m4a', '.aac', '.mp3', '.wav'];
   for (const ext of extensions) {
     const filePath = path.join(audioDir, audioPrefix + ext);
     if (fs.existsSync(filePath)) return filePath;
   }
 
-  // Busca case-insensitive na pasta (arquivos podem ter extensão diferente)
+  // Busca case-insensitive na pasta, respeitando a mesma ordem de preferência.
   try {
     const files = fs.readdirSync(audioDir);
-    for (const file of files) {
-      if (file.toLowerCase().startsWith(audioPrefix.toLowerCase())) {
-        return path.join(audioDir, file);
+    for (const ext of extensions) {
+      for (const file of files) {
+        const lower = file.toLowerCase();
+        if (lower.startsWith(audioPrefix.toLowerCase()) && lower.endsWith(ext)) {
+          return path.join(audioDir, file);
+        }
       }
     }
   } catch (e) {
