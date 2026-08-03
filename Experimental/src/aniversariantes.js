@@ -567,15 +567,31 @@ async function testeGrupo(nomeGrupo, numeroMarcar, nomePessoa) {
 
   const wa = require('./wa-client');
   await wa.initWhatsApp();
+
+  // Acha o grupo pelo nome.
+  const g = await wa.acharGrupo(nomeGrupo);
+  if (!g) { console.log(`\n⚠️  Grupo "${nomeGrupo}" não encontrado.`); return; }
+  const gid = g.id._serialized;
+  console.log(`   Grupo encontrado: ${g.name} (${gid})`);
+
+  // 1) Envia um texto SIMPLES primeiro (isola: o envio no grupo funciona?)
   try {
-    console.log('📨 Enviando mensagem de teste...');
-    // Acha o grupo pelo nome e envia marcando a pessoa (menção nativa).
-    const g = await wa.acharGrupo(nomeGrupo);
-    if (!g) { console.log(`\n⚠️  Grupo "${nomeGrupo}" não encontrado.`); return; }
-    await wa.sendGrupoComMencao(g.id._serialized, MSG_PREFIXO, MSG_SUFIXO, numeroMarcar);
-    console.log('\n✅ Teste enviado! Confira o grupo.');
+    console.log('📨 [1/2] Enviando texto simples (sem marcação)...');
+    await wa.sendGrupo(nomeGrupo, '🧪 Teste de envio no grupo (sem marcação).');
+    console.log('   ✅ Texto simples enviado.');
   } catch (e) {
-    console.log(`\n⚠️  Não consegui enviar: ${e.message}`);
+    console.log('   ⚠️  Falhou o texto simples:', e && e.message);
+    if (e && e.stack) console.log(e.stack);
+  }
+
+  // 2) Envia com @marcação (o que o job de aniversário usa).
+  try {
+    console.log('📨 [2/2] Enviando com @marcação...');
+    await wa.sendGrupoComMencao(gid, MSG_PREFIXO, MSG_SUFIXO, numeroMarcar);
+    console.log('\n✅ Teste com marcação enviado! Confira o grupo.');
+  } catch (e) {
+    console.log(`\n⚠️  Não consegui enviar com marcação: ${e && e.message}`);
+    if (e && e.stack) console.log(e.stack);
   }
 }
 

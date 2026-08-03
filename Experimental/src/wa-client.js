@@ -202,12 +202,24 @@ async function getCommonGroups(telefone) {
  */
 async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMencionado) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
-  const mid = await resolverId(telefoneMencionado);
-  const contato = await client.getContactById(mid);
-  const user = (contato && contato.id && contato.id.user) ? contato.id.user : mid.replace(/@.*/, '');
+
+  let mid;
+  try { mid = await resolverId(telefoneMencionado); }
+  catch (e) { throw new Error('resolverId: ' + (e && e.message)); }
+
+  const user = mid.replace(/@.*/, '');                     // só dígitos p/ o token @
   const texto = `${textoAntes || ''}@${user}${textoDepois || ''}`;
-  const chat = await client.getChatById(groupId);
-  return chat.sendMessage(texto, { mentions: [contato] });
+
+  let chat;
+  try { chat = await client.getChatById(groupId); }
+  catch (e) { throw new Error('getChatById: ' + (e && e.message)); }
+
+  // Formato atual do whatsapp-web.js: mentions = array de IDs (strings).
+  try {
+    return await chat.sendMessage(texto, { mentions: [mid] });
+  } catch (e) {
+    throw new Error('sendMessage(mention): ' + (e && e.message));
+  }
 }
 
 /** Keep-alive: mantém o WebSocket quente (getState) a cada ~2h. */
