@@ -34,9 +34,15 @@ const IG_PROFILE_DIR = process.env.IG_PROFILE_DIR ||
   path.resolve(__dirname, '..', 'instagram-chrome-data');
 const IG_HEADLESS = process.env.HEADLESS !== 'false';
 
+// Proxy (residencial/móvel) para o Instagram — a Meta bloqueia IP de VPS (429).
+// Defina no .env:  IG_PROXY=host:porta  (e, se precisar, IG_PROXY_USER / IG_PROXY_PASS)
+const IG_PROXY = process.env.IG_PROXY || '';
+const IG_PROXY_USER = process.env.IG_PROXY_USER || '';
+const IG_PROXY_PASS = process.env.IG_PROXY_PASS || '';
+
 // Lança o Chromium do Puppeteer com o perfil dedicado do Instagram (Linux).
 async function launchInstagramChromium() {
-  console.log(`🐧 Abrindo Chromium com perfil do Instagram (${IG_HEADLESS ? 'headless' : 'com tela'})...`);
+  console.log(`🐧 Abrindo Chromium com perfil do Instagram (${IG_HEADLESS ? 'headless' : 'com tela'})${IG_PROXY ? ' via proxy ' + IG_PROXY : ''}...`);
   const browser = await puppeteer.launch({
     headless: IG_HEADLESS ? 'new' : false,
     executablePath: process.env.CHROMIUM_PATH || undefined,
@@ -49,8 +55,16 @@ async function launchInstagramChromium() {
       '--disable-blink-features=AutomationControlled',
       '--window-size=1366,900',
       '--lang=pt-BR',
+      ...(IG_PROXY ? ['--proxy-server=' + IG_PROXY] : []),
     ],
   });
+
+  // Autenticação do proxy (se exigir usuário/senha) em toda página aberta.
+  if (IG_PROXY && IG_PROXY_USER) {
+    const autenticar = async (p) => { try { await p.authenticate({ username: IG_PROXY_USER, password: IG_PROXY_PASS }); } catch (_) {} };
+    for (const p of await browser.pages()) await autenticar(p);
+    browser.on('targetcreated', async (t) => { try { const p = await t.page(); if (p) await autenticar(p); } catch (_) {} });
+  }
   // Os jobs chamam browser.disconnect() no fim; no Linux isso precisa FECHAR o
   // Chromium (liberar o perfil). browser.close() chama disconnect() internamente,
   // então uma trava evita a recursão infinita.
