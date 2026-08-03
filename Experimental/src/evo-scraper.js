@@ -1442,38 +1442,24 @@ class EvoScraper {
     // Marca o checkbox "Contrato" (Tipo) por GEOMETRIA: acha o elemento cujo
     // TEXTO DIRETO é "Contrato" e marca o checkbox na mesma linha, logo à
     // esquerda dele (o evo3 separa o rótulo do input no DOM).
+    // O checkbox da coluna Tipo é #contrato (name="Contratos"), estilizado com
+    // jQuery Uniform (wrapper <div class="checker" id="uniform-contrato">).
     const cbInfo = await frame.evaluate(() => {
-      const textoDireto = (e) => { let s = ''; for (const n of e.childNodes) if (n.nodeType === 3) s += n.textContent; return s.replace(/\s+/g, ' ').trim(); };
-      const nodes = Array.from(document.querySelectorAll('*')).filter(e => /^contrato$/i.test(textoDireto(e)));
-      const cbs = Array.from(document.querySelectorAll('input[type="checkbox"]'));
-      // Cada checkbox é estilizado (iCheck): o input real é 0×0. Sobe até o
-      // wrapper VISÍVEL (o quadradinho clicável) e usa o rect dele.
-      const proxies = cbs.map((cb) => {
-        let el = cb, r = cb.getBoundingClientRect(), hops = 0;
-        while (!(r.width || r.height) && el.parentElement && hops < 3) { el = el.parentElement; r = el.getBoundingClientRect(); hops++; }
-        return { cb, box: el, r };
-      }).filter((p) => p.r.width || p.r.height);
-      for (const node of nodes) {
-        const r = node.getBoundingClientRect();
-        if (!(r.width || r.height)) continue;
-        let best = null, bd = 1e9;
-        for (const p of proxies) {
-          if (Math.abs((p.r.top + p.r.height / 2) - (r.top + r.height / 2)) > 16) continue; // mesma linha
-          const dist = r.left - p.r.left;                 // wrapper à esquerda do texto
-          if (dist >= -2 && dist < 60 && dist < bd) { bd = dist; best = p; }
-        }
-        if (!best) continue;
-        if (!best.cb.checked) {
-          try { best.box.click(); } catch (_) { /* segue */ }
-          if (!best.cb.checked) { try { best.cb.click(); } catch (_) {} best.cb.checked = true; best.cb.dispatchEvent(new Event('change', { bubbles: true })); best.cb.dispatchEvent(new Event('click', { bubbles: true })); }
-        }
-        return { ok: true, texto: textoDireto(node), dist: Math.round(bd), checked: best.cb.checked };
+      const cb = document.querySelector('#contrato') || document.querySelector('input[name="Contratos"][type="checkbox"]');
+      if (!cb) return { ok: false, motivo: 'input#contrato não encontrado' };
+      const checker = document.getElementById('uniform-contrato') || (cb.closest && cb.closest('.checker'));
+      const antes = cb.checked;
+      if (!cb.checked && checker) { try { checker.click(); } catch (_) {} } // Uniform alterna pelo wrapper
+      if (!cb.checked) {                                                    // fallback: força o estado
+        cb.checked = true;
+        if (checker) { checker.classList.add('checked'); const sp = checker.querySelector('span'); if (sp) sp.classList.add('checked'); }
+        cb.dispatchEvent(new Event('change', { bubbles: true }));
       }
-      return { ok: false, nNodes: nodes.length, nCbs: cbs.length, nProxies: proxies.length };
+      return { ok: true, id: cb.id, name: cb.name, antes, checked: cb.checked, temChecker: !!checker };
     });
     console.log(cbInfo.ok
-      ? `   ☑️  Checkbox "Contrato" marcado (dist=${cbInfo.dist}px, checked=${cbInfo.checked})`
-      : `   ⚠️  "Contrato" não achou wrapper. nós=${cbInfo.nNodes} checkboxes=${cbInfo.nCbs} proxies=${cbInfo.nProxies}`);
+      ? `   ☑️  Checkbox "Contrato" (#${cbInfo.id}/${cbInfo.name}) → checked=${cbInfo.checked} (antes=${cbInfo.antes}, wrapper=${cbInfo.temChecker})`
+      : `   ⚠️  ${cbInfo.motivo}`);
     await this.sleep(800);
 
     // Clica na lupa (pesquisar).
