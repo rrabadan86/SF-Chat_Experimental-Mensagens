@@ -1295,7 +1295,16 @@ class EvoScraper {
             if (!nome || nome.length < 5) continue;
             if (/marcar|fechar|reabrir|enviar|adicionar|hist[óo]rico/i.test(nome)) continue;
             totalParticipantes++;
-            const row = a.closest('li, tr') || a.parentElement?.parentElement || a.parentElement;
+            // Linha do participante: sobe até o ancestral que contém o botão
+            // "MARCAR PRESENÇA/AUSÊNCIA" (garante que o status fica no escopo).
+            let row = a.closest('li, tr');
+            {
+              let anc = a.parentElement, hops = 0;
+              while (anc && hops < 8) {
+                if (/marcar\s+(aus|presen)/i.test(anc.innerText || '')) { row = anc; break; }
+                anc = anc.parentElement; hops++;
+              }
+            }
             let ehRepo = false;
             const rowTxt = row ? (row.innerText || '') : '';
             if (row) {
@@ -1310,11 +1319,12 @@ class EvoScraper {
               if (/\(reposi|reposi[çc][ãa]o/i.test(rowTxt)) ehRepo = true;
             }
             if (!ehRepo) continue;
-            // status da presença dessa reposição
+            // Status: MARCAR AUSÊNCIA = presente | MARCAR PRESENÇA = ausente.
+            // "Justificada" escrito na linha → Falta Justificada (gera reposição).
             let status = '';
             if (/justificad/i.test(rowTxt)) status = 'Falta Justificada';
-            else if (/marcar presen|reabrir|\bfalta\b|ausente|ausência|ausencia/i.test(rowTxt)) status = 'Falta';
-            else if (/marcar aus/i.test(rowTxt)) status = 'Presença';
+            else if (/marcar\s+presen/i.test(rowTxt)) status = 'Falta';
+            else if (/marcar\s+aus/i.test(rowTxt)) status = 'Presença';
             res.push({ nome, horario, status, amostra: rowTxt.replace(/\s+/g, ' ').trim().slice(0, 90) });
           }
           return { res, totalParticipantes, badges: Array.from(badges) };
