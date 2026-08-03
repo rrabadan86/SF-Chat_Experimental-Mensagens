@@ -24,6 +24,10 @@ const AUTH_DIR = process.env.WA_AUTH_DIR || path.resolve(__dirname, '..', 'wwebj
 // whatsapp-web.js roda bem headless; deixe WA_HEADLESS=false só se quiser com tela (xvfb).
 const HEADLESS = process.env.WA_HEADLESS !== 'false';
 const CHROMIUM_PATH = process.env.CHROMIUM_PATH || undefined;
+// Fixa uma versão conhecida do WhatsApp Web (resolve o "travado em 99% / sem ready").
+// Se essa versão parar de funcionar, troque a URL pela variável WA_WEB_VERSION_URL no .env.
+const WEB_VERSION_URL = process.env.WA_WEB_VERSION_URL
+  || 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1015901307-alpha.html';
 
 let client = null;
 let pronto = false;
@@ -35,6 +39,7 @@ function log(msg) { console.log(`[wa] ${msg}`); }
 function criarClient() {
   return new Client({
     authStrategy: new LocalAuth({ dataPath: AUTH_DIR }),
+    webVersionCache: { type: 'remote', remotePath: WEB_VERSION_URL },
     puppeteer: {
       headless: HEADLESS,
       executablePath: CHROMIUM_PATH,
