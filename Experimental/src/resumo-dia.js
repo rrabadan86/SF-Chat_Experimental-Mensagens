@@ -45,7 +45,10 @@ function montarMensagem(cats, dataStr) {
   const bloco = (titulo, linhas, vazio) =>
     `${titulo}\n` + (linhas.length ? linhas.join('\n') : `_${vazio}_`);
 
-  const reposicoes = linhaNomeHora(cats.reposicoes);
+  const reposicoes = cats.reposicoes
+    .slice()
+    .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+    .map(c => `• ${c.name}${c.time ? ' — ' + c.time : ''}${c.status ? ' (' + c.status + ')' : ''}`);
   const fizeram = linhaNomeHora(cats.fizeram);
   const faltaram = linhaNomeHora(cats.faltaram);
   const fecharam = cats.fecharam
@@ -78,7 +81,7 @@ async function coletar(dataStr) {
     let reposicoes = [];
     try {
       const reps = await scraper.getReposicoesGrade(dataStr);
-      reposicoes = reps.map(r => ({ name: r.nome, time: r.horario }));
+      reposicoes = reps.map(r => ({ name: r.nome, time: r.horario, status: r.status }));
     } catch (e) {
       console.log(`   ⚠️  Falha ao ler reposições na Grade: ${e.message}`);
     }

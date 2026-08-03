@@ -1297,6 +1297,7 @@ class EvoScraper {
             totalParticipantes++;
             const row = a.closest('li, tr') || a.parentElement?.parentElement || a.parentElement;
             let ehRepo = false;
+            const rowTxt = row ? (row.innerText || '') : '';
             if (row) {
               // badge do avatar: elemento-folha com 1-2 letras (R, A, CL...)
               for (const n of Array.from(row.querySelectorAll('*'))) {
@@ -1306,15 +1307,24 @@ class EvoScraper {
                   if (t.toUpperCase() === 'R') ehRepo = true;
                 }
               }
-              if (/\(reposi|reposi[çc][ãa]o/i.test(row.innerText || '')) ehRepo = true;
+              if (/\(reposi|reposi[çc][ãa]o/i.test(rowTxt)) ehRepo = true;
             }
-            if (ehRepo) res.push({ nome, horario });
+            if (!ehRepo) continue;
+            // status da presença dessa reposição
+            let status = '';
+            if (/justificad/i.test(rowTxt)) status = 'Falta Justificada';
+            else if (/marcar presen|reabrir|\bfalta\b|ausente|ausência|ausencia/i.test(rowTxt)) status = 'Falta';
+            else if (/marcar aus/i.test(rowTxt)) status = 'Presença';
+            res.push({ nome, horario, status, amostra: rowTxt.replace(/\s+/g, ' ').trim().slice(0, 90) });
           }
           return { res, totalParticipantes, badges: Array.from(badges) };
         }, s.horario);
 
         console.log(`      • ${s.horario}: ${info.totalParticipantes} presente(s), ${info.res.length} reposição | badges: ${info.badges.join(',') || '-'}`);
-        for (const a of info.res) reposicoes.push(a);
+        for (const a of info.res) {
+          console.log(`         ↳ ${a.nome} [${a.status || '?'}] « ${a.amostra} »`);
+          reposicoes.push({ nome: a.nome, horario: a.horario, status: a.status });
+        }
 
         // fecha o painel (×, FECHAR ou ESC)
         await this.page.evaluate(() => {
