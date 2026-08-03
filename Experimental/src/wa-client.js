@@ -36,6 +36,29 @@ let keepAliveTimer = null;
 
 function log(msg) { console.log(`[wa] ${msg}`); }
 
+// Erros transitórios do puppeteer quando o WhatsApp Web recarrega/desanexa o
+// frame (comum em processos de longa duração). Vale a pena esperar e repetir.
+function ehTransiente(e) {
+  const m = (e && e.message) || '';
+  return /detached Frame|Execution context was destroyed|Target closed|Cannot find context|Session closed|Protocol error|Node is detached/i.test(m);
+}
+async function comRetry(fn, tentativas = 4, esperaMs = 4000) {
+  let ultimo;
+  for (let i = 1; i <= tentativas; i++) {
+    try { return await fn(); }
+    catch (e) {
+      ultimo = e;
+      if (!ehTransiente(e) || i === tentativas) throw e;
+      log(`⏳ frame instável (${i}/${tentativas}): ${e.message} — aguardando ${esperaMs / 1000}s`);
+      await new Promise((r) => setTimeout(r, esperaMs));
+    }
+  }
+  throw ultimo;
+}
+
+// Cache de grupo por nome (evita reler a lista de chats a cada envio).
+const gruposCache = new Map();
+
 function criarClient() {
   return new Client({
     authStrategy: new LocalAuth({ dataPath: AUTH_DIR }),
@@ -143,7 +166,7 @@ async function resolverId(telefone) {
   if (!n) throw new Error('telefone vazio');
   if (!n.startsWith('55')) n = '55' + n;
   try {
-    const numId = await client.getNumberId(n);
+    const numId = await comRetry(() => client.getNumberId(n));
     if (numId && numId._serialized) return numId._serialized;
   } catch (_) { /* usa fallback abaixo */ }
   return n + '@c.us';
@@ -152,7 +175,7 @@ async function resolverId(telefone) {
 async function sendTexto(telefone, texto) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
   const id = await resolverId(telefone);
-  return client.sendMessage(id, texto);
+  return comRetry(() => client.sendMessage(id, texto));
 }
 
 /**
@@ -165,10 +188,10 @@ async function sendMidia(telefone, urlOuCaminho, { legenda = '', comoVoz = false
     ? await MessageMedia.fromUrl(urlOuCaminho, { unsafeMime: true })
     : MessageMedia.fromFilePath(urlOuCaminho);
   const id = await resolverId(telefone);
-  return client.sendMessage(id, media, {
+  return comRetry(() => client.sendMessage(id, media, {
     caption: legenda || undefined,
     sendAudioAsVoice: comoVoz || undefined,
-  });
+  }));
 }
 
 /**
@@ -178,48 +201,47 @@ async function sendMidia(telefone, urlOuCaminho, { legenda = '', comoVoz = false
  * único grupo tiver estrutura problemática. Aqui só lemos id e nome.
  */
 async function listarGrupos() {
-  const page = client.pupPage;
-  if (!page) throw new Error('página do WhatsApp indisponível');
-  return page.evaluate(() => {
-    let arr = [];
-    try { arr = window.require('WAWebCollections').Chat.getModelsArray() || []; }
-    catch (_) { arr = []; }
-    const out = [];
-    for (const c of arr) {
-      try {
-        const id = (c.id && c.id._serialized) ? c.id._serialized : String(c.id);
-        const isGroup = (c.id && c.id.server === 'g.us') || !!c.groupMetadata || c.isGroup;
-        if (!isGroup) continue;
-        const name = c.name || c.formattedTitle || (c.contact && c.contact.name) || '';
-        out.push({ id, name });
-      } catch (_) { /* pula grupo problemático */ }
-    }
-    return out;
+  return comRetry(async () => {
+    const page = client.pupPage;
+    if (!page) throw new Error('página do WhatsApp indisponível');
+    return page.evaluate(() => {
+      let arr = [];
+      try { arr = window.require('WAWebCollections').Chat.getModelsArray() || []; }
+      catch (_) { arr = []; }
+      const out = [];
+      for (const c of arr) {
+        try {
+          const id = (c.id && c.id._serialized) ? c.id._serialized : String(c.id);
+          const isGroup = (c.id && c.id.server === 'g.us') || !!c.groupMetadata || c.isGroup;
+          if (!isGroup) continue;
+          const name = c.name || c.formattedTitle || (c.contact && c.contact.name) || '';
+          out.push({ id, name });
+        } catch (_) { /* pula grupo problemático */ }
+      }
+      return out;
+    });
   });
 }
 
 /** Acha um grupo pelo NOME (exato; senão parcial). Retorna { id, name } ou null. */
 async function acharGrupo(nomeGrupo) {
   const alvo = (nomeGrupo || '').trim().toLowerCase();
-  let grupos = [];
+  if (gruposCache.has(alvo)) return gruposCache.get(alvo);
+  let grupos;
   try { grupos = await listarGrupos(); }
-  catch (_) {
-    // fallback para a API padrão (mais pesada) se a leitura leve falhar
-    try {
-      const chats = await client.getChats();
-      grupos = chats.filter((c) => c.isGroup).map((c) => ({ id: c.id._serialized, name: c.name || '' }));
-    } catch (e2) { throw new Error('listar grupos falhou: ' + (e2 && e2.message)); }
-  }
-  return grupos.find((g) => (g.name || '').trim().toLowerCase() === alvo)
-      || grupos.find((g) => (g.name || '').toLowerCase().includes(alvo))
-      || null;
+  catch (e) { throw new Error('listar grupos falhou: ' + (e && e.message)); }
+  const g = grupos.find((x) => (x.name || '').trim().toLowerCase() === alvo)
+        || grupos.find((x) => (x.name || '').toLowerCase().includes(alvo))
+        || null;
+  if (g) gruposCache.set(alvo, g); // cacheia o ID p/ os próximos envios
+  return g;
 }
 
 async function sendGrupo(nomeGrupo, texto) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
   const g = await acharGrupo(nomeGrupo);
   if (!g) throw new Error('Grupo não encontrado: ' + nomeGrupo);
-  return client.sendMessage(g.id, texto);
+  return comRetry(() => client.sendMessage(g.id, texto));
 }
 
 /**
@@ -232,7 +254,7 @@ async function getCommonGroups(telefone) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
   const id = await resolverId(telefone);
   let comuns = [];
-  try { comuns = await client.getCommonGroups(id); } catch (_) { comuns = []; }
+  try { comuns = await comRetry(() => client.getCommonGroups(id)); } catch (_) { comuns = []; }
 
   // mapa id → nome (leve), para rotular sem serializar cada grupo
   let nomePorId = {};
@@ -267,7 +289,7 @@ async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMenc
 
   // Formato atual do whatsapp-web.js: mentions = array de IDs (strings).
   try {
-    return await client.sendMessage(groupId, texto, { mentions: [mid] });
+    return await comRetry(() => client.sendMessage(groupId, texto, { mentions: [mid] }));
   } catch (e) {
     throw new Error('sendMessage(mention): ' + (e && e.message));
   }
