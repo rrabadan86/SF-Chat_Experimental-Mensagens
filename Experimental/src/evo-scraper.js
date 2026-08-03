@@ -1591,21 +1591,23 @@ class EvoScraper {
     }
     await this.dismissSurveyModal();
 
+    // Sinais ESPECÍFICOS do formulário evo3 (não aparecem no shell Angular, que
+    // só tem a palavra "cancelamentos" no menu/rota).
     const acharFrame = async () => {
       for (const f of this.page.frames()) {
         try {
           const ok = await f.evaluate(() => {
             const t = (document.body && document.body.innerText || '').toLowerCase();
-            return /cancelamento|cancelado por|meses de perman|considerar transferidos|valor perdido/.test(t);
+            return /considerar transferidos|considerar troca de contrato|meses de perman|valor perdido|cancelado por|motivos de cancelamento/.test(t);
           });
           if (ok) return f;
-        } catch (_) { /* frame carregando */ }
+        } catch (_) { /* frame carregando / cross-origin */ }
       }
       return null;
     };
     let frame = null;
     for (let i = 0; i < 30 && !frame; i++) { frame = await acharFrame(); if (!frame) await this.sleep(1500); }
-    if (!frame) { console.log('   ⚠️  Não achei o iframe de Cancelamentos.'); return []; }
+    if (!frame) { console.log('   ⚠️  Não achei o iframe de Cancelamentos (evo3).'); return []; }
     console.log(`   🖼️  Frame: ${frame.url()}`);
 
     // De/Até = data (campos visíveis, digitando — datepicker legado).
