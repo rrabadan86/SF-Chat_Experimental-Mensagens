@@ -89,6 +89,16 @@ async function temCampoCodigo(page) {
     await clicarPorTexto(page, ['permitir todos os cookies', 'allow all cookies', 'aceitar', 'accept']);
     await sleep(2000);
 
+    // Diagnóstico: mostra em que página caímos (sem depender de print).
+    const diag = await page.evaluate(() => ({
+      temUser: !!document.querySelector('input[name="username"], input[name="email"]'),
+      inputs: Array.from(document.querySelectorAll('input')).map(i => i.name || i.getAttribute('aria-label') || i.type).slice(0, 12),
+      corpo: (document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 400),
+    }));
+    console.log('   🔎 URL:', page.url());
+    console.log('   🔎 Campo usuário?', diag.temUser, '| inputs:', JSON.stringify(diag.inputs));
+    console.log('   🔎 Texto da página:', diag.corpo);
+
     // 3) Preenche e envia credenciais
     await page.waitForSelector(SEL_USER, { timeout: 40000 });
     await page.type(SEL_USER, IG_USERNAME, { delay: 60 });
@@ -137,6 +147,11 @@ async function temCampoCodigo(page) {
     }
   } catch (e) {
     console.error('\n❌ Erro no login:', e.message);
+    try {
+      console.error('   URL:', page.url());
+      const t = await page.evaluate(() => (document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 500));
+      console.error('   Texto da página:', t);
+    } catch (_) { /* página pode estar inacessível */ }
     await shot(page, 'instagram-login-ERRO.png');
   } finally {
     await browser.disconnect();
