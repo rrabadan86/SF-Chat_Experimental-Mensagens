@@ -121,9 +121,25 @@ function toChatId(telefone) {
   return n + '@c.us';
 }
 
+/**
+ * Resolve o ID correto do destinatário via getNumberId (trata o novo "LID" do
+ * WhatsApp e valida se o número existe). Cai para @c.us se getNumberId não vier.
+ */
+async function resolverId(telefone) {
+  let n = String(telefone || '').replace(/\D/g, '');
+  if (!n) throw new Error('telefone vazio');
+  if (!n.startsWith('55')) n = '55' + n;
+  try {
+    const numId = await client.getNumberId(n);
+    if (numId && numId._serialized) return numId._serialized;
+  } catch (_) { /* usa fallback abaixo */ }
+  return n + '@c.us';
+}
+
 async function sendTexto(telefone, texto) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
-  return client.sendMessage(toChatId(telefone), texto);
+  const id = await resolverId(telefone);
+  return client.sendMessage(id, texto);
 }
 
 /**
@@ -135,7 +151,8 @@ async function sendMidia(telefone, urlOuCaminho, { legenda = '', comoVoz = false
   const media = /^https?:\/\//i.test(urlOuCaminho)
     ? await MessageMedia.fromUrl(urlOuCaminho, { unsafeMime: true })
     : MessageMedia.fromFilePath(urlOuCaminho);
-  return client.sendMessage(toChatId(telefone), media, {
+  const id = await resolverId(telefone);
+  return client.sendMessage(id, media, {
     caption: legenda || undefined,
     sendAudioAsVoice: comoVoz || undefined,
   });
