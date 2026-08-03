@@ -73,8 +73,21 @@ async function temCampoCodigo(page) {
   const browser = await launchInstagramChromium();
   const page = (await browser.pages())[0] || await browser.newPage();
   await page.setViewport({ width: 1366, height: 900 });
+  // User-Agent real (o Chromium pré-instalado às vezes reporta "HeadlessChrome",
+  // que a Meta bloqueia com 429). Força um UA de Chrome desktop normal.
+  const UA_REAL = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+  await page.setUserAgent(UA_REAL);
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8' });
 
   try {
+    // Diagnóstico do navegador (offline): mostra o UA real e webdriver.
+    try {
+      await page.goto('about:blank');
+      const nav = await page.evaluate(() => ({ ua: navigator.userAgent, wd: navigator.webdriver }));
+      console.log('   🧭 UA do navegador:', nav.ua);
+      console.log('   🧭 navigator.webdriver:', nav.wd);
+    } catch (_) { /* segue */ }
+
     // 1) Já logado?
     await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
     await sleep(5000);
