@@ -62,19 +62,62 @@ async function login(page) {
   console.log('✅ Login OK\n');
 }
 
-/** Acha o frame (iframe do EVO3 legado) que contém a tela de Faltantes. */
+/** Pontua um frame pela presença dos elementos característicos da tela Faltantes. */
+async function pontuarFrame(f) {
+  try {
+    return await f.evaluate(() => {
+      const t = (document.body && document.body.innerText || '').toLowerCase();
+      let s = 0;
+      if (/sem presen[çc]a/.test(t)) s += 5;
+      if (/inadimplente/.test(t)) s += 4;
+      if (/contabilizar/.test(t)) s += 2;
+      if (/últ\.?\s*freq|ult\.?\s*freq|última\s*frequ|ultima\s*frequ/.test(t)) s += 4;
+      if (/contrato ativo/.test(t)) s += 3;
+      if (Array.from(document.querySelectorAll('input[type="checkbox"]')).some(cb =>
+        (((cb.id || '') + (cb.name || '') + (cb.getAttribute('aria-label') || ''))).toLowerCase().includes('inadimpl'))) s += 3;
+      const temGridNome = Array.from(document.querySelectorAll('table th'))
+        .some(th => (th.textContent || '').trim().toLowerCase().includes('nome'));
+      if (temGridNome) s += 4;
+      return s;
+    });
+  } catch (_) { return -1; } // cross-origin ou ainda carregando
+}
+
+/** Acha o frame com maior pontuação (a tela de Faltantes vive num iframe legado). */
 async function acharFrameFaltantes(page) {
+  let melhor = null, melhorScore = 0;
   for (const f of page.frames()) {
-    try {
-      const bate = await f.evaluate(() => {
-        const t = (document.body && document.body.innerText || '').toLowerCase();
-        return /inadimplente|sem presen|faltante|últ\.?\s*freq|ult\.?\s*freq|contrato ativo/.test(t)
-          || !!document.querySelector('table');
-      });
-      if (bate) return f;
-    } catch (_) { /* frame ainda carregando */ }
+    const s = await pontuarFrame(f);
+    if (s > melhorScore) { melhorScore = s; melhor = f; }
   }
-  return page.mainFrame();
+  return melhor; // pode ser null se nada bateu ainda
+}
+
+/** Espera o iframe da tela de Faltantes carregar (poll até timeout). */
+async function esperarFrameFaltantes(page, timeoutMs = 40000) {
+  const inicio = Date.now();
+  let ultimo = null;
+  while (Date.now() - inicio < timeoutMs) {
+    const f = await acharFrameFaltantes(page);
+    if (f) { ultimo = f; return f; }
+    await sleep(1500);
+  }
+  return ultimo;
+}
+
+/** Lista todas as frames (url + trecho de texto) num arquivo de debug. */
+async function dumpFrames(page) {
+  const linhas = [];
+  for (const f of page.frames()) {
+    let txt = '', score = await pontuarFrame(f);
+    try { txt = await f.evaluate(() => (document.body && document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 300)); } catch (e) { txt = '(inacessível: ' + e.message + ')'; }
+    linhas.push(`--- FRAME (score=${score}) ${f.url()}\n${txt}\n`);
+  }
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(path.join(DATA_DIR, 'ausentes-frames.txt'), linhas.join('\n'), 'utf8');
+  } catch (_) { /* ignore */ }
+  return linhas.join('\n');
 }
 
 /** Preenche o campo "Sem presença nos últimos [N] dias". */
@@ -295,17 +338,29 @@ async function coletarAusentes() {
 
     console.log('📂 Abrindo CRM > Faltantes...');
     await page.evaluate((h) => { location.hash = h; }, FALTANTES_HASH);
-    await sleep(8000);
+    await sleep(6000);
 
-    let frame = await acharFrameFaltantes(page);
+    // A tela vive num iframe legado (evo3) que carrega devagar → espera por ele.
+    let frame = await esperarFrameFaltantes(page, 45000);
+    await dumpFrames(page);
+    if (!frame) {
+      await salvarDebug(page, page.mainFrame());
+      throw new Error('Não encontrei o iframe da tela de Faltantes (veja data/ausentes-frames.txt e ausentes-debug.png).');
+    }
     console.log(`   🖼️  Frame alvo: ${frame.url() || '(main)'}`);
 
     await setDiasSemPresenca(frame, DIAS_MIN);
     await marcarInadimplentes(frame);
     await sleep(800);
     await clicarLupa(frame);
-    await sleep(6000);
-    frame = await acharFrameFaltantes(page);
+
+    // Espera a grid popular (legado carrega async): até ~20s por linhas ou "Exibindo itens".
+    for (let i = 0; i < 14; i++) {
+      await sleep(1500);
+      frame = await acharFrameFaltantes(page) || frame;
+      const { rows, info } = await lerLinhas(frame);
+      if (rows.length > 0 || /Exibindo/i.test(info)) break;
+    }
     await salvarDebug(page, frame);
 
     const coletadas = [];
