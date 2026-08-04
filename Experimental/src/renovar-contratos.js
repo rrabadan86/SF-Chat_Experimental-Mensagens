@@ -56,18 +56,13 @@ function venceEmExatos7Dias(dateStr) {
 
 function buildMessage(primeiroNome, dataVencimento) {
   return `Oi, ${primeiroNome}! Tudo bem? 😊
+Que alegria ter você no SlimFit! 🥳
 
-🥳 Que alegria ter você fazendo parte do SlimFit!
+Estou enviando essa mensagem para avisar que o seu plano vence no dia *${dataVencimento}*. A gente ia adorar continuar com você firme nos treinos! ❤️
 
-Queria muito saber como você está se sentindo: tá curtindo a metodologia? Nós temos tem te atendido direitinho? Tem alguma coisinha que a gente possa melhorar pra deixar seus treinos ainda mais incríveis? 💪
+Podemos dar andamento na renovação? Prefere manter o mesmo plano ou aumentar a frequência? 💪
 
-E olha só, o seu plano vai finalizar no dia *${dataVencimento}*, e a gente ia adorar continuar com você firme nesse projeto! ❤️
-
-Uma novidade boa: em 2026 chegamos com novos planos pensados pra se encaixar melhor na rotina das nossas alunas.
-
-Podemos dar andamento na sua renovação? Gostaria de manter o mesmo plano ou aumentar a frequência?
-
-Qualquer dúvida sobre os planos, é só me chamar que eu te explico tudo! 😉`;
+Qualquer dúvida, é só me chamar! 😉`;
 }
 
 async function buscarContratosVencendoEm7Dias() {
