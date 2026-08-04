@@ -204,31 +204,23 @@ async function enviarConfirmacoes(page) {
 
 module.exports = { enviarConfirmacoes, enviarUma, contarPendentes };
 
-// ---- Modo standalone (abre o próprio Edge na porta 9226, igual seus outros jobs) ----
+// ---- Modo standalone (VPS/Linux): dispara a fila usando o cliente persistente ----
+// IMPORTANTE: pare o scheduler antes (pm2 stop slimfit-exp), pois compartilham a
+// mesma sessão do WhatsApp; religue depois (pm2 start slimfit-exp).
+//   Uso:  node src/enviar_confirmacoes.js
 if (require.main === module) {
   (async () => {
-    const { execSync, spawn } = require('child_process');
-    const puppeteer = require('puppeteer-extra');
-    puppeteer.use(require('puppeteer-extra-plugin-stealth')());
+    const wa = require('./wa-client');
+    const pendentes = contarPendentes();
+    console.log(`[confirmacoes] ${pendentes} pendente(s) na fila.`);
+    if (pendentes === 0) { console.log('Nada a enviar.'); process.exit(0); }
 
-    const EDGE = process.env.EDGE_PATH
-      || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-    try { execSync('taskkill /F /T /IM msedge.exe', { stdio: 'ignore' }); } catch {}
-    spawn(EDGE, [
-      '--remote-debugging-port=9226',
-      '--remote-debugging-address=127.0.0.1',
-      '--remote-allow-origins=*',
-      '--user-data-dir=C:\\SlimfitBot\\edge-wa',
-      '--profile-directory=Default',
-      '--no-first-run', '--no-default-browser-check',
-    ], { detached: true, stdio: 'ignore' });
-    await sleep(4000);
-
-    const browser = await puppeteer.connect({ browserURL: 'http://127.0.0.1:9226', defaultViewport: null });
-    const pages = await browser.pages();
-    const page = pages[0] || await browser.newPage();
-    await enviarConfirmacoes(page);
-    await browser.disconnect();
+    console.log('🐧 Conectando ao WhatsApp (sessão salva)...');
+    await wa.initWhatsApp();
+    // enviarUma ignora o "page" e envia pelo cliente único (whatsapp-web.js).
+    await enviarConfirmacoes(null);
+    await wa.destroy();
+    console.log('✅ Fila processada.');
     process.exit(0);
   })().catch((e) => { console.error(e); process.exit(1); });
 }
