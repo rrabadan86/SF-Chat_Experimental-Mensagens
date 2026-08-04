@@ -124,7 +124,14 @@ class ZeeClient:
     def create_contact(self, phone, name=None):
         from .util import only_digits
         digits = only_digits(phone)
-        body = {"phone": digits, "provider": "z-api", "displayName": name or digits}
+        # A ZEE passou a exigir "externalId" no POST /contact (HTTP 400 sem ele).
+        # Usamos o telefone (só dígitos) como identificador externo estável.
+        body = {
+            "phone": digits,
+            "provider": "z-api",
+            "displayName": name or digits,
+            "externalId": digits,
+        }
         return self._request("POST", "/contact", json=body)
 
     def resolve_contact_id(self, phone=None, contact_id=None, name=None, create=True):
