@@ -128,10 +128,16 @@ class EvoScraper {
     for (let tent = 1; tent <= 3 && !formReady; tent++) {
       const deadline = Date.now() + 30000;
       while (Date.now() < deadline) {
-        formReady = await this.page.evaluate(
-          (sels) => sels.some((s) => { const el = document.querySelector(s); return !!(el && el.offsetWidth > 0); }),
-          formSelectors
-        );
+        try {
+          formReady = await this.page.evaluate(
+            (sels) => sels.some((s) => { const el = document.querySelector(s); return !!(el && el.offsetWidth > 0); }),
+            formSelectors
+          );
+        } catch (_) {
+          // "Execution context was destroyed" — o EVO estava navegando/redirecionando.
+          // Não é erro fatal: tenta de novo no próximo ciclo (contexto novo).
+          formReady = false;
+        }
         if (formReady) break;
         await this.sleep(1000);
       }

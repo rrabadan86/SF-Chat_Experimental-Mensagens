@@ -421,97 +421,25 @@ async function buscarContratosVencendoEm7Dias() {
 }
 
 async function enviarWhatsApp(clientes) {
-  const fs = require('fs');
-  const { spawn } = require('child_process');
-  const CDP_URL = 'http://127.0.0.1:9223';
-  const EDGE_PATHS = [
-    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-    `${process.env.LOCALAPPDATA}\\Microsoft\\Edge\\Application\\msedge.exe`,
-  ];
-  const EDGE_USER_DATA = process.env.BOT_EDGE_FIN || 'C:\\SlimfitBot\\edge-fin';
-  const IS_LINUX = process.platform === 'linux';
-  let browser = null, page = null;
+  // Usa o cliente ÚNICO e persistente do WhatsApp (não abre/fecha navegador).
+  const wa = require('./wa-client');
+  await wa.initWhatsApp();
 
-  try {
-    // No VPS: usa a MESMA sessão do WhatsApp do Studio (whatsapp-chrome-data),
-    // conforme pedido — sem número/perfil "Financeiro" separado.
-    if (IS_LINUX) {
-      const { connectWhatsApp } = require('./aniversariantes-mes-grupo');
-      ({ browser, page } = await connectWhatsApp());
-    }
-
-    if (!browser) try {
-      browser = await puppeteer.connect({ browserURL: CDP_URL, defaultViewport: null });
-      console.log('✅ Conectado ao Edge (SlimFit Financeiro)!');
-     } catch (e) {
-      console.log(`📱 Abrindo Edge com perfil SlimFit Financeiro (${WHATSAPP_EDGE_PROFILE})...`);
-      let edgePath = null;
-      for (const p of EDGE_PATHS) { if (fs.existsSync(p)) { edgePath = p; break; } }
-      if (!edgePath) throw new Error('Microsoft Edge não encontrado.');
-
-      console.log('🔪 Fechando instâncias do Edge para liberar a porta de debug...');
-      try {
-        require('child_process').execSync('taskkill /F /T /IM msedge.exe', { stdio: 'ignore' });
-      } catch (err) { }
-      await sleep(3000);
-
-      const child = spawn(edgePath, [
-        '--remote-debugging-port=9223',
-        '--remote-debugging-address=127.0.0.1', 
-        '--remote-allow-origins=*',             
-        `--user-data-dir=${EDGE_USER_DATA}`,
-        `--profile-directory=${WHATSAPP_EDGE_PROFILE}`,
-        '--no-first-run', '--no-default-browser-check',
-        'https://web.whatsapp.com',             
-      ], { detached: true, stdio: 'ignore' });
-      child.unref();
-      await sleep(6000);
-      for (let i = 0; i < 5; i++) {
-        try { browser = await puppeteer.connect({ browserURL: CDP_URL, defaultViewport: null }); break; }
-        catch (err) { await sleep(3000); }
-      }
-      if (!browser) throw new Error('Não foi possível conectar ao Edge SlimFit Financeiro.');
-    }
-
-    if (!page) {
-      const pages = await browser.pages();
-      page = pages.find(p => p.url().includes('web.whatsapp.com')) || null;
-      if (!page) {
-        page = await browser.newPage();
-        await page.goto('https://web.whatsapp.com', { waitUntil: 'networkidle2', timeout: 60000 });
-      }
-    }
-
-    if (!IS_LINUX) {
-      console.log('⏳ Aguardando WhatsApp Web...');
-      await page.waitForFunction(
-        () => document.querySelector('[data-testid="chat-list"]') || document.querySelector('#pane-side'),
-        { timeout: 60000 }
-      );
-      await sleep(2000);
-      console.log('✅ WhatsApp Web pronto!\n');
-    }
-
-    const resultados = { enviadas: 0, falhas: 0, puladas: 0 };
-    for (const cliente of clientes) {
-      if (!cliente.telefone) { console.log(`⏭️  ${cliente.nome}: sem telefone`); resultados.puladas++; continue; }
-      const mensagem = buildMessage(cliente.primeiroNome, cliente.vencimento);
-      let numero = cliente.telefone.replace(/\D/g, '');
-      if (!numero.startsWith('55')) numero = '55' + numero;
-      console.log(`📨 Enviando para ${cliente.nome} (${numero})...`);
-      try {
-        const wa = require('./wa-client');
-        await wa.sendTexto(numero, mensagem);
-        console.log(`   ✅ Enviada!`);
-        resultados.enviadas++;
-      } catch (err) { console.log(`   ❌ Erro: ${err.message}`); resultados.falhas++; }
-      await sleep(10000);
-    }
-    return resultados;
-  } finally {
-    if (browser) { try { browser.disconnect(); } catch (e) {} }
+  const resultados = { enviadas: 0, falhas: 0, puladas: 0 };
+  for (const cliente of clientes) {
+    if (!cliente.telefone) { console.log(`⏭️  ${cliente.nome}: sem telefone`); resultados.puladas++; continue; }
+    const mensagem = buildMessage(cliente.primeiroNome, cliente.vencimento);
+    let numero = cliente.telefone.replace(/\D/g, '');
+    if (!numero.startsWith('55')) numero = '55' + numero;
+    console.log(`📨 Enviando para ${cliente.nome} (${numero})...`);
+    try {
+      await wa.sendTexto(numero, mensagem);
+      console.log(`   ✅ Enviada!`);
+      resultados.enviadas++;
+    } catch (err) { console.log(`   ❌ Erro: ${err.message}`); resultados.falhas++; }
+    await sleep(10000); // pausa entre envios
   }
+  return resultados;
 }
 
 async function main(modoEnvioParam) {
