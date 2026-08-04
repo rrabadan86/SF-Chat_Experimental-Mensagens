@@ -1567,7 +1567,7 @@ class EvoScraper {
 
     // dedup por nome+contrato
     const seen = new Set(), uniq = [];
-    for (const r of out) { const k = (r.nome.toLowerCase()) + '|' + (r.contrato.toLowerCase()); if (!seen.has(k)) { seen.add(k); uniq.push(r); } }
+    for (const r of out) { const k = ((r.nome || '').toLowerCase()) + '|' + ((r.contrato || '').toLowerCase()); if (!seen.has(k)) { seen.add(k); uniq.push(r); } }
     console.log(`   💳 ${uniq.length} contrato(s) fechado(s) no dia\n`);
     return uniq;
   }
@@ -1684,10 +1684,10 @@ class EvoScraper {
       for (const tr of trs) {
         const tds = Array.from(tr.querySelectorAll('td')).map(td => (td.innerText || '').trim());
         const joined = tds.join(' | ');
-        if (/total geral|^total\b|colaborador:/i.test(joined)) continue;
-        const nome = ((iNome >= 0 ? tds[iNome] : '') + ' ' + (iSob >= 0 ? tds[iSob] : '')).trim();
-        const contrato = iContrato >= 0 ? tds[iContrato] : '';
-        if (!nome) continue;
+        if (/total geral|^total\b|colaborador:|nenhum registro|no records/i.test(joined)) continue;
+        const nome = ((iNome >= 0 ? (tds[iNome] || '') : '') + ' ' + (iSob >= 0 ? (tds[iSob] || '') : '')).trim();
+        const contrato = (iContrato >= 0 ? (tds[iContrato] || '') : '');
+        if (!nome || /^undefined/i.test(nome)) continue; // pula linha placeholder/desalinhada
         rows.push({ nome, contrato });
       }
       const info = (document.body.innerText.match(/Exibindo\s+itens?\s+\d+\s*-\s*\d+\s+de\s+\d+/i) || [''])[0];
@@ -1731,7 +1731,7 @@ class EvoScraper {
     }
 
     const seen = new Set(), uniq = [];
-    for (const r of out) { const k = (r.nome.toLowerCase()) + '|' + (r.contrato.toLowerCase()); if (!seen.has(k)) { seen.add(k); uniq.push(r); } }
+    for (const r of out) { const k = ((r.nome || '').toLowerCase()) + '|' + ((r.contrato || '').toLowerCase()); if (!seen.has(k)) { seen.add(k); uniq.push(r); } }
     console.log(`   ✂️  ${uniq.length} rescisão(ões) no dia\n`);
     return uniq;
   }

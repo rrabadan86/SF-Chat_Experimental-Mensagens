@@ -42,15 +42,37 @@ function ehTransiente(e) {
   const m = (e && e.message) || '';
   return /detached Frame|Execution context was destroyed|Target closed|Cannot find context|Session closed|Protocol error|Node is detached/i.test(m);
 }
-async function comRetry(fn, tentativas = 4, esperaMs = 4000) {
+const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Espera a página do WhatsApp voltar a responder após um reload (frame novo). */
+async function esperarPaginaOk(timeoutMs = 60000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    try {
+      const ok = await client.pupPage.evaluate(() => document.readyState === 'complete');
+      if (ok) {
+        // confirma que o WhatsApp está CONECTADO antes de seguir
+        try { if ((await client.getState()) === 'CONNECTED') return true; } catch (_) {}
+      }
+    } catch (_) { /* frame ainda recarregando */ }
+    await espera(2500);
+  }
+  return false;
+}
+
+// Mais tentativas + espera pela página (o reload do WhatsApp Web pode levar
+// dezenas de segundos). Antes eram 4x4s (16s) — insuficiente num reload longo.
+async function comRetry(fn, tentativas = 8, esperaMs = 4000) {
   let ultimo;
   for (let i = 1; i <= tentativas; i++) {
     try { return await fn(); }
     catch (e) {
       ultimo = e;
       if (!ehTransiente(e) || i === tentativas) throw e;
-      log(`⏳ frame instável (${i}/${tentativas}): ${e.message} — aguardando ${esperaMs / 1000}s`);
-      await new Promise((r) => setTimeout(r, esperaMs));
+      log(`⏳ frame instável (${i}/${tentativas}): ${e.message} — aguardando a página voltar...`);
+      // espera a página re-estabilizar (até ~20s) em vez de só um sleep fixo
+      const voltou = await esperarPaginaOk(20000);
+      if (!voltou) await espera(esperaMs);
     }
   }
   throw ultimo;
