@@ -59,7 +59,7 @@ function buildMessage(primeiroNome, dataVencimento) {
 
 🥳 Que alegria ter você fazendo parte do SlimFit!
 
-Queria muito saber como você está se sentindo: tá curtindo a metodologia? A unidade tem te atendido direitinho? Tem alguma coisinha que a gente possa melhorar pra deixar seus treinos ainda mais incríveis? 💪
+Queria muito saber como você está se sentindo: tá curtindo a metodologia? Nós temos tem te atendido direitinho? Tem alguma coisinha que a gente possa melhorar pra deixar seus treinos ainda mais incríveis? 💪
 
 E olha só, o seu plano vai finalizar no dia *${dataVencimento}*, e a gente ia adorar continuar com você firme nesse projeto! ❤️
 
