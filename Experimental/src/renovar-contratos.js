@@ -57,11 +57,8 @@ function venceEmExatos7Dias(dateStr) {
 function buildMessage(primeiroNome, dataVencimento) {
   return `Oi, ${primeiroNome}! Tudo bem? 😊
 Que alegria ter você no SlimFit! 🥳
-
-Estou enviando essa mensagem para avisar que o seu plano vence no dia *${dataVencimento}*. A gente ia adorar continuar com você firme nos treinos! ❤️
-
+Estou enviando essa mensagem para avisar que o seu plano vence no dia ${dataVencimento}. A gente ia adorar continuar com você firme nos treinos! ❤️
 Podemos dar andamento na renovação? Prefere manter o mesmo plano ou aumentar a frequência? 💪
-
 Qualquer dúvida, é só me chamar! 😉`;
 }
 
