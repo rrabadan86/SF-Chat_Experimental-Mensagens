@@ -528,7 +528,7 @@ async function main() {
   log(`📅 Job FALTAS TARDE/NOITE agendado: ${config.schedule.noShowAfternoon} (19:30 seg-sáb)`);
   console.log('   → Faltas da tarde/noite → convida a remarcar');
 
-  // Schedule: 17:00 todos os dias → Renovação (avisa quem vence em exatos 7 dias)
+  // Schedule: 14:30 todos os dias → Renovação (avisa quem vence em exatos 7 dias)
   cron.schedule(config.schedule.renewal, () => {
     log('⏰ Cron disparado: Renovação de contratos');
     if (jobRunning) { log('⚠️  Renovação ignorada — outro job em execução'); return; }
@@ -543,7 +543,7 @@ async function main() {
       });
   }, { timezone: 'America/Sao_Paulo' });
 
-  log(`📅 Job RENOVAÇÃO agendado: ${config.schedule.renewal} (17:00 todos os dias)`);
+  log(`📅 Job RENOVAÇÃO agendado: ${config.schedule.renewal} (14:30 todos os dias)`);
   console.log('   → Avisa a aluna 7 dias antes do vencimento do contrato');
 
   // Schedule: 07:00 todos os dias → Boas-vindas a novos seguidores do Instagram.

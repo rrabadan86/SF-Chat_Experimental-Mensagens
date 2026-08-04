@@ -49,7 +49,7 @@ const config = {
   schedule: {
     morning:          '30 8 * * 1-6',   // 08:30 seg-sáb (confirmação hoje)
     afternoon:        '30 15 * * 0-5',  // 15:30 dom-sex (confirmação amanhã)
-    renewal:          '0 17 * * *',     // 17:00 todos os dias (renovação: avisa quem vence em exatos 7 dias)
+    renewal:          '30 14 * * *',    // 14:30 todos os dias (renovação: avisa quem vence em exatos 7 dias)
     followupMorning:  '30 10 * * 1-6',  // 10:30 seg-sáb (follow-up ontem manhã)
     followupAfternoon:'0 16 * * 1-6',   // 16:00 seg-sáb (follow-up ontem tarde)
     instagram:        '0 7 * * *',      // 07:00 todos os dias (boas-vindas novos seguidores)
