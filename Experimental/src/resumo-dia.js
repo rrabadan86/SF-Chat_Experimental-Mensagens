@@ -31,6 +31,14 @@ const argData = (process.argv.find(a => a.startsWith('--data=')) || '').split('=
 
 const norm = (s) => (s || '').trim().toLowerCase();
 const fezAula = (c) => /presen|realizad/.test(norm(c.status));
+
+/** DD/MM/AAAA → DD/MM/AAAA do dia seguinte. */
+function proximoDia(ds) {
+  const m = /(\d{2})\/(\d{2})\/(\d{4})/.exec(ds || '');
+  const d = m ? new Date(+m[3], +m[2] - 1, +m[1]) : new Date();
+  d.setDate(d.getDate() + 1);
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
 const faltou = (c) => norm(c.status) === 'falta' || /\bfalta\b/.test(norm(c.status));
 
 /** "Fulana — 08:00" (ordena por horário). */
@@ -57,13 +65,20 @@ function montarMensagem(cats, dataStr) {
   const rescisoes = (cats.rescisoes || [])
     .slice()
     .map(c => `• ${c.name}${c.contrato ? ' — ' + c.contrato : ''}`);
+  const amanha = (cats.amanha || [])
+    .slice()
+    .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+    .map(c => `• ${c.time || '--:--'} — ${c.name}`);
+
+  const dmAmanha = (cats.amanhaData || '').slice(0, 5); // DD/MM
 
   return `📋 *Resumo do dia — ${dataStr}*\n\n`
     + bloco('🔁 *Reposições*', reposicoes, 'nenhuma reposição hoje') + '\n\n'
     + bloco('✅ *Experimentais que fizeram aula*', fizeram, 'nenhuma') + '\n\n'
     + bloco('❌ *Experimentais que faltaram*', faltaram, 'nenhuma') + '\n\n'
     + bloco('🎉 *Fechou contrato*', fecharam, 'nenhum fechamento hoje') + '\n\n'
-    + bloco('✂️ *Rescisões*', rescisoes, 'nenhuma rescisão hoje');
+    + bloco('✂️ *Rescisões*', rescisoes, 'nenhuma rescisão hoje') + '\n\n'
+    + bloco(`📅 *Experimentais de amanhã${dmAmanha ? ' (' + dmAmanha + ')' : ''}*`, amanha, 'nenhuma agendada para amanhã');
 }
 
 async function coletar(dataStr) {
@@ -108,6 +123,15 @@ async function coletar(dataStr) {
       console.log(`   ⚠️  Falha ao ler rescisões do dia: ${e.message}`);
     }
 
+    // 5) Experimentais AGENDADAS para AMANHÃ (agenda de experimentais, status Agendado)
+    const amanhaData = proximoDia(dataStr);
+    let amanha = [];
+    try {
+      amanha = await scraper.getAgendadasNaData(amanhaData); // [{ name, time }]
+    } catch (e) {
+      console.log(`   ⚠️  Falha ao ler experimentais de amanhã: ${e.message}`);
+    }
+
     // Descarta lançamentos de teste (ex.: "ZeeTech Experimental") nas experimentais.
     const ehTeste = (c) => /zeetech|\bteste\b/i.test(c.name || '');
     return {
@@ -116,6 +140,8 @@ async function coletar(dataStr) {
       faltaram: todas.filter(c => faltou(c) && !ehTeste(c)),
       fecharam,
       rescisoes,
+      amanha: amanha.filter(c => !ehTeste(c)),
+      amanhaData,
     };
   } finally {
     await scraper.close();
@@ -145,14 +171,14 @@ async function runResumoDia() {
     }
   }
   if (!cats) throw ultimoErro;
-  console.log(`   🔁 Reposições: ${cats.reposicoes.length} | ✅ Fizeram: ${cats.fizeram.length} | ❌ Faltaram: ${cats.faltaram.length} | 🎉 Fecharam: ${cats.fecharam.length} | ✂️ Rescisões: ${(cats.rescisoes || []).length}\n`);
+  console.log(`   🔁 Reposições: ${cats.reposicoes.length} | ✅ Fizeram: ${cats.fizeram.length} | ❌ Faltaram: ${cats.faltaram.length} | 🎉 Fecharam: ${cats.fecharam.length} | ✂️ Rescisões: ${(cats.rescisoes || []).length} | 📅 Amanhã: ${(cats.amanha || []).length}\n`);
 
   const msg = montarMensagem(cats, dataStr);
   console.log('─── Mensagem ─────────────────────────────────────');
   console.log(msg);
   console.log('──────────────────────────────────────────────────\n');
 
-  const totalRelevante = cats.reposicoes.length + cats.fizeram.length + cats.faltaram.length + cats.fecharam.length + (cats.rescisoes || []).length;
+  const totalRelevante = cats.reposicoes.length + cats.fizeram.length + cats.faltaram.length + cats.fecharam.length + (cats.rescisoes || []).length + (cats.amanha || []).length;
   if (totalRelevante === 0) {
     console.log('📭 Nada de experimental/reposição hoje — NÃO enviei (evita resumo vazio).\n');
     return { enviado: false, total: 0 };

@@ -1366,6 +1366,28 @@ class EvoScraper {
   }
 
   /**
+   * Experimentais AGENDADAS numa data (todos os horários), status "Agendado".
+   * Usado no resumo do dia para listar as experimentais de AMANHÃ.
+   * Retorna [{ name, time }] ordenado por horário.
+   */
+  async getAgendadasNaData(dataStr) {
+    console.log('\n═══════════════════════════════════════');
+    console.log(`📅 Experimentais agendadas em ${dataStr}`);
+    console.log('═══════════════════════════════════════\n');
+    await this.navigateToExperimental();
+    await this.changeDateFilter(dataStr);
+    await this.sleep(3000);
+    const all = await this.extractClassList();
+    const agendadas = all
+      .filter((c) => (c.status || '').toLowerCase().includes('agendad'))
+      .map((c) => ({ name: c.name, time: c.time || '' }))
+      .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    console.log(`   📋 ${agendadas.length} agendada(s) de ${all.length} total`);
+    for (const a of agendadas) console.log(`      • ${a.time} — ${a.name}`);
+    return agendadas;
+  }
+
+  /**
    * Lê os CONTRATOS fechados no dia (Gerencial > Vendas detalhadas).
    * Passos: define De/Até = data, marca o checkbox "Contrato", clica na lupa e
    * lê a grid (Nome + Sobrenome + Item/contrato). Retorna [{ nome, contrato }].
