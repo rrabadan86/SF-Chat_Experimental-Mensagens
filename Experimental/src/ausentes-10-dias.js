@@ -34,6 +34,9 @@ const FALTANTES_HASH = process.env.EVO_FALTANTES_HASH
   || '#/app/slimfit/15/evo3/-CRM-Faltantes-Faltantes';
 
 const DRY = process.argv.includes('--dry');
+// --diag: despeja o TEXTO COMPLETO do painel de cada aluna em data/ausentes-diag.txt
+// (para descobrir onde o EVO mostra trancamento + telefone). Não envia nada.
+const DIAG = process.argv.includes('--diag');
 const argDias = (process.argv.find(a => a.startsWith('--dias=')) || '').split('=')[1];
 const DIAS_MIN = parseInt(argDias || process.env.AUSENTES_DIAS || '10', 10);
 
@@ -266,7 +269,12 @@ async function lerContratoDaLinha(frame, i, nomeEsperado) {
     };
     const contrato = pega('Contrato ativo', '[úu]ltimo contrato|[úu]ltim.\\s*presen|Tipo do contato|Novo contato|$');
     const ultimaPres = pega('[úu]ltim.\\s*presen[çc]a|[úu]ltim.\\s*presen', 'Tipo do contato|Novo contato|Liga[çc]|$');
-    return { contrato, ultimaPres };
+    // Telefone (para a futura mensagem direta) — pega o 1º padrão de celular BR.
+    const mTel = txt.match(/(?:\+?55\s*)?\(?\d{2}\)?\s*9?\d{4}[-\s]?\d{4}/);
+    const telefone = mTel ? mTel[0].trim() : '';
+    // Painel inteiro (só usado no modo --diag): ajuda a achar onde está o trancamento.
+    const painel = txt.replace(/\n{2,}/g, '\n').trim();
+    return { contrato, ultimaPres, telefone, painel };
   });
 }
 
@@ -305,6 +313,19 @@ async function salvarDebug(page, frame) {
     try { gridHtml = await frame.evaluate(() => { const t = document.querySelector('table'); return t ? t.outerHTML.slice(0, 20000) : '(sem <table>)'; }); } catch (_) {}
     fs.writeFileSync(path.join(DATA_DIR, 'ausentes-grid.html'), gridHtml, 'utf8');
     console.log(`   🧷 Debug salvo em ${DATA_DIR} (ausentes-debug.png, ausentes-grid.html)`);
+  } catch (_) { /* ignore */ }
+}
+
+/** (--diag) Anexa o painel completo de uma aluna no arquivo de diagnóstico. */
+const DIAG_FILE = path.join(DATA_DIR, 'ausentes-diag.txt');
+function dumpPainel(nome, ultima, painel) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    const bloco = `\n═══════════════════════════════════════════════════\n`
+      + `ALUNA: ${nome}  |  última presença: ${ultima}\n`
+      + `───────────────────────────────────────────────────\n`
+      + (painel || '(painel vazio)') + '\n';
+    fs.appendFileSync(DIAG_FILE, bloco, 'utf8');
   } catch (_) { /* ignore */ }
 }
 
@@ -373,12 +394,13 @@ async function coletarAusentes() {
 
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i];
-        let contrato = '';
-        try { ({ contrato } = await lerContratoDaLinha(frame, i, r.nome)); }
+        let contrato = '', telefone = '', painel = '';
+        try { ({ contrato, telefone, painel } = await lerContratoDaLinha(frame, i, r.nome)); }
         catch (_) { /* segue sem status */ }
+        if (DIAG) dumpPainel(r.nome, r.ultima, painel);
         const ativo = ehAtivo(contrato);
-        console.log(`      ${ativo ? '✅' : '⛔'} ${r.nome} — ${r.ultima} ${contrato ? '[' + contrato + ']' : '[sem contrato ativo]'}`);
-        if (ativo) coletadas.push({ nome: r.nome, ultima: r.ultima });
+        console.log(`      ${ativo ? '✅' : '⛔'} ${r.nome} — ${r.ultima} ${contrato ? '[' + contrato + ']' : '[sem contrato ativo]'}${DIAG && telefone ? ' 📞 ' + telefone : ''}`);
+        if (ativo) coletadas.push({ nome: r.nome, ultima: r.ultima, telefone });
       }
 
       const foi = await proximaPagina(frame);
@@ -425,9 +447,13 @@ async function runAusentes10Dias() {
   console.log('\n╔═══════════════════════════════════════════════════╗');
   console.log('║   AUSENTES 10 DIAS → Grupo da Equipe              ║');
   console.log('╚═══════════════════════════════════════════════════╝');
-  console.log(`   Grupo: ${GRUPO} | dias: ${DIAS_MIN}+ | ${DRY ? '🧪 DRY (não envia)' : '🚀 ENVIO'}\n`);
+  const modo = DIAG ? '🔬 DIAG (dump do painel, não envia)' : (DRY ? '🧪 DRY (não envia)' : '🚀 ENVIO');
+  console.log(`   Grupo: ${GRUPO} | dias: ${DIAS_MIN}+ | ${modo}\n`);
+
+  if (DIAG) { try { fs.writeFileSync(DIAG_FILE, `Diagnóstico ausentes ${DIAS_MIN}+ dias — ${new Date().toLocaleString('pt-BR')}\n`, 'utf8'); } catch (_) {} }
 
   const ausentes = await coletarAusentes();
+  if (DIAG) { console.log(`\n🔬 DIAG pronto — veja o painel completo de cada aluna em:\n   ${DIAG_FILE}\n`); return { total: ausentes.length, diag: true }; }
 
   if (ausentes.length === 0) {
     console.log('📭 Nenhuma aluna ativa ausente no período. Nada a enviar.\n');
@@ -452,6 +478,6 @@ module.exports = { runAusentes10Dias, coletarAusentes, montarMensagem };
 
 if (require.main === module) {
   runAusentes10Dias()
-    .then(() => { if (DRY) process.exit(0); })
+    .then(() => { if (DRY || DIAG) process.exit(0); })
     .catch(err => { console.error('\n❌ Erro fatal:', err && err.message); if (err && err.stack) console.error(err.stack); process.exit(1); });
 }
