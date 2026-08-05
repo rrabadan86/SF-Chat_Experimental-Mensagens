@@ -317,17 +317,45 @@ async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMenc
   }
 }
 
-/** Keep-alive: mantém o WebSocket quente (getState) a cada ~2h. */
-function iniciarKeepAlive(horas = 2) {
+let reconectando = false;
+/**
+ * Recupera o cliente quando o frame do WhatsApp Web morre e não volta sozinho
+ * (destrói e recria usando a sessão salva — sem QR). É o "conserto automático".
+ */
+async function reinicializar() {
+  if (reconectando) return;
+  reconectando = true;
+  try {
+    log('♻️  Frame do WhatsApp morto — reinicializando o cliente...');
+    try { if (client) await client.destroy(); } catch (_) { /* já morto */ }
+    pronto = false;
+    initPromise = null;
+    gruposCache.clear();
+    await initWhatsApp(); // recria + reconecta (LocalAuth: usa a sessão salva)
+    log('✅ Cliente do WhatsApp reinicializado com sucesso.');
+  } catch (e) {
+    log('❌ Falha ao reinicializar o WhatsApp: ' + (e && e.message));
+  } finally {
+    reconectando = false;
+  }
+}
+
+/**
+ * Watchdog do WhatsApp: a cada ~15 min confere o estado (getState). Se o frame
+ * estiver morto/detached, RECONECTA sozinho (reinicializar) — antes só avisava,
+ * e o cliente ficava travado até o restart das 03:00.
+ */
+function iniciarKeepAlive(minutos = 15) {
   if (keepAliveTimer) return;
   keepAliveTimer = setInterval(async () => {
     try {
       const s = await client.getState();
       log('💓 keep-alive — estado: ' + s);
     } catch (e) {
-      log('keep-alive falhou: ' + e.message);
+      log('⚠️  keep-alive falhou: ' + e.message);
+      if (ehTransiente(e)) await reinicializar(); // frame morto → autorrecupera
     }
-  }, horas * 3600 * 1000);
+  }, minutos * 60 * 1000);
   if (keepAliveTimer.unref) keepAliveTimer.unref();
 }
 
