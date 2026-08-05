@@ -53,12 +53,19 @@ function montarMensagem(cats, dataStr) {
   const bloco = (titulo, linhas, vazio) =>
     `${titulo}\n` + (linhas.length ? linhas.join('\n') : `_${vazio}_`);
 
+  // Formato pedido: HORÁRIO — STATUS — NOME
+  const porHora = (a, b) => (a.time || '').localeCompare(b.time || '');
+  const linhaHSN = (time, status, name) => `• ${time || '--:--'} — ${status} — ${name}`;
+
   const reposicoes = cats.reposicoes
-    .slice()
-    .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
-    .map(c => `• ${c.name}${c.time ? ' — ' + c.time : ''}${c.status ? ' (' + c.status + ')' : ''}`);
-  const fizeram = linhaNomeHora(cats.fizeram);
-  const faltaram = linhaNomeHora(cats.faltaram);
+    .slice().sort(porHora)
+    .map(c => linhaHSN(c.time, c.status || 'Reposição', c.name));
+  const fizeram = cats.fizeram
+    .slice().sort(porHora)
+    .map(c => linhaHSN(c.time, 'Presença', c.name));
+  const faltaram = cats.faltaram
+    .slice().sort(porHora)
+    .map(c => linhaHSN(c.time, 'Falta', c.name));
   const fecharam = cats.fecharam
     .slice()
     .map(c => `• ${c.name}${c.contrato ? ' — ' + c.contrato : ''}`);
