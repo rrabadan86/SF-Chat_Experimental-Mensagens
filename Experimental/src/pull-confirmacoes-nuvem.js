@@ -26,6 +26,8 @@ const LOCAL_OUTBOX = process.env.STUDIO_OUTBOX_FILE
 const STATE_FILE = process.env.FORM_PULL_STATE
   || path.join(path.dirname(LOCAL_OUTBOX) || '.', 'web_puxados.json');
 
+let _falhasBridge = 0; // contador p/ não spammar o log quando a nuvem está fora
+
 function _key(row) { return `${row.contactId}|${row.when}|${row.ts}`; }
 
 function _loadState() {
@@ -66,13 +68,19 @@ async function pullConfirmacoesNuvem() {
   let rows = [];
   try {
     const r = await fetch(`${CLOUD_URL}/api/outbox/pending?token=${encodeURIComponent(TOKEN)}`, {
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(45000), // Render free demora no "cold start"
     });
     if (!r.ok) { console.log(`[bridge] pull respondeu HTTP ${r.status}`); return 0; }
     const data = await r.json();
     rows = (data && data.rows) || [];
+    if (_falhasBridge) { console.log(`[bridge] nuvem voltou a responder (após ${_falhasBridge} falha[s]).`); _falhasBridge = 0; }
   } catch (e) {
-    console.log('[bridge] falha ao puxar da nuvem:', e.message);
+    // Evita spam: loga a 1ª falha e depois a cada 10 (1/min → ~1 log a cada 10 min).
+    _falhasBridge++;
+    if (_falhasBridge === 1 || _falhasBridge % 10 === 0) {
+      const dica = _falhasBridge === 1 ? ' (Render pode estar "dormindo"/cold start; tenta de novo em 1 min)' : '';
+      console.log(`[bridge] falha ao puxar da nuvem (${_falhasBridge}x): ${e.message}${dica}`);
+    }
     return 0;
   }
 
