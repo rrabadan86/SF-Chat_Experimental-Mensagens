@@ -17,6 +17,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
 
 const CLOUD_URL = (process.env.FORM_CLOUD_URL || 'https://sf-formularioexperimental.onrender.com')
   .replace(/\/+$/, '');
@@ -80,6 +81,15 @@ async function pullConfirmacoesNuvem() {
     if (_falhasBridge === 1 || _falhasBridge % 10 === 0) {
       const dica = _falhasBridge === 1 ? ' (Render pode estar "dormindo"/cold start; tenta de novo em 1 min)' : '';
       console.log(`[bridge] falha ao puxar da nuvem (${_falhasBridge}x): ${e.message}${dica}`);
+    }
+    // Cold start do Render é normal (1-2 falhas). Só alerta em queda SUSTENTADA
+    // (~30 min sem responder = 30 falhas seguidas): aí confirmações não chegam.
+    if (_falhasBridge === 30) {
+      notif.alertar(
+        'Ponte de confirmacoes fora do ar',
+        'A nuvem (formulario/Render) nao responde ha ~30 min. As confirmacoes de aula experimental podem nao estar chegando. Erro: ' + e.message,
+        { prioridade: 'high', tags: 'warning' },
+      );
     }
     return 0;
   }

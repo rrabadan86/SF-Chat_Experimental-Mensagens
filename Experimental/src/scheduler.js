@@ -6,6 +6,7 @@ const keepAwake = require('./keep-awake');
 const { runFollowupMorning, runFollowupAfternoon } = require('./followup-experimental');
 const { runNoShowMorning, runNoShowAfternoon } = require('./follow-up-no-show');
 const { pullConfirmacoesNuvem } = require('./pull-confirmacoes-nuvem');
+const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
 const fs = require('fs');
 const path = require('path');
 
@@ -31,6 +32,15 @@ function logError(msg, err) {
   const line = `[${ts}] ❌ ${msg}: ${err?.message || err}`;
   console.error(line);
   if (err?.stack) console.error(err.stack);
+  // Alerta push (ntfy) — best-effort, nunca derruba nada. O anti-spam do módulo
+  // impede repetição do mesmo alerta em 30 min (evita enxurrada de push).
+  try {
+    notif.alertar(
+      'Job com erro: ' + msg,
+      (err?.message || String(err) || 'erro sem mensagem') + ' — veja pm2 logs slimfit-exp.',
+      { prioridade: 'high', tags: 'warning' },
+    );
+  } catch (_) { /* alerta é opcional */ }
 }
 
 // ─── Helpers ───────────────────────────────────────────────

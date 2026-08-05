@@ -19,6 +19,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env'
 const path = require('path');
 const qrcodeTerminal = require('qrcode-terminal');
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
+const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
 
 const AUTH_DIR = process.env.WA_AUTH_DIR || path.resolve(__dirname, '..', 'wwebjs_auth');
 // whatsapp-web.js roda bem headless; deixe WA_HEADLESS=false só se quiser com tela (xvfb).
@@ -111,6 +112,13 @@ function initWhatsApp() {
     client.on('qr', (qr) => {
       console.log('\n📲 Escaneie o QR no WhatsApp do número (Aparelhos conectados → Conectar um aparelho):\n');
       qrcodeTerminal.generate(qr, { small: true });
+      // ALERTA CRÍTICO: com a sessão salva, o QR NÃO deveria aparecer. Se apareceu,
+      // a sessão caiu e o bot está PARADO até alguém escanear o QR no servidor.
+      notif.alertar(
+        'WhatsApp CAIU — precisa de QR',
+        'A sessao do WhatsApp expirou. Rode no servidor: pm2 logs slimfit-exp (ou "cd Experimental && node src/wa-client.js") e escaneie o QR. Ate la, NENHUMA mensagem sai.',
+        { prioridade: 'urgent', tags: 'rotating_light', forcar: true },
+      );
     });
     let resolvido = false;
     const marcarPronto = (via) => {
@@ -335,6 +343,13 @@ async function reinicializar() {
     log('✅ Cliente do WhatsApp reinicializado com sucesso.');
   } catch (e) {
     log('❌ Falha ao reinicializar o WhatsApp: ' + (e && e.message));
+    // O conserto automático falhou — avisa para intervenção manual no servidor.
+    notif.alertar(
+      'WhatsApp nao reconectou sozinho',
+      'O watchdog tentou religar o WhatsApp e falhou: ' + ((e && e.message) || 'erro desconhecido') +
+      '. Verifique o servidor (pm2 restart slimfit-exp) e, se pedir, escaneie o QR.',
+      { prioridade: 'urgent', tags: 'rotating_light', forcar: true },
+    );
   } finally {
     reconectando = false;
   }
