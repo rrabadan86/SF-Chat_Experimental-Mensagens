@@ -444,8 +444,15 @@ async function coletarAusentes() {
 
     const normNome = (s) => (s || '').trim().toLowerCase()
       .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/^\s*\d+\s*[-–—]?\s*/, '').replace(/\s+/g, ' ');
+    // Quando a aluna tem VÁRIOS trancamentos no período, fica com o de FIM mais
+    // recente (o mais relevante para explicar a ausência atual).
+    const fimOf = (t) => { const m = /(\d{2})\/(\d{2})\/(\d{4})/.exec(t.fim || ''); return m ? new Date(+m[3], +m[2] - 1, +m[1]) : new Date(0); };
     const trancMap = new Map();
-    for (const t of trancamentos) trancMap.set(t.nomeNorm || normNome(t.nome), t);
+    for (const t of trancamentos) {
+      const k = t.nomeNorm || normNome(t.nome);
+      const prev = trancMap.get(k);
+      if (!prev || fimOf(t) > fimOf(prev)) trancMap.set(k, t);
+    }
 
     const ausentesReais = [];
     const trancadas = [];
