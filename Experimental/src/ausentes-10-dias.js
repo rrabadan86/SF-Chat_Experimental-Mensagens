@@ -431,10 +431,13 @@ async function coletarAusentes() {
     // ── Cruza com os TRANCAMENTOS (Gerencial > Suspensões) ──────────────────
     // Reaproveita a MESMA sessão logada (page). Aluna cujo trancamento sobrepõe
     // a janela de N dias NÃO é "ausente de verdade" — separa em outra lista.
+    // Janela de trancamentos = 30 dias (cobre bem os últimos 10 de ausência,
+    // pegando também quem destrancou faz pouco). Configurável via env.
+    const TRANC_DIAS = parseInt(process.env.TRANC_LOOKBACK_DIAS || '30', 10);
     let trancamentos = [];
     try {
       const { coletarTrancamentos } = require('./suspensoes');
-      trancamentos = await coletarTrancamentos(DIAS_MIN, page);
+      trancamentos = await coletarTrancamentos(TRANC_DIAS, page);
     } catch (e) {
       console.log(`   ⚠️  Falha ao ler suspensões (sigo sem excluir trancadas): ${e.message}`);
     }

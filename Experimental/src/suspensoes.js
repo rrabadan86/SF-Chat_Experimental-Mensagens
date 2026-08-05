@@ -115,29 +115,48 @@ async function lerGridTodasPaginas(page) {
   return acc;
 }
 
-/** Troca o período do filtro (ex.: "Este mês", "Mês passado"). Best-effort. */
+/**
+ * Troca o período do filtro para um preset (ex.: "Este mês", "Mês passado").
+ * Estrutura real (Angular Material / componente evo-filter-date):
+ *   1) botão  button[data-cy="EFD-DatePickerBTN"]  abre o menu;
+ *   2) opções são <mat-list-item> com o texto do período;
+ *   3) botão "APLICAR" confirma e recarrega o grid.
+ */
 async function selecionarPeriodo(page, label) {
   try {
-    // 1) abre o dropdown "Período da suspensão: ..."
+    // 1) abre o menu do período
     const abriu = await page.evaluate(() => {
-      const alvo = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'))
-        .find(el => /per[íi]odo da suspens/i.test(el.textContent || '') && el.offsetParent !== null);
-      if (!alvo) return false;
-      (alvo.closest('button, [role="button"], a') || alvo).click();
-      return true;
+      const btn = document.querySelector('button[data-cy="EFD-DatePickerBTN"]');
+      if (btn) { btn.click(); return true; }
+      // fallback: menor elemento visível com o texto do chip
+      let best = null, len = 1e9;
+      for (const el of document.querySelectorAll('*')) {
+        const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (/per[íi]odo da suspens/i.test(t) && el.offsetParent !== null && t.length < len) { len = t.length; best = el; }
+      }
+      if (best) { (best.closest('button') || best).click(); return true; }
+      return false;
     });
     if (!abriu) return false;
-    await sleep(900);
-    // 2) clica a opção pelo texto exato
+    await sleep(1000);
+    // 2) clica a opção (mat-list-item) pelo texto exato
     const clicou = await page.evaluate((lbl) => {
-      const opts = Array.from(document.querySelectorAll('[role="menuitem"], button, li, a, span, div'));
-      const alvo = opts.find(el => (el.textContent || '').trim().toLowerCase() === lbl.toLowerCase() && el.offsetParent !== null);
+      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const items = Array.from(document.querySelectorAll('mat-list-item, .mat-list-item, [role="menuitem"], [role="option"]'));
+      const alvo = items.find(el => norm(el.textContent) === lbl.toLowerCase() && el.offsetParent !== null);
       if (!alvo) return false;
-      (alvo.closest('[role="menuitem"], button, li, a') || alvo).click();
+      alvo.click();
       return true;
     }, label);
     if (!clicou) return false;
-    await sleep(2600); // espera o grid recarregar
+    await sleep(700);
+    // 3) clica "APLICAR" (se existir)
+    await page.evaluate(() => {
+      const btn = Array.from(document.querySelectorAll('button, [role="button"]'))
+        .find(b => /^aplicar$/i.test((b.textContent || '').trim()) && b.offsetParent !== null);
+      if (btn) btn.click();
+    });
+    await sleep(2800); // espera o grid recarregar
     return true;
   } catch (_) { return false; }
 }
