@@ -427,19 +427,58 @@ async function coletarAusentes() {
     });
 
     console.log(`\n   ✅ ${unicas.length} aluna(s) ATIVA(s) ausente(s) há ${DIAS_MIN}+ dias\n`);
-    return unicas;
+
+    // ── Cruza com os TRANCAMENTOS (Gerencial > Suspensões) ──────────────────
+    // Reaproveita a MESMA sessão logada (page). Aluna cujo trancamento sobrepõe
+    // a janela de N dias NÃO é "ausente de verdade" — separa em outra lista.
+    let trancamentos = [];
+    try {
+      const { coletarTrancamentos } = require('./suspensoes');
+      trancamentos = await coletarTrancamentos(DIAS_MIN, page);
+    } catch (e) {
+      console.log(`   ⚠️  Falha ao ler suspensões (sigo sem excluir trancadas): ${e.message}`);
+    }
+
+    const normNome = (s) => (s || '').trim().toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/^\s*\d+\s*[-–—]?\s*/, '').replace(/\s+/g, ' ');
+    const trancMap = new Map();
+    for (const t of trancamentos) trancMap.set(t.nomeNorm || normNome(t.nome), t);
+
+    const ausentesReais = [];
+    const trancadas = [];
+    for (const a of unicas) {
+      const t = trancMap.get(normNome(a.nome));
+      if (t) trancadas.push({ ...a, fim: t.fim, motivo: t.motivo, status: t.status });
+      else ausentesReais.push(a);
+    }
+    console.log(`   🔒 ${trancadas.length} trancada(s) removida(s) da lista de ausentes; ${ausentesReais.length} ausente(s) real(is).\n`);
+
+    return { ausentes: ausentesReais, trancadas };
   } finally {
     await browser.close();
   }
 }
 
 /** Monta o texto para o grupo (formato pedido pela dona). */
-function montarMensagem(ausentes) {
+function montarMensagem(ausentes, trancadas = []) {
   const intro = 'Professoras, segue abaixo a listagem de alunas faltantes a mais de '
     + `${DIAS_MIN} dias, com a data da última presença dela. Por favor, entrem em contato no privado `
     + 'para entender o que está acontecendo e incentivar a retomada às aulas:';
-  const linhas = ausentes.map(a => `* ${a.nome} - ${a.ultima}`);
-  return `${intro}\n${linhas.join('\n')}`;
+  const linhas = ausentes.length
+    ? ausentes.map(a => `* ${a.nome} - ${a.ultima}`).join('\n')
+    : '_nenhuma ausente (fora as trancadas abaixo)_';
+  let msg = `${intro}\n${linhas}`;
+
+  // Seção informativa: alunas que estão/estavam TRANCADAS no período — não cobrar.
+  if (trancadas && trancadas.length) {
+    const lt = trancadas.map(a => {
+      const ate = a.fim ? ` (trancamento até ${a.fim})` : '';
+      const mot = a.motivo ? ` — ${a.motivo}` : '';
+      return `* ${a.nome} - ${a.ultima}${ate}${mot}`;
+    });
+    msg += `\n\n🔒 *Trancadas no período (não cobrar):*\n${lt.join('\n')}`;
+  }
+  return msg;
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -452,26 +491,30 @@ async function runAusentes10Dias() {
 
   if (DIAG) { try { fs.writeFileSync(DIAG_FILE, `Diagnóstico ausentes ${DIAS_MIN}+ dias — ${new Date().toLocaleString('pt-BR')}\n`, 'utf8'); } catch (_) {} }
 
-  const ausentes = await coletarAusentes();
+  const { ausentes, trancadas } = await coletarAusentes();
   if (DIAG) { console.log(`\n🔬 DIAG pronto — veja o painel completo de cada aluna em:\n   ${DIAG_FILE}\n`); return { total: ausentes.length, diag: true }; }
 
-  if (ausentes.length === 0) {
+  if (ausentes.length === 0 && trancadas.length === 0) {
     console.log('📭 Nenhuma aluna ativa ausente no período. Nada a enviar.\n');
     return { total: 0 };
   }
+  if (ausentes.length === 0) {
+    console.log('📭 Todas as ausentes estão trancadas — nada a cobrar. Não enviei.\n');
+    return { total: 0, trancadas: trancadas.length };
+  }
 
-  const msg = montarMensagem(ausentes);
+  const msg = montarMensagem(ausentes, trancadas);
   console.log('─── Mensagem ─────────────────────────────────────');
   console.log(msg);
   console.log('──────────────────────────────────────────────────\n');
 
-  if (DRY) { console.log('🧪 DRY — não enviei nada.\n'); return { total: ausentes.length, dry: true }; }
+  if (DRY) { console.log('🧪 DRY — não enviei nada.\n'); return { total: ausentes.length, trancadas: trancadas.length, dry: true }; }
 
   const wa = require('./wa-client');
   await wa.initWhatsApp();
   await wa.sendGrupo(GRUPO, msg);
   console.log(`✅ Lista enviada no grupo "${GRUPO}".\n`);
-  return { total: ausentes.length };
+  return { total: ausentes.length, trancadas: trancadas.length };
 }
 
 module.exports = { runAusentes10Dias, coletarAusentes, montarMensagem };
