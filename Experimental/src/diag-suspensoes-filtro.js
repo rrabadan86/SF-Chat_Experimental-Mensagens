@@ -97,43 +97,105 @@ async function main() {
     await sleep(7000);
     await shot(page, 'susp-filtro-0-inicial.png');
 
-    // Descreve o "chip" do período (o que clicar).
-    const chip = await page.evaluate(() => {
-      const el = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'))
-        .find(e => /per[íi]odo da suspens/i.test(e.textContent || '') && e.offsetParent !== null);
-      if (!el) return null;
-      const clk = el.closest('button, [role="button"], a') || el;
-      return { text: (el.textContent || '').trim().slice(0, 60), tag: clk.tagName.toLowerCase(), cls: (clk.className || '').toString().slice(0, 100), outer: clk.outerHTML.slice(0, 400) };
+    // Acha os MENORES elementos com o texto do chip (evita casar o container).
+    const cands = await page.evaluate(() => {
+      const vis = (el) => el.offsetParent !== null && el.getClientRects().length;
+      const out = [];
+      for (const el of document.querySelectorAll('*')) {
+        const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!/per[íi]odo da suspens/i.test(t)) continue;
+        if (!vis(el)) continue;
+        out.push({ el, len: t.length, t });
+      }
+      out.sort((a, b) => a.len - b.len);
+      const walkNgClick = (el) => {
+        let cur = el;
+        for (let i = 0; i < 6 && cur; i++) {
+          if (cur.getAttribute && (cur.getAttribute('ng-click') || cur.hasAttribute('ng-click'))) return cur;
+          cur = cur.parentElement;
+        }
+        return null;
+      };
+      return out.slice(0, 5).map(o => {
+        const ng = walkNgClick(o.el);
+        return {
+          text: o.t.slice(0, 50),
+          tag: o.el.tagName.toLowerCase(),
+          cls: (o.el.className || '').toString().slice(0, 90),
+          ngClickSelf: o.el.getAttribute ? (o.el.getAttribute('ng-click') || '') : '',
+          ngClickAncestor: ng ? (ng.tagName.toLowerCase() + ' | ng-click="' + ng.getAttribute('ng-click') + '" | cls=' + (ng.className || '').toString().slice(0, 80)) : '(nenhum ancestral com ng-click)',
+          outer: o.el.outerHTML.slice(0, 300),
+        };
+      });
     });
-    P('\n─── CHIP período ───\n' + (chip ? JSON.stringify(chip, null, 2) : '(não achei o chip)'));
+    P('\n─── CANDIDATOS a CHIP (menores primeiro) ───');
+    cands.forEach((c, i) => P(`[${i}] <${c.tag}> cls="${c.cls}"\n     texto="${c.text}"\n     ng-click(self)="${c.ngClickSelf}"\n     ng-click(ancestral)=${c.ngClickAncestor}\n     outer=${c.outer}`));
 
-    // 1) abre o dropdown
+    // 1) clica no MENOR candidato (ou no ancestral com ng-click).
     const abriu = await page.evaluate(() => {
-      const el = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'))
-        .find(e => /per[íi]odo da suspens/i.test(e.textContent || '') && e.offsetParent !== null);
-      if (!el) return false;
-      (el.closest('button, [role="button"], a') || el).click();
+      const vis = (el) => el.offsetParent !== null && el.getClientRects().length;
+      let best = null, bestLen = 1e9;
+      for (const el of document.querySelectorAll('*')) {
+        const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!/per[íi]odo da suspens/i.test(t) || !vis(el)) continue;
+        if (t.length < bestLen) { bestLen = t.length; best = el; }
+      }
+      if (!best) return false;
+      let cur = best, ng = null;
+      for (let i = 0; i < 6 && cur; i++) { if (cur.getAttribute && cur.getAttribute('ng-click')) { ng = cur; break; } cur = cur.parentElement; }
+      (ng || best).click();
       return true;
     });
-    P(`\n1) abriu dropdown? ${abriu}`);
-    await sleep(1200);
+    P(`\n1) clicou no chip? ${abriu}`);
+    await sleep(1500);
     await shot(page, 'susp-filtro-1-dropdown.png');
     await dumpOverlays(page, 'dropdown aberto');
 
-    // 2) clica "Período personalizado"
+    // Lista todas as OPÇÕES visíveis do menu (por texto conhecido).
+    const opcoes = await page.evaluate(() => {
+      const vis = (el) => el.offsetParent !== null && el.getClientRects().length;
+      const alvo = /^(hoje|esta semana|semana passada|este m[êe]s|m[êe]s passado|per[íi]odo personalizado)$/i;
+      const out = [];
+      for (const el of document.querySelectorAll('*')) {
+        const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!alvo.test(t) || !vis(el)) continue;
+        out.push({ t, tag: el.tagName.toLowerCase(), cls: (el.className || '').toString().slice(0, 70), ngClick: el.getAttribute ? (el.getAttribute('ng-click') || '') : '' });
+      }
+      // dedup por texto+tag
+      const seen = new Set(); return out.filter(o => { const k = o.t + o.tag; if (seen.has(k)) return false; seen.add(k); return true; });
+    });
+    P('\n─── OPÇÕES do menu ───');
+    opcoes.forEach(o => P(`  "${o.t}" <${o.tag}> cls="${o.cls}" ng-click="${o.ngClick}"`));
+
+    // 2) clica "Período personalizado" (o menor elemento com esse texto).
     const clicouPers = await page.evaluate(() => {
-      const opts = Array.from(document.querySelectorAll('[role="menuitem"], button, li, a, span, div'))
-        .filter(el => el.offsetParent !== null);
-      const alvo = opts.find(el => /per[íi]odo personalizado/i.test((el.textContent || '').trim()));
-      if (!alvo) return false;
-      (alvo.closest('[role="menuitem"], button, li, a') || alvo).click();
+      const vis = (el) => el.offsetParent !== null && el.getClientRects().length;
+      let best = null, bestLen = 1e9;
+      for (const el of document.querySelectorAll('*')) {
+        const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!/^per[íi]odo personalizado$/i.test(t) || !vis(el)) continue;
+        if (t.length < bestLen) { bestLen = t.length; best = el; }
+      }
+      if (!best) return false;
+      best.click();
       return true;
     });
     P(`\n2) clicou "Período personalizado"? ${clicouPers}`);
-    await sleep(1500);
+    await sleep(1800);
     await shot(page, 'susp-filtro-2-personalizado.png');
     await dumpOverlays(page, 'personalizado');
     await dumpInputs(page, 'após personalizado');
+
+    // Dump de qualquer md-datepicker / campo de data revelado.
+    const dps = await page.evaluate(() => {
+      const vis = (el) => el.offsetParent !== null;
+      const nodes = Array.from(document.querySelectorAll('md-datepicker, [md-datepicker], .md-datepicker-input-container, input.md-datepicker-input, [class*="datepicker"], [placeholder*="data" i], [aria-label*="data" i]'))
+        .filter(vis);
+      return nodes.slice(0, 12).map(n => ({ tag: n.tagName.toLowerCase(), cls: (n.className || '').toString().slice(0, 90), outer: n.outerHTML.slice(0, 260) }));
+    });
+    P('\n─── DATEPICKERS / campos de data ───');
+    if (!dps.length) P('  (nenhum encontrado — talvez os campos De/Até apareçam no sidenav "Filtre seus resultados")');
+    dps.forEach((d, i) => P(`  [${i}] <${d.tag}> cls="${d.cls}"\n       ${d.outer}`));
 
     fs.writeFileSync(OUT, out.join('\n'), 'utf8');
     console.log(`\n🔬 Salvo em ${OUT} + screenshots susp-filtro-*.png em data/`);
