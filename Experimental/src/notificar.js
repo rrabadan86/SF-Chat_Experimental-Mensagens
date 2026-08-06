@@ -76,4 +76,23 @@ function encodeAscii(s) {
     .trim() || 'SlimFit';
 }
 
-module.exports = { alertar };
+/**
+ * Alerta RESUMIDO no fim de um job de envio em massa.
+ * Manda UM push com o total ("Follow-up manhã: 2 de 8 falharam") em vez de um
+ * por pessoa. Silencioso quando não houve falha — só avisa o que precisa de ação.
+ *
+ *   nome  — nome do job (ex.: 'Follow-up manhã')
+ *   enviadas / falhas / puladas — contadores do job
+ *   detalhe — opcional: nomes de quem falhou, para saber com quem falar
+ */
+async function alertarResumo(nome, { enviadas = 0, falhas = 0, puladas = 0, detalhe = '' } = {}) {
+  if (!falhas) return false;                 // tudo certo → não incomoda
+  const total = enviadas + falhas;
+  const corpo = `${falhas} de ${total} envio(s) falharam`
+    + (puladas ? ` (${puladas} pulada[s])` : '')
+    + (detalhe ? `.\n${detalhe}` : '.')
+    + '\nVeja pm2 logs slimfit-exp.';
+  return alertar(`${nome}: ${falhas} falha(s)`, corpo, { prioridade: 'high', tags: 'warning' });
+}
+
+module.exports = { alertar, alertarResumo };

@@ -652,6 +652,11 @@ async function runFollowup(periodoFiltro, dataOverride = null) {
   console.log(`║  ✅ Enviadas: ${String(enviadas).padEnd(6)} ❌ Falhas: ${String(falhas).padEnd(6)} ⏭️  Puladas: ${String(puladas).padEnd(4)}║`);
   console.log('╚═════════════════════════════════════════════════════╝\n');
 
+  // Um único aviso no celular com o total (só quando houve falha).
+  const quemFalhou = resultado.filter(r => r.status === '❌').map(r => r.name).join(', ');
+  require('./notificar').alertarResumo(`Follow-up ${periodoLabel}`,
+    { enviadas, falhas, puladas, detalhe: quemFalhou });
+
   return { enviadas, falhas, puladas, alunos: resultado };
 }
 

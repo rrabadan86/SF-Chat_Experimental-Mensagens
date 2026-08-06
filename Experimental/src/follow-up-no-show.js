@@ -84,6 +84,10 @@ async function runNoShow(periodoFiltro) {
   }
 
   console.log(`\n📊 Resultado — ✅ ${enviadas}  ❌ ${falhas}  ⏭️ ${puladas}`);
+
+  // Um único aviso no celular com o total (só quando houve falha).
+  require('./notificar').alertarResumo(`Faltas ${label}`, { enviadas, falhas, puladas });
+
   return { enviadas, falhas, puladas, alunos };
 }
 

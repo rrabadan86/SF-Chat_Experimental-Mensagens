@@ -507,6 +507,10 @@ async function main(modoEnvioParam) {
 
   const resultados = await enviarWhatsApp(clientes);
   console.log(`\n✅ Enviadas: ${resultados.enviadas} | ❌ Falhas: ${resultados.falhas} | ⏭️ Puladas: ${resultados.puladas}\n`);
+
+  // Um único aviso no celular com o total (só quando houve falha).
+  require('./notificar').alertarResumo('Renovação de contratos', resultados);
+
   return { ...resultados, clientes };
 }
 
