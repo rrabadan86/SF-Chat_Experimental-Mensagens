@@ -44,6 +44,22 @@ def main():
 
     for i, pr in enumerate(achados):
         print(f"── cadastro {i + 1} ──")
+        # Procura QUAL campo guarda o CPF (valor com 11 dígitos). É assim que
+        # descobrimos o nome correto que a API do EVO usa para o CPF.
+        candidatos = []
+        for k, v in pr.items():
+            if v is None:
+                continue
+            so_num = "".join(ch for ch in str(v) if ch.isdigit())
+            if len(so_num) == 11 and "phone" not in k.lower() and "cell" not in k.lower():
+                candidatos.append((k, v))
+        if candidatos:
+            print("   🔎 CAMPO(S) COM CARA DE CPF (11 dígitos):")
+            for k, v in candidatos:
+                print(f"        {k} = {v!r}   ← use este nome no cadastro")
+        else:
+            print("   🔎 nenhum campo com 11 dígitos (esse cadastro está SEM CPF)")
+
         if args.full:
             print(json.dumps(pr, indent=2, ensure_ascii=False)[:3000])
         else:
