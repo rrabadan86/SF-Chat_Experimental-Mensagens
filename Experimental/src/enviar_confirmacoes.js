@@ -164,6 +164,25 @@ function contarPendentes() {
   }).length;
 }
 
+/**
+ * Avisa no celular (ntfy) quando uma confirmação é DEFINITIVAMENTE perdida.
+ *
+ * Só nos casos sem volta (número sem WhatsApp ou tentativas esgotadas) — não a
+ * cada re-tentativa, para não virar spam. É importante avisar: significa que uma
+ * aluna agendou a experimental e NÃO recebeu a confirmação; alguém precisa
+ * falar com ela na mão.
+ */
+function avisarFalhaDefinitiva(row, motivo) {
+  try {
+    require('./notificar').alertar(
+      'Confirmacao NAO enviada',
+      `${row.name || 'aluna'} (${row.phone}) nao recebeu a confirmacao da aula experimental`
+      + `${row.when ? ' de ' + row.when : ''}. Motivo: ${motivo}. Fale com ela na mao.`,
+      { prioridade: 'high', tags: 'warning', forcar: true },
+    );
+  } catch (_) { /* alerta é opcional; nunca atrapalha o envio */ }
+}
+
 // >>> Função pra COLAR no seu bot (reusa a page já conectada) <<<
 async function enviarConfirmacoes(page) {
   const enviados = lerEnviados();
@@ -191,9 +210,11 @@ async function enviarConfirmacoes(page) {
         falhas[k] = MAX_TENTATIVAS;
         salvarFalhas(falhas);
         console.error(`[confirmacoes] ${row.phone} (${row.name}) parece não ter WhatsApp — desistindo.`);
+        avisarFalhaDefinitiva(row, 'o número não tem WhatsApp');
       } else if (restam <= 0) {
         console.error(`[confirmacoes] falha ${row.phone} (${row.name}): ${e.message} — ` +
           `atingiu ${MAX_TENTATIVAS} tentativas, desistindo.`);
+        avisarFalhaDefinitiva(row, e.message);
       } else {
         console.error(`[confirmacoes] falha ${row.phone} (${row.name}): ${e.message} — ` +
           `re-tenta depois (restam ${restam}).`);
