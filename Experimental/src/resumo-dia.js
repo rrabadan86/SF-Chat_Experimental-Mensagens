@@ -77,6 +77,11 @@ function montarMensagem(cats, dataStr) {
     .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
     .map(c => `• ${c.time || '--:--'} — ${c.name}`);
 
+  const trancadas = (cats.trancadas || [])
+    .slice()
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    .map(c => `• ${c.name}${c.fim ? ' — retorna ' + c.fim : ''}`);
+
   const dmAmanha = (cats.amanhaData || '').slice(0, 5); // DD/MM
 
   return `📋 *Resumo do dia — ${dataStr}*\n\n`
@@ -85,7 +90,8 @@ function montarMensagem(cats, dataStr) {
     + bloco('❌ *Experimentais que faltaram*', faltaram, 'nenhuma') + '\n\n'
     + bloco('🎉 *Fechou contrato*', fecharam, 'nenhum fechamento hoje') + '\n\n'
     + bloco('✂️ *Rescisões*', rescisoes, 'nenhuma rescisão hoje') + '\n\n'
-    + bloco(`📅 *Experimentais de amanhã${dmAmanha ? ' (' + dmAmanha + ')' : ''}*`, amanha, 'nenhuma agendada para amanhã');
+    + bloco(`📅 *Experimentais de amanhã${dmAmanha ? ' (' + dmAmanha + ')' : ''}*`, amanha, 'nenhuma agendada para amanhã') + '\n\n'
+    + bloco('🔒 *Trancadas hoje*', trancadas, 'nenhuma trancada hoje');
 }
 
 async function coletar(dataStr) {
@@ -139,6 +145,17 @@ async function coletar(dataStr) {
       console.log(`   ⚠️  Falha ao ler experimentais de amanhã: ${e.message}`);
     }
 
+    // 6) Trancamentos VIGENTES hoje (Gerencial > Suspensões) — reusa a MESMA
+    //    sessão logada (scraper.page). dias=0 → só quem está trancada no dia.
+    let trancadas = [];
+    try {
+      const { coletarTrancamentos } = require('./suspensoes');
+      const list = await coletarTrancamentos(0, scraper.page);
+      trancadas = list.map(t => ({ name: t.nome, fim: t.fim, motivo: t.motivo }));
+    } catch (e) {
+      console.log(`   ⚠️  Falha ao ler trancadas do dia: ${e.message}`);
+    }
+
     // Descarta lançamentos de teste (ex.: "ZeeTech Experimental") nas experimentais.
     const ehTeste = (c) => /zeetech|\bteste\b/i.test(c.name || '');
     return {
@@ -149,6 +166,7 @@ async function coletar(dataStr) {
       rescisoes,
       amanha: amanha.filter(c => !ehTeste(c)),
       amanhaData,
+      trancadas: trancadas.filter(c => !ehTeste(c)),
     };
   } finally {
     await scraper.close();
@@ -178,7 +196,7 @@ async function runResumoDia() {
     }
   }
   if (!cats) throw ultimoErro;
-  console.log(`   🔁 Reposições: ${cats.reposicoes.length} | ✅ Fizeram: ${cats.fizeram.length} | ❌ Faltaram: ${cats.faltaram.length} | 🎉 Fecharam: ${cats.fecharam.length} | ✂️ Rescisões: ${(cats.rescisoes || []).length} | 📅 Amanhã: ${(cats.amanha || []).length}\n`);
+  console.log(`   🔁 Reposições: ${cats.reposicoes.length} | ✅ Fizeram: ${cats.fizeram.length} | ❌ Faltaram: ${cats.faltaram.length} | 🎉 Fecharam: ${cats.fecharam.length} | ✂️ Rescisões: ${(cats.rescisoes || []).length} | 📅 Amanhã: ${(cats.amanha || []).length} | 🔒 Trancadas: ${(cats.trancadas || []).length}\n`);
 
   const msg = montarMensagem(cats, dataStr);
   console.log('─── Mensagem ─────────────────────────────────────');
