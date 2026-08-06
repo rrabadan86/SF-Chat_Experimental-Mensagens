@@ -191,15 +191,47 @@ function toChatId(telefone) {
  * Resolve o ID correto do destinatário via getNumberId (trata o novo "LID" do
  * WhatsApp e valida se o número existe). Cai para @c.us se getNumberId não vier.
  */
+/**
+ * Variações brasileiras do mesmo celular: COM e SEM o 9º dígito.
+ * Contas antigas seguem registradas no WhatsApp sem o 9 (ex.: 11 8428-3474),
+ * enquanto o cadastro traz com o 9 (11 99428-3474) — e vice-versa. Tentar só
+ * uma forma dá "No LID for user" e a mensagem nunca sai.
+ */
+function variantesBR(n) {
+  const out = [n];
+  const m = /^55(\d{2})(\d+)$/.exec(n);
+  if (m) {
+    const [, ddd, local] = m;
+    if (local.length === 9 && local[0] === '9') out.push(`55${ddd}${local.slice(1)}`); // tira o 9
+    else if (local.length === 8 && '6789'.includes(local[0])) out.push(`55${ddd}9${local}`); // põe o 9
+  }
+  return out;
+}
+
 async function resolverId(telefone) {
   let n = String(telefone || '').replace(/\D/g, '');
   if (!n) throw new Error('telefone vazio');
   if (!n.startsWith('55')) n = '55' + n;
-  try {
-    const numId = await comRetry(() => client.getNumberId(n));
-    if (numId && numId._serialized) return numId._serialized;
-  } catch (_) { /* usa fallback abaixo */ }
-  return n + '@c.us';
+
+  let houveErro = false;             // erro de conexão ≠ número inexistente
+  for (const cand of variantesBR(n)) {
+    try {
+      const numId = await comRetry(() => client.getNumberId(cand));
+      if (numId && numId._serialized) {
+        if (cand !== n) log(`ℹ️  ${n} não existe no WhatsApp; usando ${cand} (9º dígito).`);
+        return numId._serialized;
+      }
+    } catch (_) { houveErro = true; }  // instabilidade: não conclui que é inválido
+  }
+
+  // Nenhuma variação existe. Antes caíamos em "<numero>@c.us", o envio falhava
+  // com "No LID for user" e o job repetia por horas. Agora desiste na hora.
+  if (!houveErro) {
+    const err = new Error(`número sem WhatsApp: ${n}`);
+    err.code = 'INVALIDO';
+    throw err;
+  }
+  return n + '@c.us';                 // só instabilidade → deixa o envio tentar
 }
 
 async function sendTexto(telefone, texto) {
