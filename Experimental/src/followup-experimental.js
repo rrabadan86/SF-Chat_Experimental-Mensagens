@@ -456,6 +456,7 @@ async function sendFollowupMessage(page, phoneNumber, text, audioPath) {
       await wa.sendTexto(phoneNumber, text);
       if (audioPath) {
         await sleep(1500);
+        console.log(`   🎧 Enviando áudio como voz: ${path.basename(audioPath)}`);
         await wa.sendMidia(phoneNumber, audioPath, { comoVoz: true });
       }
       return true;
