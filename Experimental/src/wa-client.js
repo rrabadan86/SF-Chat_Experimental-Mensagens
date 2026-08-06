@@ -217,6 +217,12 @@ async function sendMidia(telefone, urlOuCaminho, { legenda = '', comoVoz = false
   const media = /^https?:\/\//i.test(urlOuCaminho)
     ? await MessageMedia.fromUrl(urlOuCaminho, { unsafeMime: true })
     : MessageMedia.fromFilePath(urlOuCaminho);
+  // Nota de voz (PTT): o WhatsApp só decodifica Opus se o mimetype trouxer o
+  // codec. O MessageMedia grava só "audio/ogg" → o destinatário vê "há algo
+  // errado com o arquivo de áudio". Forçamos "audio/ogg; codecs=opus".
+  if (comoVoz && /\.(ogg|opus|oga)(\?|$)/i.test(urlOuCaminho)) {
+    media.mimetype = 'audio/ogg; codecs=opus';
+  }
   const id = await resolverId(telefone);
   return comRetry(() => client.sendMessage(id, media, {
     caption: legenda || undefined,
