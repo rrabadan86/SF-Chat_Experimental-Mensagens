@@ -400,40 +400,44 @@ async function buscarContratosVencendoEm7Dias() {
       const id = c.idCliente;
       console.log(`📞 Buscando telefone de: ${c.nome} (ID: ${id})...`);
 
-      dadosPessoaisCapturado = null;
+      // Clica na LINHA da aluna certa (não em qualquer <span>) e espera o
+      // /dadosPessoais. Com retry: o EVO às vezes demora/instável e antes
+      // desistíamos na 1ª tentativa. Também removi o fallback que clicava na 1ª
+      // linha quando não achava o nome — ele reabria a aluna anterior (que não
+      // dispara novo request), causando o "dadosPessoais não carregou".
+      let telefone = '';
+      for (let tentativa = 1; tentativa <= 3 && !telefone; tentativa++) {
+        dadosPessoaisCapturado = null;
 
-      const clicou = await page.evaluate((nome) => {
-        const alvo = nome.substring(0, 18);
-        const els = document.querySelectorAll('table tbody tr a, table tbody tr td, table tbody tr span');
-        for (const el of els) {
-          if (el.textContent && el.textContent.includes(alvo) && el.offsetWidth > 0) {
-            el.click();
-            return true;
+        const clicou = await page.evaluate((nome) => {
+          const alvo = (nome || '').substring(0, 18);
+          for (const tr of document.querySelectorAll('table tbody tr')) {
+            if ((tr.textContent || '').includes(alvo) && tr.offsetParent !== null) {
+              (tr.querySelector('a, td') || tr).click();
+              return true;
+            }
           }
+          return false;
+        }, c.nome);
+
+        if (clicou) {
+          for (let t = 0; t < 24 && !dadosPessoaisCapturado; t++) await sleep(500); // até 12s
+          telefone = extrairTelefone(dadosPessoaisCapturado) || '';
+        } else {
+          console.log(`   ⚠️  não achei a linha da aluna (tentativa ${tentativa}/3)`);
         }
-        const firstRow = document.querySelector('table tbody tr');
-        if (firstRow) { firstRow.click(); return true; }
-        return false;
-      }, c.nome);
 
-      for (let t = 0; t < 20 && !dadosPessoaisCapturado; t++) await sleep(500);
+        // Volta para a lista antes da próxima tentativa/aluna.
+        await page.keyboard.press('Escape');
+        await sleep(2000);
 
-      const telefone = extrairTelefone(dadosPessoaisCapturado);
-      if (telefone) {
-        console.log(`   📱 ${telefone}`);
-      } else if (!clicou) {
-        console.log(`   ⚠️  Não consegui clicar no cliente`);
-      } else if (!dadosPessoaisCapturado) {
-        console.log(`   ⚠️  dadosPessoais não carregou`);
-      } else {
-        const chaves = Object.keys(dadosPessoaisCapturado)
-          .filter(k => /telefone|celular|fone|ddd|contato/i.test(k))
-          .map(k => `${k}=${JSON.stringify(dadosPessoaisCapturado[k])}`);
-        console.log(`   ⚠️  Telefone não encontrado. Campos: ${chaves.join(' | ') || 'nenhum'}`);
+        if (!telefone && clicou && tentativa < 3) {
+          console.log(`   ↻ dados não vieram — tentando de novo (${tentativa}/3)...`);
+        }
       }
 
-      await page.keyboard.press('Escape');
-      await sleep(1500);
+      if (telefone) console.log(`   📱 ${telefone}`);
+      else console.log(`   ⚠️  telefone não encontrado após 3 tentativas (EVO pode estar instável)`);
 
       clientesCompletos.push({
         id,
