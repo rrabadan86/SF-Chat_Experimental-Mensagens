@@ -155,13 +155,16 @@ async function buscarContratosVencendoEm7Dias() {
     await sleep(5000);
 
     console.log('🔍 Procurando o menu lateral da segmentação...');
-    
-    const menuEncontrado = await page.evaluate(() => {
+
+    // O EVO às vezes leva bem mais que os 5s de espera para montar a lista de
+    // segmentos (ainda mais quando a API está lenta). Antes olhávamos uma única
+    // vez e desistíamos; agora insistimos por até ~45s.
+    const procurarMenu = () => page.evaluate(() => {
       const candidates = document.querySelectorAll('span, div, a, li, md-list-item');
       for (const el of candidates) {
         const text = el.innerText?.trim() || '';
         const tLower = text.toLowerCase();
-        
+
         if (tLower.includes('vencimento de contrato seman') && text.length < 50 && el.offsetWidth > 0) {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           const clickableParent = el.closest('md-list-item') || el.closest('a') || el;
@@ -171,8 +174,33 @@ async function buscarContratosVencendoEm7Dias() {
       }
       return null;
     });
-    
-    if (!menuEncontrado) throw new Error('Menu da Segmentação não encontrado. Verifique se a aba lateral está visível.');
+
+    let menuEncontrado = null;
+    for (let i = 0; i < 15 && !menuEncontrado; i++) {
+      menuEncontrado = await procurarMenu();
+      if (!menuEncontrado) await sleep(3000);
+    }
+
+    if (!menuEncontrado) {
+      // Mostra o que existe na tela — se o segmento foi renomeado/apagado no EVO,
+      // o nome certo aparece aqui e a correção é trivial.
+      const visiveis = await page.evaluate(() => {
+        const out = [];
+        for (const el of document.querySelectorAll('md-list-item, li, a')) {
+          const t = (el.innerText || '').trim().replace(/\s+/g, ' ');
+          if (t && t.length < 60 && el.offsetWidth > 0 && !out.includes(t)) out.push(t);
+        }
+        return out.slice(0, 40);
+      }).catch(() => []);
+      console.log('   📋 Itens visíveis na tela agora:');
+      visiveis.forEach(t => console.log(`      • ${t}`));
+      try {
+        await page.screenshot({ path: require('path').resolve(__dirname, '..', 'data', 'renovacao-debug.png'), fullPage: true });
+        console.log('   🧷 Screenshot: data/renovacao-debug.png');
+      } catch (_) { /* ignore */ }
+      throw new Error('Menu da Segmentação não encontrado (procurei "Vencimento de Contrato Seman..." por 45s). '
+        + 'Veja a lista acima: se o segmento foi renomeado no EVO, me diga o nome novo.');
+    }
     console.log(`✅ Menu localizado: "${menuEncontrado}"`);
     await sleep(1500);
 
