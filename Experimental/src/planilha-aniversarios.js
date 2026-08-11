@@ -119,6 +119,10 @@ async function buscarAlunasAniversario() {
         }
         return out.slice(0, 40);
       }).catch(() => []);
+      // Se o EVO mudou a rota, ele redireciona para a Home e a lista de
+      // segmentos nunca aparece — o endereço abaixo denuncia isso na hora.
+      const ondeEstou = await page.evaluate(() => location.href).catch(() => '(?)');
+      console.log(`   🌐 Endereço em que a tela parou: ${ondeEstou}`);
       console.log('   📋 Itens visíveis na tela agora:');
       visiveis.forEach(t => console.log(`      • ${t}`));
       throw new Error('Segmento "Aniversariantes" não encontrado (procurei por 45s). '

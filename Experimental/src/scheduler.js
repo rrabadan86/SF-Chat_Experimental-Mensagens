@@ -213,6 +213,27 @@ async function executeExperimentalConfirmJob() {
   }
 }
 
+// ─── Registro de "o scheduler estava vivo até quando" ──────────────────────
+// Um job só é REALMENTE perdido se o processo estava PARADO no horário dele.
+// Sem isso, todo restart listava como "perdidos" jobs que já tinham rodado
+// normalmente naquele dia (ruído no log e risco de reexecutar por engano).
+const ALIVE_FILE = path.join(LOG_DIR, 'scheduler-alive.json');
+
+function lerUltimoVivo() {
+  try {
+    const d = JSON.parse(fs.readFileSync(ALIVE_FILE, 'utf8'));
+    const t = new Date(d.ts);
+    return isNaN(t) ? null : t;
+  } catch { return null; }
+}
+
+function marcarVivo() {
+  try {
+    if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+    fs.writeFileSync(ALIVE_FILE, JSON.stringify({ ts: new Date().toISOString() }), 'utf8');
+  } catch (_) { /* não é crítico */ }
+}
+
 // ─── Missed Cron Detection ─────────────────────────────────
 /**
  * Verifica se algum job deveria ter rodado hoje mas foi perdido
@@ -315,20 +336,37 @@ function checkMissedCrons() {
   const MAX_DELAY_MINUTES = 8 * 60; // Executa se atrasou até 8 horas
   const missedJobs = [];
 
+  // Até que minuto de HOJE o scheduler esteve rodando? Se ele estava vivo no
+  // horário do job, o cron disparou — logo o job NÃO foi perdido (se falhou, é
+  // outro assunto, e reexecutar aqui só duplicaria mensagem).
+  const ultimoVivo = lerUltimoVivo();
+  let vivoAteMin = -1;
+  if (ultimoVivo) {
+    const vivoSp = new Date(ultimoVivo.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const mesmoDia = vivoSp.toDateString() === spNow.toDateString();
+    vivoAteMin = mesmoDia ? vivoSp.getHours() * 60 + vivoSp.getMinutes()
+                          : -1;   // parou ontem ou antes → tudo de hoje é candidato
+  }
+
   for (const job of jobs) {
     if (!job.validDays.includes(currentDay)) continue;
 
     const delay = currentMinutes - job.scheduledMinutes;
+    if (delay <= 0 || delay > MAX_DELAY_MINUTES) continue;
 
-    if (delay > 0 && delay <= MAX_DELAY_MINUTES) {
-      const delayStr = delay < 60
-        ? `${delay}min`
-        : `${Math.floor(delay / 60)}h${delay % 60}min`;
-      log(`🔎 Job "${job.name}" perdido! Deveria ter rodado há ${delayStr}`);
-      missedJobs.push(job);
-    }
+    // O processo estava no ar quando o job deveria rodar? Então já disparou.
+    if (job.scheduledMinutes <= vivoAteMin) continue;
+
+    const delayStr = delay < 60
+      ? `${delay}min`
+      : `${Math.floor(delay / 60)}h${delay % 60}min`;
+    log(`🔎 Job "${job.name}" perdido! Deveria ter rodado há ${delayStr}`);
+    missedJobs.push(job);
   }
 
+  if (missedJobs.length === 0 && vivoAteMin >= 0) {
+    log('✅ Nenhum job perdido (o scheduler estava no ar nos horários de hoje).');
+  }
   return missedJobs;
 }
 
@@ -418,7 +456,9 @@ async function main() {
   }
 
   // ─── Verifica jobs perdidos antes de agendar ─────────────
+  // (lê o registro ANTES de marcar que estamos vivos agora)
   const missedJobs = checkMissedCrons();
+  marcarVivo();
 
   if (missedJobs.length > 0) {
     for (const job of missedJobs) {
@@ -742,6 +782,7 @@ async function main() {
     const mem = process.memoryUsage();
     const mbUsed = (mem.heapUsed / 1024 / 1024).toFixed(1);
     log(`💓 Heartbeat — Memória: ${mbUsed}MB | PID: ${process.pid} | Uptime: ${(process.uptime() / 3600).toFixed(1)}h`);
+    marcarVivo();   // registra que estamos no ar (base do detector de jobs perdidos)
   }, HEARTBEAT_INTERVAL);
 
   log('✅ Agendador rodando. Pressione Ctrl+C para parar.\n');
