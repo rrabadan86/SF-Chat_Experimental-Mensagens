@@ -62,6 +62,38 @@ Podemos dar andamento na renovação? Prefere manter o mesmo plano ou aumentar a
 Qualquer dúvida, é só me chamar! 😉`;
 }
 
+/**
+ * Garante que estamos na LISTA de clientes, com nenhum detalhe/modal aberto e a
+ * tabela pronta para clicar. Fecha o painel de detalhe (Escape → botão fechar →
+ * clique no backdrop) e espera o backdrop sumir. Sem isso, o painel da aluna
+ * anterior ficava aberto e o clique na próxima caía no backdrop.
+ */
+async function voltarParaLista(page) {
+  for (let i = 0; i < 6; i++) {
+    const estado = await page.evaluate(() => {
+      const bd = document.querySelector('.md-dialog-backdrop, md-backdrop, .cdk-overlay-backdrop, .modal-backdrop');
+      const dlgAberto = Array.from(document.querySelectorAll('md-dialog, .md-dialog-container, [role="dialog"], .modal'))
+        .some(e => e.offsetParent !== null);
+      // tenta fechar: botão de fechar visível, senão clica no backdrop
+      if (dlgAberto || bd) {
+        const fechar = Array.from(document.querySelectorAll('button, [aria-label], .close, md-icon, i'))
+          .find(el => el.offsetParent !== null &&
+            /fechar|close|voltar/i.test((el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title')) || '') + ' ' + (el.textContent || '')));
+        if (fechar) { (fechar.closest('button') || fechar).click(); }
+        else if (bd) { bd.click(); }
+      }
+      const tabelaOk = !!document.querySelector('table tbody tr');
+      const bdAgora = !!document.querySelector('.md-dialog-backdrop, md-backdrop, .cdk-overlay-backdrop, .modal-backdrop');
+      return { pronto: tabelaOk && !bdAgora, temBd: bdAgora };
+    }).catch(() => ({ pronto: false }));
+
+    if (estado.pronto) return true;
+    await page.keyboard.press('Escape').catch(() => {});
+    await sleep(1200);
+  }
+  return false;
+}
+
 async function buscarContratosVencendoEm7Dias() {
   const alvoCalculado = dataAlvoD7();
   const alvoStr = `${String(alvoCalculado.getDate()).padStart(2,'0')}/${String(alvoCalculado.getMonth()+1).padStart(2,'0')}`;
@@ -93,6 +125,7 @@ async function buscarContratosVencendoEm7Dias() {
   // Intercepta respostas: lista da segmentação + dadosPessoais do painel
   let clientesIntercept = [];
   let dadosPessoaisCapturado = null;
+  let dadosPessoaisUrl = null;
   await page.setRequestInterception(true);
   page.on('request', req => { req.continue(); });
   page.on('response', async (res) => {
@@ -104,6 +137,7 @@ async function buscarContratosVencendoEm7Dias() {
       }
       if (url.includes('/dadosPessoais') && res.status() === 200) {
         dadosPessoaisCapturado = JSON.parse(await res.text());
+        dadosPessoaisUrl = url; // guarda o padrão da URL (útil p/ diagnóstico/futuro)
       }
     } catch (e) {}
   });
@@ -400,11 +434,11 @@ async function buscarContratosVencendoEm7Dias() {
       const id = c.idCliente;
       console.log(`📞 Buscando telefone de: ${c.nome} (ID: ${id})...`);
 
-      // Clica na LINHA da aluna certa (não em qualquer <span>) e espera o
-      // /dadosPessoais. Com retry: o EVO às vezes demora/instável e antes
-      // desistíamos na 1ª tentativa. Também removi o fallback que clicava na 1ª
-      // linha quando não achava o nome — ele reabria a aluna anterior (que não
-      // dispara novo request), causando o "dadosPessoais não carregou".
+      // Garante que estamos na LISTA (sem detalhe/backdrop aberto) antes de
+      // clicar. Era isso que se perdia: depois da 1ª aluna, o painel de detalhe
+      // ficava aberto e o clique na próxima caía no backdrop → nada abria.
+      await voltarParaLista(page);
+
       let telefone = '';
       for (let tentativa = 1; tentativa <= 3 && !telefone; tentativa++) {
         dadosPessoaisCapturado = null;
@@ -427,17 +461,29 @@ async function buscarContratosVencendoEm7Dias() {
           console.log(`   ⚠️  não achei a linha da aluna (tentativa ${tentativa}/3)`);
         }
 
-        // Volta para a lista antes da próxima tentativa/aluna.
-        await page.keyboard.press('Escape');
-        await sleep(2000);
+        await voltarParaLista(page); // fecha o detalhe e confirma a lista pronta
 
         if (!telefone && clicou && tentativa < 3) {
           console.log(`   ↻ dados não vieram — tentando de novo (${tentativa}/3)...`);
         }
       }
 
-      if (telefone) console.log(`   📱 ${telefone}`);
-      else console.log(`   ⚠️  telefone não encontrado após 3 tentativas (EVO pode estar instável)`);
+      if (telefone) {
+        console.log(`   📱 ${telefone}`);
+      } else {
+        console.log(`   ⚠️  telefone não encontrado após 3 tentativas.`);
+        // Diagnóstico: revela por que o detalhe não abriu (lista sumiu? modal preso?).
+        const estado = await page.evaluate(() => ({
+          url: location.href,
+          temTabela: !!document.querySelector('table tbody tr'),
+          linhas: document.querySelectorAll('table tbody tr').length,
+          backdrop: !!document.querySelector('.md-dialog-backdrop, md-backdrop, .cdk-overlay-backdrop, .modal-backdrop'),
+          dialogos: Array.from(document.querySelectorAll('md-dialog, .md-dialog-container, [role="dialog"], .modal'))
+            .filter(e => e.offsetParent !== null).length,
+        })).catch(() => null);
+        if (estado) console.log(`      🔎 estado: tabela=${estado.temTabela} linhas=${estado.linhas} backdrop=${estado.backdrop} dialogos=${estado.dialogos}`);
+        if (dadosPessoaisUrl) console.log(`      🔎 URL do dadosPessoais (1º ok): ${dadosPessoaisUrl}`);
+      }
 
       clientesCompletos.push({
         id,
