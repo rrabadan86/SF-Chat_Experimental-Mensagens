@@ -89,7 +89,7 @@ async function buscarAlunasAniversario() {
     console.log('📂 Abrindo Segmentação "Aniversariantes"...');
     await page.evaluate(() => { location.hash = '#/app/slimfit/15/clientes/segmentacao/clientes'; });
     await sleep(5000);
-    const segClicado = await page.evaluate(() => {
+    const tentarClicar = () => page.evaluate(() => {
       const els = document.querySelectorAll('a, li, span, div');
       for (const el of els) {
         const t = (el.textContent || '').trim().toLowerCase();
@@ -101,7 +101,29 @@ async function buscarAlunasAniversario() {
       }
       return false;
     });
-    if (!segClicado) throw new Error('Segmento "Aniversariantes" não encontrado.');
+
+    // A lista de segmentos do EVO às vezes demora bem mais que os 5s de espera.
+    // Antes tentávamos UMA vez e o job morria; agora insistimos por até ~45s.
+    let segClicado = false;
+    for (let i = 0; i < 15 && !segClicado; i++) {
+      segClicado = await tentarClicar();
+      if (!segClicado) await sleep(3000);
+    }
+
+    if (!segClicado) {
+      const visiveis = await page.evaluate(() => {
+        const out = [];
+        for (const el of document.querySelectorAll('md-list-item, li, a')) {
+          const t = (el.innerText || '').trim().replace(/\s+/g, ' ');
+          if (t && t.length < 60 && el.offsetWidth > 0 && !out.includes(t)) out.push(t);
+        }
+        return out.slice(0, 40);
+      }).catch(() => []);
+      console.log('   📋 Itens visíveis na tela agora:');
+      visiveis.forEach(t => console.log(`      • ${t}`));
+      throw new Error('Segmento "Aniversariantes" não encontrado (procurei por 45s). '
+        + 'Veja a lista acima: se o segmento foi renomeado no EVO, me diga o nome novo.');
+    }
     await sleep(6000);
 
     // 3. Seleciona "Mês de aniversário: Todos" — clicando SOMENTE dentro do

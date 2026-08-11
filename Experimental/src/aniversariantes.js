@@ -138,7 +138,7 @@ async function buscarAniversariantesHoje() {
     await sleep(5000);
 
     console.log('🔍 Clicando no segmento "Aniversariantes"...');
-    const segClicado = await page.evaluate(() => {
+    const tentarClicar = () => page.evaluate(() => {
       const els = document.querySelectorAll('a, li, span, div');
       for (const el of els) {
         const t = (el.textContent || '').trim().toLowerCase();
@@ -155,7 +155,15 @@ async function buscarAniversariantesHoje() {
       }
       return false;
     });
-    if (!segClicado) throw new Error('Segmento "Aniversariantes" não encontrado.');
+
+    // A lista de segmentos do EVO às vezes demora bem mais que os 5s de espera.
+    // Antes tentávamos UMA vez e o job morria; agora insistimos por até ~45s.
+    let segClicado = false;
+    for (let i = 0; i < 15 && !segClicado; i++) {
+      segClicado = await tentarClicar();
+      if (!segClicado) await sleep(3000);
+    }
+    if (!segClicado) throw new Error('Segmento "Aniversariantes" não encontrado (procurei por 45s).');
     await sleep(6000);
     console.log(`📊 ${clientesIntercept.length} cliente(s) na segmentação\n`);
 
