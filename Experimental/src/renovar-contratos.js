@@ -101,21 +101,27 @@ async function voltarParaLista(page) {
  * problema de o painel de detalhe ficar preso.
  */
 async function buscarDadosViaApi(page, url, headersCapturados) {
-  const auth = headersCapturados && (headersCapturados.authorization || headersCapturados.Authorization);
-  return page.evaluate(async (u, authToken) => {
+  return page.evaluate(async (u, capturados) => {
     try {
+      // Reenvia os MESMOS headers que o app do EVO mandou (Authorization + os
+      // custom que a API exige, ex.: appOrigin/x-*). Sem isso, só o token dava
+      // 401. Pula os headers controlados pelo navegador (ele os define sozinho).
+      const proibidos = new Set(['host', 'connection', 'content-length', 'origin',
+        'referer', 'user-agent', 'cookie', 'accept-encoding', 'accept-language']);
       const h = { 'Accept': 'application/json' };
-      if (authToken) h['Authorization'] = authToken;
-      // credentials:'omit' de propósito: a API do EVO autentica por TOKEN
-      // (Authorization), não por cookie. Com 'include', o navegador bloqueia o
-      // fetch cross-subdomínio por CORS (ACAO '*' + credenciais) → "Failed to
-      // fetch". Sem cookies, o token basta e o CORS libera.
+      for (const [k, v] of Object.entries(capturados || {})) {
+        const kl = k.toLowerCase();
+        if (proibidos.has(kl) || kl.startsWith('sec-') || kl.startsWith(':')) continue;
+        h[k] = v;
+      }
+      // credentials:'omit': a API autentica por TOKEN, não por cookie. Com
+      // 'include' o navegador bloqueia o fetch cross-subdomínio (CORS).
       const r = await fetch(u, { credentials: 'omit', headers: h });
       let json = null;
       try { json = await r.json(); } catch (_) { /* corpo não-JSON */ }
       return { status: r.status, ok: r.ok, json };
     } catch (e) { return { status: 0, ok: false, err: String(e && e.message || e) }; }
-  }, url, auth || null).catch((e) => ({ status: -1, ok: false, err: String(e && e.message || e) }));
+  }, url, headersCapturados || {}).catch((e) => ({ status: -1, ok: false, err: String(e && e.message || e) }));
 }
 
 async function buscarContratosVencendoEm7Dias() {
@@ -507,6 +513,7 @@ async function buscarContratosVencendoEm7Dias() {
               console.log(`   🧩 Aprendi a API do telefone — as próximas vão direto.`);
               console.log(`      modelo: ${apiTemplate}`);
               console.log(`      auth capturado? ${dadosPessoaisHeaders && (dadosPessoaisHeaders.authorization || dadosPessoaisHeaders.Authorization) ? 'sim' : 'NÃO (só cookie)'}`);
+              console.log(`      headers do app: ${Object.keys(dadosPessoaisHeaders || {}).join(', ')}`);
             }
           }
 
