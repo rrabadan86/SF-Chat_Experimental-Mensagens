@@ -94,6 +94,25 @@ async function voltarParaLista(page) {
   return false;
 }
 
+/**
+ * Busca o /dadosPessoais DIRETO na API do EVO, por dentro da página (o fetch
+ * herda os cookies da sessão; reenviamos também o Authorization capturado da 1ª
+ * chamada real). Devolve o JSON ou null. Sem clique, sem modal — imune ao
+ * problema de o painel de detalhe ficar preso.
+ */
+async function buscarDadosViaApi(page, url, headersCapturados) {
+  const auth = headersCapturados && (headersCapturados.authorization || headersCapturados.Authorization);
+  return page.evaluate(async (u, authToken) => {
+    try {
+      const h = { 'Accept': 'application/json' };
+      if (authToken) h['Authorization'] = authToken;
+      const r = await fetch(u, { credentials: 'include', headers: h });
+      if (!r.ok) return null;
+      return await r.json();
+    } catch (_) { return null; }
+  }, url, auth || null).catch(() => null);
+}
+
 async function buscarContratosVencendoEm7Dias() {
   const alvoCalculado = dataAlvoD7();
   const alvoStr = `${String(alvoCalculado.getDate()).padStart(2,'0')}/${String(alvoCalculado.getMonth()+1).padStart(2,'0')}`;
@@ -126,8 +145,14 @@ async function buscarContratosVencendoEm7Dias() {
   let clientesIntercept = [];
   let dadosPessoaisCapturado = null;
   let dadosPessoaisUrl = null;
+  let dadosPessoaisHeaders = null; // headers de auth da 1ª chamada (p/ replay via fetch)
   await page.setRequestInterception(true);
-  page.on('request', req => { req.continue(); });
+  page.on('request', req => {
+    if (req.url().includes('/dadosPessoais')) {
+      try { dadosPessoaisHeaders = req.headers(); } catch (_) { /* ignore */ }
+    }
+    req.continue();
+  });
   page.on('response', async (res) => {
     const url = res.url();
     try {
@@ -430,59 +455,72 @@ async function buscarContratosVencendoEm7Dias() {
     await sleep(6000);
     console.log(`📊 ${clientesIntercept.length} cliente(s) capturados após o filtro de data\n`);
 
+    // Template da API do telefone (aprendido na 1ª aluna): trocamos o id dela
+    // por {ID} e depois buscamos as demais DIRETO na API, sem clicar na tela.
+    let apiTemplate = null;
+
     for (const c of clientesIntercept) {
       const id = c.idCliente;
       console.log(`📞 Buscando telefone de: ${c.nome} (ID: ${id})...`);
 
-      // Garante que estamos na LISTA (sem detalhe/backdrop aberto) antes de
-      // clicar. Era isso que se perdia: depois da 1ª aluna, o painel de detalhe
-      // ficava aberto e o clique na próxima caía no backdrop → nada abria.
-      await voltarParaLista(page);
-
       let telefone = '';
-      for (let tentativa = 1; tentativa <= 3 && !telefone; tentativa++) {
-        dadosPessoaisCapturado = null;
 
-        const clicou = await page.evaluate((nome) => {
-          const alvo = (nome || '').substring(0, 18);
-          for (const tr of document.querySelectorAll('table tbody tr')) {
-            if ((tr.textContent || '').includes(alvo) && tr.offsetParent !== null) {
-              (tr.querySelector('a, td') || tr).click();
-              return true;
-            }
-          }
-          return false;
-        }, c.nome);
-
-        if (clicou) {
-          for (let t = 0; t < 24 && !dadosPessoaisCapturado; t++) await sleep(500); // até 12s
-          telefone = extrairTelefone(dadosPessoaisCapturado) || '';
-        } else {
-          console.log(`   ⚠️  não achei a linha da aluna (tentativa ${tentativa}/3)`);
-        }
-
-        await voltarParaLista(page); // fecha o detalhe e confirma a lista pronta
-
-        if (!telefone && clicou && tentativa < 3) {
-          console.log(`   ↻ dados não vieram — tentando de novo (${tentativa}/3)...`);
-        }
+      // ── Caminho rápido: busca direto na API por ID (sem mexer na tela) ──
+      if (apiTemplate) {
+        const url = apiTemplate.replace('{ID}', String(id));
+        const json = await buscarDadosViaApi(page, url, dadosPessoaisHeaders);
+        telefone = extrairTelefone(json) || '';
+        if (telefone) console.log(`   📱 ${telefone} (via API)`);
       }
 
-      if (telefone) {
-        console.log(`   📱 ${telefone}`);
-      } else {
-        console.log(`   ⚠️  telefone não encontrado após 3 tentativas.`);
-        // Diagnóstico: revela por que o detalhe não abriu (lista sumiu? modal preso?).
-        const estado = await page.evaluate(() => ({
-          url: location.href,
-          temTabela: !!document.querySelector('table tbody tr'),
-          linhas: document.querySelectorAll('table tbody tr').length,
-          backdrop: !!document.querySelector('.md-dialog-backdrop, md-backdrop, .cdk-overlay-backdrop, .modal-backdrop'),
-          dialogos: Array.from(document.querySelectorAll('md-dialog, .md-dialog-container, [role="dialog"], .modal'))
-            .filter(e => e.offsetParent !== null).length,
-        })).catch(() => null);
-        if (estado) console.log(`      🔎 estado: tabela=${estado.temTabela} linhas=${estado.linhas} backdrop=${estado.backdrop} dialogos=${estado.dialogos}`);
-        if (dadosPessoaisUrl) console.log(`      🔎 URL do dadosPessoais (1º ok): ${dadosPessoaisUrl}`);
+      // ── Fallback / 1ª aluna: clica na tela para pegar o telefone E aprender
+      //    a URL da API (que só descobrimos quando o EVO a chama de verdade). ──
+      if (!telefone) {
+        await voltarParaLista(page);
+        for (let tentativa = 1; tentativa <= 3 && !telefone; tentativa++) {
+          dadosPessoaisCapturado = null;
+          dadosPessoaisUrl = null;
+
+          const clicou = await page.evaluate((nome) => {
+            const alvo = (nome || '').substring(0, 18);
+            for (const tr of document.querySelectorAll('table tbody tr')) {
+              if ((tr.textContent || '').includes(alvo) && tr.offsetParent !== null) {
+                (tr.querySelector('a, td') || tr).click();
+                return true;
+              }
+            }
+            return false;
+          }, c.nome);
+
+          if (clicou) {
+            for (let t = 0; t < 24 && !dadosPessoaisCapturado; t++) await sleep(500); // até 12s
+            telefone = extrairTelefone(dadosPessoaisCapturado) || '';
+            // aprende o template a partir da URL real (troca o id desta aluna por {ID})
+            if (!apiTemplate && dadosPessoaisUrl && dadosPessoaisUrl.includes(String(id))) {
+              apiTemplate = dadosPessoaisUrl.replace(String(id), '{ID}');
+              console.log(`   🧩 Aprendi a API do telefone — as próximas vão direto.`);
+            }
+          }
+
+          await voltarParaLista(page); // fecha o detalhe e confirma a lista pronta
+          if (!telefone && clicou && tentativa < 3) {
+            console.log(`   ↻ dados não vieram — tentando de novo (${tentativa}/3)...`);
+          }
+        }
+        if (telefone) console.log(`   📱 ${telefone}`);
+      }
+
+      // ── Última cartada: se aprendemos a API DEPOIS desta aluna falhar no
+      //    clique, tenta a API dela também. ──
+      if (!telefone && apiTemplate) {
+        const url = apiTemplate.replace('{ID}', String(id));
+        const json = await buscarDadosViaApi(page, url, dadosPessoaisHeaders);
+        telefone = extrairTelefone(json) || '';
+        if (telefone) console.log(`   📱 ${telefone} (via API, 2ª tentativa)`);
+      }
+
+      if (!telefone) {
+        console.log(`   ⚠️  telefone não encontrado (EVO pode estar instável — chamado 427263).`);
       }
 
       clientesCompletos.push({
