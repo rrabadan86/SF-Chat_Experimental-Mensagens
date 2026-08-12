@@ -11,6 +11,16 @@ const ID_FILIAL = 15;
 
 // Modo simulação por padrão. Use --enviar para realmente enviar.
 const MODO_ENVIO = process.argv.includes('--enviar');
+// --somente=555199...,556299...  → envia SÓ para esses números (o resto é pulado).
+// Útil para reenviar a poucas pessoas específicas. Compara só os dígitos.
+const SOMENTE = (() => {
+  const a = process.argv.find(x => x.startsWith('--somente='));
+  if (!a) return null;
+  const set = new Set(a.split('=').slice(1).join('=').split(',')
+    .map(s => s.replace(/\D/g, '').replace(/^55/, '')).filter(Boolean));
+  return set.size ? set : null;
+})();
+const soDigitosSemDDI = (t) => String(t || '').replace(/\D/g, '').replace(/^55/, '');
 
 function formatarData(val) {
   if (!val) return 'em breve';
@@ -618,9 +628,21 @@ async function main(modoEnvioParam) {
     return { enviadas: 0, falhas: 0, puladas: foraDoPrazo.length, clientes: [] };
   }
 
+  // Filtro opcional --somente: mantém apenas os números indicados.
+  let alvoClientes = clientes;
+  if (SOMENTE) {
+    const antes = clientes.length;
+    alvoClientes = clientes.filter(c => SOMENTE.has(soDigitosSemDDI(c.telefone)));
+    console.log(`\n🎯 Filtro --somente ativo: ${alvoClientes.length} de ${antes} contrato(s) batem com os números informados.`);
+    if (alvoClientes.length === 0) {
+      console.log('⚠️  Nenhum dos contratos do dia tem os números informados. Confira os números e a --data.');
+      return { enviadas: 0, falhas: 0, puladas: clientes.length, clientes: [] };
+    }
+  }
+
   console.log('\n─────────────────────────────────────────────────────');
-  console.log(`🎯 Encontramos ${clientes.length} contrato(s) vencendo em ${fmt(alvo)}:`);
-  clientes.forEach((c, i) => {
+  console.log(`🎯 ${SOMENTE ? 'Vou avisar' : 'Encontramos'} ${alvoClientes.length} contrato(s) vencendo em ${fmt(alvo)}:`);
+  alvoClientes.forEach((c, i) => {
     console.log(`${i + 1}. ${c.nome} (ID: ${c.id})`);
     console.log(`   Contrato:   ${c.contrato}`);
     console.log(`   Vencimento: ${c.vencimento}`);
@@ -630,17 +652,17 @@ async function main(modoEnvioParam) {
 
   if (!modoEnvio) {
     console.log('🧪 Simulação concluída. Confira os telefones acima.');
-    console.log('   Para enviar de verdade: node src/renovar-contratos.js --enviar');
-    return { enviadas: 0, falhas: 0, puladas: foraDoPrazo.length, clientes };
+    console.log('   Para enviar de verdade: acrescente --enviar ao comando.');
+    return { enviadas: 0, falhas: 0, puladas: foraDoPrazo.length, clientes: alvoClientes };
   }
 
-  const comTelefone = clientes.filter(c => c.telefone);
+  const comTelefone = alvoClientes.filter(c => c.telefone);
   if (comTelefone.length === 0) {
     console.log('⚠️  Nenhum cliente com telefone. Nada a enviar.');
-    return { enviadas: 0, falhas: 0, puladas: clientes.length, clientes };
+    return { enviadas: 0, falhas: 0, puladas: alvoClientes.length, clientes: alvoClientes };
   }
 
-  const resultados = await enviarWhatsApp(clientes);
+  const resultados = await enviarWhatsApp(alvoClientes);
   console.log(`\n✅ Enviadas: ${resultados.enviadas} | ❌ Falhas: ${resultados.falhas} | ⏭️ Puladas: ${resultados.puladas}\n`);
 
   // Um único aviso no celular com o total (só quando houve falha).
