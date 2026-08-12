@@ -107,10 +107,11 @@ async function buscarDadosViaApi(page, url, headersCapturados) {
       const h = { 'Accept': 'application/json' };
       if (authToken) h['Authorization'] = authToken;
       const r = await fetch(u, { credentials: 'include', headers: h });
-      if (!r.ok) return null;
-      return await r.json();
-    } catch (_) { return null; }
-  }, url, auth || null).catch(() => null);
+      let json = null;
+      try { json = await r.json(); } catch (_) { /* corpo não-JSON */ }
+      return { status: r.status, ok: r.ok, json };
+    } catch (e) { return { status: 0, ok: false, err: String(e && e.message || e) }; }
+  }, url, auth || null).catch((e) => ({ status: -1, ok: false, err: String(e && e.message || e) }));
 }
 
 async function buscarContratosVencendoEm7Dias() {
@@ -468,9 +469,10 @@ async function buscarContratosVencendoEm7Dias() {
       // ── Caminho rápido: busca direto na API por ID (sem mexer na tela) ──
       if (apiTemplate) {
         const url = apiTemplate.replace('{ID}', String(id));
-        const json = await buscarDadosViaApi(page, url, dadosPessoaisHeaders);
-        telefone = extrairTelefone(json) || '';
+        const resp = await buscarDadosViaApi(page, url, dadosPessoaisHeaders);
+        telefone = extrairTelefone(resp && resp.json) || '';
         if (telefone) console.log(`   📱 ${telefone} (via API)`);
+        else console.log(`   🔎 API status=${resp && resp.status}${resp && resp.err ? ' err=' + resp.err : ''}${resp && resp.json ? ' (json ok, sem telefone)' : ''}`);
       }
 
       // ── Fallback / 1ª aluna: clica na tela para pegar o telefone E aprender
@@ -499,6 +501,8 @@ async function buscarContratosVencendoEm7Dias() {
             if (!apiTemplate && dadosPessoaisUrl && dadosPessoaisUrl.includes(String(id))) {
               apiTemplate = dadosPessoaisUrl.replace(String(id), '{ID}');
               console.log(`   🧩 Aprendi a API do telefone — as próximas vão direto.`);
+              console.log(`      modelo: ${apiTemplate}`);
+              console.log(`      auth capturado? ${dadosPessoaisHeaders && (dadosPessoaisHeaders.authorization || dadosPessoaisHeaders.Authorization) ? 'sim' : 'NÃO (só cookie)'}`);
             }
           }
 
@@ -514,8 +518,8 @@ async function buscarContratosVencendoEm7Dias() {
       //    clique, tenta a API dela também. ──
       if (!telefone && apiTemplate) {
         const url = apiTemplate.replace('{ID}', String(id));
-        const json = await buscarDadosViaApi(page, url, dadosPessoaisHeaders);
-        telefone = extrairTelefone(json) || '';
+        const resp = await buscarDadosViaApi(page, url, dadosPessoaisHeaders);
+        telefone = extrairTelefone(resp && resp.json) || '';
         if (telefone) console.log(`   📱 ${telefone} (via API, 2ª tentativa)`);
       }
 
