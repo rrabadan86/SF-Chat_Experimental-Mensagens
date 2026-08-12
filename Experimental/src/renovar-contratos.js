@@ -106,7 +106,11 @@ async function buscarDadosViaApi(page, url, headersCapturados) {
     try {
       const h = { 'Accept': 'application/json' };
       if (authToken) h['Authorization'] = authToken;
-      const r = await fetch(u, { credentials: 'include', headers: h });
+      // credentials:'omit' de propósito: a API do EVO autentica por TOKEN
+      // (Authorization), não por cookie. Com 'include', o navegador bloqueia o
+      // fetch cross-subdomínio por CORS (ACAO '*' + credenciais) → "Failed to
+      // fetch". Sem cookies, o token basta e o CORS libera.
+      const r = await fetch(u, { credentials: 'omit', headers: h });
       let json = null;
       try { json = await r.json(); } catch (_) { /* corpo não-JSON */ }
       return { status: r.status, ok: r.ok, json };
