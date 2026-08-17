@@ -501,7 +501,22 @@ async function runAusentes10Dias() {
 
   if (DIAG) { try { fs.writeFileSync(DIAG_FILE, `Diagnóstico ausentes ${DIAS_MIN}+ dias — ${new Date().toLocaleString('pt-BR')}\n`, 'utf8'); } catch (_) {} }
 
-  const { ausentes, trancadas } = await coletarAusentes();
+  // Retry: o puppeteer às vezes solta "detached Frame" (frame morto na
+  // navegação, comum com o EVO instável) — sem isso, o job morria na 1ª falha.
+  // coletarAusentes() fecha o próprio navegador, então cada tentativa é limpa.
+  let ausentes, trancadas, ultimoErro;
+  for (let tentativa = 1; tentativa <= 3; tentativa++) {
+    try {
+      ({ ausentes, trancadas } = await coletarAusentes());
+      ultimoErro = null;
+      break;
+    } catch (e) {
+      ultimoErro = e;
+      console.log(`   ⚠️  Tentativa ${tentativa}/3 falhou: ${e.message}`);
+      if (tentativa < 3) { console.log('   ⏳ aguardando 20s antes de tentar de novo...'); await sleep(20000); }
+    }
+  }
+  if (ultimoErro) throw ultimoErro;
   if (DIAG) { console.log(`\n🔬 DIAG pronto — veja o painel completo de cada aluna em:\n   ${DIAG_FILE}\n`); return { total: ausentes.length, diag: true }; }
 
   if (ausentes.length === 0 && trancadas.length === 0) {

@@ -143,48 +143,54 @@ function printJobSummary(title, classes, results) {
   console.log('╚═════════════════════════════════════════════════════╝\n');
 }
 
+/**
+ * Lê algo do EVO com retry (navegador novo a cada tentativa). O puppeteer solta
+ * "detached Frame" quando o frame morre na navegação — sem retry, o job morria
+ * na 1ª falha e a lead não recebia a confirmação. Tenta até 3x.
+ */
+async function scrapeComRetry(fn, label) {
+  let ultimo;
+  for (let t = 1; t <= 3; t++) {
+    const scraper = new EvoScraper();
+    try {
+      await scraper.init();
+      await scraper.login();
+      return await fn(scraper);
+    } catch (e) {
+      ultimo = e;
+      log(`⚠️  ${label}: tentativa ${t}/3 falhou: ${e.message}`);
+      if (t < 3) await new Promise(r => setTimeout(r, 20000));
+    } finally {
+      try { await scraper.close(); } catch (_) { /* ignore */ }
+    }
+  }
+  throw ultimo;
+}
+
 async function executeMorningJob() {
-  const scraper = new EvoScraper();
+  const classes = await scrapeComRetry(s => s.getTodayAfternoonClasses(), 'Confirmação HOJE');
+  if (classes.length === 0) { printJobSummary('Hoje (após 12h)', [], {}); return; }
+
   const whatsapp = new WhatsAppSender(); // conexão própria deste job
   try {
-    await scraper.init();
-    await scraper.login();
-    const classes = await scraper.getTodayAfternoonClasses();
-
-    if (classes.length === 0) {
-      printJobSummary('Hoje (após 12h)', [], {});
-      return;
-    }
-
-    // Só conecta ao WhatsApp se há mensagens a enviar
     await whatsapp.init();
     const results = await whatsapp.sendBulkMessages(classes, config.messagesToday);
     printJobSummary('Hoje (após 12h)', classes, results);
   } finally {
-    await scraper.close();
     try { await whatsapp.close(); } catch (e) { /* ignore */ }
   }
 }
 
 async function executeAfternoonJob() {
-  const scraper = new EvoScraper();
+  const classes = await scrapeComRetry(s => s.getTomorrowMorningClasses(), 'Confirmação AMANHÃ');
+  if (classes.length === 0) { printJobSummary('Amanhã (até 11:30)', [], {}); return; }
+
   const whatsapp = new WhatsAppSender(); // conexão própria deste job
   try {
-    await scraper.init();
-    await scraper.login();
-    const classes = await scraper.getTomorrowMorningClasses();
-
-    if (classes.length === 0) {
-      printJobSummary('Amanhã (até 11:30)', [], {});
-      return;
-    }
-
-    // Só conecta ao WhatsApp se há mensagens a enviar
     await whatsapp.init();
     const results = await whatsapp.sendBulkMessages(classes, config.messagesTomorrow);
     printJobSummary('Amanhã (até 11:30)', classes, results);
   } finally {
-    await scraper.close();
     try { await whatsapp.close(); } catch (e) { /* ignore */ }
   }
 }
