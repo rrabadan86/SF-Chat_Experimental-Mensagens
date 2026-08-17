@@ -32,16 +32,28 @@ async function runNoShow(periodoFiltro) {
   console.log('╚════════════════════════════════════════════════════╝');
   console.log(`   Período: ${label}\n`);
 
-  // 1. Lê as faltas de hoje no EVO
-  const scraper = new EvoScraper();
+  // 1. Lê as faltas de hoje no EVO — com retry. O puppeteer às vezes solta um
+  //    "detached Frame" (frame morto na navegação, comum com o EVO instável);
+  //    antes isso matava o job. Agora tenta até 3x com um navegador novo.
   let alunos = [];
-  try {
-    await scraper.init();
-    await scraper.login();
-    alunos = await scraper.getTodayNoShowClasses(periodoFiltro);
-  } finally {
-    await scraper.close();
+  let ultimoErro = null;
+  for (let tentativa = 1; tentativa <= 3; tentativa++) {
+    const scraper = new EvoScraper();
+    try {
+      await scraper.init();
+      await scraper.login();
+      alunos = await scraper.getTodayNoShowClasses(periodoFiltro);
+      ultimoErro = null;
+      break;
+    } catch (e) {
+      ultimoErro = e;
+      console.log(`   ⚠️  Tentativa ${tentativa}/3 falhou: ${e.message}`);
+      if (tentativa < 3) { console.log('   ⏳ aguardando 20s antes de tentar de novo...'); await sleep(20000); }
+    } finally {
+      try { await scraper.close(); } catch (_) { /* ignore */ }
+    }
   }
+  if (ultimoErro) throw ultimoErro;
 
   if (alunos.length === 0) {
     console.log('\n┌─────────────────────────────────────────────────────┐');
