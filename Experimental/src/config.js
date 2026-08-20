@@ -84,6 +84,8 @@ const config = {
     noShowMorning:    '30 11 * * 1-6',  // 11:30 seg-sáb (faltas nas aulas da manhã → remarcar)
     noShowAfternoon:  '30 19 * * 1-6',  // 19:30 seg-sáb (faltas nas aulas da tarde/noite → remarcar)
     slotsPush:        '*/10 5-22 * * *', // a cada 10 min, 05h-22h (calcula a grade e envia ao formulário)
+    circuitoConvoca:  '15 16 * * 3',    // 16:15 quarta (convocatória do Circuito de sábado, com a professora)
+    circuitoLembrete: '15 16 * * 5',    // 16:15 sexta ("é amanhã!" no grupo Circuito Slim)
   },
 
   // Filtros de horário

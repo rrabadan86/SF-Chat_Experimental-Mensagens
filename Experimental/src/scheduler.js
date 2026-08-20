@@ -27,6 +27,30 @@ function runSlotsPush() {
   });
 }
 
+// Convocatória do Circuito (quarta): lê a professora na Grade (usa o scraper do
+// EVO), então respeita o jobRunning. Se outro job estiver rodando, espera e
+// tenta de novo (não pode logar no EVO em paralelo com outro job).
+function agendarCircuitoConvocacao(tentativa = 1) {
+  if (jobRunning) {
+    if (tentativa > 6) {
+      logError('Circuito convocatória', new Error('scraper ocupado — desisti após esperar ~9 min'));
+      return;
+    }
+    log(`⏳ Circuito: outro job em execução — tento de novo em 90s (tentativa ${tentativa})`);
+    setTimeout(() => agendarCircuitoConvocacao(tentativa + 1), 90000);
+    return;
+  }
+  jobRunning = true;
+  const start = new Date();
+  require('./enviar-circuito').runCircuitoConvocacao()
+    .then(() => log('✅ Circuito convocatória concluída'))
+    .catch(err => logError('Circuito convocatória', err))
+    .finally(() => {
+      jobRunning = false;
+      log(`⏱️  Circuito convocatória finalizada em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
+    });
+}
+
 function log(msg) {
   const ts = new Date().toLocaleString('pt-BR', {
     timeZone: 'America/Sao_Paulo',
@@ -615,6 +639,30 @@ async function main() {
 
   log(`📅 Job RENOVAÇÃO agendado: ${config.schedule.renewal} (14:30 todos os dias)`);
   console.log('   → Avisa a aluna 7 dias antes do vencimento do contrato');
+
+  // Schedule: 16:15 quarta → Convocatória do Circuito (busca a professora de
+  // sábado na Grade > Horários e posta no grupo "Circuito Slim").
+  if (config.schedule.circuitoConvoca) {
+    cron.schedule(config.schedule.circuitoConvoca, () => {
+      log('⏰ Cron disparado: Circuito — convocatória');
+      agendarCircuitoConvocacao();
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job CIRCUITO (convocatória) agendado: ${config.schedule.circuitoConvoca} (16:15 quarta)`);
+    console.log('   → Convoca para o Circuito de sábado, com o nome da professora');
+  }
+
+  // Schedule: 16:15 sexta → Lembrete "É amanhã!" no grupo "Circuito Slim".
+  // Só posta no grupo (não usa o EVO), então roda independente do jobRunning.
+  if (config.schedule.circuitoLembrete) {
+    cron.schedule(config.schedule.circuitoLembrete, () => {
+      log('⏰ Cron disparado: Circuito — lembrete');
+      require('./enviar-circuito').runCircuitoLembrete()
+        .then(() => log('✅ Circuito lembrete enviado'))
+        .catch(err => logError('Circuito lembrete', err));
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job CIRCUITO (lembrete) agendado: ${config.schedule.circuitoLembrete} (16:15 sexta)`);
+    console.log('   → Lembrete "é amanhã" no grupo Circuito Slim');
+  }
 
   // Schedule: a cada 5 min (05h-22h) → calcula a grade de horários NO VPS e
   // ENVIA pronta para o formulário (Render). Assim a aluna vê os horários na
