@@ -81,6 +81,9 @@ async function launchInstagramChromium() {
     executablePath: process.env.CHROMIUM_PATH || undefined,
     userDataDir: IG_PROFILE_DIR,
     defaultViewport: null,
+    // Falha em ~60s se uma chamada CDP travar, em vez do padrão de 180s (evita
+    // ficar "pendurado" minutos quando o editor do Instagram fica ocupado).
+    protocolTimeout: 60000,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',

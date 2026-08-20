@@ -191,33 +191,33 @@ async function enviarDM(page, username, texto) {
   //    Enter no Instagram ENVIA a mensagem. Para manter as quebras de linha,
   //    digitamos linha por linha usando Shift+Enter, e só no fim damos Enter.
   try {
-    await page.click(composer);
-    await sleep(800);
+    // Foca o campo pelo ELEMENTO (mais leve que page.click, que faz scroll +
+    // hit-test e pode travar no protocolTimeout quando o editor do IG está ocupado).
+    const campo = await page.$(composer);
+    if (!campo) throw new Error('campo de digitação sumiu antes de digitar');
+    await campo.focus();
+    await sleep(500);
 
     const linhas = texto.split('\n');
     for (let li = 0; li < linhas.length; li++) {
       if (linhas[li].length > 0) {
-        await page.keyboard.type(linhas[li], { delay: 15 });
+        await page.keyboard.type(linhas[li], { delay: 12 });
       }
       if (li < linhas.length - 1) {
         // quebra de linha SEM enviar
         await page.keyboard.down('Shift');
         await page.keyboard.press('Enter');
         await page.keyboard.up('Shift');
-        await sleep(80);
+        await sleep(60);
       }
     }
-    await sleep(1200);
+    await sleep(1000);
     await page.keyboard.press('Enter'); // envia a mensagem completa
-    await sleep(3000);
-
-    // 7. Confirma que a mensagem apareceu na conversa
-    const confirmou = await page.evaluate((trecho) => {
-      const body = document.body.innerText || '';
-      return body.includes(trecho);
-    }, texto.slice(0, 25));
-
-    return confirmou ? 'sent' : 'sent'; // se digitou e deu Enter, considera enviado
+    await sleep(2500);
+    // NÃO fazemos evaluate de "confirmação": além de redundante (o Enter já
+    // enviou), esse evaluate podia TRAVAR 180s no protocolTimeout com o editor
+    // do Instagram ocupado — foi o que derrubava o envio no final.
+    return 'sent';
   } catch (e) {
     console.log('   ⚠️  Erro ao digitar/enviar: ' + (e && e.message));
     await salvarShot(page, 'ig-erro-envio');
