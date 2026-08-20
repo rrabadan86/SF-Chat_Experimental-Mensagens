@@ -1,5 +1,32 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
 
+// Nome do Studio como aparece nas mensagens para a aluna. Cada franquia define o
+// seu no .env (STUDIO_NOME); o padrão mantém a unidade original funcionando igual.
+const STUDIO_NOME = process.env.STUDIO_NOME || 'Studio Slimfit Setor Bueno';
+
+// Mapa professora → arquivo de áudio (pós-aula). O padrão é o da unidade original.
+// Cada franquia pode sobrescrever no .env com AUDIO_MAP (um JSON), ex.:
+//   AUDIO_MAP={"ana":"A-Ana-Pos","carla":"A-Carla-Pos"}
+function mapaAudioPadrao() {
+  return {
+    taynara: 'A-Tay-Pós',
+    luiza:   'A-Luiza-Pós',
+    raissa:  'A-Raissa-Pós',
+    beatriz: 'A-Bia-Pós',
+    bia:     'A-Bia-Pós',
+  };
+}
+function mapaAudio() {
+  if (process.env.AUDIO_MAP) {
+    try {
+      return JSON.parse(process.env.AUDIO_MAP);
+    } catch (e) {
+      console.warn('⚠️  AUDIO_MAP inválido no .env (usando o mapa padrão):', e.message);
+    }
+  }
+  return mapaAudioPadrao();
+}
+
 const config = {
   evo: {
     url: process.env.EVO_URL || 'https://slimfit.w12app.com.br',
@@ -15,11 +42,11 @@ const config = {
 
   // Mensagem para aulas de HOJE (enviada às 08:30)
   messagesToday: (nome, horario) =>
-    `Olá, ${nome}! 😊\n\nTudo bem? Aqui é do Studio Slimfit Setor Bueno!\n\nEstamos mandando essa mensagem para confirmar a sua aula experimental de logo mais que está agendada para hoje às ${horario}.\n\nPode confirmar sua presença? Estamos te esperando! 💪`,
+    `Olá, ${nome}! 😊\n\nTudo bem? Aqui é do ${STUDIO_NOME}!\n\nEstamos mandando essa mensagem para confirmar a sua aula experimental de logo mais que está agendada para hoje às ${horario}.\n\nPode confirmar sua presença? Estamos te esperando! 💪`,
 
   // Mensagem para aulas de AMANHÃ (enviada às 16:30)
   messagesTomorrow: (nome, horario) =>
-    `Olá, ${nome}! 😊\n\nTudo bem? Aqui é do Studio Slimfit Setor Bueno!\n\nEstamos mandando essa mensagem para confirmar a sua aula experimental que está agendada para amanhã às ${horario}.\n\nPode confirmar sua presença? Estamos te esperando! 💪`,
+    `Olá, ${nome}! 😊\n\nTudo bem? Aqui é do ${STUDIO_NOME}!\n\nEstamos mandando essa mensagem para confirmar a sua aula experimental que está agendada para amanhã às ${horario}.\n\nPode confirmar sua presença? Estamos te esperando! 💪`,
 
   // Mensagem de follow-up pós aula experimental — para quem AINDA NÃO fechou
   messageFollowup: (nomeProfessora) =>
@@ -36,13 +63,7 @@ const config = {
   // Áudios de follow-up (pasta e mapeamento professora → arquivo)
   audio: {
     dir: process.env.AUDIO_DIR || require('path').resolve(__dirname, '..', 'audios'),
-    map: {
-      taynara: 'A-Tay-Pós',
-      luiza:   'A-Luiza-Pós',
-      raissa:  'A-Raissa-Pós',
-      beatriz: 'A-Bia-Pós',
-      bia:     'A-Bia-Pós',
-    },
+    map: mapaAudio(),
   },
 
   // Cron schedules
