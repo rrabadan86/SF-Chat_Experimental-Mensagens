@@ -4,6 +4,7 @@ const path = require('path');
 const {
   connectEdge,
   coletarSeguidores,
+  aplicarCookiesSalvos,
   carregarConhecidos,
   salvarConhecidos,
   sleep,
@@ -219,6 +220,8 @@ async function testeEnvio(alvo) {
   try {
     const pages = await browser.pages();
     const page = pages[0] || await browser.newPage();
+    // Injeta os cookies da sessão (mesma sessão usada na leitura) antes de abrir.
+    await aplicarCookiesSalvos(page);
     // Garante estar logado (abre o IG)
     await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
     await sleep(3000);

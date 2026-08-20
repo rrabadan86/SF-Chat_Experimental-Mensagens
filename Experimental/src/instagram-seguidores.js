@@ -347,6 +347,7 @@ module.exports = {
   connectEdge,
   launchInstagramChromium,
   coletarSeguidores,
+  aplicarCookiesSalvos,
   carregarConhecidos,
   salvarConhecidos,
   sleep,
