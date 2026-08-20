@@ -83,6 +83,7 @@ const config = {
     resumoDia:        '45 19 * * *',    // 19:45 todos os dias (resumo do dia das experimentais no grupo)
     noShowMorning:    '30 11 * * 1-6',  // 11:30 seg-sáb (faltas nas aulas da manhã → remarcar)
     noShowAfternoon:  '30 19 * * 1-6',  // 19:30 seg-sáb (faltas nas aulas da tarde/noite → remarcar)
+    slotsPush:        '*/5 5-22 * * *', // a cada 5 min, 05h-22h (calcula a grade e envia ao formulário)
   },
 
   // Filtros de horário

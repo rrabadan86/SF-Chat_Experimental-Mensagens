@@ -9,9 +9,23 @@ const { pullConfirmacoesNuvem } = require('./pull-confirmacoes-nuvem');
 const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
 
 // ─── Log com timestamp ─────────────────────────────────────
 const LOG_DIR = path.resolve(__dirname, '..', 'logs');
+
+// Calcula a grade de horários (script Python, rápido no VPS) e a envia pronta ao
+// formulário na Render. Processo separado e leve — não usa o navegador/WhatsApp.
+function runSlotsPush() {
+  const dir = path.resolve(__dirname, 'agendamento_evo');
+  const script = path.join(dir, 'push_slots.py');
+  const py = process.env.PYTHON_BIN || 'python3';
+  execFile(py, [script], { cwd: dir, timeout: 120000 }, (err, stdout, stderr) => {
+    const out = (stdout || stderr || '').trim();
+    if (err) { logError('Grade→formulário (push_slots)', err); if (out) console.log('   ' + out); return; }
+    log('🗓️  ' + (out || 'grade enviada ao formulário'));
+  });
+}
 
 function log(msg) {
   const ts = new Date().toLocaleString('pt-BR', {
@@ -601,6 +615,18 @@ async function main() {
 
   log(`📅 Job RENOVAÇÃO agendado: ${config.schedule.renewal} (14:30 todos os dias)`);
   console.log('   → Avisa a aluna 7 dias antes do vencimento do contrato');
+
+  // Schedule: a cada 5 min (05h-22h) → calcula a grade de horários NO VPS e
+  // ENVIA pronta para o formulário (Render). Assim a aluna vê os horários na
+  // hora, sem a Render calcular (lento). É leve e NÃO usa o navegador/WhatsApp,
+  // então roda independente do jobRunning dos jobs pesados.
+  if (config.schedule.slotsPush) {
+    cron.schedule(config.schedule.slotsPush, runSlotsPush, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job GRADE→FORMULÁRIO agendado: ${config.schedule.slotsPush} (a cada 5 min, 05h-22h)`);
+    console.log('   → Calcula os horários e envia prontos ao formulário de agendamento');
+    // Empurra uma vez já no start (após restart, o formulário fica pronto logo).
+    setTimeout(runSlotsPush, 15000);
+  }
 
   // Schedule: 07:00 todos os dias → Boas-vindas a novos seguidores do Instagram.
   // DESLIGADO por padrão: a Meta bloqueia o navegador do VPS com 429. Religue
