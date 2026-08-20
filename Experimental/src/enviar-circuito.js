@@ -21,11 +21,30 @@ const HORA_ALVO = process.env.CIRCUITO_HORA || '09:45';       // horário do Cir
 const CHAVE = (process.env.CIRCUITO_ATIVIDADE || 'circuito').toLowerCase(); // atividade a procurar
 
 // ─── Mensagens (texto exato) ──────────────────────────────────────────────
+// A convocatória é montada em duas partes para permitir a @menção da professora
+// no meio (antes + @professora + depois).
+const MSG_ANTES = `🔥 SÁBADO É DIA DE QUEIMAR CALORIAS NO CIRCUITO! 🔥\n⚡️Comandada pela professora `;
+const MSG_DEPOIS = `.\n\nCheckin Aberto!!!\n\n⏰ Sábado às 09h45`;
 function msgConvocacao(professora) {
-  return `🔥 SÁBADO É DIA DE QUEIMAR CALORIAS NO CIRCUITO! 🔥\n`
-    + `⚡️Comandada pela professora ${professora}.\n\n`
-    + `Checkin Aberto!!!\n\n`
-    + `⏰ Sábado às 09h45`;
+  return MSG_ANTES + professora + MSG_DEPOIS;
+}
+
+// Telefone da professora para @marcar no grupo. Vem de PROFESSORAS_TEL no .env
+// (JSON: {"raissa":"5562999999999","taynara":"..."}), buscado pelo PRIMEIRO nome
+// (minúsculo). Sem telefone → a mensagem sai com o nome escrito, sem @.
+function mapaProfessorasTel() {
+  try {
+    if (process.env.PROFESSORAS_TEL) return JSON.parse(process.env.PROFESSORAS_TEL);
+  } catch (e) {
+    console.warn('⚠️  PROFESSORAS_TEL inválido no .env (ignorando):', e.message);
+  }
+  return {};
+}
+function telefoneDaProfessora(nome) {
+  const m = mapaProfessorasTel();
+  const inteiro = (nome || '').trim().toLowerCase();
+  const primeiro = inteiro.split(/\s+/)[0];
+  return m[primeiro] || m[inteiro] || null;
 }
 const MSG_LEMBRETE =
   `🔥 *É AMANHÃ!* 🔥\n`
@@ -122,13 +141,22 @@ async function runCircuitoConvocacao({ dry = false } = {}) {
     console.log(`   ↪️  Usando professora padrão do .env: ${professora}`);
   }
 
+  const tel = telefoneDaProfessora(professora);
   const msg = msgConvocacao(professora);
   console.log('\n--- MENSAGEM ---\n' + msg + '\n----------------');
+  console.log(tel ? `   👤 Vai @marcar a professora (tel configurado).` : `   ℹ️  Sem telefone da professora no .env → sai sem @ (só o nome).`);
   if (dry) { console.log('🧪 DRY — nada enviado.'); return; }
 
   const wa = require('./wa-client');
-  await wa.sendGrupo(GRUPO, msg);
-  console.log(`✅ Convocatória enviada no grupo "${GRUPO}".`);
+  if (tel) {
+    const g = await wa.acharGrupo(GRUPO);
+    if (!g) throw new Error('Grupo não encontrado: ' + GRUPO);
+    await wa.sendGrupoComMencao(g.id, MSG_ANTES, MSG_DEPOIS, tel);
+    console.log(`✅ Convocatória enviada no grupo "${GRUPO}" com @menção da professora.`);
+  } else {
+    await wa.sendGrupo(GRUPO, msg);
+    console.log(`✅ Convocatória enviada no grupo "${GRUPO}" (sem @ — telefone não configurado).`);
+  }
 }
 
 async function runCircuitoLembrete({ dry = false } = {}) {
