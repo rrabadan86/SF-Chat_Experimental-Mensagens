@@ -152,16 +152,14 @@ async function enviarDM(page, username, texto) {
   }
 
   // 4. Espera a CONVERSA/campo abrir (até ~18s). O IG pode navegar para /direct/
-  //    ou abrir um overlay (role=dialog). Antes era um sleep fixo de 6s — curto
-  //    demais quando o direct demora, e o campo não era achado → "indisponível".
+  //    ou abrir um overlay (role=dialog). PROCURA O CAMPO PRIMEIRO: só considera
+  //    "bloqueio" se o campo NUNCA aparecer (antes, uma frase solta na tela
+  //    disparava falso "indisponível" mesmo com o campo pronto).
   let composer = null;
+  let bloqFrase = null;
   for (let i = 0; i < 12; i++) {
     await sleep(1500);
     const r = await page.evaluate(() => {
-      const body = (document.body.innerText || '').toLowerCase();
-      if (body.includes('message unavailable') || body.includes('mensagem indisponível') ||
-          body.includes('mensagens indisponíveis') || body.includes("you can't message") ||
-          body.includes('não é possível enviar mensagem')) return { bloq: true };
       const sels = [
         'div[role="dialog"] div[role="textbox"][contenteditable="true"]',
         'div[role="textbox"][contenteditable="true"]',
@@ -169,15 +167,23 @@ async function enviarDM(page, username, texto) {
         'div[contenteditable="true"][aria-label]',
       ];
       for (const s of sels) { const el = document.querySelector(s); if (el && el.offsetWidth > 0) return { sel: s }; }
-      return {};
+      const body = (document.body.innerText || '').toLowerCase();
+      const frases = ['message unavailable', 'mensagem indisponível', 'mensagens indisponíveis',
+        "you can't message", 'não é possível enviar mensagem', 'this account is private'];
+      return { bloqFrase: frases.find(f => body.includes(f)) || null };
     });
-    if (r.bloq) { await salvarShot(page, 'ig-bloqueado'); return 'unavailable'; }
-    if (r.sel) { composer = r.sel; break; }
+    if (r.sel) { composer = r.sel; break; }         // campo achado → pode enviar
+    if (r.bloqFrase) bloqFrase = r.bloqFrase;        // registra, mas segue tentando
   }
 
   if (!composer) {
-    console.log('   ⚠️  Cliquei em "Mensagem" mas o campo de digitação não abriu.');
-    await salvarShot(page, 'ig-sem-composer');
+    if (bloqFrase) {
+      console.log(`   🚫 Bloqueio de mensagem detectado (frase: "${bloqFrase}").`);
+      await salvarShot(page, 'ig-bloqueado');
+    } else {
+      console.log('   ⚠️  Cliquei em "Mensagem" mas o campo de digitação não abriu.');
+      await salvarShot(page, 'ig-sem-composer');
+    }
     return 'unavailable';
   }
 
