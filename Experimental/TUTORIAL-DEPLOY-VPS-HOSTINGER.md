@@ -4,6 +4,13 @@ Guia completo para colocar a automação **`Experimental/`** rodando **online 24
 no VPS da Hostinger (Ubuntu 24.04). No final há também a seção do **`ChatBot/`
 (Sofia)**, que será migrado depois.
 
+> 📌 **Este arquivo é o registro da migração ORIGINAL** (unidade Setor Bueno).
+> Para **instalar o robô numa franquia nova**, use o **runbook** genérico e
+> pronto-pra-franquia em **`/implantacao`** do formulário
+> (`https://sf-formularioexperimental.onrender.com/implantacao`). Ele já parte do
+> `.env.example` e das variáveis por unidade (`STUDIO_NOME`, `AUDIO_MAP`, etc.).
+> Mantenha este documento como memória do primeiro deploy.
+
 > **VPS deste tutorial**
 > - IP: `2.24.87.131` · Host: `srv1867807.hstgr.cloud`
 > - SO: Ubuntu 24.04 LTS · 2 vCPU · 8 GB RAM · 100 GB disco
@@ -172,48 +179,58 @@ preciso instalar o Chrome manualmente.
 ## 📄 Etapa 4 — Criar o arquivo `.env`
 
 O `.env` guarda credenciais e caminhos. Ele **não** vem no Git (está no
-`.gitignore`). Crie-o dentro de `Experimental/`:
+`.gitignore`). O jeito mais simples é **copiar o modelo `.env.example`** (que já
+vem no repositório, com todos os campos comentados e os `[POR UNIDADE]`
+destacados) e preencher:
 
 ```bash
 cd ~/SF-Chat_Experimental-Mensagens/Experimental
-nano .env
+cp .env.example .env
+nano .env        # preencha; salve com Ctrl+O, Enter, Ctrl+X
 ```
 
-Cole e ajuste os valores reais:
+Campos essenciais:
 
 ```dotenv
+# ─── Identidade da unidade ─────────────────────────────────
+STUDIO_NOME=Studio Slimfit Setor Bueno
+# mapa professora->audio (JSON). Ex.: {"taynara":"A-Tay-Pós"}
+AUDIO_MAP={"taynara":"A-Tay-Pós","luiza":"A-Luiza-Pós"}
+
 # ─── EVO (sistema de gestão) ───────────────────────────────
-EVO_URL=https://slimfit.w12app.com.br
+# Use o evo5: o login ocorre nele e o domínio seguro é capturado sozinho.
+EVO_URL=https://evo5.w12app.com.br
 EVO_EMAIL=seu_email@gmail.com
 EVO_PASSWORD=sua_senha
+# troque o número da filial no caminho pelo da unidade:
+EVO_EXPERIMENTAL_PATH=#/app/slimfit/15/gerencial/aula-experimental
 
-# ─── Navegador (LINUX headless) ────────────────────────────
-# true = sem janela (obrigatório no VPS). Só use false em PC com tela.
-HEADLESS=true
-# (Opcional) pasta da sessão do WhatsApp. Padrão: ./whatsapp-chrome-data
-# WA_PROFILE_DIR=/root/wa-profile
+# ─── Navegador ─────────────────────────────────────────────
+# false + Xvfb: o EVO (Angular) é instável em headless puro. Ver o
+# "RESUMO DEFINITIVO" no topo — no VPS rodamos via xvfb-run.
+HEADLESS=false
 # (Opcional) usar Chromium do sistema em vez do do Puppeteer:
 # CHROMIUM_PATH=/usr/bin/chromium-browser
 
-# ─── Google Sheets / Service Account (se usar as planilhas) ─
-# Cole o JSON da service account em UMA linha, ou aponte para um arquivo.
-# GOOGLE_SA_KEY={"type":"service_account", ...}
+# ─── Grupo / planilha / alertas ────────────────────────────
+GRUPO_EQUIPE=Equipe SlimFit
+# GOOGLE_SA_KEY=./google-sa.json   (planilha compartilhada c/ a conta de serviço)
 SHEETS_ID=
 SHEETS_ABA=
+NTFY_TOPIC=slimfit-alertas-unidade
 
 # ─── Integração com o formulário na nuvem (opcional) ───────
 FORM_CLOUD_URL=
-FORM_OUTBOX_TOKEN=
-
-# ─── Instagram / grupos (opcional) ─────────────────────────
-IG_USERNAME=
-GRUPO_EQUIPE=
+FORM_OUTBOX_TOKEN=     # o MESMO valor no .env da VPS e na Render
 ```
 
 Salve no nano: `Ctrl+O`, `Enter`, `Ctrl+X`.
 
-> Preencha só o que você realmente usa. Para a confirmação de aulas
-> experimentais bastam `EVO_URL`, `EVO_EMAIL`, `EVO_PASSWORD` e `HEADLESS=true`.
+> ⚠️ **`HEADLESS`:** a configuração validada em produção usa **`HEADLESS=false`**
+> com **Xvfb** (tela virtual), porque o EVO trava em headless puro. Veja o
+> "✅ Configuração real validada" no topo — é ela que vale.
+> Preencha só o que a unidade usa; para a confirmação básica bastam
+> `STUDIO_NOME`, `EVO_URL`, `EVO_EMAIL`, `EVO_PASSWORD` e `HEADLESS=false`.
 
 ---
 
@@ -367,13 +384,23 @@ Deixe rodar até o próximo horário agendado (ver tabela abaixo) e confirme no
 
 | Job | Cron | Quando |
 |-----|------|--------|
-| Confirmação (hoje) | `30 8 * * 1-6` | 08:30 seg–sáb |
-| Confirmação (amanhã) | `30 15 * * 0-5` | 15:30 dom–sex |
-| Renovação de contratos | `0 17 * * 1` | 17:00 segunda |
-| Follow-up manhã | `30 10 * * 1-6` | 10:30 seg–sáb |
-| Follow-up tarde | `0 16 * * 1-6` | 16:00 seg–sáb |
+| Aniversariantes do mês (grupo) | `30 5 28 * *` | 05:30 dia 28 |
+| Ausentes há 10+ dias (grupo) | `10 6 * * 1` | 06:10 segunda |
+| Presentes de tempo de casa (grupo) | `45 6 * * 1` | 06:45 segunda |
 | Instagram (boas-vindas) | `0 7 * * *` | 07:00 diário |
-| Aniversariantes | `0 8 * * *` | 08:00 diário |
+| Aniversariantes (parabéns nos grupos) | `0 8 * * *` | 08:00 diário |
+| Confirmação (hoje) | `30 8 * * 1-6` | 08:30 seg–sáb |
+| Follow-up pós-aula — manhã | `30 10 * * 1-6` | 10:30 seg–sáb |
+| Faltas / no-show — manhã | `30 11 * * 1-6` | 11:30 seg–sáb |
+| Planilha de alunas & aniversários | `0 14 * * *` | 14:00 diário |
+| Renovação de contratos | `30 14 * * *` | 14:30 diário |
+| Confirmação (amanhã) | `30 15 * * 0-5` | 15:30 dom–sex |
+| Follow-up pós-aula — tarde | `0 16 * * 1-6` | 16:00 seg–sáb |
+| Resumo da semana (grupo) | `30 16 * * 5` | 16:30 sexta |
+| Faltas / no-show — tarde/noite | `30 19 * * 1-6` | 19:30 seg–sáb |
+| Resumo do dia (grupo) | `45 19 * * *` | 19:45 diário |
+
+> Reinício automático do WhatsApp: **03:00** todos os dias (mantém a conexão saudável).
 
 ---
 
