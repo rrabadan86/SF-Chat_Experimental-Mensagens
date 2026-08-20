@@ -256,11 +256,80 @@ async function testeEnvio(alvo) {
   }
 }
 
+// Envia a mensagem de boas-vindas para uma LISTA específica de @s (ex.: um
+// backlog que não foi detectado como "novo"). Respeita o limite diário
+// (IG_MAX_DIA), o intervalo humano e o dedup (quem já recebeu não recebe de novo).
+// Uso:  --usuarios=@a,@b,@c   ou   --lista=caminho/arquivo.txt   (+ --enviar)
+async function enviarParaLista(usernames) {
+  console.log('\n╔═══════════════════════════════════════════════════╗');
+  console.log('║   INSTAGRAM — Envio para LISTA específica         ║');
+  console.log('╚═══════════════════════════════════════════════════╝');
+  console.log(MODO_ENVIO ? '🚀 MODO ENVIO ATIVO\n' : '🧪 MODO SIMULAÇÃO (use --enviar para enviar)\n');
+
+  const jaEnviados = carregarEnviados();
+  const vistos = new Set();
+  const alvos = [];
+  for (const u of usernames) {
+    if (!u || vistos.has(u) || jaEnviados.has(u)) continue;
+    vistos.add(u); alvos.push(u);
+  }
+  const puladosJa = usernames.length - alvos.length;
+  const aProcessar = alvos.slice(0, MAX_ENVIOS);
+  console.log(`   Na lista: ${usernames.length} | já receberam: ${puladosJa} | a enviar agora: ${aProcessar.length} (limite ${MAX_ENVIOS})`);
+  if (alvos.length > MAX_ENVIOS) {
+    console.log(`   ⏸️  ${alvos.length - MAX_ENVIOS} ficam para a próxima execução (rode de novo depois).`);
+  }
+  aProcessar.forEach((u, i) => console.log(`  ${i + 1}. @${u}`));
+  console.log('');
+
+  if (!MODO_ENVIO) { console.log('🧪 Simulação — nada foi enviado.\n'); return; }
+  if (aProcessar.length === 0) { console.log('Nada a enviar (todos já receberam).\n'); return; }
+
+  const browser = await connectEdge();
+  try {
+    const page = (await browser.pages())[0] || await browser.newPage();
+    await aplicarCookiesSalvos(page);
+    await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await sleep(3000);
+
+    let enviadas = 0, indisponiveis = 0, erros = 0;
+    for (let i = 0; i < aProcessar.length; i++) {
+      const u = aProcessar[i];
+      console.log(`\n📨 (${i + 1}/${aProcessar.length}) @${u}...`);
+      let status;
+      try { status = await enviarDM(page, u, MENSAGEM_BOASVINDAS()); }
+      catch (e) { status = 'error'; console.log(`   ❌ Erro: ${e.message}`); }
+      if (status === 'sent') { enviadas++; jaEnviados.add(u); salvarEnviados(jaEnviados); console.log('   ✅ Enviada!'); }
+      else if (status === 'unavailable') { indisponiveis++; console.log('   🚫 Mensagem Indisponível'); }
+      else { erros++; console.log('   ⚠️  Falha'); }
+      if (i < aProcessar.length - 1) {
+        const espera = intervaloAleatorio();
+        console.log(`   ⏳ Aguardando ${Math.round(espera / 1000)}s antes do próximo...`);
+        await sleep(espera);
+      }
+    }
+    console.log(`\n  ✅ Enviadas: ${enviadas}  🚫 Indisponíveis: ${indisponiveis}  ⚠️ Falhas: ${erros}\n`);
+  } finally {
+    try { browser.disconnect(); } catch (e) {}
+  }
+}
+
 async function main() {
   // Se passou --teste=usuario, roda só o teste de envio e sai
   const argTeste = (process.argv.find(a => a.startsWith('--teste=')) || '').split('=')[1];
   if (argTeste) {
     return testeEnvio(argTeste);
+  }
+
+  // --usuarios=@a,@b  ou  --lista=arquivo.txt → envia para a lista informada
+  const argUsuarios = (process.argv.find(a => a.startsWith('--usuarios=')) || '').split('=')[1];
+  const argLista = (process.argv.find(a => a.startsWith('--lista=')) || '').split('=')[1];
+  if (argUsuarios || argLista) {
+    let brutos = [];
+    if (argUsuarios) brutos = argUsuarios.split(',');
+    else brutos = fs.readFileSync(argLista, 'utf8').split('\n');
+    const lista = brutos.map(s => s.trim().replace(/^@/, '')).filter(Boolean);
+    return enviarParaLista(lista);
   }
 
   console.log('\n╔═══════════════════════════════════════════════════╗');
