@@ -74,6 +74,15 @@ function salvarEnviados(set) {
   }, null, 2), 'utf8');
 }
 
+/** Salva um screenshot de diagnóstico (debug-*.png, ignorado pelo git). */
+async function salvarShot(page, nome) {
+  try {
+    const p = path.resolve(__dirname, '..', `debug-${nome}.png`);
+    await page.screenshot({ path: p });
+    console.log(`   📸 screenshot: ${p}`);
+  } catch (_) { /* screenshot é só ajuda; nunca derruba o envio */ }
+}
+
 /**
  * Envia uma DM de boas-vindas para um seguidor.
  * Retorna: 'sent' | 'unavailable' | 'error'
@@ -93,42 +102,41 @@ async function enviarDM(page, username, texto) {
   });
   if (indisponivel) return 'unavailable';
 
-  // 3. Clica no botão "Mensagem" / "Enviar mensagem" (opção 1: botão direto)
+  // 3. Clica no botão "Mensagem"/"Message". IMPORTANTE: o texto costuma ficar num
+  //    <div> interno, mas o clique precisa ir no ANCESTRAL clicável (role=button).
   let clicouMsg = await page.evaluate(() => {
-    const alvos = document.querySelectorAll('div[role="button"], button, a');
+    const alvos = document.querySelectorAll('div[role="button"], button, a, [role="button"]');
     for (const el of alvos) {
       const t = (el.textContent || '').trim().toLowerCase();
-      if ((t === 'mensagem' || t === 'message' || t === 'enviar mensagem' || t === 'send message') && el.offsetWidth > 0) {
-        el.click();
+      // "message"/"mensagem" exatos (evita pegar "Messages" da barra lateral, que vem "messagesmessages")
+      if ((t === 'mensagem' || t === 'message') && el.offsetWidth > 0) {
+        const clk = el.closest('[role="button"], button, a') || el;
+        clk.click();
         return true;
       }
     }
     return false;
   });
 
-  // 3b. OPÇÃO 2: se o botão direto não existe (perfil privado), abre o menu "..."
-  //     e clica em "Enviar mensagem" de dentro dele.
+  // 3b. Fallback: perfil privado → menu "..." (Opções) → "Enviar mensagem".
   if (!clicouMsg) {
-    console.log('   ↪️  Botão direto ausente — tentando menu "..." (Enviar mensagem)');
+    console.log('   ↪️  Botão direto ausente — tentando menu "..." (Opções)');
     const abriuMenu = await page.evaluate(() => {
-      // Botão de opções "..." no perfil
-      const cands = document.querySelectorAll('[aria-label="Opções"], [aria-label="Options"], svg[aria-label="Opções"], svg[aria-label="Options"], [aria-label="Mais opções"]');
+      const cands = document.querySelectorAll('[aria-label="Opções"], [aria-label="Options"], svg[aria-label="Opções"], svg[aria-label="Options"], [aria-label="Mais opções"], [aria-label="More options"]');
       for (const c of cands) {
         const clk = c.closest('div[role="button"], button, [role="button"]') || c;
         if (clk && clk.offsetWidth > 0) { clk.click(); return true; }
       }
       return false;
     });
-
     if (abriuMenu) {
       await sleep(1800);
       clicouMsg = await page.evaluate(() => {
-        // No menu/diálogo aberto, procura "Enviar mensagem"
         const els = document.querySelectorAll('[role="dialog"] button, [role="dialog"] [role="button"], [role="dialog"] a, [role="menu"] [role="menuitem"], button, div[role="button"]');
         for (const el of els) {
           const t = (el.textContent || '').trim().toLowerCase();
           if ((t === 'enviar mensagem' || t === 'send message' || t === 'mensagem' || t === 'message') && el.offsetWidth > 0) {
-            el.click();
+            (el.closest('[role="button"], button, a, [role="menuitem"]') || el).click();
             return true;
           }
         }
@@ -138,39 +146,40 @@ async function enviarDM(page, username, texto) {
   }
 
   if (!clicouMsg) {
-    // Nem o botão direto nem o menu "..." tinham "Enviar mensagem" → indisponível
+    console.log('   ⚠️  Não encontrei o botão "Mensagem" no perfil.');
+    await salvarShot(page, 'ig-sem-botao');
     return 'unavailable';
   }
 
-  await sleep(6000); // aguarda abrir a conversa (pode navegar para /direct/t/...)
+  // 4. Espera a CONVERSA/campo abrir (até ~18s). O IG pode navegar para /direct/
+  //    ou abrir um overlay (role=dialog). Antes era um sleep fixo de 6s — curto
+  //    demais quando o direct demora, e o campo não era achado → "indisponível".
+  let composer = null;
+  for (let i = 0; i < 12; i++) {
+    await sleep(1500);
+    const r = await page.evaluate(() => {
+      const body = (document.body.innerText || '').toLowerCase();
+      if (body.includes('message unavailable') || body.includes('mensagem indisponível') ||
+          body.includes('mensagens indisponíveis') || body.includes("you can't message") ||
+          body.includes('não é possível enviar mensagem')) return { bloq: true };
+      const sels = [
+        'div[role="dialog"] div[role="textbox"][contenteditable="true"]',
+        'div[role="textbox"][contenteditable="true"]',
+        'textarea[placeholder]',
+        'div[contenteditable="true"][aria-label]',
+      ];
+      for (const s of sels) { const el = document.querySelector(s); if (el && el.offsetWidth > 0) return { sel: s }; }
+      return {};
+    });
+    if (r.bloq) { await salvarShot(page, 'ig-bloqueado'); return 'unavailable'; }
+    if (r.sel) { composer = r.sel; break; }
+  }
 
-  // 4. Detecta impossibilidade de enviar (conta restrita / bloqueio)
-  const bloqueado = await page.evaluate(() => {
-    const body = (document.body.innerText || '').toLowerCase();
-    return body.includes('mensagem indisponível') ||
-           body.includes('mensagens indisponíveis') ||
-           body.includes('message unavailable') ||
-           body.includes("you can't message") ||
-           body.includes('não é possível enviar mensagem') ||
-           body.includes('this account is private');
-  });
-  if (bloqueado) return 'unavailable';
-
-  // 5. Localiza o campo de composição da mensagem
-  const composer = await page.evaluate(() => {
-    const seletores = [
-      'div[role="textbox"][contenteditable="true"]',
-      'textarea[placeholder]',
-      'div[contenteditable="true"][aria-label]',
-    ];
-    for (const sel of seletores) {
-      const el = document.querySelector(sel);
-      if (el && el.offsetWidth > 0) return sel;
-    }
-    return null;
-  });
-
-  if (!composer) return 'unavailable';
+  if (!composer) {
+    console.log('   ⚠️  Cliquei em "Mensagem" mas o campo de digitação não abriu.');
+    await salvarShot(page, 'ig-sem-composer');
+    return 'unavailable';
+  }
 
   // 6. Digita e envia
   //    Enter no Instagram ENVIA a mensagem. Para manter as quebras de linha,
