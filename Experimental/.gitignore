@@ -11,6 +11,8 @@ wwebjs_auth/
 .wwebjs_cache/
 instagram-chrome-data/
 instagram-login-*.png
+# Cookies da sessão do Instagram (contêm o sessionid = acesso à conta) — NUNCA versionar
+instagram-cookies.json
 # Credenciais (conta de serviço do Google) — NUNCA versionar
 service-account.json
 *service-account*.json

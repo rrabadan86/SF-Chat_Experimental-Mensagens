@@ -40,6 +40,39 @@ const IG_PROXY = process.env.IG_PROXY || '';
 const IG_PROXY_USER = process.env.IG_PROXY_USER || '';
 const IG_PROXY_PASS = process.env.IG_PROXY_PASS || '';
 
+// Cookies da sessão do Instagram (exportados do navegador do PC já logado).
+// Alternativa ao "perfil logado": no VPS não dá pra logar na mão, então trazemos
+// a sessão pronta. Arquivo JSON (formato do Cookie-Editor): [{name,value,domain,...}].
+// NÃO versionar (contém o sessionid = acesso à conta). Fica no .gitignore.
+const IG_COOKIES_FILE = process.env.IG_COOKIES_FILE ||
+  path.resolve(__dirname, '..', 'instagram-cookies.json');
+
+/** Injeta na página os cookies salvos do Instagram (se o arquivo existir). */
+async function aplicarCookiesSalvos(page) {
+  let raw;
+  try { raw = fs.readFileSync(IG_COOKIES_FILE, 'utf8'); }
+  catch (_) { return 0; }                 // sem arquivo → segue com o perfil
+  let lista;
+  try { lista = JSON.parse(raw); }
+  catch (e) { console.log('   ⚠️  instagram-cookies.json inválido: ' + e.message); return 0; }
+  if (!Array.isArray(lista)) lista = lista.cookies || [];
+  const cookies = lista
+    .filter(c => c && c.name && c.value)
+    .map(c => ({
+      name: c.name,
+      value: c.value,
+      domain: c.domain || '.instagram.com',
+      path: c.path || '/',
+      secure: c.secure !== false,
+      httpOnly: !!c.httpOnly,
+    }));
+  if (!cookies.length) return 0;
+  try { await page.setCookie(...cookies); }
+  catch (e) { console.log('   ⚠️  Falha ao aplicar cookies: ' + e.message); return 0; }
+  console.log(`   🍪 ${cookies.length} cookie(s) do Instagram aplicados (sessão do PC).`);
+  return cookies.length;
+}
+
 // Lança o Chromium do Puppeteer com o perfil dedicado do Instagram (Linux).
 async function launchInstagramChromium() {
   console.log(`🐧 Abrindo Chromium com perfil do Instagram (${IG_HEADLESS ? 'headless' : 'com tela'})${IG_PROXY ? ' via proxy ' + IG_PROXY : ''}...`);
@@ -125,6 +158,9 @@ async function connectEdge() {
 const IG_APP_ID = '936619743392459'; // app id do Instagram Web
 
 async function coletarSeguidores(page) {
+  // 0. Se houver cookies exportados do PC, injeta ANTES de navegar (sessão pronta).
+  await aplicarCookiesSalvos(page);
+
   // 1. Abre o Instagram (precisa estar no domínio para o fetch usar os cookies)
   console.log(`🌐 Abrindo perfil @${IG_USERNAME}...`);
   await page.goto(`https://www.instagram.com/${IG_USERNAME}/`, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -139,7 +175,10 @@ async function coletarSeguidores(page) {
     return false;
   });
   if (deslogado) {
-    throw new Error('Você NÃO está logado no Instagram neste perfil do Edge. Faça login e tente de novo (ou ajuste IG_EDGE_PROFILE no .env).');
+    throw new Error(
+      'Instagram pediu LOGIN (sessão não reconhecida). Possíveis causas: ' +
+      '(a) os cookies não foram carregados / expiraram — reexporte o instagram-cookies.json do PC; ' +
+      '(b) o Instagram aplicou CHECKPOINT no IP do VPS (datacenter) — nesse caso só um proxy residencial resolve.');
   }
 
   // 2. Descobre o ID numérico do perfil
