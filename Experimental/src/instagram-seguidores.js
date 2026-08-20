@@ -92,6 +92,10 @@ async function launchInstagramChromium() {
       '--window-size=1366,900',
       '--lang=pt-BR',
       ...(IG_PROXY ? ['--proxy-server=' + IG_PROXY] : []),
+      // Não baixa imagens (economiza MUITO tráfego do proxy pago). Não afeta a
+      // leitura de seguidores (via API) nem o envio de DM (que usa botões/campos
+      // de texto). Desligue com IG_BLOCK_IMAGES=false se algum dia precisar ver imagens.
+      ...(process.env.IG_BLOCK_IMAGES !== 'false' ? ['--blink-settings=imagesEnabled=false'] : []),
     ],
   });
 
