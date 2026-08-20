@@ -186,6 +186,8 @@ async function enviarDM(page, username, texto) {
     }
     return 'unavailable';
   }
+  console.log(`   ✏️  Campo encontrado: ${composer}`);
+  console.log(`   🔗 URL atual: ${page.url()}`);
 
   // 6. Digita e envia
   //    Enter no Instagram ENVIA a mensagem. Para manter as quebras de linha,
