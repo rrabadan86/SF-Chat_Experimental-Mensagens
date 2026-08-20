@@ -1,37 +1,49 @@
 /**
  * Convocatória do CIRCUITO no grupo do WhatsApp "Circuito Slim".
  *
- *  • Quarta 16:15 → convocatória (busca a professora do Circuito de sábado na
- *                   Grade > Horários e monta a mensagem com o nome dela).
- *  • Sexta  16:15 → lembrete "É amanhã!" (mensagem fixa).
+ *  • Quarta 16:15 → convocatória: lê na Grade > Horários a PROFESSORA e o HORÁRIO
+ *                   do Circuito de sábado, monta a mensagem e posta no grupo
+ *                   (@marcando a professora, se o telefone estiver configurado).
+ *  • Sexta  16:15 → lembrete "É amanhã!" (usa o horário lido na quarta).
  *
  * Uso manual:
- *   node src/enviar-circuito.js --convocacao --dry     # lê a professora e imprime (não envia)
- *   node src/enviar-circuito.js --convocacao --enviar  # envia no grupo
+ *   node src/enviar-circuito.js --convocacao --dry     # lê e imprime (não envia)
+ *   node src/enviar-circuito.js --convocacao --enviar  # posta no grupo
  *   node src/enviar-circuito.js --lembrete --dry
  *   node src/enviar-circuito.js --lembrete --enviar
  */
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
+const fs = require('fs');
+const path = require('path');
 const EvoScraper = require('./evo-scraper');
 const config = require('./config');
 const notif = require('./notificar');
 
 const GRUPO = process.env.CIRCUITO_GRUPO || 'Circuito Slim';
-const HORA_ALVO = process.env.CIRCUITO_HORA || '09:45';       // horário do Circuito de sábado
 const CHAVE = (process.env.CIRCUITO_ATIVIDADE || 'circuito').toLowerCase(); // atividade a procurar
+const HORA_PADRAO = process.env.CIRCUITO_HORA || '09:45';                   // reserva se não achar
+const DATA_DIR = path.resolve(__dirname, '..', 'data');
+const STATE_FILE = path.join(DATA_DIR, 'circuito.json');
 
-// ─── Mensagens (texto exato) ──────────────────────────────────────────────
-// A convocatória é montada em duas partes para permitir a @menção da professora
-// no meio (antes + @professora + depois).
-const MSG_ANTES = `🔥 SÁBADO É DIA DE QUEIMAR CALORIAS NO CIRCUITO! 🔥\n⚡️Comandada pela professora `;
-const MSG_DEPOIS = `.\n\nCheckin Aberto!!!\n\n⏰ Sábado às 09h45`;
-function msgConvocacao(professora) {
-  return MSG_ANTES + professora + MSG_DEPOIS;
+// ─── Formatação e mensagens ───────────────────────────────────────────────
+// "09:45" → "09h45"  |  "10:00" → "10h"
+function fmtHora(h) {
+  const s = String(h || HORA_PADRAO).trim();
+  const m = s.match(/(\d{1,2}):(\d{2})/);
+  if (!m) return s;
+  return `${m[1]}h${m[2]}`.replace(/h00$/, 'h');
 }
 
-// Telefone da professora para @marcar no grupo. Vem de PROFESSORAS_TEL no .env
-// (JSON: {"raissa":"5562999999999","taynara":"..."}), buscado pelo PRIMEIRO nome
-// (minúsculo). Sem telefone → a mensagem sai com o nome escrito, sem @.
+const MSG_ANTES = `🔥 SÁBADO É DIA DE QUEIMAR CALORIAS NO CIRCUITO! 🔥\n⚡️Comandada pela professora `;
+function msgDepois(horaFmt) { return `.\n\nCheckin Aberto!!!\n\n⏰ Sábado às ${horaFmt}`; }
+function msgConvocacao(professora, horaFmt) { return MSG_ANTES + professora + msgDepois(horaFmt); }
+function msgLembrete(horaFmt) {
+  return `🔥 *É AMANHÃ!* 🔥\n⚡️ Estamos esperando todas vocês!\n\n⏰ Sábado às ${horaFmt}`;
+}
+
+// ─── Telefone da professora (para @marcar) ────────────────────────────────
+// PROFESSORAS_TEL no .env (JSON: {"raissa":"5562...","taynara":"..."}), buscado
+// pelo PRIMEIRO nome (minúsculo). Sem telefone → mensagem com o nome, sem @.
 function mapaProfessorasTel() {
   try {
     if (process.env.PROFESSORAS_TEL) return JSON.parse(process.env.PROFESSORAS_TEL);
@@ -43,16 +55,22 @@ function mapaProfessorasTel() {
 function telefoneDaProfessora(nome) {
   const m = mapaProfessorasTel();
   const inteiro = (nome || '').trim().toLowerCase();
-  const primeiro = inteiro.split(/\s+/)[0];
-  return m[primeiro] || m[inteiro] || null;
+  return m[inteiro.split(/\s+/)[0]] || m[inteiro] || null;
 }
-const MSG_LEMBRETE =
-  `🔥 *É AMANHÃ!* 🔥\n`
-  + `⚡️ Estamos esperando todas vocês!\n\n`
-  + `⏰ Sábado às 09h45`;
 
-// ─── Busca a professora do Circuito na Grade > Horários (visão SEMANA) ─────
-async function buscarProfessora(scraper) {
+// ─── Estado (compartilha o horário lido na quarta com o lembrete de sexta) ─
+function salvarEstado(professora, horario) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(STATE_FILE, JSON.stringify({ professora, horario, ts: new Date().toISOString() }, null, 2), 'utf8');
+  } catch (_) { /* estado é só conveniência */ }
+}
+function lerEstado() {
+  try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch (_) { return {}; }
+}
+
+// ─── Lê PROFESSORA + HORÁRIO do Circuito de sábado na Grade > Horários ─────
+async function buscarCircuito(scraper) {
   const base = scraper.appOrigin || config.evo.url;
   const url = `${base}/#/app/slimfit/15/grade/horarios`;
   await scraper.page.goto(url, { waitUntil: 'networkidle2' });
@@ -76,7 +94,7 @@ async function buscarProfessora(scraper) {
   });
   await scraper.sleep(3500);
 
-  const res = await scraper.page.evaluate((alvoHora, chave) => {
+  return scraper.page.evaluate((chave) => {
     const cards = [];
     for (const el of document.querySelectorAll('div,td,li,a')) {
       const t = (el.innerText || '').trim();
@@ -94,16 +112,16 @@ async function buscarProfessora(scraper) {
         if (/\d{1,2}:\d{2}/.test(l) || /^\d+\s*\/\s*\d+$/.test(l) || /^\d+$/.test(l)) continue;
         prof = l; break;
       }
-      cards.push({ prof, temHora: lines.some(l => l.includes(alvoHora)), x: Math.round(r.left), raw: lines.join(' | ') });
+      // horário = 1º HH:MM do card (início da aula: "09:45 - 10:45" → 09:45)
+      let horario = '';
+      for (const l of lines) { const m = l.match(/(\d{1,2}:\d{2})/); if (m) { horario = m[1]; break; } }
+      cards.push({ prof, horario, x: Math.round(r.left), raw: lines.join(' | ') });
     }
     if (cards.length === 0) return null;
-    let cand = cards.filter(c => c.temHora);      // prefere o card do horário-alvo (09:45)
-    if (cand.length === 0) cand = cards;
-    cand.sort((a, b) => b.x - a.x);               // sábado é a última coluna (mais à direita)
-    return { professora: (cand[0].prof || '').trim() || null, debug: cand.map(c => c.raw).slice(0, 6) };
-  }, HORA_ALVO, CHAVE);
-
-  return res;
+    cards.sort((a, b) => b.x - a.x); // sábado é a última coluna (mais à direita)
+    const c = cards[0];
+    return { professora: (c.prof || '').trim() || null, horario: c.horario || null, debug: cards.map(x => x.raw).slice(0, 4) };
+  }, CHAVE);
 }
 
 // ─── Jobs ─────────────────────────────────────────────────────────────────
@@ -112,15 +130,16 @@ async function runCircuitoConvocacao({ dry = false } = {}) {
   console.log('║   CIRCUITO — Convocatória (quarta)                ║');
   console.log('╚═══════════════════════════════════════════════════╝');
 
-  let professora = null;
+  let professora = null, horario = null;
   const scraper = new EvoScraper();
   try {
     await scraper.init();
     await scraper.login();
-    const res = await buscarProfessora(scraper);
+    const res = await buscarCircuito(scraper);
     professora = res && res.professora;
-    console.log(`   Professora do Circuito (sábado ${HORA_ALVO}): ${professora || '(não encontrada)'}`);
-    if (res && res.debug) console.log(`   🔎 cards vistos: ${res.debug.join('  //  ')}`);
+    horario = res && res.horario;
+    console.log(`   Circuito de sábado → professora: ${professora || '(?)'} | horário: ${horario || '(?)'}`);
+    if (res && res.debug) console.log(`   🔎 cards: ${res.debug.join('  //  ')}`);
   } catch (e) {
     console.log(`   ⚠️  Falha ao ler a grade: ${e.message}`);
   } finally {
@@ -130,7 +149,6 @@ async function runCircuitoConvocacao({ dry = false } = {}) {
   if (!professora) {
     professora = process.env.CIRCUITO_PROFESSORA_PADRAO || '';
     if (!professora) {
-      // Sem professora e sem fallback: não manda mensagem quebrada. Avisa no ntfy.
       notif.alertar('Circuito: professora não encontrada',
         'Não achei a professora do Circuito de sábado na Grade. A convocatória NÃO foi enviada. '
         + 'Confira a Grade > Horários ou defina CIRCUITO_PROFESSORA_PADRAO no .env.',
@@ -141,17 +159,20 @@ async function runCircuitoConvocacao({ dry = false } = {}) {
     console.log(`   ↪️  Usando professora padrão do .env: ${professora}`);
   }
 
+  const horaFmt = fmtHora(horario);
+  salvarEstado(professora, horario || HORA_PADRAO); // guarda para o lembrete de sexta
+
   const tel = telefoneDaProfessora(professora);
-  const msg = msgConvocacao(professora);
+  const msg = msgConvocacao(professora, horaFmt);
   console.log('\n--- MENSAGEM ---\n' + msg + '\n----------------');
-  console.log(tel ? `   👤 Vai @marcar a professora (tel configurado).` : `   ℹ️  Sem telefone da professora no .env → sai sem @ (só o nome).`);
+  console.log(tel ? '   👤 Vai @marcar a professora (tel configurado).' : '   ℹ️  Sem telefone da professora no .env → sai sem @ (só o nome).');
   if (dry) { console.log('🧪 DRY — nada enviado.'); return; }
 
   const wa = require('./wa-client');
   if (tel) {
     const g = await wa.acharGrupo(GRUPO);
     if (!g) throw new Error('Grupo não encontrado: ' + GRUPO);
-    await wa.sendGrupoComMencao(g.id, MSG_ANTES, MSG_DEPOIS, tel);
+    await wa.sendGrupoComMencao(g.id, MSG_ANTES, msgDepois(horaFmt), tel);
     console.log(`✅ Convocatória enviada no grupo "${GRUPO}" com @menção da professora.`);
   } else {
     await wa.sendGrupo(GRUPO, msg);
@@ -163,15 +184,22 @@ async function runCircuitoLembrete({ dry = false } = {}) {
   console.log('\n╔═══════════════════════════════════════════════════╗');
   console.log('║   CIRCUITO — Lembrete (sexta)                     ║');
   console.log('╚═══════════════════════════════════════════════════╝');
-  console.log('\n--- MENSAGEM ---\n' + MSG_LEMBRETE + '\n----------------');
+
+  // Usa o horário que a convocatória (quarta) leu e guardou. Reserva: HORA_PADRAO.
+  const est = lerEstado();
+  const horaFmt = fmtHora(est.horario || HORA_PADRAO);
+  console.log(`   Horário (do estado da quarta): ${est.horario || HORA_PADRAO}`);
+
+  const msg = msgLembrete(horaFmt);
+  console.log('\n--- MENSAGEM ---\n' + msg + '\n----------------');
   if (dry) { console.log('🧪 DRY — nada enviado.'); return; }
 
   const wa = require('./wa-client');
-  await wa.sendGrupo(GRUPO, MSG_LEMBRETE);
+  await wa.sendGrupo(GRUPO, msg);
   console.log(`✅ Lembrete enviado no grupo "${GRUPO}".`);
 }
 
-module.exports = { runCircuitoConvocacao, runCircuitoLembrete, buscarProfessora, msgConvocacao, MSG_LEMBRETE };
+module.exports = { runCircuitoConvocacao, runCircuitoLembrete, buscarCircuito, msgConvocacao, msgLembrete };
 
 // ─── CLI ──────────────────────────────────────────────────────────────────
 if (require.main === module) {
