@@ -41,7 +41,12 @@ function log(msg) { console.log(`[wa] ${msg}`); }
 // frame (comum em processos de longa duração). Vale a pena esperar e repetir.
 function ehTransiente(e) {
   const m = (e && e.message) || '';
-  return /detached Frame|Execution context was destroyed|Target closed|Cannot find context|Session closed|Protocol error|Node is detached/i.test(m);
+  // Além dos erros de frame/contexto do puppeteer, tratamos como transitório o
+  // "Cannot read properties of undefined (reading 'getChat'/...)" e afins: são o
+  // Store do WhatsApp-Web ainda não montado logo após um reinício. Antes esses
+  // caíam como erro definitivo e a pessoa era contada como falha em vez de
+  // repetida quando o cliente voltasse.
+  return /detached Frame|Execution context was destroyed|Target closed|Cannot find context|Session closed|Protocol error|Node is detached|Cannot read properties of undefined|Evaluation failed|WWebJS|window\.Store|getChat/i.test(m);
 }
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -61,6 +66,16 @@ async function esperarPaginaOk(timeoutMs = 60000) {
   return false;
 }
 
+/** Espera o cliente voltar a ficar PRONTO (após uma reinicialização). */
+async function esperarPronto(timeoutMs = 90000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    if (pronto) return true;
+    await espera(1500);
+  }
+  return pronto;
+}
+
 // Mais tentativas + espera pela página (o reload do WhatsApp Web pode levar
 // dezenas de segundos). Antes eram 4x4s (16s) — insuficiente num reload longo.
 async function comRetry(fn, tentativas = 8, esperaMs = 4000) {
@@ -73,7 +88,16 @@ async function comRetry(fn, tentativas = 8, esperaMs = 4000) {
       log(`⏳ frame instável (${i}/${tentativas}): ${e.message} — aguardando a página voltar...`);
       // espera a página re-estabilizar (até ~20s) em vez de só um sleep fixo
       const voltou = await esperarPaginaOk(20000);
-      if (!voltou) await espera(esperaMs);
+      if (!voltou) {
+        // A página não voltou sozinha: o frame provavelmente morreu de vez (só um
+        // reload não conserta). Faz o conserto COMPLETO (destrói e recria com a
+        // sessão salva) e espera ficar pronto ANTES de tentar de novo — assim o
+        // mesmo envio é retomado, em vez de a pessoa ser contada como falha (era
+        // o que acontecia quando a tentativa caía no meio da reinicialização).
+        log('🔧 frame não voltou — forçando reinicialização do cliente...');
+        try { await reinicializar(); } catch (_) { /* reinicializar já alerta */ }
+        await esperarPronto(90000);
+      }
     }
   }
   throw ultimo;
