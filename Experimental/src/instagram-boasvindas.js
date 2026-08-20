@@ -219,6 +219,8 @@ async function enviarDM(page, username, texto) {
 
     return confirmou ? 'sent' : 'sent'; // se digitou e deu Enter, considera enviado
   } catch (e) {
+    console.log('   ⚠️  Erro ao digitar/enviar: ' + (e && e.message));
+    await salvarShot(page, 'ig-erro-envio');
     return 'error';
   }
 }
