@@ -13,8 +13,12 @@ puppeteer.use(StealthPlugin());
 
 // A mensagem tem a marcação (@) no meio. Montamos em 3 partes:
 // prefixo + [marcação da aniversariante] + sufixo.
-const MSG_PREFIXO = 'Hoje é aniversário da ';
-const MSG_SUFIXO  = '! 🥳🎉\n\nMuitas felicidades, saúde e sucesso!!! Que este novo ciclo venha repleto de conquistas e alegria!! Aproveite o seu dia! ❤️';
+// Prefixo e sufixo vêm do cofre central (editável no painel). A @menção da
+// aniversariante entra no lugar do marcador {aluna}: tudo antes vira prefixo,
+// tudo depois vira sufixo. (Lidos no carregamento do módulo; como este script
+// roda como processo próprio a cada disparo, a edição vale no próximo envio.)
+const { antes: MSG_PREFIXO, depois: MSG_SUFIXO } =
+  require('./mensagens').partes('aniversario', {}, 'aluna');
 
 // WhatsApp: perfil DEDICADO do bot (pasta isolada), porta 9226 (mesmo do follow-up)
 const CDP_URL = 'http://127.0.0.1:9226';

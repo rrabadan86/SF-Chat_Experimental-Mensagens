@@ -34,12 +34,13 @@ function fmtHora(h) {
   return `${m[1]}h${m[2]}`.replace(/h00$/, 'h');
 }
 
-const MSG_ANTES = `🔥 SÁBADO É DIA DE QUEIMAR CALORIAS NO CIRCUITO! 🔥\n⚡️Comandada pela professora `;
-function msgDepois(horaFmt) { return `.\n\nCheckin Aberto!!!\n\n⏰ Sábado às ${horaFmt}`; }
-function msgConvocacao(professora, horaFmt) { return MSG_ANTES + professora + msgDepois(horaFmt); }
-function msgLembrete(horaFmt) {
-  return `🔥 *É AMANHÃ!* 🔥\n⚡️ Estamos esperando todas vocês!\n\n⏰ Sábado às ${horaFmt}`;
-}
+// Textos vêm do cofre central (editáveis no painel). A convocatória tem a
+// @menção da professora no lugar do marcador {professora}: partesConvocacao()
+// devolve { antes, depois } quebrado nesse ponto para a menção nativa.
+const mensagens = require('./mensagens');
+function partesConvocacao(horaFmt) { return mensagens.partes('circuito_convocacao', { hora: horaFmt }, 'professora'); }
+function msgConvocacao(professora, horaFmt) { return mensagens.render('circuito_convocacao', { professora, hora: horaFmt }); }
+function msgLembrete(horaFmt) { return mensagens.render('circuito_lembrete', { hora: horaFmt }); }
 
 // ─── Telefone da professora (para @marcar) ────────────────────────────────
 // PROFESSORAS_TEL no .env (JSON: {"raissa":"5562...","taynara":"..."}), buscado
@@ -172,7 +173,8 @@ async function runCircuitoConvocacao({ dry = false } = {}) {
   if (tel) {
     const g = await wa.acharGrupo(GRUPO);
     if (!g) throw new Error('Grupo não encontrado: ' + GRUPO);
-    await wa.sendGrupoComMencao(g.id, MSG_ANTES, msgDepois(horaFmt), tel);
+    const { antes, depois } = partesConvocacao(horaFmt);
+    await wa.sendGrupoComMencao(g.id, antes, depois, tel);
     console.log(`✅ Convocatória enviada no grupo "${GRUPO}" com @menção da professora.`);
   } else {
     await wa.sendGrupo(GRUPO, msg);

@@ -16,19 +16,10 @@ const {
 //  CONFIGURAÇÃO — edite à vontade
 // ═══════════════════════════════════════════════════════════
 
-// Mensagem de boas-vindas (texto fixo, com quebras de linha).
+// Mensagem de boas-vindas — vem do cofre central (editável no painel).
 // As quebras de linha são enviadas como Shift+Enter (Enter sozinho ENVIA no Instagram).
-const MENSAGEM_BOASVINDAS = () =>
-`Seja muito bem vinda ao SlimFit, a Revolução do Treinamento Feminino! ❤️
-
-Estou te presenteando com uma aula experimental gratuita para conhecer a nossa metodologia e o nosso studio! Faça o agendamento através deste link: https://sf-formularioexperimental.onrender.com/
-
-Nos links abaixo eu explico sobre a nossa metodologia:
--> O que é o SlimFit: https://www.instagram.com/reel/Crluss-AWPu/
-
--> Personal X SlimFit: https://www.instagram.com/p/CwkvRzggYrs/
-
-Até mais!`;
+const mensagens = require('./mensagens');
+const MENSAGEM_BOASVINDAS = () => mensagens.render('instagram', {});
 
 // Limite de envios por execução/dia (segurança contra bloqueio do Instagram).
 const MAX_ENVIOS = parseInt(process.env.IG_MAX_DIA || '20', 10);

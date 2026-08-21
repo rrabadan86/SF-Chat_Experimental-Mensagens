@@ -1,5 +1,8 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
 
+// Cofre central de textos editáveis (padrão + edições do painel em data/mensagens.json).
+const mensagens = require('./mensagens');
+
 // Nome do Studio como aparece nas mensagens para a aluna. Cada franquia define o
 // seu no .env (STUDIO_NOME); o padrão mantém a unidade original funcionando igual.
 const STUDIO_NOME = process.env.STUDIO_NOME || 'Studio Slimfit Setor Bueno';
@@ -40,25 +43,24 @@ const config = {
     headless: process.env.HEADLESS !== 'false',
   },
 
-  // Mensagem para aulas de HOJE (enviada às 08:30)
-  messagesToday: (nome, horario) =>
-    `Olá, ${nome}! 😊\n\nTudo bem? Aqui é do ${STUDIO_NOME}!\n\nEstamos mandando essa mensagem para confirmar a sua aula experimental de logo mais que está agendada para hoje às ${horario}.\n\nPode confirmar sua presença? Estamos te esperando! 💪`,
+  // As mensagens abaixo vêm do cofre central (src/mensagens.js), que aplica as
+  // edições feitas no painel (data/mensagens.json) e, se não houver edição, usa
+  // o texto padrão. Editar no painel vale já no próximo envio, sem reiniciar.
 
-  // Mensagem para aulas de AMANHÃ (enviada às 16:30)
-  messagesTomorrow: (nome, horario) =>
-    `Olá, ${nome}! 😊\n\nTudo bem? Aqui é do ${STUDIO_NOME}!\n\nEstamos mandando essa mensagem para confirmar a sua aula experimental que está agendada para amanhã às ${horario}.\n\nPode confirmar sua presença? Estamos te esperando! 💪`,
+  // Mensagem para aulas de HOJE (enviada às 08:30)
+  messagesToday: (nome, horario) => mensagens.render('confirmacao_hoje', { nome, horario }),
+
+  // Mensagem para aulas de AMANHÃ (enviada às 15:30)
+  messagesTomorrow: (nome, horario) => mensagens.render('confirmacao_amanha', { nome, horario }),
 
   // Mensagem de follow-up pós aula experimental — para quem AINDA NÃO fechou
-  messageFollowup: (nomeProfessora) =>
-    `Oie! Tudo bem?\n\nSegue áudio que a professora ${nomeProfessora} fez sobre a sua aula experimental! =)\n\nSei que a primeira aula sempre é mais difícil, principalmente por ser uma metodologia nova!\n\nMas agora que você já deu o primeiro passo 👏, o que acha de vir para mais uma aula e darmos andamento da sua matrícula?\n\nTe aguardo!!! 🥰`,
+  messageFollowup: (nomeProfessora) => mensagens.render('followup', { professora: nomeProfessora }),
 
   // Mensagem de no-show (faltou na aula experimental) — convida a remarcar
-  messageNoShow: (nome, horario) =>
-    `Oi, ${nome}! 😊 Tudo bem?\n\nNotamos que você não conseguiu comparecer à sua aula experimental de hoje${horario ? ` (${horario})` : ''}. Acontece! 💛\n\nQue tal remarcar? Vai ser um prazer te receber. É só me responder por aqui que a gente encontra um novo horário pra você! 🙌`,
+  messageNoShow: (nome, horario) => mensagens.render('no_show', { nome, horario: horario ? ` (${horario})` : '' }),
 
   // Mensagem de follow-up para quem JÁ VIROU ALUNA (contrato preenchido)
-  messageFollowupAluna: (nomeProfessora) =>
-    `Oie! Tudo bem?\n\nQue alegria ter você com a gente! 🥰\n\nSegue um áudio que a professora ${nomeProfessora} preparou sobre a sua aula!\n\nSeja muito bem-vinda ao SlimFit! 💪\n\nEstamos muito felizes com a sua decisão. Qualquer dúvida que tiver sobre o APP pode me acionar!\n\nConte conosco! ❤️`,
+  messageFollowupAluna: (nomeProfessora) => mensagens.render('followup_aluna', { professora: nomeProfessora }),
 
   // Áudios de follow-up (pasta e mapeamento professora → arquivo)
   audio: {

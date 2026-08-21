@@ -18,3 +18,5 @@ service-account.json
 *service-account*.json
 # Screenshots de debug
 debug-*.png
+# Edições das mensagens feitas no painel (estado de cada VPS/franquia) — não versionar
+data/mensagens.json
