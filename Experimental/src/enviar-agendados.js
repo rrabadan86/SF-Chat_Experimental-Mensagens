@@ -13,6 +13,18 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env'
 const ag = require('./agendamentos');
 const notif = require('./notificar');
 
+// Intervalo (aleatório) entre um envio e o próximo — evita disparar tudo de uma
+// vez (o WhatsApp pode marcar como spam). Configurável no .env, em segundos:
+//   AGENDADOS_INTERVALO_MIN=20   AGENDADOS_INTERVALO_MAX=40
+const INTERVALO_MIN = parseInt(process.env.AGENDADOS_INTERVALO_MIN || '20', 10);
+const INTERVALO_MAX = parseInt(process.env.AGENDADOS_INTERVALO_MAX || '40', 10);
+function intervaloMs() {
+  const lo = Math.max(0, Math.min(INTERVALO_MIN, INTERVALO_MAX));
+  const hi = Math.max(INTERVALO_MIN, INTERVALO_MAX);
+  return Math.round((lo + Math.random() * (hi - lo)) * 1000);
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
 // Data de hoje em America/Sao_Paulo, no formato YYYY-MM-DD (igual ao <input date>).
 function hojeSP() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
@@ -26,7 +38,8 @@ async function runAgendados(turno, { dry = false } = {}) {
 
   const wa = require('./wa-client');
   let ok = 0, fail = 0;
-  for (const item of pend) {
+  for (let i = 0; i < pend.length; i++) {
+    const item = pend[i];
     const resumo = (item.mensagem || '(sem texto)').replace(/\n/g, ' ').slice(0, 50);
     console.log(`   → ${item.telefone}${item.foto ? ' [foto]' : ''}: ${resumo}`);
     if (dry) continue;
@@ -40,10 +53,15 @@ async function runAgendados(turno, { dry = false } = {}) {
       }
       ag.marcar(item.id, 'enviado');
       ok++; console.log('     ✅ enviado');
-      await new Promise(r => setTimeout(r, 4000)); // respiro entre envios
     } catch (e) {
       ag.marcar(item.id, 'falha', e.message);
       fail++; console.log('     ❌ falha:', e.message);
+    }
+    // Respiro aleatório antes do PRÓXIMO envio (não espera depois do último).
+    if (!dry && i < pend.length - 1) {
+      const ms = intervaloMs();
+      console.log(`     ⏳ aguardando ${(ms / 1000).toFixed(0)}s até o próximo…`);
+      await sleep(ms);
     }
   }
   console.log(`   Resultado: ${ok} enviado(s), ${fail} falha(s).`);
