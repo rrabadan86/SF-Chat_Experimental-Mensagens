@@ -80,6 +80,35 @@ function remover(id) {
   return !!item;
 }
 
+// Edita um agendamento PENDENTE. Foto: nova (fotoDataUrl) substitui; se temFoto
+// for false, remove a atual; senão mantém a que já estava.
+function atualizar(id, { telefone, mensagem, fotoDataUrl, temFoto, turno, data }) {
+  const lista = carregar();
+  const item = lista.find(x => x.id === id);
+  if (!item) throw new Error('Agendamento não encontrado.');
+  if (item.status !== 'pendente') throw new Error('Só dá para editar agendamentos pendentes.');
+  const tel = normalizarTelefone(telefone);
+  if (!tel) throw new Error('Número inválido. Use DDD + número (ex.: 62 99999-9999).');
+  const msg = String(mensagem == null ? '' : mensagem).replace(/\r\n?/g, '\n').trim();
+  if (!TURNOS.includes(turno)) throw new Error('Turno inválido.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data || '')) throw new Error('Data inválida.');
+
+  let foto = item.foto;
+  if (fotoDataUrl) {                              // nova foto → substitui
+    const nova = salvarFoto(fotoDataUrl);
+    if (foto) { try { fs.unlinkSync(path.join(FOTOS_DIR, foto)); } catch (_) {} }
+    foto = nova;
+  } else if (!temFoto) {                          // desmarcou → remove
+    if (foto) { try { fs.unlinkSync(path.join(FOTOS_DIR, foto)); } catch (_) {} }
+    foto = null;
+  }
+  if (!msg && !foto) throw new Error('Escreva uma mensagem (ou anexe uma foto).');
+
+  Object.assign(item, { telefone: tel, mensagem: msg, foto, turno, data });
+  salvar(lista);
+  return item;
+}
+
 function pendentesDe(data, turno) {
   return carregar().filter(x => x.data === data && x.turno === turno && x.status === 'pendente');
 }
@@ -97,7 +126,7 @@ function marcar(id, status, erro) {
 }
 
 module.exports = {
-  carregar, adicionar, remover, pendentesDe, marcar,
+  carregar, adicionar, atualizar, remover, pendentesDe, marcar,
   caminhoFoto, fotoValida, normalizarTelefone,
   TURNOS, ARQUIVO, FOTOS_DIR,
 };

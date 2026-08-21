@@ -159,15 +159,18 @@ function itemHtml(a) {
   const thumb = a.foto ? `<img class="thumb" src="/agendar/foto?nome=${encodeURIComponent(a.foto)}" alt="foto">` : '';
   const st = a.status === 'enviado' ? 'st-enviado' : a.status === 'falha' ? 'st-falha' : 'st-pendente';
   const stTxt = a.status === 'enviado' ? '✅ enviado' : a.status === 'falha' ? ('⚠️ falha' + (a.erro ? '' : '')) : '⏳ pendente';
-  const rm = a.status === 'pendente'
-    ? `<form method="POST" action="/agendar/remover" onsubmit="return confirm('Remover este agendamento?')" style="margin-top:8px"><input type="hidden" name="id" value="${esc(a.id)}"><button class="rm" type="submit">Remover</button></form>`
+  const acoes = a.status === 'pendente'
+    ? `<div class="acts" style="margin-top:8px">
+        <button type="button" class="reset" onclick="editarAg('${esc(a.id)}')">Editar</button>
+        <form method="POST" action="/agendar/remover" onsubmit="return confirm('Remover este agendamento?')" style="margin:0"><input type="hidden" name="id" value="${esc(a.id)}"><button class="rm" type="submit">Remover</button></form>
+      </div>`
     : '';
-  return `<div class="item">${thumb}<div class="body">
+  return `<div class="item" id="ag-${esc(a.id)}">${thumb}<div class="body">
     <div class="tel">${esc(fmtTel(a.telefone))}</div>
     <div class="meta">${esc(fmtData(a.data))} · ${esc(TURNO_LABEL[a.turno] || a.turno)} · <span class="pill ${st}">${stTxt}</span></div>
     ${a.mensagem ? `<div class="txt">${esc(a.mensagem)}</div>` : (a.foto ? '<div class="txt"><i>(só foto)</i></div>' : '')}
     ${a.erro ? `<div class="meta" style="color:#a12626">${esc(a.erro)}</div>` : ''}
-    ${rm}
+    ${acoes}
   </div></div>`;
 }
 function paginaAgendar(aviso, erro) {
@@ -176,9 +179,14 @@ function paginaAgendar(aviso, erro) {
   const pend = todos.filter(a => a.status === 'pendente').sort((x, y) => (x.data + x.turno).localeCompare(y.data + y.turno));
   const hist = todos.filter(a => a.status !== 'pendente').sort((x, y) => String(y.enviadoEm || '').localeCompare(String(x.enviadoEm || ''))).slice(0, 25);
 
+  const dados = {};
+  pend.forEach(a => { dados[a.id] = { tel: fmtTel(a.telefone), msg: a.mensagem || '', turno: a.turno, data: a.data, temFoto: !!a.foto }; });
+  const dadosJson = JSON.stringify(dados).replace(/</g, '\\u003c');
+
   const form = `
   <form class="card" id="formAg">
-    <div class="chead"><h2>Novo agendamento</h2></div>
+    <input type="hidden" id="editId" value="">
+    <div class="chead"><h2 id="formTit">Novo agendamento</h2><a id="cancelarEd" href="javascript:void(0)" onclick="cancelarEdicao()" style="display:none;margin-left:auto;font-size:.85rem;color:var(--coral-esc);font-weight:700">cancelar edição</a></div>
     <label>Número (WhatsApp)</label>
     <input id="telefone" inputmode="numeric" placeholder="(62) 99999-9999" maxlength="16">
     <label>Mensagem</label>
@@ -186,6 +194,7 @@ function paginaAgendar(aviso, erro) {
     <div class="fotorow">
       <label class="chk"><input type="checkbox" id="temFoto"> Enviar com foto</label>
       <div id="fotoWrap"><input type="file" id="foto" accept="image/png,image/jpeg,image/webp"></div>
+      <div id="fotoAtual" class="meta" style="display:none;margin-top:6px"></div>
     </div>
     <label>Turno do envio</label>
     <div class="turnos">
@@ -207,7 +216,9 @@ function paginaAgendar(aviso, erro) {
 
   const corpo = `<div class="wrap">${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}${form}</div>
 <script>
+  var AGS = ${dadosJson};
   var chk=document.getElementById('temFoto'), wrap=document.getElementById('fotoWrap'), file=document.getElementById('foto');
+  var editId=document.getElementById('editId'), fotoAtual=document.getElementById('fotoAtual');
   chk.addEventListener('change',function(){ wrap.classList.toggle('on', chk.checked); if(!chk.checked) file.value=''; });
   function soDig(s){return (s||'').replace(/\\D/g,'');}
   document.getElementById('telefone').addEventListener('input',function(e){
@@ -216,16 +227,41 @@ function paginaAgendar(aviso, erro) {
     else if(v.length>=3)e.target.value=v.replace(/(\\d{2})(\\d{0,5})/,'($1) $2'); else e.target.value=v;
   });
   function lerArquivo(f){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result);};r.onerror=rej;r.readAsDataURL(f);});}
+  function rotuloBtn(){ return editId.value ? 'Salvar alterações' : 'Agendar'; }
+  window.editarAg=function(id){
+    var a=AGS[id]; if(!a) return;
+    editId.value=id;
+    document.getElementById('telefone').value=a.tel;
+    document.getElementById('mensagem').value=a.msg;
+    document.getElementById('data').value=a.data;
+    var r=document.querySelector('input[name=turno][value="'+a.turno+'"]'); if(r)r.checked=true;
+    chk.checked=a.temFoto; wrap.classList.toggle('on',a.temFoto); file.value='';
+    if(a.temFoto){ fotoAtual.style.display='block'; fotoAtual.textContent='📎 Foto atual será mantida. Escolha outra para trocar, ou desmarque "Enviar com foto" para remover.'; }
+    else { fotoAtual.style.display='none'; }
+    document.getElementById('formTit').textContent='Editar agendamento';
+    document.querySelector('#formAg button.save').textContent='Salvar alterações';
+    document.getElementById('cancelarEd').style.display='inline';
+    document.getElementById('formAg').scrollIntoView({behavior:'smooth',block:'start'});
+  };
+  window.cancelarEdicao=function(){
+    editId.value=''; document.getElementById('formAg').reset();
+    wrap.classList.remove('on'); fotoAtual.style.display='none';
+    document.getElementById('formTit').textContent='Novo agendamento';
+    document.querySelector('#formAg button.save').textContent='Agendar';
+    document.getElementById('cancelarEd').style.display='none';
+  };
   document.getElementById('formAg').addEventListener('submit', async function(e){
     e.preventDefault();
     var msg=document.getElementById('msg');
-    var btn=e.target.querySelector('button'); btn.disabled=true; btn.textContent='Agendando…';
+    var btn=e.target.querySelector('button.save'); btn.disabled=true; btn.textContent='Salvando…';
     try{
       var payload={
+        id: editId.value || null,
         telefone:document.getElementById('telefone').value,
         mensagem:document.getElementById('mensagem').value,
         turno:(document.querySelector('input[name=turno]:checked')||{}).value,
         data:document.getElementById('data').value,
+        temFoto: chk.checked,
         fotoDataUrl:null
       };
       if(chk.checked && file.files[0]){
@@ -235,9 +271,9 @@ function paginaAgendar(aviso, erro) {
       var r=await fetch('/agendar/salvar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       var d=await r.json();
       if(d.ok){ location.href='/agendar?ok=1'; return; }
-      msg.className='aviso err'; msg.textContent=d.erro||'Não foi possível agendar.'; msg.style.display='block';
-    }catch(err){ msg.className='aviso err'; msg.textContent=err.message||'Falha ao agendar.'; msg.style.display='block'; }
-    finally{ btn.disabled=false; btn.textContent='Agendar'; }
+      msg.className='aviso err'; msg.textContent=d.erro||'Não foi possível salvar.'; msg.style.display='block';
+    }catch(err){ msg.className='aviso err'; msg.textContent=err.message||'Falha ao salvar.'; msg.style.display='block'; }
+    finally{ btn.disabled=false; btn.textContent=rotuloBtn(); }
   });
 </script>`;
   return chrome({ tab: 'Agendar envios', h1: '📅 Agendar envios', p: 'Mensagens são enviadas <b>10:45</b> (manhã) e <b>15:45</b> (tarde) do dia agendado.' }, 'ag', corpo);
@@ -287,7 +323,8 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 12e6, corpo => { // base64 da foto cabe aqui (~10-12 MB)
       try {
         const d = JSON.parse(corpo || '{}');
-        ag.adicionar({ telefone: d.telefone, mensagem: d.mensagem, fotoDataUrl: d.fotoDataUrl, turno: d.turno, data: d.data });
+        if (d.id) ag.atualizar(d.id, { telefone: d.telefone, mensagem: d.mensagem, fotoDataUrl: d.fotoDataUrl, temFoto: !!d.temFoto, turno: d.turno, data: d.data });
+        else ag.adicionar({ telefone: d.telefone, mensagem: d.mensagem, fotoDataUrl: d.fotoDataUrl, turno: d.turno, data: d.data });
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
