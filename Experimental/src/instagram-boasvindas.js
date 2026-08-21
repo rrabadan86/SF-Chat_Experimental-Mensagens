@@ -99,8 +99,9 @@ async function enviarDM(page, username, texto) {
     const alvos = document.querySelectorAll('div[role="button"], button, a, [role="button"]');
     for (const el of alvos) {
       const t = (el.textContent || '').trim().toLowerCase();
-      // "message"/"mensagem" exatos (evita pegar "Messages" da barra lateral, que vem "messagesmessages")
-      if ((t === 'mensagem' || t === 'message') && el.offsetWidth > 0) {
+      // Texto exato (evita pegar "Messages" da barra lateral, que vem "messagesmessages").
+      // O rótulo varia: "Mensagem" quando não se seguem, "Enviar mensagem" quando se seguem.
+      if ((t === 'mensagem' || t === 'message' || t === 'enviar mensagem' || t === 'send message') && el.offsetWidth > 0) {
         const clk = el.closest('[role="button"], button, a') || el;
         clk.click();
         return true;
