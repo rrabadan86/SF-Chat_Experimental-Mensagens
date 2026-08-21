@@ -664,6 +664,24 @@ async function main() {
     console.log('   → Lembrete "é amanhã" no grupo Circuito Slim');
   }
 
+  // Schedule: 10:45 (manhã) e 15:45 (tarde) → dispara os ENVIOS AGENDADOS no
+  // painel para o dia+turno atual (texto ou foto com legenda).
+  function agendarEnvios(turno, label) {
+    cron.schedule(turno === 'manha' ? config.schedule.agendadosManha : config.schedule.agendadosTarde, () => {
+      log(`⏰ Cron disparado: Envios agendados — ${turno}`);
+      if (jobRunning) { log(`⚠️  Agendados (${turno}) ignorado — outro job em execução`); return; }
+      jobRunning = true;
+      const start = new Date();
+      require('./enviar-agendados').runAgendados(turno)
+        .then(r => log(`✅ Envios agendados (${turno}) concluído — ${r.enviados} enviado(s), ${r.falhas} falha(s)`))
+        .catch(err => logError(`Envios agendados (${turno})`, err))
+        .finally(() => { jobRunning = false; log(`⏱️  Agendados (${turno}) em ${((new Date() - start) / 1000).toFixed(1)}s\n`); });
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job ENVIOS AGENDADOS (${turno}) agendado: ${label}`);
+  }
+  if (config.schedule.agendadosManha) agendarEnvios('manha', '10:45 todos os dias');
+  if (config.schedule.agendadosTarde) agendarEnvios('tarde', '15:45 todos os dias');
+
   // Schedule: a cada 5 min (05h-22h) → calcula a grade de horários NO VPS e
   // ENVIA pronta para o formulário (Render). Assim a aluna vê os horários na
   // hora, sem a Render calcular (lento). É leve e NÃO usa o navegador/WhatsApp,

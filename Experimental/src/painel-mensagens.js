@@ -1,84 +1,64 @@
 /**
- * Painel web para editar os textos das mensagens (sem mexer no código).
+ * Painel web do Studio (roda na VPS, sob o PM2, porta PAINEL_PORT — padrão 8080).
+ * Protegido por usuário e senha (Basic Auth) do .env: PAINEL_USER / PAINEL_SENHA.
  *
- * • Roda no próprio servidor (VPS), sob o PM2, na porta PAINEL_PORT (padrão 8080).
- * • Protegido por usuário e senha (Basic Auth), definidos no .env:
- *      PAINEL_USER=...        PAINEL_SENHA=...
- * • Grava as edições em data/mensagens.json; o robô lê esse arquivo na hora do
- *   envio, então a mudança vale no próximo disparo (sem reiniciar).
+ * Duas páginas:
+ *   • "/"        → editar os textos das mensagens do robô (data/mensagens.json)
+ *   • "/agendar" → agendar envios avulsos por WhatsApp (data/agendamentos.json)
+ *                  disparados 10:45 (manhã) e 15:45 (tarde) — ver enviar-agendados.js
  *
  * ⚠️ Basic Auth manda a senha só codificada (não criptografada). Exponha este
  *    painel SEMPRE atrás de HTTPS (ex.: Caddy + subdomínio). Ver o runbook.
- *
- * Uso:  node src/painel-mensagens.js        (ou sob o PM2 — ver instruções)
  */
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
 const http = require('http');
 const crypto = require('crypto');
+const fs = require('fs');
 const mensagens = require('./mensagens');
+const ag = require('./agendamentos');
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
 // Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
 // (reverse_proxy localhost:8080) ou por um túnel SSH — nunca direto da internet.
-// Para expor em todas as interfaces (não recomendado), defina PAINEL_HOST=0.0.0.0.
 const HOST = process.env.PAINEL_HOST || '127.0.0.1';
 const USER = process.env.PAINEL_USER || 'admin';
 const SENHA = process.env.PAINEL_SENHA || '';
 
-// Comparação de credenciais em tempo constante (evita timing attack).
 function seguraIgual(a, b) {
   const ba = Buffer.from(String(a)); const bb = Buffer.from(String(b));
   if (ba.length !== bb.length) return false;
   return crypto.timingSafeEqual(ba, bb);
 }
 function autorizado(req) {
-  if (!SENHA) return false; // sem senha configurada → nega tudo
+  if (!SENHA) return false;
   const h = req.headers.authorization || '';
   const m = h.match(/^Basic\s+(.+)$/i);
   if (!m) return false;
   let dec = '';
   try { dec = Buffer.from(m[1], 'base64').toString('utf8'); } catch (_) { return false; }
   const i = dec.indexOf(':');
-  const u = dec.slice(0, i); const p = dec.slice(i + 1);
-  return seguraIgual(u, USER) && seguraIgual(p, SENHA);
+  return seguraIgual(dec.slice(0, i), USER) && seguraIgual(dec.slice(i + 1), SENHA);
 }
 
 const esc = s => String(s == null ? '' : s)
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;');
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-function paginaHtml(aviso) {
-  const itens = mensagens.listar().map(m => {
-    const vars = (m.vars || []).map(([t, d]) =>
-      `<span class="var" title="${esc(d)}">{${esc(t)}}</span>`).join(' ');
-    const badge = m.editado ? '<span class="badge">editada</span>' : '';
-    return `
-    <form class="card" method="POST" action="/salvar">
-      <input type="hidden" name="chave" value="${esc(m.chave)}">
-      <div class="chead"><h2>${esc(m.titulo)} ${badge}</h2></div>
-      <p class="quando">${esc(m.quando)}</p>
-      ${vars ? `<p class="vars">Variáveis: ${vars} <small>(são trocadas automaticamente no envio — mantenha-as no texto)</small></p>` : ''}
-      <textarea name="texto" rows="7" spellcheck="true">${esc(m.texto)}</textarea>
-      <div class="acts">
-        <button type="submit" class="save">Salvar</button>
-        <button type="submit" name="reset" value="1" class="reset"
-          onclick="return confirm('Voltar esta mensagem ao texto padrão?')">Restaurar padrão</button>
-      </div>
-    </form>`;
-  }).join('\n');
+function hojeSP() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); }
+function fmtData(d) { const p = String(d || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : d; }
+function fmtTel(t) { // 5562999999999 → (62) 99999-9999
+  const d = String(t || '').replace(/\D/g, '').replace(/^55/, '');
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return t;
+}
+const TURNO_LABEL = { manha: '☀️ Manhã · 10:45', tarde: '🌇 Tarde · 15:45' };
 
-  return `<!doctype html><html lang="pt-BR"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Editar mensagens · SlimFit</title>
-<link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;500;600;700&display=swap">
-<style>
+// ── Chrome comum (cabeçalho + abas + estilo) ────────────────────────────────
+const ESTILO = `
   :root{--teal:#11abae;--coral:#ff5b57;--coral-esc:#ef5a53;--tinta:#2d2a2f;--cinza:#6e6e70;--bg:#f6f7f8;--card:#fff;--linha:#e6e6e6}
   *{box-sizing:border-box}
   body{margin:0;font-family:"Open Sans",-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--tinta);line-height:1.5}
-  h1,h2,button{font-family:"Montserrat","Open Sans",Arial,sans-serif}
+  h1,h2,h3,button,.tabs a{font-family:"Montserrat","Open Sans",Arial,sans-serif}
   header{background:var(--teal);color:#fff;padding:22px 16px}
   .wrap{max-width:820px;margin:0 auto;padding:16px}
   header .wrap{padding:0 16px;display:flex;align-items:center;gap:14px}
@@ -86,71 +66,248 @@ function paginaHtml(aviso) {
   header .logo-box img{height:28px;width:auto;display:block}
   header h1{margin:0;font-size:1.3rem;font-weight:800}
   header p{margin:4px 0 0;opacity:.92;font-size:.9rem}
+  .tabs{display:flex;gap:8px;max-width:820px;margin:16px auto 0;padding:0 16px}
+  .tabs a{flex:1;text-align:center;text-decoration:none;font-weight:700;font-size:.9rem;color:var(--cinza);background:#fff;border:1px solid var(--linha);border-radius:12px;padding:11px}
+  .tabs a.on{background:var(--teal);color:#fff;border-color:var(--teal)}
   .aviso{background:#e6f6f7;border:1px solid #bfe8e7;color:#0c6f70;border-radius:10px;padding:11px 14px;margin:16px 0}
+  .aviso.err{background:#fdecec;border-color:#f6c9c9;color:#a12626}
   .card{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:16px 18px;margin:16px 0;box-shadow:0 1px 4px rgba(0,0,0,.04)}
   .chead{display:flex;align-items:center;gap:10px}
   h2{font-size:1.05rem;margin:0}
   .badge{background:#fff0ef;color:#c23b38;border:1px solid #f6cfcd;border-radius:999px;font-size:.7rem;font-weight:700;padding:2px 9px}
   .quando{color:var(--cinza);font-size:.85rem;margin:6px 0 8px}
   .vars{font-size:.82rem;color:var(--cinza);margin:0 0 8px}
-  .vars small{opacity:.8}
   .var{display:inline-block;background:#eef7f7;color:#0c6f70;border:1px solid #cdeaea;border-radius:6px;padding:1px 6px;font-family:ui-monospace,monospace;font-size:.82rem}
-  textarea{width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:11px 12px;font-size:.95rem;font-family:inherit;line-height:1.5;resize:vertical}
-  textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(17,171,174,.15)}
-  .acts{display:flex;gap:10px;margin-top:10px}
-  button{border:none;border-radius:999px;padding:10px 18px;font-size:.92rem;font-weight:700;cursor:pointer;font-family:inherit}
+  label{display:block;font-weight:600;font-size:.86rem;margin:12px 0 4px}
+  input[type=text],input[type=tel],input[type=date],textarea{width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:11px 12px;font-size:1rem;font-family:inherit;background:#fff}
+  textarea{line-height:1.5;resize:vertical}
+  input:focus,textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(17,171,174,.15)}
+  .acts{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}
+  button{border:none;border-radius:999px;padding:11px 20px;font-size:.92rem;font-weight:700;cursor:pointer;font-family:inherit}
   .save{background:var(--coral);color:#fff}
-  .reset{background:#fff;color:var(--cinza);border:1px solid #dcdcdc}
+  .reset,.rm{background:#fff;color:var(--cinza);border:1px solid #dcdcdc}
+  .turnos{display:flex;gap:10px;margin-top:6px}
+  .turnos label{flex:1;margin:0;display:block}
+  .turnos input{position:absolute;opacity:0;pointer-events:none}
+  .turnos span{display:block;text-align:center;border:1.5px solid #dcdcdc;border-radius:12px;padding:11px;font-weight:700;cursor:pointer;color:var(--tinta)}
+  .turnos input:checked + span{border-color:var(--teal);background:var(--teal-soft,#e6f6f7);color:#0c6f70}
+  .fotorow{margin-top:12px}
+  .chk{display:flex;align-items:center;gap:9px;font-weight:600;font-size:.9rem;cursor:pointer}
+  .chk input{width:18px;height:18px}
+  #fotoWrap{display:none;margin-top:8px}
+  #fotoWrap.on{display:block}
+  .item{border:1px solid var(--linha);border-radius:12px;padding:12px 14px;margin:10px 0;display:flex;gap:12px;align-items:flex-start;background:#fff}
+  .item .thumb{width:52px;height:52px;border-radius:9px;object-fit:cover;flex:none;border:1px solid var(--linha)}
+  .item .body{flex:1;min-width:0}
+  .item .tel{font-weight:700}
+  .item .meta{font-size:.8rem;color:var(--cinza);margin-top:2px}
+  .item .txt{font-size:.9rem;color:var(--tinta);margin-top:6px;white-space:pre-wrap;word-break:break-word}
+  .pill{display:inline-block;font-size:.72rem;font-weight:700;padding:2px 9px;border-radius:999px;border:1px solid var(--linha)}
+  .st-pendente{background:#fff7e6;color:#9a6b00;border-color:#f2ddb0}
+  .st-enviado{background:#eafaf0;color:#1c6b3c;border-color:#bfe8cd}
+  .st-falha{background:#fdecec;color:#a12626;border-color:#f6c9c9}
+  .sec-t{font-family:"Montserrat";font-weight:800;font-size:1rem;margin:22px 0 4px}
+  .vazio{color:var(--cinza);font-size:.9rem}
   footer{color:var(--cinza);font-size:.8rem;text-align:center;padding:20px}
-</style></head><body>
+`;
+
+function chrome(titSubtitulo, ativo, corpo) {
+  return `<!doctype html><html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(titSubtitulo.tab)} · SlimFit</title>
+<link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;500;600;700&display=swap">
+<style>${ESTILO}</style></head><body>
 <header><div class="wrap">
   <div class="logo-box"><img alt="SlimFit Studio" src="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/logo-com-contraste.svg"></div>
-  <div><h1>✏️ Editar mensagens do robô</h1>
-  <p>Altere o texto e clique em <b>Salvar</b>. Vale já no próximo envio — sem reiniciar.</p></div>
+  <div><h1>${esc(titSubtitulo.h1)}</h1><p>${titSubtitulo.p}</p></div>
 </div></header>
-<div class="wrap">
-  ${aviso ? `<div class="aviso">${esc(aviso)}</div>` : ''}
-  ${itens}
-</div>
-<footer>SlimFit · painel de mensagens · as variáveis entre chaves são preenchidas automaticamente no envio.</footer>
+<nav class="tabs">
+  <a href="/" class="${ativo === 'msg' ? 'on' : ''}">✏️ Mensagens</a>
+  <a href="/agendar" class="${ativo === 'ag' ? 'on' : ''}">📅 Agendar envios</a>
+</nav>
+${corpo}
+<footer>SlimFit · painel do Studio</footer>
 </body></html>`;
 }
 
-function pedirLogin(res) {
-  res.writeHead(401, {
-    'WWW-Authenticate': 'Basic realm="Painel de mensagens SlimFit", charset="UTF-8"',
-    'Content-Type': 'text/plain; charset=utf-8',
+// ── Página 1: editar mensagens ──────────────────────────────────────────────
+function paginaMensagens(aviso, erro) {
+  const itens = mensagens.listar().map(m => {
+    const vars = (m.vars || []).map(([t, d]) => `<span class="var" title="${esc(d)}">{${esc(t)}}</span>`).join(' ');
+    const badge = m.editado ? '<span class="badge">editada</span>' : '';
+    return `
+    <form class="card" method="POST" action="/salvar">
+      <input type="hidden" name="chave" value="${esc(m.chave)}">
+      <div class="chead"><h2>${esc(m.titulo)} ${badge}</h2></div>
+      <p class="quando">${esc(m.quando)}</p>
+      ${vars ? `<p class="vars">Variáveis: ${vars} <small>(trocadas automaticamente no envio — mantenha-as no texto)</small></p>` : ''}
+      <textarea name="texto" rows="7" spellcheck="true">${esc(m.texto)}</textarea>
+      <div class="acts">
+        <button type="submit" class="save">Salvar</button>
+        <button type="submit" name="reset" value="1" class="reset" onclick="return confirm('Voltar esta mensagem ao texto padrão?')">Restaurar padrão</button>
+      </div>
+    </form>`;
+  }).join('\n');
+  const corpo = `<div class="wrap">${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}${itens}</div>`;
+  return chrome({ tab: 'Mensagens', h1: '✏️ Editar mensagens do robô', p: 'Altere o texto e clique em <b>Salvar</b>. Vale já no próximo envio — sem reiniciar.' }, 'msg', corpo);
+}
+
+// ── Página 2: agendar envios ────────────────────────────────────────────────
+function itemHtml(a) {
+  const thumb = a.foto ? `<img class="thumb" src="/agendar/foto?nome=${encodeURIComponent(a.foto)}" alt="foto">` : '';
+  const st = a.status === 'enviado' ? 'st-enviado' : a.status === 'falha' ? 'st-falha' : 'st-pendente';
+  const stTxt = a.status === 'enviado' ? '✅ enviado' : a.status === 'falha' ? ('⚠️ falha' + (a.erro ? '' : '')) : '⏳ pendente';
+  const rm = a.status === 'pendente'
+    ? `<form method="POST" action="/agendar/remover" onsubmit="return confirm('Remover este agendamento?')" style="margin-top:8px"><input type="hidden" name="id" value="${esc(a.id)}"><button class="rm" type="submit">Remover</button></form>`
+    : '';
+  return `<div class="item">${thumb}<div class="body">
+    <div class="tel">${esc(fmtTel(a.telefone))}</div>
+    <div class="meta">${esc(fmtData(a.data))} · ${esc(TURNO_LABEL[a.turno] || a.turno)} · <span class="pill ${st}">${stTxt}</span></div>
+    ${a.mensagem ? `<div class="txt">${esc(a.mensagem)}</div>` : (a.foto ? '<div class="txt"><i>(só foto)</i></div>' : '')}
+    ${a.erro ? `<div class="meta" style="color:#a12626">${esc(a.erro)}</div>` : ''}
+    ${rm}
+  </div></div>`;
+}
+function paginaAgendar(aviso, erro) {
+  const hoje = hojeSP();
+  const todos = ag.carregar();
+  const pend = todos.filter(a => a.status === 'pendente').sort((x, y) => (x.data + x.turno).localeCompare(y.data + y.turno));
+  const hist = todos.filter(a => a.status !== 'pendente').sort((x, y) => String(y.enviadoEm || '').localeCompare(String(x.enviadoEm || ''))).slice(0, 25);
+
+  const form = `
+  <form class="card" id="formAg">
+    <div class="chead"><h2>Novo agendamento</h2></div>
+    <label>Número (WhatsApp)</label>
+    <input id="telefone" inputmode="numeric" placeholder="(62) 99999-9999" maxlength="16">
+    <label>Mensagem</label>
+    <textarea id="mensagem" rows="5" placeholder="Escreva a mensagem que será enviada…" spellcheck="true"></textarea>
+    <div class="fotorow">
+      <label class="chk"><input type="checkbox" id="temFoto"> Enviar com foto</label>
+      <div id="fotoWrap"><input type="file" id="foto" accept="image/png,image/jpeg,image/webp"></div>
+    </div>
+    <label>Turno do envio</label>
+    <div class="turnos">
+      <label><input type="radio" name="turno" value="manha" checked><span>☀️ Manhã<br><small>10:45</small></span></label>
+      <label><input type="radio" name="turno" value="tarde"><span>🌇 Tarde<br><small>15:45</small></span></label>
+    </div>
+    <label>Data</label>
+    <input type="date" id="data" value="${hoje}" min="${hoje}">
+    <div class="acts"><button type="submit" class="save">Agendar</button></div>
+    <div id="msg" class="aviso" style="display:none"></div>
+  </form>
+
+  <div class="sec-t">⏳ Pendentes (${pend.length})</div>
+  ${pend.length ? pend.map(itemHtml).join('') : '<div class="vazio">Nenhum envio pendente.</div>'}
+
+  <div class="sec-t">📜 Histórico</div>
+  ${hist.length ? hist.map(itemHtml).join('') : '<div class="vazio">Sem envios recentes.</div>'}
+  `;
+
+  const corpo = `<div class="wrap">${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}${form}</div>
+<script>
+  var chk=document.getElementById('temFoto'), wrap=document.getElementById('fotoWrap'), file=document.getElementById('foto');
+  chk.addEventListener('change',function(){ wrap.classList.toggle('on', chk.checked); if(!chk.checked) file.value=''; });
+  function soDig(s){return (s||'').replace(/\\D/g,'');}
+  document.getElementById('telefone').addEventListener('input',function(e){
+    var v=soDig(e.target.value).slice(0,11);
+    if(v.length>=7)e.target.value=v.replace(/(\\d{2})(\\d{4,5})(\\d{0,4})/,'($1) $2-$3').replace(/-$/,'');
+    else if(v.length>=3)e.target.value=v.replace(/(\\d{2})(\\d{0,5})/,'($1) $2'); else e.target.value=v;
   });
+  function lerArquivo(f){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result);};r.onerror=rej;r.readAsDataURL(f);});}
+  document.getElementById('formAg').addEventListener('submit', async function(e){
+    e.preventDefault();
+    var msg=document.getElementById('msg');
+    var btn=e.target.querySelector('button'); btn.disabled=true; btn.textContent='Agendando…';
+    try{
+      var payload={
+        telefone:document.getElementById('telefone').value,
+        mensagem:document.getElementById('mensagem').value,
+        turno:(document.querySelector('input[name=turno]:checked')||{}).value,
+        data:document.getElementById('data').value,
+        fotoDataUrl:null
+      };
+      if(chk.checked && file.files[0]){
+        if(file.files[0].size>6*1024*1024){ throw new Error('Imagem muito grande (máx. ~6 MB).'); }
+        payload.fotoDataUrl=await lerArquivo(file.files[0]);
+      }
+      var r=await fetch('/agendar/salvar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      var d=await r.json();
+      if(d.ok){ location.href='/agendar?ok=1'; return; }
+      msg.className='aviso err'; msg.textContent=d.erro||'Não foi possível agendar.'; msg.style.display='block';
+    }catch(err){ msg.className='aviso err'; msg.textContent=err.message||'Falha ao agendar.'; msg.style.display='block'; }
+    finally{ btn.disabled=false; btn.textContent='Agendar'; }
+  });
+</script>`;
+  return chrome({ tab: 'Agendar envios', h1: '📅 Agendar envios', p: 'Mensagens são enviadas <b>10:45</b> (manhã) e <b>15:45</b> (tarde) do dia agendado.' }, 'ag', corpo);
+}
+
+function pedirLogin(res) {
+  res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Painel SlimFit", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('Acesso restrito.');
+}
+function lerCorpo(req, limite, cb) {
+  let corpo = '';
+  req.on('data', c => { corpo += c; if (corpo.length > limite) req.destroy(); });
+  req.on('end', () => cb(corpo));
 }
 
 const server = http.createServer((req, res) => {
   if (!autorizado(req)) return pedirLogin(res);
+  const url = req.url.split('?')[0];
 
+  // Página de mensagens
   if (req.method === 'GET' && (req.url === '/' || req.url.startsWith('/?'))) {
-    const aviso = /(?:\?|&)ok=(\d+)/.test(req.url)
-      ? 'Mensagem salva! Já vale no próximo envio.' : '';
+    const ok = /(?:\?|&)ok=1/.test(req.url);
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(paginaHtml(aviso));
+    return res.end(paginaMensagens(ok ? 'Mensagem salva! Já vale no próximo envio.' : ''));
   }
-
-  if (req.method === 'POST' && req.url === '/salvar') {
-    let corpo = '';
-    req.on('data', c => { corpo += c; if (corpo.length > 1e6) req.destroy(); });
-    req.on('end', () => {
+  if (req.method === 'POST' && url === '/salvar') {
+    return lerCorpo(req, 1e6, corpo => {
       const p = new URLSearchParams(corpo);
-      const chave = p.get('chave');
       try {
-        if (p.get('reset')) mensagens.salvarOverride(chave, ''); // vazio → volta ao padrão
-        else mensagens.salvarOverride(chave, p.get('texto') || '');
-        res.writeHead(303, { Location: '/?ok=1' });
-        res.end();
+        if (p.get('reset')) mensagens.salvarOverride(p.get('chave'), '');
+        else mensagens.salvarOverride(p.get('chave'), p.get('texto') || '');
+        res.writeHead(303, { Location: '/?ok=1' }); res.end();
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(paginaHtml('Erro ao salvar: ' + esc(e.message)));
+        res.end(paginaMensagens('Erro ao salvar: ' + e.message, true));
       }
     });
-    return;
+  }
+
+  // Página de agendamentos
+  if (req.method === 'GET' && (url === '/agendar')) {
+    const ok = /(?:\?|&)ok=1/.test(req.url);
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(paginaAgendar(ok ? 'Agendamento salvo! Será enviado no dia e turno escolhidos.' : ''));
+  }
+  if (req.method === 'POST' && url === '/agendar/salvar') {
+    return lerCorpo(req, 12e6, corpo => { // base64 da foto cabe aqui (~10-12 MB)
+      try {
+        const d = JSON.parse(corpo || '{}');
+        ag.adicionar({ telefone: d.telefone, mensagem: d.mensagem, fotoDataUrl: d.fotoDataUrl, turno: d.turno, data: d.data });
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+  }
+  if (req.method === 'POST' && url === '/agendar/remover') {
+    return lerCorpo(req, 1e5, corpo => {
+      try { ag.remover(new URLSearchParams(corpo).get('id')); } catch (_) {}
+      res.writeHead(303, { Location: '/agendar' }); res.end();
+    });
+  }
+  if (req.method === 'GET' && url === '/agendar/foto') {
+    const nome = new URLSearchParams(req.url.split('?')[1] || '').get('nome');
+    const caminho = ag.caminhoFoto(nome);
+    if (!caminho || !fs.existsSync(caminho)) { res.writeHead(404); return res.end('nao encontrada'); }
+    const ext = nome.split('.').pop().toLowerCase();
+    const tipo = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    res.writeHead(200, { 'Content-Type': tipo, 'Cache-Control': 'private, max-age=86400' });
+    return fs.createReadStream(caminho).pipe(res);
   }
 
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -158,9 +315,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  if (!SENHA) {
-    console.warn('⚠️  PAINEL_SENHA não definido no .env — o painel vai NEGAR todo acesso até você definir usuário e senha.');
-  }
-  console.log(`✏️  Painel de mensagens ouvindo em ${HOST}:${PORT} (usuário: ${USER}).`);
-  console.log('   Exponha SEMPRE atrás de HTTPS (ex.: Caddy). Nunca direto na internet sem TLS.');
+  if (!SENHA) console.warn('⚠️  PAINEL_SENHA não definido no .env — o painel vai NEGAR todo acesso até você definir usuário e senha.');
+  console.log(`🖥️  Painel do Studio ouvindo em ${HOST}:${PORT} (usuário: ${USER}).`);
+  console.log('   Páginas: /  (mensagens)  e  /agendar  (envios agendados). Exponha SEMPRE atrás de HTTPS.');
 });

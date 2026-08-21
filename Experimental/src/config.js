@@ -88,6 +88,8 @@ const config = {
     slotsPush:        '*/10 5-22 * * *', // a cada 10 min, 05h-22h (calcula a grade e envia ao formulário)
     circuitoConvoca:  '15 16 * * 3',    // 16:15 quarta (convocatória do Circuito de sábado, com a professora)
     circuitoLembrete: '15 16 * * 5',    // 16:15 sexta ("é amanhã!" no grupo Circuito Slim)
+    agendadosManha:   '45 10 * * *',    // 10:45 todos os dias (envios agendados no painel — turno manhã)
+    agendadosTarde:   '45 15 * * *',    // 15:45 todos os dias (envios agendados no painel — turno tarde)
   },
 
   // Filtros de horário
