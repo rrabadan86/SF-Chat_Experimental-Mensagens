@@ -70,15 +70,22 @@ function paginaHtml(aviso) {
   return `<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Editar mensagens · SlimFit</title>
+<link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;500;600;700&display=swap">
 <style>
-  :root{--teal:#11abae;--coral:#ff5b57;--tinta:#2d2a2f;--cinza:#6e6e70;--bg:#f6f7f8;--card:#fff;--linha:#e6e6e6}
+  :root{--teal:#11abae;--coral:#ff5b57;--coral-esc:#ef5a53;--tinta:#2d2a2f;--cinza:#6e6e70;--bg:#f6f7f8;--card:#fff;--linha:#e6e6e6}
   *{box-sizing:border-box}
-  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--tinta);line-height:1.5}
-  header{background:var(--teal);color:#fff;padding:20px 16px}
+  body{margin:0;font-family:"Open Sans",-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--tinta);line-height:1.5}
+  h1,h2,button{font-family:"Montserrat","Open Sans",Arial,sans-serif}
+  header{background:var(--teal);color:#fff;padding:22px 16px}
   .wrap{max-width:820px;margin:0 auto;padding:16px}
-  header .wrap{padding:0 16px}
-  header h1{margin:0;font-size:1.3rem}
-  header p{margin:4px 0 0;opacity:.9;font-size:.9rem}
+  header .wrap{padding:0 16px;display:flex;align-items:center;gap:14px}
+  header .logo-box{background:#fff;border-radius:11px;padding:7px 11px;flex:none;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+  header .logo-box img{height:28px;width:auto;display:block}
+  header h1{margin:0;font-size:1.3rem;font-weight:800}
+  header p{margin:4px 0 0;opacity:.92;font-size:.9rem}
   .aviso{background:#e6f6f7;border:1px solid #bfe8e7;color:#0c6f70;border-radius:10px;padding:11px 14px;margin:16px 0}
   .card{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:16px 18px;margin:16px 0;box-shadow:0 1px 4px rgba(0,0,0,.04)}
   .chead{display:flex;align-items:center;gap:10px}
@@ -96,8 +103,11 @@ function paginaHtml(aviso) {
   .reset{background:#fff;color:var(--cinza);border:1px solid #dcdcdc}
   footer{color:var(--cinza);font-size:.8rem;text-align:center;padding:20px}
 </style></head><body>
-<header><div class="wrap"><h1>✏️ Editar mensagens do robô</h1>
-  <p>Altere o texto e clique em <b>Salvar</b>. Vale já no próximo envio — sem reiniciar.</p></div></header>
+<header><div class="wrap">
+  <div class="logo-box"><img alt="SlimFit Studio" src="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/logo-com-contraste.svg"></div>
+  <div><h1>✏️ Editar mensagens do robô</h1>
+  <p>Altere o texto e clique em <b>Salvar</b>. Vale já no próximo envio — sem reiniciar.</p></div>
+</div></header>
 <div class="wrap">
   ${aviso ? `<div class="aviso">${esc(aviso)}</div>` : ''}
   ${itens}
