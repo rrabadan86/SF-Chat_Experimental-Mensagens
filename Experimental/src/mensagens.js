@@ -110,7 +110,7 @@ function salvarOverride(chave, texto) {
   const dir = path.dirname(ARQUIVO);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const atual = carregarOverrides();
-  const t = String(texto == null ? '' : texto);
+  const t = normalizar(texto);
   if (t.trim() === '' || t === PADROES[chave]) {
     delete atual[chave]; // vazio ou igual ao padrão → volta ao padrão
   } else {
@@ -120,10 +120,17 @@ function salvarOverride(chave, texto) {
   return atual[chave] || PADROES[chave];
 }
 
-// Texto atual de uma chave (edição do painel, ou o padrão).
+// Normaliza quebras de linha: navegadores enviam \r\n em formulários; o \r
+// solto pode virar caractere estranho no WhatsApp. Guardamos/enviamos só \n.
+function normalizar(s) {
+  return String(s == null ? '' : s).replace(/\r\n?/g, '\n');
+}
+
+// Texto atual de uma chave (edição do painel, ou o padrão). Aplica a
+// normalização de quebras de linha mesmo em edições antigas já salvas com \r\n.
 function texto(chave) {
   const ov = carregarOverrides();
-  return (ov[chave] != null && String(ov[chave]).trim() !== '') ? ov[chave] : PADROES[chave];
+  return (ov[chave] != null && String(ov[chave]).trim() !== '') ? normalizar(ov[chave]) : PADROES[chave];
 }
 
 // Substitui {marcadores} pelos valores. {studio} é resolvido do .env sozinho.
