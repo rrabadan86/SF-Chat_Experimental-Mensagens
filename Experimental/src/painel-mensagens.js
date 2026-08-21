@@ -18,6 +18,10 @@ const crypto = require('crypto');
 const mensagens = require('./mensagens');
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
+// Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
+// (reverse_proxy localhost:8080) ou por um túnel SSH — nunca direto da internet.
+// Para expor em todas as interfaces (não recomendado), defina PAINEL_HOST=0.0.0.0.
+const HOST = process.env.PAINEL_HOST || '127.0.0.1';
 const USER = process.env.PAINEL_USER || 'admin';
 const SENHA = process.env.PAINEL_SENHA || '';
 
@@ -143,10 +147,10 @@ const server = http.createServer((req, res) => {
   res.end('Não encontrado.');
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   if (!SENHA) {
     console.warn('⚠️  PAINEL_SENHA não definido no .env — o painel vai NEGAR todo acesso até você definir usuário e senha.');
   }
-  console.log(`✏️  Painel de mensagens ouvindo na porta ${PORT} (usuário: ${USER}).`);
+  console.log(`✏️  Painel de mensagens ouvindo em ${HOST}:${PORT} (usuário: ${USER}).`);
   console.log('   Exponha SEMPRE atrás de HTTPS (ex.: Caddy). Nunca direto na internet sem TLS.');
 });
