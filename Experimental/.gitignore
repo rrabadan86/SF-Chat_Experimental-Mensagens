@@ -23,3 +23,5 @@ data/mensagens.json
 # Envios agendados no painel (dados/fotos de cada VPS) — não versionar
 data/agendamentos.json
 data/agendamentos-fotos/
+# Contas do IG que esgotaram tentativas de DM (estado por VPS)
+data/instagram-indisponiveis.json

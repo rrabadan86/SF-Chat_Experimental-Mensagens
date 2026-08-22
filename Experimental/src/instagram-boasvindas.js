@@ -65,6 +65,35 @@ function salvarEnviados(set) {
   }, null, 2), 'utf8');
 }
 
+// Contas que deram "Mensagem Indisponível" (privadas/restritas): contamos as
+// tentativas e, ao atingir IG_MAX_TENTATIVAS_INDISP (padrão 2), paramos de
+// tentar — assim elas não desperdiçam as vagas do dia.
+const INDISP_FILE = path.join(DATA_DIR, 'instagram-indisponiveis.json');
+const MAX_TENT_INDISP = parseInt(process.env.IG_MAX_TENTATIVAS_INDISP || '2', 10);
+function carregarIndisp() {
+  try { if (fs.existsSync(INDISP_FILE)) return JSON.parse(fs.readFileSync(INDISP_FILE, 'utf8')) || {}; } catch (_) {}
+  return {};
+}
+function salvarIndisp(map) {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(INDISP_FILE, JSON.stringify(map, null, 2), 'utf8');
+}
+function deveuPular(username, map) {
+  const m = map || carregarIndisp();
+  return (m[username] || 0) >= MAX_TENT_INDISP;
+}
+function registrarIndisponivel(username) {
+  const m = carregarIndisp();
+  m[username] = (m[username] || 0) + 1;
+  salvarIndisp(m);
+  if (m[username] >= MAX_TENT_INDISP) console.log(`   ⛔ @${username} atingiu ${m[username]} tentativas — não será mais tentada.`);
+  return m[username];
+}
+function limparIndisponivel(username) { // ao enviar com sucesso, zera o histórico
+  const m = carregarIndisp();
+  if (m[username] != null) { delete m[username]; salvarIndisp(m); }
+}
+
 /** Salva um screenshot de diagnóstico (debug-*.png, ignorado pelo git). */
 async function salvarShot(page, nome) {
   try {
@@ -262,7 +291,7 @@ async function enviarParaLista(usernames) {
   const vistos = new Set();
   const alvos = [];
   for (const u of usernames) {
-    if (!u || vistos.has(u) || jaEnviados.has(u)) continue;
+    if (!u || vistos.has(u) || jaEnviados.has(u) || deveuPular(u)) continue;
     vistos.add(u); alvos.push(u);
   }
   const puladosJa = usernames.length - alvos.length;
@@ -291,8 +320,8 @@ async function enviarParaLista(usernames) {
       let status;
       try { status = await enviarDM(page, u, MENSAGEM_BOASVINDAS()); }
       catch (e) { status = 'error'; console.log(`   ❌ Erro: ${e.message}`); }
-      if (status === 'sent') { enviadas++; jaEnviados.add(u); salvarEnviados(jaEnviados); console.log('   ✅ Enviada!'); }
-      else if (status === 'unavailable') { indisponiveis++; console.log('   🚫 Mensagem Indisponível'); }
+      if (status === 'sent') { enviadas++; jaEnviados.add(u); salvarEnviados(jaEnviados); limparIndisponivel(u); console.log('   ✅ Enviada!'); }
+      else if (status === 'unavailable') { indisponiveis++; registrarIndisponivel(u); console.log('   🚫 Mensagem Indisponível'); }
       else { erros++; console.log('   ⚠️  Falha'); }
       if (i < aProcessar.length - 1) {
         const espera = intervaloAleatorio();
@@ -366,9 +395,11 @@ async function main() {
     const conhecidosSet = new Set(conhecidos.map(c => c.username));
     const jaEnviados = carregarEnviados();
 
-    // Novos = está agora, não estava antes, e ainda não recebeu DM
+    // Novos = está agora, não estava antes, ainda não recebeu DM e não é uma
+    // conta que já esgotou as tentativas de "indisponível".
+    const indispMap = carregarIndisp();
     const novos = atuais.filter(a =>
-      !conhecidosSet.has(a.username) && !jaEnviados.has(a.username)
+      !conhecidosSet.has(a.username) && !jaEnviados.has(a.username) && !deveuPular(a.username, indispMap)
     );
 
     console.log(`\n─────────────────────────────────────────────────────`);
@@ -414,9 +445,11 @@ async function main() {
         enviadas++;
         jaEnviados.add(seg.username);
         salvarEnviados(jaEnviados);
+        limparIndisponivel(seg.username);
         console.log('   ✅ Enviada!');
       } else if (status === 'unavailable') {
         indisponiveis++;
+        registrarIndisponivel(seg.username);
         console.log('   🚫 Mensagem Indisponível (bloqueio/restrição)');
       } else {
         erros++;
