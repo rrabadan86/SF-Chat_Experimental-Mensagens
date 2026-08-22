@@ -102,6 +102,22 @@ ol.passos .det + .det{margin-top:5px}
   background:var(--surface-2); border-radius:6px; padding:7px 10px;
   margin-top:8px; display:block; overflow-wrap:anywhere;
 }
+.endereco{
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  background:var(--brand-soft); border:1px solid var(--line);
+  border-radius:9px; padding:12px 14px; margin-top:10px;
+}
+.endereco code{
+  background:transparent; padding:0; font-size:.9rem; font-weight:500;
+  color:var(--ink); flex:1 1 260px; overflow-wrap:anywhere; line-height:1.5;
+}
+.endereco button{
+  font:inherit; font-size:.82rem; font-weight:600; cursor:pointer; flex:none;
+  background:var(--brand); color:var(--on-brand); border:1px solid var(--brand);
+  border-radius:999px; padding:7px 15px;
+}
+.endereco button:hover{filter:brightness(1.08)}
+.endereco button:focus-visible{outline:2.5px solid var(--accent); outline-offset:2px}
 .destaque{
   background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--accent);
   border-radius:10px; padding:18px 20px; margin:26px 0; box-shadow:var(--shadow);
@@ -173,8 +189,8 @@ footer p + p{margin-top:10px}
 <section class="bloco">
   <div class="rotulo"><span class="n">Parte 2</span><h2>Autorizar o sistema a escrever</h2></div>
   <p class="intro">
-    O sistema entra como um usuário robô, com um endereço de e-mail próprio que eu
-    te mando. Ele só enxerga as agendas que você autorizar, e nada mais da sua conta.
+    O sistema entra como um usuário robô, com um endereço de e-mail próprio.
+    Ele só enxerga as agendas que você autorizar, e nada mais da sua conta.
     <strong>Repita estes passos nas duas agendas.</strong>
   </p>
   <ol class="passos">
@@ -185,7 +201,12 @@ footer p + p{margin-top:10px}
     </li>
     <li>
       <b>Adicione o endereço do sistema</b>
-      <span class="det">Desça até <em>Compartilhar com pessoas ou grupos específicos</em> e clique em <strong>Adicionar pessoas</strong>. Cole o endereço que eu te mandei — é comprido e termina em <code>.iam.gserviceaccount.com</code>.</span>
+      <span class="det">Desça até <em>Compartilhar com pessoas ou grupos específicos</em> e clique em <strong>Adicionar pessoas e grupos</strong>. Cole este endereço:</span>
+      <span class="endereco">
+        <code id="conta">marcacao@agenda-onco.iam.gserviceaccount.com</code>
+        <button type="button" id="copiar">Copiar</button>
+      </span>
+      <span class="det">O Google não vai reconhecer como contato conhecido nem sugerir nada enquanto você digita — é esperado. Cole inteiro e siga.</span>
     </li>
     <li>
       <b>Escolha a permissão certa</b>
@@ -280,3 +301,17 @@ footer p + p{margin-top:10px}
 </footer>
 
 </div>
+
+<script>
+  (function () {
+    var botao = document.getElementById('copiar');
+    var conta = document.getElementById('conta');
+    if (!botao || !conta || !navigator.clipboard) { if (botao) botao.hidden = true; return; }
+    botao.addEventListener('click', function () {
+      navigator.clipboard.writeText(conta.textContent.trim()).then(function () {
+        botao.textContent = 'Copiado';
+        setTimeout(function () { botao.textContent = 'Copiar'; }, 2000);
+      });
+    });
+  })();
+</script>

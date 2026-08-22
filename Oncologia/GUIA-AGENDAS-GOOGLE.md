@@ -15,19 +15,24 @@ na agenda. Ela não é uma pessoa, não tem caixa de e-mail e só enxerga as age
 que o médico compartilhar explicitamente com ela.
 
 1. Entre em <https://console.cloud.google.com> e crie um projeto
-   — sugestão de nome: `agenda-consultorio`.
+   — no nosso caso: `agenda-onco`.
 2. Menu lateral → **APIs e serviços → Biblioteca**. Procure por
    **Google Calendar API** e clique em **Ativar**.
 3. Menu lateral → **APIs e serviços → Credenciais** →
    **Criar credenciais → Conta de serviço**.
-   - Nome: `agendamento-site`
+   - Nome: `marcacao`
    - Pode pular as duas etapas opcionais de permissão e clicar em **Concluir**.
 4. Clique na conta que acabou de aparecer → aba **Chaves** →
    **Adicionar chave → Criar nova chave → JSON**. O arquivo baixa sozinho.
 5. Renomeie esse arquivo para `credenciais.json` e coloque em `Oncologia/app/`.
-6. Copie o **e-mail da conta de serviço** — é algo como
-   `agendamento-site@agenda-consultorio.iam.gserviceaccount.com`.
-   É esse endereço que o médico vai usar no passo seguinte.
+6. Copie o **e-mail da conta de serviço**. No nosso projeto ele é:
+
+   ```
+   marcacao@agenda-onco.iam.gserviceaccount.com
+   ```
+
+   É esse endereço que o médico vai usar no passo seguinte. Ele não é segredo
+   (pode ir por WhatsApp) — quem abre a porta é o arquivo JSON, não ele.
 
 > **O arquivo JSON é uma senha.** Quem tiver ele escreve na agenda do médico.
 > Nunca mande por WhatsApp, nunca suba para o Git — o `.gitignore` já bloqueia.
@@ -63,7 +68,8 @@ Para **cada uma** das duas agendas:
    compartilhamento**.
 6. Descer até **Compartilhar com pessoas ou grupos específicos** →
    **Adicionar pessoas**.
-7. Colar o e-mail da conta de serviço (aquele do passo 6 da parte 1).
+7. Colar o e-mail da conta de serviço:
+   `marcacao@agenda-onco.iam.gserviceaccount.com`
 8. Em permissão, escolher **Fazer alterações nos eventos**.
    Menos que isso não deixa o sistema marcar; mais que isso não é necessário.
 9. **Enviar**. Não aparece convite para aceitar — conta de serviço não tem
