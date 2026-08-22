@@ -1,116 +1,189 @@
 # Agendamento de consultas — oncologista
 
-Esboço de apresentação: página do médico + formulário de agendamento que lança na
-**agenda do Google do hospital escolhido** e avisa a **recepcionista pelo WhatsApp**.
+Página do médico + formulário que agenda direto na **agenda do Google do hospital
+escolhido** e avisa a **recepcionista pelo WhatsApp**, que confirma respondendo
+uma mensagem.
 
-- Protótipo clicável: [`prototipo.html`](prototipo.html) — abre direto no navegador, não precisa de servidor.
-  Todo o comportamento é simulado no próprio navegador (horários, evento na agenda, mensagem
-  do WhatsApp). Nada é enviado para lugar nenhum.
+| | |
+|---|---|
+| [`prototipo.html`](prototipo.html) | Esboço de apresentação. Abre no navegador, tudo simulado, serve para mostrar a ideia ao médico. |
+| [`GUIA-AGENDAS-GOOGLE.md`](GUIA-AGENDAS-GOOGLE.md) | Passo a passo para criar e compartilhar as duas agendas. É o que o médico precisa fazer. |
+| [`app/`](app/) | O sistema de verdade: servidor, integração com o Google e com o WhatsApp. |
 
-## O que o protótipo mostra
+---
 
-1. **Apresentação do médico** — foto, bio, formação, áreas de atuação e os dois locais de atendimento.
-2. **Agendamento em 4 passos** — hospital → dia e horário → dados do paciente → revisão.
-3. **Bastidores** (aparece depois de enviar; **não** aparece para o paciente de verdade) —
-   o evento como ele entra no Google Agenda e a mensagem exata que chega no WhatsApp da recepção,
-   inclusive a resposta `CONFIRMAR` que muda o status do evento.
-
-Tudo que está como "a definir" no protótipo é informação que precisa vir do médico.
-
-## Como funcionaria de verdade
+## Como funciona
 
 ```
-Paciente (navegador)
-      │  1. GET /api/horarios?hospital=h1&de=…&ate=…
+Paciente (celular ou computador)
+      │  GET /api/horarios?hospital=h1
       ▼
-  Servidor  ──► Google Calendar API  freebusy.query( calendarId do hospital )
-      │         devolve só os horários realmente livres
+  Servidor ──► Google Calendar  freebusy nas DUAS agendas + agendas de bloqueio
+      │        devolve só o que está realmente livre
       │
-      │  2. POST /api/agendar  { hospital, data, hora, dados do paciente }
+      │  POST /api/agendar
       ▼
-  Servidor  ──► Google Calendar API  events.insert( calendarId do hospital )
+  Servidor ──► reconsulta o Google (a tela pode estar aberta há meia hora)
+      │    ──► events.insert na agenda daquele hospital
       │           título:  "PRÉ · <paciente> — <tipo>"
       │           status:  tentative
       │           extendedProperties.private.protocolo = PA-2026-0000
       │
-      └──────► WhatsApp da recepcionista  (mensagem pronta com os dados + protocolo)
+      └──────► WhatsApp da recepcionista: dados do paciente + protocolo
 
-  Recepcionista responde "CONFIRMAR PA-2026-0000"
+  Recepcionista liga para o paciente e responde no WhatsApp:
+  "CONFIRMAR PA-2026-0000"
       │
       ▼
-  Servidor  ──► events.patch( status: confirmed, tira o "PRÉ ·" do título )
+  Servidor ──► acha o evento pelo protocolo
+      │    ──► events.patch  status: confirmed, tira o "PRÉ ·" do título
       └──────► avisa o paciente no WhatsApp dele
 ```
 
-### Google Calendar — as duas agendas
+`REMARCAR PA-2026-0000` faz o inverso: apaga o evento, o horário volta para o
+formulário e o paciente é avisado de que a recepção vai entrar em contato.
 
-Criar **duas agendas separadas** na conta Google do médico (Hospital 1 e Hospital 2) e
-compartilhar as duas com uma *service account* do Google Cloud, com permissão de
-"Fazer alterações nos eventos". O `calendarId` de cada uma vai na configuração:
+---
 
-```
-CAL_HOSPITAL_1=xxxxxxxx@group.calendar.google.com
-CAL_HOSPITAL_2=yyyyyyyy@group.calendar.google.com
-```
+## Custo: como fica tudo de graça
 
-Vantagem de usar duas agendas em vez de uma com etiquetas: o médico vê cada hospital
-numa cor no celular, pode compartilhar só a agenda do Hospital 1 com a recepção de lá,
-e o `freebusy` já responde por local.
+**O fluxo inteiro roda sem custo de mensagem** usando `WA_DRIVER=wwebjs`, que
+conversa pelo WhatsApp Web no número que o consultório já tem. Não há cobrança
+por mensagem, nem template para aprovar, nem número novo para contratar.
 
-Ponto importante: o `freebusy` deve consultar **as duas** agendas antes de oferecer um
-horário, senão o sistema pode marcar Hospital 2 às 14h enquanto o médico já tem algo às
-14h no Hospital 1. A grade é por hospital, mas o médico é um só.
+A Cloud API oficial da Meta **cobra** pelas mensagens que o *sistema* inicia
+(as chamadas utility/marketing). Respostas dentro de uma conversa que a pessoa
+começou não são cobradas, mas o nosso caso é justamente o contrário: quem
+começa a conversa é o sistema, tanto com a recepcionista quanto com o paciente.
+Os valores e as regras da Meta mudam de tempos em tempos — se um dia essa opção
+for considerada, vale conferir a tabela vigente antes de decidir.
 
-### Grade de horários
+### O que se ganha e o que se perde
 
-Definida na configuração, não no Google: dias da semana, hora inicial, hora final e
-duração da consulta por hospital. O Google só é consultado para saber o que já está
-ocupado. Isso evita que um compromisso pessoal na agenda vire "horário de consulta".
-
-### WhatsApp para a recepcionista
-
-Duas opções, e a escolha muda custo e risco:
-
-| | API Oficial (WhatsApp Cloud API) | Biblioteca não-oficial (whatsapp-web.js) |
+| | `wwebjs` (recomendado) | `cloud` (oficial) |
 |---|---|---|
-| Custo | por conversa iniciada | zero |
-| Estabilidade | alta, é da Meta | depende do WhatsApp Web logado |
-| Número | precisa de número dedicado | usa o número atual do consultório |
-| Risco de bloqueio | nenhum | existe |
-| Mensagem para quem não escreveu antes | só com template aprovado | livre |
+| Custo por mensagem | **zero** | cobrado |
+| Número | o que o consultório já usa | precisa de um dedicado |
+| Mensagem para o paciente | texto livre | só template aprovado |
+| Confirmação por botão | não, ela digita | sim |
+| Estabilidade | depende da sessão do WhatsApp Web | alta |
+| Situação perante a Meta | não é oficial | oficial |
 
-Para avisar **a recepcionista** (que é uma pessoa só, sempre a mesma), qualquer uma serve.
-Para avisar **o paciente**, a API oficial é a recomendada — mensagem iniciada pelo sistema
-para alguém que não escreveu antes exige template aprovado.
+O código trata os dois do mesmo jeito: trocar é mudar `WA_DRIVER` no `.env`.
+Comece grátis; se um dia o volume justificar, a migração é de uma linha.
 
-### Confirmação pela recepcionista
+### Para o `wwebjs` durar
 
-Ela responde `CONFIRMAR PA-2026-0000` (ou toca num botão, se for API oficial). O sistema:
+- Use o **número do consultório**, não o pessoal do médico.
+- O volume aqui é baixo e conversacional (algumas mensagens por dia, para uma
+  recepcionista e para pacientes que estão esperando contato). É o cenário de
+  menor risco de bloqueio.
+- Nada de disparo em massa ou propaganda: é isso que derruba número.
+- A sessão é escaneada uma vez (`npm run wa:login`) e fica salva em disco. Se
+  cair, é só reescanear — os agendamentos continuam entrando na agenda do Google
+  de qualquer forma, e o aviso pendente aparece no log.
 
-1. acha o evento pela `extendedProperties.private.protocolo`;
-2. muda para `status: confirmed` e tira o prefixo `PRÉ ·` do título;
-3. manda a confirmação para o WhatsApp do paciente.
+---
 
-`REMARCAR` devolve o horário para a grade e avisa o paciente. Se ninguém responder em
-24h, o sistema lembra a recepcionista — ou libera o horário, se o médico preferir.
+## Rodando
+
+```bash
+cd app
+cp .env.example .env      # preencha CAL_H1, CAL_H2 e o caminho da credencial
+npm install
+npm test                  # 45 testes, tudo offline
+npm start                 # http://localhost:3000
+```
+
+Com `WA_DRIVER=log` (o padrão) nada é enviado de verdade: as mensagens aparecem
+no terminal. Dá para desenvolver e demonstrar o sistema inteiro assim.
+
+Para ligar o WhatsApp de verdade:
+
+```bash
+# no .env: WA_DRIVER=wwebjs e WA_RECEPCAO=55629XXXXXXXX
+npm run wa:login          # escaneia o QR uma vez com o WhatsApp do consultório
+npm start
+```
+
+### Estrutura
+
+```
+app/
+  config/hospitais.json    grade de atendimento (dias, horários, duração)
+  src/
+    tempo.js               datas e fuso, sem dependência externa
+    disponibilidade.js     regra de quais horários podem ser oferecidos (pura)
+    validacao.js           o que chega do navegador não é confiável (pura)
+    protocolo.js           PA-2026-0000 e a leitura dos comandos (pura)
+    mensagens.js           todo texto que sai pelo WhatsApp
+    google-agenda.js       freebusy, criar, confirmar, liberar
+    whatsapp/              log | wwebjs | cloud, mesma interface
+    agendamento.js         a orquestração
+    server.js              rotas HTTP
+  public/                  a página que o paciente vê
+  tests/                   45 testes, sem rede
+```
+
+As quatro primeiras são funções puras — é por isso que dá para testar as regras
+de horário, fuso e validação sem Google e sem WhatsApp.
+
+### Rotas
+
+| Rota | Para quê |
+|---|---|
+| `GET /api/hospitais` | monta a tela 1 |
+| `GET /api/horarios?hospital=h1&dias=8` | grade já descontando o ocupado |
+| `POST /api/agendar` | cria o pré-agendamento |
+| `POST /webhook/whatsapp` | respostas da recepcionista (driver `cloud`) |
+| `POST /tarefas/cobrar-pendentes` | cobrança das 24h (cron externo) |
+| `GET /saude` | health check |
+
+---
+
+## Decisões que valem conhecer
+
+**O evento entra como provisório.** O horário é bloqueado no instante do envio —
+é isso que impede dois pacientes de pegarem o mesmo slot. Mas nasce com
+`status: tentative` e prefixo `PRÉ ·`, então o médico bate o olho na agenda e
+sabe o que já passou pela recepção.
+
+**A grade vem da configuração, não do Google.** Dias e horários de ambulatório
+ficam em `config/hospitais.json`. O Google é consultado só para saber o que está
+ocupado. Assim um compromisso pessoal na agenda nunca vira "horário de consulta".
+
+**As duas agendas são consultadas sempre.** Mesmo quando o paciente escolheu o
+Hospital 2, o sistema confere o Hospital 1: o médico é um só e não pode estar em
+dois lugares às 14h.
+
+**Só a recepcionista comanda.** `CONFIRMAR` e `REMARCAR` só valem vindos do
+número em `WA_RECEPCAO`. Comando de outro número é ignorado e registrado no log.
+
+**Aviso que falha não desfaz agendamento.** Se o WhatsApp cair na hora do envio,
+o evento continua na agenda e o erro vai para o log. O contrário — avisar e não
+marcar — seria pior.
+
+---
 
 ## Cuidados que não dá para pular
 
-- **LGPD / dado sensível.** Motivo da consulta e convênio são dado de saúde. Precisa de
-  consentimento explícito (já está no formulário), HTTPS, acesso restrito, prazo de
-  descarte e um aviso de privacidade de verdade na página.
-- **Não é canal de urgência.** O formulário precisa dizer isso em letra visível — já está
-  no protótipo, no rodapé e na barra lateral do agendamento.
-- **Dois pacientes, o mesmo horário.** O evento entra no Google no momento do envio
-  (mesmo como provisório), justamente para travar o slot.
-- **CFM.** Publicidade médica tem regra (Resolução CFM 1.974/2011 e atualizações):
-  nada de promessa de resultado, foto de antes/depois ou autopromoção sensacionalista.
-  Vale o médico dar uma olhada no texto final.
+- **LGPD.** Motivo da consulta e convênio são dado de saúde. O consentimento
+  está no formulário e é obrigatório; falta definir prazo de descarte e publicar
+  um aviso de privacidade de verdade na página.
+- **Não é canal de urgência.** Está dito no rodapé, na barra do agendamento e na
+  tela de confirmação.
+- **Credencial do Google é senha.** `credenciais.json` e `.env` estão no
+  `.gitignore`. Nunca mande por WhatsApp.
+- **CFM.** Publicidade médica tem regra (Resolução CFM 1.974/2011 e
+  atualizações): nada de promessa de resultado, foto de antes/depois ou
+  autopromoção. Vale o médico ler o texto final da página.
 
-## Próximos passos sugeridos
+---
 
-1. Apresentar o protótipo e colher as informações da lista "Falta definir com o médico".
-2. Decidir API oficial x não-oficial para o WhatsApp.
-3. Criar as duas agendas e a service account.
-4. Implementar o backend (formulário → Google Agenda → WhatsApp → confirmação).
-5. Publicar com domínio próprio e HTTPS.
+## O que falta
+
+1. Informações reais do médico: nome, CRM/RQE, foto, bio, formação, áreas.
+2. Dos hospitais: nome, endereço, telefone, dias e horários, convênios aceitos.
+3. Número de WhatsApp da recepcionista.
+4. Regra de cancelamento e antecedência mínima (hoje: 24h).
+5. Publicar com domínio próprio e HTTPS, e agendar o cron da cobrança de 24h.

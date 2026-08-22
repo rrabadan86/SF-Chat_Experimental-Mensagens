@@ -1,0 +1,22 @@
+{
+  "name": "agendamento-oncologia",
+  "version": "0.1.0",
+  "description": "Agendamento de consultas: formulario web -> Google Agenda do hospital -> WhatsApp da recepcao",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test \"tests/*.test.js\"",
+    "wa:login": "node src/whatsapp/login.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "googleapis": "^173.0.0"
+  },
+  "optionalDependencies": {
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js#main"
+  }
+}
