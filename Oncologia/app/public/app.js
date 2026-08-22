@@ -162,7 +162,8 @@
         '<span class="dw">' + DIAS_CURTOS[diaDaSemana(d.data)] + '</span>' +
         '<span class="dd">' + p[2] + '</span>' +
         '<span class="dm">' + MESES[+p[1] - 1] + '</span>' +
-        '<span class="free' + (d.livres ? '' : ' none') + '">' + (d.livres ? d.livres + ' livres' : 'lotado') + '</span>' +
+        '<span class="free' + (d.livres ? '' : ' none') + '">' +
+          (d.livres ? d.livres + (d.livres > 1 ? ' livres' : ' livre') : 'lotado') + '</span>' +
         '</button>';
     }).join('');
 

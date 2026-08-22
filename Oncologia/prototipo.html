@@ -1,4 +1,5 @@
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agenda do Oncologista</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -211,6 +212,7 @@ dl.timeline dd span{display:block; color:var(--ink-2); font-size:.85rem}
   display:flex; flex-direction:column; gap:2px;
 }
 .rail h3{font-size:1.05rem; margin-bottom:16px}
+.rail, .rail ol, .rail li{min-width:0}
 .rail ol{list-style:none; margin:0; padding:0; display:grid; gap:2px}
 .rail li{
   display:grid; grid-template-columns:26px 1fr; gap:11px; align-items:center;
@@ -229,7 +231,10 @@ dl.timeline dd span{display:block; color:var(--ink-2); font-size:.85rem}
   .rail li{grid-template-columns:1fr; justify-items:center; text-align:center; font-size:.72rem; gap:6px}
   .rail .railfoot{display:none}
 }
-.stage{padding:30px 30px 26px; min-height:430px; display:flex; flex-direction:column}
+.stage{
+  padding:30px 30px 26px; min-height:430px; display:flex; flex-direction:column;
+  min-width:0;   /* sem isto a faixa de dias empurra o card e o resto é cortado */
+}
 @media (max-width:560px){ .stage{padding:22px 18px} }
 .step{display:none; flex-direction:column; flex:1}
 .step[data-active="true"]{display:flex; animation:rise .28s ease both}
@@ -256,7 +261,10 @@ dl.timeline dd span{display:block; color:var(--ink-2); font-size:.85rem}
 .dot{width:8px; height:8px; border-radius:50%; background:var(--brand); flex:none}
 .dot.b{background:var(--accent)}
 
-.days{display:flex; gap:9px; overflow-x:auto; padding:2px 2px 12px; scrollbar-width:thin}
+.days{
+  display:flex; gap:9px; overflow-x:auto; padding:2px 2px 12px;
+  scrollbar-width:thin; max-width:100%; overscroll-behavior-x:contain;
+}
 .day{
   flex:none; min-width:76px; text-align:center; padding:11px 8px;
   border:1.5px solid var(--line); border-radius:var(--radius-sm);
@@ -985,7 +993,7 @@ footer strong{color:var(--ink-2)}
       b.innerHTML = '<span class="dw">'+DIAS_CURTOS[d.getDay()]+'</span>'+
                     '<span class="dd">'+pad(d.getDate())+'</span>'+
                     '<span class="dm">'+MESES[d.getMonth()]+'</span>'+
-                    '<span class="free'+(livres?"":" none")+'">'+(livres ? livres+" livres" : "lotado")+'</span>';
+                    '<span class="free'+(livres?"":" none")+'">'+(livres ? livres+(livres>1?" livres":" livre") : "lotado")+'</span>';
       b.addEventListener("click", function(){
         estado.dia = dia; estado.hora = null;
         $$("#days .day").forEach(function(o){ o.setAttribute("aria-pressed", String(o === b)); });
