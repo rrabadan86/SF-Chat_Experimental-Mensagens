@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Preparar as Duas Agendas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -132,6 +133,43 @@ ol.passos .det + .det{margin-top:5px}
 .opcional .eyebrow{color:var(--ink-3)}
 .opcional h3{margin:8px 0 8px}
 .opcional p{color:var(--ink-2); font-size:.93rem}
+
+/* ---------- impressão / PDF ---------- */
+@page{ size:A4; margin:16mm 15mm; }
+@media print{
+  /* no papel o tema é sempre claro, mesmo que o navegador esteja no escuro */
+  :root, :root[data-theme="dark"]{
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F0F3EF;
+    --ink:#15211E; --ink-2:#41504B; --ink-3:#66756F;
+    --line:#CDD5CD; --line-strong:#AFBBB2;
+    --brand:#14453D; --brand-soft:#E4EDE8; --on-brand:#FFFFFF;
+    --accent:#8E5726; --accent-soft:#F3E8DA;
+    --warn:#7A4E0F; --warn-soft:#F6ECD9;
+    --shadow:none;
+  }
+  html, body{ background:#FFFFFF; font-size:10.6pt; }
+  *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
+  .wrap{ max-width:none; padding:0; }
+  #copiar{ display:none; }             /* botão não serve no papel */
+  .endereco{ page-break-inside:avoid; break-inside:avoid; }
+  .endereco code{ font-size:10.2pt; }
+
+  header.topo{ padding:0 0 14px; }
+  section.bloco{ padding:16px 0 12px; }
+  h1{ font-size:23pt; }
+  h2{ font-size:14pt; }
+
+  /* nada de passo cortado no meio pela quebra de página */
+  ol.passos > li, .destaque, .opcional, .aviso, .rotulo{
+    page-break-inside:avoid; break-inside:avoid;
+  }
+  h2, .rotulo{ page-break-after:avoid; break-after:avoid; }
+  section.bloco{ page-break-inside:auto; }
+
+  footer{ padding:18px 0 0; }
+  a{ text-decoration:none; color:inherit; }
+}
 
 footer{padding:36px 0 60px; border-top:1px solid var(--line); color:var(--ink-3); font-size:.86rem}
 footer p + p{margin-top:10px}
