@@ -28,7 +28,7 @@ test('campos opcionais vazios não deixam linha órfã', () => {
 });
 
 test('confirmação do paciente é escrita para o paciente, não para o sistema', () => {
-  const texto = m.confirmacaoPaciente(AG, HOSPITAL, { nome: 'Dr. Marcelo Andrade' });
+  const texto = m.confirmacaoPaciente(AG, HOSPITAL, { nome: 'Dr. Felipe Oliveira' });
   assert.ok(texto.startsWith('Olá, Maria!'));
   assert.ok(texto.includes('confirmada'));
   assert.ok(texto.includes('seg, 24 de agosto de 2026'));
