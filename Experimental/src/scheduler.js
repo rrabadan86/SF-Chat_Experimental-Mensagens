@@ -688,7 +688,7 @@ async function main() {
   // então roda independente do jobRunning dos jobs pesados.
   if (config.schedule.slotsPush) {
     cron.schedule(config.schedule.slotsPush, runSlotsPush, { timezone: 'America/Sao_Paulo' });
-    log(`📅 Job GRADE→FORMULÁRIO agendado: ${config.schedule.slotsPush} (a cada 10 min, 05h-22h)`);
+    log(`📅 Job GRADE→FORMULÁRIO agendado: ${config.schedule.slotsPush} (a cada 10 min, 24h)`);
     console.log('   → Calcula os horários e envia prontos ao formulário de agendamento');
     // Empurra uma vez já no start (após restart, o formulário fica pronto logo).
     setTimeout(runSlotsPush, 15000);
