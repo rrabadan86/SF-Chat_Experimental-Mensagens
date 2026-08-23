@@ -45,6 +45,62 @@ formulário e o paciente é avisado de que a recepção vai entrar em contato.
 
 ---
 
+## O painel do médico
+
+Locais de atendimento **não ficam no código**. O médico entra em `/admin` com senha
+e cadastra, edita, liga e desliga os locais sozinho. O formulário do paciente reflete
+na hora, sem reiniciar nada.
+
+Cada local tem: nome, ID da agenda do Google, dias da semana, horário de início e fim,
+duração da consulta, intervalo, antecedência mínima, por quantos dias abrir a agenda,
+endereço e telefone. Ele também edita o próprio nome/CRM e o WhatsApp da recepção.
+
+Três coisas que o painel resolve e que valem estar explícitas:
+
+**Testar acesso antes de salvar.** Ao colar o ID de uma agenda nova, um botão consulta
+o Google e responde uma de três coisas: conectado com permissão correta, compartilhada
+mas só com leitura, ou não encontrada. É o passo em que todo mundo erra, e agora ele
+descobre na hora em vez de dias depois com um paciente reclamando. O teste usa
+`calendarList.get`, então nada é escrito na agenda dele.
+
+**Desligar em vez de excluir.** Parou de atender num hospital? Desligar tira o local do
+formulário imediatamente, mas mantém o cadastro e não toca nas consultas que já estão
+marcadas. Se voltar a atender lá, é um clique. Excluir existe, mas o painel empurra
+para desligar.
+
+**Prévia da grade.** Enquanto ele mexe em horário e duração, a tela mostra os horários
+que aquilo vai gerar ("6 consultas por dia · Sex, 09:00 09:30 …"). Erro de configuração
+aparece antes de salvar, não depois.
+
+### Onde isso é guardado
+
+`dados/config.json`, escrito de forma atômica (grava num temporário e renomeia), porque
+um agendamento pode estar acontecendo no mesmo instante em que ele salva. O arquivo está
+no `.gitignore`: tem telefone da recepção e IDs de agenda, e é diferente em cada instalação.
+
+O `.env` continua existindo para o que é infraestrutura — porta, fuso, credencial do
+Google, driver de WhatsApp, senha do painel. Na primeira execução, se ainda não existe
+`dados/config.json`, ele é semeado a partir do `.env` e de `config/hospitais.json`.
+Depois disso o painel é a fonte da verdade.
+
+> **Hospedagem com disco efêmero** (plano free do Render e parecidos) apaga
+> `dados/config.json` a cada deploy, e o médico perde o que cadastrou. Use disco
+> persistente, ou aponte `DADOS_ARQUIVO` para um volume, ou troque por um banco.
+
+### Senha do painel
+
+```bash
+npm run senha       # pergunta a senha e imprime as duas linhas do .env
+```
+
+Guarda a senha como scrypt com salt por senha — nunca em texto. A sessão é um cookie
+assinado com HMAC (`HttpOnly`, `SameSite=Lax`, `Secure` em produção), válido por 12 horas.
+Oito tentativas erradas de um mesmo IP bloqueiam por 15 minutos.
+
+**O painel precisa estar atrás de HTTPS em produção.** Sem isso a senha trafega em claro.
+
+---
+
 ## Custo: como fica tudo de graça
 
 **O fluxo inteiro roda sem custo de mensagem** usando `WA_DRIVER=wwebjs`, que
@@ -91,7 +147,8 @@ Comece grátis; se um dia o volume justificar, a migração é de uma linha.
 cd app
 cp .env.example .env      # preencha CAL_H1, CAL_H2 e o caminho da credencial
 npm install
-npm test                  # 45 testes, tudo offline
+npm run senha             # cria a senha do painel (imprime 2 linhas para o .env)
+npm test                  # 77 testes, tudo offline
 npm start                 # http://localhost:3000
 ```
 
@@ -117,12 +174,17 @@ app/
     validacao.js           o que chega do navegador não é confiável (pura)
     protocolo.js           PA-2026-0000 e a leitura dos comandos (pura)
     mensagens.js           todo texto que sai pelo WhatsApp
-    google-agenda.js       freebusy, criar, confirmar, liberar
+    google-agenda.js       freebusy, criar, confirmar, liberar, testar acesso
+    dados.js               config editável pelo painel, gravada em disco (pura)
+    auth.js                senha e sessão do painel, sem dependência (pura)
     whatsapp/              log | wwebjs | cloud, mesma interface
     agendamento.js         a orquestração
+    rotas-admin.js         a API do painel
     server.js              rotas HTTP
+  dados/config.json        o que o médico edita (fora do Git)
   public/                  a página que o paciente vê
-  tests/                   45 testes, sem rede
+  public/admin/            o painel do médico
+  tests/                   77 testes, sem rede
 ```
 
 As quatro primeiras são funções puras — é por isso que dá para testar as regras
@@ -138,6 +200,11 @@ de horário, fuso e validação sem Google e sem WhatsApp.
 | `POST /webhook/whatsapp` | respostas da recepcionista (driver `cloud`) |
 | `POST /tarefas/cobrar-pendentes` | cobrança das 24h (cron externo) |
 | `GET /saude` | health check |
+| `/admin` | painel do médico (tela) |
+| `POST /admin/api/entrar` · `/sair` | sessão do painel |
+| `GET·PUT /admin/api/config` | dados do médico e da recepção |
+| `POST·PUT·DELETE /admin/api/hospitais` | locais de atendimento |
+| `POST /admin/api/testar-agenda` | confere o compartilhamento no Google |
 
 ---
 
@@ -182,8 +249,9 @@ marcar — seria pior.
 
 ## O que falta
 
-1. Informações reais do médico: nome, CRM/RQE, foto, bio, formação, áreas.
-2. Dos hospitais: nome, endereço, telefone, dias e horários, convênios aceitos.
-3. Número de WhatsApp da recepcionista.
-4. Regra de cancelamento e antecedência mínima (hoje: 24h).
-5. Publicar com domínio próprio e HTTPS, e agendar o cron da cobrança de 24h.
+1. Os IDs das duas agendas do Google (o médico manda) — daí em diante ele mesmo
+   cadastra novos locais pelo painel.
+2. Foto, bio, formação e áreas de atuação para a página de apresentação
+   (isso ainda é texto no HTML, não passa pelo painel).
+3. Convênios aceitos.
+4. Publicar com domínio próprio e HTTPS, e agendar o cron da cobrança de 24h.

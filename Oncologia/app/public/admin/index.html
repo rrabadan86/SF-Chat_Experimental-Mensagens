@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel — agenda de consultas</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Karla:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/estilo.css">
+<link rel="stylesheet" href="/admin/painel.css">
+</head>
+<body>
+
+<!-- ============ entrar ============ -->
+<div id="telaEntrar" class="entrar">
+  <form class="card entrar-card" id="formEntrar">
+    <div class="eyebrow">Painel do médico</div>
+    <h1>Agenda de consultas</h1>
+    <p class="muted small">Entre para editar os locais de atendimento e os horários.</p>
+    <div class="field" style="margin-top:22px">
+      <label for="senha">Senha</label>
+      <input type="password" id="senha" autocomplete="current-password" autofocus>
+    </div>
+    <div class="formerr" id="erroEntrar"></div>
+    <button class="btn" type="submit" style="margin-top:18px; width:100%">Entrar</button>
+  </form>
+</div>
+
+<!-- ============ painel ============ -->
+<div id="telaPainel" hidden>
+  <div class="topbar">
+    <div class="wrap">
+      <div class="brandmark">
+        <div class="sigil" aria-hidden="true">⚙</div>
+        <div><b>Painel</b><span id="nomeMedico">—</span></div>
+      </div>
+      <nav class="topnav">
+        <a href="/" target="_blank" rel="noopener">Ver o site</a>
+        <button class="btn ghost sm" type="button" id="sair">Sair</button>
+      </nav>
+    </div>
+  </div>
+
+  <main class="wrap painel">
+
+    <!-- locais -->
+    <section class="bloco">
+      <div class="bloco-topo">
+        <div>
+          <div class="eyebrow">Locais de atendimento</div>
+          <h2>Onde você atende</h2>
+          <p class="muted small">Cada local usa uma agenda do Google. Desligar um local o tira do
+            formulário na hora, sem apagar nada do que já está marcado.</p>
+        </div>
+        <button class="btn" type="button" id="novoLocal">Adicionar local</button>
+      </div>
+      <div id="listaLocais" class="lista"><p class="carregando">Carregando…</p></div>
+    </section>
+
+    <!-- como adicionar -->
+    <section class="bloco">
+      <details class="ajuda">
+        <summary>Como ligar uma agenda nova do Google</summary>
+        <ol class="passos-ajuda">
+          <li>No Google Agenda (no computador), crie uma agenda para o novo local.</li>
+          <li>Em <em>Configurações e compartilhamento → Compartilhar com pessoas específicas</em>,
+            adicione este endereço com permissão <strong>Fazer alterações nos eventos</strong>:
+            <span class="endereco">
+              <code id="contaServico">carregando…</code>
+              <button class="btn sm" type="button" id="copiarConta">Copiar</button>
+            </span>
+          </li>
+          <li>Ainda nas configurações, copie o <strong>ID da agenda</strong> (em "Integrar agenda").</li>
+          <li>Volte aqui, clique em <strong>Adicionar local</strong>, cole o ID e use
+            <strong>Testar acesso</strong> antes de salvar.</li>
+        </ol>
+      </details>
+    </section>
+
+    <!-- gerais -->
+    <section class="bloco">
+      <div class="eyebrow">Dados gerais</div>
+      <h2>Médico e recepção</h2>
+      <form id="formGerais" class="card" style="margin-top:18px">
+        <div class="fields">
+          <div class="field" data-name="medico.nome">
+            <label for="g-nome">Nome do médico <span class="req">*</span></label>
+            <input id="g-nome" name="medico.nome" placeholder="Dr. Felipe Oliveira">
+          </div>
+          <div class="field" data-name="medico.crm">
+            <label for="g-crm">CRM e RQE</label>
+            <input id="g-crm" name="medico.crm" placeholder="CRM-GO 00.000 · RQE 0000">
+          </div>
+          <div class="field" data-name="medico.especialidade">
+            <label for="g-esp">Especialidade</label>
+            <input id="g-esp" name="medico.especialidade" placeholder="Oncologia Clínica">
+          </div>
+          <div class="field" data-name="recepcao.nome">
+            <label for="g-recnome">Nome de quem confirma</label>
+            <input id="g-recnome" name="recepcao.nome" placeholder="Ana">
+          </div>
+          <div class="field full" data-name="recepcao.whatsapp">
+            <label for="g-zap">WhatsApp da recepção <span class="req">*</span></label>
+            <input id="g-zap" name="recepcao.whatsapp" inputmode="tel" placeholder="5562991234567">
+            <span class="help">55 + DDD + número, só dígitos. É para cá que vão os pedidos de agendamento.</span>
+          </div>
+        </div>
+        <div class="formerr" id="erroGerais"></div>
+        <div class="acoes"><button class="btn" type="submit">Salvar</button></div>
+      </form>
+    </section>
+
+    <!-- bloqueios -->
+    <section class="bloco">
+      <details class="ajuda">
+        <summary>Agendas que só bloqueiam horário</summary>
+        <p class="muted small" style="margin:12px 0">
+          Agendas consultadas para saber quando você está ocupado, mas que nunca recebem consulta —
+          a sua agenda pessoal, por exemplo. Compartilhe cada uma com a conta de serviço usando
+          <strong>Ver apenas disponibilidade (ocultar detalhes)</strong>: o sistema saberá que você está
+          ocupado, sem ver do que se trata. Um ID por linha.
+        </p>
+        <form id="formBloqueios">
+          <div class="field">
+            <label for="g-bloq">IDs das agendas</label>
+            <textarea id="g-bloq" rows="3" placeholder="pessoal@gmail.com"></textarea>
+          </div>
+          <div class="acoes"><button class="btn ghost sm" type="submit">Salvar bloqueios</button></div>
+        </form>
+      </details>
+    </section>
+
+  </main>
+</div>
+
+<!-- ============ formulário de local ============ -->
+<div id="painelLocal" class="gaveta" hidden>
+  <div class="gaveta-fundo" data-fechar></div>
+  <form class="gaveta-corpo" id="formLocal">
+    <header>
+      <h2 id="tituloLocal">Adicionar local</h2>
+      <button class="fechar" type="button" data-fechar aria-label="Fechar">×</button>
+    </header>
+
+    <div class="gaveta-conteudo">
+      <div class="fields">
+        <div class="field full" data-name="nome">
+          <label for="l-nome">Nome do local <span class="req">*</span></label>
+          <input id="l-nome" name="nome" placeholder="Hospital Santa Clara">
+        </div>
+
+        <div class="field full" data-name="calendarId">
+          <label for="l-cal">ID da agenda do Google <span class="req">*</span></label>
+          <input id="l-cal" name="calendarId" placeholder="c_abc123@group.calendar.google.com" spellcheck="false">
+          <div class="teste">
+            <button class="btn ghost sm" type="button" id="testar">Testar acesso</button>
+            <span id="resultadoTeste" class="resultado"></span>
+          </div>
+        </div>
+
+        <div class="field full" data-name="dias">
+          <label>Dias de atendimento <span class="req">*</span></label>
+          <div class="dias-semana" id="dias"></div>
+        </div>
+
+        <div class="field" data-name="inicio">
+          <label for="l-inicio">Começa às <span class="req">*</span></label>
+          <input id="l-inicio" name="inicio" type="time" step="300">
+        </div>
+        <div class="field" data-name="fim">
+          <label for="l-fim">Termina às <span class="req">*</span></label>
+          <input id="l-fim" name="fim" type="time" step="300">
+        </div>
+        <div class="field" data-name="duracaoMin">
+          <label for="l-dur">Duração da consulta <span class="req">*</span></label>
+          <input id="l-dur" name="duracaoMin" type="number" min="5" max="480" step="5">
+          <span class="help">minutos</span>
+        </div>
+        <div class="field" data-name="intervaloMin">
+          <label for="l-int">Intervalo entre consultas</label>
+          <input id="l-int" name="intervaloMin" type="number" min="0" max="240" step="5">
+          <span class="help">minutos, 0 para nenhum</span>
+        </div>
+
+        <div class="previa full" id="previa"></div>
+
+        <div class="field" data-name="antecedenciaMinHoras">
+          <label for="l-ant">Antecedência mínima</label>
+          <input id="l-ant" name="antecedenciaMinHoras" type="number" min="0" max="720">
+          <span class="help">horas antes da consulta</span>
+        </div>
+        <div class="field" data-name="janelaDias">
+          <label for="l-jan">Abrir agenda por</label>
+          <input id="l-jan" name="janelaDias" type="number" min="1" max="365">
+          <span class="help">dias à frente</span>
+        </div>
+
+        <div class="field full" data-name="endereco">
+          <label for="l-end">Endereço</label>
+          <input id="l-end" name="endereco" placeholder="Rua, número, bairro">
+        </div>
+        <div class="field full" data-name="telefone">
+          <label for="l-tel">Telefone da recepção do local</label>
+          <input id="l-tel" name="telefone" placeholder="(62) 3000-0000">
+        </div>
+      </div>
+      <div class="formerr" id="erroLocal"></div>
+    </div>
+
+    <footer>
+      <button class="btn ghost" type="button" data-fechar>Cancelar</button>
+      <button class="btn" type="submit" id="salvarLocal">Salvar local</button>
+    </footer>
+  </form>
+</div>
+
+<script src="/admin/painel.js"></script>
+</body>
+</html>

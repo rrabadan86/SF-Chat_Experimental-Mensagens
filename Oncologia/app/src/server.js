@@ -19,11 +19,16 @@ const express = require('express');
 const config = require('./config');
 const wa = require('./whatsapp');
 const servico = require('./agendamento');
+const auth = require('./auth');
+const rotasAdmin = require('./rotas-admin');
 
 const app = express();
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '32kb' }));
 app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
+
+// painel do médico: a API exige sessão (ver rotas-admin.js)
+app.use('/admin/api', rotasAdmin);
 
 /** Freio simples por IP: dá conta de robô bobo sem precisar de Redis. */
 const janelas = new Map();
@@ -93,7 +98,12 @@ app.post('/tarefas/cobrar-pendentes', async (req, res) => {
 });
 
 app.get('/saude', (_req, res) => {
-  res.json({ ok: true, whatsapp: wa.nome, hospitais: config.hospitais.length });
+  res.json({
+    ok: true,
+    whatsapp: wa.nome,
+    hospitais: config.hospitais.length,
+    painel: Boolean(process.env.ADMIN_SENHA_HASH),
+  });
 });
 
 function responderErro(res, e) {
@@ -110,7 +120,15 @@ async function iniciar() {
   wa.aoReceber((msg) => servico.tratarRespostaRecepcao(msg));
   app.listen(config.porta, () => {
     console.log(`[web] http://localhost:${config.porta}  (WhatsApp: ${wa.nome})`);
-    for (const h of config.hospitais) console.log(`      ${h.nome} -> ${h.calendarId}`);
+    console.log(`[web] painel do médico: http://localhost:${config.porta}/admin`);
+    const locais = config.hospitais;
+    if (!locais.length) {
+      console.log('      nenhum local ativo ainda — cadastre pelo painel');
+    }
+    for (const h of locais) console.log(`      ${h.nome} -> ${h.calendarId}`);
+    if (!process.env.ADMIN_SENHA_HASH) {
+      console.log('      [!] painel sem senha: rode "npm run senha" e preencha o .env');
+    }
   });
 }
 

@@ -7,7 +7,8 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "test": "node --test \"tests/*.test.js\"",
-    "wa:login": "node src/whatsapp/login.js"
+    "wa:login": "node src/whatsapp/login.js",
+    "senha": "node src/gerar-senha.js"
   },
   "engines": { "node": ">=20" },
   "dependencies": {

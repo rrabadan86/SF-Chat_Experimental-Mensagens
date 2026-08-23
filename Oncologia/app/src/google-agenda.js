@@ -145,4 +145,60 @@ async function pendentes(calendarId, deRFC, ateRFC) {
   return (data.items || []).filter((e) => e.status === 'tentative');
 }
 
-module.exports = { ocupados, criarPreAgendamento, buscarPorProtocolo, confirmar, liberar, pendentes, cliente };
+/**
+ * Confere se a conta de serviço enxerga a agenda e com qual permissão.
+ *
+ * Usa calendarList.get em vez de tentar criar um evento de teste: compartilhar
+ * uma agenda já a coloca na lista da conta de serviço, e a resposta traz o
+ * accessRole exato. Assim o médico descobre que errou a permissão sem que nada
+ * seja escrito na agenda dele.
+ */
+async function testarAcesso(calendarId) {
+  const id = String(calendarId || '').trim();
+  if (!id) return { ok: false, motivo: 'vazio', mensagem: 'Informe o ID da agenda.' };
+
+  try {
+    const { data } = await cliente().calendarList.get({ calendarId: id });
+    const papel = data.accessRole;
+    if (papel === 'owner' || papel === 'writer') {
+      return {
+        ok: true, papel, nome: data.summary,
+        mensagem: `Conectado a "${data.summary}". Permissão correta para marcar consultas.`,
+      };
+    }
+    return {
+      ok: false, papel, nome: data.summary, motivo: 'permissao',
+      mensagem: `A agenda "${data.summary}" foi compartilhada, mas só com permissão de leitura. ` +
+        'No Google Agenda, mude para "Fazer alterações nos eventos".',
+    };
+  } catch (e) {
+    const status = e.code || e.status;
+    if (status === 404) {
+      return {
+        ok: false, motivo: 'nao_compartilhada',
+        mensagem: 'Não encontrei esta agenda. Confira se o ID está certo e se ela foi ' +
+          'compartilhada com a conta de serviço, com permissão de "Fazer alterações nos eventos".',
+      };
+    }
+    if (status === 403) {
+      return {
+        ok: false, motivo: 'sem_permissao',
+        mensagem: 'O Google recusou o acesso a esta agenda. Refaça o compartilhamento com a conta de serviço.',
+      };
+    }
+    return { ok: false, motivo: 'erro', mensagem: `Erro ao consultar o Google: ${e.message}` };
+  }
+}
+
+/** E-mail da conta de serviço, para o painel mostrar o que o médico deve autorizar. */
+async function contaDeServico() {
+  try {
+    const auth = new google.auth.GoogleAuth({ ...credenciais(), scopes: ESCOPOS });
+    const c = await auth.getClient();
+    return c.email || (await auth.getCredentials()).client_email || null;
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { ocupados, criarPreAgendamento, buscarPorProtocolo, confirmar, liberar, pendentes, cliente, testarAcesso, contaDeServico };
