@@ -35,19 +35,41 @@ sudo apt install -y nginx certbot python3-certbot-nginx git
 sudo npm install -g pm2
 ```
 
-**Se for usar o WhatsApp pelo `wwebjs`**, o Chromium e as bibliotecas dele:
+**Se for usar o WhatsApp pelo `wwebjs`**, as bibliotecas que o navegador precisa:
 
 ```bash
-sudo apt install -y chromium-browser \
-  libnss3 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
-  libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 \
-  libasound2 libpango-1.0-0 libcairo2
+# Ubuntu 24.04
+sudo apt install -y \
+  libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 \
+  libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+  libgbm1 libasound2t64 libpango-1.0-0 libcairo2 fonts-liberation
 
-which chromium-browser || which chromium     # anote: vai no .env como CHROMIUM_PATH
+# Ubuntu 22.04 (nomes sem o sufixo t64)
+sudo apt install -y \
+  libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+  libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+  libgbm1 libasound2 libpango-1.0-0 libcairo2 fonts-liberation
 ```
 
-> Sem esses pacotes o WhatsApp falha com um erro obscuro de "browser não iniciou".
-> É o tropeço mais comum ao subir whatsapp-web.js em VPS enxuta.
+> O 24.04 renomeou várias dessas bibliotecas com sufixo `t64` (transição para
+> `time_t` de 64 bits). Se o apt reclamar de pacote inexistente, é isso — confira
+> qual versão do Ubuntu você tem com `lsb_release -a`.
+
+**Não instale o `chromium-browser` do apt.** No 24.04 ele é só um atalho para o
+snap, que roda confinado e quebra com o Puppeteer de um jeito difícil de
+diagnosticar. O `whatsapp-web.js` traz o Puppeteer, que baixa um Chromium próprio
+durante o `npm ci` — testado e na versão certa. As bibliotecas acima são o que
+esse Chromium precisa para rodar.
+
+Depois do `npm ci` (passo 2), confirme que ele veio:
+
+```bash
+cd ~/agendamento-onco/app
+node -e "console.log(require('puppeteer').executablePath())"
+```
+
+> Sem essas bibliotecas o WhatsApp falha com um "browser não iniciou" sem
+> explicação. É o tropeço mais comum ao subir whatsapp-web.js em VPS enxuta.
 
 ---
 
@@ -177,7 +199,8 @@ Depois que o site estiver no ar:
 
 ```bash
 cd ~/agendamento-onco/app
-nano .env                # WA_DRIVER=wwebjs  e  CHROMIUM_PATH=/usr/bin/chromium-browser
+nano .env                # WA_DRIVER=wwebjs  (deixe CHROMIUM_PATH vazio/comentado:
+                         #  vazio = usa o Chromium que o Puppeteer baixou)
 pm2 stop agendamento-onco
 npm run wa:login         # mostra o QR no terminal — escaneie com o WhatsApp do consultório
 pm2 start agendamento-onco
@@ -250,7 +273,8 @@ tocados por uma atualização — é justamente por isso que estão fora do Git.
 |---|---|
 | `EADDRINUSE` ao iniciar | já tem algo na 3000; `pm2 delete agendamento-onco` e suba de novo, ou mude a PORT |
 | 502 no navegador | o Node caiu; veja `pm2 logs` |
-| WhatsApp não conecta | faltam as bibliotecas do Chromium (passo 1) ou o `CHROMIUM_PATH` está errado |
+| WhatsApp não conecta | faltam as bibliotecas do Chromium (passo 1), ou o `CHROMIUM_PATH` aponta para o snap do sistema — deixe-o vazio para usar o do Puppeteer |
+| `Package X has no installation candidate` no apt | Ubuntu 24.04 usa nomes com sufixo `t64` (`libasound2t64`, `libcups2t64`…) |
 | Painel aceita a senha e volta para o login | faltou HTTPS: o cookie sai com `Secure` e o navegador descarta em http |
 | Horários não aparecem | agenda não compartilhada com a conta de serviço — use "Testar acesso" no painel |
 | Sumiu tudo que o médico cadastrou | `dados/config.json` foi apagado; restaure do backup |
