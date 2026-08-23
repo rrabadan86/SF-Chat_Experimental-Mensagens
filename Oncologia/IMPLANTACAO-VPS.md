@@ -188,6 +188,42 @@ sudo certbot renew --dry-run
 **HTTPS não é opcional aqui.** Sem ele a senha do painel e os dados do paciente
 trafegam em claro, e o cookie de sessão não recebe a marca `Secure`.
 
+### Se a máquina já roda Caddy (ou outro servidor na porta 80)
+
+Instalar um segundo servidor web não funciona: quem chegar depois falha com
+`bind() to 0.0.0.0:80 failed (98: Address already in use)`. Descubra quem é o
+dono da porta antes de qualquer coisa:
+
+```bash
+sudo ss -ltnp | grep -E ':80\s|:443\s'
+```
+
+**Se for Caddy**, é o caminho mais fácil dos dois: ele emite e renova o
+certificado sozinho, sem certbot. Desative o nginx e use
+[`deploy/Caddyfile-agendamento`](app/deploy/Caddyfile-agendamento):
+
+```bash
+sudo systemctl disable --now nginx
+sudo rm -f /etc/nginx/sites-enabled/agendamento
+
+sudo tee -a /etc/caddy/Caddyfile < ~/agendamento-onco/app/deploy/Caddyfile-agendamento
+sudo sed -i 's/SEU_DOMINIO/agendamento.seudominio.com.br/' /etc/caddy/Caddyfile
+sudo mkdir -p /var/log/caddy && sudo chown caddy:caddy /var/log/caddy
+
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+O certificado é emitido no primeiro acesso ao domínio — pode levar alguns
+segundos na primeira vez. Acompanhe com `sudo journalctl -u caddy -f`.
+
+**Se for Apache** e não estiver servindo nada seu: `sudo systemctl disable --now apache2`
+e siga com o nginx.
+
+**Se for um container Docker publicando a 80**: não tome a porta dele. Ou o
+container passa a escutar numa porta interna e o servidor da frente distribui
+por domínio, ou você cadastra este site no proxy que já existe.
+
 ### Firewall
 
 ```bash
@@ -283,6 +319,7 @@ tocados por uma atualização — é justamente por isso que estão fora do Git.
 | `EADDRINUSE` ao iniciar | já tem algo na 3000; `pm2 delete agendamento-onco` e suba de novo, ou mude a PORT |
 | 502 no navegador | o Node caiu; veja `pm2 logs` |
 | `no "ssl_certificate" is defined` no `nginx -t` | tem um `listen 443 ssl` sem certificado; deixe só o bloco `:80` e rode o certbot |
+| `bind() to 0.0.0.0:80 failed (Address already in use)` | outro servidor já é dono da porta 80; veja "Se a máquina já roda Caddy" |
 | WhatsApp não conecta | faltam as bibliotecas do Chromium (passo 1), ou o `CHROMIUM_PATH` aponta para o snap do sistema — deixe-o vazio para usar o do Puppeteer |
 | `Package X has no installation candidate` no apt | Ubuntu 24.04 usa nomes com sufixo `t64` (`libasound2t64`, `libcups2t64`…) |
 | Painel aceita a senha e volta para o login | faltou HTTPS: o cookie sai com `Secure` e o navegador descarta em http |
