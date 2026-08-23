@@ -15,6 +15,12 @@ const dados = require('./dados');
 
 const config = {
   porta: Number(process.env.PORT || 3000),
+  /**
+   * Atrás de um nginx, o Node só precisa escutar em 127.0.0.1 — assim a porta
+   * 3000 não fica exposta na internet mesmo que o firewall falhe. Em container,
+   * defina HOST=0.0.0.0.
+   */
+  host: process.env.HOST || '127.0.0.1',
   fuso: process.env.FUSO || 'America/Sao_Paulo',
   offset: process.env.TZ_OFFSET || '-03:00',
 

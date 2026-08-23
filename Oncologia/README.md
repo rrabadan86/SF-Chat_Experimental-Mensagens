@@ -8,6 +8,7 @@ uma mensagem.
 |---|---|
 | [`prototipo.html`](prototipo.html) | Esboço de apresentação. Abre no navegador, tudo simulado, serve para mostrar a ideia ao médico. |
 | [`GUIA-AGENDAS-GOOGLE.md`](GUIA-AGENDAS-GOOGLE.md) | Passo a passo para criar e compartilhar as duas agendas. É o que o médico precisa fazer. |
+| [`IMPLANTACAO-VPS.md`](IMPLANTACAO-VPS.md) | Passo a passo para colocar no ar numa VPS Ubuntu, com nginx, HTTPS e PM2. |
 | [`app/`](app/) | O sistema de verdade: servidor, integração com o Google e com o WhatsApp. |
 
 ---
@@ -84,8 +85,8 @@ Google, driver de WhatsApp, senha do painel. Na primeira execução, se ainda n�
 Depois disso o painel é a fonte da verdade.
 
 > **Hospedagem com disco efêmero** (plano free do Render e parecidos) apaga
-> `dados/config.json` a cada deploy, e o médico perde o que cadastrou. Use disco
-> persistente, ou aponte `DADOS_ARQUIVO` para um volume, ou troque por um banco.
+> `dados/config.json` a cada deploy, e o médico perde o que cadastrou. É um dos
+> motivos de este sistema pedir VPS — veja [`IMPLANTACAO-VPS.md`](IMPLANTACAO-VPS.md).
 
 ### Senha do painel
 
@@ -184,6 +185,7 @@ app/
   dados/config.json        o que o médico edita (fora do Git)
   public/                  a página que o paciente vê
   public/admin/            o painel do médico
+  deploy/                  PM2, nginx, systemd e backup
   tests/                   77 testes, sem rede
 ```
 
@@ -254,4 +256,5 @@ marcar — seria pior.
 2. Foto, bio, formação e áreas de atuação para a página de apresentação
    (isso ainda é texto no HTML, não passa pelo painel).
 3. Convênios aceitos.
-4. Publicar com domínio próprio e HTTPS, e agendar o cron da cobrança de 24h.
+4. Publicar na VPS com domínio e HTTPS — o passo a passo está em
+   [`IMPLANTACAO-VPS.md`](IMPLANTACAO-VPS.md).

@@ -118,8 +118,8 @@ function responderErro(res, e) {
 async function iniciar() {
   await wa.iniciar();
   wa.aoReceber((msg) => servico.tratarRespostaRecepcao(msg));
-  app.listen(config.porta, () => {
-    console.log(`[web] http://localhost:${config.porta}  (WhatsApp: ${wa.nome})`);
+  app.listen(config.porta, config.host, () => {
+    console.log(`[web] http://${config.host}:${config.porta}  (WhatsApp: ${wa.nome})`);
     console.log(`[web] painel do médico: http://localhost:${config.porta}/admin`);
     const locais = config.hospitais;
     if (!locais.length) {
