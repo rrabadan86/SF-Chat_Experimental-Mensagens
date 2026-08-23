@@ -163,12 +163,21 @@ responder o IP certo.
 ```bash
 sudo cp ~/agendamento-onco/app/deploy/nginx-agendamento.conf \
         /etc/nginx/sites-available/agendamento
-sudo nano /etc/nginx/sites-available/agendamento     # troque o server_name
-sudo ln -s /etc/nginx/sites-available/agendamento /etc/nginx/sites-enabled/
+sudo sed -i 's/SEU_DOMINIO/agendamento.seudominio.com.br/g' \
+        /etc/nginx/sites-available/agendamento
+sudo ln -sf /etc/nginx/sites-available/agendamento /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 
 sudo certbot --nginx -d agendamento.seudominio.com.br
 ```
+
+> O arquivo traz só o bloco `:80`, de propósito: o nginx **recusa iniciar** com
+> `listen 443 ssl` enquanto não existir certificado, e o certificado só é criado
+> pelo certbot, que por sua vez precisa do `:80` no ar para provar o domínio. O
+> certbot copia o bloco para um `:443` com o certificado e acrescenta o
+> redirecionamento. Se você editar o arquivo e recolocar um `listen 443` na mão
+> antes do certbot, o `nginx -t` falha com
+> `no "ssl_certificate" is defined for the "listen ... ssl" directive`.
 
 O certbot preenche o certificado e renova sozinho. Confira:
 
@@ -273,6 +282,7 @@ tocados por uma atualização — é justamente por isso que estão fora do Git.
 |---|---|
 | `EADDRINUSE` ao iniciar | já tem algo na 3000; `pm2 delete agendamento-onco` e suba de novo, ou mude a PORT |
 | 502 no navegador | o Node caiu; veja `pm2 logs` |
+| `no "ssl_certificate" is defined` no `nginx -t` | tem um `listen 443 ssl` sem certificado; deixe só o bloco `:80` e rode o certbot |
 | WhatsApp não conecta | faltam as bibliotecas do Chromium (passo 1), ou o `CHROMIUM_PATH` aponta para o snap do sistema — deixe-o vazio para usar o do Puppeteer |
 | `Package X has no installation candidate` no apt | Ubuntu 24.04 usa nomes com sufixo `t64` (`libasound2t64`, `libcups2t64`…) |
 | Painel aceita a senha e volta para o login | faltou HTTPS: o cookie sai com `Secure` e o navegador descarta em http |
