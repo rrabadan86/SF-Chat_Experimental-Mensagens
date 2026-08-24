@@ -661,8 +661,11 @@ async function main() {
         console.log(`   📨 Enviando no grupo "${rotulo}"...`);
         let ok = false;
         try {
-          // Monta: MSG_PREFIXO + @<aniversariante> + MSG_SUFIXO (menção nativa)
-          await wa.sendGrupoComMencao(g.id, MSG_PREFIXO, MSG_SUFIXO, aniv.telefone);
+          // Monta: MSG_PREFIXO + @<aniversariante> + MSG_SUFIXO (menção nativa).
+          // Com foto (flyer) opcional definida no painel.
+          const fotoAniv = require('./mensagens').fotoPath('aniversario');
+          if (fotoAniv) await wa.sendGrupoMidiaComMencao(g.id, fotoAniv, MSG_PREFIXO, MSG_SUFIXO, aniv.telefone);
+          else await wa.sendGrupoComMencao(g.id, MSG_PREFIXO, MSG_SUFIXO, aniv.telefone);
           ok = true;
           console.log(`      ✅ Enviado no grupo "${rotulo}"`);
         } catch (e) { console.log(`      ❌ Erro: ${e.message}`); }

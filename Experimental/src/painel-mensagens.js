@@ -277,6 +277,34 @@ function scriptPreviewTeste() {
       },2000);
     }catch(err){ b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(err.message||'Falha ao enviar.')+'</div>'; btn.disabled=false; }
   }
+  function mfToggle(chk){ var w=chk.closest('.fotorow').querySelector('.mfWrap'); if(w) w.style.display=chk.checked?'':'none'; }
+  function mfLer(f){ return new Promise(function(res,rej){ var r=new FileReader(); r.onload=function(){res(r.result);}; r.onerror=rej; r.readAsDataURL(f); }); }
+  async function mfSalvar(btn, chave){
+    var wrap=btn.closest('.mfWrap'); var file=wrap.querySelector('.mfFile'); var msg=wrap.querySelector('.mfMsg');
+    if(!file.files[0]){ msg.className='mfMsg meta'; msg.textContent='Escolha uma imagem primeiro.'; return; }
+    if(file.files[0].size>6*1024*1024){ msg.textContent='Imagem muito grande (máx. ~6 MB).'; return; }
+    btn.disabled=true; msg.textContent='Enviando…';
+    try{
+      var dataUrl=await mfLer(file.files[0]);
+      var r=await fetch('/mensagem/foto/salvar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:chave, fotoDataUrl:dataUrl})});
+      var d=await r.json();
+      if(!d.ok){ msg.textContent='⚠️ '+(d.erro||'Falha ao salvar.'); btn.disabled=false; return; }
+      var thumb=wrap.querySelector('.mfThumb'); thumb.src='/mensagem/foto?chave='+encodeURIComponent(chave)+'&v='+Date.now(); thumb.style.display='';
+      wrap.querySelector('.mfRm').style.display=''; file.value='';
+      msg.textContent='✅ Foto salva — vai junto no próximo envio desta mensagem.';
+    }catch(e){ msg.textContent='⚠️ '+(e.message||'Falha.'); }
+    finally{ btn.disabled=false; }
+  }
+  async function mfRemover(btn, chave){
+    if(!confirm('Remover a foto desta mensagem?')) return;
+    var wrap=btn.closest('.mfWrap'); var msg=wrap.querySelector('.mfMsg'); btn.disabled=true;
+    try{
+      var r=await fetch('/mensagem/foto/remover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:chave})});
+      await r.json();
+      wrap.querySelector('.mfThumb').style.display='none'; btn.style.display='none';
+      msg.textContent='Foto removida — volta a enviar só o texto.';
+    }catch(e){ msg.textContent='⚠️ '+(e.message||'Falha.'); btn.disabled=false; }
+  }
   async function testarDMIg(btn){
     var card = btn.closest('.card'); var ta = card.querySelector('textarea'); var b = card.querySelector('.prev');
     var inp = card.querySelector('.igteste'); var u = ((inp&&inp.value)||'').replace(/^@+/,'').trim().split(/\\s+/)[0];
@@ -328,8 +356,27 @@ function cardMensagem(m, voltar, opts = {}) {
         <button type="submit" name="reset" value="1" class="reset" onclick="return confirm('Voltar esta mensagem ao texto padrão?')">Restaurar padrão</button>
       </div>
       ${opts.ig ? botaoTeste : ''}
+      ${m.aceitaFoto ? cardFoto(m) : ''}
       <div class="prev" style="display:none"></div>
     </form>`;
+}
+
+// Bloco "enviar com foto (flyer)" para as mensagens de grupo que aceitam.
+function cardFoto(m) {
+  const tem = !!m.fotoNome;
+  const src = tem ? `/mensagem/foto?chave=${esc(m.chave)}&v=${Date.now()}` : '';
+  return `<div class="fotorow" style="margin-top:12px;border-top:1px dashed var(--linha);padding-top:12px">
+    <label class="chk"><input type="checkbox" class="mfChk"${tem ? ' checked' : ''} onchange="mfToggle(this)"> 📎 Enviar com foto (flyer junto da mensagem)</label>
+    <div class="mfWrap"${tem ? '' : ' style="display:none"'}>
+      <img class="mfThumb thumb" style="${tem ? '' : 'display:none;'}width:130px;height:auto;max-height:180px;border-radius:9px;margin:8px 0" src="${src}" alt="foto">
+      <div style="margin-top:6px"><input type="file" class="mfFile" accept="image/png,image/jpeg,image/webp"></div>
+      <div class="acts" style="margin-top:8px">
+        <button type="button" class="tbtn" onclick="mfSalvar(this,'${esc(m.chave)}')">Salvar foto</button>
+        <button type="button" class="rm mfRm" onclick="mfRemover(this,'${esc(m.chave)}')"${tem ? '' : ' style="display:none"'}>Remover foto</button>
+      </div>
+      <div class="mfMsg meta" style="margin-top:6px"></div>
+    </div>
+  </div>`;
 }
 
 // ── Página 1: editar mensagens (texto + horário de cada uma) ────────────────
@@ -866,6 +913,34 @@ const server = http.createServer((req, res) => {
         res.end(voltar === '/instagram' ? paginaInstagram(msg, true) : paginaMensagens(msg, true));
       }
     });
+  }
+
+  // Foto (flyer) de uma mensagem: salvar / remover / servir.
+  if (req.method === 'POST' && url === '/mensagem/foto/salvar') {
+    return lerCorpo(req, 12e6, corpo => {
+      try {
+        const d = JSON.parse(corpo || '{}');
+        mensagens.salvarFoto(d.chave, d.fotoDataUrl);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+  }
+  if (req.method === 'POST' && url === '/mensagem/foto/remover') {
+    return lerCorpo(req, 1e5, corpo => {
+      try { mensagens.removerFoto(JSON.parse(corpo || '{}').chave); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true }));
+    });
+  }
+  if (req.method === 'GET' && url === '/mensagem/foto') {
+    const chave = new URLSearchParams(req.url.split('?')[1] || '').get('chave');
+    const caminho = /^[a-z_]+$/i.test(chave || '') ? mensagens.fotoPath(chave) : null;
+    if (!caminho || !fs.existsSync(caminho)) { res.writeHead(404); return res.end('nao encontrada'); }
+    const ext = caminho.split('.').pop().toLowerCase();
+    const tipo = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    res.writeHead(200, { 'Content-Type': tipo, 'Cache-Control': 'private, max-age=60' });
+    return fs.createReadStream(caminho).pipe(res);
   }
 
   // Enviar teste: painel grava o pedido; o robô (que tem a sessão) envia.

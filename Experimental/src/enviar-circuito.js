@@ -170,15 +170,18 @@ async function runCircuitoConvocacao({ dry = false } = {}) {
   if (dry) { console.log('🧪 DRY — nada enviado.'); return; }
 
   const wa = require('./wa-client');
+  const foto = mensagens.fotoPath('circuito_convocacao'); // flyer opcional (painel)
   if (tel) {
     const g = await wa.acharGrupo(GRUPO);
     if (!g) throw new Error('Grupo não encontrado: ' + GRUPO);
     const { antes, depois } = partesConvocacao(horaFmt);
-    await wa.sendGrupoComMencao(g.id, antes, depois, tel);
-    console.log(`✅ Convocatória enviada no grupo "${GRUPO}" com @menção da professora.`);
+    if (foto) await wa.sendGrupoMidiaComMencao(g.id, foto, antes, depois, tel);
+    else await wa.sendGrupoComMencao(g.id, antes, depois, tel);
+    console.log(`✅ Convocatória enviada no grupo "${GRUPO}" com @menção da professora${foto ? ' + foto' : ''}.`);
   } else {
-    await wa.sendGrupo(GRUPO, msg);
-    console.log(`✅ Convocatória enviada no grupo "${GRUPO}" (sem @ — telefone não configurado).`);
+    if (foto) await wa.sendGrupoMidia(GRUPO, foto, msg);
+    else await wa.sendGrupo(GRUPO, msg);
+    console.log(`✅ Convocatória enviada no grupo "${GRUPO}" (sem @ — telefone não configurado)${foto ? ' + foto' : ''}.`);
   }
 }
 
@@ -197,8 +200,10 @@ async function runCircuitoLembrete({ dry = false } = {}) {
   if (dry) { console.log('🧪 DRY — nada enviado.'); return; }
 
   const wa = require('./wa-client');
-  await wa.sendGrupo(GRUPO, msg);
-  console.log(`✅ Lembrete enviado no grupo "${GRUPO}".`);
+  const foto = mensagens.fotoPath('circuito_lembrete'); // flyer opcional (painel)
+  if (foto) await wa.sendGrupoMidia(GRUPO, foto, msg);
+  else await wa.sendGrupo(GRUPO, msg);
+  console.log(`✅ Lembrete enviado no grupo "${GRUPO}"${foto ? ' + foto' : ''}.`);
 }
 
 module.exports = { runCircuitoConvocacao, runCircuitoLembrete, buscarCircuito, msgConvocacao, msgLembrete };

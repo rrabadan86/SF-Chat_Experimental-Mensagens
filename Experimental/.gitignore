@@ -43,3 +43,5 @@ backups/
 data/indicadores.json
 # DM de teste do Instagram (ponte painel<->robo) — por VPS
 data/teste-instagram.json
+# Fotos (flyers) das mensagens (Circuito/Aniversario) — por VPS
+data/mensagens-fotos/

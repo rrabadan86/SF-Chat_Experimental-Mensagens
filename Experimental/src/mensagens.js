@@ -16,6 +16,10 @@ const fs = require('fs');
 const path = require('path');
 
 const ARQUIVO = path.resolve(__dirname, '..', 'data', 'mensagens.json');
+// Foto opcional por mensagem (uma por chave). Só as mensagens com foto:true no
+// catálogo aceitam. O nome do arquivo é a própria chave (validada) — sem risco
+// de path traversal.
+const FOTOS_DIR = path.resolve(__dirname, '..', 'data', 'mensagens-fotos');
 
 // Catálogo: ordem, título, descrição e variáveis de cada mensagem. Também
 // alimenta o painel de edição. NÃO mude as chaves (o código depende delas).
@@ -64,6 +68,7 @@ const CATALOGO = [
   },
   {
     chave: 'aniversario',
+    foto: true,
     titulo: 'Aniversário (nos grupos)',
     quando: 'Enviada às 08:00. A aniversariante é @marcada onde está {aluna}.',
     vars: [['aluna', 'a @menção da aniversariante — mantenha o {aluna} no texto']],
@@ -78,6 +83,7 @@ const CATALOGO = [
   },
   {
     chave: 'circuito_convocacao',
+    foto: true,
     titulo: 'Circuito — convocatória (quarta)',
     quando: 'Enviada quarta 16:15 no grupo do Circuito. A professora é @marcada onde está {professora}.',
     vars: [['professora', 'a @menção da professora — mantenha o {professora} no texto'], ['hora', 'horário da aula de sábado, ex.: 09h45']],
@@ -85,6 +91,7 @@ const CATALOGO = [
   },
   {
     chave: 'circuito_lembrete',
+    foto: true,
     titulo: 'Circuito — lembrete (sexta)',
     quando: 'Enviada sexta 16:15 no grupo do Circuito.',
     vars: [['hora', 'horário da aula de sábado, ex.: 09h45']],
@@ -202,6 +209,35 @@ function partes(chave, vars, tokenMencao) {
   return { antes: t.slice(0, i), depois: t.slice(i + marca.length) };
 }
 
+// ── Foto opcional por mensagem (grupo/broadcast: Circuito, Aniversário) ──────
+function fotoPath(chave) {
+  for (const ext of ['jpg', 'png', 'webp']) {
+    const p = path.join(FOTOS_DIR, chave + '.' + ext);
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+function fotoNome(chave) { const p = fotoPath(chave); return p ? path.basename(p) : null; }
+function removerFoto(chave) {
+  for (const ext of ['jpg', 'png', 'webp']) {
+    const p = path.join(FOTOS_DIR, chave + '.' + ext);
+    try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
+  }
+}
+function aceitaFoto(chave) { const m = CATALOGO.find(x => x.chave === chave); return !!(m && m.foto); }
+function salvarFoto(chave, dataUrl) {
+  if (!aceitaFoto(chave)) throw new Error('Esta mensagem não aceita foto.');
+  const m = /^data:(image\/(png|jpe?g|webp));base64,(.+)$/i.exec(dataUrl || '');
+  if (!m) throw new Error('Imagem inválida (envie PNG, JPG ou WEBP).');
+  const ext = m[2].toLowerCase() === 'jpeg' ? 'jpg' : m[2].toLowerCase();
+  const buf = Buffer.from(m[3], 'base64');
+  if (buf.length > 6 * 1024 * 1024) throw new Error('Imagem muito grande (máx. ~6 MB).');
+  removerFoto(chave); // troca a anterior (qualquer extensão)
+  if (!fs.existsSync(FOTOS_DIR)) fs.mkdirSync(FOTOS_DIR, { recursive: true });
+  fs.writeFileSync(path.join(FOTOS_DIR, chave + '.' + ext), buf);
+  return chave + '.' + ext;
+}
+
 // Para o painel: lista com título, descrição, variáveis, texto atual, padrão
 // e se está editado.
 function listar() {
@@ -215,10 +251,13 @@ function listar() {
     padrao: m.padrao,
     texto: (ov[m.chave] != null && String(ov[m.chave]).trim() !== '') ? ov[m.chave] : m.padrao,
     editado: ov[m.chave] != null && String(ov[m.chave]).trim() !== '' && ov[m.chave] !== m.padrao,
+    aceitaFoto: !!m.foto,
+    fotoNome: m.foto ? fotoNome(m.chave) : null,
   }));
 }
 
 module.exports = {
   render, renderTexto, partes, texto, salvarOverride, listar, carregarOverrides,
+  fotoPath, fotoNome, salvarFoto, removerFoto, aceitaFoto, FOTOS_DIR,
   CATALOGO, PADROES, EXEMPLOS, exemplosCompletos, ARQUIVO,
 };

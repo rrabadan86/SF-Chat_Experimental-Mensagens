@@ -421,6 +421,41 @@ async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMenc
   }
 }
 
+/** Envia uma FOTO (com legenda) num grupo, achando-o pelo nome. */
+async function sendGrupoMidia(nomeGrupo, caminho, legenda, contexto) {
+  if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
+  try {
+    const g = await acharGrupo(nomeGrupo);
+    if (!g) throw new Error('Grupo não encontrado: ' + nomeGrupo);
+    const media = MessageMedia.fromFilePath(caminho);
+    const r = await comRetry(() => client.sendMessage(g.id, media, { caption: legenda || undefined }));
+    atividade.registrar({ destino: nomeGrupo, preview: legenda || '📎 foto', grupo: true, midia: true, ok: true, contexto });
+    return r;
+  } catch (e) {
+    atividade.registrar({ destino: nomeGrupo, preview: legenda || '📎 foto', grupo: true, midia: true, ok: false, erro: e && e.message, contexto });
+    throw e;
+  }
+}
+
+/** Envia uma FOTO num grupo com a legenda MARCANDO (@) uma pessoa. */
+async function sendGrupoMidiaComMencao(groupId, caminho, textoAntes, textoDepois, telefoneMencionado) {
+  if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
+  let mid;
+  try { mid = await resolverId(telefoneMencionado); }
+  catch (e) { throw new Error('resolverId: ' + (e && e.message)); }
+  const user = mid.replace(/@.*/, '');
+  const legenda = `${textoAntes || ''}@${user}${textoDepois || ''}`;
+  try {
+    const media = MessageMedia.fromFilePath(caminho);
+    const r = await comRetry(() => client.sendMessage(groupId, media, { caption: legenda, mentions: [mid] }));
+    atividade.registrar({ destino: 'grupo', preview: legenda, grupo: true, midia: true, ok: true });
+    return r;
+  } catch (e) {
+    atividade.registrar({ destino: 'grupo', preview: legenda, grupo: true, midia: true, ok: false, erro: e && e.message });
+    throw new Error('sendMessage(midiaMencao): ' + (e && e.message));
+  }
+}
+
 let reconectando = false;
 /**
  * Recupera o cliente quando o frame do WhatsApp Web morre e não volta sozinho
@@ -481,7 +516,7 @@ async function destroy() {
 module.exports = {
   initWhatsApp, isReady, getClient,
   sendTexto, sendMidia, sendGrupo, acharGrupo, listarGrupos,
-  getCommonGroups, sendGrupoComMencao,
+  getCommonGroups, sendGrupoComMencao, sendGrupoMidia, sendGrupoMidiaComMencao,
   iniciarKeepAlive, destroy, toChatId, MessageMedia,
 };
 
