@@ -121,6 +121,10 @@ const ESTILO = `
   .st-falha{background:#fdecec;color:#a12626;border-color:#f6c9c9}
   .sec-t{font-family:"Montserrat";font-weight:800;font-size:1rem;margin:22px 0 4px}
   .vazio{color:var(--cinza);font-size:.9rem}
+  .wabar{border-radius:12px;padding:11px 14px;margin:16px 0 0;font-weight:600;font-size:.9rem;display:flex;align-items:center;gap:8px}
+  .wabar.ok{background:#eafaf0;border:1px solid #bfe8cd;color:#1c6b3c}
+  .wabar.warn{background:#fff6f5;border:1px solid #f6cfcd;color:#a12626}
+  .wabar a{color:inherit;font-weight:700;margin-left:auto;white-space:nowrap}
   .wa-card{background:var(--card);border:1px solid var(--linha);border-radius:16px;padding:26px 22px;text-align:center;margin:18px 0;box-shadow:0 1px 4px rgba(0,0,0,.05)}
   .wa-card.ok{border-color:#bfe8cd;background:#f3fbf6}
   .wa-card.warn{border-color:#f6cfcd;background:#fff6f5}
@@ -203,10 +207,9 @@ function chrome(titSubtitulo, ativo, corpo) {
 <nav class="tabs">
   <a href="/hoje" class="${ativo === 'hoje' ? 'on' : ''}">📊 Hoje</a>
   <a href="/indicadores" class="${ativo === 'ind' ? 'on' : ''}">📈 Indicadores</a>
-  <a href="/" class="${ativo === 'msg' ? 'on' : ''}">✏️ Mensagens</a>
+  <a href="/" class="${ativo === 'msg' ? 'on' : ''}">💬 WhatsApp Mensagens</a>
   <a href="/agendar" class="${ativo === 'ag' ? 'on' : ''}">📅 Agendar envios</a>
   <a href="/instagram" class="${ativo === 'ig' ? 'on' : ''}">📸 Instagram</a>
-  <a href="/wa" class="${ativo === 'wa' ? 'on' : ''}">📱 WhatsApp</a>
 </nav>
 ${corpo}
 <footer>SlimFit · painel do Studio</footer>
@@ -360,6 +363,7 @@ function paginaMensagens(aviso, erro) {
   }).join('\n');
 
   const corpo = `<div class="wrap">
+    <div id="waBanner"></div>
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
@@ -371,8 +375,24 @@ function paginaMensagens(aviso, erro) {
       <p class="quando" style="text-align:center;margin:8px 0 0">O <b>texto</b> é salvo na hora (sem reiniciar). Já mudanças de <b>horário</b> só valem depois que o robô reinicia — alguns segundos. Evite salvar bem em cima de um horário de disparo.</p>
     </div>
   </div>
-${scriptPreviewTeste()}`;
-  return chrome({ tab: 'Mensagens', h1: '✏️ Mensagens do robô', p: 'Edite o <b>texto</b> e o <b>horário</b> de cada envio no mesmo lugar.' }, 'msg', corpo);
+${scriptPreviewTeste()}
+<script>
+  function renderWa(st){
+    var e = st && st.estado;
+    if(e==='conectado') return '<div class="wabar ok">✅ WhatsApp conectado — o robô envia normalmente.</div>';
+    if(e==='qr' && st.qr) return '<div class="wa-card warn" style="margin:16px 0 0"><div class="wa-ic">📲</div><h2>Escaneie o QR para reconectar</h2><p>A sessão caiu. No <b>celular do Studio</b>: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte a câmera para o código.</p><img class="qr" src="'+st.qr+'" alt="QR do WhatsApp"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira ✅.</p></div>';
+    if(e==='iniciando') return '<div class="wabar warn">⏳ WhatsApp iniciando… se precisar de QR, ele aparece aqui.</div>';
+    if(e==='desconectado') return '<div class="wabar warn">⚠️ WhatsApp desconectado — tentando reconectar. Se aparecer um QR aqui, escaneie.</div>';
+    return '<div class="wabar warn">❔ Sem informação do WhatsApp ainda — confira se o robô está rodando.</div>';
+  }
+  function atualizaWa(){
+    fetch('/wa/estado').then(function(r){return r.json();}).then(function(st){
+      var el=document.getElementById('waBanner'); if(el) el.innerHTML=renderWa(st);
+    }).catch(function(){});
+  }
+  atualizaWa(); setInterval(atualizaWa, 7000);
+</script>`;
+  return chrome({ tab: 'WhatsApp Mensagens', h1: '💬 WhatsApp — mensagens do robô', p: 'Conexão, texto e horário de cada envio no mesmo lugar.' }, 'msg', corpo);
 }
 
 // ── Página 2: agendar envios ────────────────────────────────────────────────
@@ -1012,10 +1032,16 @@ const server = http.createServer((req, res) => {
     });
   }
 
-  // Página da conexão do WhatsApp (QR quando cai)
+  // Estado do WhatsApp em JSON — o banner da aba Mensagens atualiza só este bloco
+  // (sem recarregar a página, para não apagar o texto que está sendo editado).
+  if (req.method === 'GET' && url === '/wa/estado') {
+    const st = waStatus.get() || {};
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ estado: st.estado || '', qr: st.qr || '', atualizadoEm: st.atualizadoEm || '' }));
+  }
+  // A conexão do WhatsApp agora vive no topo da aba Mensagens — redireciona link antigo.
   if (req.method === 'GET' && url === '/wa') {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(paginaWa());
+    res.writeHead(301, { Location: '/' }); return res.end();
   }
 
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -1025,5 +1051,5 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   if (!SENHA) console.warn('⚠️  PAINEL_SENHA não definido no .env — o painel vai NEGAR todo acesso até você definir usuário e senha.');
   console.log(`🖥️  Painel do Studio ouvindo em ${HOST}:${PORT} (usuário: ${USER}).`);
-  console.log('   Páginas: /hoje · /indicadores · /  (mensagens) · /agendar · /instagram · /wa. Exponha SEMPRE atrás de HTTPS.');
+  console.log('   Páginas: /hoje · /indicadores · /  (WhatsApp+mensagens) · /agendar · /instagram. Exponha SEMPRE atrás de HTTPS.');
 });
