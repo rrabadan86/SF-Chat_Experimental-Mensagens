@@ -20,6 +20,7 @@ const ag = require('./agendamentos');
 const waStatus = require('./wa-status');
 const horarios = require('./horarios');
 const atividade = require('./atividade');
+const teste = require('./teste-envio');
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
 // Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
@@ -159,6 +160,15 @@ const ESTILO = `
   .ev .ic{flex:none}
   .datesel{display:flex;gap:8px;align-items:center;margin:4px 0 0}
   .datesel input{width:auto}
+  .testbar{background:#fff8f0;border:1px solid #f3dcbf}
+  .testbar label{margin:0 0 4px}
+  .testbar input{max-width:260px}
+  .prev{margin-top:10px}
+  .prev-t{font-size:.78rem;font-weight:700;color:var(--cinza);margin-bottom:4px}
+  .prev-b{white-space:pre-wrap;word-break:break-word;background:#eef7f7;border:1px solid #cdeaea;border-radius:10px;padding:10px 12px;font-size:.92rem;line-height:1.5}
+  .prev-b.ok{background:#eafaf0;border-color:#bfe8cd;color:#1c6b3c}
+  .prev-b.err{background:#fdecec;border-color:#f6c9c9;color:#a12626}
+  .tbtn{background:#fff;color:var(--cinza);border:1px solid #dcdcdc}
   footer{color:var(--cinza);font-size:.8rem;text-align:center;padding:20px}
 `;
 
@@ -218,8 +228,11 @@ function paginaMensagens(aviso, erro) {
         <textarea name="texto" rows="7" spellcheck="true">${esc(m.texto)}</textarea>
         <div class="acts">
           <button type="submit" class="save">Salvar texto</button>
+          <button type="button" class="tbtn" onclick="previewMsg(this)">👁 Pré-visualizar</button>
+          <button type="button" class="tbtn" onclick="testarMsg(this)">🧪 Enviar teste</button>
           <button type="submit" name="reset" value="1" class="reset" onclick="return confirm('Voltar esta mensagem ao texto padrão?')">Restaurar padrão</button>
         </div>
+        <div class="prev" style="display:none"></div>
       </form>
       ${hbloco}
     </div>`;
@@ -232,8 +245,15 @@ function paginaMensagens(aviso, erro) {
       <div class="hsec" style="border:0;margin:8px 0 0;padding:0">${blocoHorario(j, '')}</div></div>`;
   }).join('\n');
 
+  const exemplosJson = JSON.stringify(mensagens.exemplosCompletos()).replace(/</g, '\\u003c');
+
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    <div class="card testbar">
+      <label>🧪 Número para testes</label>
+      <input id="telTeste" type="tel" inputmode="numeric" placeholder="(62) 99999-9999" maxlength="16">
+      <p class="quando" style="margin:6px 0 0">Usado pelos botões <b>Enviar teste</b>. Fica salvo só neste navegador. A prévia usa valores de exemplo (ex.: nome → <i>Maria</i>).</p>
+    </div>
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
     ${itens}
     <div class="sec-t">Outros envios automáticos <small style="font-weight:600;color:var(--cinza)">(sem texto editável)</small></div>
@@ -244,6 +264,7 @@ function paginaMensagens(aviso, erro) {
     </div>
   </div>
 <script>
+  var EXEMPLOS = ${exemplosJson};
   function inserirVar(el, token){
     var ta = el.closest('form').querySelector('textarea');
     if(!ta) return;
@@ -252,6 +273,46 @@ function paginaMensagens(aviso, erro) {
     ta.value = ta.value.slice(0, s) + token + ta.value.slice(e);
     ta.focus();
     ta.selectionStart = ta.selectionEnd = s + token.length;
+  }
+  function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function renderEx(txt){ for(var k in EXEMPLOS){ txt = txt.split('{'+k+'}').join(EXEMPLOS[k]); } return txt; }
+  function previewMsg(btn){
+    var card = btn.closest('.card'); var ta = card.querySelector('textarea'); var b = card.querySelector('.prev');
+    b.style.display='block';
+    b.innerHTML = '<div class="prev-t">👁 Como a aluna vê (valores de exemplo):</div><div class="prev-b">'+escHtml(renderEx(ta.value))+'</div>';
+  }
+  function soDigTeste(s){ return (s||'').replace(/\\D/g,''); }
+  var _tt = document.getElementById('telTeste');
+  if(_tt){
+    try{ _tt.value = localStorage.getItem('sf_tel_teste') || ''; }catch(_){}
+    _tt.addEventListener('input', function(e){
+      var v=soDigTeste(e.target.value).slice(0,11);
+      if(v.length>=7)e.target.value=v.replace(/(\\d{2})(\\d{4,5})(\\d{0,4})/,'($1) $2-$3').replace(/-$/,'');
+      else if(v.length>=3)e.target.value=v.replace(/(\\d{2})(\\d{0,5})/,'($1) $2'); else e.target.value=v;
+      try{ localStorage.setItem('sf_tel_teste', e.target.value); }catch(_){}
+    });
+  }
+  async function testarMsg(btn){
+    var tel = soDigTeste((_tt&&_tt.value)||'');
+    var card = btn.closest('.card'); var ta = card.querySelector('textarea'); var b = card.querySelector('.prev');
+    if(tel.length<10){ alert('Preencha o "Número para testes" no topo da página.'); if(_tt) _tt.focus(); return; }
+    b.style.display='block'; b.innerHTML = '<div class="prev-b">⏳ Enviando teste para '+escHtml(tel)+'…</div>';
+    btn.disabled=true;
+    try{
+      var r = await fetch('/teste/enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:tel, texto:ta.value})});
+      var d = await r.json();
+      if(!d.ok){ b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(d.erro||'Não foi possível enviar.')+'</div>'; btn.disabled=false; return; }
+      var tries=0;
+      var iv=setInterval(async function(){
+        tries++;
+        try{
+          var s = await (await fetch('/teste/status?id='+encodeURIComponent(d.id))).json();
+          if(s.status==='enviado'){ clearInterval(iv); b.innerHTML='<div class="prev-b ok">✅ Teste enviado para '+escHtml(tel)+'! Confira o WhatsApp.</div>'; btn.disabled=false; }
+          else if(s.status==='falha'){ clearInterval(iv); b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(s.erro||'Falha no envio.')+'</div>'; btn.disabled=false; }
+          else if(tries>25){ clearInterval(iv); b.innerHTML='<div class="prev-b">⏳ Ainda processando — o robô pode estar ocupado. A mensagem deve chegar em instantes.</div>'; btn.disabled=false; }
+        }catch(_){ /* tenta de novo no próximo tick */ }
+      },2000);
+    }catch(err){ b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(err.message||'Falha ao enviar.')+'</div>'; btn.disabled=false; }
   }
 </script>`;
   return chrome({ tab: 'Mensagens', h1: '✏️ Mensagens do robô', p: 'Edite o <b>texto</b> e o <b>horário</b> de cada envio no mesmo lugar.' }, 'msg', corpo);
@@ -544,6 +605,26 @@ const server = http.createServer((req, res) => {
         res.end(paginaMensagens('Erro ao salvar: ' + e.message, true));
       }
     });
+  }
+
+  // Enviar teste: painel grava o pedido; o robô (que tem a sessão) envia.
+  if (req.method === 'POST' && url === '/teste/enviar') {
+    return lerCorpo(req, 1e6, corpo => {
+      try {
+        const d = JSON.parse(corpo || '{}');
+        const textoFinal = mensagens.renderTexto(d.texto || '', mensagens.EXEMPLOS);
+        const id = teste.solicitar({ telefone: d.telefone, texto: textoFinal });
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, id }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+  }
+  if (req.method === 'GET' && url === '/teste/status') {
+    const id = new URLSearchParams(req.url.split('?')[1] || '').get('id');
+    const p = teste.ler(id);
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify(p ? { status: p.status, erro: p.erro } : { status: 'desconhecido' }));
   }
 
   // Página de agendamentos

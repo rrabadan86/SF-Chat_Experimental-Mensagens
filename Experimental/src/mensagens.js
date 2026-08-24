@@ -147,6 +147,30 @@ function render(chave, vars = {}) {
   return t;
 }
 
+// Valores de EXEMPLO para pré-visualizar/testar uma mensagem (o que a aluna
+// veria). Usados no painel (pré-visualização) e no envio de teste.
+const EXEMPLOS = {
+  nome: 'Maria',
+  horario: '09:00',
+  professora: 'Tay',
+  data: '30/08/2026',
+  aluna: 'Maria',
+  hora: '09h45',
+};
+function exemplosCompletos() {
+  return Object.assign({ studio: process.env.STUDIO_NOME || 'Studio Slimfit Setor Bueno' }, EXEMPLOS);
+}
+// Substitui {marcadores} num TEXTO qualquer (não só numa chave do catálogo).
+// Usado pelo envio de teste, que manda o texto que está na tela.
+function renderTexto(texto, vars = {}) {
+  let t = normalizar(texto);
+  const todos = Object.assign(exemplosCompletos(), vars);
+  for (const [k, v] of Object.entries(todos)) {
+    t = t.split('{' + k + '}').join(v == null ? '' : String(v));
+  }
+  return t;
+}
+
 // Para mensagens com @menção nativa: renderiza tudo, menos o marcador da
 // menção, e devolve { antes, depois } quebrado nesse ponto.
 function partes(chave, vars, tokenMencao) {
@@ -173,6 +197,6 @@ function listar() {
 }
 
 module.exports = {
-  render, partes, texto, salvarOverride, listar, carregarOverrides,
-  CATALOGO, PADROES, ARQUIVO,
+  render, renderTexto, partes, texto, salvarOverride, listar, carregarOverrides,
+  CATALOGO, PADROES, EXEMPLOS, exemplosCompletos, ARQUIVO,
 };

@@ -467,6 +467,33 @@ function perguntarUsuario(pergunta, timeoutMs = 180000) {
   });
 }
 
+// ─── Ponte de "enviar teste" do painel ─────────────────────
+// O painel grava um pedido em data/teste-envio.json; aqui (que temos a sessão
+// do WhatsApp) enviamos e escrevemos o resultado de volta. Roda fora do
+// jobRunning porque é um único envio, leve e sob demanda.
+function iniciarTesteWatcher(wa) {
+  const teste = require('./teste-envio');
+  let ocupado = false;
+  const t = setInterval(async () => {
+    if (ocupado) return;
+    const p = teste.proximoPendente();
+    if (!p) return;
+    ocupado = true;
+    teste.marcar(p.id, 'enviando');
+    try {
+      if (!wa.isReady()) throw new Error('WhatsApp não está conectado no momento.');
+      await wa.sendTexto(p.telefone, p.texto, 'Teste (painel)');
+      teste.marcar(p.id, 'enviado');
+      log(`🧪 Teste enviado para ${p.telefone} (pedido do painel)`);
+    } catch (e) {
+      teste.marcar(p.id, 'falha', e && e.message);
+      log(`🧪 Teste falhou para ${p.telefone}: ${e && e.message}`);
+    } finally { ocupado = false; }
+  }, 4000);
+  if (t.unref) t.unref();
+  log('🧪 Watcher de "enviar teste" do painel ativo (a cada 4s).');
+}
+
 // ─── Main ──────────────────────────────────────────────────
 async function main() {
   console.log('╔═══════════════════════════════════════════════════════╗');
@@ -501,6 +528,9 @@ async function main() {
     logError('Falha ao iniciar o cliente do WhatsApp', e);
     console.log('⚠️  Seguindo assim mesmo; os jobs vão tentar reconectar.\n');
   }
+
+  // Ponte de "enviar teste" do painel (lê data/teste-envio.json e dispara).
+  iniciarTesteWatcher(wa);
 
   // ─── Verifica jobs perdidos antes de agendar ─────────────
   // (lê o registro ANTES de marcar que estamos vivos agora)

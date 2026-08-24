@@ -31,3 +31,5 @@ data/wa-status.json
 data/horarios.json
 # Registro de atividade do robô (o que enviou hoje) — estado por VPS
 data/atividade.json
+# Ponte de "enviar teste" painel↔robô — estado por VPS
+data/teste-envio.json
