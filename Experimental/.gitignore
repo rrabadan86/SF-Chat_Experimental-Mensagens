@@ -33,3 +33,5 @@ data/horarios.json
 data/atividade.json
 # Ponte de "enviar teste" painel↔robô — estado por VPS
 data/teste-envio.json
+# Liga/desliga do Instagram pelo painel — estado por VPS
+data/instagram-config.json

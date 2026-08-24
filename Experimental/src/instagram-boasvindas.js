@@ -22,6 +22,7 @@ const mensagens = require('./mensagens');
 const MENSAGEM_BOASVINDAS = () => mensagens.render('instagram', {});
 
 // Limite de envios por execução/dia (segurança contra bloqueio do Instagram).
+const atividade = require('./atividade'); // registro para a aba "Hoje" do painel
 const MAX_ENVIOS = parseInt(process.env.IG_MAX_DIA || '20', 10);
 
 // Intervalo aleatório entre mensagens, em segundos (mín, máx).
@@ -446,13 +447,16 @@ async function main() {
         jaEnviados.add(seg.username);
         salvarEnviados(jaEnviados);
         limparIndisponivel(seg.username);
+        atividade.registrar({ destino: '@' + seg.username, preview: 'DM de boas-vindas', ok: true, contexto: 'Instagram (boas-vindas)' });
         console.log('   ✅ Enviada!');
       } else if (status === 'unavailable') {
         indisponiveis++;
         registrarIndisponivel(seg.username);
+        atividade.registrar({ destino: '@' + seg.username, preview: 'DM de boas-vindas', ok: false, erro: 'Mensagem indisponível (privada/restrita)', contexto: 'Instagram (boas-vindas)' });
         console.log('   🚫 Mensagem Indisponível (bloqueio/restrição)');
       } else {
         erros++;
+        atividade.registrar({ destino: '@' + seg.username, preview: 'DM de boas-vindas', ok: false, erro: 'falha no envio', contexto: 'Instagram (boas-vindas)' });
         console.log('   ⚠️  Falha ao enviar');
       }
 

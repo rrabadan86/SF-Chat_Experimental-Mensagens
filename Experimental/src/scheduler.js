@@ -8,6 +8,7 @@ const { runNoShowMorning, runNoShowAfternoon } = require('./follow-up-no-show');
 const { pullConfirmacoesNuvem } = require('./pull-confirmacoes-nuvem');
 const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
 const atividade = require('./atividade'); // registro do que o robô fez (aba "Hoje")
+const igcfg = require('./instagram-config'); // liga/desliga o Instagram pelo painel
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
@@ -737,26 +738,26 @@ async function main() {
   // Schedule: 07:00 todos os dias → Boas-vindas a novos seguidores do Instagram.
   // DESLIGADO por padrão: a Meta bloqueia o navegador do VPS com 429. Religue
   // com IG_ENABLED=true no .env quando tiver solução (PC de casa ou proxy).
-  if (process.env.IG_ENABLED === 'true') {
-    cron.schedule(config.schedule.instagram, () => {
-      log('⏰ Cron disparado: Instagram boas-vindas');
-      if (jobRunning) { log('⚠️  Instagram ignorado — outro job em execução'); return; }
-      jobRunning = true;
-      atividade.setContexto('Instagram (boas-vindas)');
-      const start = new Date();
-      require('./instagram-boasvindas').runBoasVindas()
-        .then(() => log('✅ Instagram boas-vindas concluído'))
-        .catch(err => logError('Instagram boas-vindas', err))
-        .finally(() => {
-          jobRunning = false;
-          log(`⏱️  Instagram finalizado em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
-        });
-    }, { timezone: 'America/Sao_Paulo' });
-    log(`📅 Job INSTAGRAM agendado: ${config.schedule.instagram} (07:00 todos os dias)`);
-    console.log('   → Boas-vindas a novos seguidores (perfil logado no Instagram)');
-  } else {
-    log('⏸️  Job INSTAGRAM DESLIGADO (defina IG_ENABLED=true no .env para religar)');
-  }
+  // Sempre agenda; liga/desliga é decidido NO DISPARO por instagram-config
+  // (data/instagram-config.json, controlado no painel) ou pelo .env IG_ENABLED.
+  // Assim o Studio religa/pausa pelo painel sem reiniciar o robô.
+  cron.schedule(config.schedule.instagram, () => {
+    if (!igcfg.ligado()) { log('⏸️  Instagram DESLIGADO (painel/.env) — pulando o disparo de hoje'); return; }
+    log('⏰ Cron disparado: Instagram boas-vindas');
+    if (jobRunning) { log('⚠️  Instagram ignorado — outro job em execução'); return; }
+    jobRunning = true;
+    atividade.setContexto('Instagram (boas-vindas)');
+    const start = new Date();
+    require('./instagram-boasvindas').runBoasVindas()
+      .then(() => log('✅ Instagram boas-vindas concluído'))
+      .catch(err => logError('Instagram boas-vindas', err))
+      .finally(() => {
+        jobRunning = false;
+        log(`⏱️  Instagram finalizado em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
+      });
+  }, { timezone: 'America/Sao_Paulo' });
+  log(`📅 Job INSTAGRAM agendado: ${config.schedule.instagram} (liga/desliga no painel — hoje: ${igcfg.ligado() ? 'LIGADO' : 'desligado'})`);
+  console.log('   → Boas-vindas a novos seguidores (perfil logado no Instagram)');
 
   // Schedule: 08:00 todos os dias → Parabéns às aniversariantes nos grupos
   cron.schedule(config.schedule.aniversariantes, () => {

@@ -14,6 +14,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env'
 const http = require('http');
 const crypto = require('crypto');
 const fs = require('fs');
+const path = require('path');
 const { exec } = require('child_process');
 const mensagens = require('./mensagens');
 const ag = require('./agendamentos');
@@ -21,6 +22,7 @@ const waStatus = require('./wa-status');
 const horarios = require('./horarios');
 const atividade = require('./atividade');
 const teste = require('./teste-envio');
+const igcfg = require('./instagram-config');
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
 // Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
@@ -73,8 +75,8 @@ const ESTILO = `
   header .logo-box img{height:28px;width:auto;display:block}
   header h1{margin:0;font-size:1.3rem;font-weight:800}
   header p{margin:4px 0 0;opacity:.92;font-size:.9rem}
-  .tabs{display:flex;gap:8px;max-width:820px;margin:16px auto 0;padding:0 16px}
-  .tabs a{flex:1;text-align:center;text-decoration:none;font-weight:700;font-size:.9rem;color:var(--cinza);background:#fff;border:1px solid var(--linha);border-radius:12px;padding:11px}
+  .tabs{display:flex;flex-wrap:wrap;gap:8px;max-width:820px;margin:16px auto 0;padding:0 16px}
+  .tabs a{flex:1 1 120px;text-align:center;text-decoration:none;font-weight:700;font-size:.9rem;color:var(--cinza);background:#fff;border:1px solid var(--linha);border-radius:12px;padding:11px}
   .tabs a.on{background:var(--teal);color:#fff;border-color:var(--teal)}
   .aviso{background:#e6f6f7;border:1px solid #bfe8e7;color:#0c6f70;border-radius:10px;padding:11px 14px;margin:16px 0}
   .aviso.err{background:#fdecec;border-color:#f6c9c9;color:#a12626}
@@ -188,6 +190,7 @@ function chrome(titSubtitulo, ativo, corpo) {
   <a href="/hoje" class="${ativo === 'hoje' ? 'on' : ''}">📊 Hoje</a>
   <a href="/" class="${ativo === 'msg' ? 'on' : ''}">✏️ Mensagens</a>
   <a href="/agendar" class="${ativo === 'ag' ? 'on' : ''}">📅 Agendar envios</a>
+  <a href="/instagram" class="${ativo === 'ig' ? 'on' : ''}">📸 Instagram</a>
   <a href="/wa" class="${ativo === 'wa' ? 'on' : ''}">📱 WhatsApp</a>
 </nav>
 ${corpo}
@@ -569,6 +572,71 @@ function paginaHoje(dia) {
   return chrome({ tab: 'Hoje', h1: '📊 O que o robô fez', p: ehHoje ? 'Todos os envios de <b>hoje</b>, em tempo quase real.' : `Envios do dia <b>${esc(fmtData(d))}</b>.` }, 'hoje', corpo);
 }
 
+// ── Página: Instagram (status + liga/desliga) ───────────────────────────────
+function lerJsonData(nome) {
+  try { return JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'data', nome), 'utf8')); }
+  catch (_) { return null; }
+}
+function paginaInstagram(aviso, erro) {
+  const on = igcfg.ligado();
+  const fonte = igcfg.fonte();
+  const limite = parseInt(process.env.IG_MAX_DIA || '20', 10);
+  const maxTent = parseInt(process.env.IG_MAX_TENTATIVAS_INDISP || '2', 10);
+  const rel = lerJsonData('instagram-envios.json');
+  const indisp = lerJsonData('instagram-indisponiveis.json') || {};
+  const enviados = lerJsonData('instagram-enviados.json');
+  const totalRecebeu = (enviados && Array.isArray(enviados.usernames)) ? enviados.usernames.length : 0;
+
+  let ultima = '—', env = 0, ind = 0, err = 0, teveRun = false;
+  if (rel && Array.isArray(rel.resultados)) {
+    teveRun = true;
+    ultima = rel.executadoEm || '—';
+    for (const r of rel.resultados) { if (r.status === 'sent') env++; else if (r.status === 'unavailable') ind++; else err++; }
+  }
+
+  const puladasArr = Object.entries(indisp).sort((a, b) => b[1] - a[1]);
+  const puladas = puladasArr.map(([u, n]) => {
+    const bloq = n >= maxTent;
+    return `<div class="jobrow"><div class="jn">@${esc(u)}</div><div class="jc">${bloq ? `<span class="f">⛔ ${n}/${maxTent} — não tenta mais</span>` : `${n}/${maxTent} tentativa${n === 1 ? '' : 's'}`}</div></div>`;
+  }).join('');
+
+  const statusCard = on
+    ? `<div class="wa-card ok"><div class="wa-ic">📸</div><h2>Instagram LIGADO</h2>
+        <p>O robô envia boas-vindas às novas seguidoras às <b>07:00</b>, no máximo <b>${limite}/dia</b>.</p>
+        <form method="POST" action="/instagram/toggle" style="margin-top:14px"><input type="hidden" name="alvo" value="off">
+          <button class="rm" type="submit" onclick="return confirm('Pausar o envio de boas-vindas no Instagram?')">⏸️ Pausar Instagram</button></form></div>`
+    : `<div class="wa-card warn"><div class="wa-ic">📸</div><h2>Instagram pausado</h2>
+        <p>As boas-vindas automáticas estão <b>desligadas</b>. Ligue só com o proxy e os cookies configurados (senão a conta pode ser bloqueada).</p>
+        <form method="POST" action="/instagram/toggle" style="margin-top:14px"><input type="hidden" name="alvo" value="on">
+          <button class="save" type="submit" onclick="return confirm('Ligar o envio de boas-vindas no Instagram?')">▶️ Ligar Instagram</button></form></div>`;
+
+  const corpo = `<div class="wrap">
+    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    ${statusCard}
+    <div class="stats">
+      <div class="stat tot"><div class="n">${limite}</div><div class="l">limite/dia</div></div>
+      <div class="stat ok"><div class="n">${teveRun ? env : '—'}</div><div class="l">✅ última execução</div></div>
+      <div class="stat"><div class="n" style="color:var(--tinta)">${totalRecebeu}</div><div class="l">já receberam (total)</div></div>
+    </div>
+    <div class="card">
+      <div class="chead"><h2>Última execução</h2></div>
+      ${teveRun
+        ? `<p class="quando" style="margin:0 0 8px">${esc(ultima)}</p>
+           <div class="jobrow"><div class="jn">✅ Enviadas</div><div class="jc">${env}</div></div>
+           <div class="jobrow"><div class="jn">🚫 Indisponíveis</div><div class="jc">${ind}</div></div>
+           <div class="jobrow"><div class="jn">⚠️ Falhas</div><div class="jc">${err}</div></div>`
+        : '<div class="vazio">Ainda não há registro de execução do Instagram.</div>'}
+    </div>
+    <div class="sec-t">⛔ Contas puladas (${puladasArr.length})</div>
+    <div class="card">
+      ${puladas || '<div class="vazio">Nenhuma conta na lista de indisponíveis.</div>'}
+      ${puladasArr.length ? `<p class="quando" style="margin:10px 0 0">Contas privadas/restritas que deram "Mensagem Indisponível". Após ${maxTent} tentativas o robô para de tentar (não gastam as vagas do dia). Se uma delas abrir o perfil depois, recebe normalmente.</p>` : ''}
+    </div>
+    <p class="quando" style="text-align:center">Fonte do liga/desliga: <b>${fonte === 'painel' ? 'painel' : '.env (IG_ENABLED)'}</b>. Mudar aqui vale no próximo disparo (07:00) — sem reiniciar.</p>
+  </div>`;
+  return chrome({ tab: 'Instagram', h1: '📸 Instagram', p: 'Boas-vindas automáticas às novas seguidoras — status e liga/desliga.' }, 'ig', corpo);
+}
+
 function pedirLogin(res) {
   res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Painel SlimFit", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('Acesso restrito.');
@@ -701,6 +769,23 @@ const server = http.createServer((req, res) => {
     const valido = /^\d{4}-\d{2}-\d{2}$/.test(dia || '') ? dia : null;
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(paginaHoje(valido));
+  }
+
+  // Página do Instagram (status + liga/desliga)
+  if (req.method === 'GET' && url === '/instagram') {
+    const q = req.url.split('?')[1] || '';
+    let aviso = '';
+    if (/(?:^|&)on=1/.test(q)) aviso = '📸 Instagram LIGADO. Vale no próximo disparo (07:00).';
+    else if (/(?:^|&)off=1/.test(q)) aviso = '⏸️ Instagram pausado. Nenhuma DM automática será enviada.';
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(paginaInstagram(aviso));
+  }
+  if (req.method === 'POST' && url === '/instagram/toggle') {
+    return lerCorpo(req, 1e5, corpo => {
+      const alvo = new URLSearchParams(corpo).get('alvo');
+      try { igcfg.definir(alvo === 'on'); } catch (_) {}
+      res.writeHead(303, { Location: alvo === 'on' ? '/instagram?on=1' : '/instagram?off=1' }); res.end();
+    });
   }
 
   // Página da conexão do WhatsApp (QR quando cai)
