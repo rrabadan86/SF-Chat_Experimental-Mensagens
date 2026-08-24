@@ -13,6 +13,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const pagina = require('./pagina');
 
 const RAIZ = path.resolve(__dirname, '..');
 const ARQUIVO = process.env.DADOS_ARQUIVO || path.join(RAIZ, 'dados', 'config.json');
@@ -52,6 +53,7 @@ function semente() {
     agendasDeBloqueio: (process.env.CAL_BLOQUEIOS || '')
       .split(',').map((s) => s.trim()).filter(Boolean),
     hospitais,
+    pagina: pagina.padrao(),
     atualizadoEm: null,
   };
 }
@@ -87,6 +89,7 @@ function ler() {
     if (cache && stat.mtimeMs === cacheMtime) return cache;
     const lido = JSON.parse(fs.readFileSync(ARQUIVO, 'utf8'));
     lido.hospitais = (lido.hospitais || []).map(migrarHospital);
+    lido.pagina = completarPagina(lido.pagina);
     cache = lido;
     cacheMtime = stat.mtimeMs;
     return cache;
@@ -113,6 +116,30 @@ function alterar(fn) {
   const atual = JSON.parse(JSON.stringify(ler()));
   const novo = fn(atual) || atual;
   return gravar(novo);
+}
+
+/**
+ * Garante que a configuração tem todos os campos da página.
+ *
+ * Preenche só o que falta, um nível abaixo da raiz: quem já editou um texto
+ * mantém o texto; quem nunca viu um campo novo (porque atualizou o sistema)
+ * recebe o padrão em vez de um buraco na tela.
+ */
+function completarPagina(atual) {
+  const base = pagina.padrao();
+  if (!atual || typeof atual !== 'object') return base;
+
+  const completa = { ...base, ...atual };
+  for (const chave of ['hero', 'sobre', 'locais', 'agendar', 'duvidas']) {
+    completa[chave] = { ...base[chave], ...(atual[chave] || {}) };
+  }
+  // seções novas entram no fim da ordem em vez de sumirem da página
+  const ordem = Array.isArray(atual.ordem) ? atual.ordem.filter((id) => base.ordem.includes(id)) : [];
+  completa.ordem = [...ordem, ...base.ordem.filter((id) => !ordem.includes(id))];
+  completa.ocultas = Array.isArray(atual.ocultas)
+    ? atual.ocultas.filter((id) => base.ordem.includes(id))
+    : [];
+  return completa;
 }
 
 // ---------------------------------------------------------------- validação
@@ -271,7 +298,85 @@ function validarGerais(bruto = {}) {
   return { ok: Object.keys(erros).length === 0, erros, dados };
 }
 
+/**
+ * Valida o conteúdo da página vindo do editor.
+ *
+ * Aqui a régua é diferente da dos horários: texto ruim deixa a página feia,
+ * não quebra agendamento. Então cortamos o que passa do limite em vez de
+ * recusar, e só barramos o que deixaria a página sem sentido — título vazio,
+ * nenhuma seção visível.
+ */
+function validarPagina(bruto = {}) {
+  const base = pagina.padrao();
+  const erros = {};
+  const lista = (v) => (Array.isArray(v) ? v : []);
+
+  const p = {
+    hero: {
+      eyebrow: texto(bruto.hero?.eyebrow, 60),
+      titulo: texto(bruto.hero?.titulo, 140),
+      lede: texto(bruto.hero?.lede, 600),
+      botaoPrimario: texto(bruto.hero?.botaoPrimario, 30) || base.hero.botaoPrimario,
+      botaoSecundario: texto(bruto.hero?.botaoSecundario, 30),
+      credenciais: lista(bruto.hero?.credenciais).map((c) => texto(c, 80)).filter(Boolean).slice(0, 6),
+      destaques: lista(bruto.hero?.destaques).map((d) => ({
+        valor: texto(d?.valor, 20), rotulo: texto(d?.rotulo, 60),
+      })).filter((d) => d.valor && d.rotulo).slice(0, 4),
+      foto: texto(bruto.hero?.foto, 500),
+    },
+    sobre: {
+      eyebrow: texto(bruto.sobre?.eyebrow, 60),
+      titulo: texto(bruto.sobre?.titulo, 140),
+      paragrafos: lista(bruto.sobre?.paragrafos).map((t) => texto(t, 1200)).filter(Boolean).slice(0, 8),
+      tituloAreas: texto(bruto.sobre?.tituloAreas, 60),
+      areas: lista(bruto.sobre?.areas).map((a) => ({
+        nome: texto(a?.nome, 50), destaque: Boolean(a?.destaque),
+      })).filter((a) => a.nome).slice(0, 20),
+      tituloFormacao: texto(bruto.sobre?.tituloFormacao, 60),
+      formacao: lista(bruto.sobre?.formacao).map((f) => ({
+        ano: texto(f?.ano, 12), titulo: texto(f?.titulo, 100), detalhe: texto(f?.detalhe, 100),
+      })).filter((f) => f.titulo).slice(0, 15),
+    },
+    locais: {
+      eyebrow: texto(bruto.locais?.eyebrow, 60),
+      titulo: texto(bruto.locais?.titulo, 140),
+      descricao: texto(bruto.locais?.descricao, 600),
+    },
+    agendar: {
+      eyebrow: texto(bruto.agendar?.eyebrow, 60),
+      titulo: texto(bruto.agendar?.titulo, 140),
+      descricao: texto(bruto.agendar?.descricao, 600),
+      avisoUrgencia: texto(bruto.agendar?.avisoUrgencia, 300) || base.agendar.avisoUrgencia,
+      preparo: lista(bruto.agendar?.preparo).map((t) => texto(t, 200)).filter(Boolean).slice(0, 10),
+    },
+    duvidas: {
+      eyebrow: texto(bruto.duvidas?.eyebrow, 60),
+      titulo: texto(bruto.duvidas?.titulo, 140),
+      itens: lista(bruto.duvidas?.itens).map((d) => ({
+        pergunta: texto(d?.pergunta, 200), resposta: texto(d?.resposta, 1200),
+      })).filter((d) => d.pergunta && d.resposta).slice(0, 20),
+    },
+    rodape: lista(bruto.rodape).map((t) => texto(t, 300)).filter(Boolean).slice(0, 6),
+    ordem: lista(bruto.ordem).filter((id) => base.ordem.includes(id)),
+    ocultas: lista(bruto.ocultas).filter((id) => base.ordem.includes(id)),
+  };
+
+  // seção que sumiu da lista volta para o fim, em vez de desaparecer calada
+  p.ordem = [...new Set([...p.ordem, ...base.ordem])];
+
+  if (!p.hero.titulo) erros['hero.titulo'] = 'A página precisa de um título.';
+  if (p.ordem.every((id) => p.ocultas.includes(id))) {
+    erros.ocultas = 'Deixe pelo menos uma seção visível.';
+  }
+  if (p.ocultas.includes('agendar')) {
+    erros.ocultas = 'A seção de agendamento não pode ser ocultada — é o que o paciente vem fazer aqui.';
+  }
+
+  return { ok: Object.keys(erros).length === 0, erros, pagina: p };
+}
+
 module.exports = {
-  ler, gravar, alterar, validarHospital, validarGerais, novoId, ARQUIVO, semente,
-  migrarHospital, normalizarExpediente, diasAtendidos, validarFaixas, DIA_NOME,
+  ler, gravar, alterar, validarHospital, validarGerais, validarPagina, novoId,
+  ARQUIVO, semente, migrarHospital, normalizarExpediente, diasAtendidos,
+  validarFaixas, completarPagina, DIA_NOME,
 };

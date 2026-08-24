@@ -93,6 +93,30 @@ para desligar.
 que aquilo vai gerar ("6 consultas por dia · Sex, 09:00 09:30 …"). Erro de configuração
 aparece antes de salvar, não depois.
 
+### O site também é editável
+
+Uma segunda aba do painel — **Site** — controla tudo que o paciente lê. Nada disso
+é código:
+
+- **Ordem das seções.** Setas ↑↓ mudam a sequência (dá para colocar o agendamento
+  logo abaixo da introdução, por exemplo) e cada seção pode ser ocultada. A de
+  agendamento é a única que não pode sumir — é o que o paciente veio fazer ali.
+- **Início:** título, texto de apresentação, rótulos dos botões, credenciais e os
+  números em destaque.
+- **Foto:** enviada do computador ou por endereço de uma imagem já hospedada. O
+  navegador reduz para 1000px e converte para JPEG **antes** de subir, o que evita
+  trazer biblioteca de imagem para o servidor e faz o upload de uma foto de celular
+  levar menos de um segundo.
+- **Sobre:** parágrafos, áreas de atuação (com marca de destaque) e formação —
+  todos como listas que ele adiciona, remove e reordena.
+- **Onde atendo, agendamento e dúvidas:** títulos, descrições, o aviso de urgência,
+  a lista do que levar na consulta e as perguntas frequentes.
+- **Rodapé:** as linhas de aviso. Nome e CRM entram sozinhos.
+
+A página do paciente é montada a partir disso: `public/index.html` virou uma casca
+com um `<template>` por seção, e o `app.js` clona os moldes na ordem configurada.
+Trocar a ordem no painel muda o site na hora, sem deploy.
+
 ### Onde isso é guardado
 
 `dados/config.json`, escrito de forma atômica (grava num temporário e renomeia), porque
@@ -169,7 +193,7 @@ cd app
 cp .env.example .env      # preencha CAL_H1, CAL_H2 e o caminho da credencial
 npm install
 npm run senha             # cria a senha do painel (imprime 2 linhas para o .env)
-npm test                  # 94 testes, tudo offline
+npm test                  # 102 testes, tudo offline
 npm start                 # http://localhost:3000
 ```
 
@@ -197,16 +221,18 @@ app/
     mensagens.js           todo texto que sai pelo WhatsApp
     google-agenda.js       freebusy, criar, confirmar, liberar, testar acesso
     dados.js               config editável pelo painel, gravada em disco (pura)
+    pagina.js              o conteúdo padrão do site (pura)
     auth.js                senha e sessão do painel, sem dependência (pura)
     whatsapp/              log | wwebjs | cloud, mesma interface
     agendamento.js         a orquestração
     rotas-admin.js         a API do painel
     server.js              rotas HTTP
   dados/config.json        o que o médico edita (fora do Git)
-  public/                  a página que o paciente vê
-  public/admin/            o painel do médico
+  public/                  a página que o paciente vê (moldes + montagem)
+  public/admin/            o painel: agenda e conteúdo do site
+  dados/midia/             a foto enviada pelo painel
   deploy/                  PM2, nginx, systemd e backup
-  tests/                   94 testes, sem rede
+  tests/                   102 testes, sem rede
 ```
 
 As quatro primeiras são funções puras — é por isso que dá para testar as regras
@@ -227,6 +253,9 @@ de horário, fuso e validação sem Google e sem WhatsApp.
 | `GET·PUT /admin/api/config` | dados do médico e da recepção |
 | `POST·PUT·DELETE /admin/api/hospitais` | locais de atendimento |
 | `POST /admin/api/testar-agenda` | confere o compartilhamento no Google |
+| `GET·PUT /admin/api/pagina` | conteúdo e ordem das seções do site |
+| `POST /admin/api/foto` | foto do médico |
+| `GET /api/pagina` | o que a página do paciente monta (público) |
 
 ---
 
@@ -277,8 +306,7 @@ marcar — seria pior.
 
 1. Os IDs das duas agendas do Google (o médico manda) — daí em diante ele mesmo
    cadastra novos locais pelo painel.
-2. Foto, bio, formação e áreas de atuação para a página de apresentação
-   (isso ainda é texto no HTML, não passa pelo painel).
-3. Convênios aceitos.
+2. Foto, bio, formação e áreas de atuação — o médico mesmo preenche pela aba Site.
+3. Convênios aceitos (ainda é lista fixa no formulário).
 4. Publicar na VPS com domínio e HTTPS — o passo a passo está em
    [`IMPLANTACAO-VPS.md`](IMPLANTACAO-VPS.md).

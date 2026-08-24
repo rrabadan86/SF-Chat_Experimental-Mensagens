@@ -14,6 +14,7 @@
  * A credencial do Google e o número da recepcionista NUNCA chegam ao navegador.
  */
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 
 const config = require('./config');
@@ -26,6 +27,11 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '32kb' }));
 app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
+
+// a foto que o médico enviou pelo painel
+const PASTA_MIDIA = process.env.MIDIA_DIR || path.join(__dirname, '..', 'dados', 'midia');
+fs.mkdirSync(PASTA_MIDIA, { recursive: true });
+app.use('/midia', express.static(PASTA_MIDIA, { maxAge: '7d' }));
 
 // painel do médico: a API exige sessão (ver rotas-admin.js)
 app.use('/admin/api', rotasAdmin);
@@ -46,6 +52,12 @@ function limitar(maximo, porMs) {
   };
 }
 setInterval(() => janelas.clear(), 10 * 60000).unref();
+
+/** Conteúdo do site: textos, foto, ordem das seções. Público, é o que o paciente vê. */
+app.get('/api/pagina', (_req, res) => {
+  const c = require('./dados').ler();
+  res.json({ pagina: c.pagina, medico: c.medico });
+});
 
 app.get('/api/hospitais', (_req, res) => {
   res.json({ hospitais: config.hospitais.map(servico.resumoHospital), medico: config.medico });

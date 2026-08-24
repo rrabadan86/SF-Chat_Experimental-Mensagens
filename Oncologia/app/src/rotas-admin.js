@@ -6,6 +6,9 @@
  * que não é o que está gravado.
  */
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 const dados = require('./dados');
 const auth = require('./auth');
 const agenda = require('./google-agenda');
@@ -113,6 +116,64 @@ router.delete('/hospitais/:id', (req, res) => {
     }),
   });
 });
+
+// ------------------------------------------------------------ conteúdo do site
+
+router.get('/pagina', (req, res) => {
+  res.json({ pagina: dados.ler().pagina, secoes: require('./pagina').SECOES });
+});
+
+router.put('/pagina', (req, res) => {
+  const { ok, erros, pagina } = dados.validarPagina(req.body);
+  if (!ok) return res.status(400).json({ erro: 'Confira os campos destacados.', erros });
+  res.json({ ok: true, pagina: dados.alterar((c) => { c.pagina = pagina; }).pagina });
+});
+
+/**
+ * Foto do médico.
+ *
+ * Chega como data URL porque o navegador já redimensionou a imagem antes de
+ * enviar — isso evita trazer um multipart parser e uma biblioteca de imagem
+ * para o servidor só por causa de um retrato que muda uma vez por ano.
+ */
+const TIPOS = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+const PASTA_MIDIA = process.env.MIDIA_DIR || path.join(path.resolve(__dirname, '..'), 'dados', 'midia');
+
+router.post('/foto', express.json({ limit: '6mb' }), (req, res) => {
+  const dataUrl = String(req.body?.imagem || '');
+  const m = dataUrl.match(/^data:([\w/+.-]+);base64,(.+)$/);
+  if (!m) return res.status(400).json({ erro: 'Envie uma imagem válida.' });
+
+  const extensao = TIPOS[m[1]];
+  if (!extensao) return res.status(400).json({ erro: 'Use uma imagem JPG, PNG ou WEBP.' });
+
+  const conteudo = Buffer.from(m[2], 'base64');
+  if (conteudo.length > 4 * 1024 * 1024) {
+    return res.status(413).json({ erro: 'Imagem grande demais. Tente uma foto menor.' });
+  }
+
+  fs.mkdirSync(PASTA_MIDIA, { recursive: true });
+  const nome = `foto-${crypto.randomBytes(6).toString('hex')}.${extensao}`;
+  fs.writeFileSync(path.join(PASTA_MIDIA, nome), conteudo);
+
+  const url = `/midia/${nome}`;
+  const config = dados.alterar((c) => { c.pagina.hero.foto = url; });
+
+  // a foto anterior não serve mais para ninguém
+  limparFotosAntigas(nome);
+
+  res.json({ ok: true, url, pagina: config.pagina });
+});
+
+function limparFotosAntigas(manter) {
+  try {
+    for (const arquivo of fs.readdirSync(PASTA_MIDIA)) {
+      if (arquivo.startsWith('foto-') && arquivo !== manter) {
+        fs.rmSync(path.join(PASTA_MIDIA, arquivo), { force: true });
+      }
+    }
+  } catch { /* pasta sumiu ou sem permissão: não é motivo para falhar o upload */ }
+}
 
 /** Confere o compartilhamento da agenda antes de o médico salvar. */
 router.post('/testar-agenda', async (req, res) => {

@@ -3,9 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dr. Felipe Oliveira — Oncologia Clínica</title>
-<meta name="description" content="Consulta em oncologia clínica: primeira consulta, retorno e segunda opinião. Agende online e a recepção confirma pelo WhatsApp.">
-<meta name="robots" content="index, follow">
+<title>Agendamento de consulta</title>
+<meta name="description" content="Agende sua consulta online. A recepção confirma pelo WhatsApp.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Karla:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -16,316 +15,236 @@
 <div class="topbar">
   <div class="wrap">
     <div class="brandmark">
-      <div class="sigil" aria-hidden="true">FO</div>
-      <div>
-        <b>Dr. Felipe Oliveira</b>
-        <span>Oncologia Clínica</span>
-      </div>
+      <div class="sigil" id="sigla" aria-hidden="true"></div>
+      <div><b id="nomeTopo">—</b><span id="espTopo"></span></div>
     </div>
-    <nav class="topnav">
-      <a href="#sobre">Sobre</a>
-      <a href="#locais">Onde atendo</a>
-      <a href="#agendar">Agendamento</a>
-      <a href="#duvidas">Dúvidas</a>
-      <a class="btn sm" href="#agendar">Agendar consulta</a>
-    </nav>
+    <nav class="topnav" id="navTopo"></nav>
   </div>
 </div>
 
 <header class="hero">
   <div class="wrap hero-grid">
     <div>
-      <div class="eyebrow">Oncologia clínica · Goiânia</div>
-      <h1>Cuidado oncológico com tempo para ouvir você.</h1>
-      <p class="lede">
-        Atendimento em dois hospitais, agenda aberta para primeira consulta, retorno e
-        segunda opinião. O agendamento é feito aqui e a recepção confirma com você pelo
-        WhatsApp no mesmo dia útil.
-      </p>
-      <div class="hero-actions">
-        <a class="btn" href="#agendar">Agendar consulta</a>
-        <a class="btn ghost" href="#sobre">Conhecer o médico</a>
-      </div>
-      <div class="credential">
-        <span>CRM-GO 00.000</span>
-        <span>RQE 0000 — Cancerologia Clínica</span>
-        <span>Membro SBOC</span>
-      </div>
-      <div class="factstrip">
-        <div><b>2</b><span>hospitais de atendimento</span></div>
-        <div><b>40 min</b><span>de consulta por paciente</span></div>
-        <div><b>até 24h</b><span>para a recepção confirmar</span></div>
-      </div>
+      <div class="eyebrow" id="heroEyebrow"></div>
+      <h1 id="heroTitulo"></h1>
+      <p class="lede" id="heroLede"></p>
+      <div class="hero-actions" id="heroBotoes"></div>
+      <div class="credential" id="heroCredenciais"></div>
+      <div class="factstrip" id="heroDestaques"></div>
     </div>
-    <div class="portrait">Foto do médico</div>
+    <div class="portrait" id="heroFoto"></div>
   </div>
 </header>
 
-<section id="sobre">
-  <div class="wrap two">
-    <div>
-      <div class="eyebrow">Sobre</div>
-      <h2>Quem vai te atender</h2>
-      <div class="prose" style="margin-top:16px">
-        <p>
-          Sou oncologista clínico e acompanho pacientes adultos em <strong>diagnóstico,
-          tratamento e seguimento</strong> de tumores sólidos. Trabalho em conjunto com
-          cirurgiões, radioterapeutas, nutrição e psicologia, porque tratamento de câncer
-          raramente é decisão de uma pessoa só.
-        </p>
-        <p>
-          Na primeira consulta a gente revisa o caso desde o começo: exames, laudos,
-          biópsia e histórico. Você sai da consulta sabendo <strong>qual é o diagnóstico,
-          quais são as opções e qual é o próximo passo</strong> — com tempo para perguntar
-          o que precisar, junto de um acompanhante se preferir.
-        </p>
-        <p>
-          Também atendo <strong>segunda opinião</strong>. Trazer o caso para outro
-          oncologista antes de iniciar o tratamento é uma atitude sensata, não uma
-          desconfiança do colega.
-        </p>
-      </div>
-      <div style="margin-top:30px">
-        <div class="eyebrow">Áreas de atuação</div>
-        <div class="chips" style="margin-top:12px">
-          <span class="chip solid">Mama</span>
-          <span class="chip solid">Trato gastrointestinal</span>
-          <span class="chip solid">Pulmão</span>
-          <span class="chip">Geniturinário</span>
-          <span class="chip">Ginecológico</span>
-          <span class="chip">Cabeça e pescoço</span>
-          <span class="chip">Cuidados paliativos</span>
-          <span class="chip">Segunda opinião</span>
-        </div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="eyebrow">Formação</div>
-      <dl class="timeline" style="margin-top:14px">
-        <div><dt>2008</dt><dd>Medicina<span>Universidade</span></dd></div>
-        <div><dt>2011</dt><dd>Residência em Clínica Médica<span>Hospital</span></dd></div>
-        <div><dt>2014</dt><dd>Residência em Oncologia Clínica<span>Hospital</span></dd></div>
-        <div><dt>2016</dt><dd>Título de especialista<span>SBOC / AMB</span></dd></div>
-      </dl>
-    </div>
-  </div>
-</section>
-
-<section id="locais">
-  <div class="wrap">
-    <div class="sec-head">
-      <div class="eyebrow">Onde atendo</div>
-      <h2>Dois hospitais, dois dias de ambulatório</h2>
-      <p>Escolha o local mais fácil para você — a agenda de cada hospital é independente.</p>
-    </div>
-    <div class="locais" id="cardsLocais"></div>
-  </div>
-</section>
-
-<section id="agendar">
-  <div class="wrap">
-    <div class="sec-head">
-      <div class="eyebrow">Agendamento</div>
-      <h2>Escolha o hospital, o dia e o horário</h2>
-      <p>
-        Os horários abaixo são os que estão livres na agenda do médico agora.
-        Ao enviar, sua consulta entra como <strong>pré-agendamento</strong> e a recepção
-        confirma com você pelo WhatsApp.
-      </p>
-    </div>
-
-    <div class="booker">
-      <aside class="rail">
-        <h3>Seu agendamento</h3>
-        <ol id="rail">
-          <li data-step="1" data-state="active"><span class="num">1</span> Hospital</li>
-          <li data-step="2"><span class="num">2</span> Dia e horário</li>
-          <li data-step="3"><span class="num">3</span> Seus dados</li>
-          <li data-step="4"><span class="num">4</span> Revisar e enviar</li>
-        </ol>
-        <div class="railfoot">
-          Em caso de urgência, não use este formulário: procure o pronto-socorro ou ligue 192.
-        </div>
-      </aside>
-
-      <div class="stage">
-        <div class="step" data-step="1" data-active="true">
-          <h3>Em qual hospital você quer ser atendido?</h3>
-          <p class="hint">Cada hospital tem dias e horários próprios.</p>
-          <div class="pick" id="pickLocal"><p class="carregando">Carregando os locais de atendimento…</p></div>
-          <div class="stepnav">
-            <span></span>
-            <button class="btn" type="button" data-go="2" disabled>Continuar</button>
-          </div>
-        </div>
-
-        <div class="step" data-step="2">
-          <h3>Quando fica melhor para você?</h3>
-          <p class="hint" id="hintDia">Buscando horários livres…</p>
-          <div class="days" id="days"></div>
-          <div class="slots" id="slots"></div>
-          <div class="legend">
-            <span><i class="sel"></i> selecionado</span>
-            <span><i class="busy"></i> já ocupado na agenda</span>
-            <span><i></i> livre</span>
-          </div>
-          <div class="stepnav">
-            <button class="btn ghost" type="button" data-go="1">Voltar</button>
-            <button class="btn" type="button" data-go="3" disabled>Continuar</button>
-          </div>
-        </div>
-
-        <div class="step" data-step="3">
-          <h3>Seus dados</h3>
-          <p class="hint">Precisamos disso para a recepção confirmar e preparar seu prontuário.</p>
-          <form id="form" novalidate>
-            <div class="fields">
-              <div class="field full" data-name="nome">
-                <label for="f-nome">Nome completo do paciente <span class="req">*</span></label>
-                <input id="f-nome" name="nome" autocomplete="name" placeholder="Como está no documento">
-              </div>
-              <div class="field" data-name="nascimento">
-                <label for="f-nasc">Data de nascimento <span class="req">*</span></label>
-                <input id="f-nasc" name="nascimento" type="date" min="1900-01-01">
-              </div>
-              <div class="field" data-name="telefone">
-                <label for="f-tel">WhatsApp com DDD <span class="req">*</span></label>
-                <input id="f-tel" name="telefone" inputmode="tel" autocomplete="tel" placeholder="(62) 90000-0000">
-                <span class="help">É por aqui que a recepção confirma.</span>
-              </div>
-              <div class="field" data-name="tipo">
-                <label for="f-tipo">Tipo de consulta <span class="req">*</span></label>
-                <select id="f-tipo" name="tipo">
-                  <option value="">Selecione…</option>
-                  <option>Primeira consulta</option>
-                  <option>Retorno</option>
-                  <option>Segunda opinião</option>
-                  <option>Avaliação pré-tratamento</option>
-                </select>
-              </div>
-              <div class="field" data-name="pagamento">
-                <label for="f-pag">Convênio ou particular <span class="req">*</span></label>
-                <select id="f-pag" name="pagamento">
-                  <option value="">Selecione…</option>
-                  <option>Particular</option>
-                  <option>Convênio — Unimed</option>
-                  <option>Convênio — Bradesco Saúde</option>
-                  <option>Convênio — SulAmérica</option>
-                  <option>Convênio — outro</option>
-                </select>
-              </div>
-              <div class="field full" data-name="carteirinha">
-                <label for="f-cart">Número da carteirinha</label>
-                <input id="f-cart" name="carteirinha" placeholder="Se for por convênio">
-              </div>
-              <div class="field full" data-name="motivo">
-                <label for="f-motivo">Motivo da consulta</label>
-                <textarea id="f-motivo" name="motivo" maxlength="1000" placeholder="Em poucas linhas: o que está acontecendo, desde quando, se já tem diagnóstico ou laudo."></textarea>
-              </div>
-              <div class="field full" data-name="encaminhamento">
-                <label for="f-enc">Quem encaminhou / indicou</label>
-                <input id="f-enc" name="encaminhamento" placeholder="Nome do médico, se houver">
-              </div>
-              <label class="consent" data-name="consentimento">
-                <input type="checkbox" id="f-consent" name="consentimento">
-                <span>
-                  Autorizo o uso destes dados para agendar e confirmar a consulta, conforme a
-                  LGPD. Informações de saúde são tratadas em sigilo pela equipe do consultório.
-                </span>
-              </label>
-            </div>
-            <div class="formerr" id="formerr"></div>
-          </form>
-          <div class="stepnav">
-            <button class="btn ghost" type="button" data-go="2">Voltar</button>
-            <button class="btn" type="button" data-go="4">Revisar</button>
-          </div>
-        </div>
-
-        <div class="step" data-step="4">
-          <h3>Confira antes de enviar</h3>
-          <p class="hint">Se algo estiver errado, é só voltar e corrigir.</p>
-          <div class="review" id="review"></div>
-          <div class="notice">
-            <span class="ic" aria-hidden="true">!</span>
-            <span>
-              Isto é um <strong>pedido de agendamento</strong>. A consulta só está garantida
-              depois que a recepção confirmar com você pelo WhatsApp.
-            </span>
-          </div>
-          <div class="formerr" id="enviarerr"></div>
-          <div class="stepnav">
-            <button class="btn ghost" type="button" data-go="3">Voltar</button>
-            <button class="btn" type="button" id="enviar">Enviar pedido</button>
-          </div>
-        </div>
-
-        <div class="step" data-step="5">
-          <div class="done-head">
-            <div class="tick" aria-hidden="true">✓</div>
-            <div>
-              <h3>Pedido enviado</h3>
-              <p class="hint" style="margin-bottom:0" id="doneMsg"></p>
-              <span class="protocol" id="protocolo"></span>
-            </div>
-          </div>
-          <div class="preparo">
-            <h4>Enquanto isso, vá separando</h4>
-            <ul>
-              <li>Documento com foto e carteirinha do convênio</li>
-              <li>Pedido ou encaminhamento médico, se tiver</li>
-              <li>Todos os exames e laudos, inclusive os antigos — principalmente laudo de biópsia e exames de imagem</li>
-              <li>Lista dos remédios que você toma hoje, com as doses</li>
-            </ul>
-          </div>
-          <div class="notice">
-            <span class="ic" aria-hidden="true">!</span>
-            <span>Se piorar antes da consulta — febre alta, dor intensa, sangramento ou falta de ar — procure o pronto-socorro. Não espere a data.</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="duvidas">
-  <div class="wrap">
-    <div class="sec-head">
-      <div class="eyebrow">Antes da consulta</div>
-      <h2>Dúvidas frequentes</h2>
-    </div>
-    <div class="faq">
-      <details open>
-        <summary>Meu horário já está garantido?</summary>
-        <p>O horário fica reservado assim que você envia o pedido, mas a consulta só é confirmada quando a recepção falar com você pelo WhatsApp — normalmente no mesmo dia útil.</p>
-      </details>
-      <details>
-        <summary>O que eu levo na primeira consulta?</summary>
-        <p>Documento com foto, carteirinha do convênio, pedido ou encaminhamento se tiver, e todos os exames e laudos que já fez — inclusive os antigos. Laudo de biópsia e exames de imagem são os mais importantes.</p>
-      </details>
-      <details>
-        <summary>Posso levar acompanhante?</summary>
-        <p>Pode, e é recomendado. Consulta de oncologia tem muita informação; duas pessoas ouvindo ajudam bastante.</p>
-      </details>
-      <details>
-        <summary>E se eu precisar remarcar?</summary>
-        <p>É só responder a mensagem da recepção no WhatsApp. Avisar com antecedência libera o horário para outro paciente que esteja esperando.</p>
-      </details>
-      <details>
-        <summary>É urgente. Posso usar este formulário?</summary>
-        <p>Não. Em caso de febre alta, dor intensa, sangramento, falta de ar ou piora súbita, procure o pronto-socorro ou ligue 192. Este formulário é só para consulta ambulatorial.</p>
-      </details>
-    </div>
-  </div>
-</section>
+<main id="secoes"></main>
 
 <footer>
-  <div class="wrap">
-    <div><strong>Dr. Felipe Oliveira</strong> · Oncologia Clínica · CRM-GO 00.000 · RQE 0000</div>
-    <div>Este site não substitui avaliação médica presencial e não atende urgências. Em emergência, ligue 192.</div>
-    <div>Seus dados são usados apenas para agendar e confirmar a consulta, conforme a LGPD (Lei 13.709/2018).</div>
-  </div>
+  <div class="wrap" id="rodape"></div>
 </footer>
+
+<!-- ============ moldes das seções ============ -->
+
+<template id="tpl-sobre">
+  <section id="sobre">
+    <div class="wrap two">
+      <div>
+        <div class="eyebrow" data-campo="eyebrow"></div>
+        <h2 data-campo="titulo"></h2>
+        <div class="prose" data-campo="paragrafos" style="margin-top:16px"></div>
+        <div data-bloco="areas" style="margin-top:30px">
+          <div class="eyebrow" data-campo="tituloAreas"></div>
+          <div class="chips" data-campo="areas" style="margin-top:12px"></div>
+        </div>
+      </div>
+      <div class="card" data-bloco="formacao">
+        <div class="eyebrow" data-campo="tituloFormacao"></div>
+        <dl class="timeline" data-campo="formacao" style="margin-top:14px"></dl>
+      </div>
+    </div>
+  </section>
+</template>
+
+<template id="tpl-locais">
+  <section id="locais">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow" data-campo="eyebrow"></div>
+        <h2 data-campo="titulo"></h2>
+        <p data-campo="descricao"></p>
+      </div>
+      <div class="locais" id="cardsLocais"></div>
+    </div>
+  </section>
+</template>
+
+<template id="tpl-duvidas">
+  <section id="duvidas">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow" data-campo="eyebrow"></div>
+        <h2 data-campo="titulo"></h2>
+      </div>
+      <div class="faq" data-campo="itens"></div>
+    </div>
+  </section>
+</template>
+
+<template id="tpl-agendar">
+  <section id="agendar">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow" data-campo="eyebrow"></div>
+        <h2 data-campo="titulo"></h2>
+        <p data-campo="descricao"></p>
+      </div>
+
+      <div class="booker">
+        <aside class="rail">
+          <h3>Seu agendamento</h3>
+          <ol id="rail">
+            <li data-step="1" data-state="active"><span class="num">1</span> Local</li>
+            <li data-step="2"><span class="num">2</span> Dia e horário</li>
+            <li data-step="3"><span class="num">3</span> Seus dados</li>
+            <li data-step="4"><span class="num">4</span> Revisar e enviar</li>
+          </ol>
+          <div class="railfoot" data-campo="avisoUrgencia"></div>
+        </aside>
+
+        <div class="stage">
+          <div class="step" data-step="1" data-active="true">
+            <h3>Onde você quer ser atendido?</h3>
+            <p class="hint">Cada local tem dias e horários próprios.</p>
+            <div class="pick" id="pickLocal"><p class="carregando">Carregando os locais de atendimento…</p></div>
+            <div class="stepnav">
+              <span></span>
+              <button class="btn" type="button" data-go="2" disabled>Continuar</button>
+            </div>
+          </div>
+
+          <div class="step" data-step="2">
+            <h3>Quando fica melhor para você?</h3>
+            <p class="hint" id="hintDia">Buscando horários livres…</p>
+            <div class="days" id="days"></div>
+            <div class="slots" id="slots"></div>
+            <div class="legend">
+              <span><i class="sel"></i> selecionado</span>
+              <span><i class="busy"></i> já ocupado na agenda</span>
+              <span><i></i> livre</span>
+            </div>
+            <div class="stepnav">
+              <button class="btn ghost" type="button" data-go="1">Voltar</button>
+              <button class="btn" type="button" data-go="3" disabled>Continuar</button>
+            </div>
+          </div>
+
+          <div class="step" data-step="3">
+            <h3>Seus dados</h3>
+            <p class="hint">Precisamos disso para a recepção confirmar e preparar seu prontuário.</p>
+            <form id="form" novalidate>
+              <div class="fields">
+                <div class="field full" data-name="nome">
+                  <label for="f-nome">Nome completo do paciente <span class="req">*</span></label>
+                  <input id="f-nome" name="nome" autocomplete="name" placeholder="Como está no documento">
+                </div>
+                <div class="field" data-name="nascimento">
+                  <label for="f-nasc">Data de nascimento <span class="req">*</span></label>
+                  <input id="f-nasc" name="nascimento" type="date" min="1900-01-01">
+                </div>
+                <div class="field" data-name="telefone">
+                  <label for="f-tel">WhatsApp com DDD <span class="req">*</span></label>
+                  <input id="f-tel" name="telefone" inputmode="tel" autocomplete="tel" placeholder="(62) 90000-0000">
+                  <span class="help">É por aqui que a recepção confirma.</span>
+                </div>
+                <div class="field" data-name="tipo">
+                  <label for="f-tipo">Tipo de consulta <span class="req">*</span></label>
+                  <select id="f-tipo" name="tipo">
+                    <option value="">Selecione…</option>
+                    <option>Primeira consulta</option>
+                    <option>Retorno</option>
+                    <option>Segunda opinião</option>
+                    <option>Avaliação pré-tratamento</option>
+                  </select>
+                </div>
+                <div class="field" data-name="pagamento">
+                  <label for="f-pag">Convênio ou particular <span class="req">*</span></label>
+                  <select id="f-pag" name="pagamento">
+                    <option value="">Selecione…</option>
+                    <option>Particular</option>
+                    <option>Convênio — Unimed</option>
+                    <option>Convênio — Bradesco Saúde</option>
+                    <option>Convênio — SulAmérica</option>
+                    <option>Convênio — outro</option>
+                  </select>
+                </div>
+                <div class="field full" data-name="carteirinha">
+                  <label for="f-cart">Número da carteirinha</label>
+                  <input id="f-cart" name="carteirinha" placeholder="Se for por convênio">
+                </div>
+                <div class="field full" data-name="motivo">
+                  <label for="f-motivo">Motivo da consulta</label>
+                  <textarea id="f-motivo" name="motivo" maxlength="1000" placeholder="Em poucas linhas: o que está acontecendo, desde quando, se já tem diagnóstico ou laudo."></textarea>
+                </div>
+                <div class="field full" data-name="encaminhamento">
+                  <label for="f-enc">Quem encaminhou / indicou</label>
+                  <input id="f-enc" name="encaminhamento" placeholder="Nome do médico, se houver">
+                </div>
+                <label class="consent" data-name="consentimento">
+                  <input type="checkbox" id="f-consent" name="consentimento">
+                  <span>
+                    Autorizo o uso destes dados para agendar e confirmar a consulta, conforme a
+                    LGPD. Informações de saúde são tratadas em sigilo pela equipe do consultório.
+                  </span>
+                </label>
+              </div>
+              <div class="formerr" id="formerr"></div>
+            </form>
+            <div class="stepnav">
+              <button class="btn ghost" type="button" data-go="2">Voltar</button>
+              <button class="btn" type="button" data-go="4">Revisar</button>
+            </div>
+          </div>
+
+          <div class="step" data-step="4">
+            <h3>Confira antes de enviar</h3>
+            <p class="hint">Se algo estiver errado, é só voltar e corrigir.</p>
+            <div class="review" id="review"></div>
+            <div class="notice">
+              <span class="ic" aria-hidden="true">!</span>
+              <span>
+                Isto é um <strong>pedido de agendamento</strong>. A consulta só está garantida
+                depois que a recepção confirmar com você pelo WhatsApp.
+              </span>
+            </div>
+            <div class="formerr" id="enviarerr"></div>
+            <div class="stepnav">
+              <button class="btn ghost" type="button" data-go="3">Voltar</button>
+              <button class="btn" type="button" id="enviar">Enviar pedido</button>
+            </div>
+          </div>
+
+          <div class="step" data-step="5">
+            <div class="done-head">
+              <div class="tick" aria-hidden="true">✓</div>
+              <div>
+                <h3>Pedido enviado</h3>
+                <p class="hint" style="margin-bottom:0" id="doneMsg"></p>
+                <span class="protocol" id="protocolo"></span>
+              </div>
+            </div>
+            <div class="preparo" data-bloco="preparo">
+              <h4>Enquanto isso, vá separando</h4>
+              <ul data-campo="preparo"></ul>
+            </div>
+            <div class="notice">
+              <span class="ic" aria-hidden="true">!</span>
+              <span>Se piorar antes da consulta — febre alta, dor intensa, sangramento ou falta de ar — procure o pronto-socorro. Não espere a data.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</template>
 
 <script src="/app.js"></script>
 </body>

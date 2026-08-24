@@ -57,6 +57,36 @@
 
   /* ------------------------------------------------------ passos */
 
+  /**
+   * Liga o formulário. Só pode rodar depois que a seção de agendamento entrou
+   * na página — os elementos dele vêm de um <template>, então antes disso não
+   * existem no DOM.
+   */
+  function ligarFormulario() {
+    $$('[data-go]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var alvo = +b.getAttribute('data-go');
+        if (alvo === 4) {
+          if (!validar()) return;
+          montarRevisao();
+        }
+        irPara(alvo);
+      });
+    });
+
+    var tel = $('#f-tel');
+    tel.addEventListener('input', function () {
+      var v = tel.value.replace(/\D/g, '').slice(0, 11);
+      if (v.length > 6) tel.value = '(' + v.slice(0, 2) + ') ' + v.slice(2, 7) + '-' + v.slice(7);
+      else if (v.length > 2) tel.value = '(' + v.slice(0, 2) + ') ' + v.slice(2);
+      else if (v.length) tel.value = '(' + v;
+    });
+    $('#f-nasc').max = new Date().toISOString().slice(0, 10);
+
+    $('#enviar').addEventListener('click', enviar);
+    carregarHospitais();
+  }
+
   function irPara(n) {
     $$('.step').forEach(function (s) {
       s.setAttribute('data-active', s.getAttribute('data-step') === String(n) ? 'true' : 'false');
@@ -68,17 +98,6 @@
     var topo = $('#agendar');
     if (topo) window.scrollTo({ top: topo.offsetTop - 70, behavior: 'smooth' });
   }
-
-  $$('[data-go]').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var alvo = +b.getAttribute('data-go');
-      if (alvo === 4) {
-        if (!validar()) return;
-        montarRevisao();
-      }
-      irPara(alvo);
-    });
-  });
 
   /* ------------------------------------------- passo 1: hospitais */
 
@@ -229,17 +248,6 @@
 
   /* ---------------------------------------- passo 3: dados */
 
-  var tel = $('#f-tel');
-  tel.addEventListener('input', function () {
-    var v = tel.value.replace(/\D/g, '').slice(0, 11);
-    if (v.length > 6) tel.value = '(' + v.slice(0, 2) + ') ' + v.slice(2, 7) + '-' + v.slice(7);
-    else if (v.length > 2) tel.value = '(' + v.slice(0, 2) + ') ' + v.slice(2);
-    else if (v.length) tel.value = '(' + v;
-  });
-
-  var nasc = $('#f-nasc');
-  nasc.max = new Date().toISOString().slice(0, 10);
-
   var OBRIGATORIOS = ['nome', 'nascimento', 'telefone', 'tipo', 'pagamento'];
 
   function marcarErro(campo, tem) {
@@ -309,7 +317,7 @@
 
   /* ---------------------------------------- envio */
 
-  $('#enviar').addEventListener('click', async function () {
+  async function enviar() {
     if (estado.enviando) return;
     var botao = $('#enviar'), erro = $('#enviarerr');
     estado.enviando = true;
@@ -347,7 +355,134 @@
       botao.disabled = false;
       botao.textContent = 'Enviar pedido';
     }
-  });
+  }
 
-  carregarHospitais();
+  /* ------------------------------------------------- montagem da página */
+
+  /**
+   * A página é montada a partir da configuração: textos, foto, ordem das
+   * seções. O formulário só é ligado depois que a seção de agendamento está no
+   * DOM — antes disso os elementos dele nem existem.
+   */
+  function montarPagina(pagina, medico) {
+    var iniciais = (medico.nome || '')
+      .replace(/^(Dr|Dra|Prof)\.?\s+/i, '')
+      .split(/\s+/).filter(Boolean).slice(0, 2)
+      .map(function (p) { return p[0]; }).join('').toUpperCase();
+
+    document.title = (medico.nome ? medico.nome + ' — ' : '') + (medico.especialidade || 'Agendamento de consulta');
+    $('#sigla').textContent = iniciais || '+';
+    $('#nomeTopo').textContent = medico.nome || '';
+    $('#espTopo').textContent = medico.especialidade || '';
+
+    var h = pagina.hero;
+    $('#heroEyebrow').textContent = h.eyebrow || '';
+    $('#heroTitulo').textContent = h.titulo || '';
+    $('#heroLede').textContent = h.lede || '';
+    $('#heroBotoes').innerHTML =
+      '<a class="btn" href="#agendar">' + escapar(h.botaoPrimario || 'Agendar consulta') + '</a>' +
+      (h.botaoSecundario && !escondida(pagina, 'sobre')
+        ? '<a class="btn ghost" href="#sobre">' + escapar(h.botaoSecundario) + '</a>' : '');
+    $('#heroCredenciais').innerHTML = (h.credenciais || [])
+      .map(function (c) { return '<span>' + escapar(c) + '</span>'; }).join('');
+    $('#heroDestaques').innerHTML = (h.destaques || [])
+      .map(function (d) { return '<div><b>' + escapar(d.valor) + '</b><span>' + escapar(d.rotulo) + '</span></div>'; })
+      .join('');
+    $('#heroDestaques').hidden = !(h.destaques || []).length;
+
+    if (h.foto) {
+      $('#heroFoto').innerHTML = '<img src="' + escapar(h.foto) + '" alt="' + escapar(medico.nome || 'Foto do médico') + '">';
+      $('#heroFoto').classList.add('com-foto');
+    } else {
+      $('#heroFoto').hidden = true;
+    }
+
+    $('#navTopo').innerHTML =
+      pagina.ordem.filter(function (id) { return !escondida(pagina, id) && id !== 'agendar'; })
+        .map(function (id) { return '<a href="#' + id + '">' + escapar(NOME_SECAO[id]) + '</a>'; }).join('') +
+      '<a class="btn sm" href="#agendar">' + escapar(h.botaoPrimario || 'Agendar consulta') + '</a>';
+
+    var alvo = $('#secoes');
+    alvo.innerHTML = '';
+    pagina.ordem.forEach(function (id) {
+      if (escondida(pagina, id)) return;
+      var molde = document.getElementById('tpl-' + id);
+      if (!molde) return;
+      var pedaco = molde.content.cloneNode(true);
+      preencher(pedaco, pagina[id], id);
+      alvo.appendChild(pedaco);
+    });
+
+    $('#rodape').innerHTML =
+      '<div><strong>' + escapar(medico.nome || '') + '</strong>' +
+      (medico.especialidade ? ' · ' + escapar(medico.especialidade) : '') +
+      (medico.crm ? ' · ' + escapar(medico.crm) : '') + '</div>' +
+      (pagina.rodape || []).map(function (l) { return '<div>' + escapar(l) + '</div>'; }).join('');
+  }
+
+  var NOME_SECAO = { sobre: 'Sobre', locais: 'Onde atendo', agendar: 'Agendamento', duvidas: 'Dúvidas' };
+
+  function escondida(pagina, id) {
+    return (pagina.ocultas || []).indexOf(id) >= 0;
+  }
+
+  /** Preenche os [data-campo] do molde com o conteúdo daquela seção. */
+  function preencher(pedaco, dados, secao) {
+    dados = dados || {};
+    Array.prototype.forEach.call(pedaco.querySelectorAll('[data-campo]'), function (el) {
+      var campo = el.getAttribute('data-campo');
+      var valor = dados[campo];
+
+      if (campo === 'paragrafos') {
+        el.innerHTML = (valor || []).map(function (t) { return '<p>' + escapar(t) + '</p>'; }).join('');
+      } else if (campo === 'areas') {
+        el.innerHTML = (valor || []).map(function (a) {
+          return '<span class="chip' + (a.destaque ? ' solid' : '') + '">' + escapar(a.nome) + '</span>';
+        }).join('');
+      } else if (campo === 'formacao') {
+        el.innerHTML = (valor || []).map(function (f) {
+          return '<div><dt>' + escapar(f.ano) + '</dt><dd>' + escapar(f.titulo) +
+            (f.detalhe ? '<span>' + escapar(f.detalhe) + '</span>' : '') + '</dd></div>';
+        }).join('');
+      } else if (campo === 'itens' && secao === 'duvidas') {
+        el.innerHTML = (valor || []).map(function (d, i) {
+          return '<details' + (i === 0 ? ' open' : '') + '><summary>' + escapar(d.pergunta) +
+            '</summary><p>' + escapar(d.resposta) + '</p></details>';
+        }).join('');
+      } else if (campo === 'preparo') {
+        el.innerHTML = (valor || []).map(function (t) { return '<li>' + escapar(t) + '</li>'; }).join('');
+      } else {
+        el.textContent = valor || '';
+      }
+
+      if (!valor || (Array.isArray(valor) && !valor.length)) esconderVazio(el, campo);
+    });
+
+    // blocos inteiros somem quando ficam sem conteúdo
+    Array.prototype.forEach.call(pedaco.querySelectorAll('[data-bloco]'), function (bloco) {
+      var lista = dados[bloco.getAttribute('data-bloco')];
+      if (Array.isArray(lista) && !lista.length) bloco.hidden = true;
+    });
+  }
+
+  function esconderVazio(el, campo) {
+    if (['eyebrow', 'descricao', 'avisoUrgencia'].indexOf(campo) >= 0) el.hidden = true;
+  }
+
+  /* ------------------------------------------------- início */
+
+  (async function iniciar() {
+    var pagina;
+    try {
+      var r = await api('/api/pagina');
+      pagina = r.pagina;
+      montarPagina(r.pagina, r.medico || {});
+    } catch (e) {
+      document.body.insertAdjacentHTML('afterbegin',
+        '<div class="wrap" style="padding:40px 22px"><p class="erro-slot">' +
+        'Não consegui carregar a página agora. Recarregue em instantes.</p></div>');
+      return;
+    }
+    if (!escondida(pagina, 'agendar')) ligarFormulario();
+  })();
 })();

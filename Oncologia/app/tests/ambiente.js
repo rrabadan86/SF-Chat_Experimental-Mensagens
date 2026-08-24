@@ -14,6 +14,7 @@ process.env.ADMIN_SEGREDO = 'segredo-de-teste-com-tamanho-suficiente';
 /** Cada arquivo de teste escreve a configuração num diretório temporário só dele. */
 const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'onco-teste-'));
 process.env.DADOS_ARQUIVO = path.join(pasta, 'config.json');
+process.env.MIDIA_DIR = path.join(pasta, 'midia');
 process.on('exit', () => fs.rmSync(pasta, { recursive: true, force: true }));
 
 module.exports = { pasta };

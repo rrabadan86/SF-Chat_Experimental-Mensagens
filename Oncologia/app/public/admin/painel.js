@@ -87,7 +87,24 @@
     $('#telaEntrar').hidden = true;
     $('#telaPainel').hidden = false;
     desenhar();
+    if (window.EditorConteudo) {
+      EditorConteudo.iniciar(api).catch(function (e) {
+        $('#editorConteudo').innerHTML =
+          '<p class="erro-slot">Não consegui carregar o conteúdo do site: ' + escapar(e.message) + '</p>';
+      });
+    }
   }
+
+  /* ---------------------------------------------------------- abas */
+
+  $$('.aba').forEach(function (aba) {
+    aba.addEventListener('click', function () {
+      var alvo = aba.getAttribute('data-aba');
+      $$('.aba').forEach(function (o) { o.setAttribute('aria-selected', String(o === aba)); });
+      $$('[data-painel]').forEach(function (p) { p.hidden = p.getAttribute('data-painel') !== alvo; });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
 
   /* ---------------------------------------------------------- desenhar */
 

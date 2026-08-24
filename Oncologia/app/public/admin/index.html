@@ -37,13 +37,17 @@
         <div><b>Painel</b><span id="nomeMedico">—</span></div>
       </div>
       <nav class="topnav">
+        <div class="abas" role="tablist">
+          <button type="button" class="aba" data-aba="agenda" aria-selected="true">Agenda</button>
+          <button type="button" class="aba" data-aba="site" aria-selected="false">Site</button>
+        </div>
         <a href="/" target="_blank" rel="noopener">Ver o site</a>
         <button class="btn ghost sm" type="button" id="sair">Sair</button>
       </nav>
     </div>
   </div>
 
-  <main class="wrap painel">
+  <main class="wrap painel" data-painel="agenda">
 
     <!-- locais -->
     <section class="bloco">
@@ -133,6 +137,27 @@
     </section>
 
   </main>
+
+  <!-- ============ conteúdo do site ============ -->
+  <main class="wrap painel" data-painel="site" hidden>
+
+    <section class="bloco">
+      <div class="eyebrow">Ordem das seções</div>
+      <h2>Como a página é montada</h2>
+      <p class="muted small" style="margin-top:10px; max-width:60ch">
+        Arraste com as setas para mudar a ordem em que as seções aparecem para o paciente,
+        e desligue as que não quiser mostrar. A introdução do topo fica sempre primeiro.
+      </p>
+      <div id="ordemSecoes" class="ordem-lista" style="margin-top:18px"></div>
+    </section>
+
+    <div id="editorConteudo"></div>
+
+    <div class="barra-salvar">
+      <span class="small muted" id="statusConteudo"></span>
+      <button class="btn" type="button" id="salvarConteudo">Salvar conteúdo</button>
+    </div>
+  </main>
 </div>
 
 <!-- ============ formulário de local ============ -->
@@ -221,6 +246,7 @@
   </form>
 </div>
 
+<script src="/admin/conteudo.js"></script>
 <script src="/admin/painel.js"></script>
 </body>
 </html>

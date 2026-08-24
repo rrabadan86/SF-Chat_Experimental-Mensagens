@@ -189,3 +189,109 @@ test('sair encerra a sessão', async () => {
   await nav('/admin/api/sair', { method: 'POST' });
   assert.equal((await nav('/admin/api/config')).status, 401);
 });
+
+/* ---------------------------------------------------- conteúdo do site */
+
+test('o conteúdo do site vem com o texto padrão', async () => {
+  const nav = await entrar(navegador());
+  const { corpo } = await nav('/admin/api/pagina');
+  assert.ok(corpo.pagina.hero.titulo);
+  assert.equal(corpo.pagina.ordem.join(','), 'sobre,locais,agendar,duvidas');
+  assert.equal(corpo.pagina.duvidas.itens.length, 5);
+  assert.ok(corpo.secoes.length);
+});
+
+test('editar um texto reflete no que o paciente recebe', async () => {
+  const nav = await entrar(navegador());
+  const atual = (await nav('/admin/api/pagina')).corpo.pagina;
+
+  await nav('/admin/api/pagina', {
+    method: 'PUT',
+    body: JSON.stringify({ ...atual, hero: { ...atual.hero, titulo: 'Câncer tem tratamento.' } }),
+  });
+
+  const publico = await nav('/api/pagina');
+  assert.equal(publico.corpo.pagina.hero.titulo, 'Câncer tem tratamento.');
+});
+
+test('reordenar seções vale para o site', async () => {
+  const nav = await entrar(navegador());
+  const atual = (await nav('/admin/api/pagina')).corpo.pagina;
+
+  await nav('/admin/api/pagina', {
+    method: 'PUT',
+    body: JSON.stringify({ ...atual, ordem: ['agendar', 'sobre', 'locais', 'duvidas'] }),
+  });
+
+  assert.deepEqual((await nav('/api/pagina')).corpo.pagina.ordem, ['agendar', 'sobre', 'locais', 'duvidas']);
+});
+
+test('ocultar uma seção tira ela da página; agendamento não pode sumir', async () => {
+  const nav = await entrar(navegador());
+  const atual = (await nav('/admin/api/pagina')).corpo.pagina;
+
+  const ok = await nav('/admin/api/pagina', {
+    method: 'PUT', body: JSON.stringify({ ...atual, ocultas: ['duvidas'] }),
+  });
+  assert.equal(ok.status, 200);
+  assert.deepEqual((await nav('/api/pagina')).corpo.pagina.ocultas, ['duvidas']);
+
+  const recusado = await nav('/admin/api/pagina', {
+    method: 'PUT', body: JSON.stringify({ ...atual, ocultas: ['agendar'] }),
+  });
+  assert.equal(recusado.status, 400);
+  assert.match(recusado.corpo.erros.ocultas, /agendamento/i);
+});
+
+test('página sem título é recusada', async () => {
+  const nav = await entrar(navegador());
+  const atual = (await nav('/admin/api/pagina')).corpo.pagina;
+  const r = await nav('/admin/api/pagina', {
+    method: 'PUT', body: JSON.stringify({ ...atual, hero: { ...atual.hero, titulo: '   ' } }),
+  });
+  assert.equal(r.status, 400);
+  assert.ok(r.corpo.erros['hero.titulo']);
+});
+
+test('listas soltam item vazio e cortam texto gigante', async () => {
+  const nav = await entrar(navegador());
+  const atual = (await nav('/admin/api/pagina')).corpo.pagina;
+  const r = await nav('/admin/api/pagina', {
+    method: 'PUT',
+    body: JSON.stringify({
+      ...atual,
+      sobre: {
+        ...atual.sobre,
+        paragrafos: ['Um texto de verdade.', '   ', 'x'.repeat(3000)],
+        areas: [{ nome: 'Mama', destaque: true }, { nome: '' }],
+      },
+    }),
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.pagina.sobre.paragrafos.length, 2);
+  assert.equal(r.corpo.pagina.sobre.paragrafos[1].length, 1200);
+  assert.equal(r.corpo.pagina.sobre.areas.length, 1);
+});
+
+test('foto: recusa o que não é imagem e aceita png', async () => {
+  const nav = await entrar(navegador());
+
+  const ruim = await nav('/admin/api/foto', {
+    method: 'POST', body: JSON.stringify({ imagem: 'data:text/html;base64,PHNjcmlwdD4=' }),
+  });
+  assert.equal(ruim.status, 400);
+
+  // 1x1 png transparente
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  const bom = await nav('/admin/api/foto', { method: 'POST', body: JSON.stringify({ imagem: png }) });
+  assert.equal(bom.status, 200);
+  assert.match(bom.corpo.url, /^\/midia\/foto-[0-9a-f]+\.png$/);
+  assert.equal((await nav('/api/pagina')).corpo.pagina.hero.foto, bom.corpo.url);
+});
+
+test('o conteúdo do site também exige sessão', async () => {
+  const nav = navegador();
+  assert.equal((await nav('/admin/api/pagina')).status, 401);
+  assert.equal((await nav('/admin/api/pagina', { method: 'PUT', body: '{}' })).status, 401);
+  assert.equal((await nav('/admin/api/foto', { method: 'POST', body: '{}' })).status, 401);
+});
