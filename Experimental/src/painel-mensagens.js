@@ -54,7 +54,9 @@ function fmtTel(t) { // 5562999999999 → (62) 99999-9999
   if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
   return t;
 }
-const TURNO_LABEL = { manha: '☀️ Manhã · 10:45', tarde: '🌇 Tarde · 15:45' };
+// Horários dos envios agendados vêm dos jobs (podem ter sido editados no painel).
+function horaAg(turno) { return horaTurno(turno === 'manha' ? 'agendadosManha' : 'agendadosTarde') || (turno === 'manha' ? '10:45' : '15:45'); }
+function turnoLabel(turno) { return (turno === 'manha' ? '☀️ Manhã · ' : '🌇 Tarde · ') + horaAg(turno); }
 
 // ── Chrome comum (cabeçalho + abas + estilo) ────────────────────────────────
 const ESTILO = `
@@ -121,9 +123,12 @@ const ESTILO = `
   .wa-card .qr{width:280px;max-width:82%;height:auto;margin:16px auto 6px;display:block;border:8px solid #fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.12)}
   .wa-hint{font-size:.85rem}
   .wa-upd{text-align:center;color:var(--cinza);font-size:.8rem;margin-top:10px}
+  .hsec{margin-top:14px;padding-top:14px;border-top:1px dashed var(--linha)}
+  .hsec-t{font-family:"Montserrat";font-weight:800;font-size:.9rem;color:#0c6f70;margin:0 0 10px}
   .hjob{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:14px 16px;margin:12px 0}
   .hjob h3{font-size:1rem;margin:0 0 8px}
   .hrow{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end}
+  .hrow + .hrow{margin-top:12px}
   .hrow input[type=time]{width:130px}
   .hrow .lbl{font-weight:600;font-size:.82rem;margin:0 0 4px;color:var(--cinza)}
   .dias{display:flex;gap:5px;flex-wrap:wrap}
@@ -151,7 +156,6 @@ function chrome(titSubtitulo, ativo, corpo) {
 <nav class="tabs">
   <a href="/" class="${ativo === 'msg' ? 'on' : ''}">✏️ Mensagens</a>
   <a href="/agendar" class="${ativo === 'ag' ? 'on' : ''}">📅 Agendar envios</a>
-  <a href="/horarios" class="${ativo === 'hr' ? 'on' : ''}">🕒 Horários</a>
   <a href="/wa" class="${ativo === 'wa' ? 'on' : ''}">📱 WhatsApp</a>
 </nav>
 ${corpo}
@@ -159,25 +163,64 @@ ${corpo}
 </body></html>`;
 }
 
-// ── Página 1: editar mensagens ──────────────────────────────────────────────
+// ── Página 1: editar mensagens (texto + horário de cada uma) ────────────────
 function paginaMensagens(aviso, erro) {
+  // Índice dos horários por chave de job, para embutir em cada mensagem.
+  const hmap = {};
+  horarios.listar().forEach(j => { hmap[j.chave] = j; });
+
   const itens = mensagens.listar().map(m => {
     const vars = (m.vars || []).map(([t, d]) => `<span class="var" title="${esc(d)} — clique para inserir" onclick="inserirVar(this,'{${esc(t)}}')">{${esc(t)}}</span>`).join(' ');
     const badge = m.editado ? '<span class="badge">editada</span>' : '';
+
+    // Bloco de horário embutido no card (inputs pertencem ao form #fh).
+    const mapa = HORARIOS_DA_MSG[m.chave];
+    let hbloco = '';
+    if (mapa === 'compartilha:followup') {
+      hbloco = `<div class="hsec"><div class="hsec-t">🕒 Horário</div>
+        <p class="quando" style="margin:0">Segue o <b>mesmo horário do Follow-up pós-aula (ainda não fechou)</b>, logo acima — é o mesmo disparo, muda só o texto conforme a lead.</p></div>`;
+    } else if (Array.isArray(mapa)) {
+      const linhas = mapa.map(([chave, sub]) => hmap[chave] ? blocoHorario(hmap[chave], sub) : '').join('');
+      const editouHora = mapa.some(([chave]) => hmap[chave] && hmap[chave].editado);
+      const badgeH = editouHora ? '<span class="badge-ed">alterado</span>' : '';
+      hbloco = `<div class="hsec"><div class="hsec-t">🕒 Horário deste envio ${badgeH}</div>${linhas}</div>`;
+    }
+
     return `
-    <form class="card" method="POST" action="/salvar">
-      <input type="hidden" name="chave" value="${esc(m.chave)}">
-      <div class="chead"><h2>${esc(m.titulo)} ${badge}</h2></div>
-      <p class="quando">${esc(m.quando)}</p>
-      ${vars ? `<p class="vars">Variáveis (clique para inserir): ${vars} <small>— são trocadas automaticamente no envio; mantenha-as no texto</small></p>` : ''}
-      <textarea name="texto" rows="7" spellcheck="true">${esc(m.texto)}</textarea>
-      <div class="acts">
-        <button type="submit" class="save">Salvar</button>
-        <button type="submit" name="reset" value="1" class="reset" onclick="return confirm('Voltar esta mensagem ao texto padrão?')">Restaurar padrão</button>
-      </div>
-    </form>`;
+    <div class="card">
+      <form method="POST" action="/salvar">
+        <input type="hidden" name="chave" value="${esc(m.chave)}">
+        <div class="chead"><h2>${esc(m.titulo)} ${badge}</h2></div>
+        <p class="quando">${esc(m.quando)}</p>
+        ${vars ? `<p class="vars">Variáveis (clique para inserir): ${vars} <small>— são trocadas automaticamente no envio; mantenha-as no texto</small></p>` : ''}
+        <textarea name="texto" rows="7" spellcheck="true">${esc(m.texto)}</textarea>
+        <div class="acts">
+          <button type="submit" class="save">Salvar texto</button>
+          <button type="submit" name="reset" value="1" class="reset" onclick="return confirm('Voltar esta mensagem ao texto padrão?')">Restaurar padrão</button>
+        </div>
+      </form>
+      ${hbloco}
+    </div>`;
   }).join('\n');
-  const corpo = `<div class="wrap">${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}${itens}</div>
+
+  // Seção final: jobs sem texto editável (só horário).
+  const outros = OUTROS_JOBS.map(chave => hmap[chave]).filter(Boolean).map(j => {
+    const badgeH = j.editado ? '<span class="badge-ed">alterado</span>' : '';
+    return `<div class="card"><div class="chead"><h2 style="font-size:.98rem">${esc(j.titulo)} ${badgeH}</h2></div>
+      <div class="hsec" style="border:0;margin:8px 0 0;padding:0">${blocoHorario(j, '')}</div></div>`;
+  }).join('\n');
+
+  const corpo = `<div class="wrap">
+    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
+    ${itens}
+    <div class="sec-t">Outros envios automáticos <small style="font-weight:600;color:var(--cinza)">(sem texto editável)</small></div>
+    ${outros}
+    <div class="hbar">
+      <div class="acts"><button type="submit" form="fh" id="btnH" class="save">🕒 Salvar horários e reiniciar o robô</button></div>
+      <p class="quando" style="text-align:center;margin:8px 0 0">O <b>texto</b> é salvo na hora (sem reiniciar). Já mudanças de <b>horário</b> só valem depois que o robô reinicia — alguns segundos. Evite salvar bem em cima de um horário de disparo.</p>
+    </div>
+  </div>
 <script>
   function inserirVar(el, token){
     var ta = el.closest('form').querySelector('textarea');
@@ -189,7 +232,7 @@ function paginaMensagens(aviso, erro) {
     ta.selectionStart = ta.selectionEnd = s + token.length;
   }
 </script>`;
-  return chrome({ tab: 'Mensagens', h1: '✏️ Editar mensagens do robô', p: 'Altere o texto e clique em <b>Salvar</b>. Vale já no próximo envio — sem reiniciar.' }, 'msg', corpo);
+  return chrome({ tab: 'Mensagens', h1: '✏️ Mensagens do robô', p: 'Edite o <b>texto</b> e o <b>horário</b> de cada envio no mesmo lugar.' }, 'msg', corpo);
 }
 
 // ── Página 2: agendar envios ────────────────────────────────────────────────
@@ -205,7 +248,7 @@ function itemHtml(a) {
     : '';
   return `<div class="item" id="ag-${esc(a.id)}">${thumb}<div class="body">
     <div class="tel">${esc(fmtTel(a.telefone))}</div>
-    <div class="meta">${esc(fmtData(a.data))} · ${esc(TURNO_LABEL[a.turno] || a.turno)} · <span class="pill ${st}">${stTxt}</span></div>
+    <div class="meta">${esc(fmtData(a.data))} · ${esc(turnoLabel(a.turno))} · <span class="pill ${st}">${stTxt}</span></div>
     ${a.mensagem ? `<div class="txt">${esc(a.mensagem)}</div>` : (a.foto ? '<div class="txt"><i>(só foto)</i></div>' : '')}
     ${a.erro ? `<div class="meta" style="color:#a12626">${esc(a.erro)}</div>` : ''}
     ${acoes}
@@ -236,8 +279,8 @@ function paginaAgendar(aviso, erro) {
     </div>
     <label>Turno do envio</label>
     <div class="turnos">
-      <label><input type="radio" name="turno" value="manha" checked><span>☀️ Manhã<br><small>10:45</small></span></label>
-      <label><input type="radio" name="turno" value="tarde"><span>🌇 Tarde<br><small>15:45</small></span></label>
+      <label><input type="radio" name="turno" value="manha" checked><span>☀️ Manhã<br><small>${esc(horaAg('manha'))}</small></span></label>
+      <label><input type="radio" name="turno" value="tarde"><span>🌇 Tarde<br><small>${esc(horaAg('tarde'))}</small></span></label>
     </div>
     <label>Data</label>
     <input type="date" id="data" value="${hoje}" min="${hoje}">
@@ -314,7 +357,7 @@ function paginaAgendar(aviso, erro) {
     finally{ btn.disabled=false; btn.textContent=rotuloBtn(); }
   });
 </script>`;
-  return chrome({ tab: 'Agendar envios', h1: '📅 Agendar envios', p: 'Mensagens são enviadas <b>10:45</b> (manhã) e <b>15:45</b> (tarde) do dia agendado.' }, 'ag', corpo);
+  return chrome({ tab: 'Agendar envios', h1: '📅 Agendar envios', p: `Mensagens são enviadas <b>${esc(horaAg('manha'))}</b> (manhã) e <b>${esc(horaAg('tarde'))}</b> (tarde) do dia agendado.` }, 'ag', corpo);
 }
 
 // ── Página 3: conexão do WhatsApp (QR quando cai) ───────────────────────────
@@ -341,37 +384,41 @@ function paginaWa() {
   return chrome({ tab: 'WhatsApp', h1: '📱 Conexão do WhatsApp', p: 'Veja se a sessão está ativa — e escaneie o QR aqui se ela cair.' }, 'wa', corpo);
 }
 
-// ── Página 4: horários dos jobs (hora + dias da semana) ─────────────────────
+// ── Horários por mensagem (embutidos nos cards da aba Mensagens) ────────────
 const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-function paginaHorarios(aviso, erro) {
-  const jobs = horarios.listar();
-  const cards = jobs.map(j => {
-    const badge = j.editado ? '<span class="badge-ed">editado</span>' : '';
-    const dias = DIAS.map((nome, i) => {
-      const on = j.dias.includes(i) ? ' checked' : '';
-      return `<label><input type="checkbox" name="dias_${esc(j.chave)}" value="${i}"${on}><span>${nome}</span></label>`;
-    }).join('');
-    return `<div class="hjob">
-      <h3>${esc(j.titulo)}${badge}</h3>
-      <div class="hrow">
-        <div><div class="lbl">Horário</div><input type="time" name="hora_${esc(j.chave)}" value="${esc(j.hora)}" required></div>
-        <div><div class="lbl">Dias da semana</div><div class="dias">${dias}</div></div>
-      </div>
-    </div>`;
-  }).join('\n');
 
-  const corpo = `<div class="wrap">
-    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
-    <div class="aviso">🔁 Ao salvar, o robô é <b>reiniciado</b> para aplicar os novos horários (leva alguns segundos). Os envios em andamento no momento não são interrompidos — mas evite salvar bem em cima de um horário de disparo.</div>
-    <form method="POST" action="/horarios/salvar" onsubmit="var b=this.querySelector('button.save');b.disabled=true;b.textContent='Salvando e reiniciando…';">
-      ${cards}
-      <div class="hbar"><div class="acts">
-        <button type="submit" class="save">Salvar e aplicar (reinicia o robô)</button>
-      </div></div>
-    </form>
+// mensagem (chave em mensagens.js) → jobs de horário (chave em horarios.js).
+// [chave, sublabel]. Sublabel '' = envio único; senão distingue os dois turnos.
+const HORARIOS_DA_MSG = {
+  confirmacao_hoje:    [['morning', '']],
+  confirmacao_amanha:  [['afternoon', '']],
+  followup:            [['followupMorning', 'Manhã'], ['followupAfternoon', 'Tarde']],
+  followup_aluna:      'compartilha:followup', // mesmo job do follow-up — só nota
+  no_show:             [['noShowMorning', 'Manhã'], ['noShowAfternoon', 'Tarde']],
+  renovacao:           [['renewal', '']],
+  aniversario:         [['aniversariantes', '']],
+  instagram:           [['instagram', '']],
+  circuito_convocacao: [['circuitoConvoca', '']],
+  circuito_lembrete:   [['circuitoLembrete', '']],
+};
+// Jobs sem texto editável — vão numa seção "Outros envios" no rodapé.
+const OUTROS_JOBS = ['resumoDia', 'resumoSemana', 'agendadosManha', 'agendadosTarde'];
+
+// Uma linha "hora + dias" para um job; inputs pertencem ao form #fh (rodapé).
+function blocoHorario(info, sublabel) {
+  const dias = DIAS.map((nome, i) => {
+    const on = info.dias.includes(i) ? ' checked' : '';
+    return `<label><input type="checkbox" form="fh" name="dias_${esc(info.chave)}" value="${i}"${on}><span>${nome}</span></label>`;
+  }).join('');
+  const rot = sublabel ? `Horário — ${esc(sublabel)}` : 'Horário';
+  return `<div class="hrow">
+    <div><div class="lbl">${rot}</div><input type="time" form="fh" name="hora_${esc(info.chave)}" value="${esc(info.hora)}" required></div>
+    <div><div class="lbl">Dias da semana</div><div class="dias">${dias}</div></div>
   </div>`;
-  return chrome({ tab: 'Horários', h1: '🕒 Horários dos envios', p: 'Defina a <b>hora</b> e os <b>dias da semana</b> de cada envio automático.' }, 'hr', corpo);
 }
+
+// Hora 'HH:MM' de um job (override ou padrão) — usada nos rótulos do /agendar.
+function horaTurno(chave) { try { return horarios.parse(horarios.cronDe(chave)).hora; } catch (_) { return ''; } }
 
 function pedirLogin(res) {
   res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Painel SlimFit", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8' });
@@ -389,9 +436,13 @@ const server = http.createServer((req, res) => {
 
   // Página de mensagens
   if (req.method === 'GET' && (req.url === '/' || req.url.startsWith('/?'))) {
-    const ok = /(?:\?|&)ok=1/.test(req.url);
+    const q = req.url.split('?')[1] || '';
+    let aviso = '', erro = false;
+    if (/(?:^|&)ok=1/.test(q)) aviso = 'Mensagem salva! Já vale no próximo envio.';
+    else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horários salvos e robô reiniciado. Já valem.';
+    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(paginaMensagens(ok ? 'Mensagem salva! Já vale no próximo envio.' : ''));
+    return res.end(paginaMensagens(aviso, erro));
   }
   if (req.method === 'POST' && url === '/salvar') {
     return lerCorpo(req, 1e6, corpo => {
@@ -441,16 +492,9 @@ const server = http.createServer((req, res) => {
     return fs.createReadStream(caminho).pipe(res);
   }
 
-  // Página de horários dos jobs
+  // /horarios agora vive dentro da aba Mensagens — redireciona quem tiver link antigo.
   if (req.method === 'GET' && url === '/horarios') {
-    const q = req.url.split('?')[1] || '';
-    const ok = /(?:^|&)ok=1/.test(q);
-    const errParam = /(?:^|&)erro=/.test(q);
-    let aviso = '', erro = false;
-    if (ok) { aviso = '✅ Horários salvos e robô reiniciado. Os novos horários já valem.'; }
-    else if (errParam) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(paginaHorarios(aviso, erro));
+    res.writeHead(301, { Location: '/' }); return res.end();
   }
   if (req.method === 'POST' && url === '/horarios/salvar') {
     return lerCorpo(req, 1e6, corpo => {
@@ -459,19 +503,19 @@ const server = http.createServer((req, res) => {
         // Valida TUDO antes de salvar qualquer coisa (build lança em entrada inválida).
         const planos = horarios.CATALOGO.map(j => {
           const hora = p.get('hora_' + j.chave);
+          if (hora == null) return null; // job não presente no form → mantém como está
           const dias = p.getAll('dias_' + j.chave).map(Number);
           horarios.build(hora, dias); // valida (lança se inválido)
           return { chave: j.chave, hora, dias };
-        });
+        }).filter(Boolean);
         planos.forEach(pl => horarios.salvar(pl.chave, pl.hora, pl.dias));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-        return res.end(paginaHorarios('Erro ao salvar: ' + e.message + ' (nada foi alterado).', true));
+        return res.end(paginaMensagens('Erro ao salvar horários: ' + e.message + ' (nada foi alterado).', true));
       }
       // Reinicia o robô para reagendar os jobs com os novos horários.
       exec('pm2 restart slimfit-exp --update-env', { timeout: 25000 }, (err) => {
-        if (err) { res.writeHead(303, { Location: '/horarios?erro=1' }); return res.end(); }
-        res.writeHead(303, { Location: '/horarios?ok=1' }); res.end();
+        res.writeHead(303, { Location: err ? '/?errh=1' : '/?okh=1' }); res.end();
       });
     });
   }
