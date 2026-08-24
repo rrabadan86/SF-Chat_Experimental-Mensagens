@@ -146,7 +146,7 @@ function topo({ pagina, medico }) {
   <div class="wrap">
     <div class="brandmark">
       <div class="sigil" aria-hidden="true">${esc(iniciais(medico.nome))}</div>
-      <div><b>${esc(medico.nome)}</b><span>${esc(medico.especialidade)}</span></div>
+      <div class="brandtxt"><b>${esc(medico.nome)}</b><span>${esc(medico.especialidade)}</span></div>
     </div>
     <nav class="topnav">
         ${links}

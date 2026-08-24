@@ -76,8 +76,14 @@ button{font:inherit; color:inherit}
   background:color-mix(in srgb, var(--paper) 88%, transparent);
   backdrop-filter:blur(10px); border-bottom:1px solid var(--line);
 }
-.topbar .wrap{display:flex; align-items:center; gap:16px; justify-content:space-between; height:62px}
-.brandmark{display:flex; align-items:center; gap:11px; min-width:0}
+.topbar .wrap{
+  display:flex; align-items:center; gap:14px; justify-content:space-between;
+  min-height:62px; padding-block:9px;
+}
+.brandmark{display:flex; align-items:center; gap:11px; min-width:0; flex:1 1 auto}
+/* sem min-width:0 aqui o bloco do nome não encolhe, e um nome comprido
+   passa por baixo do botão em vez de caber na barra */
+.brandtxt{min-width:0}
 .sigil{
   width:34px; height:34px; flex:none; border-radius:50%;
   background:var(--brand); color:var(--on-brand);
@@ -86,7 +92,7 @@ button{font:inherit; color:inherit}
 }
 .brandmark b{font-weight:700; font-size:.95rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .brandmark span{display:block; font-size:.74rem; color:var(--ink-2); line-height:1.2}
-.topnav{display:flex; gap:22px; align-items:center; font-size:.9rem}
+.topnav{display:flex; gap:22px; align-items:center; font-size:.9rem; flex:none}
 .topnav a{text-decoration:none; color:var(--ink-2)}
 .topnav a:hover{color:var(--ink)}
 /* o botão do topo é um <a> dentro do .topnav: sem isto, a cor do link
@@ -96,12 +102,29 @@ button{font:inherit; color:inherit}
   .topnav a{display:none}
   .topnav a.btn{display:inline-flex}
 }
+/* No celular sobra pouca largura para um nome completo. Em vez de cortar o
+   nome do médico com reticências, some a especialidade — que o próprio hero
+   repete logo abaixo — e deixa o nome ocupar duas linhas. */
+@media (max-width:620px){
+  .brandmark span{display:none}
+  /* o line-height precisa ir no bloco também: a entrelinha do corpo (1.65)
+     define a altura mínima da linha e afastaria as duas linhas do nome */
+  .brandtxt{line-height:1.22}
+  .brandmark b{display:block; white-space:normal; font-size:.88rem; line-height:1.22}
+  .topnav a.btn{padding:9px 14px; font-size:.84rem}
+}
+/* último recurso, só nas telas mais estreitas: o monograma sai para o nome
+   não virar quatro linhas */
+@media (max-width:345px){
+  .sigil{display:none}
+}
 
 .btn{
   display:inline-flex; align-items:center; justify-content:center; gap:8px;
   background:var(--brand); color:var(--on-brand); border:1px solid var(--brand);
   padding:11px 18px; border-radius:999px; font-weight:600; font-size:.92rem;
-  cursor:pointer; text-decoration:none; transition:transform .12s ease, filter .12s ease;
+  cursor:pointer; text-decoration:none; white-space:nowrap;
+  transition:transform .12s ease, filter .12s ease;
 }
 .btn:hover{filter:brightness(1.08); transform:translateY(-1px)}
 .btn:disabled{opacity:.45; cursor:not-allowed; transform:none}

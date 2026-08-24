@@ -164,3 +164,11 @@ test('/admin serve o painel (index:false não pode derrubá-lo)', async () => {
     assert.match(r.html, /id="senha"/);
   }
 });
+
+test('o nome no topo fica num bloco que pode encolher', async () => {
+  // sem a .brandtxt o CSS não tem onde aplicar min-width:0, e um nome
+  // comprido passa por baixo do botão "Agendar consulta" no celular
+  dados.alterar((c) => { c.medico.nome = 'Dr. Felipe Márcio Araújo Oliveira'; });
+  const { html } = await pegar('/');
+  assert.match(html, /<div class="brandtxt"><b>Dr\. Felipe Márcio Araújo Oliveira<\/b>/);
+});
