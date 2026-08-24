@@ -133,7 +133,7 @@ async function agendar(corpo, agora = new Date()) {
 }
 
 /** Resposta da recepcionista chegando pelo WhatsApp. */
-async function tratarRespostaRecepcao({ de, texto: corpoDaMensagem, propria = false }) {
+async function tratarRespostaRecepcao({ de, texto: corpoDaMensagem, propria = false, responder = null }) {
   const comando = protocolo.interpretar(corpoDaMensagem);
   if (!comando) return null;                       // conversa normal, ignora
 
@@ -148,9 +148,25 @@ async function tratarRespostaRecepcao({ de, texto: corpoDaMensagem, propria = fa
     return null;
   }
 
+  /**
+   * Responde na própria conversa quando possível.
+   *
+   * O endereço que o WhatsApp entrega nem sempre é um telefone — em conversa
+   * migrada ele vem como identificador interno (algo como 40880002101274), e
+   * tentar enviar para aquilo falha. Responder na mesma conversa não depende
+   * de resolver número nenhum; o envio direto fica só como reserva.
+   */
+  const avisar = async (texto) => {
+    if (responder) return responder(texto);
+    // sem a conversa em mãos, o único destino confiável é o número cadastrado:
+    // o endereço que veio na mensagem pode ser um identificador interno, e
+    // "parece telefone" não distingue — os dois têm 14 dígitos
+    return wa.enviar(config.whatsapp.recepcao, texto);
+  };
+
   const achado = await agenda.buscarPorProtocolo(config.hospitais.map((h) => h.calendarId), comando.protocolo);
   if (!achado) {
-    await wa.enviar(de, `Não achei o protocolo ${comando.protocolo}. Confira o número.`);
+    await avisar(`Não achei o protocolo ${comando.protocolo}. Confira o número.`);
     return { comando: comando.comando, protocolo: comando.protocolo, resultado: 'nao_encontrado' };
   }
 
@@ -162,7 +178,7 @@ async function tratarRespostaRecepcao({ de, texto: corpoDaMensagem, propria = fa
     if (config.whatsapp.avisarPaciente && dadosDoEvento.telefone) {
       await avisarPaciente(dadosDoEvento, hospital, 'confirmacao');
     }
-    await wa.enviar(de, `Feito. ${comando.protocolo} confirmado na agenda do ${hospital.nome}` +
+    await avisar(`Feito. ${comando.protocolo} confirmado na agenda do ${hospital.nome}` +
       (config.whatsapp.avisarPaciente ? ' e o paciente já foi avisado.' : '.'));
     return { comando: 'CONFIRMAR', protocolo: comando.protocolo, resultado: 'confirmado' };
   }
@@ -172,11 +188,11 @@ async function tratarRespostaRecepcao({ de, texto: corpoDaMensagem, propria = fa
     if (comando.comando === 'REMARCAR' && config.whatsapp.avisarPaciente && dadosDoEvento.telefone) {
       await avisarPaciente(dadosDoEvento, hospital, 'remarcacao');
     }
-    await wa.enviar(de, `Horário de ${comando.protocolo} liberado na agenda do ${hospital.nome}.`);
+    await avisar(`Horário de ${comando.protocolo} liberado na agenda do ${hospital.nome}.`);
     return { comando: comando.comando, protocolo: comando.protocolo, resultado: 'liberado' };
   }
 
-  await wa.enviar(de, `Recebi ${comando.protocolo}, mas não entendi o que fazer. ` +
+  await avisar(`Recebi ${comando.protocolo}, mas não entendi o que fazer. ` +
     `Responda *CONFIRMAR ${comando.protocolo}* ou *REMARCAR ${comando.protocolo}*.`);
   return { comando: null, protocolo: comando.protocolo, resultado: 'comando_desconhecido' };
 }

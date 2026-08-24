@@ -101,7 +101,16 @@ function montar() {
     const id = msg.id && msg.id._serialized;
     if (msg.fromMe && enviadasPorNos.has(id)) return;    // é o nosso próprio aviso
 
-    const de = String(msg.fromMe ? (msg.to || '') : (msg.from || '')).replace(/\D/g, '');
+    // O endereço da conversa nem sempre é um telefone: em conta migrada vem um
+    // identificador interno. O contato traz o número de verdade, quando existe.
+    let de = '';
+    if (!msg.fromMe) {
+      try {
+        const contato = await msg.getContact();
+        de = String((contato && contato.number) || '').replace(/\D/g, '');
+      } catch { /* segue com o endereço cru */ }
+    }
+    if (!de) de = String(msg.fromMe ? (msg.to || '') : (msg.from || '')).replace(/\D/g, '');
     for (const cb of escutas) {
       try { await cb({ de, texto: msg.body, propria: Boolean(msg.fromMe), responder: (t) => msg.reply(t) }); }
       catch (e) { console.error('[wa] erro tratando mensagem:', e.message); }

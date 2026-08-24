@@ -364,3 +364,35 @@ test('o sistema não confirma sozinho ao ler o próprio aviso', async () => {
   assert.equal(agendaFalsa.criados[0].status, 'tentative');
   void r;
 });
+
+test('a resposta à recepção vai na própria conversa, sem depender do número', async () => {
+  const r = await servico.agendar(PEDIDO, AGORA);
+  waFalso.reset();
+  const respostas = [];
+
+  // 40880002101274 é um identificador interno, não um telefone — enviar para
+  // ele falharia; o sistema tem que responder na conversa
+  await servico.tratarRespostaRecepcao({
+    de: '40880002101274',
+    texto: `CONFIRMAR ${r.protocolo}`,
+    propria: true,
+    responder: async (t) => respostas.push(t),
+  });
+
+  assert.equal(agendaFalsa.criados[0].status, 'confirmed');
+  assert.equal(respostas.length, 1);
+  assert.match(respostas[0], /confirmado na agenda do Hospital 1/);
+  assert.ok(!waFalso.enviadas.some((m) => m.numero === '40880002101274'));
+});
+
+test('sem conversa para responder, cai no número da recepção', async () => {
+  const r = await servico.agendar(PEDIDO, AGORA);
+  waFalso.reset();
+
+  await servico.tratarRespostaRecepcao({
+    de: '40880002101274', texto: `CONFIRMAR ${r.protocolo}`, propria: true,
+  });
+
+  const paraRecepcao = waFalso.enviadas.find((m) => /confirmado na agenda/.test(m.texto));
+  assert.equal(paraRecepcao.numero, RECEPCAO);
+});
