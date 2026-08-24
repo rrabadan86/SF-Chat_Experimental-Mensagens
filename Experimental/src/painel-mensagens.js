@@ -23,6 +23,7 @@ const horarios = require('./horarios');
 const atividade = require('./atividade');
 const teste = require('./teste-envio');
 const igcfg = require('./instagram-config');
+const indicadores = require('./indicadores');
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
 // Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
@@ -162,6 +163,17 @@ const ESTILO = `
   .ev .ic{flex:none}
   .datesel{display:flex;gap:8px;align-items:center;margin:4px 0 0}
   .datesel input{width:auto}
+  .segs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 0}
+  .segs a{text-decoration:none;font-weight:700;font-size:.82rem;color:var(--cinza);background:#fff;border:1px solid var(--linha);border-radius:999px;padding:7px 14px}
+  .segs a.on{background:var(--teal);color:#fff;border-color:var(--teal)}
+  .bar{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--linha);font-size:.86rem}
+  .bar:last-child{border-bottom:0}
+  .bar .bd{width:64px;flex:none;color:var(--cinza);font-variant-numeric:tabular-nums}
+  .bar .btrack{flex:1;background:#eef1f2;border-radius:6px;height:20px;position:relative;overflow:hidden;min-width:60px}
+  .bar .bfill{position:absolute;inset:0 auto 0 0;background:var(--teal);border-radius:6px}
+  .bar .bfill.ag{background:var(--coral);opacity:.85}
+  .bar .bn{flex:none;width:96px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+  .bar .bn small{font-weight:600;color:var(--cinza)}
   .testbar{background:#fff8f0;border:1px solid #f3dcbf}
   .testbar label{margin:0 0 4px}
   .testbar input{max-width:260px}
@@ -188,6 +200,7 @@ function chrome(titSubtitulo, ativo, corpo) {
 </div></header>
 <nav class="tabs">
   <a href="/hoje" class="${ativo === 'hoje' ? 'on' : ''}">📊 Hoje</a>
+  <a href="/indicadores" class="${ativo === 'ind' ? 'on' : ''}">📈 Indicadores</a>
   <a href="/" class="${ativo === 'msg' ? 'on' : ''}">✏️ Mensagens</a>
   <a href="/agendar" class="${ativo === 'ag' ? 'on' : ''}">📅 Agendar envios</a>
   <a href="/instagram" class="${ativo === 'ig' ? 'on' : ''}">📸 Instagram</a>
@@ -671,6 +684,56 @@ function paginaInstagram(aviso, erro) {
   return chrome({ tab: 'Instagram', h1: '📸 Instagram', p: 'Status, liga/desliga, limite, mensagem e horário — tudo do Instagram aqui.' }, 'ig', corpo);
 }
 
+// ── Página: Indicadores do formulário ───────────────────────────────────────
+function paginaIndicadores(dias) {
+  const janelas = [[1, 'Hoje'], [7, '7 dias'], [30, '30 dias'], [0, 'Tudo']];
+  const jan = janelas.some(([d]) => d === dias) ? dias : 7;
+  const r = indicadores.resumo(jan);
+
+  const segs = janelas.map(([d, l]) => `<a href="/indicadores?dias=${d}" class="${d === jan ? 'on' : ''}">${l}</a>`).join('');
+
+  // Barras por dia (mais recente primeiro), escala pelo maior nº de acessos.
+  const maxAc = Math.max(1, ...r.porDia.map(d => d.acessos));
+  const fmtDia = s => { const p = String(s).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : s; };
+  const barras = r.porDia.filter(d => d.acessos || d.agendamentos).map(d => {
+    const wAc = Math.round((d.acessos / maxAc) * 100);
+    return `<div class="bar">
+      <span class="bd">${fmtDia(d.dia)}</span>
+      <span class="btrack"><span class="bfill" style="width:${wAc}%"></span></span>
+      <span class="bn">${d.acessos} <small>acesso${d.acessos === 1 ? '' : 's'}</small> · <span style="color:var(--coral-esc)">${d.agendamentos}</span> <small>agend.</small></span>
+    </div>`;
+  }).join('');
+
+  const origemBloco = r.temOrigem ? `
+    <div class="sec-t">🔗 Por origem</div>
+    <div class="card">
+      ${r.porOrigem.map(o => `<div class="jobrow"><div class="jn">${esc(o.origem)}</div><div class="jc">${o.acessos} acesso${o.acessos === 1 ? '' : 's'} · <span style="color:var(--coral-esc)">${o.agendamentos} agend.</span></div></div>`).join('')}
+    </div>` : `
+    <div class="card" style="border-style:dashed">
+      <p class="quando" style="margin:0">💡 <b>Quer saber de onde vêm os acessos</b> (WhatsApp, Instagram, anúncio)? É só usar links etiquetados — ex.: <code>…/?origem=instagram</code>. Peça que eu gero os links e a partir daí a origem aparece aqui.</p>
+    </div>`;
+
+  const corpo = `<div class="wrap">
+    <div class="segs">${segs}</div>
+    <div class="stats">
+      <div class="stat tot"><div class="n">${r.acessos}</div><div class="l">acessos ao formulário</div></div>
+      <div class="stat ok"><div class="n">${r.agendamentos}</div><div class="l">agendaram</div></div>
+      <div class="stat"><div class="n" style="color:var(--coral-esc)">${r.conversao}%</div><div class="l">taxa de conversão</div></div>
+    </div>
+    <div class="card">
+      <div class="chead"><h2>Funil</h2></div>
+      <div class="jobrow"><div class="jn">👀 Abriram o formulário</div><div class="jc">${r.acessos}</div></div>
+      <div class="jobrow"><div class="jn">✅ Agendaram a experimental</div><div class="jc">${r.agendamentos}</div></div>
+      <div class="jobrow"><div class="jn">↩️ Abriram e não agendaram</div><div class="jc">${r.naoAgendaram}</div></div>
+    </div>
+    <div class="sec-t">📅 Por dia (acessos ▮ · agendamentos)</div>
+    <div class="card">${barras || '<div class="vazio">Sem dados ainda neste período. Os números aparecem conforme as pessoas acessam o formulário.</div>'}</div>
+    ${origemBloco}
+    <p class="quando" style="text-align:center">Coletado do formulário a cada ~2 min. ${r.primeiroDia ? `Desde ${esc(fmtData(r.primeiroDia))}.` : 'Ainda começando a coletar.'}</p>
+  </div>`;
+  return chrome({ tab: 'Indicadores', h1: '📈 Indicadores do formulário', p: 'Acessos, agendamentos e taxa de conversão do formulário de agendamento.' }, 'ind', corpo);
+}
+
 function pedirLogin(res) {
   res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Painel SlimFit", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('Acesso restrito.');
@@ -800,6 +863,13 @@ const server = http.createServer((req, res) => {
     });
   }
 
+  // Página de indicadores do formulário
+  if (req.method === 'GET' && url === '/indicadores') {
+    const d = new URLSearchParams(req.url.split('?')[1] || '').get('dias');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(paginaIndicadores(d == null ? 7 : parseInt(d, 10)));
+  }
+
   // Página "Hoje" (o que o robô enviou)
   if (req.method === 'GET' && url === '/hoje') {
     const dia = new URLSearchParams(req.url.split('?')[1] || '').get('dia');
@@ -851,5 +921,5 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   if (!SENHA) console.warn('⚠️  PAINEL_SENHA não definido no .env — o painel vai NEGAR todo acesso até você definir usuário e senha.');
   console.log(`🖥️  Painel do Studio ouvindo em ${HOST}:${PORT} (usuário: ${USER}).`);
-  console.log('   Páginas: /hoje · /  (mensagens) · /agendar  (envios) · /wa  (WhatsApp). Exponha SEMPRE atrás de HTTPS.');
+  console.log('   Páginas: /hoje · /indicadores · /  (mensagens) · /agendar · /instagram · /wa. Exponha SEMPRE atrás de HTTPS.');
 });

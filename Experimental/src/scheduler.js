@@ -917,6 +917,20 @@ async function main() {
   log('📡 Ponte de confirmações (nuvem) agendada: a cada 1 min');
   console.log('   → Puxa as marcações do formulário (Render) p/ confirmacoes_outbox.jsonl');
 
+  // Indicadores do formulário (acessos/agendamentos) — puxa a cada 2 min e grava
+  // em data/indicadores.json (aba Indicadores do painel). Best-effort, leve.
+  let pullingInd = false;
+  const puxarIndicadores = async () => {
+    if (pullingInd) return;
+    pullingInd = true;
+    try { await require('./pull-indicadores').pullIndicadores(); }
+    catch (err) { logError('Indicadores (nuvem)', err); }
+    finally { pullingInd = false; }
+  };
+  cron.schedule('*/2 * * * *', puxarIndicadores, { timezone: 'America/Sao_Paulo' });
+  setTimeout(puxarIndicadores, 20000); // uma vez no boot (após estabilizar)
+  log('📈 Indicadores do formulário agendados: a cada 2 min');
+
   // ─── Heartbeat: log a cada 15 minutos para saber que o processo está vivo ───
   const HEARTBEAT_INTERVAL = 15 * 60 * 1000; // 15 min
   setInterval(() => {

@@ -39,3 +39,5 @@ data/instagram-config.json
 data/watchdog-estado.json
 # Backups locais da pasta data/ — por VPS (não versionar)
 backups/
+# Indicadores do formulario (acessos/agendamentos) — por VPS
+data/indicadores.json
