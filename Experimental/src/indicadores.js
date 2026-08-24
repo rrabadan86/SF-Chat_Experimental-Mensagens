@@ -39,6 +39,7 @@ function registrar(eventos) {
       id: ev.id,
       tipo: ev.tipo === 'agendou' ? 'agendou' : 'acesso',
       origem: (ev.origem || '').toString().slice(0, 40),
+      hora: (ev.hora || '').toString().slice(0, 5), // horário da aula (só nos agendamentos)
       dia: hojeSP(),
       quando: horaSP(),
       tsForm: ev.ts || '',
@@ -88,12 +89,28 @@ function resumo(dias) {
   const porOrigem = Object.values(porOrigemMap).sort((a, b) => (b.acessos + b.agendamentos) - (a.acessos + a.agendamentos));
   const temOrigem = evs.some(e => e.origem);
 
+  // Picos de ACESSO por hora do dia e por dia da semana.
+  const acessosEvs = evs.filter(e => e.tipo === 'acesso');
+  const horaMap = {};
+  for (const e of acessosEvs) { const h = String(e.quando || '').slice(0, 2); if (/^\d\d$/.test(h)) horaMap[h] = (horaMap[h] || 0) + 1; }
+  const picoHoras = Object.entries(horaMap).map(([h, n]) => ({ hora: h + 'h', n })).sort((a, b) => b.n - a.n);
+  const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const diaSem = [0, 0, 0, 0, 0, 0, 0];
+  for (const e of acessosEvs) { const d = new Date(e.dia + 'T12:00:00'); if (!isNaN(d)) diaSem[d.getDay()]++; }
+  const picoDias = DIAS.map((nome, i) => ({ dia: nome, n: diaSem[i] }));
+
+  // Horários de AULA mais escolhidos (entre os agendamentos que carimbaram a hora).
+  const aulaMap = {};
+  for (const e of evs) { if (e.tipo === 'agendou' && e.hora) aulaMap[e.hora] = (aulaMap[e.hora] || 0) + 1; }
+  const horariosAula = Object.entries(aulaMap).map(([hora, n]) => ({ hora, n })).sort((a, b) => (b.n - a.n) || a.hora.localeCompare(b.hora));
+
   return {
     acessos, agendamentos,
     conversao: Math.round(conversao * 10) / 10,
     naoAgendaram: Math.max(0, acessos - agendamentos),
     porDia,
     porOrigem, temOrigem,
+    picoHoras, picoDias, horariosAula,
     primeiroDia: arr.length ? arr[0].dia : null,
     total: arr.length,
   };

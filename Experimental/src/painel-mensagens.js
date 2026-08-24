@@ -704,6 +704,14 @@ function paginaIndicadores(dias) {
     </div>`;
   }).join('');
 
+  const barLinha = (label, n, max, coral) => `<div class="bar"><span class="bd">${esc(label)}</span><span class="btrack"><span class="bfill${coral ? ' ag' : ''}" style="width:${Math.round((n / max) * 100)}%"></span></span><span class="bn">${n}</span></div>`;
+  const maxH = Math.max(1, ...r.picoHoras.map(h => h.n));
+  const picoHorasHtml = r.picoHoras.slice(0, 8).map(h => barLinha(h.hora, h.n, maxH)).join('');
+  const maxD = Math.max(1, ...r.picoDias.map(d => d.n));
+  const picoDiasHtml = r.picoDias.map(d => barLinha(d.dia, d.n, maxD)).join('');
+  const maxA = Math.max(1, ...r.horariosAula.map(a => a.n));
+  const aulaHtml = r.horariosAula.slice(0, 12).map(a => barLinha(a.hora, a.n, maxA, true)).join('');
+
   const origemBloco = r.temOrigem ? `
     <div class="sec-t">🔗 Por origem</div>
     <div class="card">
@@ -728,6 +736,19 @@ function paginaIndicadores(dias) {
     </div>
     <div class="sec-t">📅 Por dia (acessos ▮ · agendamentos)</div>
     <div class="card">${barras || '<div class="vazio">Sem dados ainda neste período. Os números aparecem conforme as pessoas acessam o formulário.</div>'}</div>
+
+    <div class="sec-t">⏰ Horários de pico &nbsp;·&nbsp; 📆 Dias da semana</div>
+    <div class="card">
+      <p class="quando" style="margin:0 0 8px">Quando as pessoas mais <b>acessam</b> o formulário.</p>
+      <div style="display:grid;grid-template-columns:1fr;gap:2px">${picoHorasHtml || '<div class="vazio">Sem acessos no período.</div>'}</div>
+      <div style="height:12px"></div>
+      <div style="display:grid;grid-template-columns:1fr;gap:2px">${picoDiasHtml}</div>
+    </div>
+
+    <div class="sec-t">🎯 Horários de aula mais escolhidos</div>
+    <div class="card">
+      ${aulaHtml || '<div class="vazio">Ainda sem agendamentos com horário registrado neste período — passa a contar a partir dos próximos agendamentos.</div>'}
+    </div>
     ${origemBloco}
     <p class="quando" style="text-align:center">Coletado do formulário a cada ~2 min. ${r.primeiroDia ? `Desde ${esc(fmtData(r.primeiroDia))}.` : 'Ainda começando a coletar.'}</p>
   </div>`;
