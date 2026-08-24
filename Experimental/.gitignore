@@ -27,3 +27,5 @@ data/agendamentos-fotos/
 data/instagram-indisponiveis.json
 # Estado do WhatsApp (QR/conexao) — por VPS
 data/wa-status.json
+# Horários dos jobs editados no painel (estado por VPS/franquia) — não versionar
+data/horarios.json

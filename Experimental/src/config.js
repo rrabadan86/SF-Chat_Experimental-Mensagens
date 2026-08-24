@@ -99,4 +99,13 @@ const config = {
   },
 };
 
+// Aplica os horários editados no painel (data/horarios.json) por cima dos
+// padrões acima. Só afeta as chaves editáveis (as demais ficam intactas).
+try {
+  const horarios = require('./horarios');
+  for (const k of Object.keys(config.schedule)) {
+    config.schedule[k] = horarios.cronDe(k, config.schedule[k]);
+  }
+} catch (_) { /* sem overrides → usa os padrões */ }
+
 module.exports = config;

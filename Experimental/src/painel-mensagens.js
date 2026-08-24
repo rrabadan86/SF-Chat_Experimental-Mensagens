@@ -14,9 +14,11 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env'
 const http = require('http');
 const crypto = require('crypto');
 const fs = require('fs');
+const { exec } = require('child_process');
 const mensagens = require('./mensagens');
 const ag = require('./agendamentos');
 const waStatus = require('./wa-status');
+const horarios = require('./horarios');
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
 // Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
@@ -119,6 +121,18 @@ const ESTILO = `
   .wa-card .qr{width:280px;max-width:82%;height:auto;margin:16px auto 6px;display:block;border:8px solid #fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.12)}
   .wa-hint{font-size:.85rem}
   .wa-upd{text-align:center;color:var(--cinza);font-size:.8rem;margin-top:10px}
+  .hjob{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:14px 16px;margin:12px 0}
+  .hjob h3{font-size:1rem;margin:0 0 8px}
+  .hrow{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end}
+  .hrow input[type=time]{width:130px}
+  .hrow .lbl{font-weight:600;font-size:.82rem;margin:0 0 4px;color:var(--cinza)}
+  .dias{display:flex;gap:5px;flex-wrap:wrap}
+  .dias label{margin:0}
+  .dias input{position:absolute;opacity:0;pointer-events:none}
+  .dias span{display:inline-block;min-width:40px;text-align:center;border:1.5px solid #dcdcdc;border-radius:9px;padding:7px 4px;font-size:.8rem;font-weight:700;cursor:pointer;color:var(--tinta)}
+  .dias input:checked + span{border-color:var(--teal);background:#e6f6f7;color:#0c6f70}
+  .hbar{position:sticky;bottom:0;background:linear-gradient(180deg,transparent,var(--bg) 40%);padding:14px 0 6px;margin-top:6px}
+  .badge-ed{background:#fff0ef;color:#c23b38;border:1px solid #f6cfcd;border-radius:999px;font-size:.68rem;font-weight:700;padding:2px 8px;margin-left:6px}
   footer{color:var(--cinza);font-size:.8rem;text-align:center;padding:20px}
 `;
 
@@ -137,6 +151,7 @@ function chrome(titSubtitulo, ativo, corpo) {
 <nav class="tabs">
   <a href="/" class="${ativo === 'msg' ? 'on' : ''}">✏️ Mensagens</a>
   <a href="/agendar" class="${ativo === 'ag' ? 'on' : ''}">📅 Agendar envios</a>
+  <a href="/horarios" class="${ativo === 'hr' ? 'on' : ''}">🕒 Horários</a>
   <a href="/wa" class="${ativo === 'wa' ? 'on' : ''}">📱 WhatsApp</a>
 </nav>
 ${corpo}
@@ -326,6 +341,38 @@ function paginaWa() {
   return chrome({ tab: 'WhatsApp', h1: '📱 Conexão do WhatsApp', p: 'Veja se a sessão está ativa — e escaneie o QR aqui se ela cair.' }, 'wa', corpo);
 }
 
+// ── Página 4: horários dos jobs (hora + dias da semana) ─────────────────────
+const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+function paginaHorarios(aviso, erro) {
+  const jobs = horarios.listar();
+  const cards = jobs.map(j => {
+    const badge = j.editado ? '<span class="badge-ed">editado</span>' : '';
+    const dias = DIAS.map((nome, i) => {
+      const on = j.dias.includes(i) ? ' checked' : '';
+      return `<label><input type="checkbox" name="dias_${esc(j.chave)}" value="${i}"${on}><span>${nome}</span></label>`;
+    }).join('');
+    return `<div class="hjob">
+      <h3>${esc(j.titulo)}${badge}</h3>
+      <div class="hrow">
+        <div><div class="lbl">Horário</div><input type="time" name="hora_${esc(j.chave)}" value="${esc(j.hora)}" required></div>
+        <div><div class="lbl">Dias da semana</div><div class="dias">${dias}</div></div>
+      </div>
+    </div>`;
+  }).join('\n');
+
+  const corpo = `<div class="wrap">
+    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    <div class="aviso">🔁 Ao salvar, o robô é <b>reiniciado</b> para aplicar os novos horários (leva alguns segundos). Os envios em andamento no momento não são interrompidos — mas evite salvar bem em cima de um horário de disparo.</div>
+    <form method="POST" action="/horarios/salvar" onsubmit="var b=this.querySelector('button.save');b.disabled=true;b.textContent='Salvando e reiniciando…';">
+      ${cards}
+      <div class="hbar"><div class="acts">
+        <button type="submit" class="save">Salvar e aplicar (reinicia o robô)</button>
+      </div></div>
+    </form>
+  </div>`;
+  return chrome({ tab: 'Horários', h1: '🕒 Horários dos envios', p: 'Defina a <b>hora</b> e os <b>dias da semana</b> de cada envio automático.' }, 'hr', corpo);
+}
+
 function pedirLogin(res) {
   res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Painel SlimFit", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('Acesso restrito.');
@@ -394,6 +441,41 @@ const server = http.createServer((req, res) => {
     return fs.createReadStream(caminho).pipe(res);
   }
 
+  // Página de horários dos jobs
+  if (req.method === 'GET' && url === '/horarios') {
+    const q = req.url.split('?')[1] || '';
+    const ok = /(?:^|&)ok=1/.test(q);
+    const errParam = /(?:^|&)erro=/.test(q);
+    let aviso = '', erro = false;
+    if (ok) { aviso = '✅ Horários salvos e robô reiniciado. Os novos horários já valem.'; }
+    else if (errParam) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(paginaHorarios(aviso, erro));
+  }
+  if (req.method === 'POST' && url === '/horarios/salvar') {
+    return lerCorpo(req, 1e6, corpo => {
+      const p = new URLSearchParams(corpo);
+      try {
+        // Valida TUDO antes de salvar qualquer coisa (build lança em entrada inválida).
+        const planos = horarios.CATALOGO.map(j => {
+          const hora = p.get('hora_' + j.chave);
+          const dias = p.getAll('dias_' + j.chave).map(Number);
+          horarios.build(hora, dias); // valida (lança se inválido)
+          return { chave: j.chave, hora, dias };
+        });
+        planos.forEach(pl => horarios.salvar(pl.chave, pl.hora, pl.dias));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(paginaHorarios('Erro ao salvar: ' + e.message + ' (nada foi alterado).', true));
+      }
+      // Reinicia o robô para reagendar os jobs com os novos horários.
+      exec('pm2 restart slimfit-exp --update-env', { timeout: 25000 }, (err) => {
+        if (err) { res.writeHead(303, { Location: '/horarios?erro=1' }); return res.end(); }
+        res.writeHead(303, { Location: '/horarios?ok=1' }); res.end();
+      });
+    });
+  }
+
   // Página da conexão do WhatsApp (QR quando cai)
   if (req.method === 'GET' && url === '/wa') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -407,5 +489,5 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   if (!SENHA) console.warn('⚠️  PAINEL_SENHA não definido no .env — o painel vai NEGAR todo acesso até você definir usuário e senha.');
   console.log(`🖥️  Painel do Studio ouvindo em ${HOST}:${PORT} (usuário: ${USER}).`);
-  console.log('   Páginas: /  (mensagens) · /agendar  (envios) · /wa  (conexão do WhatsApp). Exponha SEMPRE atrás de HTTPS.');
+  console.log('   Páginas: /  (mensagens) · /agendar  (envios) · /horarios  (horários) · /wa  (conexão do WhatsApp). Exponha SEMPRE atrás de HTTPS.');
 });
