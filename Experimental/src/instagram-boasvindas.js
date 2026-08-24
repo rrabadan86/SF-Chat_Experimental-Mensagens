@@ -23,6 +23,9 @@ const MENSAGEM_BOASVINDAS = () => mensagens.render('instagram', {});
 
 // Limite de envios por execução/dia (segurança contra bloqueio do Instagram).
 const atividade = require('./atividade'); // registro para a aba "Hoje" do painel
+const igCfg = require('./instagram-config'); // limite/dia editável no painel (live)
+// Fallback do limite (se o painel não definiu, cai para IG_MAX_DIA). O valor
+// EFETIVO é lido a cada execução via igCfg.maxDia() — ver as funções de envio.
 const MAX_ENVIOS = parseInt(process.env.IG_MAX_DIA || '20', 10);
 
 // Intervalo aleatório entre mensagens, em segundos (mín, máx).
@@ -283,6 +286,7 @@ async function testeEnvio(alvo) {
 // (IG_MAX_DIA), o intervalo humano e o dedup (quem já recebeu não recebe de novo).
 // Uso:  --usuarios=@a,@b,@c   ou   --lista=caminho/arquivo.txt   (+ --enviar)
 async function enviarParaLista(usernames) {
+  const MAX_ENVIOS = igCfg.maxDia(); // limite efetivo (painel ou .env), lido agora
   console.log('\n╔═══════════════════════════════════════════════════╗');
   console.log('║   INSTAGRAM — Envio para LISTA específica         ║');
   console.log('╚═══════════════════════════════════════════════════╝');
@@ -337,6 +341,7 @@ async function enviarParaLista(usernames) {
 }
 
 async function main() {
+  const MAX_ENVIOS = igCfg.maxDia(); // limite efetivo (painel ou .env), lido agora
   // Se passou --teste=usuario, roda só o teste de envio e sai
   const argTeste = (process.argv.find(a => a.startsWith('--teste=')) || '').split('=')[1];
   if (argTeste) {

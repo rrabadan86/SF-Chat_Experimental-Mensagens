@@ -198,75 +198,18 @@ ${corpo}
 </body></html>`;
 }
 
-// ── Página 1: editar mensagens (texto + horário de cada uma) ────────────────
-function paginaMensagens(aviso, erro) {
-  // Índice dos horários por chave de job, para embutir em cada mensagem.
-  const hmap = {};
-  horarios.listar().forEach(j => { hmap[j.chave] = j; });
-
-  const itens = mensagens.listar().map(m => {
-    const vars = (m.vars || []).map(([t, d]) => `<span class="var" title="${esc(d)} — clique para inserir" onclick="inserirVar(this,'{${esc(t)}}')">{${esc(t)}}</span>`).join(' ');
-    const badge = m.editado ? '<span class="badge">editada</span>' : '';
-
-    // Bloco de horário embutido no card (inputs pertencem ao form #fh).
-    const mapa = HORARIOS_DA_MSG[m.chave];
-    let hbloco = '';
-    if (mapa === 'compartilha:followup') {
-      hbloco = `<div class="hsec"><div class="hsec-t">🕒 Horário</div>
-        <p class="quando" style="margin:0">Segue o <b>mesmo horário do Follow-up pós-aula (ainda não fechou)</b>, logo acima — é o mesmo disparo, muda só o texto conforme a lead.</p></div>`;
-    } else if (Array.isArray(mapa)) {
-      const linhas = mapa.map(([chave, sub]) => hmap[chave] ? blocoHorario(hmap[chave], sub) : '').join('');
-      const editouHora = mapa.some(([chave]) => hmap[chave] && hmap[chave].editado);
-      const badgeH = editouHora ? '<span class="badge-ed">alterado</span>' : '';
-      hbloco = `<div class="hsec"><div class="hsec-t">🕒 Horário deste envio ${badgeH}</div>${linhas}</div>`;
-    }
-
-    return `
-    <div class="card">
-      <form method="POST" action="/salvar">
-        <input type="hidden" name="chave" value="${esc(m.chave)}">
-        <div class="chead"><h2>${esc(m.titulo)} ${badge}</h2></div>
-        <p class="quando">${esc(m.quando)}</p>
-        ${vars ? `<p class="vars">Variáveis (clique para inserir): ${vars} <small>— são trocadas automaticamente no envio; mantenha-as no texto</small></p>` : ''}
-        <textarea name="texto" rows="7" spellcheck="true">${esc(m.texto)}</textarea>
-        <div class="acts">
-          <button type="submit" class="save">Salvar texto</button>
-          <button type="button" class="tbtn" onclick="previewMsg(this)">👁 Pré-visualizar</button>
-          <button type="button" class="tbtn" onclick="testarMsg(this)">🧪 Enviar teste</button>
-          <button type="submit" name="reset" value="1" class="reset" onclick="return confirm('Voltar esta mensagem ao texto padrão?')">Restaurar padrão</button>
-        </div>
-        <div class="prev" style="display:none"></div>
-      </form>
-      ${hbloco}
-    </div>`;
-  }).join('\n');
-
-  // Seção final: jobs sem texto editável (só horário).
-  const outros = OUTROS_JOBS.map(chave => hmap[chave]).filter(Boolean).map(j => {
-    const badgeH = j.editado ? '<span class="badge-ed">alterado</span>' : '';
-    return `<div class="card"><div class="chead"><h2 style="font-size:.98rem">${esc(j.titulo)} ${badgeH}</h2></div>
-      <div class="hsec" style="border:0;margin:8px 0 0;padding:0">${blocoHorario(j, '')}</div></div>`;
-  }).join('\n');
-
+// Barra "número para testes" (compartilhada por Mensagens e Instagram).
+function barraTeste() {
+  return `<div class="card testbar">
+    <label>🧪 Número para testes</label>
+    <input id="telTeste" type="tel" inputmode="numeric" placeholder="(62) 99999-9999" maxlength="16">
+    <p class="quando" style="margin:6px 0 0">Usado pelos botões <b>Enviar teste</b>. Fica salvo só neste navegador. A prévia usa valores de exemplo (ex.: nome → <i>Maria</i>).</p>
+  </div>`;
+}
+// Script de pré-visualizar/enviar teste + inserir variável (compartilhado).
+function scriptPreviewTeste() {
   const exemplosJson = JSON.stringify(mensagens.exemplosCompletos()).replace(/</g, '\\u003c');
-
-  const corpo = `<div class="wrap">
-    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
-    <div class="card testbar">
-      <label>🧪 Número para testes</label>
-      <input id="telTeste" type="tel" inputmode="numeric" placeholder="(62) 99999-9999" maxlength="16">
-      <p class="quando" style="margin:6px 0 0">Usado pelos botões <b>Enviar teste</b>. Fica salvo só neste navegador. A prévia usa valores de exemplo (ex.: nome → <i>Maria</i>).</p>
-    </div>
-    <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
-    ${itens}
-    <div class="sec-t">Outros envios automáticos <small style="font-weight:600;color:var(--cinza)">(sem texto editável)</small></div>
-    ${outros}
-    <div class="hbar">
-      <div class="acts"><button type="submit" form="fh" id="btnH" class="save">🕒 Salvar horários e reiniciar o robô</button></div>
-      <p class="quando" style="text-align:center;margin:8px 0 0">O <b>texto</b> é salvo na hora (sem reiniciar). Já mudanças de <b>horário</b> só valem depois que o robô reinicia — alguns segundos. Evite salvar bem em cima de um horário de disparo.</p>
-    </div>
-  </div>
-<script>
+  return `<script>
   var EXEMPLOS = ${exemplosJson};
   function inserirVar(el, token){
     var ta = el.closest('form').querySelector('textarea');
@@ -274,15 +217,14 @@ function paginaMensagens(aviso, erro) {
     var s = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
     var e = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
     ta.value = ta.value.slice(0, s) + token + ta.value.slice(e);
-    ta.focus();
-    ta.selectionStart = ta.selectionEnd = s + token.length;
+    ta.focus(); ta.selectionStart = ta.selectionEnd = s + token.length;
   }
   function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function renderEx(txt){ for(var k in EXEMPLOS){ txt = txt.split('{'+k+'}').join(EXEMPLOS[k]); } return txt; }
   function previewMsg(btn){
     var card = btn.closest('.card'); var ta = card.querySelector('textarea'); var b = card.querySelector('.prev');
     b.style.display='block';
-    b.innerHTML = '<div class="prev-t">👁 Como a aluna vê (valores de exemplo):</div><div class="prev-b">'+escHtml(renderEx(ta.value))+'</div>';
+    b.innerHTML = '<div class="prev-t">👁 Como a pessoa vê (valores de exemplo):</div><div class="prev-b">'+escHtml(renderEx(ta.value))+'</div>';
   }
   function soDigTeste(s){ return (s||'').replace(/\\D/g,''); }
   var _tt = document.getElementById('telTeste');
@@ -313,11 +255,77 @@ function paginaMensagens(aviso, erro) {
           if(s.status==='enviado'){ clearInterval(iv); b.innerHTML='<div class="prev-b ok">✅ Teste enviado para '+escHtml(tel)+'! Confira o WhatsApp.</div>'; btn.disabled=false; }
           else if(s.status==='falha'){ clearInterval(iv); b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(s.erro||'Falha no envio.')+'</div>'; btn.disabled=false; }
           else if(tries>25){ clearInterval(iv); b.innerHTML='<div class="prev-b">⏳ Ainda processando — o robô pode estar ocupado. A mensagem deve chegar em instantes.</div>'; btn.disabled=false; }
-        }catch(_){ /* tenta de novo no próximo tick */ }
+        }catch(_){ }
       },2000);
     }catch(err){ b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(err.message||'Falha ao enviar.')+'</div>'; btn.disabled=false; }
   }
 </script>`;
+}
+
+// Card de edição de UMA mensagem (texto + variáveis + preview/teste). Reusável.
+function cardMensagem(m, voltar) {
+  const vars = (m.vars || []).map(([t, d]) => `<span class="var" title="${esc(d)} — clique para inserir" onclick="inserirVar(this,'{${esc(t)}}')">{${esc(t)}}</span>`).join(' ');
+  const badge = m.editado ? '<span class="badge">editada</span>' : '';
+  return `<form method="POST" action="/salvar">
+      <input type="hidden" name="chave" value="${esc(m.chave)}">
+      ${voltar ? `<input type="hidden" name="voltar" value="${esc(voltar)}">` : ''}
+      <div class="chead"><h2>${esc(m.titulo)} ${badge}</h2></div>
+      <p class="quando">${esc(m.quando)}</p>
+      ${vars ? `<p class="vars">Variáveis (clique para inserir): ${vars} <small>— são trocadas automaticamente no envio; mantenha-as no texto</small></p>` : ''}
+      <textarea name="texto" rows="7" spellcheck="true">${esc(m.texto)}</textarea>
+      <div class="acts">
+        <button type="submit" class="save">Salvar texto</button>
+        <button type="button" class="tbtn" onclick="previewMsg(this)">👁 Pré-visualizar</button>
+        <button type="button" class="tbtn" onclick="testarMsg(this)">🧪 Enviar teste</button>
+        <button type="submit" name="reset" value="1" class="reset" onclick="return confirm('Voltar esta mensagem ao texto padrão?')">Restaurar padrão</button>
+      </div>
+      <div class="prev" style="display:none"></div>
+    </form>`;
+}
+
+// ── Página 1: editar mensagens (texto + horário de cada uma) ────────────────
+function paginaMensagens(aviso, erro) {
+  // Índice dos horários por chave de job, para embutir em cada mensagem.
+  const hmap = {};
+  horarios.listar().forEach(j => { hmap[j.chave] = j; });
+
+  // A mensagem do Instagram é editada na aba "📸 Instagram" (fica tudo do IG lá).
+  const itens = mensagens.listar().filter(m => m.chave !== 'instagram').map(m => {
+    // Bloco de horário embutido no card (inputs pertencem ao form #fh).
+    const mapa = HORARIOS_DA_MSG[m.chave];
+    let hbloco = '';
+    if (mapa === 'compartilha:followup') {
+      hbloco = `<div class="hsec"><div class="hsec-t">🕒 Horário</div>
+        <p class="quando" style="margin:0">Segue o <b>mesmo horário do Follow-up pós-aula (ainda não fechou)</b>, logo acima — é o mesmo disparo, muda só o texto conforme a lead.</p></div>`;
+    } else if (Array.isArray(mapa)) {
+      const linhas = mapa.map(([chave, sub]) => hmap[chave] ? blocoHorario(hmap[chave], sub) : '').join('');
+      const editouHora = mapa.some(([chave]) => hmap[chave] && hmap[chave].editado);
+      const badgeH = editouHora ? '<span class="badge-ed">alterado</span>' : '';
+      hbloco = `<div class="hsec"><div class="hsec-t">🕒 Horário deste envio ${badgeH}</div>${linhas}</div>`;
+    }
+    return `<div class="card">${cardMensagem(m)}${hbloco}</div>`;
+  }).join('\n');
+
+  // Seção final: jobs sem texto editável (só horário).
+  const outros = OUTROS_JOBS.map(chave => hmap[chave]).filter(Boolean).map(j => {
+    const badgeH = j.editado ? '<span class="badge-ed">alterado</span>' : '';
+    return `<div class="card"><div class="chead"><h2 style="font-size:.98rem">${esc(j.titulo)} ${badgeH}</h2></div>
+      <div class="hsec" style="border:0;margin:8px 0 0;padding:0">${blocoHorario(j, '')}</div></div>`;
+  }).join('\n');
+
+  const corpo = `<div class="wrap">
+    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    ${barraTeste()}
+    <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
+    ${itens}
+    <div class="sec-t">Outros envios automáticos <small style="font-weight:600;color:var(--cinza)">(sem texto editável)</small></div>
+    ${outros}
+    <div class="hbar">
+      <div class="acts"><button type="submit" form="fh" id="btnH" class="save">🕒 Salvar horários e reiniciar o robô</button></div>
+      <p class="quando" style="text-align:center;margin:8px 0 0">O <b>texto</b> é salvo na hora (sem reiniciar). Já mudanças de <b>horário</b> só valem depois que o robô reinicia — alguns segundos. Evite salvar bem em cima de um horário de disparo.</p>
+    </div>
+  </div>
+${scriptPreviewTeste()}`;
   return chrome({ tab: 'Mensagens', h1: '✏️ Mensagens do robô', p: 'Edite o <b>texto</b> e o <b>horário</b> de cada envio no mesmo lugar.' }, 'msg', corpo);
 }
 
@@ -580,8 +588,11 @@ function lerJsonData(nome) {
 function paginaInstagram(aviso, erro) {
   const on = igcfg.ligado();
   const fonte = igcfg.fonte();
-  const limite = parseInt(process.env.IG_MAX_DIA || '20', 10);
+  const limite = igcfg.maxDia();
+  const fonteMax = igcfg.fonteMax();
   const maxTent = parseInt(process.env.IG_MAX_TENTATIVAS_INDISP || '2', 10);
+  const msgIg = mensagens.listar().find(m => m.chave === 'instagram');
+  const jobIg = horarios.listar().find(j => j.chave === 'instagram');
   const rel = lerJsonData('instagram-envios.json');
   const indisp = lerJsonData('instagram-indisponiveis.json') || {};
   const enviados = lerJsonData('instagram-enviados.json');
@@ -632,9 +643,32 @@ function paginaInstagram(aviso, erro) {
       ${puladas || '<div class="vazio">Nenhuma conta na lista de indisponíveis.</div>'}
       ${puladasArr.length ? `<p class="quando" style="margin:10px 0 0">Contas privadas/restritas que deram "Mensagem Indisponível". Após ${maxTent} tentativas o robô para de tentar (não gastam as vagas do dia). Se uma delas abrir o perfil depois, recebe normalmente.</p>` : ''}
     </div>
-    <p class="quando" style="text-align:center">Fonte do liga/desliga: <b>${fonte === 'painel' ? 'painel' : '.env (IG_ENABLED)'}</b>. Mudar aqui vale no próximo disparo (07:00) — sem reiniciar.</p>
-  </div>`;
-  return chrome({ tab: 'Instagram', h1: '📸 Instagram', p: 'Boas-vindas automáticas às novas seguidoras — status e liga/desliga.' }, 'ig', corpo);
+
+    <div class="sec-t">🎯 Limite de envios por dia</div>
+    <div class="card">
+      <form method="POST" action="/instagram/limite" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+        <div><label style="margin:0 0 4px">Máximo de DMs por dia</label><input type="number" name="max" min="1" max="100" value="${limite}" style="width:120px" required></div>
+        <button type="submit" class="save">Salvar limite</button>
+      </form>
+      <p class="quando" style="margin:8px 0 0">Fonte: <b>${fonteMax === 'painel' ? 'painel' : '.env (IG_MAX_DIA)'}</b>. Recomendado começar baixo (4–5) e subir aos poucos. Vale já no próximo disparo — sem reiniciar.</p>
+    </div>
+
+    <div class="sec-t">✍️ Mensagem de boas-vindas</div>
+    ${barraTeste()}
+    ${msgIg ? `<div class="card">${cardMensagem(msgIg, '/instagram')}</div>` : ''}
+
+    <div class="sec-t">🕒 Horário do envio</div>
+    <div class="card">
+      <form id="fhIg" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnHIg');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"><input type="hidden" name="voltar" value="/instagram"></form>
+      ${jobIg ? blocoHorario(jobIg, '', 'fhIg') : '<div class="vazio">Sem horário configurável.</div>'}
+      <div class="acts" style="margin-top:14px"><button type="submit" form="fhIg" id="btnHIg" class="save">🕒 Salvar horário e reiniciar o robô</button></div>
+      <p class="quando" style="margin:8px 0 0">Só vale depois que o robô reinicia — alguns segundos.</p>
+    </div>
+
+    <p class="quando" style="text-align:center">Fonte do liga/desliga: <b>${fonte === 'painel' ? 'painel' : '.env (IG_ENABLED)'}</b>. Mudar aqui vale no próximo disparo — sem reiniciar.</p>
+  </div>
+  ${scriptPreviewTeste()}`;
+  return chrome({ tab: 'Instagram', h1: '📸 Instagram', p: 'Status, liga/desliga, limite, mensagem e horário — tudo do Instagram aqui.' }, 'ig', corpo);
 }
 
 function pedirLogin(res) {
@@ -664,13 +698,15 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url === '/salvar') {
     return lerCorpo(req, 1e6, corpo => {
       const p = new URLSearchParams(corpo);
+      const voltar = p.get('voltar') === '/instagram' ? '/instagram' : '/'; // whitelist
       try {
         if (p.get('reset')) mensagens.salvarOverride(p.get('chave'), '');
         else mensagens.salvarOverride(p.get('chave'), p.get('texto') || '');
-        res.writeHead(303, { Location: '/?ok=1' }); res.end();
+        res.writeHead(303, { Location: voltar + '?ok=1' }); res.end();
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(paginaMensagens('Erro ao salvar: ' + e.message, true));
+        const msg = 'Erro ao salvar: ' + e.message;
+        res.end(voltar === '/instagram' ? paginaInstagram(msg, true) : paginaMensagens(msg, true));
       }
     });
   }
@@ -740,7 +776,8 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url === '/horarios/salvar') {
     return lerCorpo(req, 1e6, corpo => {
       const p = new URLSearchParams(corpo);
-      const voltar = p.get('voltar') === '/agendar' ? '/agendar' : '/'; // whitelist
+      const vRaw = p.get('voltar');
+      const voltar = (vRaw === '/agendar' || vRaw === '/instagram') ? vRaw : '/'; // whitelist
       try {
         // Valida TUDO antes de salvar qualquer coisa (build lança em entrada inválida).
         const planos = horarios.CATALOGO.map(j => {
@@ -754,7 +791,7 @@ const server = http.createServer((req, res) => {
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         const msg = 'Erro ao salvar horários: ' + e.message + ' (nada foi alterado).';
-        return res.end(voltar === '/agendar' ? paginaAgendar(msg, true) : paginaMensagens(msg, true));
+        return res.end(voltar === '/agendar' ? paginaAgendar(msg, true) : voltar === '/instagram' ? paginaInstagram(msg, true) : paginaMensagens(msg, true));
       }
       // Reinicia o robô para reagendar os jobs com os novos horários.
       exec('pm2 restart slimfit-exp --update-env', { timeout: 25000 }, (err) => {
@@ -771,20 +808,33 @@ const server = http.createServer((req, res) => {
     return res.end(paginaHoje(valido));
   }
 
-  // Página do Instagram (status + liga/desliga)
+  // Página do Instagram (status + liga/desliga + limite + mensagem + horário)
   if (req.method === 'GET' && url === '/instagram') {
     const q = req.url.split('?')[1] || '';
-    let aviso = '';
+    let aviso = '', erro = false;
     if (/(?:^|&)on=1/.test(q)) aviso = '📸 Instagram LIGADO. Vale no próximo disparo (07:00).';
     else if (/(?:^|&)off=1/.test(q)) aviso = '⏸️ Instagram pausado. Nenhuma DM automática será enviada.';
+    else if (/(?:^|&)lim=1/.test(q)) aviso = '🎯 Limite salvo. Vale já no próximo disparo — sem reiniciar.';
+    else if (/(?:^|&)ok=1/.test(q)) aviso = 'Mensagem salva! Já vale no próximo envio.';
+    else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horário salvo e robô reiniciado. Já vale.';
+    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horário salvo, mas não consegui reiniciar o robô. Rode: pm2 restart slimfit-exp'; erro = true; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(paginaInstagram(aviso));
+    return res.end(paginaInstagram(aviso, erro));
   }
   if (req.method === 'POST' && url === '/instagram/toggle') {
     return lerCorpo(req, 1e5, corpo => {
       const alvo = new URLSearchParams(corpo).get('alvo');
       try { igcfg.definir(alvo === 'on'); } catch (_) {}
       res.writeHead(303, { Location: alvo === 'on' ? '/instagram?on=1' : '/instagram?off=1' }); res.end();
+    });
+  }
+  if (req.method === 'POST' && url === '/instagram/limite') {
+    return lerCorpo(req, 1e5, corpo => {
+      try { igcfg.definirMax(new URLSearchParams(corpo).get('max')); res.writeHead(303, { Location: '/instagram?lim=1' }); res.end(); }
+      catch (e) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(paginaInstagram('Erro ao salvar o limite: ' + e.message, true));
+      }
     });
   }
 
