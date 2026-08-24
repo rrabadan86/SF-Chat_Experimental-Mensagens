@@ -23,6 +23,7 @@ const horarios = require('./horarios');
 const atividade = require('./atividade');
 const teste = require('./teste-envio');
 const igcfg = require('./instagram-config');
+const igcookies = require('./instagram-cookies');
 const indicadores = require('./indicadores');
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
@@ -606,6 +607,13 @@ function paginaInstagram(aviso, erro) {
   const maxTent = parseInt(process.env.IG_MAX_TENTATIVAS_INDISP || '2', 10);
   const msgIg = mensagens.listar().find(m => m.chave === 'instagram');
   const jobIg = horarios.listar().find(j => j.chave === 'instagram');
+  const ck = igcookies.status();
+  const ckQuando = ck.atualizadoEm ? new Date(ck.atualizadoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '';
+  const ckTexto = (ck.existe && ck.temSessionId)
+    ? `✅ Cookies presentes (${ck.quantidade} cookie${ck.quantidade === 1 ? '' : 's'}, sessionid ok). Atualizado em ${esc(ckQuando)}.`
+    : ck.existe
+      ? '⚠️ Há cookies salvos, mas <b>sem o sessionid</b> — reimporte estando logada.'
+      : '⚠️ Nenhum cookie salvo — a sessão do Instagram depende deles. Cole abaixo para (re)conectar.';
   const rel = lerJsonData('instagram-envios.json');
   const indisp = lerJsonData('instagram-indisponiveis.json') || {};
   const enviados = lerJsonData('instagram-enviados.json');
@@ -637,6 +645,18 @@ function paginaInstagram(aviso, erro) {
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${statusCard}
+
+    <div class="sec-t">🍪 Sessão do Instagram (cookies)</div>
+    <div class="card">
+      <p class="quando" style="margin:0 0 10px">${ckTexto}</p>
+      <form method="POST" action="/instagram/cookies">
+        <label style="margin:0 0 4px">Cole o JSON dos cookies (Cookie-Editor → instagram.com logada → Export)</label>
+        <textarea name="cookies" rows="4" spellcheck="false" placeholder='[{"name":"sessionid","value":"..."}, ... ]' style="font-family:ui-monospace,monospace;font-size:.85rem"></textarea>
+        <div class="acts"><button type="submit" class="save" onclick="return confirm('Importar estes cookies do Instagram?')">🍪 Importar cookies</button></div>
+      </form>
+      <p class="quando" style="margin:10px 0 0">🔒 Fica só no servidor (nunca é mostrado de volta) e vale já na próxima execução — sem reiniciar. Instale a extensão <b>Cookie-Editor</b>, abra o <b>instagram.com logada na conta do Studio</b>, clique em <b>Export</b> (JSON) e cole aqui.</p>
+    </div>
+
     <div class="stats">
       <div class="stat tot"><div class="n">${limite}</div><div class="l">limite/dia</div></div>
       <div class="stat ok"><div class="n">${teveRun ? env : '—'}</div><div class="l">✅ última execução</div></div>
@@ -906,6 +926,7 @@ const server = http.createServer((req, res) => {
     if (/(?:^|&)on=1/.test(q)) aviso = '📸 Instagram LIGADO. Vale no próximo disparo (07:00).';
     else if (/(?:^|&)off=1/.test(q)) aviso = '⏸️ Instagram pausado. Nenhuma DM automática será enviada.';
     else if (/(?:^|&)lim=1/.test(q)) aviso = '🎯 Limite salvo. Vale já no próximo disparo — sem reiniciar.';
+    else if (/(?:^|&)ck=\d/.test(q)) aviso = '🍪 Cookies importados (' + (q.match(/ck=(\d+)/) || [])[1] + '). A sessão do Instagram foi renovada — vale na próxima execução.';
     else if (/(?:^|&)ok=1/.test(q)) aviso = 'Mensagem salva! Já vale no próximo envio.';
     else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horário salvo e robô reiniciado. Já vale.';
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horário salvo, mas não consegui reiniciar o robô. Rode: pm2 restart slimfit-exp'; erro = true; }
@@ -925,6 +946,17 @@ const server = http.createServer((req, res) => {
       catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(paginaInstagram('Erro ao salvar o limite: ' + e.message, true));
+      }
+    });
+  }
+  if (req.method === 'POST' && url === '/instagram/cookies') {
+    return lerCorpo(req, 4e6, corpo => { // cookies podem somar alguns KB
+      try {
+        const n = igcookies.salvar(new URLSearchParams(corpo).get('cookies') || '');
+        res.writeHead(303, { Location: '/instagram?ck=' + n }); res.end();
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(paginaInstagram('Erro ao importar cookies: ' + e.message, true));
       }
     });
   }
