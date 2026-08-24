@@ -93,6 +93,24 @@ para desligar.
 que aquilo vai gerar ("6 consultas por dia · Sex, 09:00 09:30 …"). Erro de configuração
 aparece antes de salvar, não depois.
 
+### A página é montada no servidor
+
+O HTML sai pronto do servidor, com o conteúdo que o médico editou — título,
+textos, formação, locais, perguntas. O buscador lê tudo no primeiro acesso; o
+JavaScript fica só para o formulário de agendamento, e se ele falhar a página
+continua legível por inteiro.
+
+Isso não pede framework. O conteúdo já mora em `dados/config.json` e o servidor
+já é Node: `src/render.js` são algumas funções que devolvem HTML. Trazer Next.js
+custaria um passo de build a cada alteração — e mataria justamente o que o painel
+tem de mais útil, que é o médico salvar e o site mudar na hora.
+
+Junto vêm os itens que decidem posição na busca de um médico: `<title>` e
+descrição vindos do conteúdo, Open Graph para o link ficar apresentável quando
+compartilhado no WhatsApp, `canonical`, `sitemap.xml`, e **dados estruturados
+`Physician`** — com especialidade, endereço de cada local e horários de
+atendimento, que é o que alimenta busca do tipo "oncologista perto de mim".
+
 ### O site também é editável
 
 Uma segunda aba do painel — **Site** — controla tudo que o paciente lê. Nada disso
@@ -207,7 +225,7 @@ cd app
 cp .env.example .env      # preencha CAL_H1, CAL_H2 e o caminho da credencial
 npm install
 npm run senha             # cria a senha do painel (imprime 2 linhas para o .env)
-npm test                  # 113 testes, tudo offline
+npm test                  # 140 testes, tudo offline
 npm start                 # http://localhost:3000
 ```
 
@@ -239,6 +257,7 @@ app/
     google-agenda.js       freebusy, criar, confirmar, liberar, testar acesso
     dados.js               config editável pelo painel, gravada em disco (pura)
     pagina.js              o conteúdo padrão do site (pura)
+    render.js              a página do paciente em HTML, montada no servidor
     auth.js                senha e sessão do painel, sem dependência (pura)
     whatsapp/              log | wwebjs | cloud, mesma interface
     agendamento.js         a orquestração
@@ -249,7 +268,7 @@ app/
   public/admin/            o painel: agenda e conteúdo do site
   dados/midia/             a foto enviada pelo painel
   deploy/                  PM2, nginx, systemd e backup
-  tests/                   113 testes, sem rede
+  tests/                   140 testes, sem rede
 ```
 
 As quatro primeiras são funções puras — é por isso que dá para testar as regras
@@ -274,7 +293,9 @@ de horário, fuso e validação sem Google e sem WhatsApp.
 | `POST /admin/api/foto` | foto do médico |
 | `GET /admin/api/whatsapp` | situação da conexão e o QR |
 | `POST /admin/api/whatsapp/conectar` · `/desconectar` · `/testar` | controle da sessão |
-| `GET /api/pagina` | o que a página do paciente monta (público) |
+| `GET /` | a página do paciente, montada no servidor |
+| `GET /sitemap.xml` · `/robots.txt` | para os buscadores |
+| `GET /api/pagina` | o conteúdo em JSON (público) |
 
 ---
 

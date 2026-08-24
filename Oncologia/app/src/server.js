@@ -22,6 +22,8 @@ const wa = require('./whatsapp');
 const servico = require('./agendamento');
 const auth = require('./auth');
 const rotasAdmin = require('./rotas-admin');
+const render = require('./render');
+const dados = require('./dados');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -36,7 +38,42 @@ const corpoPequeno = express.json({ limit: '32kb' });
 app.use((req, res, next) => (
   CORPO_GRANDE.includes(req.path) ? next() : corpoPequeno(req, res, next)
 ));
-app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
+/**
+ * A página do paciente é montada no servidor, não no navegador.
+ *
+ * Assim o HTML já sai com o conteúdo que o médico editou — título, textos,
+ * locais, perguntas — e o buscador lê tudo no primeiro acesso. O JavaScript
+ * fica só para o formulário de agendamento.
+ */
+function enderecoDoSite(req) {
+  const configurado = process.env.SITE_URL;
+  if (configurado) return configurado.replace(/\/$/, '');
+  const protocolo = req.get('x-forwarded-proto') || req.protocol;
+  return `${protocolo}://${req.get('host')}`;
+}
+
+app.get('/', (req, res) => {
+  const c = dados.ler();
+  res.set('Cache-Control', 'public, max-age=0, must-revalidate');
+  res.type('html').send(render.paginaCompleta({
+    pagina: c.pagina,
+    medico: c.medico,
+    hospitais: config.hospitais,
+    url: enderecoDoSite(req),
+  }));
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  const url = enderecoDoSite(req);
+  const atualizado = (dados.ler().atualizadoEm || new Date().toISOString()).slice(0, 10);
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${url}/</loc><lastmod>${atualizado}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+</urlset>`);
+});
+
+// index:false para o arquivo estático não passar na frente da página montada
+app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'], index: false }));
 
 // a foto que o médico enviou pelo painel
 const PASTA_MIDIA = process.env.MIDIA_DIR || path.join(__dirname, '..', 'dados', 'midia');
