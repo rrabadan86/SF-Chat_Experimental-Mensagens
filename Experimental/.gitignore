@@ -29,3 +29,5 @@ data/instagram-indisponiveis.json
 data/wa-status.json
 # Horários dos jobs editados no painel (estado por VPS/franquia) — não versionar
 data/horarios.json
+# Registro de atividade do robô (o que enviou hoje) — estado por VPS
+data/atividade.json

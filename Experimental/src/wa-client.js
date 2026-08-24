@@ -21,6 +21,7 @@ const qrcodeTerminal = require('qrcode-terminal');
 const waStatus = require('./wa-status');
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
+const atividade = require('./atividade'); // registro do que foi enviado (aba "Hoje")
 
 const AUTH_DIR = process.env.WA_AUTH_DIR || path.resolve(__dirname, '..', 'wwebjs_auth');
 // whatsapp-web.js roda bem headless; deixe WA_HEADLESS=false só se quiser com tela (xvfb).
@@ -267,32 +268,46 @@ async function resolverId(telefone) {
   return n + '@c.us';                 // só instabilidade → deixa o envio tentar
 }
 
-async function sendTexto(telefone, texto) {
+async function sendTexto(telefone, texto, contexto) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
-  const id = await resolverId(telefone);
-  return comRetry(() => client.sendMessage(id, texto));
+  try {
+    const id = await resolverId(telefone);
+    const r = await comRetry(() => client.sendMessage(id, texto));
+    atividade.registrar({ destino: telefone, preview: texto, ok: true, contexto });
+    return r;
+  } catch (e) {
+    atividade.registrar({ destino: telefone, preview: texto, ok: false, erro: e && e.message, contexto });
+    throw e;
+  }
 }
 
 /**
  * Envia mídia (áudio/imagem/etc). Aceita URL http(s) ou caminho local.
  * legenda é opcional. Para áudio como "mensagem de voz", passe sendAudioAsVoice.
  */
-async function sendMidia(telefone, urlOuCaminho, { legenda = '', comoVoz = false } = {}) {
+async function sendMidia(telefone, urlOuCaminho, { legenda = '', comoVoz = false, contexto } = {}) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
-  const media = /^https?:\/\//i.test(urlOuCaminho)
-    ? await MessageMedia.fromUrl(urlOuCaminho, { unsafeMime: true })
-    : MessageMedia.fromFilePath(urlOuCaminho);
-  // Nota de voz (PTT): o WhatsApp só decodifica Opus se o mimetype trouxer o
-  // codec. O MessageMedia grava só "audio/ogg" → o destinatário vê "há algo
-  // errado com o arquivo de áudio". Forçamos "audio/ogg; codecs=opus".
-  if (comoVoz && /\.(ogg|opus|oga)(\?|$)/i.test(urlOuCaminho)) {
-    media.mimetype = 'audio/ogg; codecs=opus';
+  try {
+    const media = /^https?:\/\//i.test(urlOuCaminho)
+      ? await MessageMedia.fromUrl(urlOuCaminho, { unsafeMime: true })
+      : MessageMedia.fromFilePath(urlOuCaminho);
+    // Nota de voz (PTT): o WhatsApp só decodifica Opus se o mimetype trouxer o
+    // codec. O MessageMedia grava só "audio/ogg" → o destinatário vê "há algo
+    // errado com o arquivo de áudio". Forçamos "audio/ogg; codecs=opus".
+    if (comoVoz && /\.(ogg|opus|oga)(\?|$)/i.test(urlOuCaminho)) {
+      media.mimetype = 'audio/ogg; codecs=opus';
+    }
+    const id = await resolverId(telefone);
+    const r = await comRetry(() => client.sendMessage(id, media, {
+      caption: legenda || undefined,
+      sendAudioAsVoice: comoVoz || undefined,
+    }));
+    atividade.registrar({ destino: telefone, preview: legenda || (comoVoz ? '🎤 áudio' : '📎 mídia'), midia: true, ok: true, contexto });
+    return r;
+  } catch (e) {
+    atividade.registrar({ destino: telefone, preview: legenda || '📎 mídia', midia: true, ok: false, erro: e && e.message, contexto });
+    throw e;
   }
-  const id = await resolverId(telefone);
-  return comRetry(() => client.sendMessage(id, media, {
-    caption: legenda || undefined,
-    sendAudioAsVoice: comoVoz || undefined,
-  }));
 }
 
 /**
@@ -338,11 +353,18 @@ async function acharGrupo(nomeGrupo) {
   return g;
 }
 
-async function sendGrupo(nomeGrupo, texto) {
+async function sendGrupo(nomeGrupo, texto, contexto) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
-  const g = await acharGrupo(nomeGrupo);
-  if (!g) throw new Error('Grupo não encontrado: ' + nomeGrupo);
-  return comRetry(() => client.sendMessage(g.id, texto));
+  try {
+    const g = await acharGrupo(nomeGrupo);
+    if (!g) throw new Error('Grupo não encontrado: ' + nomeGrupo);
+    const r = await comRetry(() => client.sendMessage(g.id, texto));
+    atividade.registrar({ destino: nomeGrupo, preview: texto, grupo: true, ok: true, contexto });
+    return r;
+  } catch (e) {
+    atividade.registrar({ destino: nomeGrupo, preview: texto, grupo: true, ok: false, erro: e && e.message, contexto });
+    throw e;
+  }
 }
 
 /**
@@ -390,8 +412,11 @@ async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMenc
 
   // Formato atual do whatsapp-web.js: mentions = array de IDs (strings).
   try {
-    return await comRetry(() => client.sendMessage(groupId, texto, { mentions: [mid] }));
+    const r = await comRetry(() => client.sendMessage(groupId, texto, { mentions: [mid] }));
+    atividade.registrar({ destino: 'grupo', preview: texto, grupo: true, ok: true });
+    return r;
   } catch (e) {
+    atividade.registrar({ destino: 'grupo', preview: texto, grupo: true, ok: false, erro: e && e.message });
     throw new Error('sendMessage(mention): ' + (e && e.message));
   }
 }

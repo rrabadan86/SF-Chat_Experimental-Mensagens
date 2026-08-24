@@ -19,6 +19,7 @@ const mensagens = require('./mensagens');
 const ag = require('./agendamentos');
 const waStatus = require('./wa-status');
 const horarios = require('./horarios');
+const atividade = require('./atividade');
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
 // Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
@@ -138,6 +139,26 @@ const ESTILO = `
   .dias input:checked + span{border-color:var(--teal);background:#e6f6f7;color:#0c6f70}
   .hbar{position:sticky;bottom:0;background:linear-gradient(180deg,transparent,var(--bg) 40%);padding:14px 0 6px;margin-top:6px}
   .badge-ed{background:#fff0ef;color:#c23b38;border:1px solid #f6cfcd;border-radius:999px;font-size:.68rem;font-weight:700;padding:2px 8px;margin-left:6px}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0}
+  .stat{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:16px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+  .stat .n{font-family:"Montserrat";font-weight:800;font-size:2rem;line-height:1}
+  .stat .l{font-size:.78rem;color:var(--cinza);margin-top:4px;font-weight:600}
+  .stat.ok .n{color:#1c6b3c}.stat.err .n{color:#a12626}.stat.tot .n{color:var(--teal)}
+  .jobrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--linha)}
+  .jobrow:last-child{border-bottom:0}
+  .jobrow .jn{font-weight:700;font-size:.92rem;flex:1;min-width:0}
+  .jobrow .jc{font-size:.82rem;font-weight:700;color:#1c6b3c;white-space:nowrap}
+  .jobrow .jc .f{color:#a12626}
+  .ev{display:flex;gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--linha);font-size:.88rem}
+  .ev:last-child{border-bottom:0}
+  .ev .h{color:var(--cinza);font-variant-numeric:tabular-nums;font-size:.8rem;flex:none}
+  .ev .d{flex:1;min-width:0}
+  .ev .who{font-weight:600}
+  .ev .ctx{font-size:.72rem;color:var(--cinza)}
+  .ev .pv{color:var(--cinza);font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;display:block}
+  .ev .ic{flex:none}
+  .datesel{display:flex;gap:8px;align-items:center;margin:4px 0 0}
+  .datesel input{width:auto}
   footer{color:var(--cinza);font-size:.8rem;text-align:center;padding:20px}
 `;
 
@@ -154,6 +175,7 @@ function chrome(titSubtitulo, ativo, corpo) {
   <div><h1>${esc(titSubtitulo.h1)}</h1><p>${titSubtitulo.p}</p></div>
 </div></header>
 <nav class="tabs">
+  <a href="/hoje" class="${ativo === 'hoje' ? 'on' : ''}">📊 Hoje</a>
   <a href="/" class="${ativo === 'msg' ? 'on' : ''}">✏️ Mensagens</a>
   <a href="/agendar" class="${ativo === 'ag' ? 'on' : ''}">📅 Agendar envios</a>
   <a href="/wa" class="${ativo === 'wa' ? 'on' : ''}">📱 WhatsApp</a>
@@ -442,6 +464,50 @@ function blocoHorario(info, sublabel, formId = 'fh') {
 // Hora 'HH:MM' de um job (override ou padrão) — usada nos rótulos do /agendar.
 function horaTurno(chave) { try { return horarios.parse(horarios.cronDe(chave)).hora; } catch (_) { return ''; } }
 
+// ── Página: o que o robô fez hoje ───────────────────────────────────────────
+function paginaHoje(dia) {
+  const d = dia || atividade.hojeSP();
+  const r = atividade.resumoHoje(d);
+  const evs = atividade.listarHoje(d, 150);
+  const ehHoje = d === atividade.hojeSP();
+
+  const jobs = r.jobs.map(j => `<div class="jobrow">
+    <div class="jn">${esc(j.contexto)}</div>
+    <div class="jc">${j.sent} enviada${j.sent === 1 ? '' : 's'}${j.failed ? ` · <span class="f">${j.failed} falha${j.failed === 1 ? '' : 's'}</span>` : ''}</div>
+  </div>`).join('');
+
+  const lista = evs.map(e => {
+    const ic = e.ok ? '✅' : '⚠️';
+    const who = e.grupo ? esc(e.destino || 'grupo') : esc(fmtTel(e.destino));
+    const pv = e.erro ? `<span style="color:#a12626">${esc(e.erro)}</span>` : esc(e.preview || (e.midia ? '📎 mídia' : ''));
+    return `<div class="ev"><span class="h">${esc(e.quando)}</span><span class="ic">${ic}</span>
+      <div class="d"><span class="who">${who}</span> <span class="ctx">· ${esc(e.contexto)}</span><span class="pv">${pv}</span></div></div>`;
+  }).join('');
+
+  const corpo = `<div class="wrap">
+    <div class="datesel">
+      <form method="GET" action="/hoje" class="datesel" style="margin:0">
+        <label style="margin:0">Dia:</label>
+        <input type="date" name="dia" value="${esc(d)}" max="${esc(atividade.hojeSP())}" onchange="this.form.submit()">
+        ${ehHoje ? '' : '<a href="/hoje" style="font-size:.85rem;font-weight:700;color:var(--teal)">voltar para hoje</a>'}
+      </form>
+    </div>
+    <div class="stats">
+      <div class="stat tot"><div class="n">${r.total}</div><div class="l">total de envios</div></div>
+      <div class="stat ok"><div class="n">${r.enviados}</div><div class="l">✅ enviados</div></div>
+      <div class="stat err"><div class="n">${r.falhas}</div><div class="l">⚠️ falhas</div></div>
+    </div>
+    <div class="card">
+      <div class="chead"><h2>Por tipo de envio</h2></div>
+      ${jobs || '<div class="vazio">Nenhum envio registrado ' + (ehHoje ? 'hoje' : 'neste dia') + ' ainda.</div>'}
+    </div>
+    <div class="sec-t">📜 Envios ${ehHoje ? 'de hoje' : 'do dia'} (${evs.length})</div>
+    <div class="card">${lista || '<div class="vazio">Sem envios para mostrar.</div>'}</div>
+    <p class="quando" style="text-align:center">Registrado automaticamente a cada envio do robô. ${ehHoje ? 'Atualiza ao recarregar.' : ''}</p>
+  </div>${ehHoje ? '<script>setTimeout(function(){location.reload()},60000)</script>' : ''}`;
+  return chrome({ tab: 'Hoje', h1: '📊 O que o robô fez', p: ehHoje ? 'Todos os envios de <b>hoje</b>, em tempo quase real.' : `Envios do dia <b>${esc(fmtData(d))}</b>.` }, 'hoje', corpo);
+}
+
 function pedirLogin(res) {
   res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Painel SlimFit", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('Acesso restrito.');
@@ -548,6 +614,14 @@ const server = http.createServer((req, res) => {
     });
   }
 
+  // Página "Hoje" (o que o robô enviou)
+  if (req.method === 'GET' && url === '/hoje') {
+    const dia = new URLSearchParams(req.url.split('?')[1] || '').get('dia');
+    const valido = /^\d{4}-\d{2}-\d{2}$/.test(dia || '') ? dia : null;
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(paginaHoje(valido));
+  }
+
   // Página da conexão do WhatsApp (QR quando cai)
   if (req.method === 'GET' && url === '/wa') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -561,5 +635,5 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   if (!SENHA) console.warn('⚠️  PAINEL_SENHA não definido no .env — o painel vai NEGAR todo acesso até você definir usuário e senha.');
   console.log(`🖥️  Painel do Studio ouvindo em ${HOST}:${PORT} (usuário: ${USER}).`);
-  console.log('   Páginas: /  (mensagens) · /agendar  (envios) · /horarios  (horários) · /wa  (conexão do WhatsApp). Exponha SEMPRE atrás de HTTPS.');
+  console.log('   Páginas: /hoje · /  (mensagens) · /agendar  (envios) · /wa  (WhatsApp). Exponha SEMPRE atrás de HTTPS.');
 });

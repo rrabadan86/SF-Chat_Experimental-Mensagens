@@ -7,6 +7,7 @@ const { runFollowupMorning, runFollowupAfternoon } = require('./followup-experim
 const { runNoShowMorning, runNoShowAfternoon } = require('./follow-up-no-show');
 const { pullConfirmacoesNuvem } = require('./pull-confirmacoes-nuvem');
 const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
+const atividade = require('./atividade'); // registro do que o robô fez (aba "Hoje")
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
@@ -41,6 +42,7 @@ function agendarCircuitoConvocacao(tentativa = 1) {
     return;
   }
   jobRunning = true;
+  atividade.setContexto('Circuito — convocatória');
   const start = new Date();
   require('./enviar-circuito').runCircuitoConvocacao()
     .then(() => log('✅ Circuito convocatória concluída'))
@@ -136,6 +138,7 @@ async function runJob(jobName, jobFn) {
   }
 
   jobRunning = true;
+  atividade.setContexto(jobName); // marca de quem são os envios deste job
   const startTime = new Date();
 
   // Timeout de segurança: 5 minutos para qualquer job
@@ -555,6 +558,7 @@ async function main() {
     log('⏰ Cron disparado: Follow-up Manhã');
     if (jobRunning) { log('⚠️  Follow-up Manhã ignorado — outro job em execução'); return; }
     jobRunning = true;
+    atividade.setContexto('Follow-up (manhã)');
     const start = new Date();
     runFollowupMorning()
       .then(() => log('✅ Follow-up Manhã concluído'))
@@ -573,6 +577,7 @@ async function main() {
     log('⏰ Cron disparado: Follow-up Tarde');
     if (jobRunning) { log('⚠️  Follow-up Tarde ignorado — outro job em execução'); return; }
     jobRunning = true;
+    atividade.setContexto('Follow-up (tarde)');
     const start = new Date();
     runFollowupAfternoon()
       .then(() => log('✅ Follow-up Tarde concluído'))
@@ -591,6 +596,7 @@ async function main() {
     log('⏰ Cron disparado: Faltas (no-show) Manhã');
     if (jobRunning) { log('⚠️  No-show Manhã ignorado — outro job em execução'); return; }
     jobRunning = true;
+    atividade.setContexto('Faltas / no-show (manhã)');
     const start = new Date();
     runNoShowMorning()
       .then(() => log('✅ Faltas Manhã concluído'))
@@ -609,6 +615,7 @@ async function main() {
     log('⏰ Cron disparado: Faltas (no-show) Tarde/Noite');
     if (jobRunning) { log('⚠️  No-show Tarde/Noite ignorado — outro job em execução'); return; }
     jobRunning = true;
+    atividade.setContexto('Faltas / no-show (tarde)');
     const start = new Date();
     runNoShowAfternoon()
       .then(() => log('✅ Faltas Tarde/Noite concluído'))
@@ -627,6 +634,7 @@ async function main() {
     log('⏰ Cron disparado: Renovação de contratos');
     if (jobRunning) { log('⚠️  Renovação ignorada — outro job em execução'); return; }
     jobRunning = true;
+    atividade.setContexto('Renovação de contrato');
     const start = new Date();
     require('./renovar-contratos').runRenovacao()
       .then(() => log('✅ Renovação de contratos concluída'))
@@ -656,6 +664,7 @@ async function main() {
   if (config.schedule.circuitoLembrete) {
     cron.schedule(config.schedule.circuitoLembrete, () => {
       log('⏰ Cron disparado: Circuito — lembrete');
+      atividade.setContexto('Circuito — lembrete');
       require('./enviar-circuito').runCircuitoLembrete()
         .then(() => log('✅ Circuito lembrete enviado'))
         .catch(err => logError('Circuito lembrete', err));
@@ -671,6 +680,7 @@ async function main() {
       log(`⏰ Cron disparado: Envios agendados — ${turno}`);
       if (jobRunning) { log(`⚠️  Agendados (${turno}) ignorado — outro job em execução`); return; }
       jobRunning = true;
+      atividade.setContexto('Envio agendado (painel)');
       const start = new Date();
       require('./enviar-agendados').runAgendados(turno)
         .then(r => log(`✅ Envios agendados (${turno}) concluído — ${r.enviados} enviado(s), ${r.falhas} falha(s)`))
@@ -702,6 +712,7 @@ async function main() {
       log('⏰ Cron disparado: Instagram boas-vindas');
       if (jobRunning) { log('⚠️  Instagram ignorado — outro job em execução'); return; }
       jobRunning = true;
+      atividade.setContexto('Instagram (boas-vindas)');
       const start = new Date();
       require('./instagram-boasvindas').runBoasVindas()
         .then(() => log('✅ Instagram boas-vindas concluído'))
@@ -722,6 +733,7 @@ async function main() {
     log('⏰ Cron disparado: Aniversariantes');
     if (jobRunning) { log('⚠️  Aniversariantes ignorado — outro job em execução'); return; }
     jobRunning = true;
+    atividade.setContexto('Aniversário (grupos)');
     const start = new Date();
     require('./aniversariantes').runAniversariantes()
       .then(() => log('✅ Aniversariantes concluído'))
