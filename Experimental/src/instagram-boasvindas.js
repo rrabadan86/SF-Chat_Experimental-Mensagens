@@ -254,7 +254,11 @@ async function enviarDM(page, username, texto) {
         }
       }
     }
-    await sleep(1000);
+    // Pausa ANTES de enviar: dá tempo do Instagram "linkificar" o URL e buscar a
+    // pré-visualização — se enviar rápido demais, o link pode sair como texto puro.
+    // Ajustável no .env (IG_ESPERA_ENVIO_MS, padrão 5000).
+    const esperaEnvio = parseInt(process.env.IG_ESPERA_ENVIO_MS || '5000', 10);
+    await sleep(Number.isFinite(esperaEnvio) && esperaEnvio >= 0 ? esperaEnvio : 5000);
     await page.keyboard.press('Enter'); // envia a mensagem completa
     await sleep(2500);
     // NÃO fazemos evaluate de "confirmação": além de redundante (o Enter já
