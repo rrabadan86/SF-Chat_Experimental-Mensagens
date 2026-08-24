@@ -145,7 +145,7 @@ const ESTILO = `
   .dias input:checked + span{border-color:var(--teal);background:#e6f6f7;color:#0c6f70}
   .hbar{position:sticky;bottom:0;background:linear-gradient(180deg,transparent,var(--bg) 40%);padding:14px 0 6px;margin-top:6px}
   .badge-ed{background:#fff0ef;color:#c23b38;border:1px solid #f6cfcd;border-radius:999px;font-size:.68rem;font-weight:700;padding:2px 8px;margin-left:6px}
-  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
   .stat{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:16px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.04)}
   .stat .n{font-family:"Montserrat";font-weight:800;font-size:2rem;line-height:1}
   .stat .l{font-size:.78rem;color:var(--cinza);margin-top:4px;font-weight:600}
@@ -743,15 +743,15 @@ function paginaIndicadores(dias) {
 
   const segs = janelas.map(([d, l]) => `<a href="/indicadores?dias=${d}" class="${d === jan ? 'on' : ''}">${l}</a>`).join('');
 
-  // Barras por dia (mais recente primeiro), escala pelo maior nº de acessos.
-  const maxAc = Math.max(1, ...r.porDia.map(d => d.acessos));
+  // Barras por dia (mais recente primeiro), escala pelo maior nº de PESSOAS.
+  const maxP = Math.max(1, ...r.porDia.map(d => d.pessoas));
   const fmtDia = s => { const p = String(s).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : s; };
-  const barras = r.porDia.filter(d => d.acessos || d.agendamentos).map(d => {
-    const wAc = Math.round((d.acessos / maxAc) * 100);
+  const barras = r.porDia.filter(d => d.pessoas || d.agendamentos).map(d => {
+    const wP = Math.round((d.pessoas / maxP) * 100);
     return `<div class="bar">
       <span class="bd">${fmtDia(d.dia)}</span>
-      <span class="btrack"><span class="bfill" style="width:${wAc}%"></span></span>
-      <span class="bn">${d.acessos} <small>acesso${d.acessos === 1 ? '' : 's'}</small> · <span style="color:var(--coral-esc)">${d.agendamentos}</span> <small>agend.</small></span>
+      <span class="btrack"><span class="bfill" style="width:${wP}%"></span></span>
+      <span class="bn">${d.pessoas} <small>pessoa${d.pessoas === 1 ? '' : 's'}</small> · <span style="color:var(--coral-esc)">${d.agendamentos}</span> <small>agend.</small></span>
     </div>`;
   }).join('');
 
@@ -775,17 +775,19 @@ function paginaIndicadores(dias) {
   const corpo = `<div class="wrap">
     <div class="segs">${segs}</div>
     <div class="stats">
-      <div class="stat tot"><div class="n">${r.acessos}</div><div class="l">acessos ao formulário</div></div>
+      <div class="stat tot"><div class="n">${r.pessoas}</div><div class="l">👥 pessoas</div></div>
+      <div class="stat"><div class="n" style="color:var(--cinza)">${r.acessos}</div><div class="l">aberturas (acessos)</div></div>
       <div class="stat ok"><div class="n">${r.agendamentos}</div><div class="l">agendaram</div></div>
-      <div class="stat"><div class="n" style="color:var(--coral-esc)">${r.conversao}%</div><div class="l">taxa de conversão</div></div>
+      <div class="stat"><div class="n" style="color:var(--coral-esc)">${r.conversao}%</div><div class="l">conversão (por pessoa)</div></div>
     </div>
     <div class="card">
       <div class="chead"><h2>Funil</h2></div>
-      <div class="jobrow"><div class="jn">👀 Abriram o formulário</div><div class="jc">${r.acessos}</div></div>
+      <div class="jobrow"><div class="jn">👥 Pessoas que visitaram</div><div class="jc">${r.pessoas}</div></div>
+      <div class="jobrow"><div class="jn">👀 Aberturas da página (acessos)</div><div class="jc">${r.acessos}</div></div>
       <div class="jobrow"><div class="jn">✅ Agendaram a experimental</div><div class="jc">${r.agendamentos}</div></div>
-      <div class="jobrow"><div class="jn">↩️ Abriram e não agendaram</div><div class="jc">${r.naoAgendaram}</div></div>
+      <div class="jobrow"><div class="jn">↩️ Visitaram e não agendaram</div><div class="jc">${r.naoAgendaram}</div></div>
     </div>
-    <div class="sec-t">📅 Por dia (acessos ▮ · agendamentos)</div>
+    <div class="sec-t">📅 Por dia (pessoas ▮ · agendamentos)</div>
     <div class="card">${barras || '<div class="vazio">Sem dados ainda neste período. Os números aparecem conforme as pessoas acessam o formulário.</div>'}</div>
 
     <div class="sec-t">⏰ Horários de pico &nbsp;·&nbsp; 📆 Dias da semana</div>

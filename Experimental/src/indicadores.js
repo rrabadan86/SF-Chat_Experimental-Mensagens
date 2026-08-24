@@ -39,6 +39,7 @@ function registrar(eventos) {
       id: ev.id,
       tipo: ev.tipo === 'agendou' ? 'agendou' : 'acesso',
       origem: (ev.origem || '').toString().slice(0, 40),
+      vid: (ev.vid || '').toString().slice(0, 40),  // id do visitante (cookie) — p/ contar pessoas
       hora: (ev.hora || '').toString().slice(0, 5), // horário da aula (só nos agendamentos)
       dia: hojeSP(),
       quando: horaSP(),
@@ -61,9 +62,18 @@ function resumo(dias) {
   }
   const evs = corte ? arr.filter(e => e.dia >= corte) : arr;
 
+  // Pessoas únicas = visitantes distintos (cookie). Acessos sem cookie (legado)
+  // contam como 1 cada, para não sumir do total.
+  const pessoasDe = (lista) => {
+    const s = new Set(); let semVid = 0;
+    for (const e of lista) { if (e.tipo !== 'acesso') continue; if (e.vid) s.add(e.vid); else semVid++; }
+    return s.size + semVid;
+  };
+
   const acessos = evs.filter(e => e.tipo === 'acesso').length;
+  const pessoas = pessoasDe(evs);
   const agendamentos = evs.filter(e => e.tipo === 'agendou').length;
-  const conversao = acessos > 0 ? (agendamentos / acessos) * 100 : 0;
+  const conversao = pessoas > 0 ? (agendamentos / pessoas) * 100 : 0;
 
   // Por dia (últimos min(janela,30) dias, do mais recente ao mais antigo).
   const nDias = Math.min(janela > 0 ? janela : 30, 30);
@@ -75,6 +85,7 @@ function resumo(dias) {
     porDia.push({
       dia,
       acessos: doDia.filter(e => e.tipo === 'acesso').length,
+      pessoas: pessoasDe(doDia),
       agendamentos: doDia.filter(e => e.tipo === 'agendou').length,
     });
   }
@@ -105,9 +116,9 @@ function resumo(dias) {
   const horariosAula = Object.entries(aulaMap).map(([hora, n]) => ({ hora, n })).sort((a, b) => (b.n - a.n) || a.hora.localeCompare(b.hora));
 
   return {
-    acessos, agendamentos,
+    acessos, pessoas, agendamentos,
     conversao: Math.round(conversao * 10) / 10,
-    naoAgendaram: Math.max(0, acessos - agendamentos),
+    naoAgendaram: Math.max(0, pessoas - agendamentos),
     porDia,
     porOrigem, temOrigem,
     picoHoras, picoDias, horariosAula,
