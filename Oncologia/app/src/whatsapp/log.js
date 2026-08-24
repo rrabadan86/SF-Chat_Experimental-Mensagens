@@ -13,6 +13,15 @@ module.exports = {
     return { simulado: true };
   },
   aoReceber(cb) { escutas.push(cb); },
+  estado() {
+    return {
+      driver: 'log', situacao: 'teste', conectado: false, temQr: false,
+      erro: null, desde: null,
+    };
+  },
+  async qrImagem() { return null; },
+  async conectar() { return this.estado(); },
+  async desconectar() { return this.estado(); },
   /** Só existe no driver de log: simula uma resposta chegando. */
   async simularEntrada(numero, texto) {
     for (const cb of escutas) await cb({ de: numero, texto });

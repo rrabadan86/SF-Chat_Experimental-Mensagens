@@ -71,4 +71,18 @@ module.exports = {
   enviarTemplate,
   processarWebhook,
   aoReceber: (cb) => escutas.push(cb),
+  estado() {
+    const configurado = Boolean(process.env.WA_CLOUD_TOKEN && process.env.WA_CLOUD_PHONE_ID);
+    return {
+      driver: 'cloud',
+      situacao: configurado ? 'conectado' : 'erro',
+      conectado: configurado,
+      temQr: false,                      // API oficial não usa QR
+      erro: configurado ? null : 'Faltam WA_CLOUD_TOKEN e WA_CLOUD_PHONE_ID no .env.',
+      desde: null,
+    };
+  },
+  async qrImagem() { return null; },
+  async conectar() { return this.estado(); },
+  async desconectar() { return this.estado(); },
 };

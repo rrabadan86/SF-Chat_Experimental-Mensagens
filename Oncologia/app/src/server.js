@@ -128,7 +128,10 @@ function responderErro(res, e) {
 }
 
 async function iniciar() {
-  await wa.iniciar();
+  // o WhatsApp sobe em paralelo: um agendamento gravado na agenda vale mais do
+  // que o aviso, e sem sessão salva o cliente ficaria esperando um QR para
+  // sempre. Se falhar, o painel mostra a situação e o log registra.
+  wa.iniciar().catch((e) => console.error(`[wa] início falhou: ${e.message}`));
   wa.aoReceber((msg) => servico.tratarRespostaRecepcao(msg));
   app.listen(config.porta, config.host, () => {
     console.log(`[web] http://${config.host}:${config.porta}  (WhatsApp: ${wa.nome})`);

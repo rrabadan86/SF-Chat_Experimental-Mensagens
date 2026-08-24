@@ -246,10 +246,16 @@ Depois que o site estiver no ar:
 cd ~/agendamento-onco/app
 nano .env                # WA_DRIVER=wwebjs  (deixe CHROMIUM_PATH vazio/comentado:
                          #  vazio = usa o Chromium que o Puppeteer baixou)
-pm2 stop agendamento-onco
-npm run wa:login         # mostra o QR no terminal — escaneie com o WhatsApp do consultório
-pm2 start agendamento-onco
+pm2 restart agendamento-onco
 ```
+
+Agora abra **`/admin`**, vá no bloco **WhatsApp** e clique em **Conectar WhatsApp**.
+O QR aparece na tela; escaneie com o celular do consultório em
+*⋮ → Dispositivos conectados → Conectar dispositivo*. A tela avisa sozinha quando
+conectar, e o botão **Enviar mensagem de teste** confirma que a recepção recebe.
+
+Quem preferir o terminal: `pm2 stop agendamento-onco && npm run wa:login`, escaneie,
+e `pm2 start agendamento-onco`.
 
 A sessão fica em `app/wwebjs_auth/`. Não apague essa pasta, senão precisa
 escanear de novo.

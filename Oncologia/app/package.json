@@ -10,13 +10,16 @@
     "wa:login": "node src/whatsapp/login.js",
     "senha": "node src/gerar-senha.js"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "googleapis": "^173.0.0"
   },
   "optionalDependencies": {
+    "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js#main"
   }

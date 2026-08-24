@@ -132,6 +132,20 @@ Depois disso o painel é a fonte da verdade.
 > `dados/config.json` a cada deploy, e o médico perde o que cadastrou. É um dos
 > motivos de este sistema pedir VPS — veja [`IMPLANTACAO-VPS.md`](IMPLANTACAO-VPS.md).
 
+### WhatsApp pelo painel
+
+O bloco **WhatsApp** na aba Agenda mostra a situação da conexão, exibe o **QR na
+própria tela** e tem botões de conectar, desconectar e mandar uma mensagem de teste
+para a recepção. Ninguém precisa de SSH para reconectar quando a sessão cair.
+
+Enquanto o QR está na tela, ela se atualiza sozinha a cada 3 segundos e avisa quando
+conectar. `npm run wa:login` continua funcionando para quem preferir o terminal.
+
+Isso obrigou uma mudança no início do servidor: antes ele **esperava** o WhatsApp
+ficar pronto, e sem sessão salva o site simplesmente não subia. Agora o WhatsApp
+conecta em paralelo — um agendamento gravado na agenda vale mais que o aviso, que
+fica registrado como pendente no log se o envio falhar.
+
 ### Senha do painel
 
 ```bash
@@ -193,7 +207,7 @@ cd app
 cp .env.example .env      # preencha CAL_H1, CAL_H2 e o caminho da credencial
 npm install
 npm run senha             # cria a senha do painel (imprime 2 linhas para o .env)
-npm test                  # 102 testes, tudo offline
+npm test                  # 113 testes, tudo offline
 npm start                 # http://localhost:3000
 ```
 
@@ -203,10 +217,13 @@ no terminal. Dá para desenvolver e demonstrar o sistema inteiro assim.
 Para ligar o WhatsApp de verdade:
 
 ```bash
-# no .env: WA_DRIVER=wwebjs e WA_RECEPCAO=55629XXXXXXXX
-npm run wa:login          # escaneia o QR uma vez com o WhatsApp do consultório
+# no .env: WA_DRIVER=wwebjs
 npm start
 ```
+
+Depois é só abrir `/admin`, cadastrar o WhatsApp da recepção e clicar em
+**Conectar WhatsApp** — o QR aparece na própria tela. Quem preferir o terminal
+pode usar `npm run wa:login`.
 
 ### Estrutura
 
@@ -232,7 +249,7 @@ app/
   public/admin/            o painel: agenda e conteúdo do site
   dados/midia/             a foto enviada pelo painel
   deploy/                  PM2, nginx, systemd e backup
-  tests/                   102 testes, sem rede
+  tests/                   113 testes, sem rede
 ```
 
 As quatro primeiras são funções puras — é por isso que dá para testar as regras
@@ -255,6 +272,8 @@ de horário, fuso e validação sem Google e sem WhatsApp.
 | `POST /admin/api/testar-agenda` | confere o compartilhamento no Google |
 | `GET·PUT /admin/api/pagina` | conteúdo e ordem das seções do site |
 | `POST /admin/api/foto` | foto do médico |
+| `GET /admin/api/whatsapp` | situação da conexão e o QR |
+| `POST /admin/api/whatsapp/conectar` · `/desconectar` · `/testar` | controle da sessão |
 | `GET /api/pagina` | o que a página do paciente monta (público) |
 
 ---

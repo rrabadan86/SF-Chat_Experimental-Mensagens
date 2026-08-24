@@ -295,3 +295,43 @@ test('o conteúdo do site também exige sessão', async () => {
   assert.equal((await nav('/admin/api/pagina', { method: 'PUT', body: '{}' })).status, 401);
   assert.equal((await nav('/admin/api/foto', { method: 'POST', body: '{}' })).status, 401);
 });
+
+/* ---------------------------------------------------- WhatsApp pelo painel */
+
+test('o painel mostra a situação do WhatsApp', async () => {
+  const nav = await entrar(navegador());
+  const { corpo } = await nav('/admin/api/whatsapp');
+  assert.equal(corpo.driver, 'log');
+  assert.equal(corpo.conectado, false);
+  assert.equal(corpo.qr, null);
+  assert.equal(corpo.recepcao, '5562999998888');
+});
+
+test('a mensagem de teste vai para o número da recepção', async () => {
+  const nav = await entrar(navegador());
+  const r = await nav('/admin/api/whatsapp/testar', { method: 'POST' });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.numero, '5562999998888');
+});
+
+test('sem número cadastrado, o teste avisa em vez de tentar enviar', async () => {
+  const nav = await entrar(navegador());
+  dados.alterar((c) => { c.recepcao.whatsapp = ''; });
+  const r = await nav('/admin/api/whatsapp/testar', { method: 'POST' });
+  assert.equal(r.status, 400);
+  assert.match(r.corpo.erro, /Cadastre o WhatsApp/);
+});
+
+test('conectar e desconectar respondem sem quebrar no driver de teste', async () => {
+  const nav = await entrar(navegador());
+  assert.equal((await nav('/admin/api/whatsapp/conectar', { method: 'POST' })).status, 200);
+  assert.equal((await nav('/admin/api/whatsapp/desconectar', { method: 'POST' })).status, 200);
+});
+
+test('as rotas do WhatsApp exigem sessão', async () => {
+  const nav = navegador();
+  assert.equal((await nav('/admin/api/whatsapp')).status, 401);
+  assert.equal((await nav('/admin/api/whatsapp/conectar', { method: 'POST' })).status, 401);
+  assert.equal((await nav('/admin/api/whatsapp/desconectar', { method: 'POST' })).status, 401);
+  assert.equal((await nav('/admin/api/whatsapp/testar', { method: 'POST' })).status, 401);
+});

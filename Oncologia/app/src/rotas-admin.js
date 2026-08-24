@@ -175,6 +175,50 @@ function limparFotosAntigas(manter) {
   } catch { /* pasta sumiu ou sem permissão: não é motivo para falhar o upload */ }
 }
 
+// ------------------------------------------------------------------ WhatsApp
+
+const wa = require('./whatsapp');
+
+router.get('/whatsapp', async (req, res) => {
+  const estado = wa.estado ? wa.estado() : { driver: wa.nome, situacao: 'desconhecida' };
+  res.json({
+    ...estado,
+    recepcao: (dados.ler().recepcao || {}).whatsapp || '',
+    qr: estado.temQr && wa.qrImagem ? await wa.qrImagem() : null,
+  });
+});
+
+router.post('/whatsapp/conectar', async (req, res) => {
+  try {
+    const estado = wa.conectar ? await wa.conectar() : wa.estado();
+    res.json({ ...estado, qr: estado.temQr && wa.qrImagem ? await wa.qrImagem() : null });
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
+});
+
+router.post('/whatsapp/desconectar', async (req, res) => {
+  try {
+    res.json(wa.desconectar ? await wa.desconectar() : wa.estado());
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
+});
+
+/** Manda uma mensagem de teste para a recepção, para provar que o caminho funciona. */
+router.post('/whatsapp/testar', async (req, res) => {
+  const numero = (dados.ler().recepcao || {}).whatsapp;
+  if (!numero) {
+    return res.status(400).json({ erro: 'Cadastre o WhatsApp da recepção antes de testar.' });
+  }
+  try {
+    await wa.enviar(numero, 'Teste do sistema de agendamento. Se você recebeu esta mensagem, está tudo certo.');
+    res.json({ ok: true, numero });
+  } catch (e) {
+    res.status(502).json({ erro: e.message });
+  }
+});
+
 /** Confere o compartilhamento da agenda antes de o médico salvar. */
 router.post('/testar-agenda', async (req, res) => {
   try {

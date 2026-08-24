@@ -19,7 +19,7 @@
     { n: 0, curto: 'Dom', longo: 'domingo' },
   ];
 
-  var estado = { config: null, contaServico: null, editando: null, faixas: [] };
+  var estado = { config: null, contaServico: null, editando: null, faixas: [], zap: null, relogioZap: null };
 
   function escapar(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
@@ -87,12 +87,139 @@
     $('#telaEntrar').hidden = true;
     $('#telaPainel').hidden = false;
     desenhar();
+    verZap();
     if (window.EditorConteudo) {
       EditorConteudo.iniciar(api).catch(function (e) {
         $('#editorConteudo').innerHTML =
           '<p class="erro-slot">Não consegui carregar o conteúdo do site: ' + escapar(e.message) + '</p>';
       });
     }
+  }
+
+  /* ------------------------------------------------------- WhatsApp */
+
+  var TEXTO_SITUACAO = {
+    conectado: 'Conectado',
+    qr: 'Aguardando leitura do QR',
+    iniciando: 'Conectando…',
+    desligado: 'Desconectado',
+    erro: 'Com problema',
+    teste: 'Modo de teste',
+  };
+
+  async function verZap(forcar) {
+    try {
+      estado.zap = await api('/whatsapp' + (forcar ? '' : ''));
+    } catch (e) {
+      $('#zap').innerHTML = '<p class="erro-slot">' + escapar(e.message) + '</p>';
+      return;
+    }
+    desenharZap();
+    agendarRelogio();
+  }
+
+  /** Enquanto está conectando ou esperando o QR, a tela se atualiza sozinha. */
+  function agendarRelogio() {
+    clearTimeout(estado.relogioZap);
+    var s = (estado.zap || {}).situacao;
+    if (s === 'qr' || s === 'iniciando') {
+      estado.relogioZap = setTimeout(function () { verZap(); }, 3000);
+    }
+  }
+
+  function desenharZap() {
+    var z = estado.zap;
+    var caixa = $('#zap');
+
+    if (z.driver === 'log') {
+      caixa.innerHTML =
+        '<div class="zap-topo"><span class="zap-selo" data-situacao="teste">Modo de teste</span></div>' +
+        '<p class="zap-detalhe">O sistema monta as mensagens mas <strong>não envia nada</strong> — elas só ' +
+        'aparecem no log do servidor. Para enviar de verdade, troque <code>WA_DRIVER</code> para ' +
+        '<code>wwebjs</code> no arquivo <code>.env</code> e reinicie.</p>';
+      return;
+    }
+
+    if (z.driver === 'cloud') {
+      caixa.innerHTML =
+        '<div class="zap-topo"><span class="zap-selo" data-situacao="' + (z.conectado ? 'conectado' : 'erro') + '">' +
+          (z.conectado ? 'API oficial conectada' : 'API oficial sem configuração') + '</span></div>' +
+        '<p class="zap-detalhe">' + escapar(z.erro || 'Mensagens saem pela Cloud API da Meta. Não usa QR.') + '</p>';
+      return;
+    }
+
+    caixa.innerHTML =
+      '<div class="zap-topo">' +
+        '<span class="zap-selo" data-situacao="' + escapar(z.situacao) + '">' +
+          escapar(TEXTO_SITUACAO[z.situacao] || z.situacao) + '</span>' +
+        (z.recepcao
+          ? '<span class="zap-detalhe">avisos vão para ' + escapar(formatarZap(z.recepcao)) + '</span>'
+          : '<span class="zap-detalhe">falta cadastrar o WhatsApp da recepção aqui embaixo</span>') +
+      '</div>' +
+      (z.erro ? '<p class="zap-detalhe">' + escapar(z.erro) + '</p>' : '') +
+      (z.qr
+        ? '<div class="zap-qr">' +
+            '<img src="' + z.qr + '" alt="QR Code para conectar o WhatsApp">' +
+            '<ol>' +
+              '<li>Abra o <strong>WhatsApp do consultório</strong> no celular</li>' +
+              '<li>Toque em <strong>⋮ → Dispositivos conectados</strong></li>' +
+              '<li>Toque em <strong>Conectar dispositivo</strong> e aponte para este código</li>' +
+              '<li>A tela avisa sozinha quando conectar</li>' +
+            '</ol>' +
+          '</div>'
+        : '') +
+      '<div class="zap-acoes">' +
+        (z.conectado
+          ? '<button class="btn ghost sm" type="button" id="zapTestar">Enviar mensagem de teste</button>' +
+            '<button class="btn ghost sm" type="button" id="zapSair">Desconectar</button>'
+          : '<button class="btn sm" type="button" id="zapConectar">' +
+              (z.situacao === 'qr' ? 'Gerar outro QR' : 'Conectar WhatsApp') + '</button>') +
+        '<span class="zap-detalhe" id="zapAviso"></span>' +
+      '</div>';
+
+    var conectar = $('#zapConectar');
+    if (conectar) {
+      conectar.addEventListener('click', async function () {
+        conectar.disabled = true; conectar.textContent = 'Preparando…';
+        try { estado.zap = await api('/whatsapp/conectar', { method: 'POST' }); desenharZap(); agendarRelogio(); }
+        catch (e) { $('#zapAviso').textContent = e.message; conectar.disabled = false; }
+      });
+    }
+
+    var sair = $('#zapSair');
+    if (sair) {
+      sair.addEventListener('click', async function () {
+        if (!confirm('Desconectar o WhatsApp?\n\nAs mensagens param de ser enviadas até você ' +
+          'escanear o QR de novo. Os agendamentos continuam entrando na agenda normalmente.')) return;
+        sair.disabled = true; sair.textContent = 'Desconectando…';
+        try { estado.zap = await api('/whatsapp/desconectar', { method: 'POST' }); desenharZap(); }
+        catch (e) { $('#zapAviso').textContent = e.message; sair.disabled = false; }
+      });
+    }
+
+    var testar = $('#zapTestar');
+    if (testar) {
+      testar.addEventListener('click', async function () {
+        testar.disabled = true;
+        $('#zapAviso').textContent = 'Enviando…';
+        try {
+          var r = await api('/whatsapp/testar', { method: 'POST' });
+          $('#zapAviso').textContent = 'Mensagem enviada para ' + formatarZap(r.numero) + '.';
+        } catch (e) {
+          $('#zapAviso').textContent = e.message;
+        } finally {
+          testar.disabled = false;
+        }
+      });
+    }
+  }
+
+  /** 5562991234567 -> (62) 99123-4567 */
+  function formatarZap(numero) {
+    var d = String(numero || '').replace(/\D/g, '').replace(/^55/, '');
+    if (d.length === 11) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7);
+    if (d.length === 10) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6);
+    return numero;
   }
 
   /* ---------------------------------------------------------- abas */
@@ -453,6 +580,7 @@
       });
       estado.config = r.config;
       desenhar();
+      verZap();
       mostrarErro($('#erroGerais'), '');
       piscar($('#formGerais'));
     } catch (e) {
