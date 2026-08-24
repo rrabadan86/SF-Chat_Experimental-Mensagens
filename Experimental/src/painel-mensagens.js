@@ -78,7 +78,8 @@ const ESTILO = `
   .badge{background:#fff0ef;color:#c23b38;border:1px solid #f6cfcd;border-radius:999px;font-size:.7rem;font-weight:700;padding:2px 9px}
   .quando{color:var(--cinza);font-size:.85rem;margin:6px 0 8px}
   .vars{font-size:.82rem;color:var(--cinza);margin:0 0 8px}
-  .var{display:inline-block;background:#eef7f7;color:#0c6f70;border:1px solid #cdeaea;border-radius:6px;padding:1px 6px;font-family:ui-monospace,monospace;font-size:.82rem}
+  .var{display:inline-block;background:#eef7f7;color:#0c6f70;border:1px solid #cdeaea;border-radius:6px;padding:2px 8px;font-family:ui-monospace,monospace;font-size:.82rem;cursor:pointer;user-select:none;transition:.12s}
+  .var:hover{background:var(--teal);color:#fff;border-color:var(--teal)}
   label{display:block;font-weight:600;font-size:.86rem;margin:12px 0 4px}
   input[type=text],input[type=tel],input[type=date],textarea{width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:11px 12px;font-size:1rem;font-family:inherit;background:#fff}
   textarea{line-height:1.5;resize:vertical}
@@ -146,14 +147,14 @@ ${corpo}
 // ── Página 1: editar mensagens ──────────────────────────────────────────────
 function paginaMensagens(aviso, erro) {
   const itens = mensagens.listar().map(m => {
-    const vars = (m.vars || []).map(([t, d]) => `<span class="var" title="${esc(d)}">{${esc(t)}}</span>`).join(' ');
+    const vars = (m.vars || []).map(([t, d]) => `<span class="var" title="${esc(d)} — clique para inserir" onclick="inserirVar(this,'{${esc(t)}}')">{${esc(t)}}</span>`).join(' ');
     const badge = m.editado ? '<span class="badge">editada</span>' : '';
     return `
     <form class="card" method="POST" action="/salvar">
       <input type="hidden" name="chave" value="${esc(m.chave)}">
       <div class="chead"><h2>${esc(m.titulo)} ${badge}</h2></div>
       <p class="quando">${esc(m.quando)}</p>
-      ${vars ? `<p class="vars">Variáveis: ${vars} <small>(trocadas automaticamente no envio — mantenha-as no texto)</small></p>` : ''}
+      ${vars ? `<p class="vars">Variáveis (clique para inserir): ${vars} <small>— são trocadas automaticamente no envio; mantenha-as no texto</small></p>` : ''}
       <textarea name="texto" rows="7" spellcheck="true">${esc(m.texto)}</textarea>
       <div class="acts">
         <button type="submit" class="save">Salvar</button>
@@ -161,7 +162,18 @@ function paginaMensagens(aviso, erro) {
       </div>
     </form>`;
   }).join('\n');
-  const corpo = `<div class="wrap">${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}${itens}</div>`;
+  const corpo = `<div class="wrap">${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}${itens}</div>
+<script>
+  function inserirVar(el, token){
+    var ta = el.closest('form').querySelector('textarea');
+    if(!ta) return;
+    var s = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+    var e = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
+    ta.value = ta.value.slice(0, s) + token + ta.value.slice(e);
+    ta.focus();
+    ta.selectionStart = ta.selectionEnd = s + token.length;
+  }
+</script>`;
   return chrome({ tab: 'Mensagens', h1: '✏️ Editar mensagens do robô', p: 'Altere o texto e clique em <b>Salvar</b>. Vale já no próximo envio — sem reiniciar.' }, 'msg', corpo);
 }
 
