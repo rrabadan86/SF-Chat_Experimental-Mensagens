@@ -35,3 +35,7 @@ data/atividade.json
 data/teste-envio.json
 # Liga/desliga do Instagram pelo painel — estado por VPS
 data/instagram-config.json
+# Estado do watchdog (de-dup dos alertas) — por VPS
+data/watchdog-estado.json
+# Backups locais da pasta data/ — por VPS (não versionar)
+backups/
