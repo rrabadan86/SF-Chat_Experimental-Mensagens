@@ -160,19 +160,19 @@
           </div>
         </div>
 
-        <div class="field full" data-name="dias">
-          <label>Dias de atendimento <span class="req">*</span></label>
-          <div class="dias-semana" id="dias"></div>
+        <div class="field full" data-name="expediente">
+          <label>Faixas de atendimento <span class="req">*</span></label>
+          <span class="help" style="margin-bottom:10px">
+            Uma faixa para cada horário diferente. Ex.: seg/ter/qua das 07:30 às 12:00
+            é uma faixa; quinta das 14:00 às 17:00 é outra. Para dia partido, crie duas
+            faixas no mesmo dia.
+          </span>
+          <div id="faixas" class="faixas"></div>
+          <button class="btn ghost sm" type="button" id="novaFaixa" style="margin-top:10px; align-self:flex-start">
+            Adicionar faixa
+          </button>
         </div>
 
-        <div class="field" data-name="inicio">
-          <label for="l-inicio">Começa às <span class="req">*</span></label>
-          <input id="l-inicio" name="inicio" type="time" step="300">
-        </div>
-        <div class="field" data-name="fim">
-          <label for="l-fim">Termina às <span class="req">*</span></label>
-          <input id="l-fim" name="fim" type="time" step="300">
-        </div>
         <div class="field" data-name="duracaoMin">
           <label for="l-dur">Duração da consulta <span class="req">*</span></label>
           <input id="l-dur" name="duracaoMin" type="number" min="5" max="480" step="5">
@@ -182,6 +182,11 @@
           <label for="l-int">Intervalo entre consultas</label>
           <input id="l-int" name="intervaloMin" type="number" min="0" max="240" step="5">
           <span class="help">minutos, 0 para nenhum</span>
+        </div>
+        <div class="field" data-name="vagasPorHorario">
+          <label for="l-vagas">Pacientes por horário</label>
+          <input id="l-vagas" name="vagasPorHorario" type="number" min="1" max="10">
+          <span class="help">1 é o normal; 2 permite encaixe no mesmo horário</span>
         </div>
 
         <div class="previa full" id="previa"></div>

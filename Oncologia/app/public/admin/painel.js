@@ -19,7 +19,7 @@
     { n: 0, curto: 'Dom', longo: 'domingo' },
   ];
 
-  var estado = { config: null, contaServico: null, editando: null, diasEscolhidos: [] };
+  var estado = { config: null, contaServico: null, editando: null, faixas: [] };
 
   function escapar(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
@@ -97,6 +97,14 @@
       .map(function (d) { return d.curto; }).join(', ');
   }
 
+  /** "Seg, Ter, Qua 07:30–12:00 · Qui 14:00–17:00" */
+  function resumoExpediente(expediente) {
+    if (!expediente || !expediente.length) return 'sem horário definido';
+    return expediente.map(function (f) {
+      return resumoDias(f.dias) + ' ' + f.inicio + '–' + f.fim;
+    }).join(' · ');
+  }
+
   function desenhar() {
     var c = estado.config;
     $('#nomeMedico').textContent = c.medico.nome || 'sem nome';
@@ -139,9 +147,10 @@
             '</div>' +
           '</div>' +
           '<div class="local-meta">' +
-            '<span><b>' + resumoDias(h.dias) + '</b> · ' + h.inicio + ' às ' + h.fim + '</span>' +
+            '<span><b>' + escapar(resumoExpediente(h.expediente)) + '</b></span>' +
             '<span>consulta de <b>' + h.duracaoMin + ' min</b></span>' +
             (h.intervaloMin ? '<span>intervalo de ' + h.intervaloMin + ' min</span>' : '') +
+            ((h.vagasPorHorario || 1) > 1 ? '<span><b>' + h.vagasPorHorario + '</b> pacientes por horário</span>' : '') +
             '<span>antecedência de <b>' + h.antecedenciaMinHoras + 'h</b></span>' +
             (h.endereco ? '<span>' + escapar(h.endereco) + '</span>' : '') +
           '</div>' +
@@ -182,42 +191,102 @@
 
   /* ---------------------------------------------------------- gaveta */
 
-  function montarDias() {
-    $('#dias').innerHTML = DIAS.map(function (d) {
-      return '<button type="button" data-dia="' + d.n + '" aria-pressed="false" ' +
-        'aria-label="' + d.longo + '">' + d.curto + '</button>';
+  /**
+   * Desenha o editor de faixas. Cada faixa é um horário com os seus dias —
+   * é o que permite "seg/ter/qua de manhã e quinta à tarde", e também dia
+   * partido (duas faixas no mesmo dia).
+   */
+  function montarFaixas(erros) {
+    erros = erros || {};
+    var caixa = $('#faixas');
+
+    caixa.innerHTML = estado.faixas.map(function (f, i) {
+      var erroDias = erros['expediente.' + i + '.dias'];
+      var erroIni = erros['expediente.' + i + '.inicio'];
+      var erroFim = erros['expediente.' + i + '.fim'];
+      var erro = erroDias || erroIni || erroFim || '';
+      return '<div class="faixa" data-i="' + i + '" data-error="' + (erro ? 'true' : 'false') + '">' +
+        '<div class="faixa-topo">' +
+          '<span class="faixa-num">Faixa ' + (i + 1) + '</span>' +
+          (estado.faixas.length > 1
+            ? '<button type="button" class="remover-faixa" data-remover="' + i + '" aria-label="Remover faixa">×</button>'
+            : '') +
+        '</div>' +
+        '<div class="dias-semana">' +
+          DIAS.map(function (d) {
+            return '<button type="button" data-dia="' + d.n + '" aria-label="' + d.longo + '" ' +
+              'aria-pressed="' + (f.dias.indexOf(d.n) >= 0) + '">' + d.curto + '</button>';
+          }).join('') +
+        '</div>' +
+        '<div class="faixa-horas">' +
+          '<input type="time" step="300" class="f-inicio" value="' + escapar(f.inicio) + '" aria-label="Começa às">' +
+          '<span>às</span>' +
+          '<input type="time" step="300" class="f-fim" value="' + escapar(f.fim) + '" aria-label="Termina às">' +
+        '</div>' +
+        '<p class="faixa-erro">' + escapar(erro) + '</p>' +
+      '</div>';
     }).join('');
-    $$('#dias button').forEach(function (b) {
+
+    $$('#faixas .faixa').forEach(function (linha) {
+      var i = Number(linha.getAttribute('data-i'));
+      $$('.dias-semana button', linha).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var n = Number(b.getAttribute('data-dia'));
+          var pos = estado.faixas[i].dias.indexOf(n);
+          if (pos >= 0) estado.faixas[i].dias.splice(pos, 1);
+          else estado.faixas[i].dias.push(n);
+          estado.faixas[i].dias.sort();
+          b.setAttribute('aria-pressed', String(pos < 0));
+          atualizarPrevia();
+        });
+      });
+      $('.f-inicio', linha).addEventListener('input', function (e) {
+        estado.faixas[i].inicio = e.target.value; atualizarPrevia();
+      });
+      $('.f-fim', linha).addEventListener('input', function (e) {
+        estado.faixas[i].fim = e.target.value; atualizarPrevia();
+      });
+    });
+
+    $$('[data-remover]').forEach(function (b) {
       b.addEventListener('click', function () {
-        var n = Number(b.getAttribute('data-dia'));
-        var i = estado.diasEscolhidos.indexOf(n);
-        if (i >= 0) estado.diasEscolhidos.splice(i, 1); else estado.diasEscolhidos.push(n);
-        b.setAttribute('aria-pressed', String(i < 0));
+        estado.faixas.splice(Number(b.getAttribute('data-remover')), 1);
+        montarFaixas();
         atualizarPrevia();
       });
     });
   }
 
+  $('#novaFaixa').addEventListener('click', function () {
+    var ultima = estado.faixas[estado.faixas.length - 1];
+    estado.faixas.push({
+      dias: [],
+      inicio: ultima ? ultima.fim : '08:00',
+      fim: ultima ? ultima.fim : '12:00',
+    });
+    montarFaixas();
+    atualizarPrevia();
+  });
+
   function abrirGaveta(id) {
     var h = id ? estado.config.hospitais.find(function (x) { return x.id === id; }) : null;
     estado.editando = id || null;
-    estado.diasEscolhidos = h ? h.dias.slice() : [1, 3];
+    estado.faixas = (h && h.expediente && h.expediente.length)
+      ? h.expediente.map(function (f) { return { dias: f.dias.slice(), inicio: f.inicio, fim: f.fim }; })
+      : [{ dias: [1, 3], inicio: '08:00', fim: '12:00' }];
 
     $('#tituloLocal').textContent = h ? 'Editar ' + h.nome : 'Adicionar local';
     $('#l-nome').value = h ? h.nome : '';
     $('#l-cal').value = h ? h.calendarId : '';
-    $('#l-inicio').value = h ? h.inicio : '08:00';
-    $('#l-fim').value = h ? h.fim : '12:00';
     $('#l-dur').value = h ? h.duracaoMin : 40;
     $('#l-int').value = h ? (h.intervaloMin || 0) : 0;
+    $('#l-vagas').value = h ? (h.vagasPorHorario || 1) : 1;
     $('#l-ant').value = h ? h.antecedenciaMinHoras : 24;
     $('#l-jan').value = h ? (h.janelaDias || 60) : 60;
     $('#l-end').value = h ? (h.endereco || '') : '';
     $('#l-tel').value = h ? (h.telefone || '') : '';
 
-    $$('#dias button').forEach(function (b) {
-      b.setAttribute('aria-pressed', String(estado.diasEscolhidos.indexOf(Number(b.getAttribute('data-dia'))) >= 0));
-    });
+    montarFaixas();
     marcarCampos({});
     mostrarErro($('#erroLocal'), '');
     $('#resultadoTeste').textContent = '';
@@ -243,11 +312,12 @@
     return {
       nome: $('#l-nome').value,
       calendarId: $('#l-cal').value,
-      dias: estado.diasEscolhidos.slice().sort(),
-      inicio: $('#l-inicio').value,
-      fim: $('#l-fim').value,
+      expediente: estado.faixas.map(function (f) {
+        return { dias: f.dias.slice().sort(), inicio: f.inicio, fim: f.fim };
+      }),
       duracaoMin: Number($('#l-dur').value),
       intervaloMin: Number($('#l-int').value || 0),
+      vagasPorHorario: Number($('#l-vagas').value || 1),
       antecedenciaMinHoras: Number($('#l-ant').value),
       janelaDias: Number($('#l-jan').value || 60),
       endereco: $('#l-end').value,
@@ -258,33 +328,54 @@
     };
   }
 
-  /** Mostra os horários que a configuração atual geraria, antes de salvar. */
+  var minutos = function (s) { return Number(String(s).slice(0, 2)) * 60 + Number(String(s).slice(3)); };
+  var paraHora = function (m) {
+    return ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + (m % 60)).slice(-2);
+  };
+
+  /**
+   * Mostra, por dia da semana, os horários que a configuração geraria.
+   * É o que deixa o médico ver "quinta começa 14h, não 7h30" antes de salvar.
+   */
   function atualizarPrevia() {
     var caixa = $('#previa');
-    var ini = $('#l-inicio').value, fim = $('#l-fim').value;
-    var dur = Number($('#l-dur').value), inter = Number($('#l-int').value || 0);
-    var min = function (s) { return Number(s.slice(0, 2)) * 60 + Number(s.slice(3)); };
+    var dur = Number($('#l-dur').value);
+    var inter = Number($('#l-int').value || 0);
+    var vagas = Number($('#l-vagas').value || 1);
 
-    if (!/^\d{2}:\d{2}$/.test(ini) || !/^\d{2}:\d{2}$/.test(fim) || !(dur > 0) || min(fim) <= min(ini)) {
-      caixa.setAttribute('data-vazio', 'true'); return;
-    }
-    var horas = [];
-    for (var m = min(ini); m + dur <= min(fim); m += dur + inter) {
-      horas.push(('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + (m % 60)).slice(-2));
-    }
-    if (!horas.length) {
+    if (!(dur > 0)) { caixa.setAttribute('data-vazio', 'true'); return; }
+
+    var porDia = {};
+    estado.faixas.forEach(function (f) {
+      if (!/^\d{2}:\d{2}$/.test(f.inicio) || !/^\d{2}:\d{2}$/.test(f.fim)) return;
+      if (minutos(f.fim) <= minutos(f.inicio)) return;
+      var horas = [];
+      for (var m = minutos(f.inicio); m + dur <= minutos(f.fim); m += dur + inter) horas.push(paraHora(m));
+      f.dias.forEach(function (d) { porDia[d] = (porDia[d] || []).concat(horas); });
+    });
+
+    var diasComGrade = DIAS.filter(function (d) { return porDia[d.n] && porDia[d.n].length; });
+    if (!diasComGrade.length) {
       caixa.setAttribute('data-vazio', 'false');
-      caixa.innerHTML = '<span class="titulo">Nenhuma consulta cabe nesse expediente.</span>';
+      caixa.innerHTML = '<span class="titulo vazio">Nenhuma consulta cabe nas faixas definidas.</span>';
       return;
     }
+
+    var total = diasComGrade.reduce(function (n, d) { return n + porDia[d.n].length; }, 0);
     caixa.setAttribute('data-vazio', 'false');
-    caixa.innerHTML = '<span class="titulo">' + horas.length + ' consultas por dia' +
-      (estado.diasEscolhidos.length ? ' · ' + resumoDias(estado.diasEscolhidos) : '') + '</span>' +
-      '<div class="horas">' + horas.map(function (h) { return '<span>' + h + '</span>'; }).join('') + '</div>';
+    caixa.innerHTML =
+      '<span class="titulo">' + total + ' consultas por semana' +
+        (vagas > 1 ? ' × ' + vagas + ' pacientes por horário' : '') + '</span>' +
+      diasComGrade.map(function (d) {
+        var horas = porDia[d.n].sort();
+        return '<div class="linha"><b>' + d.curto + '</b><div class="horas">' +
+          horas.map(function (h) { return '<span>' + h + '</span>'; }).join('') +
+          '</div></div>';
+      }).join('');
   }
 
-  ['#l-inicio', '#l-fim', '#l-dur', '#l-int'].forEach(function (s) {
-    $(s).addEventListener('input', atualizarPrevia);
+  ['#l-dur', '#l-int', '#l-vagas'].forEach(function (sel) {
+    $(sel).addEventListener('input', atualizarPrevia);
   });
 
   $('#testar').addEventListener('click', async function () {
@@ -322,6 +413,7 @@
       desenhar();
     } catch (e) {
       marcarCampos(e.erros);
+      montarFaixas(e.erros);          // aponta a faixa exata que está errada
       mostrarErro($('#erroLocal'), e.message);
     } finally {
       botao.disabled = false; botao.textContent = 'Salvar local';
@@ -382,7 +474,6 @@
 
   /* ---------------------------------------------------------- início */
 
-  montarDias();
   api('/sessao').then(function (r) {
     if (r.autenticado) abrirPainel();
   }).catch(function () {});

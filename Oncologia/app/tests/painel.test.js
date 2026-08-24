@@ -11,6 +11,7 @@ const agendaFalsa = {
   async testarAcesso() { return this.respostaTeste; },
   async contaDeServico() { return 'marcacao@agenda-onco.iam.gserviceaccount.com'; },
   async ocupados() { return []; },
+  async eventos() { return { consultas: [], bloqueios: [] }; },
 };
 const caminho = require.resolve('../src/google-agenda');
 require.cache[caminho] = { id: caminho, filename: caminho, loaded: true, exports: agendaFalsa, children: [], paths: [] };
@@ -53,8 +54,9 @@ async function entrar(nav) {
 const LOCAL = {
   nome: 'Hospital Santa Clara',
   calendarId: 'c_novo@group.calendar.google.com',
-  dias: [2, 4], inicio: '14:00', fim: '18:00',
-  duracaoMin: 30, intervaloMin: 0, antecedenciaMinHoras: 12, janelaDias: 45,
+  expediente: [{ dias: [2, 4], inicio: '14:00', fim: '18:00' }],
+  duracaoMin: 30, intervaloMin: 0, vagasPorHorario: 1,
+  antecedenciaMinHoras: 12, janelaDias: 45,
 };
 
 test('sem senha o painel não abre', async () => {
@@ -90,7 +92,7 @@ test('médico cadastra um local novo e ele aparece para o paciente', async () =>
   const depois = await nav('/api/hospitais');
   assert.equal(depois.corpo.hospitais.length, 3);
   const novo = depois.corpo.hospitais.find((h) => h.id === 'hospital-santa-clara');
-  assert.deepEqual(novo.dias, [2, 4]);
+  assert.deepEqual(novo.expediente, [{ dias: [2, 4], inicio: '14:00', fim: '18:00' }]);
   assert.equal(novo.duracaoMin, 30);
 });
 
@@ -123,7 +125,12 @@ test('editar horários muda a grade na hora', async () => {
   const nav = await entrar(navegador());
   const atual = (await nav('/admin/api/config')).corpo.config.hospitais.find((h) => h.id === 'h1');
   await nav('/admin/api/hospitais/h1', {
-    method: 'PUT', body: JSON.stringify({ ...atual, inicio: '09:00', fim: '11:00', duracaoMin: 60 }),
+    method: 'PUT',
+    body: JSON.stringify({
+      ...atual,
+      expediente: [{ dias: [1, 3], inicio: '09:00', fim: '11:00' }],
+      duracaoMin: 60,
+    }),
   });
   const { corpo } = await nav('/api/horarios?hospital=h1&dias=2');
   assert.deepEqual(corpo.dias[0].slots.map((s) => s.inicio), ['09:00', '10:00']);
@@ -138,10 +145,16 @@ test('excluir remove de vez', async () => {
 test('dados inválidos voltam com o erro no campo certo', async () => {
   const nav = await entrar(navegador());
   const r = await nav('/admin/api/hospitais', {
-    method: 'POST', body: JSON.stringify({ ...LOCAL, nome: '', dias: [], fim: '10:00', inicio: '14:00' }),
+    method: 'POST',
+    body: JSON.stringify({
+      ...LOCAL, nome: '',
+      expediente: [{ dias: [], inicio: '14:00', fim: '10:00' }],
+    }),
   });
   assert.equal(r.status, 400);
-  assert.ok(r.corpo.erros.nome && r.corpo.erros.dias && r.corpo.erros.fim);
+  assert.ok(r.corpo.erros.nome);
+  assert.ok(r.corpo.erros['expediente.0.dias']);
+  assert.ok(r.corpo.erros['expediente.0.fim']);
   assert.equal((await nav('/admin/api/config')).corpo.config.hospitais.length, 2);   // nada foi gravado
 });
 

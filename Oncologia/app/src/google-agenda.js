@@ -12,6 +12,8 @@
  */
 const { google } = require('googleapis');
 
+const OFFSET = process.env.TZ_OFFSET || '-03:00';
+
 const ESCOPOS = ['https://www.googleapis.com/auth/calendar.events'];
 const ESCOPOS_LEITURA = ['https://www.googleapis.com/auth/calendar.readonly'];
 
@@ -201,4 +203,48 @@ async function contaDeServico() {
   }
 }
 
-module.exports = { ocupados, criarPreAgendamento, buscarPorProtocolo, confirmar, liberar, pendentes, cliente, testarAcesso, contaDeServico };
+/**
+ * Eventos de UMA agenda, para poder CONTAR quantas consultas há num horário.
+ *
+ * Por que não usar o freeBusy aqui: ele funde períodos sobrepostos num bloco
+ * só. Duas consultas marcadas às 9h voltam como um único "ocupado das 9h às
+ * 9h40", e não haveria como saber se ainda cabe alguém. Listar os eventos é a
+ * única forma de contar.
+ *
+ * Evento de dia inteiro entra como bloqueio, não como consulta: é férias,
+ * congresso, feriado — não um paciente.
+ */
+async function eventos(calendarId, inicioRFC, fimRFC, fuso) {
+  const { data } = await cliente().events.list({
+    calendarId,
+    timeMin: inicioRFC,
+    timeMax: fimRFC,
+    timeZone: fuso,
+    singleEvents: true,          // expande as recorrências
+    showDeleted: false,
+    orderBy: 'startTime',
+    maxResults: 2500,
+  });
+
+  const consultas = [];
+  const bloqueios = [];
+  for (const e of data.items || []) {
+    if (e.status === 'cancelled') continue;
+    if (e.transparency === 'transparent') continue;      // marcado como "disponível"
+    if (e.start?.date) {                                  // dia inteiro
+      bloqueios.push({
+        inicio: `${e.start.date}T00:00:00${OFFSET}`,
+        fim: `${e.end.date}T00:00:00${OFFSET}`,
+      });
+      continue;
+    }
+    if (!e.start?.dateTime) continue;
+    consultas.push({ inicio: e.start.dateTime, fim: e.end.dateTime, id: e.id });
+  }
+  return { consultas, bloqueios };
+}
+
+module.exports = {
+  ocupados, eventos, criarPreAgendamento, buscarPorProtocolo, confirmar, liberar,
+  pendentes, cliente, testarAcesso, contaDeServico,
+};

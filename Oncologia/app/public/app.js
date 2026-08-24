@@ -82,11 +82,41 @@
 
   /* ------------------------------------------- passo 1: hospitais */
 
+  /**
+   * "Segundas, terças e quartas de manhã · quintas à tarde"
+   *
+   * O expediente é uma lista de faixas, porque o médico pode atender de manhã
+   * num dia e à tarde noutro. Cada faixa vira um pedaço da frase.
+   */
   function resumoDias(h) {
-    var nomes = h.dias.map(function (d) { return DIAS_SEMANA[d] + 's'; });
-    var lista = nomes.length > 1 ? nomes.slice(0, -1).join(', ') + ' e ' + nomes[nomes.length - 1] : nomes[0];
-    var turno = Number(h.inicio.slice(0, 2)) < 12 ? 'manhã' : 'tarde';
-    return lista.charAt(0).toUpperCase() + lista.slice(1) + ' · ' + turno;
+    var faixas = h.expediente || [];
+    if (!faixas.length) return 'horários a confirmar';
+
+    return faixas.map(function (f) {
+      var nomes = f.dias.slice().sort().map(function (d) { return DIAS_SEMANA[d] + 's'; });
+      if (!nomes.length) return '';
+      var lista = nomes.length > 1
+        ? nomes.slice(0, -1).join(', ') + ' e ' + nomes[nomes.length - 1]
+        : nomes[0];
+      return lista.charAt(0).toUpperCase() + lista.slice(1) + ' ' + turno(f);
+    }).filter(Boolean).join(' · ');
+  }
+
+  function turno(faixa) {
+    var h = Number(String(faixa.inicio).slice(0, 2));
+    var fim = Number(String(faixa.fim).slice(0, 2));
+    if (fim <= 12) return 'de manhã';
+    if (h >= 18) return 'à noite';
+    if (h >= 12) return 'à tarde';
+    return 'das ' + faixa.inicio + ' às ' + faixa.fim;   // atravessa o almoço
+  }
+
+  /** Faixa horária completa, para o card de "onde atendo". */
+  function resumoHorarios(h) {
+    return (h.expediente || []).map(function (f) {
+      var nomes = f.dias.slice().sort().map(function (d) { return DIAS_SEMANA[d].slice(0, 3); });
+      return nomes.join('/') + ' ' + f.inicio + '–' + f.fim;
+    }).join(' · ');
   }
 
   async function carregarHospitais() {
@@ -122,7 +152,7 @@
         '<h3>' + escapar(h.nome) + '</h3>' +
         '<ul>' +
           '<li><b>Endereço</b><span>' + escapar(h.endereco || 'a definir') + '</span></li>' +
-          '<li><b>Dias</b><span>' + escapar(resumoDias(h)) + ', ' + h.inicio + ' às ' + h.fim + '</span></li>' +
+          '<li><b>Dias</b><span>' + escapar(resumoHorarios(h)) + '</span></li>' +
           '<li><b>Consulta</b><span>' + h.duracaoMin + ' minutos</span></li>' +
         '</ul></article>';
     }).join('');

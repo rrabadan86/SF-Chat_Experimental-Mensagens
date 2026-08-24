@@ -123,23 +123,4 @@ router.post('/testar-agenda', async (req, res) => {
   }
 });
 
-/** Prévia da grade, para ele conferir os horários que acabou de configurar. */
-router.post('/previa', (req, res) => {
-  const disp = require('./disponibilidade');
-  const { ok, erros, hospital } = dados.validarHospital(req.body, { existentes: dados.ler().hospitais, id: req.body?.id || 'previa' });
-  if (!ok) return res.status(400).json({ erro: 'Confira os campos destacados.', erros });
-  const grade = disp.gradeDoDia({ ...hospital, dias: hospital.dias }, proximoDiaDe(hospital.dias));
-  res.json({ ok: true, porDia: grade.length, horarios: grade.map((s) => s.inicio) });
-});
-
-function proximoDiaDe(dias) {
-  const t = require('./tempo');
-  let data = t.hoje();
-  for (let i = 0; i < 14; i++) {
-    if (dias.includes(t.diaDaSemana(data))) return data;
-    data = t.somarDias(data, 1);
-  }
-  return t.hoje();
-}
-
 module.exports = router;

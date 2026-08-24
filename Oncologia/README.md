@@ -52,9 +52,29 @@ Locais de atendimento **não ficam no código**. O médico entra em `/admin` com
 e cadastra, edita, liga e desliga os locais sozinho. O formulário do paciente reflete
 na hora, sem reiniciar nada.
 
-Cada local tem: nome, ID da agenda do Google, dias da semana, horário de início e fim,
-duração da consulta, intervalo, antecedência mínima, por quantos dias abrir a agenda,
-endereço e telefone. Ele também edita o próprio nome/CRM e o WhatsApp da recepção.
+Cada local tem: nome, ID da agenda do Google, **faixas de atendimento**, duração da
+consulta, intervalo, **pacientes por horário**, antecedência mínima, por quantos dias
+abrir a agenda, endereço e telefone. Ele também edita o próprio nome/CRM e o WhatsApp
+da recepção.
+
+**Faixas de atendimento.** O médico não atende o mesmo horário todos os dias, então o
+expediente é uma lista de faixas — cada uma com seus dias e seu horário:
+
+```
+Seg, Ter, Qua  →  07:30 às 12:00
+Qui            →  14:00 às 17:00
+```
+
+Sexta simplesmente não aparece. Duas faixas no mesmo dia cobrem o dia partido (manhã
+e tarde). A validação recusa faixas que se sobreponham no mesmo dia e faixas curtas
+demais para caber uma consulta inteira.
+
+**Pacientes por horário.** Se o médico atende dois no mesmo horário, a vaga só fecha
+quando as duas estiverem tomadas — e a recepção recebe "2ª de 2 consultas neste
+horário" na mensagem. Isso obrigou uma mudança na leitura do Google: o `freeBusy`
+funde períodos sobrepostos num bloco só e não serviria para contar, então a agenda do
+próprio local é lida evento a evento (`events.list`). As outras agendas continuam por
+`freeBusy` — ali só interessa se está ocupado, não quantos.
 
 Três coisas que o painel resolve e que valem estar explícitas:
 
@@ -149,7 +169,7 @@ cd app
 cp .env.example .env      # preencha CAL_H1, CAL_H2 e o caminho da credencial
 npm install
 npm run senha             # cria a senha do painel (imprime 2 linhas para o .env)
-npm test                  # 77 testes, tudo offline
+npm test                  # 94 testes, tudo offline
 npm start                 # http://localhost:3000
 ```
 
@@ -186,7 +206,7 @@ app/
   public/                  a página que o paciente vê
   public/admin/            o painel do médico
   deploy/                  PM2, nginx, systemd e backup
-  tests/                   77 testes, sem rede
+  tests/                   94 testes, sem rede
 ```
 
 As quatro primeiras são funções puras — é por isso que dá para testar as regras
@@ -217,9 +237,13 @@ de horário, fuso e validação sem Google e sem WhatsApp.
 `status: tentative` e prefixo `PRÉ ·`, então o médico bate o olho na agenda e
 sabe o que já passou pela recepção.
 
-**A grade vem da configuração, não do Google.** Dias e horários de ambulatório
-ficam em `config/hospitais.json`. O Google é consultado só para saber o que está
-ocupado. Assim um compromisso pessoal na agenda nunca vira "horário de consulta".
+**A grade vem da configuração, não do Google.** As faixas de atendimento são
+definidas no painel. O Google é consultado só para saber o que está ocupado. Assim um
+compromisso pessoal na agenda nunca vira "horário de consulta".
+
+**Ocupar e bloquear são coisas diferentes.** Consulta marcada *neste* local conta
+contra as vagas do horário; compromisso em outro hospital, na agenda pessoal ou um
+evento de dia inteiro **bloqueia** o horário inteiro, por mais vagas que houvesse.
 
 **As duas agendas são consultadas sempre.** Mesmo quando o paciente escolheu o
 Hospital 2, o sistema confere o Hospital 1: o médico é um só e não pode estar em

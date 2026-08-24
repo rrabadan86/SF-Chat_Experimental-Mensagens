@@ -16,6 +16,9 @@ function paraRecepcao(ag, hospital, hojeISO = t.hoje()) {
   const l = [];
   l.push(`*NOVO PRÉ-AGENDAMENTO* ${ag.protocolo}`);
   l.push(`${hospital.nome} · ${t.curta(ag.data)} às ${ag.hora}`);
+  if (ag.vagasNoHorario > 1) {
+    l.push(`_${ag.posicaoNoHorario}ª de ${ag.vagasNoHorario} consultas neste horário_`);
+  }
   l.push('');
   l.push(`*Paciente:* ${ag.nome}`);
   l.push(`*Nascimento:* ${linhaIdade(ag.nascimento, hojeISO)}`);

@@ -87,6 +87,32 @@
   padding:16px 24px; border-top:1px solid var(--line); background:var(--surface);
 }
 
+/* ---- faixas de atendimento ---- */
+.faixas{ display:grid; gap:12px; }
+.faixa{
+  border:1px solid var(--line); border-radius:var(--radius-sm);
+  padding:13px 14px; background:var(--surface); display:grid; gap:11px;
+}
+.faixa[data-error="true"]{ border-color:var(--accent); }
+.faixa-topo{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+.faixa-num{
+  font-family:"IBM Plex Mono",monospace; font-size:.7rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3);
+}
+.faixa-horas{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; font-size:.9rem; color:var(--ink-2); }
+.faixa-horas input{
+  font:inherit; font-size:.92rem; color:var(--ink); background:var(--surface);
+  border:1.5px solid var(--line); border-radius:8px; padding:8px 10px; width:auto;
+}
+.faixa-horas input:focus{ border-color:var(--brand); outline:none; }
+.remover-faixa{
+  border:0; background:none; color:var(--ink-3); cursor:pointer;
+  font-size:1.3rem; line-height:1; padding:0 4px;
+}
+.remover-faixa:hover{ color:var(--accent); }
+.faixa-erro{ color:var(--accent); font-size:.82rem; }
+.faixa-erro:empty{ display:none; }
+
 /* ---- dias da semana ---- */
 .dias-semana{ display:flex; gap:7px; flex-wrap:wrap; }
 .dias-semana button{
@@ -110,6 +136,9 @@
 .previa[data-vazio="true"]{ display:none; }
 .previa .titulo{ font-weight:600; color:var(--ink); display:block; margin-bottom:7px; }
 .previa .horas{ display:flex; gap:6px; flex-wrap:wrap; }
+.previa .linha{ display:grid; grid-template-columns:88px 1fr; gap:12px; align-items:baseline; padding:5px 0; }
+.previa .linha b{ font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-3); font-weight:600; }
+.previa .vazio{ color:var(--ink-3); }
 .previa .horas span{
   font-family:"IBM Plex Mono",monospace; font-size:.78rem;
   background:var(--surface-2); border-radius:6px; padding:3px 8px;

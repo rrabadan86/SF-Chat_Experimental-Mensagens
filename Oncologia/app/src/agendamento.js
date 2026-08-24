@@ -28,6 +28,30 @@ class ErroDeAgendamento extends Error {
   }
 }
 
+/**
+ * Levanta a ocupação de um período, separando o que conta vaga do que bloqueia.
+ *
+ * A agenda DESTE local é listada evento a evento, porque é preciso CONTAR
+ * quantas consultas há em cada horário — o freeBusy funde os sobrepostos e não
+ * serviria. As outras agendas (o outro hospital, a pessoal) vêm por freeBusy
+ * mesmo: ali só interessa saber se está ocupado, não quantos.
+ */
+async function levantarOcupacao(hospital, deISO, ateISO) {
+  const inicioRFC = t.rfc3339(deISO, '00:00');
+  const fimRFC = t.rfc3339(ateISO, '00:00');
+  const outras = config.agendasParaConsultar.filter((id) => id !== hospital.calendarId);
+
+  const [proprio, deOutras] = await Promise.all([
+    agenda.eventos(hospital.calendarId, inicioRFC, fimRFC, config.fuso),
+    outras.length ? agenda.ocupados(outras, inicioRFC, fimRFC, config.fuso) : Promise.resolve([]),
+  ]);
+
+  return {
+    consultas: proprio.consultas,
+    bloqueios: [...proprio.bloqueios, ...deOutras],
+  };
+}
+
 /** Grade dos próximos dias de um hospital, já descontando o que está ocupado. */
 async function horariosDisponiveis(hospitalId, quantidadeDeDias = 8, agora = new Date()) {
   const hospital = config.hospitalPorId(hospitalId);
@@ -36,17 +60,12 @@ async function horariosDisponiveis(hospitalId, quantidadeDeDias = 8, agora = new
   const dias = disp.proximosDias(hospital, t.hoje(agora), quantidadeDeDias);
   if (!dias.length) return { hospital: resumoHospital(hospital), dias: [] };
 
-  const ocupados = await agenda.ocupados(
-    config.agendasParaConsultar,
-    t.rfc3339(dias[0], '00:00'),
-    t.rfc3339(t.somarDias(dias[dias.length - 1], 1), '00:00'),
-    config.fuso
-  );
+  const ocupacao = await levantarOcupacao(hospital, dias[0], t.somarDias(dias[dias.length - 1], 1));
 
   return {
     hospital: resumoHospital(hospital),
     dias: dias.map((data) => {
-      const slots = disp.slotsLivres(hospital, data, ocupados, agora);
+      const slots = disp.slotsLivres(hospital, data, ocupacao, agora);
       return { data, livres: slots.filter((s) => s.livre).length, slots };
     }),
   };
@@ -60,18 +79,15 @@ async function agendar(corpo, agora = new Date()) {
   if (!hospital) throw new ErroDeAgendamento('Hospital desconhecido.', 'hospital_invalido');
 
   // 2. reconsulta antes de gravar — a tela pode estar aberta há meia hora
-  const ocupados = await agenda.ocupados(
-    config.agendasParaConsultar,
-    t.rfc3339(dados.data, '00:00'),
-    t.rfc3339(t.somarDias(dados.data, 1), '00:00'),
-    config.fuso
-  );
-  if (!disp.horarioEstaLivre(hospital, dados.data, dados.hora, ocupados, agora)) {
+  const ocupacao = await levantarOcupacao(hospital, dados.data, t.somarDias(dados.data, 1));
+  if (!disp.horarioEstaLivre(hospital, dados.data, dados.hora, ocupacao, agora)) {
     throw new ErroDeAgendamento(
       'Esse horário acabou de ser ocupado. Escolha outro, por favor.',
       'horario_ocupado'
     );
   }
+  // quantos já estavam nesse horário: a recepção precisa saber que é a 2ª
+  const antes = disp.ocupacaoDoHorario(hospital, dados.data, dados.hora, ocupacao);
 
   // 3. grava o pré-agendamento
   const numero = protocolo.gerar(Number(dados.data.slice(0, 4)));
@@ -87,7 +103,10 @@ async function agendar(corpo, agora = new Date()) {
     protocolo: numero,
   });
 
-  const registro = { ...dados, protocolo: numero, eventoId: evento.id, calendarId: hospital.calendarId };
+  const registro = {
+    ...dados, protocolo: numero, eventoId: evento.id, calendarId: hospital.calendarId,
+    posicaoNoHorario: antes.ocupadas + 1, vagasNoHorario: antes.vagas,
+  };
 
   // 4. avisa a recepcionista (falha aqui não desfaz o agendamento)
   try {
@@ -103,6 +122,8 @@ async function agendar(corpo, agora = new Date()) {
     data: dados.data,
     hora: dados.hora,
     fim,
+    posicaoNoHorario: registro.posicaoNoHorario,
+    vagasNoHorario: registro.vagasNoHorario,
     avisoPendente: Boolean(registro.avisoPendente),
   };
 }
@@ -173,7 +194,8 @@ async function cobrarPendentes(agora = new Date()) {
 function resumoHospital(h) {
   return {
     id: h.id, nome: h.nome, agenda: h.agenda, endereco: h.endereco,
-    duracaoMin: h.duracaoMin, dias: h.dias, inicio: h.inicio, fim: h.fim,
+    duracaoMin: h.duracaoMin, expediente: h.expediente || [],
+    vagasPorHorario: h.vagasPorHorario || 1,
   };
 }
 
@@ -245,6 +267,6 @@ async function avisarPaciente(dados, hospital, tipo) {
 }
 
 module.exports = {
-  horariosDisponiveis, agendar, tratarRespostaRecepcao, cobrarPendentes,
+  horariosDisponiveis, agendar, tratarRespostaRecepcao, cobrarPendentes, levantarOcupacao,
   ErroDeAgendamento, descricaoDoEvento, lerEvento, resumoHospital,
 };
