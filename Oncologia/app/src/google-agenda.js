@@ -133,6 +133,37 @@ async function liberar(calendarId, eventoId) {
   await cliente().events.delete({ calendarId, eventId: eventoId, sendUpdates: 'none' });
 }
 
+/**
+ * Registra no evento se o aviso à recepção saiu ou não.
+ *
+ * Guardar isso no próprio evento evita uma fila em memória, que se perderia no
+ * primeiro reinício — justamente quando o WhatsApp costuma estar fora do ar.
+ */
+async function marcarAviso(calendarId, eventoId, situacao, motivo) {
+  const priv = { aviso: situacao };
+  if (situacao === 'pendente') priv.avisoErro = String(motivo || '').slice(0, 300);
+  else priv.avisoErro = null;      // null remove a propriedade no Google
+  await cliente().events.patch({
+    calendarId,
+    eventId: eventoId,
+    requestBody: { extendedProperties: { private: priv } },
+  });
+}
+
+/** Eventos cujo aviso à recepção ficou pendente. */
+async function comAvisoPendente(calendarId, deRFC, ateRFC) {
+  const { data } = await cliente().events.list({
+    calendarId,
+    timeMin: deRFC,
+    timeMax: ateRFC,
+    privateExtendedProperty: 'aviso=pendente',
+    singleEvents: true,
+    orderBy: 'startTime',
+    maxResults: 250,
+  });
+  return (data.items || []).filter((e) => e.status !== 'cancelled');
+}
+
 /** Pré-agendamentos ainda provisórios — usado pela cobrança das 24h. */
 async function pendentes(calendarId, deRFC, ateRFC) {
   const { data } = await cliente().events.list({
@@ -290,5 +321,5 @@ async function eventos(calendarId, inicioRFC, fimRFC, fuso) {
 
 module.exports = {
   ocupados, eventos, criarPreAgendamento, buscarPorProtocolo, confirmar, liberar,
-  pendentes, cliente, testarAcesso, contaDeServico,
+  pendentes, cliente, testarAcesso, contaDeServico, marcarAviso, comAvisoPendente,
 };

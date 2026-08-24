@@ -123,6 +123,7 @@
     }
     desenharZap();
     agendarRelogio();
+    verPendentes();
   }
 
   /** Enquanto está conectando ou esperando o QR, a tela se atualiza sozinha. */
@@ -219,6 +220,56 @@
         }
       });
     }
+  }
+
+  /**
+   * Pedidos que ficaram sem aviso.
+   *
+   * Um aviso perdido é silencioso por natureza: o paciente marcou, o horário
+   * está reservado, e a recepção não sabe. Por isso ele aparece aqui em vez de
+   * só no log.
+   */
+  async function verPendentes() {
+    var caixa = $('#pendentes');
+    var lista;
+    try {
+      lista = (await api('/avisos-pendentes')).pendentes;
+    } catch (e) {
+      caixa.hidden = true;
+      return;
+    }
+    if (!lista.length) { caixa.hidden = true; caixa.innerHTML = ''; return; }
+
+    caixa.hidden = false;
+    caixa.innerHTML = '<div class="pendentes">' +
+      '<h3>' + lista.length + (lista.length > 1
+        ? ' pedidos não chegaram à recepção'
+        : ' pedido não chegou à recepção') + '</h3>' +
+      '<p class="small">O horário está reservado na agenda, mas a mensagem no WhatsApp falhou. ' +
+      'Confira se o WhatsApp está conectado e reenvie.</p>' +
+      '<ul>' + lista.map(function (p) {
+        return '<li><strong>' + escapar(p.nome || '(sem nome)') + '</strong> — ' +
+          escapar(p.protocolo) + (p.motivo ? ' · <span class="muted">' + escapar(p.motivo) + '</span>' : '') +
+          '</li>';
+      }).join('') + '</ul>' +
+      '<div class="acoes">' +
+        '<button class="btn sm" type="button" id="reenviarAvisos">Reenviar agora</button>' +
+        '<span class="small" id="statusPendentes"></span>' +
+      '</div></div>';
+
+    $('#reenviarAvisos').addEventListener('click', async function () {
+      var b = $('#reenviarAvisos');
+      b.disabled = true; b.textContent = 'Reenviando…';
+      try {
+        var r = await api('/avisos-pendentes/reenviar', { method: 'POST' });
+        $('#statusPendentes').textContent = r.enviados.length + ' enviado(s)' +
+          (r.falharam.length ? ', ' + r.falharam.length + ' ainda falhando' : '');
+        setTimeout(verPendentes, 1200);
+      } catch (e) {
+        $('#statusPendentes').textContent = e.message;
+        b.disabled = false; b.textContent = 'Reenviar agora';
+      }
+    });
   }
 
   /** 5562991234567 -> (62) 99123-4567 */

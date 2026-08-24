@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const dados = require('./dados');
 const auth = require('./auth');
 const agenda = require('./google-agenda');
+const servico = require('./agendamento');
 
 const router = express.Router();
 const seguro = process.env.NODE_ENV === 'production';
@@ -200,6 +201,23 @@ router.post('/whatsapp/conectar', async (req, res) => {
 router.post('/whatsapp/desconectar', async (req, res) => {
   try {
     res.json(wa.desconectar ? await wa.desconectar() : wa.estado());
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
+});
+
+/** Pedidos que ficaram sem aviso — o paciente marcou e a recepção não soube. */
+router.get('/avisos-pendentes', async (req, res) => {
+  try {
+    res.json({ pendentes: await servico.avisosPendentes() });
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
+});
+
+router.post('/avisos-pendentes/reenviar', async (req, res) => {
+  try {
+    res.json(await servico.reenviarAvisos());
   } catch (e) {
     res.status(500).json({ erro: e.message });
   }

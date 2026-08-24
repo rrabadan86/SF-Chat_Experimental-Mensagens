@@ -12,6 +12,8 @@ const agendaFalsa = {
   async contaDeServico() { return 'marcacao@agenda-onco.iam.gserviceaccount.com'; },
   async ocupados() { return []; },
   async eventos() { return { consultas: [], bloqueios: [] }; },
+  async comAvisoPendente() { return []; },
+  async marcarAviso() {},
 };
 const caminho = require.resolve('../src/google-agenda');
 require.cache[caminho] = { id: caminho, filename: caminho, loaded: true, exports: agendaFalsa, children: [], paths: [] };

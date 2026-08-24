@@ -53,6 +53,15 @@ const agendaFalsa = {
   async liberar(_calendarId, eventoId) {
     this.criados = this.criados.filter((e) => e.id !== eventoId);
   },
+  async marcarAviso(calendarId, eventoId, situacao, motivo) {
+    const e = this.criados.find((x) => x.id === eventoId);
+    if (e) Object.assign(e.extendedProperties.private, { aviso: situacao, avisoErro: motivo || null });
+  },
+  async comAvisoPendente(calendarId) {
+    return this.criados.filter(
+      (e) => e.calendarId === calendarId && e.extendedProperties.private.aviso === 'pendente'
+    );
+  },
   async pendentes(calendarId) {
     // filtra por agenda como o Google faz — senão o mesmo evento apareceria
     // uma vez para cada hospital no laço da cobrança
@@ -218,6 +227,53 @@ test('falha ao avisar a recepção não desfaz o agendamento', async () => {
     const r = await servico.agendar(PEDIDO, AGORA);
     assert.equal(r.avisoPendente, true);
     assert.equal(agendaFalsa.criados.length, 1);      // o horário continua reservado
+  } finally {
+    waFalso.enviar = original;
+  }
+});
+
+test('o aviso perdido fica marcado no evento, não só no log', async () => {
+  const original = waFalso.enviar;
+  waFalso.enviar = async () => { throw new Error('WhatsApp fora do ar'); };
+  try {
+    await servico.agendar(PEDIDO, AGORA);
+  } finally {
+    waFalso.enviar = original;
+  }
+
+  const privado = agendaFalsa.criados[0].extendedProperties.private;
+  assert.equal(privado.aviso, 'pendente');
+  assert.match(privado.avisoErro, /fora do ar/);
+
+  const pendentes = await servico.avisosPendentes(AGORA);
+  assert.equal(pendentes.length, 1);
+  assert.equal(pendentes[0].nome, 'Maria Aparecida de Souza');
+});
+
+test('reenviar recupera o aviso que ficou para trás', async () => {
+  const original = waFalso.enviar;
+  waFalso.enviar = async () => { throw new Error('WhatsApp fora do ar'); };
+  try { await servico.agendar(PEDIDO, AGORA); } finally { waFalso.enviar = original; }
+
+  waFalso.reset();
+  const r = await servico.reenviarAvisos(AGORA);
+
+  assert.equal(r.enviados.length, 1);
+  assert.equal(r.falharam.length, 0);
+  assert.match(waFalso.paraRecepcao()[0].texto, /NOVO PRÉ-AGENDAMENTO/);
+  assert.equal(agendaFalsa.criados[0].extendedProperties.private.aviso, 'enviado');
+  assert.equal((await servico.avisosPendentes(AGORA)).length, 0);
+});
+
+test('se o WhatsApp continuar fora, o reenvio não perde o pendente', async () => {
+  const original = waFalso.enviar;
+  waFalso.enviar = async () => { throw new Error('WhatsApp fora do ar'); };
+  try {
+    await servico.agendar(PEDIDO, AGORA);
+    const r = await servico.reenviarAvisos(AGORA);
+    assert.equal(r.enviados.length, 0);
+    assert.equal(r.falharam.length, 1);
+    assert.equal((await servico.avisosPendentes(AGORA)).length, 1);   // continua na fila
   } finally {
     waFalso.enviar = original;
   }

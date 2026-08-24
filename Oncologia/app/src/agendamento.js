@@ -114,6 +114,10 @@ async function agendar(corpo, agora = new Date()) {
   } catch (e) {
     console.error(`[agendamento] ${numero} criado, mas o aviso à recepção falhou: ${e.message}`);
     registro.avisoPendente = true;
+    // marca no próprio evento: sem isso, o aviso perdido só existiria no log e
+    // ninguém ficaria sabendo que a recepção não recebeu o pedido
+    await agenda.marcarAviso(hospital.calendarId, evento.id, 'pendente', e.message)
+      .catch((erro) => console.error(`[agendamento] não consegui marcar o aviso pendente: ${erro.message}`));
   }
 
   return {
@@ -168,6 +172,48 @@ async function tratarRespostaRecepcao({ de, texto: corpoDaMensagem }) {
   await wa.enviar(de, `Recebi ${comando.protocolo}, mas não entendi o que fazer. ` +
     `Responda *CONFIRMAR ${comando.protocolo}* ou *REMARCAR ${comando.protocolo}*.`);
   return { comando: null, protocolo: comando.protocolo, resultado: 'comando_desconhecido' };
+}
+
+/**
+ * Pré-agendamentos cujo aviso à recepção não saiu.
+ *
+ * A marca fica no próprio evento do Google, então não existe fila em memória
+ * para se perder num reinício — se o WhatsApp estava fora do ar quando o
+ * paciente marcou, o pedido continua esperando aqui.
+ */
+async function avisosPendentes(agora = new Date()) {
+  const lista = [];
+  for (const hospital of config.hospitais) {
+    const eventos = await agenda.comAvisoPendente(
+      hospital.calendarId,
+      agora.toISOString(),
+      new Date(agora.getTime() + 180 * 86400000).toISOString()
+    );
+    for (const evento of eventos) {
+      lista.push({ ...lerEvento(evento, hospital), eventoId: evento.id, calendarId: hospital.calendarId,
+        motivo: evento.extendedProperties?.private?.avisoErro || '' });
+    }
+  }
+  return lista;
+}
+
+/** Tenta de novo os avisos que ficaram para trás. */
+async function reenviarAvisos(agora = new Date()) {
+  const pendentes = await avisosPendentes(agora);
+  const enviados = [];
+  const falharam = [];
+
+  for (const item of pendentes) {
+    const hospital = config.qualquerHospitalPorId(item.hospital);
+    try {
+      await avisarRecepcao(item, hospital, agora);   // avisarRecepcao é quem formata a data
+      await agenda.marcarAviso(item.calendarId, item.eventoId, 'enviado');
+      enviados.push(item.protocolo);
+    } catch (e) {
+      falharam.push({ protocolo: item.protocolo, motivo: e.message });
+    }
+  }
+  return { enviados, falharam };
 }
 
 /** Cobra da recepcionista os pré-agendamentos parados além do prazo. */
@@ -268,5 +314,6 @@ async function avisarPaciente(dados, hospital, tipo) {
 
 module.exports = {
   horariosDisponiveis, agendar, tratarRespostaRecepcao, cobrarPendentes, levantarOcupacao,
+  avisosPendentes, reenviarAvisos,
   ErroDeAgendamento, descricaoDoEvento, lerEvento, resumoHospital,
 };
