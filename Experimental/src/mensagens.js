@@ -24,14 +24,14 @@ const CATALOGO = [
     chave: 'confirmacao_hoje',
     titulo: 'Confirmação — aula de hoje',
     quando: 'Enviada às 08:30 (seg–sáb) para quem tem experimental hoje.',
-    vars: [['nome', 'primeiro nome da lead'], ['horario', 'horário da aula'], ['studio', 'nome do Studio']],
+    vars: [['nome', 'primeiro nome da lead'], ['horario', 'horário da aula'], ['professora', 'professora da aula (quando o EVO informa)'], ['data', 'data da aula (dd/mm/aaaa)']],
     padrao: 'Olá, {nome}! 😊\n\nTudo bem? Aqui é do {studio}!\n\nEstamos mandando essa mensagem para confirmar a sua aula experimental de logo mais que está agendada para hoje às {horario}.\n\nPode confirmar sua presença? Estamos te esperando! 💪',
   },
   {
     chave: 'confirmacao_amanha',
     titulo: 'Confirmação — aula de amanhã',
     quando: 'Enviada às 15:30 (dom–sex) para quem tem experimental amanhã.',
-    vars: [['nome', 'primeiro nome da lead'], ['horario', 'horário da aula'], ['studio', 'nome do Studio']],
+    vars: [['nome', 'primeiro nome da lead'], ['horario', 'horário da aula'], ['professora', 'professora da aula (quando o EVO informa)'], ['data', 'data da aula (dd/mm/aaaa)']],
     padrao: 'Olá, {nome}! 😊\n\nTudo bem? Aqui é do {studio}!\n\nEstamos mandando essa mensagem para confirmar a sua aula experimental que está agendada para amanhã às {horario}.\n\nPode confirmar sua presença? Estamos te esperando! 💪',
   },
   {
@@ -133,19 +133,40 @@ function texto(chave) {
   return (ov[chave] != null && String(ov[chave]).trim() !== '') ? normalizar(ov[chave]) : PADROES[chave];
 }
 
-// Substitui {marcadores} pelos valores. {studio} é resolvido do .env sozinho.
+// Substitui {marcadores} pelos valores. As variáveis GLOBAIS (studio, saudacao,
+// hoje, dia_semana) são resolvidas sozinhas; o que o job passar tem prioridade.
 function render(chave, vars = {}) {
   let t = texto(chave);
   if (t == null) return '';
-  const todos = Object.assign(
-    { studio: process.env.STUDIO_NOME || 'Studio Slimfit Setor Bueno' },
-    vars,
-  );
+  const todos = Object.assign(globais(), vars);
   for (const [k, v] of Object.entries(todos)) {
     t = t.split('{' + k + '}').join(v == null ? '' : String(v));
   }
   return t;
 }
+
+// Variáveis GLOBAIS: valem em QUALQUER mensagem, preenchidas automaticamente na
+// hora do envio a partir do relógio/ambiente (não dependem do job). Se um job
+// passar o mesmo nome com um valor específico, o valor do job tem prioridade.
+function globais() {
+  const agora = new Date();
+  const opt = { timeZone: 'America/Sao_Paulo' };
+  const h = parseInt(agora.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }), 10);
+  const saudacao = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+  return {
+    studio: process.env.STUDIO_NOME || 'Studio Slimfit Setor Bueno',
+    saudacao,
+    hoje: agora.toLocaleDateString('pt-BR', opt),
+    dia_semana: agora.toLocaleDateString('pt-BR', Object.assign({ weekday: 'long' }, opt)),
+  };
+}
+// Tags globais, para o painel listar como clicáveis em toda mensagem.
+const GLOBAIS_TAGS = [
+  ['saudacao', 'Bom dia / Boa tarde / Boa noite (conforme a hora)'],
+  ['studio', 'nome do Studio'],
+  ['hoje', 'data de hoje (ex.: 24/08/2026)'],
+  ['dia_semana', 'dia da semana (ex.: segunda-feira)'],
+];
 
 // Valores de EXEMPLO para pré-visualizar/testar uma mensagem (o que a aluna
 // veria). Usados no painel (pré-visualização) e no envio de teste.
@@ -158,13 +179,13 @@ const EXEMPLOS = {
   hora: '09h45',
 };
 function exemplosCompletos() {
-  return Object.assign({ studio: process.env.STUDIO_NOME || 'Studio Slimfit Setor Bueno' }, EXEMPLOS);
+  return Object.assign(globais(), EXEMPLOS);
 }
 // Substitui {marcadores} num TEXTO qualquer (não só numa chave do catálogo).
 // Usado pelo envio de teste, que manda o texto que está na tela.
 function renderTexto(texto, vars = {}) {
   let t = normalizar(texto);
-  const todos = Object.assign(exemplosCompletos(), vars);
+  const todos = Object.assign(globais(), EXEMPLOS, vars);
   for (const [k, v] of Object.entries(todos)) {
     t = t.split('{' + k + '}').join(v == null ? '' : String(v));
   }
@@ -189,7 +210,8 @@ function listar() {
     chave: m.chave,
     titulo: m.titulo,
     quando: m.quando,
-    vars: m.vars,
+    // vars do job + globais (sem duplicar as que o job já lista).
+    vars: [...(m.vars || []), ...GLOBAIS_TAGS.filter(g => !(m.vars || []).some(v => v[0] === g[0]))],
     padrao: m.padrao,
     texto: (ov[m.chave] != null && String(ov[m.chave]).trim() !== '') ? ov[m.chave] : m.padrao,
     editado: ov[m.chave] != null && String(ov[m.chave]).trim() !== '' && ov[m.chave] !== m.padrao,

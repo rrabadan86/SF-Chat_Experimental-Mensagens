@@ -44,7 +44,7 @@ class WhatsAppSender {
         continue;
       }
 
-      const message = messageBuilder(student.name, student.time);
+      const message = messageBuilder(student.name, student.time, student);
       console.log(`   📨 Enviando para ${student.name} (${student.phone})...`);
       const success = await this.sendMessage(student.phone, message);
 

@@ -47,11 +47,12 @@ const config = {
   // edições feitas no painel (data/mensagens.json) e, se não houver edição, usa
   // o texto padrão. Editar no painel vale já no próximo envio, sem reiniciar.
 
-  // Mensagem para aulas de HOJE (enviada às 08:30)
-  messagesToday: (nome, horario) => mensagens.render('confirmacao_hoje', { nome, horario }),
+  // Mensagem para aulas de HOJE (enviada às 08:30). `aula` traz os campos da
+  // turma (professor, date…) para as variáveis {professora} e {data}.
+  messagesToday: (nome, horario, aula = {}) => mensagens.render('confirmacao_hoje', { nome, horario, professora: aula.professor || '', data: aula.date || '' }),
 
   // Mensagem para aulas de AMANHÃ (enviada às 15:30)
-  messagesTomorrow: (nome, horario) => mensagens.render('confirmacao_amanha', { nome, horario }),
+  messagesTomorrow: (nome, horario, aula = {}) => mensagens.render('confirmacao_amanha', { nome, horario, professora: aula.professor || '', data: aula.date || '' }),
 
   // Mensagem de follow-up pós aula experimental — para quem AINDA NÃO fechou
   messageFollowup: (nomeProfessora) => mensagens.render('followup', { professora: nomeProfessora }),
