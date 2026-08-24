@@ -24,6 +24,7 @@ const atividade = require('./atividade');
 const teste = require('./teste-envio');
 const igcfg = require('./instagram-config');
 const igcookies = require('./instagram-cookies');
+const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
@@ -273,13 +274,43 @@ function scriptPreviewTeste() {
       },2000);
     }catch(err){ b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(err.message||'Falha ao enviar.')+'</div>'; btn.disabled=false; }
   }
+  async function testarDMIg(btn){
+    var card = btn.closest('.card'); var ta = card.querySelector('textarea'); var b = card.querySelector('.prev');
+    var inp = card.querySelector('.igteste'); var u = ((inp&&inp.value)||'').replace(/^@+/,'').trim().split(/\\s+/)[0];
+    if(!u){ alert('Informe o @usuário do Instagram para testar.'); if(inp) inp.focus(); return; }
+    b.style.display='block'; b.innerHTML = '<div class="prev-b">⏳ Enviando DM de teste para @'+escHtml(u)+'… pode levar até ~1 min (abre o navegador, usa o proxy e o cookie).</div>';
+    btn.disabled=true;
+    try{
+      var r = await fetch('/instagram/teste-dm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u, texto:ta.value})});
+      var d = await r.json();
+      if(!d.ok){ b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(d.erro||'Não foi possível iniciar o teste.')+'</div>'; btn.disabled=false; return; }
+      var tries=0;
+      var iv=setInterval(async function(){
+        tries++;
+        try{
+          var s = await (await fetch('/instagram/teste-dm/status?id='+encodeURIComponent(d.id))).json();
+          if(s.status==='enviado'){ clearInterval(iv); b.innerHTML='<div class="prev-b ok">✅ DM enviada para @'+escHtml(u)+'! A sessão (cookie) está funcionando. Confira no Instagram.</div>'; btn.disabled=false; }
+          else if(s.status==='falha'){ clearInterval(iv); b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(s.erro||'Falha no envio.')+'</div>'; btn.disabled=false; }
+          else if(tries>60){ clearInterval(iv); b.innerHTML='<div class="prev-b">⏳ Ainda processando — o robô pode estar ocupado com outro envio. Tente de novo em instantes.</div>'; btn.disabled=false; }
+        }catch(_){ }
+      },3000);
+    }catch(err){ b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(err.message||'Falha ao enviar.')+'</div>'; btn.disabled=false; }
+  }
 </script>`;
 }
 
 // Card de edição de UMA mensagem (texto + variáveis + preview/teste). Reusável.
-function cardMensagem(m, voltar) {
+// opts.ig = true → o teste é um DM do Instagram para um @usuário (não WhatsApp).
+function cardMensagem(m, voltar, opts = {}) {
   const vars = (m.vars || []).map(([t, d]) => `<span class="var" title="${esc(d)} — clique para inserir" onclick="inserirVar(this,'{${esc(t)}}')">{${esc(t)}}</span>`).join(' ');
   const badge = m.editado ? '<span class="badge">editada</span>' : '';
+  const botaoTeste = opts.ig
+    ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+        <input class="igteste" type="text" placeholder="@usuario para testar" style="max-width:220px">
+        <button type="button" class="tbtn" onclick="testarDMIg(this)">📩 Enviar DM de teste</button>
+        <small style="color:var(--cinza)">envia o DM de verdade — e comprova o cookie</small>
+       </div>`
+    : `<button type="button" class="tbtn" onclick="testarMsg(this)">🧪 Enviar teste</button>`;
   return `<form method="POST" action="/salvar">
       <input type="hidden" name="chave" value="${esc(m.chave)}">
       ${voltar ? `<input type="hidden" name="voltar" value="${esc(voltar)}">` : ''}
@@ -290,9 +321,10 @@ function cardMensagem(m, voltar) {
       <div class="acts">
         <button type="submit" class="save">Salvar texto</button>
         <button type="button" class="tbtn" onclick="previewMsg(this)">👁 Pré-visualizar</button>
-        <button type="button" class="tbtn" onclick="testarMsg(this)">🧪 Enviar teste</button>
+        ${opts.ig ? '' : botaoTeste}
         <button type="submit" name="reset" value="1" class="reset" onclick="return confirm('Voltar esta mensagem ao texto padrão?')">Restaurar padrão</button>
       </div>
+      ${opts.ig ? botaoTeste : ''}
       <div class="prev" style="display:none"></div>
     </form>`;
 }
@@ -687,8 +719,7 @@ function paginaInstagram(aviso, erro) {
     </div>
 
     <div class="sec-t">✍️ Mensagem de boas-vindas</div>
-    ${barraTeste()}
-    ${msgIg ? `<div class="card">${cardMensagem(msgIg, '/instagram')}</div>` : ''}
+    ${msgIg ? `<div class="card">${cardMensagem(msgIg, '/instagram', { ig: true })}</div>` : ''}
 
     <div class="sec-t">🕒 Horário do envio</div>
     <div class="card">
@@ -948,6 +979,24 @@ const server = http.createServer((req, res) => {
         res.end(paginaInstagram('Erro ao salvar o limite: ' + e.message, true));
       }
     });
+  }
+  if (req.method === 'POST' && url === '/instagram/teste-dm') {
+    return lerCorpo(req, 1e6, corpo => {
+      try {
+        const d = JSON.parse(corpo || '{}');
+        const textoFinal = mensagens.renderTexto(d.texto || '', mensagens.EXEMPLOS);
+        const id = testeIg.solicitar({ username: d.username, texto: textoFinal });
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, id }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+  }
+  if (req.method === 'GET' && url === '/instagram/teste-dm/status') {
+    const id = new URLSearchParams(req.url.split('?')[1] || '').get('id');
+    const p = testeIg.ler(id);
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify(p ? { status: p.status, erro: p.erro } : { status: 'desconhecido' }));
   }
   if (req.method === 'POST' && url === '/instagram/cookies') {
     return lerCorpo(req, 4e6, corpo => { // cookies podem somar alguns KB

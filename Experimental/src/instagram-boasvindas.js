@@ -254,6 +254,29 @@ async function enviarDM(page, username, texto) {
 
 // Modo de teste: envia a mensagem para UM usuário específico e sai.
 // Uso: node src/instagram-boasvindas.js --teste=usuario_de_teste
+// Envio de DM de teste sob demanda (chamado pelo painel via ponte). Testa de
+// quebra se o COOKIE está válido: se não estiver logado, avisa para reimportar.
+async function enviarTesteDM(username, texto) {
+  const alvo = String(username || '').replace(/^@+/, '').trim().split(/\s+/)[0];
+  if (!alvo) throw new Error('Informe o @usuário do Instagram.');
+  const browser = await connectEdge();
+  try {
+    const pages = await browser.pages();
+    const page = pages[0] || await browser.newPage();
+    await aplicarCookiesSalvos(page);
+    await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await sleep(3000);
+    const logado = await page.evaluate(() =>
+      !document.querySelector('input[name="username"]') && !/\/accounts\/login/.test(location.pathname));
+    if (!logado) throw new Error('A sessão do Instagram NÃO está logada (cookie expirado/inválido). Reimporte os cookies.');
+    const msg = (texto && String(texto).trim()) ? String(texto) : MENSAGEM_BOASVINDAS();
+    const status = await enviarDM(page, alvo, msg);
+    if (status === 'sent') return { ok: true };
+    if (status === 'unavailable') throw new Error('Conta @' + alvo + ' indisponível (privada/restrita) ou sem botão de mensagem.');
+    throw new Error('Não consegui enviar para @' + alvo + ' — o botão de mensagem não apareceu (confira o @usuário).');
+  } finally { try { browser.disconnect(); } catch (_) {} }
+}
+
 async function testeEnvio(alvo) {
   console.log('\n╔═══════════════════════════════════════════════════╗');
   console.log('║   INSTAGRAM — TESTE de envio (1 usuário)          ║');
@@ -508,7 +531,7 @@ async function runBoasVindas() {
   return main();
 }
 
-module.exports = { runBoasVindas, main };
+module.exports = { runBoasVindas, main, enviarTesteDM };
 
 // Execução direta via CLI
 if (require.main === module) {

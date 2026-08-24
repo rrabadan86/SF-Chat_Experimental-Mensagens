@@ -495,6 +495,32 @@ function iniciarTesteWatcher(wa) {
   log('🧪 Watcher de "enviar teste" do painel ativo (a cada 4s).');
 }
 
+// Ponte de "DM de teste" do Instagram (painel). Usa o navegador+proxy+cookie do
+// IG, então respeita o jobRunning (não roda junto com outro job) e tem timeout.
+function iniciarTesteInstagramWatcher() {
+  const ti = require('./teste-instagram');
+  let ocupado = false;
+  const t = setInterval(async () => {
+    if (ocupado || jobRunning) return;
+    const p = ti.proximoPendente();
+    if (!p) return;
+    ocupado = true;
+    jobRunning = true;
+    ti.marcar(p.id, 'enviando');
+    const limite = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo esgotado (o navegador do Instagram demorou demais)')), 150000));
+    try {
+      await Promise.race([require('./instagram-boasvindas').enviarTesteDM(p.username, p.texto), limite]);
+      ti.marcar(p.id, 'enviado');
+      log(`🧪 DM de teste (IG) enviada para @${p.username}`);
+    } catch (e) {
+      ti.marcar(p.id, 'falha', e && e.message);
+      log(`🧪 DM de teste (IG) falhou para @${p.username}: ${e && e.message}`);
+    } finally { ocupado = false; jobRunning = false; }
+  }, 5000);
+  if (t.unref) t.unref();
+  log('🧪 Watcher de "DM de teste" do Instagram ativo (a cada 5s).');
+}
+
 // ─── Main ──────────────────────────────────────────────────
 async function main() {
   console.log('╔═══════════════════════════════════════════════════════╗');
@@ -532,6 +558,8 @@ async function main() {
 
   // Ponte de "enviar teste" do painel (lê data/teste-envio.json e dispara).
   iniciarTesteWatcher(wa);
+  // Ponte de "DM de teste" do Instagram (lê data/teste-instagram.json).
+  iniciarTesteInstagramWatcher();
 
   // ─── Verifica jobs perdidos antes de agendar ─────────────
   // (lê o registro ANTES de marcar que estamos vivos agora)
