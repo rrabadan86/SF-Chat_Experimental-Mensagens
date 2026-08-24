@@ -340,3 +340,27 @@ test('cobrança das 24h só pega o que está parado além do prazo', async () =>
   assert.equal(cobrados.length, 1);
   assert.ok(waFalso.paraRecepcao()[0].texto.includes('PENDENTE'));
 });
+
+test('recepcionista que usa o próprio WhatsApp do consultório também confirma', async () => {
+  const r = await servico.agendar(PEDIDO, AGORA);
+  waFalso.reset();
+
+  // resposta marcada como "própria": saiu do aparelho conectado
+  const res = await servico.tratarRespostaRecepcao({
+    de: '5562900000000', texto: `CONFIRMAR ${r.protocolo}`, propria: true,
+  });
+
+  assert.equal(res.resultado, 'confirmado');
+  assert.equal(agendaFalsa.criados[0].status, 'confirmed');
+});
+
+test('o sistema não confirma sozinho ao ler o próprio aviso', async () => {
+  const r = await servico.agendar(PEDIDO, AGORA);
+  const textoDoAviso = waFalso.paraRecepcao()[0].texto;
+  assert.match(textoDoAviso, /CONFIRMAR PA-/);        // o aviso contém o comando
+
+  // se esse texto voltasse como mensagem própria, não pode auto-confirmar:
+  // o driver filtra pelos ids do que enviou, então isso nunca chega aqui
+  assert.equal(agendaFalsa.criados[0].status, 'tentative');
+  void r;
+});

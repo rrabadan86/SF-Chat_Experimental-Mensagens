@@ -21,6 +21,27 @@ let Client, LocalAuth, qrcodeTerminal, gerarQrImagem;
 let cliente = null;
 const escutas = [];
 
+/**
+ * Ids das mensagens que nós mesmos enviamos.
+ *
+ * Precisamos ouvir também as mensagens marcadas como "minhas": quando a
+ * recepcionista usa o PRÓPRIO WhatsApp do consultório — o mesmo que está
+ * conectado aqui —, a resposta dela chega como mensagem própria e não como
+ * mensagem recebida. Sem isso, o CONFIRMAR dela nunca seria visto.
+ *
+ * O risco disso é o sistema reagir ao que ele mesmo escreveu: o aviso de
+ * pré-agendamento contém o texto "CONFIRMAR PA-...", e seria confirmado
+ * sozinho. Por isso guardamos os ids do que enviamos e os ignoramos.
+ */
+const enviadasPorNos = new Set();
+function lembrarEnviada(id) {
+  if (!id) return;
+  enviadasPorNos.add(id);
+  if (enviadasPorNos.size > 500) {
+    enviadasPorNos.delete(enviadasPorNos.values().next().value);
+  }
+}
+
 const estado = {
   situacao: 'desligado',   // desligado | iniciando | qr | conectado | erro
   qr: null,                // texto do QR, quando situacao === 'qr'
@@ -74,11 +95,16 @@ function montar() {
     cliente = null;                       // permite reconectar sem reiniciar o processo
   });
 
-  cliente.on('message', async (msg) => {
-    const de = String(msg.from || '').replace(/\D/g, '');
+  // 'message_create' cobre as duas origens: o que chega de fora e o que sai do
+  // próprio aparelho conectado. 'message' sozinho perderia o segundo caso.
+  cliente.on('message_create', async (msg) => {
+    const id = msg.id && msg.id._serialized;
+    if (msg.fromMe && enviadasPorNos.has(id)) return;    // é o nosso próprio aviso
+
+    const de = String(msg.fromMe ? (msg.to || '') : (msg.from || '')).replace(/\D/g, '');
     for (const cb of escutas) {
-      try { await cb({ de, texto: msg.body, responder: (t) => msg.reply(t) }); }
-      catch (e) { console.error('[wa] erro tratando mensagem recebida:', e.message); }
+      try { await cb({ de, texto: msg.body, propria: Boolean(msg.fromMe), responder: (t) => msg.reply(t) }); }
+      catch (e) { console.error('[wa] erro tratando mensagem:', e.message); }
     }
   });
 }
@@ -205,7 +231,9 @@ async function enviar(numero, texto) {
     if (!cliente) await iniciar();
     await esperarPronto();
   }
-  return cliente.sendMessage(await enderecoDe(numero), texto);
+  const enviada = await cliente.sendMessage(await enderecoDe(numero), texto);
+  lembrarEnviada(enviada && enviada.id && enviada.id._serialized);
+  return enviada;
 }
 
 module.exports = {

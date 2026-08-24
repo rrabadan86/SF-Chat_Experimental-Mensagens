@@ -133,11 +133,17 @@ async function agendar(corpo, agora = new Date()) {
 }
 
 /** Resposta da recepcionista chegando pelo WhatsApp. */
-async function tratarRespostaRecepcao({ de, texto: corpoDaMensagem }) {
+async function tratarRespostaRecepcao({ de, texto: corpoDaMensagem, propria = false }) {
   const comando = protocolo.interpretar(corpoDaMensagem);
   if (!comando) return null;                       // conversa normal, ignora
+
+  /*
+   * Quem pode comandar: os números de recepção cadastrados, e também o próprio
+   * aparelho conectado — é comum a recepcionista operar o WhatsApp do
+   * consultório, e nesse caso a resposta dela sai como mensagem própria.
+   */
   const autorizados = numerosDaRecepcao();
-  if (de && autorizados.size && !autorizados.has(de.replace(/\D/g, ''))) {
+  if (!propria && de && autorizados.size && !autorizados.has(de.replace(/\D/g, ''))) {
     console.warn(`[wa] comando ${comando.protocolo} veio de ${de}, que não é a recepção. Ignorado.`);
     return null;
   }
