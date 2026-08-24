@@ -99,6 +99,12 @@ async function launchInstagramChromium() {
     ],
   });
 
+  // Libera a área de transferência para o Instagram (usada ao COLAR a DM — o
+  // link só fica clicável quando entra por "colar", não por digitação).
+  try {
+    await browser.defaultBrowserContext().overridePermissions('https://www.instagram.com', ['clipboard-read', 'clipboard-write']);
+  } catch (_) { /* segue sem — o envio cai para a digitação */ }
+
   // Autenticação do proxy (se exigir usuário/senha) em toda página aberta.
   if (IG_PROXY && IG_PROXY_USER) {
     const autenticar = async (p) => { try { await p.authenticate({ username: IG_PROXY_USER, password: IG_PROXY_PASS }); } catch (_) {} };

@@ -225,17 +225,33 @@ async function enviarDM(page, username, texto) {
     await campo.focus();
     await sleep(500);
 
-    const linhas = texto.split('\n');
-    for (let li = 0; li < linhas.length; li++) {
-      if (linhas[li].length > 0) {
-        await page.keyboard.type(linhas[li], { delay: 12 });
-      }
-      if (li < linhas.length - 1) {
-        // quebra de linha SEM enviar
-        await page.keyboard.down('Shift');
-        await page.keyboard.press('Enter');
-        await page.keyboard.up('Shift');
-        await sleep(60);
+    // Tenta COLAR a mensagem (Ctrl+V), como quando você copia e cola: o
+    // Instagram torna o link clicável quando ele entra por "colar" — a digitação
+    // automática nem sempre dispara isso. Se a colagem não preencher o campo,
+    // cai para a digitação linha por linha (comportamento antigo, garantido).
+    let colou = false;
+    try {
+      await page.evaluate(async (txt) => { try { await navigator.clipboard.writeText(txt); } catch (_) {} }, texto);
+      await page.keyboard.down('Control'); await page.keyboard.press('KeyV'); await page.keyboard.up('Control');
+      await sleep(800);
+      colou = await page.evaluate((sel) => ((document.querySelector(sel) || {}).textContent || '').trim().length > 0, composer);
+      if (colou) console.log('   📋 Mensagem colada (link deve ficar clicável).');
+    } catch (_) { colou = false; }
+
+    if (!colou) {
+      console.log('   ⌨️  Colagem não pegou — digitando linha por linha (fallback).');
+      const linhas = texto.split('\n');
+      for (let li = 0; li < linhas.length; li++) {
+        if (linhas[li].length > 0) {
+          await page.keyboard.type(linhas[li], { delay: 12 });
+        }
+        if (li < linhas.length - 1) {
+          // quebra de linha SEM enviar
+          await page.keyboard.down('Shift');
+          await page.keyboard.press('Enter');
+          await page.keyboard.up('Shift');
+          await sleep(60);
+        }
       }
     }
     await sleep(1000);
