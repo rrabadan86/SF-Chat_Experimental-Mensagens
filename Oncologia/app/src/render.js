@@ -221,7 +221,7 @@ function secaoSobre(pagina) {
 
 function secaoLocais(pagina, hospitais) {
   const s = pagina.locais;
-  const cartoes = hospitais.map((h) => `<article class="local" data-loc="${esc(h.id)}">
+  const cartoes = hospitais.map((h) => `<article class="card local" data-loc="${esc(h.id)}">
         <h3>${esc(h.nome)}</h3>
         <ul>
           ${h.endereco && h.endereco !== 'a definir' ? `<li><b>Endereço</b><span>${esc(h.endereco)}</span></li>` : ''}
