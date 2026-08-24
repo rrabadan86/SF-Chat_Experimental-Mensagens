@@ -161,7 +161,8 @@
         '<span class="zap-selo" data-situacao="' + escapar(z.situacao) + '">' +
           escapar(TEXTO_SITUACAO[z.situacao] || z.situacao) + '</span>' +
         (z.recepcao
-          ? '<span class="zap-detalhe">avisos vão para ' + escapar(formatarZap(z.recepcao)) + '</span>'
+          ? '<span class="zap-detalhe">os pedidos vão para ' + escapar(formatarZap(z.recepcao)) +
+            ' — o número em "Médico e recepção", não o telefone do local</span>'
           : '<span class="zap-detalhe">falta cadastrar o WhatsApp da recepção aqui embaixo</span>') +
       '</div>' +
       (z.erro ? '<p class="zap-detalhe">' + escapar(z.erro) + '</p>' : '') +
@@ -353,6 +354,7 @@
             '<span>consulta de <b>' + h.duracaoMin + ' min</b></span>' +
             (h.intervaloMin ? '<span>intervalo de ' + h.intervaloMin + ' min</span>' : '') +
             ((h.vagasPorHorario || 1) > 1 ? '<span><b>' + h.vagasPorHorario + '</b> pacientes por horário</span>' : '') +
+            (h.whatsappRecepcao ? '<span>recepção própria: <b>' + escapar(h.whatsappRecepcao) + '</b></span>' : '') +
             '<span>antecedência de <b>' + h.antecedenciaMinHoras + 'h</b></span>' +
             (h.endereco ? '<span>' + escapar(h.endereco) + '</span>' : '') +
           '</div>' +
@@ -487,6 +489,7 @@
     $('#l-jan').value = h ? (h.janelaDias || 60) : 60;
     $('#l-end').value = h ? (h.endereco || '') : '';
     $('#l-tel').value = h ? (h.telefone || '') : '';
+    $('#l-zap').value = h ? (h.whatsappRecepcao || '') : '';
 
     montarFaixas();
     marcarCampos({});
@@ -524,6 +527,7 @@
       janelaDias: Number($('#l-jan').value || 60),
       endereco: $('#l-end').value,
       telefone: $('#l-tel').value,
+      whatsappRecepcao: $('#l-zap').value,
       ativo: estado.editando
         ? estado.config.hospitais.find(function (x) { return x.id === estado.editando; }).ativo
         : true,

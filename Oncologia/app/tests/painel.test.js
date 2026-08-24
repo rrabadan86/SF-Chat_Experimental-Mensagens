@@ -366,3 +366,34 @@ test('as outras rotas continuam com o limite pequeno', async () => {
   assert.equal(r.status, 413);
   assert.equal(r.corpo.codigo, 'muito_grande');
 });
+
+test('local pode ter uma recepção própria; sem ela, vale a geral', async () => {
+  const nav = await entrar(navegador());
+  const servico = require('../src/agendamento');
+
+  const geral = { ...LOCAL, whatsappRecepcao: '' };
+  const proprio = { ...LOCAL, nome: 'Hospital do Norte',
+    calendarId: 'c_norte@group.calendar.google.com', whatsappRecepcao: '5562988887777' };
+
+  await nav('/admin/api/hospitais', { method: 'POST', body: JSON.stringify(geral) });
+  await nav('/admin/api/hospitais', { method: 'POST', body: JSON.stringify(proprio) });
+
+  const config = require('../src/config');
+  assert.equal(servico.recepcaoDe(config.hospitalPorId('hospital-santa-clara')), '5562999998888');
+  assert.equal(servico.recepcaoDe(config.hospitalPorId('hospital-do-norte')), '5562988887777');
+
+  // os dois números podem confirmar
+  const autorizados = servico.numerosDaRecepcao();
+  assert.ok(autorizados.has('5562999998888'));
+  assert.ok(autorizados.has('5562988887777'));
+});
+
+test('WhatsApp do local em formato errado é recusado', async () => {
+  const nav = await entrar(navegador());
+  const r = await nav('/admin/api/hospitais', {
+    method: 'POST',
+    body: JSON.stringify({ ...LOCAL, calendarId: 'c_x@group.calendar.google.com', whatsappRecepcao: '62999' }),
+  });
+  assert.equal(r.status, 400);
+  assert.ok(r.corpo.erros.whatsappRecepcao);
+});

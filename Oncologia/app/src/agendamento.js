@@ -136,7 +136,8 @@ async function agendar(corpo, agora = new Date()) {
 async function tratarRespostaRecepcao({ de, texto: corpoDaMensagem }) {
   const comando = protocolo.interpretar(corpoDaMensagem);
   if (!comando) return null;                       // conversa normal, ignora
-  if (de && config.whatsapp.recepcao && de.replace(/\D/g, '') !== config.whatsapp.recepcao) {
+  const autorizados = numerosDaRecepcao();
+  if (de && autorizados.size && !autorizados.has(de.replace(/\D/g, ''))) {
     console.warn(`[wa] comando ${comando.protocolo} veio de ${de}, que não é a recepção. Ignorado.`);
     return null;
   }
@@ -155,7 +156,7 @@ async function tratarRespostaRecepcao({ de, texto: corpoDaMensagem }) {
     if (config.whatsapp.avisarPaciente && dadosDoEvento.telefone) {
       await avisarPaciente(dadosDoEvento, hospital, 'confirmacao');
     }
-    await wa.enviar(de, `Feito. ${comando.protocolo} confirmado na ${hospital.agenda}` +
+    await wa.enviar(de, `Feito. ${comando.protocolo} confirmado na agenda do ${hospital.nome}` +
       (config.whatsapp.avisarPaciente ? ' e o paciente já foi avisado.' : '.'));
     return { comando: 'CONFIRMAR', protocolo: comando.protocolo, resultado: 'confirmado' };
   }
@@ -165,7 +166,7 @@ async function tratarRespostaRecepcao({ de, texto: corpoDaMensagem }) {
     if (comando.comando === 'REMARCAR' && config.whatsapp.avisarPaciente && dadosDoEvento.telefone) {
       await avisarPaciente(dadosDoEvento, hospital, 'remarcacao');
     }
-    await wa.enviar(de, `Horário de ${comando.protocolo} liberado na ${hospital.agenda}.`);
+    await wa.enviar(de, `Horário de ${comando.protocolo} liberado na agenda do ${hospital.nome}.`);
     return { comando: comando.comando, protocolo: comando.protocolo, resultado: 'liberado' };
   }
 
@@ -227,7 +228,7 @@ async function cobrarPendentes(agora = new Date()) {
     for (const evento of eventos) {
       if (Date.parse(evento.created) > limite) continue;
       const dados = lerEvento(evento, hospital);
-      await wa.enviar(config.whatsapp.recepcao,
+      await wa.enviar(recepcaoDe(hospital),
         mensagens.lembreteRecepcao(dados, hospital, config.confirmacaoPrazoHoras));
       cobrados.push(dados.protocolo);
     }
@@ -287,12 +288,37 @@ function lerEvento(evento, hospital) {
   };
 }
 
+/**
+ * Para quem vai o aviso deste local.
+ *
+ * O padrão é o WhatsApp da recepção cadastrado em "Médico e recepção" — um
+ * número só, que é o caso do consultório com uma secretária. Mas cada local
+ * pode ter o seu: em hospital diferente, quem atende o telefone costuma ser
+ * outra pessoa.
+ */
+function recepcaoDe(hospital) {
+  const doLocal = (hospital && hospital.whatsappRecepcao || '').replace(/\D/g, '');
+  return doLocal || config.whatsapp.recepcao;
+}
+
+/** Todos os números autorizados a mandar CONFIRMAR/REMARCAR. */
+function numerosDaRecepcao() {
+  const numeros = new Set();
+  if (config.whatsapp.recepcao) numeros.add(config.whatsapp.recepcao);
+  for (const h of config.todosHospitais) {
+    const n = (h.whatsappRecepcao || '').replace(/\D/g, '');
+    if (n) numeros.add(n);
+  }
+  return numeros;
+}
+
 async function avisarRecepcao(registro, hospital, agora) {
-  if (!config.whatsapp.recepcao) {
-    throw new Error('WA_RECEPCAO não configurado — ninguém para avisar.');
+  const destino = recepcaoDe(hospital);
+  if (!destino) {
+    throw new Error('Nenhum WhatsApp de recepção cadastrado — ninguém para avisar.');
   }
   const texto = mensagens.paraRecepcao(registro, hospital, t.hoje(agora));
-  await wa.enviar(config.whatsapp.recepcao, texto);
+  await wa.enviar(destino, texto);
 }
 
 async function avisarPaciente(dados, hospital, tipo) {
@@ -314,6 +340,6 @@ async function avisarPaciente(dados, hospital, tipo) {
 
 module.exports = {
   horariosDisponiveis, agendar, tratarRespostaRecepcao, cobrarPendentes, levantarOcupacao,
-  avisosPendentes, reenviarAvisos,
+  avisosPendentes, reenviarAvisos, recepcaoDe, numerosDaRecepcao,
   ErroDeAgendamento, descricaoDoEvento, lerEvento, resumoHospital,
 };

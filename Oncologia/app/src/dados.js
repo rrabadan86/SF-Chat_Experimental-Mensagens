@@ -179,6 +179,9 @@ function validarHospital(bruto = {}, { existentes = [], id = null } = {}) {
     calendarId: texto(bruto.calendarId, 200).toLowerCase(),
     endereco: texto(bruto.endereco, 200),
     telefone: texto(bruto.telefone, 40),
+    // opcional: quando este local tem uma recepção própria, os avisos vão para
+    // cá em vez do número geral
+    whatsappRecepcao: texto(bruto.whatsappRecepcao, 20).replace(/\D/g, ''),
     expediente: normalizarExpediente(bruto.expediente),
     duracaoMin: Number(bruto.duracaoMin),
     intervaloMin: Number(bruto.intervaloMin || 0),
@@ -205,6 +208,9 @@ function validarHospital(bruto = {}, { existentes = [], id = null } = {}) {
     erros.antecedenciaMinHoras = 'Antecedência entre 0 e 720 horas.';
   }
   if (!(h.janelaDias >= 1 && h.janelaDias <= 365)) erros.janelaDias = 'Janela entre 1 e 365 dias.';
+  if (h.whatsappRecepcao && !/^55\d{10,11}$/.test(h.whatsappRecepcao)) {
+    erros.whatsappRecepcao = 'Use 55 + DDD + número, só dígitos. Ex.: 5562991234567';
+  }
 
   Object.assign(erros, validarFaixas(h.expediente, h.duracaoMin));
 

@@ -245,8 +245,17 @@
           <input id="l-end" name="endereco" placeholder="Rua, número, bairro">
         </div>
         <div class="field full" data-name="telefone">
-          <label for="l-tel">Telefone da recepção do local</label>
+          <label for="l-tel">Telefone do local</label>
           <input id="l-tel" name="telefone" placeholder="(62) 3000-0000">
+          <span class="help">Aparece no site para o paciente. Não recebe mensagens.</span>
+        </div>
+        <div class="field full" data-name="whatsappRecepcao">
+          <label for="l-zap">WhatsApp que recebe os pedidos deste local</label>
+          <input id="l-zap" name="whatsappRecepcao" inputmode="tel" placeholder="5562991234567">
+          <span class="help">
+            Só preencha se este local tiver uma recepção diferente. Em branco, os pedidos vão
+            para o WhatsApp da recepção cadastrado em "Médico e recepção".
+          </span>
         </div>
       </div>
       <div class="formerr" id="erroLocal"></div>

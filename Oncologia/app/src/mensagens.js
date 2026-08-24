@@ -28,7 +28,7 @@ function paraRecepcao(ag, hospital, hojeISO = t.hoje()) {
   if (ag.encaminhamento) l.push(`*Encaminhado por:* ${ag.encaminhamento}`);
   if (ag.motivo) l.push(`*Motivo:* ${ag.motivo}`);
   l.push('');
-  l.push(`Já lancei na ${hospital.agenda} do Google como pré-agendamento.`);
+  l.push(`Já lancei na agenda do ${hospital.nome} como pré-agendamento.`);
   l.push(`Responda *CONFIRMAR ${ag.protocolo}* depois de falar com o paciente, ou *REMARCAR ${ag.protocolo}*.`);
   return l.join('\n');
 }
@@ -39,7 +39,7 @@ function lembreteRecepcao(ag, hospital, horas) {
     `*PENDENTE HÁ ${horas}H* ${ag.protocolo}`,
     `${ag.nome} — ${hospital.nome}, ${t.curta(ag.data)} às ${ag.hora}`,
     '',
-    `O horário segue bloqueado na ${hospital.agenda}. Responda *CONFIRMAR ${ag.protocolo}* ou *REMARCAR ${ag.protocolo}*.`,
+    `O horário segue bloqueado na agenda do ${hospital.nome}. Responda *CONFIRMAR ${ag.protocolo}* ou *REMARCAR ${ag.protocolo}*.`,
   ].join('\n');
 }
 
