@@ -130,7 +130,7 @@ function completarPagina(atual) {
   if (!atual || typeof atual !== 'object') return base;
 
   const completa = { ...base, ...atual };
-  for (const chave of ['hero', 'sobre', 'locais', 'agendar', 'duvidas']) {
+  for (const chave of ['hero', 'destaque', 'sobre', 'locais', 'agendar', 'duvidas']) {
     completa[chave] = { ...base[chave], ...(atual[chave] || {}) };
   }
   // seções novas entram no fim da ordem em vez de sumirem da página
@@ -329,6 +329,10 @@ function validarPagina(bruto = {}) {
         valor: texto(d?.valor, 20), rotulo: texto(d?.rotulo, 60),
       })).filter((d) => d.valor && d.rotulo).slice(0, 4),
       foto: texto(bruto.hero?.foto, 500),
+    },
+    destaque: {
+      frase: texto(bruto.destaque?.frase, 300),
+      autoria: texto(bruto.destaque?.autoria, 80),
     },
     sobre: {
       eyebrow: texto(bruto.sobre?.eyebrow, 60),

@@ -135,3 +135,32 @@ test('sitemap e robots respondem', async () => {
   assert.equal(robots.status, 200);
   assert.match(robots.html, /Disallow: \/admin/);
 });
+
+test('a frase de destaque só aparece quando existe', async () => {
+  dados.alterar((c) => {
+    c.pagina.destaque = { frase: 'Ninguém deveria sair do consultório sem entender.', autoria: 'Dr. Felipe' };
+  });
+  const com = await pegar('/');
+  assert.match(com.html, /<aside class="destaque">/);
+  assert.match(com.html, /Ninguém deveria sair do consultório sem entender\./);
+  assert.match(com.html, /<cite>Dr\. Felipe<\/cite>/);
+
+  dados.alterar((c) => { c.pagina.destaque = { frase: '', autoria: '' }; });
+  const sem = await pegar('/');
+  assert.ok(!sem.html.includes('<aside class="destaque">'));
+});
+
+test('a frase sem assinatura não deixa <cite> vazio', async () => {
+  dados.alterar((c) => { c.pagina.destaque = { frase: 'Uma frase só.', autoria: '' }; });
+  const { html } = await pegar('/');
+  assert.match(html, /Uma frase só\./);
+  assert.ok(!html.includes('<cite>'));
+});
+
+test('/admin serve o painel (index:false não pode derrubá-lo)', async () => {
+  for (const rota of ['/admin', '/admin/']) {
+    const r = await pegar(rota);
+    assert.equal(r.status, 200, rota);
+    assert.match(r.html, /id="senha"/);
+  }
+});

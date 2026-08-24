@@ -187,6 +187,23 @@ function hero({ pagina, medico }) {
 </header>`;
 }
 
+/**
+ * A frase do médico, entre a apresentação e o resto.
+ *
+ * A página era bloco de texto do começo ao fim; isto é a pausa — e o único
+ * lugar em que ele fala na primeira pessoa em voz alta.
+ */
+function destaque(pagina) {
+  const d = pagina.destaque || {};
+  if (!d.frase) return '';
+  return `<aside class="destaque">
+  <div class="wrap">
+    <blockquote>${esc(d.frase)}</blockquote>
+    ${d.autoria ? `<cite>${esc(d.autoria)}</cite>` : ''}
+  </div>
+</aside>`;
+}
+
 function secaoSobre(pagina) {
   const s = pagina.sobre;
   const paragrafos = (s.paragrafos || []).map((t) => `<p>${esc(t)}</p>`).join('\n          ');
@@ -233,7 +250,7 @@ function secaoLocais(pagina, hospitais) {
 
   return `<section id="locais">
   <div class="wrap">
-    <div class="sec-head">
+    <div class="sec-head centro">
       ${s.eyebrow ? `<div class="eyebrow">${esc(s.eyebrow)}</div>` : ''}
       <h2>${esc(s.titulo)}</h2>
       ${s.descricao ? `<p>${esc(s.descricao)}</p>` : ''}
@@ -253,7 +270,7 @@ function secaoDuvidas(pagina) {
 
   return `<section id="duvidas">
   <div class="wrap">
-    <div class="sec-head">
+    <div class="sec-head centro">
       ${s.eyebrow ? `<div class="eyebrow">${esc(s.eyebrow)}</div>` : ''}
       <h2>${esc(s.titulo)}</h2>
     </div>
@@ -297,9 +314,11 @@ function secaoAgendar(pagina, hospitais) {
 
   return `<section id="agendar">
   <div class="wrap">
-    <div class="sec-head">
-      ${s.eyebrow ? `<div class="eyebrow">${esc(s.eyebrow)}</div>` : ''}
-      <h2>${esc(s.titulo)}</h2>
+    <div class="sec-head duplo">
+      <div>
+        ${s.eyebrow ? `<div class="eyebrow">${esc(s.eyebrow)}</div>` : ''}
+        <h2>${esc(s.titulo)}</h2>
+      </div>
       ${s.descricao ? `<p>${esc(s.descricao)}</p>` : ''}
     </div>
 
@@ -487,6 +506,8 @@ ${topo({ pagina, medico })}
 
 ${hero({ pagina, medico })}
 
+${destaque(pagina)}
+
 <main>
 ${corpo}
 </main>
@@ -501,4 +522,4 @@ ${rodape({ pagina, medico })}
 
 module.exports = { esc, iniciais, resumoExpediente, horariosDetalhados, turno, cabeca,
   descricaoDaPagina, dadosEstruturados, topo, hero, secaoSobre, secaoLocais, secaoDuvidas,
-  secaoAgendar, rodape, paginaCompleta, NOME_SECAO, DIAS_LONGOS, DIAS_PLURAL };
+  secaoAgendar, destaque, rodape, paginaCompleta, NOME_SECAO, DIAS_LONGOS, DIAS_PLURAL };

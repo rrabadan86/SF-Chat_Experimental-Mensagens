@@ -37,6 +37,17 @@ function padrao() {
       foto: '',
     },
 
+    /**
+     * Uma frase do médico, logo abaixo da apresentação. Existe para dar uma
+     * pausa entre blocos de texto e para o paciente ouvir a voz dele antes de
+     * ler o currículo. Em branco, o bloco não aparece.
+     */
+    destaque: {
+      frase: 'Ninguém deveria receber um diagnóstico de câncer e sair do consultório '
+        + 'sem entender o que vem pela frente.',
+      autoria: '',
+    },
+
     sobre: {
       eyebrow: 'Sobre',
       titulo: 'Quem vai te atender',

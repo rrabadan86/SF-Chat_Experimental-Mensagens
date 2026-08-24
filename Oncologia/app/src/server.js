@@ -75,6 +75,12 @@ app.get('/sitemap.xml', (req, res) => {
 // index:false para o arquivo estático não passar na frente da página montada
 app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'], index: false }));
 
+// ...mas o painel ainda precisa do seu index. Sem esta rota, `index:false`
+// derruba /admin junto com o index da raiz.
+app.get(['/admin', '/admin/'], (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'admin', 'index.html'));
+});
+
 // a foto que o médico enviou pelo painel
 const PASTA_MIDIA = process.env.MIDIA_DIR || path.join(__dirname, '..', 'dados', 'midia');
 fs.mkdirSync(PASTA_MIDIA, { recursive: true });

@@ -223,6 +223,14 @@ window.EditorConteudo = (function () {
         }))
       ) +
 
+      bloco('Frase de destaque', 'A faixa logo abaixo da apresentação. Deixe a frase em branco para não mostrar.',
+        '<div class="fields">' +
+          campo('Frase', 'destaque.frase', { largo: true, linhas: 3,
+            ajuda: 'Uma frase só, na voz do médico' }) +
+          campo('Assinatura', 'destaque.autoria', { ajuda: 'Ex.: Dr. Felipe Oliveira — opcional' }) +
+        '</div>'
+      ) +
+
       bloco('Sobre o médico', 'A apresentação, as áreas de atuação e a formação.',
         '<div class="fields">' +
           campo('Linha de cima', 'sobre.eyebrow') +
