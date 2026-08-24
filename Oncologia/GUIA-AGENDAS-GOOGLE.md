@@ -135,6 +135,7 @@ dias e horários, as agendas estão conectadas.
 |---|---|
 | `Falta a variável CAL_H1 no .env` | Os IDs não foram colados no `.env`. |
 | `O Google recusou a consulta a estas agendas` | A agenda não foi compartilhada com a conta de serviço, ou foi compartilhada com permissão de leitura só. Refaça os passos 5 a 9. |
+| A agenda não aparece em `calendarList` | Comportamento normal: conta de serviço **não** recebe a agenda na própria lista quando alguém compartilha, ao contrário de uma conta de pessoa. Não use `calendarList` para verificar acesso — use `calendars.get` ou tente escrever. |
 | `Faltou a credencial do Google` | O `credenciais.json` não está no lugar indicado no `.env`. |
 | Nenhum horário aparece | Confira em `config/hospitais.json` se os dias da semana batem (0=domingo … 6=sábado) e se a antecedência mínima não está engolindo os próximos dias. |
 
