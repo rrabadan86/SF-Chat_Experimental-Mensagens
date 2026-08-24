@@ -18,6 +18,7 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
 const path = require('path');
 const qrcodeTerminal = require('qrcode-terminal');
+const waStatus = require('./wa-status');
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
 
@@ -136,11 +137,16 @@ function initWhatsApp() {
     client.on('qr', (qr) => {
       console.log('\n📲 Escaneie o QR no WhatsApp do número (Aparelhos conectados → Conectar um aparelho):\n');
       qrcodeTerminal.generate(qr, { small: true });
+      // Grava o QR (como imagem) no estado compartilhado para o painel exibir.
+      // O QR é gerado LOCALMENTE (nunca enviado a serviços externos — é um token).
+      require('qrcode').toDataURL(qr, { margin: 1, width: 320 })
+        .then(dataUrl => waStatus.set('qr', dataUrl))
+        .catch(() => waStatus.set('qr', null));
       // ALERTA CRÍTICO: com a sessão salva, o QR NÃO deveria aparecer. Se apareceu,
-      // a sessão caiu e o bot está PARADO até alguém escanear o QR no servidor.
+      // a sessão caiu e o bot está PARADO até alguém escanear o QR (no painel ou servidor).
       notif.alertar(
         'WhatsApp CAIU — precisa de QR',
-        'A sessao do WhatsApp expirou. Rode no servidor: pm2 logs slimfit-exp (ou "cd Experimental && node src/wa-client.js") e escaneie o QR. Ate la, NENHUMA mensagem sai.',
+        'A sessao do WhatsApp expirou. Abra o painel (aba WhatsApp) e escaneie o QR, ou rode no servidor: pm2 logs slimfit-exp. Ate la, NENHUMA mensagem sai.',
         { prioridade: 'urgent', tags: 'rotating_light', forcar: true },
       );
     });
@@ -149,6 +155,7 @@ function initWhatsApp() {
       if (resolvido) return;
       resolvido = true;
       pronto = true;
+      waStatus.set('conectado', null);
       log(`✅ WhatsApp PRONTO (${via}) — pode disparar.`);
       iniciarKeepAlive();
       resolve(client);
@@ -177,6 +184,7 @@ function initWhatsApp() {
     client.on('ready', () => marcarPronto('evento ready'));
     client.on('disconnected', (motivo) => {
       pronto = false;
+      waStatus.set('desconectado', null);
       log('⚠️  Desconectado: ' + motivo);
     });
 
@@ -185,6 +193,7 @@ function initWhatsApp() {
     }, 90000);
   });
 
+  waStatus.set('iniciando', null);
   client.initialize().catch((e) => {
     const msg = (e && e.message) || String(e);
     if (/already running/i.test(msg)) {

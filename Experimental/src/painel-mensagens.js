@@ -16,6 +16,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const mensagens = require('./mensagens');
 const ag = require('./agendamentos');
+const waStatus = require('./wa-status');
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
 // Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
@@ -108,6 +109,15 @@ const ESTILO = `
   .st-falha{background:#fdecec;color:#a12626;border-color:#f6c9c9}
   .sec-t{font-family:"Montserrat";font-weight:800;font-size:1rem;margin:22px 0 4px}
   .vazio{color:var(--cinza);font-size:.9rem}
+  .wa-card{background:var(--card);border:1px solid var(--linha);border-radius:16px;padding:26px 22px;text-align:center;margin:18px 0;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+  .wa-card.ok{border-color:#bfe8cd;background:#f3fbf6}
+  .wa-card.warn{border-color:#f6cfcd;background:#fff6f5}
+  .wa-ic{font-size:2.4rem;line-height:1}
+  .wa-card h2{margin:8px 0 6px}
+  .wa-card p{color:var(--cinza);margin:6px auto 0;max-width:48ch}
+  .wa-card .qr{width:280px;max-width:82%;height:auto;margin:16px auto 6px;display:block;border:8px solid #fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.12)}
+  .wa-hint{font-size:.85rem}
+  .wa-upd{text-align:center;color:var(--cinza);font-size:.8rem;margin-top:10px}
   footer{color:var(--cinza);font-size:.8rem;text-align:center;padding:20px}
 `;
 
@@ -126,6 +136,7 @@ function chrome(titSubtitulo, ativo, corpo) {
 <nav class="tabs">
   <a href="/" class="${ativo === 'msg' ? 'on' : ''}">✏️ Mensagens</a>
   <a href="/agendar" class="${ativo === 'ag' ? 'on' : ''}">📅 Agendar envios</a>
+  <a href="/wa" class="${ativo === 'wa' ? 'on' : ''}">📱 WhatsApp</a>
 </nav>
 ${corpo}
 <footer>SlimFit · painel do Studio</footer>
@@ -279,6 +290,30 @@ function paginaAgendar(aviso, erro) {
   return chrome({ tab: 'Agendar envios', h1: '📅 Agendar envios', p: 'Mensagens são enviadas <b>10:45</b> (manhã) e <b>15:45</b> (tarde) do dia agendado.' }, 'ag', corpo);
 }
 
+// ── Página 3: conexão do WhatsApp (QR quando cai) ───────────────────────────
+function paginaWa() {
+  const st = waStatus.get();
+  const quando = st.atualizadoEm ? new Date(st.atualizadoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
+  let bloco;
+  if (st.estado === 'conectado') {
+    bloco = `<div class="wa-card ok"><div class="wa-ic">✅</div><h2>WhatsApp conectado</h2><p>A sessão está ativa — o robô envia normalmente.</p></div>`;
+  } else if (st.estado === 'qr' && st.qr) {
+    bloco = `<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR para reconectar</h2>
+      <p>A sessão caiu. No <b>celular do Studio</b>: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte a câmera para o código abaixo.</p>
+      <img class="qr" src="${esc(st.qr)}" alt="QR do WhatsApp">
+      <p class="wa-hint">Esta página se atualiza sozinha. Assim que conectar, vira “✅ conectado”.</p></div>`;
+  } else if (st.estado === 'iniciando') {
+    bloco = `<div class="wa-card"><div class="wa-ic">⏳</div><h2>Iniciando…</h2><p>O robô está subindo a conexão. Aguarde alguns segundos — se precisar de QR, ele aparece aqui.</p></div>`;
+  } else if (st.estado === 'desconectado') {
+    bloco = `<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>O robô está tentando reconectar sozinho. Se aparecer um QR aqui em instantes, escaneie; senão, a reconexão automática costuma resolver.</p></div>`;
+  } else {
+    bloco = `<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>O robô ainda não gravou o estado. Verifique se o <code>slimfit-exp</code> está rodando (<code>pm2 status</code>).</p></div>`;
+  }
+  const reload = st.estado === 'conectado' ? '' : '<script>setTimeout(function(){location.reload()},6000)</script>';
+  const corpo = `<div class="wrap">${bloco}<p class="wa-upd">Última atualização do robô: ${esc(quando)}</p></div>${reload}`;
+  return chrome({ tab: 'WhatsApp', h1: '📱 Conexão do WhatsApp', p: 'Veja se a sessão está ativa — e escaneie o QR aqui se ela cair.' }, 'wa', corpo);
+}
+
 function pedirLogin(res) {
   res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Painel SlimFit", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('Acesso restrito.');
@@ -347,6 +382,12 @@ const server = http.createServer((req, res) => {
     return fs.createReadStream(caminho).pipe(res);
   }
 
+  // Página da conexão do WhatsApp (QR quando cai)
+  if (req.method === 'GET' && url === '/wa') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(paginaWa());
+  }
+
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('Não encontrado.');
 });
@@ -354,5 +395,5 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   if (!SENHA) console.warn('⚠️  PAINEL_SENHA não definido no .env — o painel vai NEGAR todo acesso até você definir usuário e senha.');
   console.log(`🖥️  Painel do Studio ouvindo em ${HOST}:${PORT} (usuário: ${USER}).`);
-  console.log('   Páginas: /  (mensagens)  e  /agendar  (envios agendados). Exponha SEMPRE atrás de HTTPS.');
+  console.log('   Páginas: /  (mensagens) · /agendar  (envios) · /wa  (conexão do WhatsApp). Exponha SEMPRE atrás de HTTPS.');
 });

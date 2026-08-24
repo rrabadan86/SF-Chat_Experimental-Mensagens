@@ -25,3 +25,5 @@ data/agendamentos.json
 data/agendamentos-fotos/
 # Contas do IG que esgotaram tentativas de DM (estado por VPS)
 data/instagram-indisponiveis.json
+# Estado do WhatsApp (QR/conexao) — por VPS
+data/wa-status.json
