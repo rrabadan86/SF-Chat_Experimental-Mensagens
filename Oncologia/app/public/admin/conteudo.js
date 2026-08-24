@@ -317,7 +317,7 @@ window.EditorConteudo = (function () {
     var url = estado.pagina.hero.foto;
     return '<div class="foto-editor">' +
       '<div class="foto-previa" id="fotoPrevia">' +
-        (url ? '<img src="' + escapar(url) + '" alt="">' : 'Sem foto') +
+        (url ? '<img src="' + escapar(url) + '" alt="" id="imgPrevia">' : 'Sem foto') +
       '</div>' +
       '<div class="foto-acoes">' +
         '<div class="foto-botoes">' +
@@ -335,9 +335,52 @@ window.EditorConteudo = (function () {
     '</div>';
   }
 
+  /**
+   * Sites como Instagram e Facebook bloqueiam o uso da imagem fora deles, e os
+   * endereços expiram em algumas horas. Colar um link desses parece funcionar
+   * na hora de salvar e depois vira quadradinho quebrado na página do paciente,
+   * então avisamos aqui, antes.
+   */
+  var HOSPEDEIROS_QUE_BLOQUEIAM = /(fbcdn\.net|cdninstagram\.com|instagram\.com|fbsbx\.com|lookaside\.)/i;
+
+  function conferirEndereco() {
+    var campo = $('#c-hero-foto');
+    var status = $('#statusFoto');
+    if (!campo || !status) return;
+    var url = campo.value.trim();
+
+    if (!url || url.indexOf('/midia/') === 0) return;
+
+    if (HOSPEDEIROS_QUE_BLOQUEIAM.test(url)) {
+      status.textContent = 'Endereços do Instagram e do Facebook não funcionam aqui: eles bloqueiam '
+        + 'o uso da imagem fora do site e o link expira em algumas horas. Baixe a foto e use '
+        + '"Enviar do computador".';
+      return;
+    }
+
+    status.textContent = 'Verificando o endereço…';
+    var teste = new Image();
+    teste.onload = function () { status.textContent = 'Imagem encontrada.'; };
+    teste.onerror = function () {
+      status.textContent = 'Não consegui carregar a imagem desse endereço. Talvez o site bloqueie '
+        + 'o uso fora dele — nesse caso, baixe a foto e use "Enviar do computador".';
+    };
+    teste.src = url;
+  }
+
   function ligarFoto() {
     var escolher = $('#escolherFoto');
     if (!escolher) return;
+
+    var campoUrl = $('#c-hero-foto');
+    if (campoUrl) {
+      var espera;
+      campoUrl.addEventListener('input', function () {
+        clearTimeout(espera);
+        espera = setTimeout(conferirEndereco, 700);
+      });
+      campoUrl.addEventListener('blur', conferirEndereco);
+    }
     escolher.addEventListener('click', function () { $('#arquivoFoto').click(); });
 
     var tirar = $('#tirarFoto');
@@ -352,10 +395,16 @@ window.EditorConteudo = (function () {
       var arquivo = ev.target.files && ev.target.files[0];
       if (!arquivo) return;
       var status = $('#statusFoto');
+
+      if (arquivo.size > 25 * 1024 * 1024) {
+        status.textContent = 'Essa imagem tem mais de 25 MB. Use uma foto menor.';
+        return;
+      }
+
       status.textContent = 'Preparando a imagem…';
       try {
         var imagem = await reduzir(arquivo, 1000);
-        status.textContent = 'Enviando…';
+        status.textContent = 'Enviando ' + Math.round(imagem.length / 1400) + ' KB…';
         var r = await estado.api('/foto', { method: 'POST', body: JSON.stringify({ imagem: imagem }) });
         estado.pagina.hero.foto = r.url;
         desenharEditor();

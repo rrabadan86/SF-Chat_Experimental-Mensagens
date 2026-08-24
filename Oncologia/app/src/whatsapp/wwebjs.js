@@ -164,18 +164,55 @@ function esperarPronto(timeoutMs = 60000) {
   });
 }
 
+/**
+ * Descobre o endereço real do número no WhatsApp.
+ *
+ * Montar `numero@c.us` na mão não funciona de forma confiável: o WhatsApp passou
+ * a usar um identificador interno (LID) e o envio falha com "No LID for user".
+ * No Brasil ainda tem o nono dígito — muita linha antiga está registrada sem
+ * ele, e o número que a recepção informou pode ser a variante que não existe.
+ * `getNumberId` resolve as duas coisas: devolve o endereço certo, ou nada, se o
+ * número não tiver WhatsApp.
+ */
+async function enderecoDe(numero) {
+  const digitos = String(numero).replace(/\D/g, '');
+  if (!digitos) throw new Error('Número de WhatsApp vazio.');
+
+  let achado = null;
+  try {
+    achado = await cliente.getNumberId(digitos);
+  } catch (e) {
+    console.error(`[wa] não consegui resolver o número ${digitos}: ${e.message}`);
+  }
+
+  // linha brasileira antiga: tenta a variante sem o nono dígito
+  if (!achado && /^55\d{2}9\d{8}$/.test(digitos)) {
+    const semNove = digitos.slice(0, 4) + digitos.slice(5);
+    try { achado = await cliente.getNumberId(semNove); } catch { /* segue */ }
+  }
+
+  if (!achado) {
+    throw new Error(
+      `O número ${digitos} não foi encontrado no WhatsApp. Confira se está certo, ` +
+      'com 55 + DDD + número, e se essa linha realmente tem WhatsApp.'
+    );
+  }
+  return achado._serialized;
+}
+
 async function enviar(numero, texto) {
   if (estado.situacao !== 'conectado') {
     if (!cliente) await iniciar();
     await esperarPronto();
   }
-  const destino = `${String(numero).replace(/\D/g, '')}@c.us`;
-  return cliente.sendMessage(destino, texto);
+  return cliente.sendMessage(await enderecoDe(numero), texto);
 }
 
 module.exports = {
   nome: 'wwebjs',
-  iniciar, enviar, conectar, desconectar, qrImagem,
+  iniciar, enviar, conectar, desconectar, qrImagem, enderecoDe,
+  /** só para teste: troca o cliente do WhatsApp por um de mentira */
+  _usarCliente(falso) { cliente = falso; anotar('conectado'); },
   estado: estadoAtual,
   aoReceber: (cb) => escutas.push(cb),
 };

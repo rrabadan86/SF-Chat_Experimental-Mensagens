@@ -25,7 +25,17 @@ const rotasAdmin = require('./rotas-admin');
 
 const app = express();
 app.set('trust proxy', 1);
-app.use(express.json({ limit: '32kb' }));
+/**
+ * Corpo em JSON, pequeno de propósito: as rotas do paciente recebem um
+ * formulário, não um arquivo. A exceção é o envio da foto, que tem o próprio
+ * limite maior definido na rota — por isso ela precisa escapar deste parser,
+ * senão o corpo é recusado aqui antes de chegar lá.
+ */
+const CORPO_GRANDE = ['/admin/api/foto'];
+const corpoPequeno = express.json({ limit: '32kb' });
+app.use((req, res, next) => (
+  CORPO_GRANDE.includes(req.path) ? next() : corpoPequeno(req, res, next)
+));
 app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
 
 // a foto que o médico enviou pelo painel
@@ -116,6 +126,18 @@ app.get('/saude', (_req, res) => {
     hospitais: config.hospitais.length,
     painel: Boolean(process.env.ADMIN_SENHA_HASH),
   });
+});
+
+// erro do parser de JSON (corpo grande, JSON quebrado) vira resposta em JSON,
+// senão o Express devolve uma página HTML que a tela não consegue ler
+app.use((erro, req, res, next) => {
+  if (erro && erro.type === 'entity.too.large') {
+    return res.status(413).json({ erro: 'Conteúdo grande demais para enviar.', codigo: 'muito_grande' });
+  }
+  if (erro && erro.type === 'entity.parse.failed') {
+    return res.status(400).json({ erro: 'Não entendi os dados enviados.', codigo: 'json_invalido' });
+  }
+  return next(erro);
 });
 
 function responderErro(res, e) {

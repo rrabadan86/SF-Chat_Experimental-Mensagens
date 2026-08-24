@@ -47,6 +47,13 @@
     var r = await fetch(caminho, opcoes);
     var corpo = await r.json().catch(function () { return {}; });
     if (!r.ok) {
+      // resposta sem JSON (erro do próprio servidor web) não pode virar
+      // "não consegui falar com o servidor" — isso esconde a causa
+      if (!corpo.erro) {
+        corpo.erro = r.status === 413
+          ? 'O arquivo é grande demais para enviar.'
+          : 'O servidor respondeu ' + r.status + '. Veja os logs se persistir.';
+      }
       var erro = new Error(corpo.erro || 'Não consegui falar com o servidor.');
       erro.codigo = corpo.codigo;
       erro.erros = corpo.erros;

@@ -335,3 +335,32 @@ test('as rotas do WhatsApp exigem sessão', async () => {
   assert.equal((await nav('/admin/api/whatsapp/desconectar', { method: 'POST' })).status, 401);
   assert.equal((await nav('/admin/api/whatsapp/testar', { method: 'POST' })).status, 401);
 });
+
+test('foto real (grande) passa pelo limite de corpo', async () => {
+  const nav = await entrar(navegador());
+
+  // ~300 KB de base64, o tamanho de um retrato já reduzido pelo navegador —
+  // acima do limite de 32 KB que vale para as outras rotas
+  const png = 'data:image/png;base64,' + 'A'.repeat(400_000);
+  const r = await nav('/admin/api/foto', { method: 'POST', body: JSON.stringify({ imagem: png }) });
+
+  assert.equal(r.status, 200, 'o parser global não pode barrar a rota da foto');
+  assert.match(r.corpo.url, /^\/midia\/foto-/);
+});
+
+test('imagem absurda é recusada com mensagem, não com erro cru', async () => {
+  const nav = await entrar(navegador());
+  const gigante = 'data:image/png;base64,' + 'A'.repeat(6 * 1024 * 1024);
+  const r = await nav('/admin/api/foto', { method: 'POST', body: JSON.stringify({ imagem: gigante }) });
+  assert.ok(r.status === 413, `esperava 413, veio ${r.status}`);
+  assert.ok(r.corpo.erro, 'a resposta precisa ser JSON com mensagem');
+});
+
+test('as outras rotas continuam com o limite pequeno', async () => {
+  const nav = await entrar(navegador());
+  const r = await nav('/admin/api/pagina', {
+    method: 'PUT', body: JSON.stringify({ recheio: 'x'.repeat(50_000) }),
+  });
+  assert.equal(r.status, 413);
+  assert.equal(r.corpo.codigo, 'muito_grande');
+});
