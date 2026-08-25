@@ -249,12 +249,12 @@ const ESTILO = `
   .wabar.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
   .wabar.warn{background:var(--erro-bg);border:1px solid var(--erro-bd);color:var(--erro)}
   .wabar a{color:inherit;font-weight:700;margin-left:auto;white-space:nowrap}
-  .wa-card{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:16px 20px;text-align:center;margin:12px 0}
+  .wa-card{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:14px 18px;text-align:center;margin:12px 0}
   .wa-card.ok{border-color:var(--ok-bd);background:var(--ok-bg)}
   .wa-card.warn{border-color:var(--erro-bd);background:var(--erro-bg)}
-  .wa-ic{font-size:1.9rem;line-height:1}
-  .wa-card h2{margin:6px 0 4px}
-  .wa-card p{color:var(--cinza);margin:4px auto 0;max-width:48ch;font-size:var(--fs-sm)}
+  .wa-ic{font-size:1.7rem;line-height:1}
+  .wa-card h2{margin:4px 0 3px}
+  .wa-card p{color:var(--cinza);margin:3px auto 0;max-width:none;font-size:var(--fs-sm)}
   .wa-card .qr{width:280px;max-width:82%;height:auto;margin:16px auto 6px;display:block;border:8px solid #fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.12)}
   .wa-hint{font-size:var(--fs-sm)}
   .wa-upd{text-align:center;color:var(--cinza);font-size:var(--fs-xs);margin-top:10px}
