@@ -941,7 +941,11 @@ function paginaSofiaConversas(aviso, erro) {
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('conversas')}
     <div class="sec-t">💬 Conversas da Sofia <small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
-    <div style="display:grid;grid-template-columns:320px minmax(0,1fr);gap:14px;align-items:start">
+    <style>
+      .inbox-grid{display:grid;grid-template-columns:320px minmax(0,1fr);gap:14px;align-items:start}
+      @media(max-width:760px){ .inbox-grid{grid-template-columns:1fr} #convLista{max-height:260px;overflow:auto} }
+    </style>
+    <div class="inbox-grid">
       <div>
         <div id="convLista" style="min-height:120px"></div>
         <div id="convPag" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px"></div>
