@@ -119,6 +119,68 @@ function setTags(telefone, tags) {
   return true;
 }
 
+// Exclui um contato.
+function remover(telefone) {
+  const map = carregar();
+  const tel = normTel(telefone);
+  if (!map[tel]) return false;
+  delete map[tel];
+  salvar(map);
+  return true;
+}
+
+// Edita nome/telefone/tags de um contato. Se o telefone mudar, muda a chave
+// (se o novo número já existir, funde as tags no existente e remove o antigo).
+function editarContato(telOrig, { nome, telefone, tags }) {
+  const map = carregar();
+  const orig = normTel(telOrig);
+  if (!map[orig]) return false;
+  let c = map[orig];
+  if (nome != null) c.nome = String(nome).trim();
+  if (tags != null) c.tags = limparTags(tags);
+  const novo = normTel(telefone);
+  if (novo && novo !== orig) {
+    if (map[novo]) { // já existe → funde as tags e descarta o antigo
+      for (const t of c.tags) if (!map[novo].tags.includes(t)) map[novo].tags.push(t);
+      if (nome != null && String(nome).trim()) map[novo].nome = String(nome).trim();
+      map[novo].atualizadoEm = Date.now();
+      delete map[orig];
+    } else { // re-chaveia
+      c.tel = novo; map[novo] = c; delete map[orig];
+    }
+  } else {
+    c.atualizadoEm = Date.now();
+  }
+  salvar(map);
+  return true;
+}
+
+// Renomeia uma tag em TODOS os contatos. Devolve quantos foram afetados.
+function renomearTag(de, para) {
+  de = String(de || '').trim(); para = String(para || '').trim();
+  if (!de || !para || de === para) return 0;
+  const map = carregar(); let n = 0;
+  for (const c of Object.values(map)) {
+    if ((c.tags || []).includes(de)) { c.tags = limparTags(c.tags.map(t => t === de ? para : t)); c.atualizadoEm = Date.now(); n++; }
+  }
+  salvar(map);
+  return n;
+}
+
+// Remove uma tag de TODOS os contatos. Devolve quantos foram afetados.
+function excluirTag(tag) {
+  tag = String(tag || '').trim();
+  if (!tag) return 0;
+  const map = carregar(); let n = 0;
+  for (const c of Object.values(map)) {
+    const antes = (c.tags || []).length;
+    c.tags = (c.tags || []).filter(t => t !== tag);
+    if (c.tags.length !== antes) { c.atualizadoEm = Date.now(); n++; }
+  }
+  salvar(map);
+  return n;
+}
+
 // Lista com busca (nome/telefone), filtro por tag e paginação.
 function listar({ q = '', tag = '', pagina = 0, porPagina = 25 } = {}) {
   const map = carregar();
@@ -147,4 +209,19 @@ function tagsDistintas() {
 
 function totalContatos() { return Object.keys(carregar()).length; }
 
-module.exports = { normTel, carregar, importarCSV, setTags, listar, tagsDistintas, totalContatos, ARQUIVO };
+// Existe um contato salvo com este telefone?
+function existe(telefone) { const t = normTel(telefone); return !!(t && carregar()[t]); }
+
+// Adiciona/mescla UM contato (usado ao salvar direto de uma conversa).
+function adicionar({ nome, telefone, tags, instrucoes }) {
+  const map = carregar();
+  const c = upsert(map, { nome, telefone, tags, instrucoes });
+  if (!c) throw new Error('Telefone inválido.');
+  salvar(map);
+  return c;
+}
+
+module.exports = {
+  normTel, carregar, importarCSV, setTags, listar, tagsDistintas, totalContatos,
+  remover, editarContato, renomearTag, excluirTag, existe, adicionar, ARQUIVO,
+};

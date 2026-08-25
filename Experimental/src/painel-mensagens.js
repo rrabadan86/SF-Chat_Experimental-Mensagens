@@ -949,7 +949,7 @@ function paginaSofiaConversas(aviso, erro) {
     </div>
   </div>
 <script>
-  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={};
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1};
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function fmtHora(ts){ try{return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
   function autorRot(a){ return a==='aluna'?'Aluna':(a==='humano'?'Você':'Sofia'); }
@@ -962,8 +962,18 @@ function paginaSofiaConversas(aviso, erro) {
       var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e6f6f7');
       return '<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+autorRot(m.autor)+' · '+fmtHora(m.em)+'</div><div style="white-space:pre-wrap">'+escH(m.texto)+'</div></div></div>';
     }).join('');
-    chat.innerHTML = '<div style="font-weight:800;margin-bottom:2px">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin-bottom:8px">'+escH(fmtTel(k))+'</div><div id="bolhas" style="overflow:auto;max-height:460px;padding-right:4px">'+bolhas+'</div>';
+    var salvar = c.salvo
+      ? '<div class="quando" style="color:#0e8e91;margin-bottom:8px">✓ contato salvo</div>'
+      : '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 10px"><input id="ncNome" placeholder="Nome" value="'+escH(c.nome||'')+'" style="flex:1;min-width:110px;font-size:.85rem"><input id="ncTags" placeholder="tags (vírgula)" style="flex:1;min-width:110px;font-size:.85rem"><button type="button" class="save" style="padding:5px 10px" onclick="salvarContato(\\''+k+'\\')">💾 Salvar contato</button><span id="ncMsg" class="quando"></span></div>';
+    chat.innerHTML = '<div style="font-weight:800;margin-bottom:2px">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin-bottom:6px">'+escH(fmtTel(k))+'</div>'+salvar+'<div id="bolhas" style="overflow:auto;max-height:440px;padding-right:4px">'+bolhas+'</div>';
     var b=document.getElementById('bolhas'); if(b) b.scrollTop=b.scrollHeight;
+  }
+  function salvarContato(k){
+    var nome=(document.getElementById('ncNome')||{}).value||'', tags=(document.getElementById('ncTags')||{}).value||'', msg=document.getElementById('ncMsg');
+    if(msg)msg.textContent='Salvando…';
+    fetch('/sofia/contatos/salvar-novo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:k,nome:nome,tags:tags})})
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].salvo=true; ultimoRender={chave:null,n:-1}; renderChat(ultimoData[k],k); } else if(msg){ msg.textContent='❌ '+(j.erro||'falha'); } })
+      .catch(function(){ if(msg)msg.textContent='❌ erro'; });
   }
   function renderInbox(data){
     ultimoData = data||{};
@@ -983,10 +993,15 @@ function paginaSofiaConversas(aviso, erro) {
       if(paginas>1){ pag.innerHTML='<button type="button" class="reset" onclick="mudarPag(-1)" '+(pagina===0?'disabled':'')+' style="padding:6px 12px">‹ Anterior</button><span class="quando" style="text-align:center">Página '+(pagina+1)+' de '+paginas+'<br>'+total+' conversas</span><button type="button" class="reset" onclick="mudarPag(1)" '+(pagina>=paginas-1?'disabled':'')+' style="padding:6px 12px">Próxima ›</button>'; }
       else { pag.innerHTML='<span class="quando">'+total+' conversa'+(total>1?'s':'')+'</span>'; }
     }
-    if(selecionada && ultimoData[selecionada]) renderChat(ultimoData[selecionada], selecionada);
+    if(selecionada && ultimoData[selecionada]){
+      var cc=ultimoData[selecionada], nn=(cc.msgs?cc.msgs.length:0);
+      // Só re-renderiza o chat quando muda de conversa ou chega mensagem nova —
+      // assim o refresh de 4s não apaga o que você está digitando no "Salvar contato".
+      if(ultimoRender.chave!==selecionada || ultimoRender.n!==nn){ renderChat(cc, selecionada); ultimoRender={chave:selecionada,n:nn}; }
+    }
   }
   function mudarPag(d){ pagina+=d; renderInbox(ultimoData); }
-  function abrir(k){ selecionada=k; if(ultimoData[k]) renderChat(ultimoData[k],k); renderInbox(ultimoData); }
+  function abrir(k){ selecionada=k; ultimoRender={chave:null,n:-1}; renderInbox(ultimoData); }
   function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(renderInbox).catch(function(){}); }
   atualizaInbox(); setInterval(atualizaInbox, 4000);
 </script>`;
@@ -1004,20 +1019,34 @@ function paginaSofiaContatos(aviso, erro, params) {
   const total = contatos.totalContatos();
 
   const fmtTelP = (t) => { const d = String(t || '').replace(/\D/g, ''); if (/^55\d{10,11}$/.test(d)) { const ddd = d.slice(2, 4), x = d.slice(4); return '+55 (' + ddd + ') ' + (x.length === 9 ? x.slice(0, 5) + '-' + x.slice(5) : x.slice(0, 4) + '-' + x.slice(4)); } return t || ''; };
-  const chip = (t) => `<span style="display:inline-block;background:#e6f6f7;color:#0e8e91;border:1px solid #b8e6e7;border-radius:999px;padding:2px 9px;font-size:.74rem;margin:2px 4px 2px 0">${esc(t)}</span>`;
+  const chip = (t) => `<span style="display:inline-flex;align-items:center;gap:5px;background:#e6f6f7;color:#0e8e91;border:1px solid #b8e6e7;border-radius:999px;padding:2px 9px;font-size:.74rem;margin:2px 4px 2px 0">${esc(t)}<a href="javascript:void(0)" data-tag="${esc(t)}" onclick="rmChip(this)" title="tirar esta tag" style="color:#0e8e91;font-weight:800;text-decoration:none">×</a></span>`;
   const qs = (pg) => { const p = new URLSearchParams(); p.set('view', 'contatos'); if (q) p.set('q', q); if (tagSel) p.set('tag', tagSel); p.set('pagina', pg); return '/sofia?' + p.toString(); };
+  const hidden = `<input type="hidden" name="q" value="${esc(q)}"><input type="hidden" name="tag" value="${esc(tagSel)}"><input type="hidden" name="pagina" value="${pagina}">`;
 
   const linhas = r.itens.map(c => `<div class="card" style="padding:12px 14px;margin-bottom:8px">
-      <div style="font-weight:700">${esc(c.nome || '(sem nome)')}</div>
-      <div class="quando">${esc(fmtTelP(c.tel))}</div>
-      <div style="margin:6px 0">${(c.tags || []).map(chip).join('') || '<span class="quando">sem tags</span>'}</div>
-      <form method="POST" action="/sofia/contatos/tags" style="display:flex;gap:8px;margin:4px 0 0;flex-wrap:wrap">
-        <input type="hidden" name="tel" value="${esc(c.tel)}">
-        <input type="hidden" name="q" value="${esc(q)}"><input type="hidden" name="tag" value="${esc(tagSel)}"><input type="hidden" name="pagina" value="${pagina}">
-        <input type="text" name="tags" value="${esc((c.tags || []).join(', '))}" placeholder="tags separadas por vírgula" style="flex:1;min-width:200px;font-size:.85rem">
-        <button type="submit" class="save" style="padding:6px 12px">Salvar tags</button>
+      <form method="POST" action="/sofia/contatos/salvar">
+        <input type="hidden" name="telOrig" value="${esc(c.tel)}">${hidden}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+          <input type="text" name="nome" value="${esc(c.nome || '')}" placeholder="Nome" style="flex:2;min-width:160px;font-weight:700">
+          <input type="text" name="telefone" value="${esc(fmtTelP(c.tel))}" placeholder="Telefone" style="flex:1;min-width:140px">
+        </div>
+        <div style="margin:2px 0 6px">${(c.tags || []).map(chip).join('') || '<span class="quando">sem tags</span>'}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="text" name="tags" value="${esc((c.tags || []).join(', '))}" placeholder="tags separadas por vírgula" style="flex:1;min-width:200px;font-size:.85rem">
+          <button type="submit" class="save" name="acao" value="salvar" style="padding:6px 12px">💾 Salvar</button>
+          <button type="submit" class="reset" name="acao" value="excluir" onclick="return confirm('Excluir este contato de vez?')" style="padding:6px 12px">🗑️ Excluir</button>
+        </div>
       </form>
     </div>`).join('');
+
+  const gerenciarTags = tags.length ? `<details style="margin:0 0 12px"><summary style="cursor:pointer;font-weight:700;padding:6px 0">🏷️ Gerenciar tags <small style="font-weight:400;color:#5c5960">(renomear ou excluir uma tag em TODOS os contatos)</small></summary>
+    <div class="card">${tags.map(t => `<form method="POST" action="/sofia/contatos/tag" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+      <input type="hidden" name="de" value="${esc(t.tag)}">${hidden}
+      <input type="text" name="para" value="${esc(t.tag)}" style="flex:1;min-width:220px;font-size:.85rem">
+      <span class="quando">(${t.n})</span>
+      <button type="submit" class="save" name="acao" value="renomear" style="padding:5px 10px">Renomear</button>
+      <button type="submit" class="reset" name="acao" value="excluir" onclick="return confirm('Excluir a tag em TODOS os contatos?')" style="padding:5px 10px">Excluir</button>
+    </form>`).join('')}</div></details>` : '';
 
   const opcoes = ['<option value="">Todas as tags</option>']
     .concat(tags.map(t => `<option value="${esc(t.tag)}"${t.tag === tagSel ? ' selected' : ''}>${esc(t.tag)} (${t.n})</option>`)).join('');
@@ -1051,10 +1080,17 @@ function paginaSofiaContatos(aviso, erro, params) {
       ${(q || tagSel) ? `<a href="/sofia?view=contatos" class="reset" style="padding:8px 14px">Limpar</a>` : ''}
     </form>
 
+    ${gerenciarTags}
     ${linhas || '<div class="card"><p class="quando">Nenhum contato encontrado. Importe um CSV acima ou ajuste o filtro.</p></div>'}
     ${pag}
   </div>
 <script>
+  function rmChip(a){
+    var tag=a.getAttribute('data-tag'), form=a.closest('form'); if(!form) return;
+    var inp=form.querySelector('input[name=tags]');
+    if(inp){ inp.value=inp.value.split(',').map(function(s){return s.trim();}).filter(function(s){return s && s!==tag;}).join(', '); }
+    var chip=a.closest('span'); if(chip && chip.parentNode) chip.parentNode.removeChild(chip);
+  }
   function importarCsv(){
     var f=document.getElementById('csvFile'), msg=document.getElementById('impMsg');
     if(!f.files||!f.files[0]){ msg.textContent='Escolha um arquivo .csv primeiro.'; return; }
@@ -1413,21 +1449,52 @@ const server = http.createServer((req, res) => {
       }
     });
   }
-  // Editar as tags de um contato.
-  if (req.method === 'POST' && url === '/sofia/contatos/tags') {
+  // Volta para a lista de contatos preservando busca/filtro/página.
+  const voltarContatos = (p, res) => {
+    const back = new URLSearchParams(); back.set('view', 'contatos');
+    if (p.get('q')) back.set('q', p.get('q')); if (p.get('tag')) back.set('tag', p.get('tag'));
+    back.set('pagina', p.get('pagina') || 0); back.set('ctok', '1');
+    res.writeHead(303, { Location: '/sofia?' + back.toString() }); res.end();
+  };
+  // Salvar (editar nome/telefone/tags) OU excluir um contato.
+  if (req.method === 'POST' && url === '/sofia/contatos/salvar') {
     return lerCorpo(req, 1e5, corpo => {
       const p = new URLSearchParams(corpo);
-      try { contatos.setTags(p.get('tel'), p.get('tags') || ''); } catch (_) {}
-      const back = new URLSearchParams(); back.set('view', 'contatos');
-      if (p.get('q')) back.set('q', p.get('q')); if (p.get('tag')) back.set('tag', p.get('tag'));
-      back.set('pagina', p.get('pagina') || 0); back.set('ctok', '1');
-      res.writeHead(303, { Location: '/sofia?' + back.toString() }); res.end();
+      try {
+        if (p.get('acao') === 'excluir') contatos.remover(p.get('telOrig'));
+        else contatos.editarContato(p.get('telOrig'), { nome: p.get('nome'), telefone: p.get('telefone'), tags: p.get('tags') || '' });
+      } catch (_) {}
+      voltarContatos(p, res);
+    });
+  }
+  // Renomear/excluir uma tag em TODOS os contatos.
+  if (req.method === 'POST' && url === '/sofia/contatos/tag') {
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      try {
+        if (p.get('acao') === 'excluir') contatos.excluirTag(p.get('de'));
+        else contatos.renomearTag(p.get('de'), p.get('para'));
+      } catch (_) {}
+      voltarContatos(p, res);
+    });
+  }
+  // Salvar um contato NOVO direto de uma conversa (aba Conversas).
+  if (req.method === 'POST' && url === '/sofia/contatos/salvar-novo') {
+    return lerCorpo(req, 1e5, corpo => {
+      try {
+        const d = JSON.parse(corpo || '{}');
+        const c = contatos.adicionar({ nome: d.nome, telefone: d.telefone, tags: d.tags });
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, tel: c.tel }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
     });
   }
   // Inbox das conversas da Sofia (JSON) — a aba Conversas atualiza sozinha com isto.
   if (req.method === 'GET' && url === '/sofia/conversas') {
     let obj = {};
     try { obj = sofia.conversas() || {}; } catch (_) {}
+    try { for (const k in obj) obj[k].salvo = contatos.existe(k); } catch (_) {} // marca quem já é contato salvo
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify(obj));
   }
