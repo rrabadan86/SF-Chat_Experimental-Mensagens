@@ -206,10 +206,52 @@ const solicitarAgendamento = tool(
   },
 );
 
+// Consulta a LOTAÇÃO REAL da grade (turma cheia ou não) — via o /api/slots que o
+// formulário já expõe. Diferente da verificar_disponibilidade (que só olha a
+// grade/antecedência), esta sabe se a turma está lotada, ANTES de coletar dados.
+const consultarVaga = tool(
+  "consultar_vaga",
+  "Verifica se um dia/horário da aula experimental TEM VAGA (turma não lotada), consultando a grade real. " +
+    "Use ASSIM QUE a aluna informar o dia/horário e ANTES de pedir nome/e-mail. Se vaga=true, prossiga; " +
+    "se vaga=false, ofereça as 'alternativas' retornadas (horários com vaga) sem pedir dados. " +
+    "Complementa a verificar_disponibilidade (que só checa a grade/antecedência).",
+  { data: z.string().describe("AAAA-MM-DD"), horario: z.string().describe("HH:MM") },
+  async ({ data, horario }) => {
+    const base = process.env.SOFIA_BOOK_URL || "https://sf-formularioexperimental.onrender.com/api/book-sofia";
+    const slotsUrl = process.env.SOFIA_SLOTS_URL || base.replace(/\/api\/book-sofia\/?$/, "/api/slots");
+    const hh = String(horario).slice(0, 5);
+    try {
+      const r = await comRetry(async () => {
+        const resp = await fetch(slotsUrl + "?days=10", { headers: { Accept: "application/json" } });
+        if (resp.status >= 500) throw Object.assign(new Error(`slots ${resp.status}`), { status: resp.status });
+        return resp;
+      });
+      const j: any = await r.json().catch(() => ({}));
+      const dias: Record<string, any[]> = (j && j.dias) || {};
+      const doDia: any[] = Array.isArray(dias[data]) ? dias[data] : [];
+      const alvo = doDia.find((s) => String(s.time).slice(0, 5) === hh);
+      // Alternativas com vaga: primeiro o mesmo dia, depois os próximos.
+      const comVaga: string[] = [];
+      const juntar = (arr: any[]) => arr.forEach((s) => { if (s && s.disponivel) comVaga.push(s.activityDate); });
+      juntar(doDia);
+      for (const d of Object.keys(dias).sort()) { if (d !== data) juntar(dias[d] || []); }
+      const alternativas = comVaga.slice(0, 5);
+      if (alvo && alvo.disponivel) return json({ vaga: true, freeSpots: alvo.freeSpots });
+      if (alvo && !alvo.disponivel) return json({ vaga: false, motivo: "lotada", alternativas });
+      return json({ vaga: false, motivo: "inexistente", alternativas });
+    } catch (e: any) {
+      // Se a grade não responder, NÃO trava o atendimento: segue (a
+      // solicitar_agendamento ainda valida a vaga de verdade na hora de agendar).
+      console.log("⚠️  consultar_vaga falhou:", e?.message ?? e);
+      return json({ vaga: null, indisponivel_checar: true });
+    }
+  },
+);
+
 const servidor = createSdkMcpServer({
   name: "slimfit",
   version: "1.0.0",
-  tools: [enviarMidia, verificarDisponibilidade, solicitarAgendamento],
+  tools: [enviarMidia, verificarDisponibilidade, consultarVaga, solicitarAgendamento],
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -446,6 +488,7 @@ const options: ClaudeAgentOptions = {
   allowedTools: [
     "mcp__slimfit__enviar_midia",
     "mcp__slimfit__verificar_disponibilidade",
+    "mcp__slimfit__consultar_vaga",
     "mcp__slimfit__solicitar_agendamento",
   ],
   permissionMode: "default",
