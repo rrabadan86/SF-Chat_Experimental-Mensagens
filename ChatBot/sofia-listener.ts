@@ -139,11 +139,17 @@ function pareceTelefone(s: string) { return /^\d{11,15}$/.test(s); } // com DDI:
 // vier, loga um DIAGNÓSTICO com os campos disponíveis (pra mirarmos certo nesta
 // versão) e devolve "" (sem número). Nunca devolve o próprio LID como telefone.
 async function telefoneDoLid(msg: any, jid: string, lid: string): Promise<string> {
-  // 1) API pública
+  // 1) getContact(): em "@lid", o telefone REAL vem no c.id (@c.us) — o c.number
+  //    costuma trazer o próprio LID. Então tentamos o c.id PRIMEIRO.
   try {
     const c = await msg.getContact();
-    const num = soDigitos(c && c.number);
-    if (pareceTelefone(num) && num !== lid) { log(`@lid ${jid} → telefone ${num} (getContact.number)`); return num; }
+    const idSer: string = (c && c.id && c.id._serialized) || "";
+    if (idSer.endsWith("@c.us")) {
+      const num = soDigitos(c.id.user);
+      if (pareceTelefone(num) && num !== lid) { log(`@lid ${jid} → telefone ${num} (getContact.id)`); return num; }
+    }
+    const num2 = soDigitos(c && c.number);
+    if (pareceTelefone(num2) && num2 !== lid) { log(`@lid ${jid} → telefone ${num2} (getContact.number)`); return num2; }
   } catch {}
   // 2) Campos do protocolo novo que às vezes acompanham o LID
   try {
