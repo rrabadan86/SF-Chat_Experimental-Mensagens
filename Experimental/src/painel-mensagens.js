@@ -1507,36 +1507,33 @@ function paginaLogin(erro) {
 // Aba "Perfis" (só admin): cria usuários, define telas, senha e exclui.
 function paginaPerfis(aviso, erro) {
   const lista = usuarios.listar();
-  const umChk = (t, marcadas, prefixo) => `<label class="chk" style="font-weight:600;font-size:.85rem;margin:0"><input type="checkbox" name="${prefixo}" value="${t.key}"${(marcadas || []).includes(t.key) ? ' checked' : ''}> ${t.rot}</label>`;
+  const umChk = (t, marcadas, prefixo) => `<label style="display:inline-flex;align-items:center;gap:6px;margin:0;font-weight:600;font-size:var(--fs-sm);cursor:pointer;white-space:nowrap"><input type="checkbox" name="${prefixo}" value="${t.key}"${(marcadas || []).includes(t.key) ? ' checked' : ''} style="width:15px;height:15px;margin:0"> ${t.rot}</label>`;
   const chkTelas = (marcadas, prefixo) => {
-    const soltas = usuarios.TELAS.filter(t => !t.grupo).map(t => umChk(t, marcadas, prefixo)).join('');
-    // Sub-telas agrupadas (ex.: Sofia) num bloco recolhido com moldura.
+    const soltas = usuarios.TELAS.filter(t => !t.grupo);
     const grupos = {};
     for (const t of usuarios.TELAS) if (t.grupo) (grupos[t.grupo] = grupos[t.grupo] || []).push(t);
-    const blocos = Object.keys(grupos).map(g => `<div style="border:1px solid var(--linha);border-radius:10px;padding:8px 10px;margin-top:4px">
-        <div style="font-weight:800;font-size:.82rem;color:#0c6f70;margin-bottom:4px">${g}</div>
-        <div style="display:flex;gap:14px;flex-wrap:wrap">${grupos[g].map(t => umChk(t, marcadas, prefixo)).join('')}</div>
-      </div>`).join('');
-    return `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">${soltas}</div>${blocos}`;
+    const linha = `<div style="display:flex;flex-wrap:wrap;gap:6px 18px">${soltas.map(t => umChk(t, marcadas, prefixo)).join('')}</div>`;
+    const gs = Object.keys(grupos).map(g => `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;margin-top:7px"><span style="font-weight:700;font-size:var(--fs-xs);color:var(--teal-esc);min-width:84px">${g}</span>${grupos[g].map(t => umChk(t, marcadas, prefixo)).join('')}</div>`).join('');
+    return linha + gs;
   };
 
   const cardsUsuarios = lista.length ? lista.map(u => `
-    <div class="card" style="padding:14px 16px;margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <div style="font-weight:800;font-size:1rem">👤 ${esc(u.usuario)}</div>
-        <span class="quando" style="margin:0">${(u.telas || []).length} tela(s) liberada(s)</span>
-      </div>
-      <form method="POST" action="/perfis/telas" style="margin:10px 0 0">
+    <div class="card" style="margin-bottom:8px">
+      <form method="POST" action="/perfis/telas">
+        <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <span style="font-weight:700;font-size:var(--fs-h2)">${esc(u.usuario)}</span>
+          <span class="quando" style="margin:0">${(u.telas || []).length} tela(s)</span>
+        </div>
         <input type="hidden" name="usuario" value="${esc(u.usuario)}">
-        <div style="margin:2px 0 8px">${chkTelas(u.telas, 'telas')}</div>
-        <button type="submit" class="save" style="padding:6px 14px">💾 Salvar telas</button>
+        <div style="margin:0 0 10px">${chkTelas(u.telas, 'telas')}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding-top:10px;border-top:1px dashed var(--linha)">
+          <button type="submit" class="save" style="padding:6px 13px">Salvar telas</button>
+          <input type="text" name="senha" placeholder="nova senha" style="width:140px" form="sn-${esc(u.usuario)}">
+          <button type="submit" class="reset" form="sn-${esc(u.usuario)}" style="padding:6px 13px">Redefinir senha</button>
+          <button type="submit" class="reset" formaction="/perfis/excluir" onclick="return confirm('Excluir o usuário ${esc(u.usuario)}?')" style="padding:6px 13px;margin-left:auto">Excluir</button>
+        </div>
       </form>
-      <form method="POST" action="/perfis/senha" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin:10px 0 0;padding-top:10px;border-top:1px dashed var(--linha)">
-        <input type="hidden" name="usuario" value="${esc(u.usuario)}">
-        <div><label style="margin:0 0 4px">Nova senha</label><input type="text" name="senha" placeholder="nova senha" style="width:180px"></div>
-        <button type="submit" class="reset" style="padding:8px 14px">🔑 Redefinir senha</button>
-        <button type="submit" class="reset" formaction="/perfis/excluir" onclick="return confirm('Excluir o usuário ${esc(u.usuario)}?')" style="padding:8px 14px;margin-left:auto">🗑️ Excluir</button>
-      </form>
+      <form method="POST" action="/perfis/senha" id="sn-${esc(u.usuario)}" style="display:none"><input type="hidden" name="usuario" value="${esc(u.usuario)}"></form>
     </div>`).join('') : '<p class="vazio">Nenhum usuário criado ainda. Crie o primeiro abaixo.</p>';
 
   const corpo = `<div class="wrap">
