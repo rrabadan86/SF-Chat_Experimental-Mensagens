@@ -115,11 +115,34 @@ function telaDaUrl(u) {
   if (u === '/perfis' || u.startsWith('/perfis/')) return 'perfis';
   return 'msg';
 }
-const CAMINHO_TELA = { hoje: '/hoje', ind: '/indicadores', msg: '/', ig: '/instagram', sofia: '/sofia' };
+// Sofia é dividida em três sub-abas com permissão própria.
+const SOFIA_SUBS = ['conversas', 'config', 'contatos'];
+function podeSofiaSub(sess, sub) { return sess.admin || (sess.telas || []).includes('sofia_' + sub); }
+function temSofia(sess) { return sess.admin || SOFIA_SUBS.some(s => podeSofiaSub(sess, s)); }
+function sofiaHref(sess) {
+  if (podeSofiaSub(sess, 'conversas')) return '/sofia?view=conversas';
+  if (podeSofiaSub(sess, 'config')) return '/sofia';
+  if (podeSofiaSub(sess, 'contatos')) return '/sofia?view=contatos';
+  return '/sofia';
+}
+// Rota /sofia/* (fora o GET da página) → sub-permissão exigida. O "salvar-novo"
+// (marcar tags/salvar contato a partir de uma conversa) vale para Conversas OU Contatos.
+function sofiaRotaPermitida(sess, url) {
+  const has = k => (sess.telas || []).includes(k);
+  if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano') return has('sofia_conversas');
+  if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
+  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag') return has('sofia_contatos');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado') return has('sofia_config');
+  return false;
+}
 function primeiraTela(sess) {
   if (sess.admin) return '/hoje';
-  const k = TODAS_TELAS.find(t => sess.telas.includes(t));
-  return k ? CAMINHO_TELA[k] : '';
+  if (sess.telas.includes('hoje')) return '/hoje';
+  if (sess.telas.includes('ind')) return '/indicadores';
+  if (sess.telas.includes('msg')) return '/';
+  if (sess.telas.includes('ig')) return '/instagram';
+  if (temSofia(sess)) return sofiaHref(sess);
+  return '';
 }
 
 // Sessão do request atual, para o chrome() montar o menu só com as telas
@@ -274,9 +297,9 @@ function navTabs(ativo) {
   const sess = _navSess || { admin: true, telas: usuarios.TELAS_KEYS };
   const pode = k => sess.admin || (sess.telas || []).includes(k);
   const item = (k, href, rot) => pode(k) ? `<a href="${href}" class="${ativo === k ? 'on' : ''}">${rot}</a>` : '';
-  let html = item('hoje', '/hoje', '📊 Hoje') + item('ind', '/indicadores', '📈 Indicadores')
-    + item('msg', '/', '💬 WhatsApp') + item('ig', '/instagram', '📸 Instagram')
-    + item('sofia', '/sofia', '🤖 Sofia');
+  let html = item('hoje', '/hoje', '📊 Hoje') + item('ind', '/indicadores', '📈 Formulário')
+    + item('msg', '/', '💬 WhatsApp') + item('ig', '/instagram', '📸 Instagram');
+  if (temSofia(sess)) html += `<a href="${sofiaHref(sess)}" class="${ativo === 'sofia' ? 'on' : ''}">🤖 Sofia</a>`;
   if (sess.admin) html += `<a href="/perfis" class="${ativo === 'perfis' ? 'on' : ''}">👤 Perfis</a>`;
   return html;
 }
@@ -988,7 +1011,7 @@ function paginaIndicadores(dias) {
     ${origemBloco}
     <p class="quando" style="text-align:center">Coletado do formulário a cada ~2 min. ${r.primeiroDia ? `Desde ${esc(fmtData(r.primeiroDia))}.` : 'Ainda começando a coletar.'}</p>
   </div>`;
-  return chrome({ tab: 'Indicadores', h1: '📈 Indicadores do formulário', p: 'Acessos, agendamentos e taxa de conversão do formulário de agendamento.' }, 'ind', corpo);
+  return chrome({ tab: 'Formulário', h1: '📈 Formulário', p: 'Acessos, agendamentos e taxa de conversão do formulário de agendamento.' }, 'ind', corpo);
 }
 
 // ── Página: Sofia (chatbot) — prompt, configs e conexão do WhatsApp dela ─────
@@ -1015,7 +1038,12 @@ function subnavSofia(view) {
   const on = 'background:#11abae;color:#fff;border-color:#11abae';
   const off = 'background:#fff;color:#5c5960';
   const item = (v, rot) => `<a href="/sofia${v === 'config' ? '' : '?view=' + v}" style="${base};${view === v ? on : off}">${rot}</a>`;
-  return `<div style="margin:0 0 18px">${item('config', '⚙️ Configuração')}${item('conversas', '💬 Conversas')}${item('contatos', '📇 Contatos')}</div>`;
+  const sess = _navSess || { admin: true, telas: [] };
+  let its = '';
+  if (podeSofiaSub(sess, 'config')) its += item('config', '⚙️ Configuração');
+  if (podeSofiaSub(sess, 'conversas')) its += item('conversas', '💬 Conversas');
+  if (podeSofiaSub(sess, 'contatos')) its += item('contatos', '📇 Contatos');
+  return `<div style="margin:0 0 18px">${its}</div>`;
 }
 
 // Aba Sofia → Conversas: inbox das conversas da Sofia (ler e, na Parte 2, responder).
@@ -1041,7 +1069,7 @@ function paginaSofiaConversas(aviso, erro) {
     </div>
   </div>
 <script>
-  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, tagFiltro='';
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, tagFiltro='', tagEdAberto=false;
   var TAGS_EXISTENTES = ${JSON.stringify(tagsLista)};
   var SESSAO_MS = ${Math.round(sessaoHoras * 3600 * 1000)};
   function encerrada(c){ return c && c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS); }
@@ -1058,28 +1086,37 @@ function paginaSofiaConversas(aviso, erro) {
       return '<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+autorRot(m.autor)+' · '+fmtHora(m.em)+'</div><div style="white-space:pre-wrap">'+escH(m.texto)+'</div></div></div>';
     }).join('');
     var fim = encerrada(c) ? '<div style="text-align:center;margin:10px 0 2px"><span style="display:inline-block;background:#f3eaea;color:#a15a5a;border:1px solid #e6cfcf;border-radius:999px;padding:3px 12px;font-size:.72rem;font-weight:700">🔒 Sessão encerrada · a Sofia recomeça do zero se a aluna voltar</span></div>' : '';
+    var hum = !!c.humano;
+    // Cabeçalho enxuto: nome + telefone à esquerda, botão de controle (compacto) à direita.
+    var pill='<button type="button" onclick="toggleHumano()" class="'+(hum?'save':'reset')+'" style="padding:5px 12px;font-size:.78rem;white-space:nowrap">'+(hum?'🙋 devolver à Sofia':'assumir')+'</button>';
+    var header='<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">'
+      +'<div style="flex:1;min-width:0"><div style="font-weight:800">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin:0">'+escH(fmtTel(k))+'</div></div>'+pill+'</div>';
+    // Linha de tags recolhível — o editor completo só aparece ao clicar em "editar".
+    var mini=function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:1px 8px;font-size:.7rem;margin:0 4px 0 0">'+escH(t)+'</span>';};
+    var resumo = ncSel.length ? ncSel.map(mini).join('') : '<span class="quando" style="margin:0">sem tags</span>';
     var opts='<option value="">＋ escolher tag…</option>'+TAGS_EXISTENTES.map(function(t){return '<option>'+escH(t)+'</option>';}).join('');
-    var editor='<div style="margin:2px 0 10px">'
+    var tagLinha='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:.82rem">'
+      +'🏷️ '+(tagEdAberto?'':resumo)
+      +'<a href="javascript:void(0)" onclick="toggleTagEd()" class="quando" style="margin:0;text-decoration:underline">'+(tagEdAberto?'fechar':'editar')+'</a></div>';
+    var editor = tagEdAberto ? ('<div style="margin:0 0 12px;padding:10px 12px;background:#fafafa;border:1px solid #eee;border-radius:10px">'
       +'<div id="ncChips" style="margin-bottom:6px"></div>'
       +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
       +'<select id="ncTagSel" onchange="ncAddTag(this.value);this.selectedIndex=0" style="min-width:150px;font-size:.85rem">'+opts+'</select>'
       +'<input id="ncNovaTag" placeholder="nova tag" style="width:110px;font-size:.85rem" onkeydown="if(event.key===\\'Enter\\'){event.preventDefault();ncAddTag(this.value);this.value=\\'\\';}">'
       +'<button type="button" class="save" style="padding:5px 10px" onclick="salvarContato(\\''+k+'\\')">💾 '+(c.salvo?'Salvar tags':'Salvar contato')+'</button>'
       +'<span id="ncMsg" class="quando">'+(c.salvo?'✓ salvo':'')+'</span>'
-      +'</div></div>';
-    var hum = !!c.humano;
-    var toggle='<div style="margin:2px 0 8px"><button type="button" onclick="toggleHumano()" class="'+(hum?'save':'reset')+'" style="padding:6px 12px;font-size:.82rem">'+(hum?'🙋 Você no controle · clique para devolver à Sofia':'🤖 Sofia atendendo · clique para assumir')+'</button></div>';
+      +'</div></div>') : '';
     var composer='<div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end">'
-      +'<textarea id="msgTxt" rows="2" '+(hum?'':'disabled')+' placeholder="'+(hum?'Escreva uma mensagem para a aluna…  (Enter envia · Shift+Enter quebra linha)':'🔒 Ative o controle humano (botão acima) para responder por aqui')+'" oninput="if(selecionada)rascunhos[selecionada]=this.value" onkeydown="msgKey(event)" style="flex:1;resize:vertical;min-height:46px;font-size:.9rem'+(hum?'':';background:#f2f2f2;color:#999;cursor:not-allowed')+'"></textarea>'
-      +'<button type="button" class="save" onclick="enviarMsg()" '+(hum?'':'disabled')+' style="padding:9px 16px;white-space:nowrap'+(hum?'':';opacity:.45;cursor:not-allowed')+'">Enviar ➤</button>'
+      +'<textarea id="msgTxt" rows="2" '+(hum?'':'disabled')+' placeholder="'+(hum?'Escreva uma mensagem…  (Enter envia)':'🔒 Clique em “assumir” para responder')+'" oninput="if(selecionada)rascunhos[selecionada]=this.value" onkeydown="msgKey(event)" style="flex:1;resize:vertical;min-height:44px;font-size:.9rem'+(hum?'':';background:#f5f5f5;color:#aaa;cursor:not-allowed')+'"></textarea>'
+      +'<button type="button" class="save" onclick="enviarMsg()" '+(hum?'':'disabled')+' style="padding:9px 16px;white-space:nowrap'+(hum?'':';opacity:.4;cursor:not-allowed')+'">Enviar ➤</button>'
       +'</div>'
-      +'<div id="msgStatus" class="quando" style="margin-top:4px;min-height:16px"></div>'
-      +'<p class="quando" style="margin:2px 0 0;font-size:.72rem">'+(hum?'Enquanto você está no controle, a Sofia não responde ESTA conversa (as outras seguem normalmente). Clique no botão acima para devolver à Sofia.':'A Sofia está atendendo esta conversa. Para responder você mesmo, clique em “assumir” acima — só esta conversa para; as outras continuam com a Sofia.')+'</p>';
-    chat.innerHTML = '<div style="font-weight:800;margin-bottom:2px">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin-bottom:4px">'+escH(fmtTel(k))+'</div>'+toggle+editor+'<div id="bolhas" style="overflow:auto;max-height:340px;padding-right:4px">'+bolhas+fim+'</div>'+composer;
-    ncRenderChips();
+      +'<div id="msgStatus" class="quando" style="margin-top:4px;min-height:14px;font-size:.75rem"></div>';
+    chat.innerHTML = header+tagLinha+editor+'<div id="bolhas" style="overflow:auto;max-height:360px;padding-right:4px">'+bolhas+fim+'</div>'+composer;
+    if(tagEdAberto) ncRenderChips();
     var ta=document.getElementById('msgTxt'); if(ta) ta.value=rascunhos[k]||'';
     var b=document.getElementById('bolhas'); if(b) b.scrollTop=b.scrollHeight;
   }
+  function toggleTagEd(){ tagEdAberto=!tagEdAberto; if(selecionada){ ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[selecionada],selecionada); } }
   function toggleHumano(){
     var k=selecionada; if(!k) return;
     var c=ultimoData[k]||{}; var novo=!c.humano;
@@ -1146,7 +1183,7 @@ function paginaSofiaConversas(aviso, erro) {
     }
   }
   function mudarPag(d){ pagina+=d; renderInbox(ultimoData); }
-  function abrir(k){ selecionada=k; ncSel=(ultimoData[k]&&ultimoData[k].tagsContato?ultimoData[k].tagsContato.slice():[]); ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); }
+  function abrir(k){ selecionada=k; ncSel=(ultimoData[k]&&ultimoData[k].tagsContato?ultimoData[k].tagsContato.slice():[]); tagEdAberto=false; ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); }
   function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(renderInbox).catch(function(){}); }
   atualizaInbox(); setInterval(atualizaInbox, 4000);
 </script>`;
@@ -1437,8 +1474,18 @@ function paginaLogin(erro) {
 // Aba "Perfis" (só admin): cria usuários, define telas, senha e exclui.
 function paginaPerfis(aviso, erro) {
   const lista = usuarios.listar();
-  const chkTelas = (marcadas, prefixo) => usuarios.TELAS.map(t =>
-    `<label class="chk" style="font-weight:600;font-size:.85rem;margin:0"><input type="checkbox" name="${prefixo}" value="${t.key}"${(marcadas || []).includes(t.key) ? ' checked' : ''}> ${t.rot}</label>`).join('');
+  const umChk = (t, marcadas, prefixo) => `<label class="chk" style="font-weight:600;font-size:.85rem;margin:0"><input type="checkbox" name="${prefixo}" value="${t.key}"${(marcadas || []).includes(t.key) ? ' checked' : ''}> ${t.rot}</label>`;
+  const chkTelas = (marcadas, prefixo) => {
+    const soltas = usuarios.TELAS.filter(t => !t.grupo).map(t => umChk(t, marcadas, prefixo)).join('');
+    // Sub-telas agrupadas (ex.: Sofia) num bloco recolhido com moldura.
+    const grupos = {};
+    for (const t of usuarios.TELAS) if (t.grupo) (grupos[t.grupo] = grupos[t.grupo] || []).push(t);
+    const blocos = Object.keys(grupos).map(g => `<div style="border:1px solid var(--linha);border-radius:10px;padding:8px 10px;margin-top:4px">
+        <div style="font-weight:800;font-size:.82rem;color:#0c6f70;margin-bottom:4px">${g}</div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">${grupos[g].map(t => umChk(t, marcadas, prefixo)).join('')}</div>
+      </div>`).join('');
+    return `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">${soltas}</div>${blocos}`;
+  };
 
   const cardsUsuarios = lista.length ? lista.map(u => `
     <div class="card" style="padding:14px 16px;margin-bottom:10px">
@@ -1448,7 +1495,7 @@ function paginaPerfis(aviso, erro) {
       </div>
       <form method="POST" action="/perfis/telas" style="margin:10px 0 0">
         <input type="hidden" name="usuario" value="${esc(u.usuario)}">
-        <div style="display:flex;gap:14px;flex-wrap:wrap;margin:2px 0 8px">${chkTelas(u.telas, 'telas')}</div>
+        <div style="margin:2px 0 8px">${chkTelas(u.telas, 'telas')}</div>
         <button type="submit" class="save" style="padding:6px 14px">💾 Salvar telas</button>
       </form>
       <form method="POST" action="/perfis/senha" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin:10px 0 0;padding-top:10px;border-top:1px dashed var(--linha)">
@@ -1469,7 +1516,7 @@ function paginaPerfis(aviso, erro) {
           <div style="flex:1;min-width:160px"><label>Senha</label><input type="text" name="senha" placeholder="senha inicial"></div>
         </div>
         <label style="margin-top:12px">Telas que este usuário pode acessar</label>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;margin:4px 0 2px">${chkTelas([], 'telas')}</div>
+        <div style="margin:4px 0 2px">${chkTelas([], 'telas')}</div>
         <div class="acts"><button type="submit" class="save">Criar usuário</button></div>
         <p class="quando" style="margin:8px 0 0">O usuário entra com esse login e senha na hora — sem reiniciar. A senha pode ser trocada depois aqui mesmo.</p>
       </form>
@@ -1541,6 +1588,12 @@ const server = http.createServer((req, res) => {
   // ── Autorização por tela ─────────────────────────────────────────────────
   const tela = telaDaUrl(url);
   if (tela === 'perfis') { if (!sess.admin) return negarAcesso(res, sess); }
+  else if (tela === 'sofia') {
+    if (!sess.admin) {
+      if (req.method === 'GET' && url === '/sofia') { if (!temSofia(sess)) return negarAcesso(res, sess); }
+      else if (!sofiaRotaPermitida(sess, url)) return negarAcesso(res, sess);
+    }
+  }
   else if (tela && !sess.admin && !(sess.telas || []).includes(tela)) return negarAcesso(res, sess);
 
   // ── Perfis (só admin — já barrado acima) ─────────────────────────────────
@@ -1755,10 +1808,14 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)rest=1/.test(q)) aviso = 'Restaurado para a versão anterior.';
     else if (/(?:^|&)rest=0/.test(q)) { aviso = 'Não havia versão anterior para restaurar.'; erro = true; }
     else if (/(?:^|&)ctok=1/.test(q)) aviso = 'Tags salvas.';
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     const sp = new URLSearchParams(q);
-    if (sp.get('view') === 'contatos') return res.end(paginaSofiaContatos(aviso, erro, { q: sp.get('q') || '', tag: sp.get('tag') || '', pagina: sp.get('pagina') || 0 }));
-    if (sp.get('view') === 'conversas') return res.end(paginaSofiaConversas(aviso, erro));
+    // Só renderiza a sub-aba que o usuário pode ver; se pediu uma sem acesso,
+    // cai na primeira permitida (config → conversas → contatos).
+    let view = sp.get('view') || 'config';
+    if (!podeSofiaSub(sess, view)) view = SOFIA_SUBS.find(s => podeSofiaSub(sess, s)) || 'config';
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    if (view === 'contatos') return res.end(paginaSofiaContatos(aviso, erro, { q: sp.get('q') || '', tag: sp.get('tag') || '', pagina: sp.get('pagina') || 0 }));
+    if (view === 'conversas') return res.end(paginaSofiaConversas(aviso, erro));
     return res.end(paginaSofia(aviso, erro));
   }
   // Importar contatos (CSV enviado pelo painel, lido no navegador e postado como JSON).

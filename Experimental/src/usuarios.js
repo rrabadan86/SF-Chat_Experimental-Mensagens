@@ -17,13 +17,16 @@ const crypto = require('crypto');
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
 const ARQUIVO = path.join(DATA_DIR, 'usuarios.json');
 
-// Telas que dá para liberar por usuário (as mesmas abas do painel; "Perfis" é só do admin).
+// Telas que dá para liberar por usuário. A Sofia é dividida em três (Conversas,
+// Configuração e Contatos) para dar acesso fino. "Perfis" é só do admin.
 const TELAS = [
   { key: 'hoje', rot: '📊 Hoje' },
   { key: 'ind', rot: '📈 Indicadores' },
   { key: 'msg', rot: '💬 WhatsApp' },
   { key: 'ig', rot: '📸 Instagram' },
-  { key: 'sofia', rot: '🤖 Sofia' },
+  { key: 'sofia_conversas', rot: '💬 Conversas', grupo: '🤖 Sofia' },
+  { key: 'sofia_config', rot: '⚙️ Configuração', grupo: '🤖 Sofia' },
+  { key: 'sofia_contatos', rot: '📇 Contatos', grupo: '🤖 Sofia' },
 ];
 const TELAS_KEYS = TELAS.map(t => t.key);
 
@@ -31,7 +34,11 @@ function normU(u) { return String(u == null ? '' : u).trim().toLowerCase(); }
 function limparTelas(v) {
   const arr = Array.isArray(v) ? v : String(v == null ? '' : v).split(',');
   const out = [];
-  for (let t of arr) { t = normU(t); if (TELAS_KEYS.includes(t) && !out.includes(t)) out.push(t); }
+  for (let t of arr) {
+    t = normU(t);
+    if (t === 'sofia') { for (const k of ['sofia_conversas', 'sofia_config', 'sofia_contatos']) if (!out.includes(k)) out.push(k); continue; } // legado → expande
+    if (TELAS_KEYS.includes(t) && !out.includes(t)) out.push(t);
+  }
   return out;
 }
 
