@@ -316,6 +316,49 @@ function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMs
   agendarSalvarInbox();
 }
 
+// ── Respostas ENVIADAS PELO PAINEL (aba Sofia → Conversas) ──────────────────
+//    O painel enfileira em sofia-respostas.jsonl (uma linha JSON por resposta:
+//    {chave, jid, texto, em}). Aqui consumimos essa fila, enviamos pelo WhatsApp
+//    e ASSUMIMOS a conversa (a Sofia sai dela pelos minutos configurados), igual
+//    a responder pelo WhatsApp Web. Para não perder linhas gravadas enquanto
+//    processamos, renomeamos o arquivo (atômico) e lemos a cópia — novas linhas
+//    do painel caem num arquivo novo.
+const RESPOSTAS_FILE = path.join(DIR, "sofia-respostas.jsonl");
+let processandoResp = false;
+async function processarRespostas() {
+  if (processandoResp || !pronta) return;         // espera estar conectada
+  let tamanho = 0;
+  try { tamanho = fs.statSync(RESPOSTAS_FILE).size; } catch { return; } // sem fila
+  if (!tamanho) return;
+  processandoResp = true;
+  const tmp = RESPOSTAS_FILE + "." + Date.now() + ".proc";
+  let linhas: string[] = [];
+  try {
+    fs.renameSync(RESPOSTAS_FILE, tmp);           // atômico: novas gravações vão p/ um arquivo novo
+    linhas = fs.readFileSync(tmp, "utf8").split("\n").map((l) => l.trim()).filter(Boolean);
+    fs.rmSync(tmp, { force: true });
+  } catch (e: any) { log("erro lendo fila de respostas: " + (e?.message || e)); processandoResp = false; return; }
+  for (const linha of linhas) {
+    let ent: any; try { ent = JSON.parse(linha); } catch { continue; }
+    const texto = String(ent?.texto || "").trim();
+    if (!texto) continue;
+    const chave = String(ent?.chave || "").trim();
+    let jid = String(ent?.jid || "").trim();
+    if (!jid) jid = pareceTelefone(chave) ? `${chave}@c.us` : "";
+    if (!jid) { log(`resposta do painel sem destino (chave=${chave}) — ignorada.`); continue; }
+    enfileirar(async () => {
+      const alvo = jid.replace(/@lid$/, "@c.us"); // enviar sempre por @c.us
+      assumirConversa(chave);                     // você assumiu → Sofia pausa nesta conversa
+      registrarNaMemoria(chave, "humano", texto); // Sofia "ouve" para ter contexto ao reassumir
+      registrarInbox(chave, alvo, "", "humano", texto);
+      try { await enviar(alvo, texto); log(`resposta do painel enviada para ${chave}.`); }
+      catch (e: any) { log("falha ao enviar resposta do painel: " + (e?.message || e)); }
+    });
+  }
+  processandoResp = false;
+}
+setInterval(() => { processarRespostas().catch(() => {}); }, 1500);
+
 // Mensagem RECEBIDA da aluna (não é fromMe).
 client.on("message", (msg: any) => {
   try {

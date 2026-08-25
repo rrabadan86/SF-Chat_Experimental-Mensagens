@@ -949,6 +949,7 @@ function paginaSofiaConversas(aviso, erro) {
     </style>
     <div class="inbox-grid">
       <div>
+        <div style="margin-bottom:8px"><select id="convFiltroTag" onchange="filtrarTag(this.value)" style="width:100%;font-size:.85rem"><option value="">🏷️ Todas as tags</option>${tagsLista.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>
         <div id="convLista" style="min-height:120px"></div>
         <div id="convPag" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px"></div>
       </div>
@@ -956,7 +957,7 @@ function paginaSofiaConversas(aviso, erro) {
     </div>
   </div>
 <script>
-  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1}, ncSel=[];
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1}, ncSel=[], rascunhos={}, tagFiltro='';
   var TAGS_EXISTENTES = ${JSON.stringify(tagsLista)};
   var SESSAO_MS = ${Math.round(sessaoHoras * 3600 * 1000)};
   function encerrada(c){ return c && c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS); }
@@ -982,9 +983,31 @@ function paginaSofiaConversas(aviso, erro) {
       +'<button type="button" class="save" style="padding:5px 10px" onclick="salvarContato(\\''+k+'\\')">💾 '+(c.salvo?'Salvar tags':'Salvar contato')+'</button>'
       +'<span id="ncMsg" class="quando">'+(c.salvo?'✓ salvo':'')+'</span>'
       +'</div></div>';
-    chat.innerHTML = '<div style="font-weight:800;margin-bottom:2px">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin-bottom:6px">'+escH(fmtTel(k))+'</div>'+editor+'<div id="bolhas" style="overflow:auto;max-height:420px;padding-right:4px">'+bolhas+fim+'</div>';
+    var composer='<div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end">'
+      +'<textarea id="msgTxt" rows="2" placeholder="Escreva uma mensagem para a aluna…  (Enter envia · Shift+Enter quebra linha)" oninput="if(selecionada)rascunhos[selecionada]=this.value" onkeydown="msgKey(event)" style="flex:1;resize:vertical;min-height:46px;font-size:.9rem"></textarea>'
+      +'<button type="button" class="save" onclick="enviarMsg()" style="padding:9px 16px;white-space:nowrap">Enviar ➤</button>'
+      +'</div>'
+      +'<div id="msgStatus" class="quando" style="margin-top:4px;min-height:16px"></div>'
+      +'<p class="quando" style="margin:2px 0 0;font-size:.72rem">Ao responder por aqui, você assume a conversa e a Sofia fica de fora dela pelo tempo configurado (aba Configuração).</p>';
+    chat.innerHTML = '<div style="font-weight:800;margin-bottom:2px">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin-bottom:6px">'+escH(fmtTel(k))+'</div>'+editor+'<div id="bolhas" style="overflow:auto;max-height:360px;padding-right:4px">'+bolhas+fim+'</div>'+composer;
     ncRenderChips();
+    var ta=document.getElementById('msgTxt'); if(ta) ta.value=rascunhos[k]||'';
     var b=document.getElementById('bolhas'); if(b) b.scrollTop=b.scrollHeight;
+  }
+  function msgKey(ev){ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); enviarMsg(); } }
+  function enviarMsg(){
+    var k=selecionada; if(!k) return;
+    var c=ultimoData[k]||{}; var jid=c.jid||'';
+    var ta=document.getElementById('msgTxt'); var txt=(ta&&ta.value||'').trim();
+    var st=document.getElementById('msgStatus');
+    if(!txt){ if(st)st.textContent=''; return; }
+    if(st)st.textContent='Enviando…';
+    fetch('/sofia/responder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,jid:jid,texto:txt})})
+      .then(function(r){return r.json();}).then(function(j){
+        if(j.ok){ if(ta)ta.value=''; rascunhos[k]=''; if(st)st.textContent='✓ enviada';
+          setTimeout(atualizaInbox,800); setTimeout(atualizaInbox,2000); setTimeout(atualizaInbox,3600); }
+        else if(st){ st.textContent='❌ '+(j.erro||'não consegui enviar'); }
+      }).catch(function(){ if(st)st.textContent='❌ erro de rede'; });
   }
   function ncRenderChips(){
     var el=document.getElementById('ncChips'); if(!el) return;
@@ -999,13 +1022,15 @@ function paginaSofiaConversas(aviso, erro) {
       .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k]){ultimoData[k].salvo=true; ultimoData[k].tagsContato=ncSel.slice();} if(msg)msg.textContent='✓ salvo'; } else if(msg){ msg.textContent='❌ '+(j.erro||'falha'); } })
       .catch(function(){ if(msg)msg.textContent='❌ erro'; });
   }
+  function filtrarTag(t){ tagFiltro=t||''; pagina=0; renderInbox(ultimoData); }
   function renderInbox(data){
     ultimoData = data||{};
     var chaves = Object.keys(ultimoData).sort(function(a,b){return (ultimoData[b].ultimaEm||0)-(ultimoData[a].ultimaEm||0);});
+    if(tagFiltro) chaves = chaves.filter(function(k){ return (ultimoData[k].tagsContato||[]).indexOf(tagFiltro)>=0; });
     var total=chaves.length, paginas=Math.max(1,Math.ceil(total/POR_PAGINA));
     if(pagina>=paginas) pagina=paginas-1; if(pagina<0) pagina=0;
     var lista=document.getElementById('convLista'), pag=document.getElementById('convPag');
-    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">Nenhuma conversa ainda. Assim que a Sofia receber mensagens, elas aparecem aqui.</p>'; if(pag)pag.innerHTML=''; return; }
+    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a Sofia receber mensagens, elas aparecem aqui.')+'</p>'; if(pag)pag.innerHTML=''; return; }
     var ini=pagina*POR_PAGINA, fatia=chaves.slice(ini,ini+POR_PAGINA);
     lista.innerHTML = fatia.map(function(k){
       var c=ultimoData[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
@@ -1531,6 +1556,21 @@ const server = http.createServer((req, res) => {
     try { const cmap = contatos.carregar(); for (const k in obj) { const c = cmap[contatos.normTel(k)]; obj[k].salvo = !!c; obj[k].tagsContato = c ? (c.tags || []) : []; } } catch (_) {} // salvo? + tags do contato
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify(obj));
+  }
+  // Responder uma conversa pelo painel: enfileira para o listener da Sofia enviar
+  // pelo WhatsApp (e assumir a conversa, pausando a Sofia nela).
+  if (req.method === 'POST' && url === '/sofia/responder') {
+    return lerCorpo(req, 1e6, corpo => {
+      let d = {};
+      try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      const chave = String(d.chave || '').trim();
+      const jid = String(d.jid || '').trim();
+      const texto = String(d.texto || '').trim();
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      if (!chave || !texto) return res.end(JSON.stringify({ ok: false, erro: 'faltou destinatário ou texto' }));
+      try { sofia.enfileirarResposta(chave, jid, texto); res.end(JSON.stringify({ ok: true })); }
+      catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
+    });
   }
   if (req.method === 'POST' && url === '/sofia/salvar') {
     return lerCorpo(req, 4e6, corpo => {
