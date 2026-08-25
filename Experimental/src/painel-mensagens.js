@@ -28,6 +28,7 @@ const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
 const sofia = require('./sofia-editor');
 const contatos = require('./contatos');
+const usuarios = require('./usuarios');
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
 // Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
@@ -41,16 +42,90 @@ function seguraIgual(a, b) {
   if (ba.length !== bb.length) return false;
   return crypto.timingSafeEqual(ba, bb);
 }
-function autorizado(req) {
-  if (!SENHA) return false;
-  const h = req.headers.authorization || '';
-  const m = h.match(/^Basic\s+(.+)$/i);
-  if (!m) return false;
-  let dec = '';
-  try { dec = Buffer.from(m[1], 'base64').toString('utf8'); } catch (_) { return false; }
-  const i = dec.indexOf(':');
-  return seguraIgual(dec.slice(0, i), USER) && seguraIgual(dec.slice(i + 1), SENHA);
+
+// ── Login por perfil (cookie de sessão assinado) ────────────────────────────
+// O admin do .env (USER/SENHA) é o super-usuário: entra sempre, vê tudo e é o
+// único que gerencia os Perfis. Os demais usuários ficam em data/usuarios.json
+// (via usuarios.js) e só veem as telas marcadas. Sessão = cookie assinado com
+// HMAC (não dá pra forjar), guardado no navegador; nada de senha no cookie.
+const TODAS_TELAS = usuarios.TELAS_KEYS.slice();
+const SESSAO_DIAS = parseInt(process.env.PAINEL_SESSAO_DIAS || '30', 10);
+// Segredo de assinatura: do .env, senão gerado e guardado em data/.sessao-segredo
+// (assim as sessões sobrevivem a reinícios). Nunca vai para o Git.
+const SEGREDO = (function () {
+  if (process.env.PAINEL_SESSAO_SEGREDO) return process.env.PAINEL_SESSAO_SEGREDO;
+  try {
+    const p = require('path').resolve(__dirname, '..', 'data', '.sessao-segredo');
+    try { return require('fs').readFileSync(p, 'utf8').trim(); } catch (_) {}
+    const s = crypto.randomBytes(32).toString('hex');
+    try { require('fs').mkdirSync(require('path').dirname(p), { recursive: true }); } catch (_) {}
+    try { require('fs').writeFileSync(p, s, 'utf8'); } catch (_) {}
+    return s;
+  } catch (_) { return crypto.randomBytes(32).toString('hex'); }
+})();
+function b64url(buf) { return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function assinar(dado) { return crypto.createHmac('sha256', SEGREDO).update(dado).digest('hex'); }
+function criarToken(usuario) {
+  const payload = b64url(JSON.stringify({ u: usuario, exp: Date.now() + SESSAO_DIAS * 864e5 }));
+  return payload + '.' + assinar(payload);
 }
+function lerToken(tok) {
+  const i = String(tok || '').indexOf('.');
+  if (i < 0) return null;
+  const payload = tok.slice(0, i), sig = tok.slice(i + 1);
+  const esperado = assinar(payload);
+  if (sig.length !== esperado.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(esperado))) return null;
+  let o; try { o = JSON.parse(Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')); } catch (_) { return null; }
+  if (!o || !o.u || !o.exp || Date.now() > o.exp) return null;
+  return o;
+}
+function lerCookie(req, nome) {
+  const raw = req.headers.cookie || '';
+  for (const par of raw.split(';')) { const i = par.indexOf('='); if (i > 0 && par.slice(0, i).trim() === nome) return decodeURIComponent(par.slice(i + 1).trim()); }
+  return '';
+}
+function ehHttps(req) { return (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https'; }
+function setCookieSessao(req, res, valor, maxAgeSec) {
+  const partes = [`sf_sess=${encodeURIComponent(valor)}`, 'Path=/', 'HttpOnly', 'SameSite=Lax', `Max-Age=${maxAgeSec}`];
+  if (ehHttps(req)) partes.push('Secure');
+  res.setHeader('Set-Cookie', partes.join('; '));
+}
+// Devolve o usuário logado (objeto {usuario, admin, telas}) ou null.
+function usuarioDaReq(req) {
+  const o = lerToken(lerCookie(req, 'sf_sess'));
+  if (!o) return null;
+  if (SENHA && usuarios.normU(o.u) === usuarios.normU(USER)) return { usuario: USER, admin: true, telas: TODAS_TELAS };
+  const u = usuarios.obter(o.u);
+  if (!u) return null; // usuário apagado depois de logar
+  return { usuario: u.usuario, admin: false, telas: u.telas || [] };
+}
+// Confere usuário+senha no login. Devolve {usuario, admin} ou null.
+function validarLogin(usuario, senha) {
+  const u = String(usuario || '').trim();
+  if (SENHA && usuarios.normU(u) === usuarios.normU(USER) && seguraIgual(senha, SENHA)) return { usuario: USER, admin: true };
+  const fu = usuarios.verificar(u, senha);
+  return fu ? { usuario: fu.usuario, admin: false } : null;
+}
+// Qual aba uma URL pertence (para a checagem de acesso). O resto é a aba WhatsApp.
+function telaDaUrl(u) {
+  if (u === '/hoje') return 'hoje';
+  if (u === '/indicadores') return 'ind';
+  if (u === '/instagram' || u.startsWith('/instagram/')) return 'ig';
+  if (u === '/sofia' || u.startsWith('/sofia/')) return 'sofia';
+  if (u === '/perfis' || u.startsWith('/perfis/')) return 'perfis';
+  return 'msg';
+}
+const CAMINHO_TELA = { hoje: '/hoje', ind: '/indicadores', msg: '/', ig: '/instagram', sofia: '/sofia' };
+function primeiraTela(sess) {
+  if (sess.admin) return '/hoje';
+  const k = TODAS_TELAS.find(t => sess.telas.includes(t));
+  return k ? CAMINHO_TELA[k] : '';
+}
+
+// Sessão do request atual, para o chrome() montar o menu só com as telas
+// liberadas. O painel é de baixíssimo tráfego (um Studio), então guardar aqui
+// entre o início do dispatch e a renderização síncrona da página é seguro.
+let _navSess = null;
 
 const esc = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -194,6 +269,18 @@ const ESTILO = `
   footer{color:var(--cinza);font-size:.8rem;text-align:center;padding:20px}
 `;
 
+// Menu de abas, mostrando só as telas que o usuário logado pode ver (+ Perfis p/ admin).
+function navTabs(ativo) {
+  const sess = _navSess || { admin: true, telas: usuarios.TELAS_KEYS };
+  const pode = k => sess.admin || (sess.telas || []).includes(k);
+  const item = (k, href, rot) => pode(k) ? `<a href="${href}" class="${ativo === k ? 'on' : ''}">${rot}</a>` : '';
+  let html = item('hoje', '/hoje', '📊 Hoje') + item('ind', '/indicadores', '📈 Indicadores')
+    + item('msg', '/', '💬 WhatsApp') + item('ig', '/instagram', '📸 Instagram')
+    + item('sofia', '/sofia', '🤖 Sofia');
+  if (sess.admin) html += `<a href="/perfis" class="${ativo === 'perfis' ? 'on' : ''}">👤 Perfis</a>`;
+  return html;
+}
+
 function chrome(titSubtitulo, ativo, corpo) {
   return `<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -204,14 +291,11 @@ function chrome(titSubtitulo, ativo, corpo) {
 <style>${ESTILO}</style></head><body>
 <header><div class="wrap">
   <div class="logo-box"><img alt="SlimFit Studio" src="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/logo-com-contraste.svg"></div>
-  <div><h1>${esc(titSubtitulo.h1)}</h1><p>${titSubtitulo.p}</p></div>
+  <div style="flex:1"><h1>${esc(titSubtitulo.h1)}</h1><p>${titSubtitulo.p}</p></div>
+  ${_navSess ? `<div style="text-align:right;font-size:.82rem;white-space:nowrap"><div style="opacity:.92">👤 ${esc(_navSess.usuario)}</div><a href="/logout" style="color:#fff;font-weight:700;text-decoration:underline">Sair</a></div>` : ''}
 </div></header>
 <nav class="tabs">
-  <a href="/hoje" class="${ativo === 'hoje' ? 'on' : ''}">📊 Hoje</a>
-  <a href="/indicadores" class="${ativo === 'ind' ? 'on' : ''}">📈 Indicadores</a>
-  <a href="/" class="${ativo === 'msg' ? 'on' : ''}">💬 WhatsApp</a>
-  <a href="/instagram" class="${ativo === 'ig' ? 'on' : ''}">📸 Instagram</a>
-  <a href="/sofia" class="${ativo === 'sofia' ? 'on' : ''}">🤖 Sofia</a>
+  ${navTabs(ativo)}
 </nav>
 ${corpo}
 <footer>SlimFit · painel do Studio</footer>
@@ -1315,10 +1399,102 @@ function paginaSofia(aviso, erro) {
   return chrome({ tab: 'Sofia', h1: '🤖 Sofia', p: 'Edite o prompt, as configurações e conecte o WhatsApp da Sofia.' }, 'sofia', corpo);
 }
 
-function pedirLogin(res) {
-  res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Painel SlimFit", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8' });
-  res.end('Acesso restrito.');
+// Página de login (sem menu). Simples: usuário + senha.
+function paginaLogin(erro) {
+  return `<!doctype html><html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar · SlimFit</title>
+<link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;500;600;700&display=swap">
+<style>${ESTILO}
+  .loginwrap{max-width:380px;margin:8vh auto;padding:16px}
+  .loginwrap .logo-box{background:var(--teal);border-radius:14px;padding:14px 16px;text-align:center;margin-bottom:18px}
+  .loginwrap .logo-box img{height:34px}
+  .loginwrap .card{padding:22px}
+  .loginwrap h1{font-family:Montserrat;font-size:1.2rem;margin:0 0 4px;text-align:center}
+  .loginwrap p.sub{color:var(--cinza);font-size:.86rem;text-align:center;margin:0 0 12px}
+  .loginwrap button{width:100%;margin-top:16px}
+</style></head><body>
+<div class="loginwrap">
+  <div class="logo-box"><img alt="SlimFit Studio" src="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/logo-com-contraste.svg"></div>
+  <div class="card">
+    <h1>Painel do Studio</h1>
+    <p class="sub">Entre com o seu usuário e senha.</p>
+    ${erro ? `<div class="aviso err" style="margin:0 0 12px">${esc(erro)}</div>` : ''}
+    <form method="POST" action="/login">
+      <label>Usuário</label>
+      <input type="text" name="usuario" autofocus autocapitalize="none" autocomplete="username" spellcheck="false">
+      <label>Senha</label>
+      <input type="password" name="senha" autocomplete="current-password" style="width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:11px 12px;font-size:1rem;font-family:inherit;background:#fff">
+      <button type="submit" class="save">Entrar</button>
+    </form>
+  </div>
+  <footer>SlimFit · painel do Studio</footer>
+</div></body></html>`;
 }
+
+// Aba "Perfis" (só admin): cria usuários, define telas, senha e exclui.
+function paginaPerfis(aviso, erro) {
+  const lista = usuarios.listar();
+  const chkTelas = (marcadas, prefixo) => usuarios.TELAS.map(t =>
+    `<label class="chk" style="font-weight:600;font-size:.85rem;margin:0"><input type="checkbox" name="${prefixo}" value="${t.key}"${(marcadas || []).includes(t.key) ? ' checked' : ''}> ${t.rot}</label>`).join('');
+
+  const cardsUsuarios = lista.length ? lista.map(u => `
+    <div class="card" style="padding:14px 16px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="font-weight:800;font-size:1rem">👤 ${esc(u.usuario)}</div>
+        <span class="quando" style="margin:0">${(u.telas || []).length} tela(s) liberada(s)</span>
+      </div>
+      <form method="POST" action="/perfis/telas" style="margin:10px 0 0">
+        <input type="hidden" name="usuario" value="${esc(u.usuario)}">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin:2px 0 8px">${chkTelas(u.telas, 'telas')}</div>
+        <button type="submit" class="save" style="padding:6px 14px">💾 Salvar telas</button>
+      </form>
+      <form method="POST" action="/perfis/senha" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin:10px 0 0;padding-top:10px;border-top:1px dashed var(--linha)">
+        <input type="hidden" name="usuario" value="${esc(u.usuario)}">
+        <div><label style="margin:0 0 4px">Nova senha</label><input type="text" name="senha" placeholder="nova senha" style="width:180px"></div>
+        <button type="submit" class="reset" style="padding:8px 14px">🔑 Redefinir senha</button>
+        <button type="submit" class="reset" formaction="/perfis/excluir" onclick="return confirm('Excluir o usuário ${esc(u.usuario)}?')" style="padding:8px 14px;margin-left:auto">🗑️ Excluir</button>
+      </form>
+    </div>`).join('') : '<p class="vazio">Nenhum usuário criado ainda. Crie o primeiro abaixo.</p>';
+
+  const corpo = `<div class="wrap">
+    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    <div class="sec-t">➕ Novo usuário</div>
+    <div class="card">
+      <form method="POST" action="/perfis/criar">
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:160px"><label>Usuário</label><input type="text" name="usuario" autocapitalize="none" spellcheck="false" placeholder="ex.: recepcao"></div>
+          <div style="flex:1;min-width:160px"><label>Senha</label><input type="text" name="senha" placeholder="senha inicial"></div>
+        </div>
+        <label style="margin-top:12px">Telas que este usuário pode acessar</label>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin:4px 0 2px">${chkTelas([], 'telas')}</div>
+        <div class="acts"><button type="submit" class="save">Criar usuário</button></div>
+        <p class="quando" style="margin:8px 0 0">O usuário entra com esse login e senha na hora — sem reiniciar. A senha pode ser trocada depois aqui mesmo.</p>
+      </form>
+    </div>
+
+    <div class="sec-t">👥 Usuários</div>
+    <div class="card" style="background:#f3fbfb;border-color:#bfe8e7"><p class="quando" style="margin:0">🔑 <b>Admin</b> (do sistema): <b>${esc(USER)}</b> — vê todas as telas e gerencia os Perfis. Para trocar a senha do admin, altere <code>PAINEL_SENHA</code> no <code>.env</code>.</p></div>
+    ${cardsUsuarios}
+  </div>`;
+  return chrome({ tab: 'Perfis', h1: '👤 Perfis', p: 'Crie usuários e escolha quais telas cada um pode acessar.' }, 'perfis', corpo);
+}
+
+// Página "sem acesso" (usuário logado tentando uma tela não liberada).
+function negarAcesso(res, sess) {
+  const destino = primeiraTela(sess);
+  const corpo = `<div class="wrap"><div class="card" style="text-align:center;padding:28px">
+    <div style="font-size:2rem">🔒</div>
+    <h2 style="margin:8px 0">Você não tem acesso a esta tela</h2>
+    <p class="quando">Fale com o administrador se precisar deste acesso.</p>
+    ${destino ? `<a href="${destino}" style="display:inline-block;margin-top:10px;background:var(--coral);color:#fff;border-radius:999px;padding:10px 20px;font-weight:700;text-decoration:none">Voltar ao painel</a>` : `<a href="/logout" style="display:inline-block;margin-top:10px;color:var(--cinza);text-decoration:underline">Sair</a>`}
+  </div></div>`;
+  res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(chrome({ tab: 'Sem acesso', h1: 'SlimFit', p: 'Painel do Studio.' }, '', corpo));
+}
+
 function lerCorpo(req, limite, cb) {
   let corpo = '';
   req.on('data', c => { corpo += c; if (corpo.length > limite) req.destroy(); });
@@ -1326,8 +1502,89 @@ function lerCorpo(req, limite, cb) {
 }
 
 const server = http.createServer((req, res) => {
-  if (!autorizado(req)) return pedirLogin(res);
   const url = req.url.split('?')[0];
+  _navSess = null;
+
+  // ── Login / logout (rotas públicas) ──────────────────────────────────────
+  if (url === '/login') {
+    if (req.method === 'GET') {
+      const jaLogado = usuarioDaReq(req);
+      if (jaLogado) { res.writeHead(303, { Location: primeiraTela(jaLogado) || '/hoje' }); return res.end(); }
+      const e = /(?:^|&)e=1/.test(req.url.split('?')[1] || '') ? 'Usuário ou senha incorretos.' : '';
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(paginaLogin(e));
+    }
+    if (req.method === 'POST') {
+      return lerCorpo(req, 1e5, corpo => {
+        const p = new URLSearchParams(corpo);
+        const ok = validarLogin(p.get('usuario'), p.get('senha') || '');
+        if (!ok) { res.writeHead(303, { Location: '/login?e=1' }); return res.end(); }
+        setCookieSessao(req, res, criarToken(ok.usuario), SESSAO_DIAS * 86400);
+        const sess = { admin: ok.admin, telas: ok.admin ? TODAS_TELAS : (usuarios.obter(ok.usuario) || { telas: [] }).telas };
+        res.writeHead(303, { Location: primeiraTela(sess) || '/hoje' }); res.end();
+      });
+    }
+  }
+  if (url === '/logout') {
+    setCookieSessao(req, res, '', 0);
+    res.writeHead(303, { Location: '/login' }); return res.end();
+  }
+
+  // ── Exige login ──────────────────────────────────────────────────────────
+  const sess = usuarioDaReq(req);
+  if (!sess) {
+    if (req.method === 'GET') { res.writeHead(303, { Location: '/login' }); return res.end(); }
+    res.writeHead(401, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Faça login.');
+  }
+  _navSess = sess;
+
+  // ── Autorização por tela ─────────────────────────────────────────────────
+  const tela = telaDaUrl(url);
+  if (tela === 'perfis') { if (!sess.admin) return negarAcesso(res, sess); }
+  else if (tela && !sess.admin && !(sess.telas || []).includes(tela)) return negarAcesso(res, sess);
+
+  // ── Perfis (só admin — já barrado acima) ─────────────────────────────────
+  if (tela === 'perfis') {
+    if (req.method === 'GET' && url === '/perfis') {
+      const q = req.url.split('?')[1] || '';
+      let aviso = '', erro = false;
+      if (/(?:^|&)ok=criado/.test(q)) aviso = 'Usuário criado! Já pode entrar.';
+      else if (/(?:^|&)ok=telas/.test(q)) aviso = 'Telas atualizadas.';
+      else if (/(?:^|&)ok=senha/.test(q)) aviso = 'Senha redefinida.';
+      else if (/(?:^|&)ok=excluido/.test(q)) aviso = 'Usuário excluído.';
+      else if (/(?:^|&)err=/.test(q)) { aviso = decodeURIComponent((q.match(/err=([^&]*)/) || [])[1] || 'Erro.'); erro = true; }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(paginaPerfis(aviso, erro));
+    }
+    if (req.method === 'POST' && url === '/perfis/criar') {
+      return lerCorpo(req, 1e5, corpo => {
+        const p = new URLSearchParams(corpo);
+        try { usuarios.criar({ usuario: p.get('usuario'), senha: p.get('senha') || '', telas: p.getAll('telas') }); res.writeHead(303, { Location: '/perfis?ok=criado' }); res.end(); }
+        catch (e) { res.writeHead(303, { Location: '/perfis?err=' + encodeURIComponent(e.message) }); res.end(); }
+      });
+    }
+    if (req.method === 'POST' && url === '/perfis/telas') {
+      return lerCorpo(req, 1e5, corpo => {
+        const p = new URLSearchParams(corpo);
+        usuarios.definirTelas(p.get('usuario'), p.getAll('telas'));
+        res.writeHead(303, { Location: '/perfis?ok=telas' }); res.end();
+      });
+    }
+    if (req.method === 'POST' && url === '/perfis/senha') {
+      return lerCorpo(req, 1e5, corpo => {
+        const p = new URLSearchParams(corpo);
+        try { usuarios.definirSenha(p.get('usuario'), p.get('senha') || ''); res.writeHead(303, { Location: '/perfis?ok=senha' }); res.end(); }
+        catch (e) { res.writeHead(303, { Location: '/perfis?err=' + encodeURIComponent(e.message) }); res.end(); }
+      });
+    }
+    if (req.method === 'POST' && url === '/perfis/excluir') {
+      return lerCorpo(req, 1e5, corpo => {
+        const p = new URLSearchParams(corpo);
+        usuarios.remover(p.get('usuario'));
+        res.writeHead(303, { Location: '/perfis?ok=excluido' }); res.end();
+      });
+    }
+  }
 
   // Página de mensagens
   if (req.method === 'GET' && (req.url === '/' || req.url.startsWith('/?'))) {

@@ -47,3 +47,6 @@ data/teste-instagram.json
 data/mensagens-fotos/
 # Contatos (CRM) — dado pessoal, por VPS, NÃO versionar
 data/contatos.json
+# Usuários do painel (hash de senha) e segredo de sessão — NUNCA versionar
+data/usuarios.json
+data/.sessao-segredo
