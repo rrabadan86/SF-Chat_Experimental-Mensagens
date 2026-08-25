@@ -208,7 +208,7 @@ function chrome(titSubtitulo, ativo, corpo) {
 <nav class="tabs">
   <a href="/hoje" class="${ativo === 'hoje' ? 'on' : ''}">📊 Hoje</a>
   <a href="/indicadores" class="${ativo === 'ind' ? 'on' : ''}">📈 Indicadores</a>
-  <a href="/" class="${ativo === 'msg' ? 'on' : ''}">💬 WhatsApp Mensagens</a>
+  <a href="/" class="${ativo === 'msg' ? 'on' : ''}">💬 WhatsApp</a>
   <a href="/instagram" class="${ativo === 'ig' ? 'on' : ''}">📸 Instagram</a>
   <a href="/sofia" class="${ativo === 'sofia' ? 'on' : ''}">🤖 Sofia</a>
 </nav>
@@ -939,40 +939,53 @@ function paginaSofiaConversas(aviso, erro) {
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('conversas')}
     <div class="sec-t">💬 Conversas da Sofia <small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
-    <div style="display:grid;grid-template-columns:300px 1fr;gap:14px;align-items:start" id="inboxGrid">
-      <div id="convLista" style="max-height:520px;overflow:auto"></div>
-      <div id="convChat" class="card" style="min-height:200px">Selecione uma conversa à esquerda.</div>
+    <div style="display:grid;grid-template-columns:320px minmax(0,1fr);gap:14px;align-items:start">
+      <div>
+        <div id="convLista" style="min-height:120px"></div>
+        <div id="convPag" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px"></div>
+      </div>
+      <div id="convChat" class="card" style="min-width:0;min-height:200px">Selecione uma conversa à esquerda.</div>
     </div>
   </div>
 <script>
-  var selecionada = null;
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={};
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function fmtHora(ts){ try{return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
   function autorRot(a){ return a==='aluna'?'Aluna':(a==='humano'?'Você':'Sofia'); }
-  function renderChat(c){
+  function fmtTel(k){ var d=String(k||'').replace(/\\D/g,''); if(/^55\\d{10,11}$/.test(d)){ var ddd=d.slice(2,4), r=d.slice(4); return '+55 ('+ddd+') '+(r.length===9?r.slice(0,5)+'-'+r.slice(5):r.slice(0,4)+'-'+r.slice(4)); } return k; }
+  function renderChat(c,k){
     var chat=document.getElementById('convChat'); if(!chat) return;
     var msgs=c.msgs||[];
     var bolhas = msgs.map(function(m){
       var mine = (m.autor!=='aluna');
       var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e6f6f7');
-      return '<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px"><div style="font-size:.68rem;font-weight:700;color:#888">'+autorRot(m.autor)+' · '+fmtHora(m.em)+'</div><div style="white-space:pre-wrap">'+escH(m.texto)+'</div></div></div>';
+      return '<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+autorRot(m.autor)+' · '+fmtHora(m.em)+'</div><div style="white-space:pre-wrap">'+escH(m.texto)+'</div></div></div>';
     }).join('');
-    chat.innerHTML = '<div style="font-weight:800;margin-bottom:8px">'+escH(c.nome||'(sem nome)')+' <span class="quando" style="font-weight:400">'+escH(c.jid||'')+'</span></div><div id="bolhas" style="overflow:auto;max-height:460px;padding-right:4px">'+bolhas+'</div>';
+    chat.innerHTML = '<div style="font-weight:800;margin-bottom:2px">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin-bottom:8px">'+escH(fmtTel(k))+'</div><div id="bolhas" style="overflow:auto;max-height:460px;padding-right:4px">'+bolhas+'</div>';
     var b=document.getElementById('bolhas'); if(b) b.scrollTop=b.scrollHeight;
   }
   function renderInbox(data){
-    var chaves = Object.keys(data||{}).sort(function(a,b){return (data[b].ultimaEm||0)-(data[a].ultimaEm||0);});
-    var lista=document.getElementById('convLista'); if(!lista) return;
-    if(!chaves.length){ lista.innerHTML='<p class="quando" style="padding:12px">Nenhuma conversa ainda. Assim que a Sofia receber mensagens, elas aparecem aqui.</p>'; return; }
-    lista.innerHTML = chaves.map(function(k){
-      var c=data[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
+    ultimoData = data||{};
+    var chaves = Object.keys(ultimoData).sort(function(a,b){return (ultimoData[b].ultimaEm||0)-(ultimoData[a].ultimaEm||0);});
+    var total=chaves.length, paginas=Math.max(1,Math.ceil(total/POR_PAGINA));
+    if(pagina>=paginas) pagina=paginas-1; if(pagina<0) pagina=0;
+    var lista=document.getElementById('convLista'), pag=document.getElementById('convPag');
+    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">Nenhuma conversa ainda. Assim que a Sofia receber mensagens, elas aparecem aqui.</p>'; if(pag)pag.innerHTML=''; return; }
+    var ini=pagina*POR_PAGINA, fatia=chaves.slice(ini,ini+POR_PAGINA);
+    lista.innerHTML = fatia.map(function(k){
+      var c=ultimoData[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
       var prev = ult? (autorRot(ult.autor)+': '+ult.texto) : '';
       var on=(k===selecionada);
-      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:10px 12px;border-radius:10px;margin-bottom:6px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':'#fff')+'"><div style="font-weight:700;font-size:.92rem">'+escH(c.nome||k)+'</div><div class="quando" style="margin:2px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(prev)+'</div><div class="quando" style="font-size:.72rem">'+fmtHora(c.ultimaEm)+'</div></div>';
+      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:10px 12px;border-radius:10px;margin-bottom:6px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':'#fff')+'"><div style="font-weight:700;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(c.nome||fmtTel(k))+'</div><div class="quando">'+escH(fmtTel(k))+'</div><div class="quando" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(prev)+'</div><div class="quando" style="font-size:.72rem">'+fmtHora(c.ultimaEm)+'</div></div>';
     }).join('');
-    if(selecionada && data[selecionada]) renderChat(data[selecionada]);
+    if(pag){
+      if(paginas>1){ pag.innerHTML='<button type="button" class="reset" onclick="mudarPag(-1)" '+(pagina===0?'disabled':'')+' style="padding:6px 12px">‹ Anterior</button><span class="quando" style="text-align:center">Página '+(pagina+1)+' de '+paginas+'<br>'+total+' conversas</span><button type="button" class="reset" onclick="mudarPag(1)" '+(pagina>=paginas-1?'disabled':'')+' style="padding:6px 12px">Próxima ›</button>'; }
+      else { pag.innerHTML='<span class="quando">'+total+' conversa'+(total>1?'s':'')+'</span>'; }
+    }
+    if(selecionada && ultimoData[selecionada]) renderChat(ultimoData[selecionada], selecionada);
   }
-  function abrir(k){ selecionada=k; atualizaInbox(); }
+  function mudarPag(d){ pagina+=d; renderInbox(ultimoData); }
+  function abrir(k){ selecionada=k; if(ultimoData[k]) renderChat(ultimoData[k],k); renderInbox(ultimoData); }
   function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(renderInbox).catch(function(){}); }
   atualizaInbox(); setInterval(atualizaInbox, 4000);
 </script>`;
