@@ -539,12 +539,18 @@ export async function responderComMemoria(telefone: string, mensagem: string): P
   conversa.transcricao.push({ autor: "aluna", texto: mensagem });
   conversa.transcricao.push({ autor: "sofia", texto: resposta });
 
-  // Se a extração/disparo falhar, não derruba a conversa: apenas registra e
-  // tenta de novo na próxima mensagem (o flag resumoEnviado continua false).
-  try {
-    await verificarEDispararAgendamento(telefone, conversa);
-  } catch (err: any) {
-    console.log("⚠️  Não consegui extrair/disparar o resumo agora (tento na próxima mensagem):", err?.message ?? err);
+  // Caminho AUTOMÁTICO de agendamento (extrai da conversa e agenda por trás).
+  // DESLIGADO por padrão: ele agenda SEM avisar a Sofia do resultado, então numa
+  // turma lotada a aluna era cadastrada mas ficava sem aula E a Sofia dizia
+  // "agendada". Agora o agendamento é só pela ferramenta solicitar_agendamento,
+  // que devolve o resultado real. Reative com SOFIA_AUTO_BOOK=true se algum dia
+  // precisar do fallback.
+  if (process.env.SOFIA_AUTO_BOOK === "true") {
+    try {
+      await verificarEDispararAgendamento(telefone, conversa);
+    } catch (err: any) {
+      console.log("⚠️  Não consegui extrair/disparar o resumo agora (tento na próxima mensagem):", err?.message ?? err);
+    }
   }
   return resposta;
 }
