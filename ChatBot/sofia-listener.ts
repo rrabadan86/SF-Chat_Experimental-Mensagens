@@ -75,30 +75,38 @@ function dividirEmMensagens(texto: string): string[] {
 function delayDigitando(parte: string, r: Ritmo): number {
   return Math.min(r.delayMax, Math.max(r.delayMin, parte.length * r.msPorChar));
 }
-// "digitando…" é só enfeite: getChat() serializa e às vezes estoura um erro
-// minificado ("r") — igual o robô descobriu. Então é SEMPRE best-effort: se
-// falhar, seguimos enviando sem o indicador (nunca deixa a resposta cair).
-async function mostrarDigitando(chat: any) { if (chat) { try { await chat.sendStateTyping(); } catch {} } }
-async function pararDigitando(chat: any) { if (chat) { try { await chat.clearState(); } catch {} } }
-async function pegarChat(msg: any): Promise<any> {
-  try { return await msg.getChat(); }
-  catch (e: any) { log("aviso: getChat falhou (" + (e?.message || e) + ") — envio segue sem 'digitando'."); return null; }
+// "digitando…" SEM getChat: o getChat serializa a conversa e estoura o erro
+// minificado ("r") — o robô descobriu isso e passou longe. Por baixo, o
+// chat.sendStateTyping() da whatsapp-web.js só chama window.WWebJS.sendChatstate,
+// então fazemos isso direto pelo jid (msg.from), sem serializar nada. Best-effort:
+// se a versão do WhatsApp Web não tiver essa função, apenas não mostra a bolinha.
+async function chatstate(jid: string, estado: "typing" | "recording" | "stop") {
+  try {
+    const page: any = (client as any).pupPage;
+    if (!page) return;
+    await page.evaluate(
+      (chatId: string, st: string) => (window as any).WWebJS?.sendChatstate?.(st, chatId),
+      jid, estado,
+    );
+  } catch {}
 }
+async function mostrarDigitando(jid: string) { await chatstate(jid, "typing"); }
+async function pararDigitando(jid: string) { await chatstate(jid, "stop"); }
 
 // Envia como gente: "digitando…" + pausa + a mensagem, uma parte de cada vez.
-// O envio de verdade é client.sendMessage (não serializa chat), então não
-// depende do getChat — mesmo sem "digitando", a mensagem vai.
-async function enviarHumano(chat: any, to: string, texto: string) {
+// O envio de verdade é client.sendMessage (não serializa chat) — a mensagem vai
+// mesmo que a bolinha de "digitando" não apareça.
+async function enviarHumano(to: string, texto: string) {
   const r = lerRitmo(); // fresco a cada resposta — o painel manda no ritmo
   const partes = r.humano ? dividirEmMensagens(texto) : [String(texto || "").trim()];
   for (let i = 0; i < partes.length; i++) {
     if (!partes[i]) continue;
-    await mostrarDigitando(chat);
+    await mostrarDigitando(to);
     await sleep(delayDigitando(partes[i], r));
     await enviar(to, partes[i]);
     if (i < partes.length - 1) await sleep(400 + Math.floor(Math.random() * 500));
   }
-  await pararDigitando(chat);
+  await pararDigitando(to);
 }
 
 const client = new Client({
@@ -156,17 +164,16 @@ client.on("message", (msg: any) => {
       const reply = await responderComMemoria(tel, texto); // já cuida de on/off, handoff e memória
       const urls = drenarMidias(); // imagens que a Sofia pediu nesta resposta
       if ((reply && reply.trim()) || urls.length) {
-        const chat = await pegarChat(msg); // best-effort (pode vir null) — não derruba o envio
-        if (reply && reply.trim()) await enviarHumano(chat, msg.from, reply);
+        if (reply && reply.trim()) await enviarHumano(msg.from, reply);
         for (const url of urls) {
           try {
-            await mostrarDigitando(chat);
+            await mostrarDigitando(msg.from);
             await sleep(900);
             const media = await MessageMedia.fromUrl(url, { unsafeMime: true });
             await enviar(msg.from, media);
           } catch (e: any) { log("falha ao enviar imagem: " + (e?.message || e)); }
         }
-        await pararDigitando(chat);
+        await pararDigitando(msg.from);
       }
     });
   } catch (e: any) { log("erro no on(message): " + (e?.message || e)); }
