@@ -39,26 +39,50 @@ const log = (m: string) => console.log(`[sofia] ${new Date().toLocaleString("pt-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ── "Jeito humano": divide a resposta em várias mensagens e mostra "digitando…"
-//    com um tempo proporcional ao tamanho. Desligue com SOFIA_HUMANO=false.
-const HUMANO = process.env.SOFIA_HUMANO !== "false";
-const MS_POR_CHAR = parseInt(process.env.SOFIA_MS_POR_CHAR || "45", 10);   // "velocidade" de digitação
-const DELAY_MIN = parseInt(process.env.SOFIA_DELAY_MIN || "1200", 10);
-const DELAY_MAX = parseInt(process.env.SOFIA_DELAY_MAX || "4500", 10);
+//    com um tempo proporcional ao tamanho.
+//    Os valores vêm do painel (aba 🤖 Sofia → "Jeito de responder"), gravados em
+//    sofia-ritmo.json e lidos AQUI a cada mensagem — muda sem reiniciar o listener.
+//    Se o arquivo não existir, cai nas variáveis do .env (SOFIA_*) e, por fim, no padrão.
+const RITMO_FILE = path.join(DIR, "sofia-ritmo.json");
+type Ritmo = { humano: boolean; msPorChar: number; delayMin: number; delayMax: number };
+function inteiroEnv(v: string | undefined, padrao: number): number {
+  const n = parseInt(v ?? "", 10); return Number.isFinite(n) ? n : padrao;
+}
+function lerRitmo(): Ritmo {
+  const base: Ritmo = {
+    humano: process.env.SOFIA_HUMANO !== "false",
+    msPorChar: inteiroEnv(process.env.SOFIA_MS_POR_CHAR, 45),
+    delayMin: inteiroEnv(process.env.SOFIA_DELAY_MIN, 1200),
+    delayMax: inteiroEnv(process.env.SOFIA_DELAY_MAX, 4500),
+  };
+  try {
+    const o = JSON.parse(fs.readFileSync(RITMO_FILE, "utf8"));
+    if (o && typeof o === "object") {
+      if (o.humano !== undefined) base.humano = o.humano !== false;
+      if (o.msPorChar !== undefined) base.msPorChar = inteiroEnv(String(o.msPorChar), base.msPorChar);
+      if (o.delayMin !== undefined) base.delayMin = inteiroEnv(String(o.delayMin), base.delayMin);
+      if (o.delayMax !== undefined) base.delayMax = inteiroEnv(String(o.delayMax), base.delayMax);
+    }
+  } catch {}
+  if (base.delayMax < base.delayMin) base.delayMax = base.delayMin;
+  return base;
+}
 
 // Cada parágrafo (separado por linha em branco) vira uma mensagem separada.
 function dividirEmMensagens(texto: string): string[] {
   return String(texto || "").split(/\n{2,}/).map((p) => p.trim()).filter((p) => p.length > 0);
 }
-function delayDigitando(parte: string): number {
-  return Math.min(DELAY_MAX, Math.max(DELAY_MIN, parte.length * MS_POR_CHAR));
+function delayDigitando(parte: string, r: Ritmo): number {
+  return Math.min(r.delayMax, Math.max(r.delayMin, parte.length * r.msPorChar));
 }
 // Envia como gente: "digitando…" + pausa + a mensagem, uma parte de cada vez.
 async function enviarHumano(chat: any, to: string, texto: string) {
-  const partes = HUMANO ? dividirEmMensagens(texto) : [String(texto || "").trim()];
+  const r = lerRitmo(); // fresco a cada resposta — o painel manda no ritmo
+  const partes = r.humano ? dividirEmMensagens(texto) : [String(texto || "").trim()];
   for (let i = 0; i < partes.length; i++) {
     if (!partes[i]) continue;
     try { await chat.sendStateTyping(); } catch {}
-    await sleep(delayDigitando(partes[i]));
+    await sleep(delayDigitando(partes[i], r));
     await enviar(to, partes[i]);
     if (i < partes.length - 1) await sleep(400 + Math.floor(Math.random() * 500));
   }

@@ -942,6 +942,32 @@ function paginaSofia(aviso, erro) {
         <input type="number" name="pausaMin" min="1" max="1440" value="${e.pausaMin}" style="width:130px"> minutos
       </div>
 
+      <div class="sec-t">⌨️ Jeito de responder <small style="font-weight:600;color:var(--cinza)">(deixa a Sofia mais humana — vale na hora, sem reiniciar)</small></div>
+      <div class="card">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" name="ritHumano" value="1"${e.ritmo.humano ? ' checked' : ''} style="width:auto;margin:0">
+          Modo humano — quebra respostas longas em várias mensagens e mostra “digitando…”
+        </label>
+        <p class="quando" style="margin:6px 0 14px">Desmarcado, a Sofia manda tudo de uma vez, sem simular digitação.</p>
+        <div style="display:flex;gap:18px;flex-wrap:wrap">
+          <div>
+            <label>Velocidade da digitação</label>
+            <div><input type="number" name="ritMsPorChar" min="0" max="500" value="${e.ritmo.msPorChar}" style="width:110px"> ms por caractere</div>
+            <p class="quando" style="margin:4px 0 0">Maior = digita mais devagar.</p>
+          </div>
+          <div>
+            <label>Pausa mínima</label>
+            <div><input type="number" name="ritDelayMin" min="0" max="60000" value="${e.ritmo.delayMin}" style="width:110px"> ms</div>
+            <p class="quando" style="margin:4px 0 0">Tempo mínimo “digitando…” por mensagem.</p>
+          </div>
+          <div>
+            <label>Pausa máxima</label>
+            <div><input type="number" name="ritDelayMax" min="0" max="60000" value="${e.ritmo.delayMax}" style="width:110px"> ms</div>
+            <p class="quando" style="margin:4px 0 0">Teto, mesmo em mensagens longas.</p>
+          </div>
+        </div>
+      </div>
+
       <div class="sec-t">💬 Conversa da Sofia <small style="font-weight:600;color:var(--cinza)">(cada bloco é uma parte do atendimento)</small></div>
       ${cardsSecoes}
 
@@ -1187,6 +1213,12 @@ const server = http.createServer((req, res) => {
             grade_link: (p.get('grade_link') || '').trim(),
             precos_imagem: (p.get('precos_imagem') || '').trim(),
             precos_link: (p.get('precos_link') || '').trim(),
+          },
+          ritmo: {
+            humano: p.get('ritHumano') === '1',
+            msPorChar: p.get('ritMsPorChar') || '45',
+            delayMin: p.get('ritDelayMin') || '1200',
+            delayMax: p.get('ritDelayMax') || '4500',
           },
         });
         res.writeHead(303, { Location: '/sofia?ok=1' }); res.end();

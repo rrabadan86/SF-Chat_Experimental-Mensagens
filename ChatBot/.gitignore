@@ -10,5 +10,6 @@ sofia-estado.txt
 # Estado da conexão do WhatsApp da Sofia (QR/conectado) — publicado pelo listener
 sofia-wa-status.json
 sofia-pausa-min.txt
+sofia-ritmo.json
 # Backups do editor
 *.bak.txt
