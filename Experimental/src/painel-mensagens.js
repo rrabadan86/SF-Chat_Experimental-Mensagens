@@ -132,7 +132,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano') return has('sofia_conversas');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag') return has('sofia_contatos');
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado') return has('sofia_config');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar') return has('sofia_config');
   return false;
 }
 // WhatsApp também é dividido em duas sub-abas: Configuração e Agendamento.
@@ -580,6 +580,7 @@ function paginaMensagens(aviso, erro) {
   const corpo = `<div class="wrap">
     ${subnavMensagens('config')}
     <div id="waBanner">${blocoWaRobo()}</div>
+    <div style="text-align:right;margin:-4px 0 0"><form method="POST" action="/wa/desconectar" onsubmit="return confirm('Desconectar o WhatsApp do robô?\\n\\nO robô para de enviar e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔌 Desconectar</button></form></div>
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
@@ -1355,6 +1356,7 @@ function paginaSofia(aviso, erro) {
 
     <div class="sec-t">📱 Conexão do WhatsApp da Sofia <small style="font-weight:600;color:var(--cinza)">(número próprio, diferente do robô)</small></div>
     <div id="sofiaWa">${blocoSofiaWa()}</div>
+    <div style="text-align:right;margin:-4px 0 0"><form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da Sofia?\\n\\nA Sofia para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔌 Desconectar</button></form></div>
 
     <div class="sec-t">⚡ Sofia</div>
     <div class="card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
@@ -1681,6 +1683,7 @@ const server = http.createServer((req, res) => {
     let aviso = '', erro = false;
     if (/(?:^|&)ok=1/.test(q)) aviso = 'Mensagem salva! Já vale no próximo envio.';
     else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horários salvos e robô reiniciado. Já valem.';
+    else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. O robô vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     // Só a sub-aba permitida; se pediu uma sem acesso, cai na primeira permitida.
@@ -1847,6 +1850,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)rest=1/.test(q)) aviso = 'Restaurado para a versão anterior.';
     else if (/(?:^|&)rest=0/.test(q)) { aviso = 'Não havia versão anterior para restaurar.'; erro = true; }
     else if (/(?:^|&)ctok=1/.test(q)) aviso = 'Tags salvas.';
+    else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. A Sofia vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
     const sp = new URLSearchParams(q);
     // Só renderiza a sub-aba que o usuário pode ver; se pediu uma sem acesso,
     // cai na primeira permitida (config → conversas → contatos).
@@ -2008,6 +2012,13 @@ const server = http.createServer((req, res) => {
       res.writeHead(303, { Location: '/sofia?' + (novo ? 'on=1' : 'off=1') }); res.end();
     });
   }
+  // Desconectar o WhatsApp da Sofia (envia comando ao listener → logout + reinicia → QR novo).
+  if (req.method === 'POST' && url === '/sofia/desconectar') {
+    return lerCorpo(req, 1e5, () => {
+      try { sofia.enviarComando('logout'); } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?dcon=1' }); res.end();
+    });
+  }
 
   // Página do Instagram (status + liga/desliga + limite + mensagem + horário)
   if (req.method === 'GET' && url === '/instagram') {
@@ -2075,6 +2086,17 @@ const server = http.createServer((req, res) => {
     const st = waStatus.get() || {};
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify({ estado: st.estado || '', qr: st.qr || '', atualizadoEm: st.atualizadoEm || '' }));
+  }
+  // Desconectar o WhatsApp do robô (grava comando → o robô faz logout e reinicia → QR novo).
+  if (req.method === 'POST' && url === '/wa/desconectar') {
+    return lerCorpo(req, 1e5, () => {
+      try {
+        const fs = require('fs'); const p = require('path');
+        const arq = p.join(p.dirname(waStatus.ARQUIVO), 'wa-comando.json');
+        fs.writeFileSync(arq, JSON.stringify({ cmd: 'logout', em: Date.now() }), 'utf8');
+      } catch (_) {}
+      res.writeHead(303, { Location: '/?dcon=1' }); res.end();
+    });
   }
   // A conexão do WhatsApp agora vive no topo da aba Mensagens — redireciona link antigo.
   if (req.method === 'GET' && url === '/wa') {

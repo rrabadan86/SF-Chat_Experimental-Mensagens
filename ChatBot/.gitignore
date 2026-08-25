@@ -27,3 +27,4 @@ sofia-conversas.json
 sofia-respostas.jsonl
 sofia-respostas.*.proc
 sofia-humano.json
+sofia-comando.json

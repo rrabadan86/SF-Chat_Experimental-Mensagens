@@ -36,8 +36,31 @@ let client = null;
 let pronto = false;
 let initPromise = null;
 let keepAliveTimer = null;
+let comandoTimer = null;
 
 function log(msg) { console.log(`[wa] ${msg}`); }
+
+// ── Ponte de comando painel → robô ──────────────────────────────────────────
+// O painel (processo separado) grava data/wa-comando.json para pedir ações que
+// só podem ser feitas AQUI (onde o cliente vive). Hoje: "logout" (desconectar o
+// WhatsApp). Lemos a cada poucos segundos, executamos e apagamos o arquivo.
+const COMANDO_FILE = path.resolve(__dirname, '..', 'data', 'wa-comando.json');
+function iniciarWatcherComando() {
+  if (comandoTimer) return;
+  comandoTimer = setInterval(async () => {
+    let cmd = null;
+    try { cmd = JSON.parse(require('fs').readFileSync(COMANDO_FILE, 'utf8')); } catch (_) { return; } // sem comando
+    try { require('fs').unlinkSync(COMANDO_FILE); } catch (_) {} // consome uma vez só
+    if (!cmd || cmd.cmd !== 'logout') return;
+    log('🔌 comando do painel: DESCONECTAR (logout). Encerrando a sessão…');
+    waStatus.set('desconectado', null);
+    try { if (client) await client.logout(); log('sessão desvinculada (logout).'); }
+    catch (e) { log('logout falhou (' + ((e && e.message) || e) + ') — vou reiniciar mesmo assim.'); }
+    // Sai para o PM2 reiniciar: como a sessão foi removida, sobe um QR novo no painel.
+    setTimeout(() => process.exit(0), 500);
+  }, 4000);
+  if (comandoTimer.unref) comandoTimer.unref();
+}
 
 // Erros transitórios do puppeteer quando o WhatsApp Web recarrega/desanexa o
 // frame (comum em processos de longa duração). Vale a pena esperar e repetir.
@@ -131,6 +154,7 @@ function criarClient() {
 function initWhatsApp() {
   if (initPromise) return initPromise;
   client = criarClient();
+  iniciarWatcherComando(); // escuta o pedido de "desconectar" vindo do painel
 
   let rejectInit = null;
   initPromise = new Promise((resolve, reject) => {

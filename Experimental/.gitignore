@@ -27,6 +27,8 @@ data/agendamentos-fotos/
 data/instagram-indisponiveis.json
 # Estado do WhatsApp (QR/conexao) — por VPS
 data/wa-status.json
+# Comando painel -> robo (ex.: desconectar) — efemero, por VPS
+data/wa-comando.json
 # Horários dos jobs editados no painel (estado por VPS/franquia) — não versionar
 data/horarios.json
 # Registro de atividade do robô (o que enviou hoje) — estado por VPS

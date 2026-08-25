@@ -195,6 +195,13 @@ function lerHumano() {
   catch (_) { return {}; }
 }
 function controleHumanoDe(chave) { return !!lerHumano()[chave]; }
+
+// Comando painel → listener (ex.: desconectar o WhatsApp da Sofia). O listener lê,
+// executa e apaga o arquivo. Gravado em sofia-comando.json (fora do Git).
+function enviarComando(cmd) {
+  const arq = path.join(DIR, 'sofia-comando.json');
+  fs.writeFileSync(arq, JSON.stringify({ cmd: String(cmd || ''), em: Date.now() }), 'utf8');
+}
 function setControleHumano(chave, ativo) {
   const o = lerHumano();
   if (ativo) o[chave] = Date.now(); else delete o[chave];
@@ -205,5 +212,5 @@ function setControleHumano(chave, ativo) {
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerRitmo, gravarRitmo, waStatus,
-  conversas, enfileirarResposta, lerHumano, controleHumanoDe, setControleHumano, DIR, ARQUIVOS: F,
+  conversas, enfileirarResposta, lerHumano, controleHumanoDe, setControleHumano, enviarComando, DIR, ARQUIVOS: F,
 };

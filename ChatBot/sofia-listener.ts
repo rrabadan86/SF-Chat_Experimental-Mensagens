@@ -390,6 +390,23 @@ async function processarRespostas() {
 }
 setInterval(() => { processarRespostas().catch(() => {}); }, 1500);
 
+// ── Ponte de comando painel → Sofia ─────────────────────────────────────────
+// O painel grava sofia-comando.json para pedir ações que só dá para fazer aqui.
+// Hoje: "logout" (desconectar o WhatsApp da Sofia). Lemos, executamos e apagamos.
+const COMANDO_FILE = path.join(DIR, "sofia-comando.json");
+setInterval(async () => {
+  let cmd: any = null;
+  try { cmd = JSON.parse(fs.readFileSync(COMANDO_FILE, "utf8")); } catch { return; } // sem comando
+  try { fs.unlinkSync(COMANDO_FILE); } catch {} // consome uma vez só
+  if (!cmd || cmd.cmd !== "logout") return;
+  log("🔌 comando do painel: DESCONECTAR (logout). Encerrando a sessão da Sofia…");
+  setStatus("desconectado");
+  try { await client.logout(); log("sessão da Sofia desvinculada (logout)."); }
+  catch (e: any) { log("logout falhou (" + (e?.message || e) + ") — reinicio mesmo assim."); }
+  // Sai para o PM2 reiniciar: sem a sessão salva, sobe um QR novo no painel.
+  setTimeout(() => process.exit(0), 500);
+}, 4000);
+
 // Mensagem RECEBIDA da aluna (não é fromMe).
 client.on("message", (msg: any) => {
   try {
