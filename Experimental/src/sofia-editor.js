@@ -26,6 +26,7 @@ const F = {
   waStatus: path.join(DIR, 'sofia-wa-status.json'), // publicado pelo listener da Sofia
   conversas: path.join(DIR, 'sofia-conversas.json'), // inbox — publicado pelo listener
   respostas: path.join(DIR, 'sofia-respostas.jsonl'), // fila de respostas do painel → listener envia
+  humano: path.join(DIR, 'sofia-humano.json'), // conversas sob controle humano (Sofia não responde) — lido pela Sofia
 };
 
 // Padrões do "jeito humano" (mesmos do listener). O painel edita e o listener lê
@@ -186,8 +187,23 @@ function enfileirarResposta(chave, jid, texto) {
   fs.appendFileSync(F.respostas, linha, 'utf8');
 }
 
+// ── controle humano por conversa (interruptor no painel) ────────────────────
+// { "<chave>": <ativadoEm> }. Quando a chave existe, a Sofia não responde AQUELA
+// conversa (você conversa manualmente). As outras seguem com a Sofia normalmente.
+function lerHumano() {
+  try { const o = JSON.parse(ler(F.humano)); return (o && typeof o === 'object') ? o : {}; }
+  catch (_) { return {}; }
+}
+function controleHumanoDe(chave) { return !!lerHumano()[chave]; }
+function setControleHumano(chave, ativo) {
+  const o = lerHumano();
+  if (ativo) o[chave] = Date.now(); else delete o[chave];
+  fs.writeFileSync(F.humano, JSON.stringify(o), 'utf8');
+  return !!ativo;
+}
+
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerRitmo, gravarRitmo, waStatus,
-  conversas, enfileirarResposta, DIR, ARQUIVOS: F,
+  conversas, enfileirarResposta, lerHumano, controleHumanoDe, setControleHumano, DIR, ARQUIVOS: F,
 };

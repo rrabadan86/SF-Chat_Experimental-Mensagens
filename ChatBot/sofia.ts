@@ -282,6 +282,20 @@ function pausaMinutos(): number {
   try { const n = parseInt(fs.readFileSync(PAUSA_FILE, "utf-8").trim(), 10); return n > 0 ? n : 30; }
   catch { return 30; }
 }
+// ── CONTROLE HUMANO POR CONVERSA (interruptor no painel) ──────────────────────
+// Diferente da pausa por tempo (assumirConversa): aqui é um interruptor PERSISTENTE
+// por conversa, ligado/desligado no painel (aba Sofia → Conversas). Enquanto ligado
+// para uma conversa, a Sofia NÃO responde AQUELA conversa (você conversa manualmente);
+// as demais conversas seguem com a Sofia normalmente. Gravado em sofia-humano.json
+// pelo painel e lido AQUI a cada mensagem — muda sem reiniciar.
+const HUMANO_FILE = path.join(process.cwd(), "sofia-humano.json");
+function controleHumanoAtivo(chave: string): boolean {
+  try {
+    const o = JSON.parse(fs.readFileSync(HUMANO_FILE, "utf-8"));
+    return !!(o && typeof o === "object" && o[chave]);
+  } catch { return false; }
+}
+
 const assumidasAte = new Map<string, number>(); // telefone -> timestamp (ms) até quando a Sofia fica fora
 export function assumirConversa(telefone: string) {
   assumidasAte.set(telefone, Date.now() + pausaMinutos() * 60_000);
@@ -536,6 +550,14 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
   // Retorna string vazia — o webhook/listener trata isso como "não enviar nada".
   if (!sofiaAtiva()) {
     console.log(`🔕 Sofia DESLIGADA — mensagem de ${telefone} não respondida (atenda manualmente).`);
+    return "";
+  }
+  // Controle humano LIGADO para esta conversa (interruptor do painel): Sofia fica
+  // fora SÓ desta conversa, sem prazo, até você desligar. As outras seguem normais.
+  // Mesmo calada, REGISTRA a mensagem da aluna para ter contexto quando devolver.
+  if (controleHumanoAtivo(telefone)) {
+    registrarNaMemoria(telefone, "aluna", mensagem);
+    console.log(`🙋 ${telefone} sob CONTROLE HUMANO — Sofia anotou a mensagem, mas não responde.`);
     return "";
   }
   // Conversa assumida por humano: Sofia fica fora só desta, pelo tempo configurado.

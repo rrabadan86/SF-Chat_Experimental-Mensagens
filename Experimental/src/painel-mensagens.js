@@ -957,7 +957,7 @@ function paginaSofiaConversas(aviso, erro) {
     </div>
   </div>
 <script>
-  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1}, ncSel=[], rascunhos={}, tagFiltro='';
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, tagFiltro='';
   var TAGS_EXISTENTES = ${JSON.stringify(tagsLista)};
   var SESSAO_MS = ${Math.round(sessaoHoras * 3600 * 1000)};
   function encerrada(c){ return c && c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS); }
@@ -983,16 +983,24 @@ function paginaSofiaConversas(aviso, erro) {
       +'<button type="button" class="save" style="padding:5px 10px" onclick="salvarContato(\\''+k+'\\')">💾 '+(c.salvo?'Salvar tags':'Salvar contato')+'</button>'
       +'<span id="ncMsg" class="quando">'+(c.salvo?'✓ salvo':'')+'</span>'
       +'</div></div>';
+    var hum = !!c.humano;
+    var toggle='<div style="margin:2px 0 8px"><button type="button" onclick="toggleHumano()" class="'+(hum?'save':'reset')+'" style="padding:6px 12px;font-size:.82rem">'+(hum?'🙋 Você no controle · clique para devolver à Sofia':'🤖 Sofia atendendo · clique para assumir')+'</button></div>';
     var composer='<div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end">'
-      +'<textarea id="msgTxt" rows="2" placeholder="Escreva uma mensagem para a aluna…  (Enter envia · Shift+Enter quebra linha)" oninput="if(selecionada)rascunhos[selecionada]=this.value" onkeydown="msgKey(event)" style="flex:1;resize:vertical;min-height:46px;font-size:.9rem"></textarea>'
-      +'<button type="button" class="save" onclick="enviarMsg()" style="padding:9px 16px;white-space:nowrap">Enviar ➤</button>'
+      +'<textarea id="msgTxt" rows="2" '+(hum?'':'disabled')+' placeholder="'+(hum?'Escreva uma mensagem para a aluna…  (Enter envia · Shift+Enter quebra linha)':'🔒 Ative o controle humano (botão acima) para responder por aqui')+'" oninput="if(selecionada)rascunhos[selecionada]=this.value" onkeydown="msgKey(event)" style="flex:1;resize:vertical;min-height:46px;font-size:.9rem'+(hum?'':';background:#f2f2f2;color:#999;cursor:not-allowed')+'"></textarea>'
+      +'<button type="button" class="save" onclick="enviarMsg()" '+(hum?'':'disabled')+' style="padding:9px 16px;white-space:nowrap'+(hum?'':';opacity:.45;cursor:not-allowed')+'">Enviar ➤</button>'
       +'</div>'
       +'<div id="msgStatus" class="quando" style="margin-top:4px;min-height:16px"></div>'
-      +'<p class="quando" style="margin:2px 0 0;font-size:.72rem">Ao responder por aqui, você assume a conversa e a Sofia fica de fora dela pelo tempo configurado (aba Configuração).</p>';
-    chat.innerHTML = '<div style="font-weight:800;margin-bottom:2px">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin-bottom:6px">'+escH(fmtTel(k))+'</div>'+editor+'<div id="bolhas" style="overflow:auto;max-height:360px;padding-right:4px">'+bolhas+fim+'</div>'+composer;
+      +'<p class="quando" style="margin:2px 0 0;font-size:.72rem">'+(hum?'Enquanto você está no controle, a Sofia não responde ESTA conversa (as outras seguem normalmente). Clique no botão acima para devolver à Sofia.':'A Sofia está atendendo esta conversa. Para responder você mesmo, clique em “assumir” acima — só esta conversa para; as outras continuam com a Sofia.')+'</p>';
+    chat.innerHTML = '<div style="font-weight:800;margin-bottom:2px">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin-bottom:4px">'+escH(fmtTel(k))+'</div>'+toggle+editor+'<div id="bolhas" style="overflow:auto;max-height:340px;padding-right:4px">'+bolhas+fim+'</div>'+composer;
     ncRenderChips();
     var ta=document.getElementById('msgTxt'); if(ta) ta.value=rascunhos[k]||'';
     var b=document.getElementById('bolhas'); if(b) b.scrollTop=b.scrollHeight;
+  }
+  function toggleHumano(){
+    var k=selecionada; if(!k) return;
+    var c=ultimoData[k]||{}; var novo=!c.humano;
+    fetch('/sofia/humano',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,ativo:novo})})
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].humano=novo; ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[k],k); } });
   }
   function msgKey(ev){ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); enviarMsg(); } }
   function enviarMsg(){
@@ -1000,6 +1008,7 @@ function paginaSofiaConversas(aviso, erro) {
     var c=ultimoData[k]||{}; var jid=c.jid||'';
     var ta=document.getElementById('msgTxt'); var txt=(ta&&ta.value||'').trim();
     var st=document.getElementById('msgStatus');
+    if(!c.humano){ if(st)st.textContent='Ative o controle humano para responder.'; return; }
     if(!txt){ if(st)st.textContent=''; return; }
     if(st)st.textContent='Enviando…';
     fetch('/sofia/responder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,jid:jid,texto:txt})})
@@ -1038,7 +1047,8 @@ function paginaSofiaConversas(aviso, erro) {
       var on=(k===selecionada);
       var tgs=(c.tagsContato||[]).map(function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:1px 7px;font-size:.66rem;margin:3px 4px 0 0">'+escH(t)+'</span>';}).join('');
       var enc=encerrada(c)?'<span style="display:inline-block;background:#f3eaea;color:#a15a5a;border-radius:999px;padding:1px 7px;font-size:.64rem;font-weight:700;margin-left:4px">🔒 encerrada</span>':'';
-      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:10px 12px;border-radius:10px;margin-bottom:6px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':(encerrada(c)?'#fbf7f7':'#fff'))+'"><div style="font-weight:700;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(c.nome||fmtTel(k))+'</div><div class="quando">'+escH(fmtTel(k))+'</div><div class="quando" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(prev)+'</div><div class="quando" style="font-size:.72rem">'+fmtHora(c.ultimaEm)+enc+'</div>'+(tgs?'<div>'+tgs+'</div>':'')+'</div>';
+      var hb=c.humano?'<span style="display:inline-block;background:#e6f6ec;color:#1f8f52;border-radius:999px;padding:1px 7px;font-size:.64rem;font-weight:700;margin-left:4px">🙋 você</span>':'';
+      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:10px 12px;border-radius:10px;margin-bottom:6px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':(encerrada(c)?'#fbf7f7':'#fff'))+'"><div style="font-weight:700;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(c.nome||fmtTel(k))+'</div><div class="quando">'+escH(fmtTel(k))+'</div><div class="quando" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(prev)+'</div><div class="quando" style="font-size:.72rem">'+fmtHora(c.ultimaEm)+hb+enc+'</div>'+(tgs?'<div>'+tgs+'</div>':'')+'</div>';
     }).join('');
     if(pag){
       if(paginas>1){ pag.innerHTML='<button type="button" class="reset" onclick="mudarPag(-1)" '+(pagina===0?'disabled':'')+' style="padding:6px 12px">‹ Anterior</button><span class="quando" style="text-align:center">Página '+(pagina+1)+' de '+paginas+'<br>'+total+' conversas</span><button type="button" class="reset" onclick="mudarPag(1)" '+(pagina>=paginas-1?'disabled':'')+' style="padding:6px 12px">Próxima ›</button>'; }
@@ -1046,13 +1056,13 @@ function paginaSofiaConversas(aviso, erro) {
     }
     if(selecionada && ultimoData[selecionada]){
       var cc=ultimoData[selecionada], nn=(cc.msgs?cc.msgs.length:0);
-      // Só re-renderiza o chat quando muda de conversa ou chega mensagem nova —
-      // assim o refresh de 4s não apaga o que você está digitando no "Salvar contato".
-      if(ultimoRender.chave!==selecionada || ultimoRender.n!==nn){ renderChat(cc, selecionada); ultimoRender={chave:selecionada,n:nn}; }
+      // Só re-renderiza o chat quando muda de conversa, chega mensagem nova ou muda
+      // o controle humano — assim o refresh de 4s não apaga o que você está digitando.
+      if(ultimoRender.chave!==selecionada || ultimoRender.n!==nn || ultimoRender.humano!==!!cc.humano){ renderChat(cc, selecionada); ultimoRender={chave:selecionada,n:nn,humano:!!cc.humano}; }
     }
   }
   function mudarPag(d){ pagina+=d; renderInbox(ultimoData); }
-  function abrir(k){ selecionada=k; ncSel=(ultimoData[k]&&ultimoData[k].tagsContato?ultimoData[k].tagsContato.slice():[]); ultimoRender={chave:null,n:-1}; renderInbox(ultimoData); }
+  function abrir(k){ selecionada=k; ncSel=(ultimoData[k]&&ultimoData[k].tagsContato?ultimoData[k].tagsContato.slice():[]); ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); }
   function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(renderInbox).catch(function(){}); }
   atualizaInbox(); setInterval(atualizaInbox, 4000);
 </script>`;
@@ -1554,8 +1564,21 @@ const server = http.createServer((req, res) => {
     let obj = {};
     try { obj = sofia.conversas() || {}; } catch (_) {}
     try { const cmap = contatos.carregar(); for (const k in obj) { const c = cmap[contatos.normTel(k)]; obj[k].salvo = !!c; obj[k].tagsContato = c ? (c.tags || []) : []; } } catch (_) {} // salvo? + tags do contato
+    try { const hum = sofia.lerHumano(); for (const k in obj) obj[k].humano = !!hum[k]; } catch (_) {} // controle humano por conversa
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify(obj));
+  }
+  // Liga/desliga o controle humano de UMA conversa (a Sofia para de responder só ela).
+  if (req.method === 'POST' && url === '/sofia/humano') {
+    return lerCorpo(req, 1e6, corpo => {
+      let d = {};
+      try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      const chave = String(d.chave || '').trim();
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
+      try { const ativo = sofia.setControleHumano(chave, !!d.ativo); res.end(JSON.stringify({ ok: true, ativo })); }
+      catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
+    });
   }
   // Responder uma conversa pelo painel: enfileira para o listener da Sofia enviar
   // pelo WhatsApp (e assumir a conversa, pausando a Sofia nela).

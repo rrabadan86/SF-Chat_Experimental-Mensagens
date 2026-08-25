@@ -348,8 +348,10 @@ async function processarRespostas() {
     if (!jid) { log(`resposta do painel sem destino (chave=${chave}) — ignorada.`); continue; }
     enfileirar(async () => {
       const alvo = jid.replace(/@lid$/, "@c.us"); // enviar sempre por @c.us
-      assumirConversa(chave);                     // você assumiu → Sofia pausa nesta conversa
-      registrarNaMemoria(chave, "humano", texto); // Sofia "ouve" para ter contexto ao reassumir
+      // NÃO usamos a pausa por tempo aqui: quem controla é o interruptor "controle
+      // humano" da conversa (o painel liga/desliga em sofia-humano.json). Assim,
+      // ao devolver à Sofia (desligar o interruptor), ela volta na hora.
+      registrarNaMemoria(chave, "humano", texto); // Sofia "ouve" para ter contexto quando voltar
       registrarInbox(chave, alvo, "", "humano", texto);
       try { await enviar(alvo, texto); log(`resposta do painel enviada para ${chave}.`); }
       catch (e: any) { log("falha ao enviar resposta do painel: " + (e?.message || e)); }
