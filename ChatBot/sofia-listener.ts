@@ -47,18 +47,22 @@ const client = new Client({
   },
 });
 
-// IDs das mensagens que a PRÓPRIA Sofia enviou — para não confundir com uma
-// resposta MANUAL sua (essa sim deve pausar a Sofia naquela conversa).
-const idsDaSofia = new Set<string>();
-function lembrarId(id?: string) {
-  if (!id) return;
-  idsDaSofia.add(id);
-  if (idsDaSofia.size > 800) { const v = idsDaSofia.values().next().value; if (v) idsDaSofia.delete(v); }
-}
+// jid → telefone/chave (mesma normalização nos dois handlers, para o handoff
+// pausar exatamente a conversa que a Sofia estava respondendo).
+function jidParaTel(jid: string) { return String(jid || "").replace(/@(c\.us|lid)$/, ""); }
+
+// Quantas mensagens a PRÓPRIA Sofia enviou e ainda não "ecoaram" no evento
+// message_create. Incrementa ANTES de enviar (sem corrida) e decrementa quando
+// o eco chega. Um message_create fromMe SEM eco pendente = VOCÊ respondeu
+// manualmente (handoff). À prova de corrida, ao contrário do id salvo depois.
+const pendentesEco = new Map<string, number>();
+function incEco(jid: string) { pendentesEco.set(jid, (pendentesEco.get(jid) || 0) + 1); }
+function decEco(jid: string) { const n = (pendentesEco.get(jid) || 0) - 1; if (n > 0) pendentesEco.set(jid, n); else pendentesEco.delete(jid); }
+
 async function enviar(to: string, conteudo: any) {
-  const m: any = await client.sendMessage(to, conteudo);
-  lembrarId(m?.id?._serialized);
-  return m;
+  incEco(to);
+  try { return await client.sendMessage(to, conteudo); }
+  catch (e) { decEco(to); throw e; } // envio falhou → não deixa o contador preso
 }
 
 client.on("qr", async (qr) => {
@@ -83,7 +87,7 @@ client.on("message", (msg: any) => {
     if (!msg.from || msg.from.endsWith("@g.us") || msg.from === "status@broadcast") return; // ignora grupos/status
     const texto = (msg.body || "").trim();
     if (!texto) return; // por ora só texto (áudio/imagem da aluna não são tratados aqui)
-    const tel = msg.from.replace(/@c\.us$/, "");
+    const tel = jidParaTel(msg.from);
     enfileirar(async () => {
       const reply = await responderComMemoria(tel, texto); // já cuida de on/off, handoff e memória
       if (reply && reply.trim()) await enviar(msg.from, reply);
@@ -100,9 +104,10 @@ client.on("message", (msg: any) => {
 client.on("message_create", (msg: any) => {
   try {
     if (!msg.fromMe) return;
-    if (!msg.to || msg.to.endsWith("@g.us")) return;
-    if (idsDaSofia.has(msg?.id?._serialized)) return; // foi a própria Sofia enviando
-    const tel = msg.to.replace(/@c\.us$/, "");
+    const jid = msg.to;
+    if (!jid || jid.endsWith("@g.us")) return;
+    if ((pendentesEco.get(jid) || 0) > 0) { decEco(jid); return; } // foi a própria Sofia (eco do envio)
+    const tel = jidParaTel(jid);
     assumirConversa(tel);
     registrarNaMemoria(tel, "humano", msg.body || "");
     log(`você assumiu a conversa com ${tel} — Sofia pausada nela.`);
