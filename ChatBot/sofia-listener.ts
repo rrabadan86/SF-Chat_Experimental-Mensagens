@@ -123,6 +123,31 @@ const client = new Client({
 // pausar exatamente a conversa que a Sofia estava respondendo).
 function jidParaTel(jid: string) { return String(jid || "").replace(/@(c\.us|lid)$/, ""); }
 
+// Resolve o TELEFONE REAL do contato. Para "@c.us" o próprio jid já é o número.
+// Para o formato novo "@lid" o jid é um ID interno (NÃO é telefone) — aí buscamos
+// o número de verdade em getContact() (best-effort). Sem isso, o agendamento ia
+// para o EVO com o "@lid" e a confirmação do robô voltava "número não tem WhatsApp".
+// Resolvemos UMA vez por contato e guardamos em cache, para a chave de memória e o
+// handoff ficarem estáveis mesmo que um getContact posterior falhe.
+const telCache = new Map<string, string>();
+function pareceTelefone(s: string) { return /^\d{11,15}$/.test(s); } // com DDI: 55 + DDD + número
+async function resolverTel(msg: any): Promise<string> {
+  const jid: string = msg.from || msg.to || "";
+  const cache = telCache.get(jid);
+  if (cache) return cache;
+  let tel = jidParaTel(jid);
+  if (jid.endsWith("@lid")) {
+    try {
+      const c = await msg.getContact();
+      const num = String((c && (c.number || (c.id && c.id.user))) || "").replace(/\D/g, "");
+      if (pareceTelefone(num)) tel = num;
+      else log(`aviso: contato ${jid} sem telefone visível — agendamento ficaria sem número real.`);
+    } catch (e: any) { log("aviso: getContact falhou para " + jid + " (" + (e?.message || e) + ")"); }
+  }
+  telCache.set(jid, tel);
+  return tel;
+}
+
 // Quantas mensagens a PRÓPRIA Sofia enviou e ainda não "ecoaram" no evento
 // message_create. Incrementa ANTES de enviar (sem corrida) e decrementa quando
 // o eco chega. Um message_create fromMe SEM eco pendente = VOCÊ respondeu
@@ -159,8 +184,8 @@ client.on("message", (msg: any) => {
     if (!msg.from || msg.from.endsWith("@g.us") || msg.from === "status@broadcast") return; // ignora grupos/status
     const texto = (msg.body || "").trim();
     if (!texto) return; // por ora só texto (áudio/imagem da aluna não são tratados aqui)
-    const tel = jidParaTel(msg.from);
     enfileirar(async () => {
+      const tel = await resolverTel(msg); // telefone REAL (resolve o "@lid"); estável via cache
       const reply = await responderComMemoria(tel, texto); // já cuida de on/off, handoff e memória
       const urls = drenarMidias(); // imagens que a Sofia pediu nesta resposta
       if ((reply && reply.trim()) || urls.length) {
@@ -187,7 +212,7 @@ client.on("message_create", (msg: any) => {
     const jid = msg.to;
     if (!jid || jid.endsWith("@g.us")) return;
     if ((pendentesEco.get(jid) || 0) > 0) { decEco(jid); return; } // foi a própria Sofia (eco do envio)
-    const tel = jidParaTel(jid);
+    const tel = telCache.get(jid) || jidParaTel(jid); // mesma chave da memória (telefone real do "@lid")
     assumirConversa(tel);
     registrarNaMemoria(tel, "humano", msg.body || "");
     log(`você assumiu a conversa com ${tel} — Sofia pausada nela.`);
