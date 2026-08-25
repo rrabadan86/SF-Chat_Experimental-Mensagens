@@ -166,12 +166,16 @@ async function enviar(to: string, conteudo: any) {
 }
 
 client.on("qr", async (qr) => {
+  // Esperando um HUMANO escanear — NÃO é travamento. Desarma o watchdog para não
+  // matar o processo (e trocar o QR) no meio da leitura. Ele é re-armado quando
+  // a sessão autenticar (aí sim faz sentido cobrar o "PRONTA").
+  if (bootTimer) { clearTimeout(bootTimer); bootTimer = null; }
   log("QR recebido — escaneie pelo painel (aba 🤖 Sofia) ou aqui no terminal:");
   try { qrcodeTerminal.generate(qr, { small: true }); } catch {}
   try { const dataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 }); setStatus("qr", dataUrl); }
   catch { setStatus("qr", ""); }
 });
-client.on("authenticated", () => { log("autenticada."); setStatus("iniciando"); });
+client.on("authenticated", () => { log("autenticada."); setStatus("iniciando"); armarWatchdogBoot(); });
 client.on("ready", () => { pronta = true; if (bootTimer) clearTimeout(bootTimer); log("PRONTA — respondendo as alunas."); setStatus("conectado"); });
 client.on("change_state", (s: string) => log("estado: " + s));
 client.on("disconnected", (m: any) => { pronta = false; log("desconectada: " + m); setStatus("desconectado"); armarWatchdogBoot(); });
