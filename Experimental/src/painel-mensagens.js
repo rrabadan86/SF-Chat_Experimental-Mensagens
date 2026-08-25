@@ -325,7 +325,7 @@ function navTabs(ativo) {
   let html = item('hoje', '/hoje', '📊', 'Hoje') + item('ind', '/indicadores', '📈', 'Formulário');
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp');
   html += item('ig', '/instagram', '📸', 'Instagram');
-  if (temSofia(sess)) html += cel(sofiaHref(sess), ativo === 'sofia', '🤖', 'Sofia');
+  if (temSofia(sess)) html += cel(sofiaHref(sess), ativo === 'sofia', '🤖', 'SoFIA');
   if (sess.admin) html += cel('/perfis', ativo === 'perfis', '👤', 'Perfis');
   return html;
 }
@@ -1050,16 +1050,16 @@ function blocoSofiaWa() {
   const st = sofia.waStatus();
   const quando = st.atualizadoEm ? new Date(st.atualizadoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
   if (st.estado === 'conectado') {
-    return `<div class="wa-card ok"><div class="wa-ic">🤖</div><h2>WhatsApp da Sofia conectado</h2><p>A Sofia está no ar e responde as alunas neste número.</p></div>`;
+    return `<div class="wa-card ok"><div class="wa-ic">🤖</div><h2>WhatsApp da SoFIA conectado</h2><p>A SoFIA está no ar e responde as alunas neste número.</p></div>`;
   }
   if (st.estado === 'qr' && st.qr) {
-    return `<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR da Sofia</h2>
-      <p>Este é o WhatsApp <b>da Sofia</b> (número próprio, diferente do robô de mensagens). No celular do número da Sofia: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte para o código.</p>
-      <img class="qr" src="${esc(st.qr)}" alt="QR da Sofia"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira “🤖 conectado”.</p></div>`;
+    return `<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR da SoFIA</h2>
+      <p>Este é o WhatsApp <b>da SoFIA</b> (número próprio, diferente do robô de mensagens). No celular do número da SoFIA: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte para o código.</p>
+      <img class="qr" src="${esc(st.qr)}" alt="QR da SoFIA"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira “🤖 conectado”.</p></div>`;
   }
   // Sem status publicado ainda (o listener da Sofia precisa gravar sofia-wa-status.json).
-  return `<div class="wa-card"><div class="wa-ic">❔</div><h2>Conexão da Sofia — sem informação</h2>
-    <p>Para o QR da Sofia aparecer aqui, o processo dela precisa <b>publicar o estado</b> em <code>sofia-wa-status.json</code>. Enquanto isso não estiver ligado, conecte a Sofia pelo terminal como de costume.</p>
+  return `<div class="wa-card"><div class="wa-ic">❔</div><h2>Conexão da SoFIA — sem informação</h2>
+    <p>Para o QR da SoFIA aparecer aqui, o processo dela precisa <b>publicar o estado</b> em <code>sofia-wa-status.json</code>. Enquanto isso não estiver ligado, conecte a SoFIA pelo terminal como de costume.</p>
     <p class="wa-upd">Última atualização: ${esc(quando)}</p></div>`;
 }
 
@@ -1084,7 +1084,7 @@ function paginaSofiaConversas(aviso, erro) {
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('conversas')}
-    <div class="sec-t">💬 Conversas da Sofia <small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
+    <div class="sec-t">💬 Conversas da SoFIA <small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
     <style>
       .inbox-grid{display:grid;grid-template-columns:236px minmax(0,1fr);gap:14px;align-items:start}
       .inbox-grid>div{min-width:0}
@@ -1106,7 +1106,7 @@ function paginaSofiaConversas(aviso, erro) {
   function encerrada(c){ return c && c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS); }
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function fmtHora(ts){ try{return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
-  function autorRot(a){ return a==='aluna'?'Aluna':(a==='humano'?'Você':'Sofia'); }
+  function autorRot(a){ return a==='aluna'?'Aluna':(a==='humano'?'Você':'SoFIA'); }
   function fmtTel(k){ var d=String(k||'').replace(/\\D/g,''); if(/^55\\d{10,11}$/.test(d)){ var ddd=d.slice(2,4), r=d.slice(4); return '+55 ('+ddd+') '+(r.length===9?r.slice(0,5)+'-'+r.slice(5):r.slice(0,4)+'-'+r.slice(4)); } return k; }
   function renderChat(c,k){
     var chat=document.getElementById('convChat'); if(!chat) return;
@@ -1116,10 +1116,10 @@ function paginaSofiaConversas(aviso, erro) {
       var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e6f6f7');
       return '<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+autorRot(m.autor)+' · '+fmtHora(m.em)+'</div><div style="white-space:pre-wrap">'+escH(m.texto)+'</div></div></div>';
     }).join('');
-    var fim = encerrada(c) ? '<div style="text-align:center;margin:10px 0 2px"><span style="display:inline-block;background:#f3eaea;color:#a15a5a;border:1px solid #e6cfcf;border-radius:999px;padding:3px 12px;font-size:.72rem;font-weight:700">🔒 Sessão encerrada · a Sofia recomeça do zero se a aluna voltar</span></div>' : '';
+    var fim = encerrada(c) ? '<div style="text-align:center;margin:10px 0 2px"><span style="display:inline-block;background:#f3eaea;color:#a15a5a;border:1px solid #e6cfcf;border-radius:999px;padding:3px 12px;font-size:.72rem;font-weight:700">🔒 Sessão encerrada · a SoFIA recomeça do zero se a aluna voltar</span></div>' : '';
     var hum = !!c.humano;
     // Cabeçalho enxuto: nome + telefone à esquerda, botão de controle (compacto) à direita.
-    var pill='<button type="button" onclick="toggleHumano()" class="'+(hum?'save':'reset')+'" style="padding:5px 12px;font-size:.78rem;white-space:nowrap">'+(hum?'🙋 devolver à Sofia':'assumir')+'</button>';
+    var pill='<button type="button" onclick="toggleHumano()" class="'+(hum?'save':'reset')+'" style="padding:5px 12px;font-size:.78rem;white-space:nowrap">'+(hum?'🙋 devolver à SoFIA':'assumir')+'</button>';
     var header='<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">'
       +'<div style="flex:1;min-width:0"><div style="font-weight:800">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin:0">'+escH(fmtTel(k))+'</div></div>'+pill+'</div>';
     // Linha de tags recolhível — o editor completo só aparece ao clicar em "editar".
@@ -1191,7 +1191,7 @@ function paginaSofiaConversas(aviso, erro) {
     var total=chaves.length, paginas=Math.max(1,Math.ceil(total/POR_PAGINA));
     if(pagina>=paginas) pagina=paginas-1; if(pagina<0) pagina=0;
     var lista=document.getElementById('convLista'), pag=document.getElementById('convPag');
-    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a Sofia receber mensagens, elas aparecem aqui.')+'</p>'; if(pag)pag.innerHTML=''; return; }
+    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a SoFIA receber mensagens, elas aparecem aqui.')+'</p>'; if(pag)pag.innerHTML=''; return; }
     var ini=pagina*POR_PAGINA, fatia=chaves.slice(ini,ini+POR_PAGINA);
     lista.innerHTML = fatia.map(function(k){
       var c=ultimoData[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
@@ -1221,7 +1221,7 @@ function paginaSofiaConversas(aviso, erro) {
   function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(renderInbox).catch(function(){}); }
   atualizaInbox(); setInterval(atualizaInbox, 4000);
 </script>`;
-  return chrome({ tab: 'Sofia', h1: '🤖 Sofia', p: 'Conversas da Sofia — leia o histórico de cada atendimento.' }, 'sofia', corpo);
+  return chrome({ tab: 'SoFIA', h1: '🤖 SoFIA', p: 'Conversas da SoFIA — leia o histórico de cada atendimento.' }, 'sofia', corpo);
 }
 
 // Aba Sofia → Contatos: CRM leve (importar CSV, etiquetar, filtrar por tag).
@@ -1322,17 +1322,17 @@ function paginaSofiaContatos(aviso, erro, params) {
     rd.readAsText(f.files[0],'utf-8');
   }
 </script>`;
-  return chrome({ tab: 'Contatos', h1: '🤖 Sofia', p: 'Contatos — importe, etiquete e filtre por tag.' }, 'sofia', corpo);
+  return chrome({ tab: 'Contatos', h1: '🤖 SoFIA', p: 'Contatos — importe, etiquete e filtre por tag.' }, 'sofia', corpo);
 }
 
 function paginaSofia(aviso, erro) {
   if (!sofia.disponivel()) {
     const corpo = `<div class="wrap">
       ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
-      <div class="card"><div class="chead"><h2>Sofia não encontrada nesta máquina</h2></div>
-        <p class="quando">Não achei a pasta da Sofia (<code>${esc(sofia.DIR)}</code>) ou o arquivo do prompt. Se a Sofia roda em outra pasta/servidor, aponte com a variável <code>SOFIA_DIR</code> no <code>.env</code> do painel e reinicie: <code>pm2 restart slimfit-painel --update-env</code>.</p>
+      <div class="card"><div class="chead"><h2>SoFIA não encontrada nesta máquina</h2></div>
+        <p class="quando">Não achei a pasta da SoFIA (<code>${esc(sofia.DIR)}</code>) ou o arquivo do prompt. Se a SoFIA roda em outra pasta/servidor, aponte com a variável <code>SOFIA_DIR</code> no <code>.env</code> do painel e reinicie: <code>pm2 restart slimfit-painel --update-env</code>.</p>
       </div></div>`;
-    return chrome({ tab: 'Sofia', h1: '🤖 Sofia', p: 'Prompt, configurações e conexão do chatbot.' }, 'sofia', corpo);
+    return chrome({ tab: 'SoFIA', h1: '🤖 SoFIA', p: 'Prompt, configurações e conexão do chatbot.' }, 'sofia', corpo);
   }
 
   const e = sofia.estado();
@@ -1354,41 +1354,41 @@ function paginaSofia(aviso, erro) {
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('config')}
 
-    <div class="sec-t">📱 Conexão do WhatsApp da Sofia <small style="font-weight:600;color:var(--cinza)">(número próprio, diferente do robô)</small></div>
+    <div class="sec-t">📱 Conexão do WhatsApp da SoFIA <small style="font-weight:600;color:var(--cinza)">(número próprio, diferente do robô)</small></div>
     <div id="sofiaWa">${blocoSofiaWa()}</div>
-    <div style="text-align:right;margin:-4px 0 0"><form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da Sofia?\\n\\nA Sofia para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔌 Desconectar</button></form></div>
+    <div style="text-align:right;margin:-4px 0 0"><form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔌 Desconectar</button></form></div>
 
-    <div class="sec-t">⚡ Sofia</div>
+    <div class="sec-t">⚡ SoFIA</div>
     <div class="card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:200px">
         <h2 style="margin:0 0 4px">${e.ativa ? '🟢 IA ativa' : '⏸️ IA pausada'}</h2>
-        <p class="quando" style="margin:0">${e.ativa ? 'A Sofia está respondendo as alunas.' : 'A Sofia NÃO responde — atenda manualmente pelo WhatsApp.'}</p>
+        <p class="quando" style="margin:0">${e.ativa ? 'A SoFIA está respondendo as alunas.' : 'A SoFIA NÃO responde — atenda manualmente pelo WhatsApp.'}</p>
       </div>
       <form method="POST" action="/sofia/toggle" style="margin:0">
-        <button type="submit" class="${e.ativa ? 'reset' : 'save'}">${e.ativa ? '⏸️ Pausar Sofia' : '▶️ Ativar Sofia'}</button>
+        <button type="submit" class="${e.ativa ? 'reset' : 'save'}">${e.ativa ? '⏸️ Pausar SoFIA' : '▶️ Ativar SoFIA'}</button>
       </form>
     </div>
 
     <form method="POST" action="/sofia/salvar">
 
       <div class="card">
-        <label>⏳ Minutos que a Sofia fica fora ao você assumir uma conversa</label>
+        <label>⏳ Minutos que a SoFIA fica fora ao você assumir uma conversa</label>
         <input type="number" name="pausaMin" min="1" max="1440" value="${e.pausaMin}" style="width:130px"> minutos
       </div>
 
       <div class="card">
         <label>🧠 Tempo de sessão (memória da conversa)</label>
         <div><input type="number" name="sessaoHoras" min="1" max="720" step="1" value="${e.sessaoHoras}" style="width:130px"> horas</div>
-        <p class="quando" style="margin:6px 0 0">Depois desse tempo <b>sem mensagens</b>, a próxima mensagem da aluna começa uma conversa <b>nova</b> — a Sofia não lembra do que foi dito antes. No painel (aba Conversas), a conversa aparece como <b>“Sessão encerrada”</b> quando passa desse tempo. Padrão: 12 horas.</p>
+        <p class="quando" style="margin:6px 0 0">Depois desse tempo <b>sem mensagens</b>, a próxima mensagem da aluna começa uma conversa <b>nova</b> — a SoFIA não lembra do que foi dito antes. No painel (aba Conversas), a conversa aparece como <b>“Sessão encerrada”</b> quando passa desse tempo. Padrão: 12 horas.</p>
       </div>
 
-      <div class="sec-t">⌨️ Jeito de responder <small style="font-weight:600;color:var(--cinza)">(deixa a Sofia mais humana — vale na hora, sem reiniciar)</small></div>
+      <div class="sec-t">⌨️ Jeito de responder <small style="font-weight:600;color:var(--cinza)">(deixa a SoFIA mais humana — vale na hora, sem reiniciar)</small></div>
       <div class="card">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="ritHumano" value="1"${e.ritmo.humano ? ' checked' : ''} style="width:auto;margin:0">
           Modo humano — quebra respostas longas em várias mensagens e mostra “digitando…”
         </label>
-        <p class="quando" style="margin:6px 0 14px">Desmarcado, a Sofia manda tudo de uma vez, sem simular digitação.</p>
+        <p class="quando" style="margin:6px 0 14px">Desmarcado, a SoFIA manda tudo de uma vez, sem simular digitação.</p>
         <div style="display:flex;gap:18px;flex-wrap:wrap">
           <div>
             <label>Velocidade da digitação</label>
@@ -1408,7 +1408,7 @@ function paginaSofia(aviso, erro) {
         </div>
       </div>
 
-      <div class="sec-t">💬 Conversa da Sofia <small style="font-weight:600;color:var(--cinza)">(cada bloco é uma parte do atendimento — dá pra editar o título, remover ou adicionar)</small></div>
+      <div class="sec-t">💬 Conversa da SoFIA <small style="font-weight:600;color:var(--cinza)">(cada bloco é uma parte do atendimento — dá pra editar o título, remover ou adicionar)</small></div>
       <div id="secoes">${cardsSecoes}</div>
       <button type="button" class="reset" onclick="adicionarSecao()" style="margin:2px 0 10px">➕ Nova seção</button>
 
@@ -1431,18 +1431,18 @@ function paginaSofia(aviso, erro) {
           <button type="submit" class="save">💾 Salvar tudo</button>
           <button type="submit" class="reset" formaction="/sofia/restaurar" onclick="return confirm('Restaurar a versão anterior de TODOS os campos?')">↩️ Restaurar anterior</button>
         </div>
-        <p class="quando" style="text-align:center;margin:8px 0 0">Vale nas próximas conversas — a Sofia lê os arquivos na hora, sem reiniciar.</p>
+        <p class="quando" style="text-align:center;margin:8px 0 0">Vale nas próximas conversas — a SoFIA lê os arquivos na hora, sem reiniciar.</p>
       </div>
     </form>
   </div>
 <script>
   function renderSofiaWa(st){
     var e = st && st.estado;
-    if(e==='conectado') return '<div class="wa-card ok"><div class="wa-ic">🤖</div><h2>WhatsApp da Sofia conectado</h2><p>A Sofia está no ar e responde as alunas neste número.</p></div>';
-    if(e==='qr' && st.qr) return '<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR da Sofia</h2><p>Este é o WhatsApp <b>da Sofia</b> (número próprio, diferente do robô de mensagens). No celular do número da Sofia: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte para o código.</p><img class="qr" src="'+st.qr+'" alt="QR da Sofia"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira “🤖 conectado”.</p></div>';
-    if(e==='iniciando') return '<div class="wa-card"><div class="wa-ic">⏳</div><h2>Iniciando…</h2><p>Subindo a conexão da Sofia. Se precisar de QR, ele aparece aqui.</p></div>';
-    if(e==='desconectado') return '<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>A Sofia caiu. Se aparecer um QR aqui, escaneie de novo.</p></div>';
-    return '<div class="wa-card"><div class="wa-ic">❔</div><h2>Conexão da Sofia — sem informação</h2><p>O processo da Sofia (sofia-listener) precisa estar rodando e publicando o estado.</p></div>';
+    if(e==='conectado') return '<div class="wa-card ok"><div class="wa-ic">🤖</div><h2>WhatsApp da SoFIA conectado</h2><p>A SoFIA está no ar e responde as alunas neste número.</p></div>';
+    if(e==='qr' && st.qr) return '<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR da SoFIA</h2><p>Este é o WhatsApp <b>da SoFIA</b> (número próprio, diferente do robô de mensagens). No celular do número da SoFIA: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte para o código.</p><img class="qr" src="'+st.qr+'" alt="QR da SoFIA"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira “🤖 conectado”.</p></div>';
+    if(e==='iniciando') return '<div class="wa-card"><div class="wa-ic">⏳</div><h2>Iniciando…</h2><p>Subindo a conexão da SoFIA. Se precisar de QR, ele aparece aqui.</p></div>';
+    if(e==='desconectado') return '<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>A SoFIA caiu. Se aparecer um QR aqui, escaneie de novo.</p></div>';
+    return '<div class="wa-card"><div class="wa-ic">❔</div><h2>Conexão da SoFIA — sem informação</h2><p>O processo da SoFIA (sofia-listener) precisa estar rodando e publicando o estado.</p></div>';
   }
   function atualizaSofiaWa(){
     fetch('/sofia/estado',{cache:'no-store'}).then(function(r){return r.json();}).then(function(st){
@@ -1468,7 +1468,7 @@ function paginaSofia(aviso, erro) {
     var inp = div.querySelector('input'); if(inp) inp.focus();
   }
 </script>`;
-  return chrome({ tab: 'Sofia', h1: '🤖 Sofia', p: 'Edite o prompt, as configurações e conecte o WhatsApp da Sofia.' }, 'sofia', corpo);
+  return chrome({ tab: 'SoFIA', h1: '🤖 SoFIA', p: 'Edite o prompt, as configurações e conecte o WhatsApp da SoFIA.' }, 'sofia', corpo);
 }
 
 // Página de login (sem menu). Simples: usuário + senha.
@@ -1845,12 +1845,12 @@ const server = http.createServer((req, res) => {
     const q = req.url.split('?')[1] || '';
     let aviso = '', erro = false;
     if (/(?:^|&)ok=1/.test(q)) aviso = 'Salvo! As próximas conversas já usam estas configurações.';
-    else if (/(?:^|&)on=1/.test(q)) aviso = '🟢 Sofia ativada — voltou a responder as alunas.';
-    else if (/(?:^|&)off=1/.test(q)) aviso = '⏸️ Sofia pausada — atenda manualmente pelo WhatsApp.';
+    else if (/(?:^|&)on=1/.test(q)) aviso = '🟢 SoFIA ativada — voltou a responder as alunas.';
+    else if (/(?:^|&)off=1/.test(q)) aviso = '⏸️ SoFIA pausada — atenda manualmente pelo WhatsApp.';
     else if (/(?:^|&)rest=1/.test(q)) aviso = 'Restaurado para a versão anterior.';
     else if (/(?:^|&)rest=0/.test(q)) { aviso = 'Não havia versão anterior para restaurar.'; erro = true; }
     else if (/(?:^|&)ctok=1/.test(q)) aviso = 'Tags salvas.';
-    else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. A Sofia vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
+    else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. A SoFIA vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
     const sp = new URLSearchParams(q);
     // Só renderiza a sub-aba que o usuário pode ver; se pediu uma sem acesso,
     // cai na primeira permitida (config → conversas → contatos).
