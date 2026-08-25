@@ -936,6 +936,7 @@ function subnavSofia(view) {
 
 // Aba Sofia → Conversas: inbox das conversas da Sofia (ler e, na Parte 2, responder).
 function paginaSofiaConversas(aviso, erro) {
+  const tagsLista = contatos.tagsDistintas().map(t => t.tag);
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('conversas')}
@@ -949,7 +950,8 @@ function paginaSofiaConversas(aviso, erro) {
     </div>
   </div>
 <script>
-  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1};
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1}, ncSel=[];
+  var TAGS_EXISTENTES = ${JSON.stringify(tagsLista)};
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function fmtHora(ts){ try{return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
   function autorRot(a){ return a==='aluna'?'Aluna':(a==='humano'?'Você':'Sofia'); }
@@ -962,17 +964,30 @@ function paginaSofiaConversas(aviso, erro) {
       var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e6f6f7');
       return '<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+autorRot(m.autor)+' · '+fmtHora(m.em)+'</div><div style="white-space:pre-wrap">'+escH(m.texto)+'</div></div></div>';
     }).join('');
-    var salvar = c.salvo
-      ? '<div class="quando" style="color:#0e8e91;margin-bottom:8px">✓ contato salvo</div>'
-      : '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 10px"><input id="ncNome" placeholder="Nome" value="'+escH(c.nome||'')+'" style="flex:1;min-width:110px;font-size:.85rem"><input id="ncTags" placeholder="tags (vírgula)" style="flex:1;min-width:110px;font-size:.85rem"><button type="button" class="save" style="padding:5px 10px" onclick="salvarContato(\\''+k+'\\')">💾 Salvar contato</button><span id="ncMsg" class="quando"></span></div>';
-    chat.innerHTML = '<div style="font-weight:800;margin-bottom:2px">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin-bottom:6px">'+escH(fmtTel(k))+'</div>'+salvar+'<div id="bolhas" style="overflow:auto;max-height:440px;padding-right:4px">'+bolhas+'</div>';
+    var opts='<option value="">＋ escolher tag…</option>'+TAGS_EXISTENTES.map(function(t){return '<option>'+escH(t)+'</option>';}).join('');
+    var editor='<div style="margin:2px 0 10px">'
+      +'<div id="ncChips" style="margin-bottom:6px"></div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
+      +'<select id="ncTagSel" onchange="ncAddTag(this.value);this.selectedIndex=0" style="min-width:150px;font-size:.85rem">'+opts+'</select>'
+      +'<input id="ncNovaTag" placeholder="nova tag" style="width:110px;font-size:.85rem" onkeydown="if(event.key===\\'Enter\\'){event.preventDefault();ncAddTag(this.value);this.value=\\'\\';}">'
+      +'<button type="button" class="save" style="padding:5px 10px" onclick="salvarContato(\\''+k+'\\')">💾 '+(c.salvo?'Salvar tags':'Salvar contato')+'</button>'
+      +'<span id="ncMsg" class="quando">'+(c.salvo?'✓ salvo':'')+'</span>'
+      +'</div></div>';
+    chat.innerHTML = '<div style="font-weight:800;margin-bottom:2px">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin-bottom:6px">'+escH(fmtTel(k))+'</div>'+editor+'<div id="bolhas" style="overflow:auto;max-height:420px;padding-right:4px">'+bolhas+'</div>';
+    ncRenderChips();
     var b=document.getElementById('bolhas'); if(b) b.scrollTop=b.scrollHeight;
   }
+  function ncRenderChips(){
+    var el=document.getElementById('ncChips'); if(!el) return;
+    el.innerHTML = ncSel.map(function(t,i){ return '<span style="display:inline-flex;align-items:center;gap:5px;background:#e6f6f7;color:#0e8e91;border:1px solid #b8e6e7;border-radius:999px;padding:2px 9px;font-size:.74rem;margin:2px 4px 2px 0">'+escH(t)+'<a href="javascript:void(0)" onclick="ncRmTag('+i+')" style="color:#0e8e91;font-weight:800;text-decoration:none">×</a></span>'; }).join('') || '<span class="quando">sem tags</span>';
+  }
+  function ncAddTag(t){ t=(t||'').trim(); if(t && ncSel.indexOf(t)<0){ ncSel.push(t); ncRenderChips(); } }
+  function ncRmTag(i){ ncSel.splice(i,1); ncRenderChips(); }
   function salvarContato(k){
-    var nome=(document.getElementById('ncNome')||{}).value||'', tags=(document.getElementById('ncTags')||{}).value||'', msg=document.getElementById('ncMsg');
-    if(msg)msg.textContent='Salvando…';
-    fetch('/sofia/contatos/salvar-novo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:k,nome:nome,tags:tags})})
-      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].salvo=true; ultimoRender={chave:null,n:-1}; renderChat(ultimoData[k],k); } else if(msg){ msg.textContent='❌ '+(j.erro||'falha'); } })
+    var msg=document.getElementById('ncMsg'); if(msg)msg.textContent='Salvando…';
+    var nome=(ultimoData[k]&&ultimoData[k].nome)||'';
+    fetch('/sofia/contatos/salvar-novo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:k,nome:nome,tags:ncSel})})
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k]){ultimoData[k].salvo=true; ultimoData[k].tagsContato=ncSel.slice();} if(msg)msg.textContent='✓ salvo'; } else if(msg){ msg.textContent='❌ '+(j.erro||'falha'); } })
       .catch(function(){ if(msg)msg.textContent='❌ erro'; });
   }
   function renderInbox(data){
@@ -987,7 +1002,8 @@ function paginaSofiaConversas(aviso, erro) {
       var c=ultimoData[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
       var prev = ult? (autorRot(ult.autor)+': '+ult.texto) : '';
       var on=(k===selecionada);
-      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:10px 12px;border-radius:10px;margin-bottom:6px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':'#fff')+'"><div style="font-weight:700;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(c.nome||fmtTel(k))+'</div><div class="quando">'+escH(fmtTel(k))+'</div><div class="quando" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(prev)+'</div><div class="quando" style="font-size:.72rem">'+fmtHora(c.ultimaEm)+'</div></div>';
+      var tgs=(c.tagsContato||[]).map(function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:1px 7px;font-size:.66rem;margin:3px 4px 0 0">'+escH(t)+'</span>';}).join('');
+      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:10px 12px;border-radius:10px;margin-bottom:6px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':'#fff')+'"><div style="font-weight:700;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(c.nome||fmtTel(k))+'</div><div class="quando">'+escH(fmtTel(k))+'</div><div class="quando" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(prev)+'</div><div class="quando" style="font-size:.72rem">'+fmtHora(c.ultimaEm)+'</div>'+(tgs?'<div>'+tgs+'</div>':'')+'</div>';
     }).join('');
     if(pag){
       if(paginas>1){ pag.innerHTML='<button type="button" class="reset" onclick="mudarPag(-1)" '+(pagina===0?'disabled':'')+' style="padding:6px 12px">‹ Anterior</button><span class="quando" style="text-align:center">Página '+(pagina+1)+' de '+paginas+'<br>'+total+' conversas</span><button type="button" class="reset" onclick="mudarPag(1)" '+(pagina>=paginas-1?'disabled':'')+' style="padding:6px 12px">Próxima ›</button>'; }
@@ -1001,7 +1017,7 @@ function paginaSofiaConversas(aviso, erro) {
     }
   }
   function mudarPag(d){ pagina+=d; renderInbox(ultimoData); }
-  function abrir(k){ selecionada=k; ultimoRender={chave:null,n:-1}; renderInbox(ultimoData); }
+  function abrir(k){ selecionada=k; ncSel=(ultimoData[k]&&ultimoData[k].tagsContato?ultimoData[k].tagsContato.slice():[]); ultimoRender={chave:null,n:-1}; renderInbox(ultimoData); }
   function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(renderInbox).catch(function(){}); }
   atualizaInbox(); setInterval(atualizaInbox, 4000);
 </script>`;
@@ -1478,12 +1494,14 @@ const server = http.createServer((req, res) => {
       voltarContatos(p, res);
     });
   }
-  // Salvar um contato NOVO direto de uma conversa (aba Conversas).
+  // Salvar/atualizar um contato direto de uma conversa (cria se novo) e DEFINE as
+  // tags exatamente como vieram (permite adicionar e remover no cabeçalho do chat).
   if (req.method === 'POST' && url === '/sofia/contatos/salvar-novo') {
     return lerCorpo(req, 1e5, corpo => {
       try {
         const d = JSON.parse(corpo || '{}');
-        const c = contatos.adicionar({ nome: d.nome, telefone: d.telefone, tags: d.tags });
+        const c = contatos.adicionar({ nome: d.nome, telefone: d.telefone }); // cria/atualiza (sem mexer nas tags)
+        contatos.setTags(d.telefone, d.tags || []);                            // DEFINE as tags (substitui)
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, tel: c.tel }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
@@ -1494,7 +1512,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && url === '/sofia/conversas') {
     let obj = {};
     try { obj = sofia.conversas() || {}; } catch (_) {}
-    try { for (const k in obj) obj[k].salvo = contatos.existe(k); } catch (_) {} // marca quem já é contato salvo
+    try { const cmap = contatos.carregar(); for (const k in obj) { const c = cmap[contatos.normTel(k)]; obj[k].salvo = !!c; obj[k].tagsContato = c ? (c.tags || []) : []; } } catch (_) {} // salvo? + tags do contato
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify(obj));
   }
