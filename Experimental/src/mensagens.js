@@ -39,6 +39,13 @@ const CATALOGO = [
     padrao: 'Olá, {nome}! 😊\n\nTudo bem? Aqui é do {studio}!\n\nEstamos mandando essa mensagem para confirmar a sua aula experimental que está agendada para amanhã às {horario}.\n\nPode confirmar sua presença? Estamos te esperando! 💪',
   },
   {
+    chave: 'confirmacao_experimental',
+    titulo: 'Confirmação — aula experimental (agendada pelo site/Sofia)',
+    quando: 'Enviada logo após a lead agendar pelo formulário ou pela Sofia. Só é usada aqui se você EDITAR este texto; sem edição, vale o texto padrão do sistema.',
+    vars: [['nome', 'primeiro nome da lead'], ['quando', 'dia e hora amigável, ex.: sexta-feira, 28/08 às 16:15']],
+    padrao: 'Oie, {nome}! 🎉 Tudo bem? Me chamo Juliana e sou do *Studio Slim Fit* do Setor Bueno.\n\nEstou mandando essa mensagem para informar que a sua aula experimental está confirmada para *{quando}*.\nQualquer dúvida que tiver, ou precisar remarcar a sua aula, pode me chamar por aqui.❤️\n\n*Endereço:* R. C-235, 846, Setor Bueno, Goiânia-GO, 74280-130.\n*Localização:* https://goo.gl/maps/LFBZhkzbCZ5wJ99f6\n\nSe possível, tente chegar 10 minutos antes para você conhecer o Studio e conversarmos! 💪\nMuito bem vinda ao #SlimFit - A Revolução do Treinamento Feminino! ❤️',
+  },
+  {
     chave: 'followup',
     titulo: 'Follow-up pós-aula (ainda não fechou)',
     quando: 'Enviada 10:30 / 16:00 para quem fez a experimental no dia anterior.',
@@ -184,6 +191,7 @@ const EXEMPLOS = {
   data: '30/08/2026',
   aluna: 'Maria',
   hora: '09h45',
+  quando: 'sexta-feira, 28/08 às 16:15',
 };
 function exemplosCompletos() {
   return Object.assign(globais(), EXEMPLOS);

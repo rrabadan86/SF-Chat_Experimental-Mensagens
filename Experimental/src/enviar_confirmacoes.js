@@ -81,6 +81,33 @@ function reterFalha(row, motivo) {
   } catch (_) { /* rede de segurança: nunca atrapalha o envio */ }
 }
 function chave(row) { return `${row.contactId}|${row.when}|${row.ts}`; }
+
+// "2026-08-28 16:15" -> "sexta-feira, 28/08 às 16:15" (mesmo formato do formulário).
+const _DIAS_PT = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+function friendlyQuando(when) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(String(when || ''));
+  if (!m) return String(when || '');
+  const [, Y, Mo, D, H, Mi] = m;
+  const dt = new Date(Number(Y), Number(Mo) - 1, Number(D), Number(H), Number(Mi));
+  return `${_DIAS_PT[dt.getDay()]}, ${D}/${Mo} às ${H}:${Mi}`;
+}
+
+// Texto a enviar. Se você EDITOU a "Confirmação — aula experimental" no painel,
+// o robô re-renderiza esse texto (com {nome} e {quando}); senão, usa o texto que
+// já veio pronto na fila (montado pelo formulário). Assim dá para editar a
+// confirmação no painel SEM mexer no formulário/Render — e sem risco: sem edição,
+// nada muda.
+function mensagemDaConfirmacao(row) {
+  try {
+    const mensagens = require('./mensagens');
+    const ov = mensagens.carregarOverrides();
+    if (ov && ov.confirmacao_experimental && String(ov.confirmacao_experimental).trim()) {
+      const nome = String(row.name || '').trim().split(/\s+/)[0] || '';
+      return mensagens.render('confirmacao_experimental', { nome, quando: friendlyQuando(row.when) });
+    }
+  } catch (_) { /* qualquer erro: cai no texto da fila */ }
+  return row.message;
+}
 function normalizar(phone) {
   let n = String(phone || '').replace(/\D/g, '');
   if (n && !n.startsWith('55')) n = '55' + n;   // garante DDI
@@ -220,7 +247,7 @@ async function enviarConfirmacoes(page) {
   for (const row of pendentes) {
     const k = chave(row);
     try {
-      await enviarUma(page, row.phone, row.message);
+      await enviarUma(page, row.phone, mensagemDaConfirmacao(row));
       enviados.add(k);
       salvarEnviados(enviados);
       if (falhas[k]) { delete falhas[k]; salvarFalhas(falhas); }
@@ -269,7 +296,7 @@ async function reenviarRetido({ chave: k, nome, telefone } = {}) {
   const item = retidos[alvo];
   const destino = normalizar(telefone || item.phone);
   const wa = require('./wa-client');
-  await wa.sendTexto(destino, item.message);
+  await wa.sendTexto(destino, mensagemDaConfirmacao(item));
   delete retidos[alvo]; salvarRetidos(retidos);
   const enviados = lerEnviados(); enviados.add(alvo); salvarEnviados(enviados);
   const falhas = lerFalhas(); if (falhas[alvo] != null) { delete falhas[alvo]; salvarFalhas(falhas); }
