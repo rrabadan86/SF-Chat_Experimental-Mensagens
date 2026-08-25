@@ -1164,12 +1164,15 @@ function paginaSofiaConversas(aviso, erro) {
     var ini=pagina*POR_PAGINA, fatia=chaves.slice(ini,ini+POR_PAGINA);
     lista.innerHTML = fatia.map(function(k){
       var c=ultimoData[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
-      var prev = ult? (autorRot(ult.autor)+': '+ult.texto) : '';
       var on=(k===selecionada);
-      var tgs=(c.tagsContato||[]).map(function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:1px 7px;font-size:.66rem;margin:3px 4px 0 0">'+escH(t)+'</span>';}).join('');
-      var enc=encerrada(c)?'<span style="display:inline-block;background:#f3eaea;color:#a15a5a;border-radius:999px;padding:1px 7px;font-size:.64rem;font-weight:700;margin-left:4px">🔒 encerrada</span>':'';
-      var hb=c.humano?'<span style="display:inline-block;background:#e6f6ec;color:#1f8f52;border-radius:999px;padding:1px 7px;font-size:.64rem;font-weight:700;margin-left:4px">🙋 você</span>':'';
-      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:10px 12px;border-radius:10px;margin-bottom:6px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':(encerrada(c)?'#fbf7f7':'#fff'))+'"><div style="font-weight:700;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(c.nome||fmtTel(k))+'</div><div class="quando">'+escH(fmtTel(k))+'</div><div class="quando" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(prev)+'</div><div class="quando" style="font-size:.72rem">'+fmtHora(c.ultimaEm)+hb+enc+'</div>'+(tgs?'<div>'+tgs+'</div>':'')+'</div>';
+      var pendente = !!(ult && ult.autor==='aluna'); // última foi da aluna → esperando resposta
+      var dot = pendente ? '<span title="aguardando resposta" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#11abae;flex:none"></span>' : '';
+      var tgs=(c.tagsContato||[]).map(function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:0 7px;font-size:.64rem;margin-left:5px">'+escH(t)+'</span>';}).join('');
+      var enc=encerrada(c)?'<span style="display:inline-block;background:#f3eaea;color:#a15a5a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🔒 encerrada</span>':'';
+      var hb=c.humano?'<span style="display:inline-block;background:#e6f6ec;color:#1f8f52;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 você</span>':'';
+      var nome='<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:'+(pendente?'800':'700')+';font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escH(c.nome||fmtTel(k))+'</span>'+dot+'</div>';
+      var meta='<div class="quando" style="font-size:.72rem;margin:0;display:flex;align-items:center;flex-wrap:wrap;row-gap:3px">'+fmtHora(c.ultimaEm)+tgs+hb+enc+'</div>';
+      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:9px 12px;border-radius:10px;margin-bottom:6px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':(encerrada(c)?'#fbf7f7':'#fff'))+'">'+nome+'<div class="quando" style="margin:1px 0 3px">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
     }).join('');
     if(pag){
       if(paginas>1){ pag.innerHTML='<button type="button" class="reset" onclick="mudarPag(-1)" '+(pagina===0?'disabled':'')+' style="padding:6px 12px">‹ Anterior</button><span class="quando" style="text-align:center">Página '+(pagina+1)+' de '+paginas+'<br>'+total+' conversas</span><button type="button" class="reset" onclick="mudarPag(1)" '+(pagina>=paginas-1?'disabled':'')+' style="padding:6px 12px">Próxima ›</button>'; }
