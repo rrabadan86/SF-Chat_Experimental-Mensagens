@@ -183,19 +183,21 @@ const ESTILO = `
   *{box-sizing:border-box}
   body{margin:0;font-family:"Open Sans",-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--tinta);line-height:1.5}
   h1,h2,h3,button,.tabs a{font-family:"Montserrat","Open Sans",Arial,sans-serif}
-  header{background:var(--teal);color:#fff;padding:22px 16px}
+  header{background:var(--teal);color:#fff;padding:16px 16px}
   .wrap{max-width:820px;margin:0 auto;padding:16px}
   header .wrap{padding:0 16px;display:flex;align-items:center;gap:14px}
   header .logo-box{background:#fff;border-radius:11px;padding:7px 11px;flex:none;box-shadow:0 2px 8px rgba(0,0,0,.12)}
   header .logo-box img{height:28px;width:auto;display:block}
   header h1{margin:0;font-size:1.3rem;font-weight:800}
   header p{margin:4px 0 0;opacity:.92;font-size:.9rem}
-  .tabs{display:flex;flex-wrap:wrap;gap:8px;max-width:820px;margin:16px auto 0;padding:0 16px}
-  .tabs a{flex:1 1 120px;text-align:center;text-decoration:none;font-weight:700;font-size:.9rem;color:var(--cinza);background:#fff;border:1px solid var(--linha);border-radius:12px;padding:11px}
+  .tabs{display:flex;flex-wrap:wrap;gap:8px;max-width:820px;margin:14px auto 0;padding:0 16px}
+  .tabs a{flex:1 1 84px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;line-height:1.1;text-decoration:none;font-weight:700;color:var(--cinza);background:#fff;border:1px solid var(--linha);border-radius:12px;padding:9px 6px}
+  .tabs a .tic{font-size:1.2rem;line-height:1}
+  .tabs a .ttx{font-size:.78rem}
   .tabs a.on{background:var(--teal);color:#fff;border-color:var(--teal)}
   .aviso{background:#e6f6f7;border:1px solid #bfe8e7;color:#0c6f70;border-radius:10px;padding:11px 14px;margin:16px 0}
   .aviso.err{background:#fdecec;border-color:#f6c9c9;color:#a12626}
-  .card{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:16px 18px;margin:16px 0;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+  .card{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:14px 16px;margin:13px 0;box-shadow:0 1px 4px rgba(0,0,0,.04)}
   .chead{display:flex;align-items:center;gap:10px}
   h2{font-size:1.05rem;margin:0}
   .badge{background:#fff0ef;color:#c23b38;border:1px solid #f6cfcd;border-radius:999px;font-size:.7rem;font-weight:700;padding:2px 9px}
@@ -231,7 +233,7 @@ const ESTILO = `
   .st-pendente{background:#fff7e6;color:#9a6b00;border-color:#f2ddb0}
   .st-enviado{background:#eafaf0;color:#1c6b3c;border-color:#bfe8cd}
   .st-falha{background:#fdecec;color:#a12626;border-color:#f6c9c9}
-  .sec-t{font-family:"Montserrat";font-weight:800;font-size:1rem;margin:22px 0 4px}
+  .sec-t{font-family:"Montserrat";font-weight:800;font-size:1rem;margin:18px 0 4px}
   .vazio{color:var(--cinza);font-size:.9rem}
   .wabar{border-radius:12px;padding:11px 14px;margin:16px 0 0;font-weight:600;font-size:.9rem;display:flex;align-items:center;gap:8px}
   .wabar.ok{background:#eafaf0;border:1px solid #bfe8cd;color:#1c6b3c}
@@ -308,12 +310,13 @@ const ESTILO = `
 function navTabs(ativo) {
   const sess = _navSess || { admin: true, telas: usuarios.TELAS_KEYS };
   const pode = k => sess.admin || (sess.telas || []).includes(k);
-  const item = (k, href, rot) => pode(k) ? `<a href="${href}" class="${ativo === k ? 'on' : ''}">${rot}</a>` : '';
-  let html = item('hoje', '/hoje', '📊 Hoje') + item('ind', '/indicadores', '📈 Formulário');
-  if (temMsg(sess)) html += `<a href="${msgHref(sess)}" class="${ativo === 'msg' ? 'on' : ''}">💬 WhatsApp</a>`;
-  html += item('ig', '/instagram', '📸 Instagram');
-  if (temSofia(sess)) html += `<a href="${sofiaHref(sess)}" class="${ativo === 'sofia' ? 'on' : ''}">🤖 Sofia</a>`;
-  if (sess.admin) html += `<a href="/perfis" class="${ativo === 'perfis' ? 'on' : ''}">👤 Perfis</a>`;
+  const cel = (href, on, ic, tx) => `<a href="${href}" class="${on ? 'on' : ''}"><span class="tic">${ic}</span><span class="ttx">${tx}</span></a>`;
+  const item = (k, href, ic, tx) => pode(k) ? cel(href, ativo === k, ic, tx) : '';
+  let html = item('hoje', '/hoje', '📊', 'Hoje') + item('ind', '/indicadores', '📈', 'Formulário');
+  if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp');
+  html += item('ig', '/instagram', '📸', 'Instagram');
+  if (temSofia(sess)) html += cel(sofiaHref(sess), ativo === 'sofia', '🤖', 'Sofia');
+  if (sess.admin) html += cel('/perfis', ativo === 'perfis', '👤', 'Perfis');
   return html;
 }
 
@@ -1072,7 +1075,7 @@ function paginaSofiaConversas(aviso, erro) {
     ${subnavSofia('conversas')}
     <div class="sec-t">💬 Conversas da Sofia <small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
     <style>
-      .inbox-grid{display:grid;grid-template-columns:320px minmax(0,1fr);gap:14px;align-items:start}
+      .inbox-grid{display:grid;grid-template-columns:236px minmax(0,1fr);gap:14px;align-items:start}
       .inbox-grid>div{min-width:0}
       @media(max-width:760px){ .inbox-grid{grid-template-columns:minmax(0,1fr)} #convLista{max-height:260px;overflow:auto} }
     </style>
