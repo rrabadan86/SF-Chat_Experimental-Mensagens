@@ -172,9 +172,28 @@ client.on("qr", async (qr) => {
   catch { setStatus("qr", ""); }
 });
 client.on("authenticated", () => { log("autenticada."); setStatus("iniciando"); });
-client.on("ready", () => { log("PRONTA — respondendo as alunas."); setStatus("conectado"); });
+client.on("ready", () => { pronta = true; if (bootTimer) clearTimeout(bootTimer); log("PRONTA — respondendo as alunas."); setStatus("conectado"); });
 client.on("change_state", (s: string) => log("estado: " + s));
-client.on("disconnected", (m: any) => { log("desconectada: " + m); setStatus("desconectado"); });
+client.on("disconnected", (m: any) => { pronta = false; log("desconectada: " + m); setStatus("desconectado"); armarWatchdogBoot(); });
+
+// ── Auto-recuperação do "travou no carregamento" (fica em "iniciando" e nunca
+//    chega em PRONTA). Se não conectar dentro do tempo, LIMPA o cache do WhatsApp
+//    Web (não o login) e reinicia o processo — o pm2 sobe de novo, agora limpo.
+//    Assim o painel nunca fica preso em "Iniciando…" sem ninguém no servidor.
+const BOOT_TIMEOUT_MS = parseInt(process.env.SOFIA_BOOT_TIMEOUT_MS || "120000", 10); // 2 min
+let pronta = false;
+let bootTimer: ReturnType<typeof setTimeout> | null = null;
+function armarWatchdogBoot() {
+  if (bootTimer) clearTimeout(bootTimer);
+  bootTimer = setTimeout(() => {
+    if (pronta) return;
+    log(`não cheguei em PRONTA em ${Math.round(BOOT_TIMEOUT_MS / 1000)}s (WhatsApp Web travou). Limpando cache e reiniciando…`);
+    try { fs.rmSync(path.join(AUTH_DIR, "..", ".wwebjs_cache"), { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(path.join(DIR, ".wwebjs_cache"), { recursive: true, force: true }); } catch {}
+    setStatus("iniciando");
+    process.exit(1); // pm2 reinicia o processo (agora sem o cache poluído)
+  }, BOOT_TIMEOUT_MS);
+}
 
 // Serializa o processamento (uma mensagem por vez): mantém a fila de mídias
 // (drenarMidias) coerente e é mais gentil com a API da Claude.
@@ -228,4 +247,5 @@ process.on("SIGTERM", sair);
 
 setStatus("iniciando");
 log("iniciando a conexão do WhatsApp da Sofia...");
+armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia sozinho
 client.initialize();
