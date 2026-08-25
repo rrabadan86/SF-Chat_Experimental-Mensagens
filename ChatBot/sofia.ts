@@ -100,6 +100,13 @@ function proximaSegundaTarde(ref: Date) {
   return d;
 }
 
+// Imagens que a Sofia pediu para enviar NESTA resposta. O listener (WhatsApp)
+// drena esta fila logo após responderComMemoria e envia as imagens de verdade.
+// (é resetada no início de cada responderComMemoria; o listener serializa as
+// mensagens, então não há corrida entre conversas.)
+let _midiasDaVez: string[] = [];
+export function drenarMidias(): string[] { const m = _midiasDaVez; _midiasDaVez = []; return m; }
+
 const enviarMidia = tool(
   "enviar_midia",
   "Envia uma imagem para a usuária. 'grade' = grade de horários; 'precos' = tabela de preços 2026.",
@@ -107,7 +114,8 @@ const enviarMidia = tool(
   async ({ tipo }) => {
     const url = tipo === "grade" ? MIDIAS.grade_imagem : MIDIAS.precos_imagem;
     const link = tipo === "grade" ? MIDIAS.grade_link : MIDIAS.precos_link;
-    console.log(`🖼️  [ENVIAR IMAGEM] ${tipo}: ${url}`); // no real: envia a imagem via API do WhatsApp
+    if (url) _midiasDaVez.push(url); // o listener envia a imagem de verdade após a resposta
+    console.log(`🖼️  [ENVIAR IMAGEM] ${tipo}: ${url}`);
     return { content: [{ type: "text", text: `Imagem "${tipo}" enviada. Link: ${link}` }] };
   },
 );
@@ -430,6 +438,7 @@ const conversas = new Map<string, Conversa>();
 const INATIVIDADE_MS = 12 * 60 * 60 * 1000; // 12 horas
 
 export async function responderComMemoria(telefone: string, mensagem: string): Promise<string> {
+  _midiasDaVez = []; // zera as imagens desta resposta (o listener drena depois)
   // Interruptor geral: se estiver desligada, fica em silêncio (atendimento manual).
   // Retorna string vazia — o webhook/listener trata isso como "não enviar nada".
   if (!sofiaAtiva()) {
@@ -651,5 +660,10 @@ async function chatInterativo() {
   rl.close();
 }
 
-if (process.argv.includes("--chat")) chatInterativo().catch(console.error);
-else testeAutomatico().catch(console.error);
+// Só roda o teste/chat quando a sofia.ts é executada DIRETAMENTE (tsx sofia.ts).
+// Quando é IMPORTADA (pelo sofia-listener.ts), não dispara nada.
+const _ehEntrada = /(^|[\\/])sofia\.ts$/.test(process.argv[1] || "");
+if (_ehEntrada) {
+  if (process.argv.includes("--chat")) chatInterativo().catch(console.error);
+  else testeAutomatico().catch(console.error);
+}

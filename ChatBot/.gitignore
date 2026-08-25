@@ -7,5 +7,8 @@ sofia-chrome-data/
 # Memória e estado em runtime
 sofia-memoria.json
 sofia-estado.txt
+# Estado da conexão do WhatsApp da Sofia (QR/conectado) — publicado pelo listener
+sofia-wa-status.json
+sofia-pausa-min.txt
 # Backups do editor
 *.bak.txt
