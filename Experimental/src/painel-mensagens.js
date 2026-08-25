@@ -209,7 +209,6 @@ function chrome(titSubtitulo, ativo, corpo) {
   <a href="/hoje" class="${ativo === 'hoje' ? 'on' : ''}">📊 Hoje</a>
   <a href="/indicadores" class="${ativo === 'ind' ? 'on' : ''}">📈 Indicadores</a>
   <a href="/" class="${ativo === 'msg' ? 'on' : ''}">💬 WhatsApp Mensagens</a>
-  <a href="/agendar" class="${ativo === 'ag' ? 'on' : ''}">📅 Agendar envios</a>
   <a href="/instagram" class="${ativo === 'ig' ? 'on' : ''}">📸 Instagram</a>
   <a href="/sofia" class="${ativo === 'sofia' ? 'on' : ''}">🤖 Sofia</a>
 </nav>
@@ -402,6 +401,15 @@ function blocoWaRobo() {
   return `<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>Confira se o robô (<code>slimfit-exp</code>) está rodando.</p></div>`;
 }
 
+// Sub-navegação da aba WhatsApp Mensagens: Configuração (mensagens/horários) x Agendamento (envios pontuais).
+function subnavMensagens(view) {
+  const base = 'display:inline-block;padding:8px 16px;border-radius:999px;font-weight:700;font-family:Montserrat,sans-serif;font-size:.9rem;text-decoration:none;margin-right:8px;border:1px solid #e6e6e6';
+  const on = 'background:#11abae;color:#fff;border-color:#11abae';
+  const off = 'background:#fff;color:#5c5960';
+  const item = (v, rot) => `<a href="/${v === 'agendar' ? '?view=agendar' : ''}" style="${base};${view === v ? on : off}">${rot}</a>`;
+  return `<div style="margin:0 0 18px">${item('config', '⚙️ Configuração')}${item('agendar', '📅 Agendamento')}</div>`;
+}
+
 function paginaMensagens(aviso, erro) {
   // Índice dos horários por chave de job, para embutir em cada mensagem.
   const hmap = {};
@@ -432,6 +440,7 @@ function paginaMensagens(aviso, erro) {
   }).join('\n');
 
   const corpo = `<div class="wrap">
+    ${subnavMensagens('config')}
     <div id="waBanner">${blocoWaRobo()}</div>
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
@@ -544,7 +553,7 @@ function paginaAgendar(aviso, erro) {
   ${cardHorariosAgendados()}
   `;
 
-  const corpo = `<div class="wrap">${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}${form}</div>
+  const corpo = `<div class="wrap">${subnavMensagens('agendar')}${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}${form}</div>
 <script>
   var AGS = ${dadosJson};
   var chk=document.getElementById('temFoto'), wrap=document.getElementById('fotoWrap'), file=document.getElementById('foto');
@@ -606,7 +615,7 @@ function paginaAgendar(aviso, erro) {
     finally{ btn.disabled=false; btn.textContent=rotuloBtn(); }
   });
 </script>`;
-  return chrome({ tab: 'Agendar envios', h1: '📅 Agendar envios', p: `Mensagens são enviadas <b>${esc(horaAg('manha'))}</b> (manhã) e <b>${esc(horaAg('tarde'))}</b> (tarde) do dia agendado.` }, 'ag', corpo);
+  return chrome({ tab: 'Agendamento', h1: '📅 Agendamento de envios', p: `Mensagens são enviadas <b>${esc(horaAg('manha'))}</b> (manhã) e <b>${esc(horaAg('tarde'))}</b> (tarde) do dia agendado.` }, 'msg', corpo);
 }
 
 // ── Página 3: conexão do WhatsApp (QR quando cai) ───────────────────────────
@@ -1131,6 +1140,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horários salvos e robô reiniciado. Já valem.';
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    if (/(?:^|&)view=agendar/.test(q)) return res.end(paginaAgendar(aviso, erro)); // sub-aba Agendamento
     return res.end(paginaMensagens(aviso, erro));
   }
   if (req.method === 'POST' && url === '/salvar') {
