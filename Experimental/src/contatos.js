@@ -1,0 +1,150 @@
+/**
+ * contatos.js — CRM leve de contatos (Fase 1): importar CSV, listar/buscar/filtrar
+ * por tag e editar as tags de cada contato. Guardado em data/contatos.json
+ * (gitignored — dado pessoal). Chave = telefone normalizado (com DDI 55).
+ *
+ * Formato do CSV (cabeçalho flexível): Nome, Telefone, Instruções personalizadas, Tags.
+ * Tags separadas por vírgula/ponto-e-vírgula (várias por contato).
+ */
+const fs = require('fs');
+const path = require('path');
+
+const DATA_DIR = path.resolve(__dirname, '..', 'data');
+const ARQUIVO = path.join(DATA_DIR, 'contatos.json');
+
+function normTel(t) {
+  let d = String(t == null ? '' : t).replace(/\D/g, '');
+  if (!d) return '';
+  if (d.length < 10) return '';            // curto demais para ser telefone
+  if (!d.startsWith('55')) d = '55' + d;   // garante o DDI
+  return d;
+}
+
+function carregar() {
+  try { const o = JSON.parse(fs.readFileSync(ARQUIVO, 'utf8')); return (o && typeof o === 'object') ? o : {}; }
+  catch (_) { return {}; }
+}
+function salvar(map) {
+  try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); }
+  catch (_) {}
+  fs.writeFileSync(ARQUIVO, JSON.stringify(map), 'utf8');
+}
+
+function limparTags(v) {
+  const arr = Array.isArray(v) ? v : String(v == null ? '' : v).split(/[;,]/);
+  const out = [];
+  for (let t of arr) { t = String(t).trim(); if (t && !out.includes(t)) out.push(t); }
+  return out;
+}
+
+// Insere ou atualiza um contato (mescla tags, não apaga as existentes na importação).
+function upsert(map, { nome, telefone, tags, instrucoes }) {
+  const tel = normTel(telefone);
+  if (!tel) return null;
+  const c = map[tel] || { tel, nome: '', tags: [], instrucoes: '', criadoEm: Date.now() };
+  const nm = String(nome == null ? '' : nome).trim();
+  if (nm) c.nome = nm;
+  const ins = String(instrucoes == null ? '' : instrucoes).trim();
+  if (ins && ins !== '-') c.instrucoes = ins;
+  for (const t of limparTags(tags)) if (!c.tags.includes(t)) c.tags.push(t);
+  c.atualizadoEm = Date.now();
+  map[tel] = c;
+  return c;
+}
+
+// ── CSV ─────────────────────────────────────────────────────────────────────
+function parseLinha(line, delim) {
+  const out = []; let cur = ''; let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) {
+      if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += ch;
+    } else {
+      if (ch === '"') q = true;
+      else if (ch === delim) { out.push(cur); cur = ''; }
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out.map(s => s.trim());
+}
+function parseCSV(texto) {
+  const linhas = String(texto || '').replace(/\r\n?/g, '\n').split('\n').filter(l => l.length);
+  if (!linhas.length) return { header: [], rows: [] };
+  const delim = (linhas[0].split(';').length > linhas[0].split(',').length) ? ';' : ',';
+  const header = parseLinha(linhas[0], delim).map(h => h.toLowerCase());
+  const rows = linhas.slice(1).map(l => parseLinha(l, delim));
+  return { header, rows };
+}
+function idxDe(header, chaves) {
+  for (const k of chaves) { const i = header.findIndex(h => h.includes(k)); if (i >= 0) return i; }
+  return -1;
+}
+
+// Importa um CSV. Devolve um resumo {novos, atualizados, ignorados, total}.
+function importarCSV(texto) {
+  const { header, rows } = parseCSV(texto);
+  const iTel = idxDe(header, ['telefone', 'whatsapp', 'celular', 'fone']);
+  if (iTel < 0) throw new Error('Não encontrei a coluna de Telefone no CSV. Cabeçalho esperado: Nome, Telefone, Tags.');
+  const iNome = idxDe(header, ['nome']);
+  const iIns = idxDe(header, ['instru']);
+  const iTags = idxDe(header, ['tag']);
+  const map = carregar();
+  let novos = 0, atualizados = 0, ignorados = 0;
+  for (const r of rows) {
+    const tel = normTel(r[iTel]);
+    if (!tel) { ignorados++; continue; }
+    const existia = !!map[tel];
+    upsert(map, {
+      nome: iNome >= 0 ? r[iNome] : '',
+      telefone: r[iTel],
+      instrucoes: iIns >= 0 ? r[iIns] : '',
+      tags: iTags >= 0 ? r[iTags] : '',
+    });
+    if (existia) atualizados++; else novos++;
+  }
+  salvar(map);
+  return { novos, atualizados, ignorados, total: Object.keys(map).length };
+}
+
+// Substitui as tags de um contato (edição manual no painel).
+function setTags(telefone, tags) {
+  const map = carregar();
+  const tel = normTel(telefone);
+  if (!map[tel]) return false;
+  map[tel].tags = limparTags(tags);
+  map[tel].atualizadoEm = Date.now();
+  salvar(map);
+  return true;
+}
+
+// Lista com busca (nome/telefone), filtro por tag e paginação.
+function listar({ q = '', tag = '', pagina = 0, porPagina = 25 } = {}) {
+  const map = carregar();
+  let arr = Object.values(map);
+  if (q) {
+    const s = String(q).toLowerCase();
+    const sd = s.replace(/\D/g, '');
+    arr = arr.filter(c => (c.nome || '').toLowerCase().includes(s) || (sd && (c.tel || '').includes(sd)));
+  }
+  if (tag) arr = arr.filter(c => (c.tags || []).includes(tag));
+  arr.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
+  const total = arr.length;
+  const paginas = Math.max(1, Math.ceil(total / porPagina));
+  pagina = Math.max(0, Math.min(parseInt(pagina, 10) || 0, paginas - 1));
+  const itens = arr.slice(pagina * porPagina, pagina * porPagina + porPagina);
+  return { itens, total, pagina, paginas, porPagina };
+}
+
+// Tags distintas com contagem (para o filtro e a visão geral).
+function tagsDistintas() {
+  const map = carregar();
+  const c = {};
+  for (const ct of Object.values(map)) for (const t of (ct.tags || [])) c[t] = (c[t] || 0) + 1;
+  return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([tag, n]) => ({ tag, n }));
+}
+
+function totalContatos() { return Object.keys(carregar()).length; }
+
+module.exports = { normTel, carregar, importarCSV, setTags, listar, tagsDistintas, totalContatos, ARQUIVO };

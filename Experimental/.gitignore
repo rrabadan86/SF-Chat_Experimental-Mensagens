@@ -45,3 +45,5 @@ data/indicadores.json
 data/teste-instagram.json
 # Fotos (flyers) das mensagens (Circuito/Aniversario) — por VPS
 data/mensagens-fotos/
+# Contatos (CRM) — dado pessoal, por VPS, NÃO versionar
+data/contatos.json

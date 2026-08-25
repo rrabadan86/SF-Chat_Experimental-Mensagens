@@ -27,6 +27,7 @@ const igcookies = require('./instagram-cookies');
 const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
 const sofia = require('./sofia-editor');
+const contatos = require('./contatos');
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
 // Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
@@ -929,8 +930,8 @@ function subnavSofia(view) {
   const base = 'display:inline-block;padding:8px 16px;border-radius:999px;font-weight:700;font-family:Montserrat,sans-serif;font-size:.9rem;text-decoration:none;margin-right:8px;border:1px solid #e6e6e6';
   const on = 'background:#11abae;color:#fff;border-color:#11abae';
   const off = 'background:#fff;color:#5c5960';
-  const item = (v, rot) => `<a href="/sofia${v === 'conversas' ? '?view=conversas' : ''}" style="${base};${view === v ? on : off}">${rot}</a>`;
-  return `<div style="margin:0 0 18px">${item('config', '⚙️ Configuração')}${item('conversas', '💬 Conversas')}</div>`;
+  const item = (v, rot) => `<a href="/sofia${v === 'config' ? '' : '?view=' + v}" style="${base};${view === v ? on : off}">${rot}</a>`;
+  return `<div style="margin:0 0 18px">${item('config', '⚙️ Configuração')}${item('conversas', '💬 Conversas')}${item('contatos', '📇 Contatos')}</div>`;
 }
 
 // Aba Sofia → Conversas: inbox das conversas da Sofia (ler e, na Parte 2, responder).
@@ -990,6 +991,86 @@ function paginaSofiaConversas(aviso, erro) {
   atualizaInbox(); setInterval(atualizaInbox, 4000);
 </script>`;
   return chrome({ tab: 'Sofia', h1: '🤖 Sofia', p: 'Conversas da Sofia — leia o histórico de cada atendimento.' }, 'sofia', corpo);
+}
+
+// Aba Sofia → Contatos: CRM leve (importar CSV, etiquetar, filtrar por tag).
+function paginaSofiaContatos(aviso, erro, params) {
+  params = params || {};
+  const q = params.q || '';
+  const tagSel = params.tag || '';
+  const pagina = parseInt(params.pagina, 10) || 0;
+  const r = contatos.listar({ q, tag: tagSel, pagina, porPagina: 25 });
+  const tags = contatos.tagsDistintas();
+  const total = contatos.totalContatos();
+
+  const fmtTelP = (t) => { const d = String(t || '').replace(/\D/g, ''); if (/^55\d{10,11}$/.test(d)) { const ddd = d.slice(2, 4), x = d.slice(4); return '+55 (' + ddd + ') ' + (x.length === 9 ? x.slice(0, 5) + '-' + x.slice(5) : x.slice(0, 4) + '-' + x.slice(4)); } return t || ''; };
+  const chip = (t) => `<span style="display:inline-block;background:#e6f6f7;color:#0e8e91;border:1px solid #b8e6e7;border-radius:999px;padding:2px 9px;font-size:.74rem;margin:2px 4px 2px 0">${esc(t)}</span>`;
+  const qs = (pg) => { const p = new URLSearchParams(); p.set('view', 'contatos'); if (q) p.set('q', q); if (tagSel) p.set('tag', tagSel); p.set('pagina', pg); return '/sofia?' + p.toString(); };
+
+  const linhas = r.itens.map(c => `<div class="card" style="padding:12px 14px;margin-bottom:8px">
+      <div style="font-weight:700">${esc(c.nome || '(sem nome)')}</div>
+      <div class="quando">${esc(fmtTelP(c.tel))}</div>
+      <div style="margin:6px 0">${(c.tags || []).map(chip).join('') || '<span class="quando">sem tags</span>'}</div>
+      <form method="POST" action="/sofia/contatos/tags" style="display:flex;gap:8px;margin:4px 0 0;flex-wrap:wrap">
+        <input type="hidden" name="tel" value="${esc(c.tel)}">
+        <input type="hidden" name="q" value="${esc(q)}"><input type="hidden" name="tag" value="${esc(tagSel)}"><input type="hidden" name="pagina" value="${pagina}">
+        <input type="text" name="tags" value="${esc((c.tags || []).join(', '))}" placeholder="tags separadas por vírgula" style="flex:1;min-width:200px;font-size:.85rem">
+        <button type="submit" class="save" style="padding:6px 12px">Salvar tags</button>
+      </form>
+    </div>`).join('');
+
+  const opcoes = ['<option value="">Todas as tags</option>']
+    .concat(tags.map(t => `<option value="${esc(t.tag)}"${t.tag === tagSel ? ' selected' : ''}>${esc(t.tag)} (${t.n})</option>`)).join('');
+
+  const pag = r.paginas > 1 ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+      <a class="reset" style="padding:6px 12px;${pagina <= 0 ? 'pointer-events:none;opacity:.4' : ''}" href="${qs(Math.max(0, pagina - 1))}">‹ Anterior</a>
+      <span class="quando">Página ${r.pagina + 1} de ${r.paginas} · ${r.total} contato(s)</span>
+      <a class="reset" style="padding:6px 12px;${pagina >= r.paginas - 1 ? 'pointer-events:none;opacity:.4' : ''}" href="${qs(Math.min(r.paginas - 1, pagina + 1))}">Próxima ›</a>
+    </div>` : '';
+
+  const corpo = `<div class="wrap">
+    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    ${subnavSofia('contatos')}
+    <div class="sec-t">📇 Contatos <small style="font-weight:600;color:#5c5960">(${total} no total — importe por CSV, etiquete e filtre por tag)</small></div>
+
+    <div class="card">
+      <label>⬆️ Importar CSV <small style="font-weight:400;color:#5c5960">(colunas: Nome, Telefone, Tags — várias tags por vírgula)</small></label>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
+        <input type="file" id="csvFile" accept=".csv,text/csv">
+        <button type="button" class="save" onclick="importarCsv()" style="padding:8px 14px">Importar arquivo</button>
+        <span id="impMsg" class="quando"></span>
+      </div>
+      <p class="quando" style="margin:8px 0 0">A importação <b>mescla</b> (não apaga): contatos existentes ganham as tags novas; telefones repetidos não duplicam.</p>
+    </div>
+
+    <form method="GET" action="/sofia" class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input type="hidden" name="view" value="contatos">
+      <input type="text" name="q" value="${esc(q)}" placeholder="Buscar por nome ou telefone" style="flex:1;min-width:180px">
+      <select name="tag" style="min-width:200px">${opcoes}</select>
+      <button type="submit" class="save" style="padding:8px 14px">Filtrar</button>
+      ${(q || tagSel) ? `<a href="/sofia?view=contatos" class="reset" style="padding:8px 14px">Limpar</a>` : ''}
+    </form>
+
+    ${linhas || '<div class="card"><p class="quando">Nenhum contato encontrado. Importe um CSV acima ou ajuste o filtro.</p></div>'}
+    ${pag}
+  </div>
+<script>
+  function importarCsv(){
+    var f=document.getElementById('csvFile'), msg=document.getElementById('impMsg');
+    if(!f.files||!f.files[0]){ msg.textContent='Escolha um arquivo .csv primeiro.'; return; }
+    msg.textContent='Importando…';
+    var rd=new FileReader();
+    rd.onload=function(){
+      fetch('/sofia/contatos/importar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csv:rd.result})})
+        .then(function(r){return r.json();}).then(function(j){
+          if(j.ok){ msg.textContent='✅ '+j.resumo.novos+' novos, '+j.resumo.atualizados+' atualizados, '+j.resumo.ignorados+' ignorados.'; setTimeout(function(){location.href='/sofia?view=contatos';},1000); }
+          else { msg.textContent='❌ '+(j.erro||'falha ao importar'); }
+        }).catch(function(){ msg.textContent='❌ erro de rede'; });
+    };
+    rd.readAsText(f.files[0],'utf-8');
+  }
+</script>`;
+  return chrome({ tab: 'Contatos', h1: '🤖 Sofia', p: 'Contatos — importe, etiquete e filtre por tag.' }, 'sofia', corpo);
 }
 
 function paginaSofia(aviso, erro) {
@@ -1313,9 +1394,35 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)off=1/.test(q)) aviso = '⏸️ Sofia pausada — atenda manualmente pelo WhatsApp.';
     else if (/(?:^|&)rest=1/.test(q)) aviso = 'Restaurado para a versão anterior.';
     else if (/(?:^|&)rest=0/.test(q)) { aviso = 'Não havia versão anterior para restaurar.'; erro = true; }
+    else if (/(?:^|&)ctok=1/.test(q)) aviso = 'Tags salvas.';
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    if (/(?:^|&)view=conversas/.test(q)) return res.end(paginaSofiaConversas(aviso, erro));
+    const sp = new URLSearchParams(q);
+    if (sp.get('view') === 'contatos') return res.end(paginaSofiaContatos(aviso, erro, { q: sp.get('q') || '', tag: sp.get('tag') || '', pagina: sp.get('pagina') || 0 }));
+    if (sp.get('view') === 'conversas') return res.end(paginaSofiaConversas(aviso, erro));
     return res.end(paginaSofia(aviso, erro));
+  }
+  // Importar contatos (CSV enviado pelo painel, lido no navegador e postado como JSON).
+  if (req.method === 'POST' && url === '/sofia/contatos/importar') {
+    return lerCorpo(req, 20e6, corpo => {
+      try {
+        const d = JSON.parse(corpo || '{}');
+        const resumo = contatos.importarCSV(d.csv || '');
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, resumo }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+  }
+  // Editar as tags de um contato.
+  if (req.method === 'POST' && url === '/sofia/contatos/tags') {
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      try { contatos.setTags(p.get('tel'), p.get('tags') || ''); } catch (_) {}
+      const back = new URLSearchParams(); back.set('view', 'contatos');
+      if (p.get('q')) back.set('q', p.get('q')); if (p.get('tag')) back.set('tag', p.get('tag'));
+      back.set('pagina', p.get('pagina') || 0); back.set('ctok', '1');
+      res.writeHead(303, { Location: '/sofia?' + back.toString() }); res.end();
+    });
   }
   // Inbox das conversas da Sofia (JSON) — a aba Conversas atualiza sozinha com isto.
   if (req.method === 'GET' && url === '/sofia/conversas') {
