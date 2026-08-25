@@ -21,6 +21,11 @@ const OUTBOX = process.env.STUDIO_OUTBOX_FILE
   || 'C:\\AntiGravity\\Experimental\\src\\agendamento_evo\\confirmacoes_outbox.jsonl';
 const SENT_DB = OUTBOX.replace(/\.jsonl$/i, '') + '_enviados.json';
 const FAIL_DB = OUTBOX.replace(/\.jsonl$/i, '') + '_falhas.json';
+// Rede de segurança: quando uma confirmação falha EM DEFINITIVO (número sem
+// WhatsApp ou tentativas esgotadas), em vez de sumir, ela é GUARDADA aqui com
+// todos os dados — para você poder reenviar depois (com o número corrigido)
+// sem precisar caçar nada. Ver src/reenviar-confirmacao.js.
+const RETIDOS_DB = OUTBOX.replace(/\.jsonl$/i, '') + '_retidas.json';
 const MAX_TENTATIVAS = 5;   // depois disso, desiste daquele número (evita loop infinito)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -55,6 +60,25 @@ function lerFalhas() {
 }
 function salvarFalhas(obj) {
   try { fs.writeFileSync(FAIL_DB, JSON.stringify(obj), 'utf8'); } catch {}
+}
+function lerRetidos() {
+  try { return JSON.parse(fs.readFileSync(RETIDOS_DB, 'utf8')) || {}; }
+  catch { return {}; }
+}
+function salvarRetidos(obj) {
+  try { fs.writeFileSync(RETIDOS_DB, JSON.stringify(obj, null, 2), 'utf8'); } catch {}
+}
+// Guarda a confirmação que falhou em definitivo (com todos os dados) para reenvio
+// posterior — em vez de deixá-la sumir. É idempotente pela chave.
+function reterFalha(row, motivo) {
+  try {
+    const r = lerRetidos();
+    r[chave(row)] = {
+      name: row.name || '', phone: row.phone || '', when: row.when || '',
+      message: row.message || '', motivo, ts: new Date().toISOString(),
+    };
+    salvarRetidos(r);
+  } catch (_) { /* rede de segurança: nunca atrapalha o envio */ }
 }
 function chave(row) { return `${row.contactId}|${row.when}|${row.ts}`; }
 function normalizar(phone) {
@@ -177,7 +201,8 @@ function avisarFalhaDefinitiva(row, motivo) {
     require('./notificar').alertar(
       'Confirmacao NAO enviada',
       `${row.name || 'aluna'} (${row.phone}) nao recebeu a confirmacao da aula experimental`
-      + `${row.when ? ' de ' + row.when : ''}. Motivo: ${motivo}. Fale com ela na mao.`,
+      + `${row.when ? ' de ' + row.when : ''}. Motivo: ${motivo}. Ficou RETIDA — reenvie com o numero certo:`
+      + ` node src/reenviar-confirmacao.js --nome="${row.name || ''}" --para=NUMERO --enviar`,
       { prioridade: 'high', tags: 'warning', forcar: true },
     );
   } catch (_) { /* alerta é opcional; nunca atrapalha o envio */ }
@@ -206,14 +231,17 @@ async function enviarConfirmacoes(page) {
       salvarFalhas(falhas);
       const restam = MAX_TENTATIVAS - falhas[k];
       if (e.code === 'INVALIDO') {
-        // Número sem WhatsApp: não adianta re-tentar — desiste já.
+        // Número sem WhatsApp: não adianta re-tentar — desiste já, mas GUARDA
+        // para reenvio (com o número corrigido) em vez de deixar sumir.
         falhas[k] = MAX_TENTATIVAS;
         salvarFalhas(falhas);
-        console.error(`[confirmacoes] ${row.phone} (${row.name}) parece não ter WhatsApp — desistindo.`);
+        reterFalha(row, 'o número não tem WhatsApp');
+        console.error(`[confirmacoes] ${row.phone} (${row.name}) parece não ter WhatsApp — retida para reenvio.`);
         avisarFalhaDefinitiva(row, 'o número não tem WhatsApp');
       } else if (restam <= 0) {
+        reterFalha(row, e.message);
         console.error(`[confirmacoes] falha ${row.phone} (${row.name}): ${e.message} — ` +
-          `atingiu ${MAX_TENTATIVAS} tentativas, desistindo.`);
+          `atingiu ${MAX_TENTATIVAS} tentativas, retida para reenvio.`);
         avisarFalhaDefinitiva(row, e.message);
       } else {
         console.error(`[confirmacoes] falha ${row.phone} (${row.name}): ${e.message} — ` +
@@ -223,7 +251,32 @@ async function enviarConfirmacoes(page) {
   }
 }
 
-module.exports = { enviarConfirmacoes, enviarUma, contarPendentes };
+// Reenvia uma confirmação RETIDA. Seleciona por chave exata ou por nome (parcial,
+// sem acento/caixa). Envia pelo cliente único (wa-client) já inicializado. Em caso
+// de sucesso: tira dos retidos, marca como enviada (não reaparece) e limpa a falha.
+function _semAcento(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+async function reenviarRetido({ chave: k, nome, telefone } = {}) {
+  const retidos = lerRetidos();
+  const chaves = Object.keys(retidos);
+  let alvo = (k && retidos[k]) ? k : '';
+  if (!alvo && nome) {
+    const alvoNome = _semAcento(nome);
+    const achados = chaves.filter((c) => _semAcento(retidos[c].name).includes(alvoNome));
+    if (achados.length > 1) throw new Error(`mais de um retido bate com "${nome}" — use --chave=...`);
+    alvo = achados[0] || '';
+  }
+  if (!alvo) throw new Error('confirmação retida não encontrada');
+  const item = retidos[alvo];
+  const destino = normalizar(telefone || item.phone);
+  const wa = require('./wa-client');
+  await wa.sendTexto(destino, item.message);
+  delete retidos[alvo]; salvarRetidos(retidos);
+  const enviados = lerEnviados(); enviados.add(alvo); salvarEnviados(enviados);
+  const falhas = lerFalhas(); if (falhas[alvo] != null) { delete falhas[alvo]; salvarFalhas(falhas); }
+  return { ...item, enviadoPara: destino };
+}
+
+module.exports = { enviarConfirmacoes, enviarUma, contarPendentes, lerRetidos, reenviarRetido };
 
 // ---- Modo standalone (VPS/Linux): dispara a fila usando o cliente persistente ----
 // IMPORTANTE: pare o scheduler antes (pm2 stop slimfit-exp), pois compartilham a
