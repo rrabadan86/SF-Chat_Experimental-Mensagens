@@ -137,11 +137,14 @@ async function resolverTel(msg: any): Promise<string> {
   if (cache) return cache;
   let tel = jidParaTel(jid);
   if (jid.endsWith("@lid")) {
+    const lid = tel; // o próprio ID interno — NUNCA pode ser aceito como telefone
     try {
       const c = await msg.getContact();
-      const num = String((c && (c.number || (c.id && c.id.user))) || "").replace(/\D/g, "");
-      if (pareceTelefone(num)) tel = num;
-      else log(`aviso: contato ${jid} sem telefone visível — agendamento ficaria sem número real.`);
+      // Só c.number é o telefone de verdade. NÃO usar c.id.user: para "@lid" ele é
+      // o próprio ID (e teria a mesma cara de um telefone, reintroduzindo o bug).
+      const num = String((c && c.number) || "").replace(/\D/g, "");
+      if (pareceTelefone(num) && num !== lid) tel = num;
+      else log(`aviso: contato ${jid} sem telefone visível — agendamento ficaria sem número real (avise pela Sofia).`);
     } catch (e: any) { log("aviso: getContact falhou para " + jid + " (" + (e?.message || e) + ")"); }
   }
   telCache.set(jid, tel);
