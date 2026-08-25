@@ -75,18 +75,30 @@ function dividirEmMensagens(texto: string): string[] {
 function delayDigitando(parte: string, r: Ritmo): number {
   return Math.min(r.delayMax, Math.max(r.delayMin, parte.length * r.msPorChar));
 }
+// "digitando…" é só enfeite: getChat() serializa e às vezes estoura um erro
+// minificado ("r") — igual o robô descobriu. Então é SEMPRE best-effort: se
+// falhar, seguimos enviando sem o indicador (nunca deixa a resposta cair).
+async function mostrarDigitando(chat: any) { if (chat) { try { await chat.sendStateTyping(); } catch {} } }
+async function pararDigitando(chat: any) { if (chat) { try { await chat.clearState(); } catch {} } }
+async function pegarChat(msg: any): Promise<any> {
+  try { return await msg.getChat(); }
+  catch (e: any) { log("aviso: getChat falhou (" + (e?.message || e) + ") — envio segue sem 'digitando'."); return null; }
+}
+
 // Envia como gente: "digitando…" + pausa + a mensagem, uma parte de cada vez.
+// O envio de verdade é client.sendMessage (não serializa chat), então não
+// depende do getChat — mesmo sem "digitando", a mensagem vai.
 async function enviarHumano(chat: any, to: string, texto: string) {
   const r = lerRitmo(); // fresco a cada resposta — o painel manda no ritmo
   const partes = r.humano ? dividirEmMensagens(texto) : [String(texto || "").trim()];
   for (let i = 0; i < partes.length; i++) {
     if (!partes[i]) continue;
-    try { await chat.sendStateTyping(); } catch {}
+    await mostrarDigitando(chat);
     await sleep(delayDigitando(partes[i], r));
     await enviar(to, partes[i]);
     if (i < partes.length - 1) await sleep(400 + Math.floor(Math.random() * 500));
   }
-  try { await chat.clearState(); } catch {}
+  await pararDigitando(chat);
 }
 
 const client = new Client({
@@ -131,7 +143,7 @@ client.on("disconnected", (m: any) => { log("desconectada: " + m); setStatus("de
 // Serializa o processamento (uma mensagem por vez): mantém a fila de mídias
 // (drenarMidias) coerente e é mais gentil com a API da Claude.
 let fila: Promise<any> = Promise.resolve();
-function enfileirar(fn: () => Promise<void>) { fila = fila.then(fn).catch((e: any) => log("erro na fila: " + (e?.message || e))); return fila; }
+function enfileirar(fn: () => Promise<void>) { fila = fila.then(fn).catch((e: any) => log("erro na fila: " + (e?.stack || e?.message || e))); return fila; }
 
 // Mensagem RECEBIDA da aluna (não é fromMe).
 client.on("message", (msg: any) => {
@@ -144,17 +156,17 @@ client.on("message", (msg: any) => {
       const reply = await responderComMemoria(tel, texto); // já cuida de on/off, handoff e memória
       const urls = drenarMidias(); // imagens que a Sofia pediu nesta resposta
       if ((reply && reply.trim()) || urls.length) {
-        const chat = await msg.getChat();
+        const chat = await pegarChat(msg); // best-effort (pode vir null) — não derruba o envio
         if (reply && reply.trim()) await enviarHumano(chat, msg.from, reply);
         for (const url of urls) {
           try {
-            try { await chat.sendStateTyping(); } catch {}
+            await mostrarDigitando(chat);
             await sleep(900);
             const media = await MessageMedia.fromUrl(url, { unsafeMime: true });
             await enviar(msg.from, media);
           } catch (e: any) { log("falha ao enviar imagem: " + (e?.message || e)); }
         }
-        try { await chat.clearState(); } catch {}
+        await pararDigitando(chat);
       }
     });
   } catch (e: any) { log("erro no on(message): " + (e?.message || e)); }
