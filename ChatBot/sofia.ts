@@ -174,9 +174,11 @@ const verificarDisponibilidade = tool(
 
 const solicitarAgendamento = tool(
   "solicitar_agendamento",
-  "Marca que a coleta do agendamento terminou (nome + e-mail + dia/hora). " +
-    "Chame só DEPOIS de ter horário válido, nome completo e e-mail. Depois de chamar, " +
-    "confirme para a aluna que a solicitação foi registrada e que a secretária dará sequência.",
+  "AGENDA a aula experimental no sistema (EVO) DE VERDADE. Chame só DEPOIS de ter " +
+    "horário válido (via verificar_disponibilidade), nome completo e e-mail. Aja conforme " +
+    "o retorno: ok=agendado (confirme com alegria); lotada=ofereça as 'alternativas' e, " +
+    "quando a aluna escolher, chame de novo com o novo horário; erro=peça para falar com a " +
+    "secretária; faltando=peça só o dado que faltou (não invente nada).",
   {
     nome_completo: z.string(),
     email: z.string(),
@@ -185,12 +187,22 @@ const solicitarAgendamento = tool(
     telefone: z.string().optional().describe("Telefone da aluna, se disponível"),
     indicacao: z.string().optional(),
   },
-  async (dados) => {
-    // Apenas confirma que a Sofia concluiu a coleta. O agendamento REAL no EVO é
-    // feito pela função enviarParaSeuSistema (caminho único), logo após a extração
-    // dos 4 campos — ela tem o telefone da aluna de forma confiável.
-    console.log("📋 [SOFIA CONCLUIU A COLETA]", dados);
-    return json({ registrado: true });
+  async ({ nome_completo, email, data, horario, telefone }) => {
+    const conversa = _conversaDaVez;
+    // Idempotência: se já agendou nesta conversa, não reagenda.
+    if (conversa && conversa.resumoEnviado) return json({ ok: true, ja_agendado: true });
+    // Validação leve — não inventa dados; pede o que faltar.
+    if (!nome_completo || nome_completo.trim().split(/\s+/).length < 2) return json({ faltando: "nome_completo" });
+    if (!email || !/\S+@\S+\.\S+/.test(email)) return json({ faltando: "email" });
+    if (!data || !horario) return json({ faltando: "horario" });
+    // Telefone CONFIÁVEL vem do listener (resolve o "@lid"); só usa o do modelo se faltar.
+    const tel = _telefoneDaVez || telefone || "";
+    console.log("📋 [SOFIA VAI AGENDAR]", { nome_completo, email, data, horario, tel });
+    const r = await bookNoEvo(tel, nome_completo, email, `${data} ${horario}`);
+    if (conversa) conversa.solicitou = true; // a ferramenta cuidou → desliga o fallback automático
+    if ("ok" in r) { if (conversa) conversa.resumoEnviado = true; return json({ ok: true, when: r.when }); }
+    if ("lotada" in r) return json({ lotada: true, alternativas: r.alternativas });
+    return json({ erro: true });
   },
 );
 
@@ -447,9 +459,17 @@ interface Conversa {
   ultimaMensagemEm: number;
   transcricao: { autor: "aluna" | "sofia"; texto: string }[];
   resumoEnviado: boolean;
+  solicitou?: boolean; // a ferramenta solicitar_agendamento já cuidou (êxito ou não)
 }
 const conversas = new Map<string, Conversa>();
 const INATIVIDADE_MS = 12 * 60 * 60 * 1000; // 12 horas
+
+// Contexto da conversa ATUAL, para a ferramenta solicitar_agendamento (que roda
+// DURANTE a resposta) usar o telefone CONFIÁVEL (resolvido pelo listener, já com
+// a correção do "@lid") e marcar a conversa como agendada. Setados no começo de
+// responderComMemoria, depois que a conversa é resolvida.
+let _telefoneDaVez = "";
+let _conversaDaVez: Conversa | null = null;
 
 export async function responderComMemoria(telefone: string, mensagem: string): Promise<string> {
   _midiasDaVez = []; // zera as imagens desta resposta (o listener drena depois)
@@ -475,6 +495,11 @@ export async function responderComMemoria(telefone: string, mensagem: string): P
     conversa = { sessionId: undefined, ultimaMensagemEm: agora, transcricao: [], resumoEnviado: false };
     conversas.set(telefone, conversa);
   }
+
+  // Deixa o telefone confiável e a conversa acessíveis para a ferramenta de
+  // agendamento (que roda durante a geração da resposta).
+  _telefoneDaVez = telefone;
+  _conversaDaVez = conversa;
 
   // Conversa NOVA → injeta o prompt lido do arquivo agora (pega edições recentes).
   // Conversa retomada → mantém a sessão (o prompt já está embutido nela).
@@ -589,6 +614,7 @@ async function extrairResumo(conversa: Conversa, nomeWhatsapp: string): Promise<
 
 async function verificarEDispararAgendamento(telefone: string, conversa: Conversa) {
   if (conversa.resumoEnviado) return;
+  if (conversa.solicitou) return; // a ferramenta solicitar_agendamento já cuidou — não duplica
 
   // GATILHO: só tenta extrair depois que um e-mail apareceu na conversa.
   // Checagem local (sem chamar API) — evita gasto/erro no começo do papo.
@@ -612,43 +638,53 @@ async function verificarEDispararAgendamento(telefone: string, conversa: Convers
 const SOFIA_BOOK_URL = process.env.SOFIA_BOOK_URL || "https://sf-formularioexperimental.onrender.com/api/book-sofia";
 const SOFIA_TOKEN = process.env.SOFIA_TOKEN || "";
 
-async function enviarParaSeuSistema(telefone: string, resumo: ResumoAgendamento) {
-  // A Sofia manda o "dia" + "hora" em linguagem natural; o parse_when do seu
-  // Python resolve a data real ("quinta-feira às 16:30" -> 2026-07-30 16:30).
-  const when = `${resumo.dia} às ${resumo.hora}`;
-  const corpo = {
-    nome: resumo.nome_completo,
-    email: resumo.email,
-    telefone,
-    when,
-  };
+type ResultadoAgendamento =
+  | { ok: true; when: string }
+  | { lotada: true; alternativas: string[] }
+  | { erro: true; detalhe?: string };
 
-  const resp = await comRetry(async () => {
-    const r = await fetch(SOFIA_BOOK_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Sofia-Token": SOFIA_TOKEN },
-      body: JSON.stringify(corpo),
+// Caminho ÚNICO de agendamento no EVO (via o formulário). Devolve o resultado
+// REAL para quem chamou — usado pela ferramenta solicitar_agendamento e pelo
+// fallback automático. A aluna manda "dia"/"hora" em linguagem natural OU já
+// vem "AAAA-MM-DD HH:MM"; o parse do Python resolve a data real.
+async function bookNoEvo(telefone: string, nome: string, email: string, when: string): Promise<ResultadoAgendamento> {
+  const corpo = { nome, email, telefone, when };
+  let resp: any;
+  try {
+    resp = await comRetry(async () => {
+      const r = await fetch(SOFIA_BOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Sofia-Token": SOFIA_TOKEN },
+        body: JSON.stringify(corpo),
+      });
+      // 5xx é temporário → deixa o comRetry tentar de novo. 4xx é definitivo.
+      if (r.status >= 500) throw Object.assign(new Error(`EVO/serviço ${r.status}`), { status: r.status });
+      return r;
     });
-    // 5xx é temporário → deixa o comRetry tentar de novo. 4xx é definitivo.
-    if (r.status >= 500) throw Object.assign(new Error(`EVO/serviço ${r.status}`), { status: r.status });
-    return r;
-  });
+  } catch (e: any) {
+    console.log("⚠️  Falha ao agendar no EVO (rede/serviço):", e?.message ?? e);
+    return { erro: true, detalhe: e?.message };
+  }
 
   const data: any = await resp.json().catch(() => ({}));
 
   if (resp.ok && data.ok) {
-    console.log(`✅ AGENDADO NO EVO: ${resumo.nome_completo} em ${data.when} (idProspect=${data.idProspect})`);
-    return;
+    console.log(`✅ AGENDADO NO EVO: ${nome} em ${data.when} (idProspect=${data.idProspect})`);
+    return { ok: true, when: data.when };
   }
-
-  // Turma cheia/indisponível: o lead já ficou cadastrado no EVO. A secretária
-  // trata (ou a Sofia pode oferecer as alternativas retornadas em data.alternativas).
+  // Turma cheia/indisponível: o lead já ficou cadastrado no EVO; a Sofia oferece
+  // as alternativas retornadas para a aluna escolher outro horário.
   if (resp.status === 409) {
-    console.log(`⚠️  Sem vaga para ${resumo.nome_completo}. Alternativas:`, data.alternativas ?? []);
-    return;
+    const alternativas = Array.isArray(data.alternativas) ? data.alternativas.filter(Boolean) : [];
+    console.log(`⚠️  Sem vaga para ${nome}. Alternativas:`, alternativas);
+    return { lotada: true, alternativas };
   }
-
   console.log("⚠️  Falha ao agendar no EVO:", resp.status, data);
+  return { erro: true, detalhe: data?.erro };
+}
+
+async function enviarParaSeuSistema(telefone: string, resumo: ResumoAgendamento): Promise<ResultadoAgendamento> {
+  return bookNoEvo(telefone, resumo.nome_completo, resumo.email, `${resumo.dia} às ${resumo.hora}`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
