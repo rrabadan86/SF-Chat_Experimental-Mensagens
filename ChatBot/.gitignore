@@ -20,3 +20,5 @@ sofia-extracao.txt
 sofia-midias.txt
 # Backups do editor
 *.bak.txt
+sofia-boot-fails
+.sofia-boot-fails

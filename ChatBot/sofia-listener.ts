@@ -176,26 +176,46 @@ client.on("qr", async (qr) => {
   catch { setStatus("qr", ""); }
 });
 client.on("authenticated", () => { log("autenticada."); setStatus("iniciando"); armarWatchdogBoot(); });
-client.on("ready", () => { pronta = true; if (bootTimer) clearTimeout(bootTimer); log("PRONTA — respondendo as alunas."); setStatus("conectado"); });
+client.on("ready", () => { pronta = true; if (bootTimer) clearTimeout(bootTimer); gravarFails(0); log("PRONTA — respondendo as alunas."); setStatus("conectado"); });
 client.on("change_state", (s: string) => log("estado: " + s));
 client.on("disconnected", (m: any) => { pronta = false; log("desconectada: " + m); setStatus("desconectado"); armarWatchdogBoot(); });
 
-// ── Auto-recuperação do "travou no carregamento" (fica em "iniciando" e nunca
-//    chega em PRONTA). Se não conectar dentro do tempo, LIMPA o cache do WhatsApp
-//    Web (não o login) e reinicia o processo — o pm2 sobe de novo, agora limpo.
-//    Assim o painel nunca fica preso em "Iniciando…" sem ninguém no servidor.
-const BOOT_TIMEOUT_MS = parseInt(process.env.SOFIA_BOOT_TIMEOUT_MS || "120000", 10); // 2 min
+// ── Auto-recuperação do "travou no carregamento" (autentica mas nunca chega em
+//    PRONTA). ESCALONA, para não virar loop destrutivo:
+//      tentativa 1 → só reinicia (reaproveita o cache; muitas vezes já resolve);
+//      tentativa 2 → limpa o cache do WhatsApp Web (NÃO o login) e reinicia;
+//      tentativa >= MAX → PARA de reiniciar e fica ociosa pedindo atenção
+//        (evita o loop infinito de reinícios). O contador zera quando conecta.
+//    Desligue com SOFIA_BOOT_TIMEOUT_MS=0.
+const BOOT_TIMEOUT_MS = parseInt(process.env.SOFIA_BOOT_TIMEOUT_MS || "180000", 10); // 3 min
+const BOOT_MAX_TENTATIVAS = parseInt(process.env.SOFIA_BOOT_MAX_TENTATIVAS || "3", 10);
+const FAILS_FILE = path.join(DIR, ".sofia-boot-fails");
+function lerFails() { try { return parseInt(fs.readFileSync(FAILS_FILE, "utf8").trim(), 10) || 0; } catch { return 0; } }
+function gravarFails(n: number) { try { fs.writeFileSync(FAILS_FILE, String(n), "utf8"); } catch {} }
+function limparCacheWa() {
+  try { fs.rmSync(path.join(AUTH_DIR, "..", ".wwebjs_cache"), { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(path.join(DIR, ".wwebjs_cache"), { recursive: true, force: true }); } catch {}
+}
 let pronta = false;
 let bootTimer: ReturnType<typeof setTimeout> | null = null;
 function armarWatchdogBoot() {
+  if (BOOT_TIMEOUT_MS <= 0) return; // desligado por env
   if (bootTimer) clearTimeout(bootTimer);
   bootTimer = setTimeout(() => {
     if (pronta) return;
-    log(`não cheguei em PRONTA em ${Math.round(BOOT_TIMEOUT_MS / 1000)}s (WhatsApp Web travou). Limpando cache e reiniciando…`);
-    try { fs.rmSync(path.join(AUTH_DIR, "..", ".wwebjs_cache"), { recursive: true, force: true }); } catch {}
-    try { fs.rmSync(path.join(DIR, ".wwebjs_cache"), { recursive: true, force: true }); } catch {}
+    const tentativa = lerFails() + 1;
+    gravarFails(tentativa);
+    if (tentativa >= BOOT_MAX_TENTATIVAS) {
+      // Chega de reiniciar: fica viva e ociosa (o pm2 não reinicia) pedindo atenção.
+      log(`travou ${tentativa}x seguidas sem conectar — PAREI de reiniciar sozinha. `
+        + `Reescaneie o QR na aba Sofia (ou reinicie o processo) quando puder.`);
+      setStatus("desconectado");
+      return;
+    }
+    if (tentativa >= 2) { log(`travou (tentativa ${tentativa}/${BOOT_MAX_TENTATIVAS}) — limpando cache e reiniciando…`); limparCacheWa(); }
+    else { log(`travou (tentativa ${tentativa}/${BOOT_MAX_TENTATIVAS}) — reiniciando (sem limpar cache)…`); }
     setStatus("iniciando");
-    process.exit(1); // pm2 reinicia o processo (agora sem o cache poluído)
+    process.exit(1); // pm2 reinicia o processo
   }, BOOT_TIMEOUT_MS);
 }
 
