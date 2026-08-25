@@ -187,8 +187,8 @@ client.on("disconnected", (m: any) => { pronta = false; log("desconectada: " + m
 //      tentativa >= MAX → PARA de reiniciar e fica ociosa pedindo atenção
 //        (evita o loop infinito de reinícios). O contador zera quando conecta.
 //    Desligue com SOFIA_BOOT_TIMEOUT_MS=0.
-const BOOT_TIMEOUT_MS = parseInt(process.env.SOFIA_BOOT_TIMEOUT_MS || "180000", 10); // 3 min
-const BOOT_MAX_TENTATIVAS = parseInt(process.env.SOFIA_BOOT_MAX_TENTATIVAS || "3", 10);
+const BOOT_TIMEOUT_MS = parseInt(process.env.SOFIA_BOOT_TIMEOUT_MS || "75000", 10);  // 75s (0 desliga)
+const BOOT_MAX_TENTATIVAS = parseInt(process.env.SOFIA_BOOT_MAX_TENTATIVAS || "6", 10);
 const FAILS_FILE = path.join(DIR, ".sofia-boot-fails");
 function lerFails() { try { return parseInt(fs.readFileSync(FAILS_FILE, "utf8").trim(), 10) || 0; } catch { return 0; } }
 function gravarFails(n: number) { try { fs.writeFileSync(FAILS_FILE, String(n), "utf8"); } catch {} }
@@ -206,14 +206,18 @@ function armarWatchdogBoot() {
     const tentativa = lerFails() + 1;
     gravarFails(tentativa);
     if (tentativa >= BOOT_MAX_TENTATIVAS) {
-      // Chega de reiniciar: fica viva e ociosa (o pm2 não reinicia) pedindo atenção.
-      log(`travou ${tentativa}x seguidas sem conectar — PAREI de reiniciar sozinha. `
-        + `Reescaneie o QR na aba Sofia (ou reinicie o processo) quando puder.`);
+      // Desiste de reiniciar sozinha (evita loop). Limpa o cache só AGORA — assim a
+      // próxima tentativa manual pega a versão fresca — e fica ociosa pedindo atenção.
+      log(`travou ${tentativa}x seguidas — PAREI de reiniciar sozinha. Limpei o cache; `
+        + `rode 'pm2 restart sofia-listener' de novo (ou reescaneie o QR) quando puder.`);
+      limparCacheWa();
       setStatus("desconectado");
       return;
     }
-    if (tentativa >= 2) { log(`travou (tentativa ${tentativa}/${BOOT_MAX_TENTATIVAS}) — limpando cache e reiniciando…`); limparCacheWa(); }
-    else { log(`travou (tentativa ${tentativa}/${BOOT_MAX_TENTATIVAS}) — reiniciando (sem limpar cache)…`); }
+    // Boot bom conecta em segundos; travado nunca conecta. Reinício rápido
+    // reaproveitando o cache maximiza a chance de pegar um boot bom logo — NÃO
+    // limpamos o cache no meio (forçar re-download não ajuda num hang do WhatsApp).
+    log(`travou (tentativa ${tentativa}/${BOOT_MAX_TENTATIVAS}) — reiniciando…`);
     setStatus("iniciando");
     process.exit(1); // pm2 reinicia o processo
   }, BOOT_TIMEOUT_MS);
