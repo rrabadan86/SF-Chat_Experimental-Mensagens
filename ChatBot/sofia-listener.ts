@@ -38,6 +38,29 @@ function setStatus(estado: string, qr = "") {
 const log = (m: string) => console.log(`[sofia] ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} ${m}`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// ── Alerta de queda (push no celular via ntfy) ──────────────────────────────
+// Mesmo canal do robô: assine o MESMO tópico no app ntfy. Basta ter NTFY_TOPIC
+// (e, opcional, NTFY_URL) no ChatBot/.env — o mesmo valor usado pelo robô. Sem
+// isso, não faz nada. Anti-spam de 30 min para o QR não repetir a cada refresh.
+const NTFY_BASE = (process.env.NTFY_URL || "https://ntfy.sh").replace(/\/+$/, "");
+const NTFY_TOPIC = process.env.NTFY_TOPIC || "";
+let ultimoAlertaQr = 0;
+async function alertarQuedaQR() {
+  if (!NTFY_TOPIC) return; // não configurado → silêncio
+  const agora = Date.now();
+  if (agora - ultimoAlertaQr < 30 * 60 * 1000) return; // já avisei há pouco
+  ultimoAlertaQr = agora;
+  try {
+    await fetch(`${NTFY_BASE}/${encodeURIComponent(NTFY_TOPIC)}`, {
+      method: "POST",
+      headers: { Title: "SoFIA caiu - precisa de QR", Priority: "urgent", Tags: "rotating_light" },
+      body: "O WhatsApp da SoFIA desconectou. Abra o painel (aba SoFIA -> Configuracao) e escaneie o QR. Ate la, ela nao responde as alunas.",
+      signal: AbortSignal.timeout(15000),
+    });
+    log("alerta de QR enviado (ntfy).");
+  } catch (e: any) { log("falha ao enviar alerta ntfy: " + (e?.message || e)); }
+}
+
 // ── "Jeito humano": divide a resposta em várias mensagens e mostra "digitando…"
 //    com um tempo proporcional ao tamanho.
 //    Os valores vêm do painel (aba 🤖 Sofia → "Jeito de responder"), gravados em
@@ -226,6 +249,7 @@ client.on("qr", async (qr) => {
   // a sessão autenticar (aí sim faz sentido cobrar o "PRONTA").
   if (bootTimer) { clearTimeout(bootTimer); bootTimer = null; }
   log("QR recebido — escaneie pelo painel (aba 🤖 Sofia) ou aqui no terminal:");
+  alertarQuedaQR(); // push no celular (mesmo canal do robô) — sessão caiu, precisa reescanear
   try { qrcodeTerminal.generate(qr, { small: true }); } catch {}
   try { const dataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 }); setStatus("qr", dataUrl); }
   catch { setStatus("qr", ""); }
