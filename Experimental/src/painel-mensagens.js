@@ -135,11 +135,23 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado') return has('sofia_config');
   return false;
 }
+// WhatsApp também é dividido em duas sub-abas: Configuração e Agendamento.
+function podeMsgSub(sess, sub) { return sess.admin || (sess.telas || []).includes('msg_' + sub); }
+function temMsg(sess) { return sess.admin || ['config', 'agendar'].some(s => podeMsgSub(sess, s)); }
+function msgHref(sess) { return podeMsgSub(sess, 'config') ? '/' : (podeMsgSub(sess, 'agendar') ? '/?view=agendar' : '/'); }
+// Rota da aba WhatsApp → sub-permissão. O agendamento é o /agendar* e o /?view=agendar;
+// o resto (mensagens, fotos, teste, horários, conexão) é Configuração.
+function msgRotaPermitida(sess, url, fullUrl) {
+  const has = k => (sess.telas || []).includes(k);
+  if (url === '/agendar' || url.startsWith('/agendar/')) return has('msg_agendar');
+  if (url === '/' && /(?:^|[?&])view=agendar/.test(fullUrl || '')) return has('msg_agendar');
+  return has('msg_config'); // /, /salvar, /mensagem/*, /teste/*, /horarios*, /wa*
+}
 function primeiraTela(sess) {
   if (sess.admin) return '/hoje';
   if (sess.telas.includes('hoje')) return '/hoje';
   if (sess.telas.includes('ind')) return '/indicadores';
-  if (sess.telas.includes('msg')) return '/';
+  if (temMsg(sess)) return msgHref(sess);
   if (sess.telas.includes('ig')) return '/instagram';
   if (temSofia(sess)) return sofiaHref(sess);
   return '';
@@ -297,8 +309,9 @@ function navTabs(ativo) {
   const sess = _navSess || { admin: true, telas: usuarios.TELAS_KEYS };
   const pode = k => sess.admin || (sess.telas || []).includes(k);
   const item = (k, href, rot) => pode(k) ? `<a href="${href}" class="${ativo === k ? 'on' : ''}">${rot}</a>` : '';
-  let html = item('hoje', '/hoje', '📊 Hoje') + item('ind', '/indicadores', '📈 Formulário')
-    + item('msg', '/', '💬 WhatsApp') + item('ig', '/instagram', '📸 Instagram');
+  let html = item('hoje', '/hoje', '📊 Hoje') + item('ind', '/indicadores', '📈 Formulário');
+  if (temMsg(sess)) html += `<a href="${msgHref(sess)}" class="${ativo === 'msg' ? 'on' : ''}">💬 WhatsApp</a>`;
+  html += item('ig', '/instagram', '📸 Instagram');
   if (temSofia(sess)) html += `<a href="${sofiaHref(sess)}" class="${ativo === 'sofia' ? 'on' : ''}">🤖 Sofia</a>`;
   if (sess.admin) html += `<a href="/perfis" class="${ativo === 'perfis' ? 'on' : ''}">👤 Perfis</a>`;
   return html;
@@ -515,7 +528,11 @@ function subnavMensagens(view) {
   const on = 'background:#11abae;color:#fff;border-color:#11abae';
   const off = 'background:#fff;color:#5c5960';
   const item = (v, rot) => `<a href="/${v === 'agendar' ? '?view=agendar' : ''}" style="${base};${view === v ? on : off}">${rot}</a>`;
-  return `<div style="margin:0 0 18px">${item('config', '⚙️ Configuração')}${item('agendar', '📅 Agendamento')}</div>`;
+  const sess = _navSess || { admin: true, telas: [] };
+  let its = '';
+  if (podeMsgSub(sess, 'config')) its += item('config', '⚙️ Configuração');
+  if (podeMsgSub(sess, 'agendar')) its += item('agendar', '📅 Agendamento');
+  return `<div style="margin:0 0 18px">${its}</div>`;
 }
 
 function paginaMensagens(aviso, erro) {
@@ -1597,6 +1614,12 @@ const server = http.createServer((req, res) => {
       else if (!sofiaRotaPermitida(sess, url)) return negarAcesso(res, sess);
     }
   }
+  else if (tela === 'msg') {
+    if (!sess.admin) {
+      if (req.method === 'GET' && url === '/') { if (!temMsg(sess)) return negarAcesso(res, sess); }
+      else if (!msgRotaPermitida(sess, url, req.url)) return negarAcesso(res, sess);
+    }
+  }
   else if (tela && !sess.admin && !(sess.telas || []).includes(tela)) return negarAcesso(res, sess);
 
   // ── Perfis (só admin — já barrado acima) ─────────────────────────────────
@@ -1650,7 +1673,10 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horários salvos e robô reiniciado. Já valem.';
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    if (/(?:^|&)view=agendar/.test(q)) return res.end(paginaAgendar(aviso, erro)); // sub-aba Agendamento
+    // Só a sub-aba permitida; se pediu uma sem acesso, cai na primeira permitida.
+    let view = /(?:^|&)view=agendar/.test(q) ? 'agendar' : 'config';
+    if (!podeMsgSub(sess, view)) view = podeMsgSub(sess, 'config') ? 'config' : 'agendar';
+    if (view === 'agendar') return res.end(paginaAgendar(aviso, erro)); // sub-aba Agendamento
     return res.end(paginaMensagens(aviso, erro));
   }
   if (req.method === 'POST' && url === '/salvar') {
