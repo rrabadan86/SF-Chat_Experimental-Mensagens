@@ -906,14 +906,17 @@ function paginaSofia(aviso, erro) {
   }
 
   const e = sofia.estado();
-  const cardsSecoes = e.secoes.map((s, i) => {
-    const rows = Math.min(16, Math.max(4, String(s.corpo).split('\n').length + 1));
-    return `<div class="card">
-      <label>${esc(s.titulo)}</label>
-      <input type="hidden" name="titulo_${i}" value="${esc(s.titulo)}">
-      <textarea name="corpo_${i}" rows="${rows}" spellcheck="false">${esc(s.corpo)}</textarea>
+  const cardSecao = (titulo, corpo) => {
+    const rows = Math.min(16, Math.max(4, String(corpo || '').split('\n').length + 1));
+    return `<div class="card sec-card">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+        <input type="text" name="titulo[]" value="${esc(titulo)}" placeholder="TÍTULO DA SEÇÃO" style="flex:1;font-weight:700;font-family:Montserrat,sans-serif;font-size:.92rem">
+        <button type="button" class="reset" onclick="removerSecao(this)" title="Remover esta seção" style="padding:6px 12px">🗑️</button>
+      </div>
+      <textarea name="corpo[]" rows="${rows}" spellcheck="false">${esc(corpo)}</textarea>
     </div>`;
-  }).join('');
+  };
+  const cardsSecoes = e.secoes.map(s => cardSecao(s.titulo, s.corpo)).join('');
 
   const inpMidia = (nome, valor, rot) => `<label>${rot}</label><input type="text" name="${nome}" value="${esc(valor)}" style="font-family:ui-monospace,monospace;font-size:.86rem">`;
 
@@ -935,7 +938,6 @@ function paginaSofia(aviso, erro) {
     </div>
 
     <form method="POST" action="/sofia/salvar">
-      <input type="hidden" name="n" value="${e.secoes.length}">
 
       <div class="card">
         <label>⏳ Minutos que a Sofia fica fora ao você assumir uma conversa</label>
@@ -968,8 +970,9 @@ function paginaSofia(aviso, erro) {
         </div>
       </div>
 
-      <div class="sec-t">💬 Conversa da Sofia <small style="font-weight:600;color:var(--cinza)">(cada bloco é uma parte do atendimento)</small></div>
-      ${cardsSecoes}
+      <div class="sec-t">💬 Conversa da Sofia <small style="font-weight:600;color:var(--cinza)">(cada bloco é uma parte do atendimento — dá pra editar o título, remover ou adicionar)</small></div>
+      <div id="secoes">${cardsSecoes}</div>
+      <button type="button" class="reset" onclick="adicionarSecao()" style="margin:2px 0 10px">➕ Nova seção</button>
 
       <div class="sec-t">🔗 Script de integração <small style="font-weight:600;color:var(--cinza)">(dados enviados ao EVO)</small></div>
       <div class="card">
@@ -1009,6 +1012,23 @@ function paginaSofia(aviso, erro) {
     }).catch(function(){});
   }
   atualizaSofiaWa(); setInterval(atualizaSofiaWa, 5000);
+
+  // Editar seções do prompt: remover uma inteira ou adicionar uma nova.
+  function removerSecao(btn){
+    if(!confirm('Remover esta seção inteira? (título e conteúdo)')) return;
+    var card = btn.closest('.sec-card'); if(card && card.parentNode) card.parentNode.removeChild(card);
+  }
+  function adicionarSecao(){
+    var wrap = document.getElementById('secoes'); if(!wrap) return;
+    var div = document.createElement('div');
+    div.className = 'card sec-card';
+    div.innerHTML = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">'
+      + '<input type="text" name="titulo[]" value="" placeholder="TÍTULO DA SEÇÃO" style="flex:1;font-weight:700;font-family:Montserrat,sans-serif;font-size:.92rem">'
+      + '<button type="button" class="reset" onclick="removerSecao(this)" title="Remover esta seção" style="padding:6px 12px">🗑️</button>'
+      + '</div><textarea name="corpo[]" rows="6" spellcheck="false"></textarea>';
+    wrap.appendChild(div);
+    var inp = div.querySelector('input'); if(inp) inp.focus();
+  }
 </script>`;
   return chrome({ tab: 'Sofia', h1: '🤖 Sofia', p: 'Edite o prompt, as configurações e conecte o WhatsApp da Sofia.' }, 'sofia', corpo);
 }
@@ -1200,9 +1220,17 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url === '/sofia/salvar') {
     return lerCorpo(req, 4e6, corpo => {
       const p = new URLSearchParams(corpo);
-      const n = parseInt(p.get('n') || '0', 10);
+      // Seções chegam como arrays paralelos titulo[]/corpo[] (permite adicionar e
+      // remover seções pelo painel). Ignora seções totalmente vazias.
+      const titulos = p.getAll('titulo[]');
+      const corpos = p.getAll('corpo[]');
       const secoes = [];
-      for (let i = 0; i < n; i++) secoes.push({ titulo: p.get('titulo_' + i) || ('SEÇÃO ' + i), corpo: p.get('corpo_' + i) || '' });
+      for (let i = 0; i < titulos.length; i++) {
+        const t = (titulos[i] || '').trim();
+        const c = corpos[i] || '';
+        if (!t && !c.trim()) continue; // seção vazia (card novo não preenchido) — descarta
+        secoes.push({ titulo: t || ('SEÇÃO ' + (i + 1)), corpo: c });
+      }
       try {
         sofia.salvar({
           secoes,
