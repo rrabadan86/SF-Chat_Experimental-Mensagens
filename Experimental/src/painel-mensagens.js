@@ -921,7 +921,7 @@ function paginaSofia(aviso, erro) {
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
 
     <div class="sec-t">📱 Conexão do WhatsApp da Sofia <small style="font-weight:600;color:var(--cinza)">(número próprio, diferente do robô)</small></div>
-    ${blocoSofiaWa()}
+    <div id="sofiaWa">${blocoSofiaWa()}</div>
 
     <div class="sec-t">⚡ Sofia</div>
     <div class="card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
@@ -967,7 +967,23 @@ function paginaSofia(aviso, erro) {
         <p class="quando" style="text-align:center;margin:8px 0 0">Vale nas próximas conversas — a Sofia lê os arquivos na hora, sem reiniciar.</p>
       </div>
     </form>
-  </div>`;
+  </div>
+<script>
+  function renderSofiaWa(st){
+    var e = st && st.estado;
+    if(e==='conectado') return '<div class="wa-card ok"><div class="wa-ic">🤖</div><h2>WhatsApp da Sofia conectado</h2><p>A Sofia está no ar e responde as alunas neste número.</p></div>';
+    if(e==='qr' && st.qr) return '<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR da Sofia</h2><p>Este é o WhatsApp <b>da Sofia</b> (número próprio, diferente do robô de mensagens). No celular do número da Sofia: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte para o código.</p><img class="qr" src="'+st.qr+'" alt="QR da Sofia"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira “🤖 conectado”.</p></div>';
+    if(e==='iniciando') return '<div class="wa-card"><div class="wa-ic">⏳</div><h2>Iniciando…</h2><p>Subindo a conexão da Sofia. Se precisar de QR, ele aparece aqui.</p></div>';
+    if(e==='desconectado') return '<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>A Sofia caiu. Se aparecer um QR aqui, escaneie de novo.</p></div>';
+    return '<div class="wa-card"><div class="wa-ic">❔</div><h2>Conexão da Sofia — sem informação</h2><p>O processo da Sofia (sofia-listener) precisa estar rodando e publicando o estado.</p></div>';
+  }
+  function atualizaSofiaWa(){
+    fetch('/sofia/estado',{cache:'no-store'}).then(function(r){return r.json();}).then(function(st){
+      var el=document.getElementById('sofiaWa'); if(el) el.innerHTML=renderSofiaWa(st);
+    }).catch(function(){});
+  }
+  atualizaSofiaWa(); setInterval(atualizaSofiaWa, 5000);
+</script>`;
   return chrome({ tab: 'Sofia', h1: '🤖 Sofia', p: 'Edite o prompt, as configurações e conecte o WhatsApp da Sofia.' }, 'sofia', corpo);
 }
 
@@ -1185,6 +1201,13 @@ const server = http.createServer((req, res) => {
       let ok = false; try { ok = sofia.restaurar(); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?rest=' + (ok ? '1' : '0') }); res.end();
     });
+  }
+  // Estado do WhatsApp da Sofia (JSON) — o bloco de conexão atualiza só ele,
+  // sem recarregar a página (não apaga o que estiver sendo editado no prompt).
+  if (req.method === 'GET' && url === '/sofia/estado') {
+    const st = sofia.waStatus() || {};
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ estado: st.estado || '', qr: st.qr || '', atualizadoEm: st.atualizadoEm || '' }));
   }
   if (req.method === 'POST' && url === '/sofia/toggle') {
     return lerCorpo(req, 1e5, () => {
