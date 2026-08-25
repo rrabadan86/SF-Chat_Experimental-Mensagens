@@ -382,6 +382,26 @@ function cardFoto(m) {
 }
 
 // ── Página 1: editar mensagens (texto + horário de cada uma) ────────────────
+// Conexão do WhatsApp do ROBÔ, no MESMO leiaute (wa-card) da aba Sofia.
+function blocoWaRobo() {
+  const st = waStatus.get() || {};
+  if (st.estado === 'conectado') {
+    return `<div class="wa-card ok"><div class="wa-ic">✅</div><h2>WhatsApp conectado</h2><p>A sessão está ativa — o robô envia normalmente.</p></div>`;
+  }
+  if (st.estado === 'qr' && st.qr) {
+    return `<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR para reconectar</h2>
+      <p>A sessão caiu. No <b>celular do Studio</b>: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte a câmera para o código.</p>
+      <img class="qr" src="${esc(st.qr)}" alt="QR do WhatsApp"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira ✅.</p></div>`;
+  }
+  if (st.estado === 'iniciando') {
+    return `<div class="wa-card"><div class="wa-ic">⏳</div><h2>Iniciando…</h2><p>O robô está subindo a conexão. Se precisar de QR, ele aparece aqui.</p></div>`;
+  }
+  if (st.estado === 'desconectado') {
+    return `<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>O robô está tentando reconectar sozinho. Se aparecer um QR aqui, escaneie.</p></div>`;
+  }
+  return `<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>Confira se o robô (<code>slimfit-exp</code>) está rodando.</p></div>`;
+}
+
 function paginaMensagens(aviso, erro) {
   // Índice dos horários por chave de job, para embutir em cada mensagem.
   const hmap = {};
@@ -412,7 +432,7 @@ function paginaMensagens(aviso, erro) {
   }).join('\n');
 
   const corpo = `<div class="wrap">
-    <div id="waBanner"></div>
+    <div id="waBanner">${blocoWaRobo()}</div>
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
@@ -428,11 +448,11 @@ ${scriptPreviewTeste()}
 <script>
   function renderWa(st){
     var e = st && st.estado;
-    if(e==='conectado') return '<div class="wabar ok">✅ WhatsApp conectado — o robô envia normalmente.</div>';
-    if(e==='qr' && st.qr) return '<div class="wa-card warn" style="margin:16px 0 0"><div class="wa-ic">📲</div><h2>Escaneie o QR para reconectar</h2><p>A sessão caiu. No <b>celular do Studio</b>: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte a câmera para o código.</p><img class="qr" src="'+st.qr+'" alt="QR do WhatsApp"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira ✅.</p></div>';
-    if(e==='iniciando') return '<div class="wabar warn">⏳ WhatsApp iniciando… se precisar de QR, ele aparece aqui.</div>';
-    if(e==='desconectado') return '<div class="wabar warn">⚠️ WhatsApp desconectado — tentando reconectar. Se aparecer um QR aqui, escaneie.</div>';
-    return '<div class="wabar warn">❔ Sem informação do WhatsApp ainda — confira se o robô está rodando.</div>';
+    if(e==='conectado') return '<div class="wa-card ok"><div class="wa-ic">✅</div><h2>WhatsApp conectado</h2><p>A sessão está ativa — o robô envia normalmente.</p></div>';
+    if(e==='qr' && st.qr) return '<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR para reconectar</h2><p>A sessão caiu. No <b>celular do Studio</b>: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte a câmera para o código.</p><img class="qr" src="'+st.qr+'" alt="QR do WhatsApp"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira ✅.</p></div>';
+    if(e==='iniciando') return '<div class="wa-card"><div class="wa-ic">⏳</div><h2>Iniciando…</h2><p>O robô está subindo a conexão. Se precisar de QR, ele aparece aqui.</p></div>';
+    if(e==='desconectado') return '<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>O robô está tentando reconectar sozinho. Se aparecer um QR aqui, escaneie.</p></div>';
+    return '<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>Confira se o robô (slimfit-exp) está rodando.</p></div>';
   }
   function atualizaWa(){
     fetch('/wa/estado').then(function(r){return r.json();}).then(function(st){
