@@ -937,6 +937,7 @@ function subnavSofia(view) {
 // Aba Sofia → Conversas: inbox das conversas da Sofia (ler e, na Parte 2, responder).
 function paginaSofiaConversas(aviso, erro) {
   const tagsLista = contatos.tagsDistintas().map(t => t.tag);
+  let sessaoHoras = 12; try { sessaoHoras = sofia.lerSessaoHoras(); } catch (_) {}
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('conversas')}
@@ -957,6 +958,8 @@ function paginaSofiaConversas(aviso, erro) {
 <script>
   var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1}, ncSel=[];
   var TAGS_EXISTENTES = ${JSON.stringify(tagsLista)};
+  var SESSAO_MS = ${Math.round(sessaoHoras * 3600 * 1000)};
+  function encerrada(c){ return c && c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS); }
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function fmtHora(ts){ try{return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
   function autorRot(a){ return a==='aluna'?'Aluna':(a==='humano'?'Você':'Sofia'); }
@@ -969,6 +972,7 @@ function paginaSofiaConversas(aviso, erro) {
       var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e6f6f7');
       return '<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+autorRot(m.autor)+' · '+fmtHora(m.em)+'</div><div style="white-space:pre-wrap">'+escH(m.texto)+'</div></div></div>';
     }).join('');
+    var fim = encerrada(c) ? '<div style="text-align:center;margin:10px 0 2px"><span style="display:inline-block;background:#f3eaea;color:#a15a5a;border:1px solid #e6cfcf;border-radius:999px;padding:3px 12px;font-size:.72rem;font-weight:700">🔒 Sessão encerrada · a Sofia recomeça do zero se a aluna voltar</span></div>' : '';
     var opts='<option value="">＋ escolher tag…</option>'+TAGS_EXISTENTES.map(function(t){return '<option>'+escH(t)+'</option>';}).join('');
     var editor='<div style="margin:2px 0 10px">'
       +'<div id="ncChips" style="margin-bottom:6px"></div>'
@@ -978,7 +982,7 @@ function paginaSofiaConversas(aviso, erro) {
       +'<button type="button" class="save" style="padding:5px 10px" onclick="salvarContato(\\''+k+'\\')">💾 '+(c.salvo?'Salvar tags':'Salvar contato')+'</button>'
       +'<span id="ncMsg" class="quando">'+(c.salvo?'✓ salvo':'')+'</span>'
       +'</div></div>';
-    chat.innerHTML = '<div style="font-weight:800;margin-bottom:2px">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin-bottom:6px">'+escH(fmtTel(k))+'</div>'+editor+'<div id="bolhas" style="overflow:auto;max-height:420px;padding-right:4px">'+bolhas+'</div>';
+    chat.innerHTML = '<div style="font-weight:800;margin-bottom:2px">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin-bottom:6px">'+escH(fmtTel(k))+'</div>'+editor+'<div id="bolhas" style="overflow:auto;max-height:420px;padding-right:4px">'+bolhas+fim+'</div>';
     ncRenderChips();
     var b=document.getElementById('bolhas'); if(b) b.scrollTop=b.scrollHeight;
   }
@@ -1008,7 +1012,8 @@ function paginaSofiaConversas(aviso, erro) {
       var prev = ult? (autorRot(ult.autor)+': '+ult.texto) : '';
       var on=(k===selecionada);
       var tgs=(c.tagsContato||[]).map(function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:1px 7px;font-size:.66rem;margin:3px 4px 0 0">'+escH(t)+'</span>';}).join('');
-      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:10px 12px;border-radius:10px;margin-bottom:6px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':'#fff')+'"><div style="font-weight:700;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(c.nome||fmtTel(k))+'</div><div class="quando">'+escH(fmtTel(k))+'</div><div class="quando" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(prev)+'</div><div class="quando" style="font-size:.72rem">'+fmtHora(c.ultimaEm)+'</div>'+(tgs?'<div>'+tgs+'</div>':'')+'</div>';
+      var enc=encerrada(c)?'<span style="display:inline-block;background:#f3eaea;color:#a15a5a;border-radius:999px;padding:1px 7px;font-size:.64rem;font-weight:700;margin-left:4px">🔒 encerrada</span>':'';
+      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:10px 12px;border-radius:10px;margin-bottom:6px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':(encerrada(c)?'#fbf7f7':'#fff'))+'"><div style="font-weight:700;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(c.nome||fmtTel(k))+'</div><div class="quando">'+escH(fmtTel(k))+'</div><div class="quando" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(prev)+'</div><div class="quando" style="font-size:.72rem">'+fmtHora(c.ultimaEm)+enc+'</div>'+(tgs?'<div>'+tgs+'</div>':'')+'</div>';
     }).join('');
     if(pag){
       if(paginas>1){ pag.innerHTML='<button type="button" class="reset" onclick="mudarPag(-1)" '+(pagina===0?'disabled':'')+' style="padding:6px 12px">‹ Anterior</button><span class="quando" style="text-align:center">Página '+(pagina+1)+' de '+paginas+'<br>'+total+' conversas</span><button type="button" class="reset" onclick="mudarPag(1)" '+(pagina>=paginas-1?'disabled':'')+' style="padding:6px 12px">Próxima ›</button>'; }
@@ -1178,6 +1183,12 @@ function paginaSofia(aviso, erro) {
       <div class="card">
         <label>⏳ Minutos que a Sofia fica fora ao você assumir uma conversa</label>
         <input type="number" name="pausaMin" min="1" max="1440" value="${e.pausaMin}" style="width:130px"> minutos
+      </div>
+
+      <div class="card">
+        <label>🧠 Tempo de sessão (memória da conversa)</label>
+        <div><input type="number" name="sessaoHoras" min="1" max="720" step="1" value="${e.sessaoHoras}" style="width:130px"> horas</div>
+        <p class="quando" style="margin:6px 0 0">Depois desse tempo <b>sem mensagens</b>, a próxima mensagem da aluna começa uma conversa <b>nova</b> — a Sofia não lembra do que foi dito antes. No painel (aba Conversas), a conversa aparece como <b>“Sessão encerrada”</b> quando passa desse tempo. Padrão: 12 horas.</p>
       </div>
 
       <div class="sec-t">⌨️ Jeito de responder <small style="font-weight:600;color:var(--cinza)">(deixa a Sofia mais humana — vale na hora, sem reiniciar)</small></div>
@@ -1540,6 +1551,7 @@ const server = http.createServer((req, res) => {
           secoes,
           extracao: p.get('extracao') || '',
           pausaMin: p.get('pausaMin') || '30',
+          sessaoHoras: p.get('sessaoHoras') || '12',
           midias: {
             grade_imagem: (p.get('grade_imagem') || '').trim(),
             grade_link: (p.get('grade_link') || '').trim(),

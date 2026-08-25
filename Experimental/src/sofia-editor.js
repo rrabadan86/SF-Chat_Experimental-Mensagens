@@ -20,6 +20,7 @@ const F = {
   extracaoBak: path.join(DIR, 'sofia-extracao.bak.txt'),
   estado: path.join(DIR, 'sofia-estado.txt'),
   pausa: path.join(DIR, 'sofia-pausa-min.txt'),
+  sessao: path.join(DIR, 'sofia-sessao-horas.txt'), // janela de memória da conversa (horas) — lida pela Sofia
   midias: path.join(DIR, 'sofia-midias.txt'),
   ritmo: path.join(DIR, 'sofia-ritmo.json'), // "jeito humano" (velocidade/pausas) — lido pelo listener
   waStatus: path.join(DIR, 'sofia-wa-status.json'), // publicado pelo listener da Sofia
@@ -51,6 +52,20 @@ function estadoAtivo() { return ler(F.estado).trim().toLowerCase() !== 'off'; }
 function gravarEstado(ativo) { fs.writeFileSync(F.estado, ativo ? 'on' : 'off', 'utf8'); }
 function lerPausaMin() { const n = parseInt(ler(F.pausa).trim(), 10); return Number.isFinite(n) && n > 0 ? n : 30; }
 function gravarPausaMin(n) { fs.writeFileSync(F.pausa, String(n), 'utf8'); }
+
+// ── janela de sessão (memória da conversa), em HORAS ────────────────────────
+// Padrão 12h (mesmo da Sofia). Depois desse tempo sem mensagens, a próxima
+// mensagem começa uma conversa nova (a Sofia não lembra do que foi dito antes).
+const SESSAO_HORAS_PADRAO = 12;
+function lerSessaoHoras() {
+  const n = parseFloat(ler(F.sessao).trim().replace(',', '.'));
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 720) : SESSAO_HORAS_PADRAO;
+}
+function gravarSessaoHoras(h) {
+  const n = parseFloat(String(h).replace(',', '.'));
+  const val = Number.isFinite(n) && n > 0 ? Math.min(n, 720) : SESSAO_HORAS_PADRAO;
+  fs.writeFileSync(F.sessao, String(val), 'utf8');
+}
 
 // ── mídias (URLs de imagens de preços/grade) ────────────────────────────────
 function lerMidias() {
@@ -122,6 +137,7 @@ function estado() {
     dir: DIR,
     ativa: estadoAtivo(),
     pausaMin: lerPausaMin(),
+    sessaoHoras: lerSessaoHoras(),
     secoes: parseSecoes(ler(F.prompt)),
     extracao: ler(F.extracao),
     midias: lerMidias(),
@@ -130,7 +146,7 @@ function estado() {
 }
 
 // Salva tudo (com backup e validação mínima). Lança Error em caso de recusa.
-function salvar({ secoes, extracao, pausaMin, midias, ritmo }) {
+function salvar({ secoes, extracao, pausaMin, sessaoHoras, midias, ritmo }) {
   const promptMontado = montarPrompt(secoes || []);
   const ext = String(extracao || '').trim();
   if (promptMontado.trim().length < 50 || ext.length < 30) {
@@ -141,6 +157,7 @@ function salvar({ secoes, extracao, pausaMin, midias, ritmo }) {
   fs.writeFileSync(F.prompt, promptMontado, 'utf8');
   fs.writeFileSync(F.extracao, ext, 'utf8');
   gravarPausaMin(Math.max(1, Math.min(1440, parseInt(pausaMin, 10) || 30)));
+  if (sessaoHoras !== undefined) gravarSessaoHoras(sessaoHoras);
   gravarMidias(midias || {});
   if (ritmo) gravarRitmo(ritmo);
 }
@@ -171,6 +188,6 @@ function enfileirarResposta(chave, jid, texto) {
 
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
-  lerPausaMin, gravarPausaMin, lerRitmo, gravarRitmo, waStatus,
+  lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerRitmo, gravarRitmo, waStatus,
   conversas, enfileirarResposta, DIR, ARQUIVOS: F,
 };

@@ -505,7 +505,20 @@ interface Conversa {
   solicitou?: boolean; // a ferramenta solicitar_agendamento já cuidou (êxito ou não)
 }
 const conversas = new Map<string, Conversa>();
-const INATIVIDADE_MS = 12 * 60 * 60 * 1000; // 12 horas
+
+// Janela de sessão (memória da conversa). Depois deste tempo SEM mensagens, a
+// próxima mensagem da aluna começa uma conversa NOVA (a Sofia não lembra do que
+// foi dito antes). É editável pelo painel (aba Sofia → Configuração), gravado em
+// sofia-sessao-horas.txt e lido AQUI a cada mensagem — muda sem reiniciar.
+const SESSAO_FILE = path.join(process.cwd(), "sofia-sessao-horas.txt");
+const SESSAO_HORAS_PADRAO = 12;
+export function janelaSessaoMs(): number {
+  try {
+    const n = parseFloat(fs.readFileSync(SESSAO_FILE, "utf-8").trim().replace(",", "."));
+    if (Number.isFinite(n) && n > 0) return Math.min(n, 720) * 3_600_000; // teto de 30 dias
+  } catch {}
+  return SESSAO_HORAS_PADRAO * 3_600_000;
+}
 
 // Contexto da conversa ATUAL, para a ferramenta solicitar_agendamento (que roda
 // DURANTE a resposta) usar o telefone CONFIÁVEL (resolvido pelo listener, já com
@@ -535,9 +548,10 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
   const agora = Date.now();
   let conversa = conversas.get(telefone);
 
-  const inativa = conversa && agora - conversa.ultimaMensagemEm > INATIVIDADE_MS;
+  const janelaMs = janelaSessaoMs();
+  const inativa = conversa && agora - conversa.ultimaMensagemEm > janelaMs;
   if (!conversa || inativa) {
-    if (inativa) console.log(`⏰ ${telefone}: +12h de inatividade — iniciando conversa nova.`);
+    if (inativa) console.log(`⏰ ${telefone}: +${(janelaMs / 3_600_000).toFixed(1)}h de inatividade — iniciando conversa nova.`);
     conversa = { sessionId: undefined, ultimaMensagemEm: agora, transcricao: [], resumoEnviado: false };
     conversas.set(telefone, conversa);
   }
