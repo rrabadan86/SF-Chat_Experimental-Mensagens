@@ -26,6 +26,7 @@ const igcfg = require('./instagram-config');
 const igcookies = require('./instagram-cookies');
 const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
+const sofia = require('./sofia-editor');
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
 // Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
@@ -210,6 +211,7 @@ function chrome(titSubtitulo, ativo, corpo) {
   <a href="/" class="${ativo === 'msg' ? 'on' : ''}">💬 WhatsApp Mensagens</a>
   <a href="/agendar" class="${ativo === 'ag' ? 'on' : ''}">📅 Agendar envios</a>
   <a href="/instagram" class="${ativo === 'ig' ? 'on' : ''}">📸 Instagram</a>
+  <a href="/sofia" class="${ativo === 'sofia' ? 'on' : ''}">🤖 Sofia</a>
 </nav>
 ${corpo}
 <footer>SlimFit · painel do Studio</footer>
@@ -875,6 +877,100 @@ function paginaIndicadores(dias) {
   return chrome({ tab: 'Indicadores', h1: '📈 Indicadores do formulário', p: 'Acessos, agendamentos e taxa de conversão do formulário de agendamento.' }, 'ind', corpo);
 }
 
+// ── Página: Sofia (chatbot) — prompt, configs e conexão do WhatsApp dela ─────
+function blocoSofiaWa() {
+  const st = sofia.waStatus();
+  const quando = st.atualizadoEm ? new Date(st.atualizadoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
+  if (st.estado === 'conectado') {
+    return `<div class="wa-card ok"><div class="wa-ic">🤖</div><h2>WhatsApp da Sofia conectado</h2><p>A Sofia está no ar e responde as alunas neste número.</p></div>`;
+  }
+  if (st.estado === 'qr' && st.qr) {
+    return `<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR da Sofia</h2>
+      <p>Este é o WhatsApp <b>da Sofia</b> (número próprio, diferente do robô de mensagens). No celular do número da Sofia: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte para o código.</p>
+      <img class="qr" src="${esc(st.qr)}" alt="QR da Sofia"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira “🤖 conectado”.</p></div>`;
+  }
+  // Sem status publicado ainda (o listener da Sofia precisa gravar sofia-wa-status.json).
+  return `<div class="wa-card"><div class="wa-ic">❔</div><h2>Conexão da Sofia — sem informação</h2>
+    <p>Para o QR da Sofia aparecer aqui, o processo dela precisa <b>publicar o estado</b> em <code>sofia-wa-status.json</code>. Enquanto isso não estiver ligado, conecte a Sofia pelo terminal como de costume.</p>
+    <p class="wa-upd">Última atualização: ${esc(quando)}</p></div>`;
+}
+
+function paginaSofia(aviso, erro) {
+  if (!sofia.disponivel()) {
+    const corpo = `<div class="wrap">
+      ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+      <div class="card"><div class="chead"><h2>Sofia não encontrada nesta máquina</h2></div>
+        <p class="quando">Não achei a pasta da Sofia (<code>${esc(sofia.DIR)}</code>) ou o arquivo do prompt. Se a Sofia roda em outra pasta/servidor, aponte com a variável <code>SOFIA_DIR</code> no <code>.env</code> do painel e reinicie: <code>pm2 restart slimfit-painel --update-env</code>.</p>
+      </div></div>`;
+    return chrome({ tab: 'Sofia', h1: '🤖 Sofia', p: 'Prompt, configurações e conexão do chatbot.' }, 'sofia', corpo);
+  }
+
+  const e = sofia.estado();
+  const cardsSecoes = e.secoes.map((s, i) => {
+    const rows = Math.min(16, Math.max(4, String(s.corpo).split('\n').length + 1));
+    return `<div class="card">
+      <label>${esc(s.titulo)}</label>
+      <input type="hidden" name="titulo_${i}" value="${esc(s.titulo)}">
+      <textarea name="corpo_${i}" rows="${rows}" spellcheck="false">${esc(s.corpo)}</textarea>
+    </div>`;
+  }).join('');
+
+  const inpMidia = (nome, valor, rot) => `<label>${rot}</label><input type="text" name="${nome}" value="${esc(valor)}" style="font-family:ui-monospace,monospace;font-size:.86rem">`;
+
+  const corpo = `<div class="wrap">
+    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+
+    <div class="sec-t">📱 Conexão do WhatsApp da Sofia <small style="font-weight:600;color:var(--cinza)">(número próprio, diferente do robô)</small></div>
+    ${blocoSofiaWa()}
+
+    <div class="sec-t">⚡ Sofia</div>
+    <div class="card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <h2 style="margin:0 0 4px">${e.ativa ? '🟢 IA ativa' : '⏸️ IA pausada'}</h2>
+        <p class="quando" style="margin:0">${e.ativa ? 'A Sofia está respondendo as alunas.' : 'A Sofia NÃO responde — atenda manualmente pelo WhatsApp.'}</p>
+      </div>
+      <form method="POST" action="/sofia/toggle" style="margin:0">
+        <button type="submit" class="${e.ativa ? 'reset' : 'save'}">${e.ativa ? '⏸️ Pausar Sofia' : '▶️ Ativar Sofia'}</button>
+      </form>
+    </div>
+
+    <form method="POST" action="/sofia/salvar">
+      <input type="hidden" name="n" value="${e.secoes.length}">
+
+      <div class="card">
+        <label>⏳ Minutos que a Sofia fica fora ao você assumir uma conversa</label>
+        <input type="number" name="pausaMin" min="1" max="1440" value="${e.pausaMin}" style="width:130px"> minutos
+      </div>
+
+      <div class="sec-t">💬 Conversa da Sofia <small style="font-weight:600;color:var(--cinza)">(cada bloco é uma parte do atendimento)</small></div>
+      ${cardsSecoes}
+
+      <div class="sec-t">🔗 Script de integração <small style="font-weight:600;color:var(--cinza)">(dados enviados ao EVO)</small></div>
+      <div class="card">
+        <label>Extração do resumo (nome, e-mail, dia, hora)</label>
+        <textarea name="extracao" rows="12" spellcheck="false">${esc(e.extracao)}</textarea>
+      </div>
+
+      <div class="sec-t">📷 Imagens <small style="font-weight:600;color:var(--cinza)">(troque as URLs quando atualizar a grade/preços)</small></div>
+      <div class="card">
+        ${inpMidia('precos_imagem', e.midias.precos_imagem, 'Imagem da TABELA DE PREÇOS (URL)')}
+        ${inpMidia('precos_link', e.midias.precos_link, 'Link (Google Drive) da tabela de preços')}
+        ${inpMidia('grade_imagem', e.midias.grade_imagem, 'Imagem da GRADE DE HORÁRIOS (URL)')}
+        ${inpMidia('grade_link', e.midias.grade_link, 'Link (Google Drive) da grade')}
+      </div>
+
+      <div class="hbar">
+        <div class="acts">
+          <button type="submit" class="save">💾 Salvar tudo</button>
+          <button type="submit" class="reset" formaction="/sofia/restaurar" onclick="return confirm('Restaurar a versão anterior de TODOS os campos?')">↩️ Restaurar anterior</button>
+        </div>
+        <p class="quando" style="text-align:center;margin:8px 0 0">Vale nas próximas conversas — a Sofia lê os arquivos na hora, sem reiniciar.</p>
+      </div>
+    </form>
+  </div>`;
+  return chrome({ tab: 'Sofia', h1: '🤖 Sofia', p: 'Edite o prompt, as configurações e conecte o WhatsApp da Sofia.' }, 'sofia', corpo);
+}
+
 function pedirLogin(res) {
   res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Painel SlimFit", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('Acesso restrito.');
@@ -1047,6 +1143,57 @@ const server = http.createServer((req, res) => {
     return res.end(paginaHoje(valido));
   }
 
+  // Aba Sofia (chatbot): prompt, configs e conexão
+  if (req.method === 'GET' && url === '/sofia') {
+    const q = req.url.split('?')[1] || '';
+    let aviso = '', erro = false;
+    if (/(?:^|&)ok=1/.test(q)) aviso = 'Salvo! As próximas conversas já usam estas configurações.';
+    else if (/(?:^|&)on=1/.test(q)) aviso = '🟢 Sofia ativada — voltou a responder as alunas.';
+    else if (/(?:^|&)off=1/.test(q)) aviso = '⏸️ Sofia pausada — atenda manualmente pelo WhatsApp.';
+    else if (/(?:^|&)rest=1/.test(q)) aviso = 'Restaurado para a versão anterior.';
+    else if (/(?:^|&)rest=0/.test(q)) { aviso = 'Não havia versão anterior para restaurar.'; erro = true; }
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(paginaSofia(aviso, erro));
+  }
+  if (req.method === 'POST' && url === '/sofia/salvar') {
+    return lerCorpo(req, 4e6, corpo => {
+      const p = new URLSearchParams(corpo);
+      const n = parseInt(p.get('n') || '0', 10);
+      const secoes = [];
+      for (let i = 0; i < n; i++) secoes.push({ titulo: p.get('titulo_' + i) || ('SEÇÃO ' + i), corpo: p.get('corpo_' + i) || '' });
+      try {
+        sofia.salvar({
+          secoes,
+          extracao: p.get('extracao') || '',
+          pausaMin: p.get('pausaMin') || '30',
+          midias: {
+            grade_imagem: (p.get('grade_imagem') || '').trim(),
+            grade_link: (p.get('grade_link') || '').trim(),
+            precos_imagem: (p.get('precos_imagem') || '').trim(),
+            precos_link: (p.get('precos_link') || '').trim(),
+          },
+        });
+        res.writeHead(303, { Location: '/sofia?ok=1' }); res.end();
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(paginaSofia('Não salvei: ' + e.message, true));
+      }
+    });
+  }
+  if (req.method === 'POST' && url === '/sofia/restaurar') {
+    return lerCorpo(req, 1e5, () => {
+      let ok = false; try { ok = sofia.restaurar(); } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?rest=' + (ok ? '1' : '0') }); res.end();
+    });
+  }
+  if (req.method === 'POST' && url === '/sofia/toggle') {
+    return lerCorpo(req, 1e5, () => {
+      let novo = true;
+      try { novo = !sofia.estadoAtivo(); sofia.gravarEstado(novo); } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?' + (novo ? 'on=1' : 'off=1') }); res.end();
+    });
+  }
+
   // Página do Instagram (status + liga/desliga + limite + mensagem + horário)
   if (req.method === 'GET' && url === '/instagram') {
     const q = req.url.split('?')[1] || '';
@@ -1126,5 +1273,5 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   if (!SENHA) console.warn('⚠️  PAINEL_SENHA não definido no .env — o painel vai NEGAR todo acesso até você definir usuário e senha.');
   console.log(`🖥️  Painel do Studio ouvindo em ${HOST}:${PORT} (usuário: ${USER}).`);
-  console.log('   Páginas: /hoje · /indicadores · /  (WhatsApp+mensagens) · /agendar · /instagram. Exponha SEMPRE atrás de HTTPS.');
+  console.log('   Páginas: /hoje · /indicadores · /  (WhatsApp+mensagens) · /agendar · /instagram · /sofia. Exponha SEMPRE atrás de HTTPS.');
 });
