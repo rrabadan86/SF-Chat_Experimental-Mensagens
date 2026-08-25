@@ -130,25 +130,74 @@ function jidParaTel(jid: string) { return String(jid || "").replace(/@(c\.us|lid
 // Resolvemos UMA vez por contato e guardamos em cache, para a chave de memória e o
 // handoff ficarem estáveis mesmo que um getContact posterior falhe.
 const telCache = new Map<string, string>();
+function soDigitos(v: any) { return String((v && (v._serialized || v.user || v)) || "").replace(/\D/g, ""); }
 function pareceTelefone(s: string) { return /^\d{11,15}$/.test(s); } // com DDI: 55 + DDD + número
-async function resolverTel(msg: any): Promise<string> {
+
+// Tenta descobrir o TELEFONE REAL de um contato "@lid" (o jid é um ID interno,
+// NÃO é telefone). Tenta, em ordem: getContact().number → campos "Pn" que o
+// protocolo novo às vezes traz no msg._data → store interno (pupPage). Se nada
+// vier, loga um DIAGNÓSTICO com os campos disponíveis (pra mirarmos certo nesta
+// versão) e devolve "" (sem número). Nunca devolve o próprio LID como telefone.
+async function telefoneDoLid(msg: any, jid: string, lid: string): Promise<string> {
+  // 1) API pública
+  try {
+    const c = await msg.getContact();
+    const num = soDigitos(c && c.number);
+    if (pareceTelefone(num) && num !== lid) { log(`@lid ${jid} → telefone ${num} (getContact.number)`); return num; }
+  } catch {}
+  // 2) Campos do protocolo novo que às vezes acompanham o LID
+  try {
+    const d: any = msg._data || {};
+    for (const cand of [d.senderPn, d.peerRecipientPn, d.recipientPn, d.participantPn, d.author]) {
+      const num = soDigitos(cand);
+      if (pareceTelefone(num) && num !== lid) { log(`@lid ${jid} → telefone ${num} (msg._data)`); return num; }
+    }
+  } catch {}
+  // 3) Store interno (nomes variam por versão — tudo best-effort)
+  try {
+    const page: any = (client as any).pupPage;
+    if (page) {
+      const bruto = await page.evaluate((lidJid: string) => {
+        try {
+          const S: any = (window as any).Store || {};
+          const fns = [S.LidUtils && S.LidUtils.getPhoneNumber, S.NumberInfo && S.NumberInfo.getPhoneNumber];
+          for (const fn of fns) { if (typeof fn === "function") { const r = fn(lidJid); const s = r && (r._serialized || r.user || r); if (s) return String(s); } }
+          const WW: any = (window as any).WWebJS;
+          if (WW && typeof WW.getContact === "function") { const c = WW.getContact(lidJid); if (c && c.number) return String(c.number); }
+        } catch (e) {}
+        return "";
+      }, jid);
+      const num = soDigitos(bruto);
+      if (pareceTelefone(num) && num !== lid) { log(`@lid ${jid} → telefone ${num} (Store)`); return num; }
+    }
+  } catch {}
+  // 4) Diagnóstico: mostra o que existe, pra sabermos qual campo usar nesta versão
+  try {
+    const c: any = await msg.getContact().catch(() => null);
+    const d: any = msg._data || {};
+    const chaves = Object.keys(d).filter((k) => /pn|phone|number|author|recipient|sender/i.test(k));
+    log(`DIAG @lid ${jid}: number=${c && c.number} id=${c && c.id && c.id._serialized} campos=[${chaves.map((k) => k + "=" + JSON.stringify(soDigitos((d as any)[k]) || (d as any)[k])).join(", ")}]`);
+  } catch {}
+  log(`aviso: não achei o telefone real de ${jid} — agendamento fica sem número (avise pela Sofia).`);
+  return "";
+}
+
+// Resolve DUAS coisas por contato (com cache, para ficarem estáveis):
+//   • chave    → id estável para MEMÓRIA e handoff (telefone real, ou o LID quando
+//                não dá pra descobrir — nunca colide entre contatos diferentes).
+//   • telefone → telefone REAL para o AGENDAMENTO (ou "" quando não dá pra achar;
+//                NUNCA o LID, pra não mandar lixo ao EVO).
+const telRealCache = new Map<string, string>();
+async function resolverTel(msg: any): Promise<{ chave: string; telefone: string }> {
   const jid: string = msg.from || msg.to || "";
-  const cache = telCache.get(jid);
-  if (cache) return cache;
-  let tel = jidParaTel(jid);
-  if (jid.endsWith("@lid")) {
-    const lid = tel; // o próprio ID interno — NUNCA pode ser aceito como telefone
-    try {
-      const c = await msg.getContact();
-      // Só c.number é o telefone de verdade. NÃO usar c.id.user: para "@lid" ele é
-      // o próprio ID (e teria a mesma cara de um telefone, reintroduzindo o bug).
-      const num = String((c && c.number) || "").replace(/\D/g, "");
-      if (pareceTelefone(num) && num !== lid) tel = num;
-      else log(`aviso: contato ${jid} sem telefone visível — agendamento ficaria sem número real (avise pela Sofia).`);
-    } catch (e: any) { log("aviso: getContact falhou para " + jid + " (" + (e?.message || e) + ")"); }
-  }
-  telCache.set(jid, tel);
-  return tel;
+  if (telCache.has(jid)) return { chave: telCache.get(jid) as string, telefone: telRealCache.get(jid) || "" };
+  let telefone = "";
+  if (jid.endsWith("@lid")) telefone = await telefoneDoLid(msg, jid, jidParaTel(jid)); // "" se não achar
+  else telefone = jidParaTel(jid); // @c.us: o jid já é o telefone
+  const chave = telefone || jidParaTel(jid); // estável: telefone real, senão o LID
+  telCache.set(jid, chave);
+  telRealCache.set(jid, telefone);
+  return { chave, telefone };
 }
 
 // Quantas mensagens a PRÓPRIA Sofia enviou e ainda não "ecoaram" no evento
@@ -235,8 +284,8 @@ client.on("message", (msg: any) => {
     const texto = (msg.body || "").trim();
     if (!texto) return; // por ora só texto (áudio/imagem da aluna não são tratados aqui)
     enfileirar(async () => {
-      const tel = await resolverTel(msg); // telefone REAL (resolve o "@lid"); estável via cache
-      const reply = await responderComMemoria(tel, texto); // já cuida de on/off, handoff e memória
+      const { chave, telefone } = await resolverTel(msg); // chave estável p/ memória + telefone real p/ agendar
+      const reply = await responderComMemoria(chave, texto, telefone); // já cuida de on/off, handoff e memória
       const urls = drenarMidias(); // imagens que a Sofia pediu nesta resposta
       if ((reply && reply.trim()) || urls.length) {
         if (reply && reply.trim()) await enviarHumano(msg.from, reply);

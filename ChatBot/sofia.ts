@@ -471,7 +471,10 @@ const INATIVIDADE_MS = 12 * 60 * 60 * 1000; // 12 horas
 let _telefoneDaVez = "";
 let _conversaDaVez: Conversa | null = null;
 
-export async function responderComMemoria(telefone: string, mensagem: string): Promise<string> {
+// `telefone` é a CHAVE de memória/handoff (telefone real, ou o LID quando não dá
+// pra descobrir). `telefoneReal` é o número que vai ao EVO no agendamento (ou ""
+// quando não dá pra achar — nunca o LID). Para "@c.us" os dois são iguais.
+export async function responderComMemoria(telefone: string, mensagem: string, telefoneReal?: string): Promise<string> {
   _midiasDaVez = []; // zera as imagens desta resposta (o listener drena depois)
   // Interruptor geral: se estiver desligada, fica em silêncio (atendimento manual).
   // Retorna string vazia — o webhook/listener trata isso como "não enviar nada".
@@ -498,7 +501,7 @@ export async function responderComMemoria(telefone: string, mensagem: string): P
 
   // Deixa o telefone confiável e a conversa acessíveis para a ferramenta de
   // agendamento (que roda durante a geração da resposta).
-  _telefoneDaVez = telefone;
+  _telefoneDaVez = (telefoneReal !== undefined ? telefoneReal : telefone); // real p/ o EVO (pode ser "")
   _conversaDaVez = conversa;
 
   // Conversa NOVA → injeta o prompt lido do arquivo agora (pega edições recentes).
