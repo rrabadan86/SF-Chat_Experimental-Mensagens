@@ -27,6 +27,17 @@ import * as path from "node:path";
 
 const anthropic = new Anthropic(); // usado só na extração do resumo
 
+// Semeadura: prompt/extração/mídias são editáveis pelo painel e ficam FORA do Git
+// (sofia-*.txt no .gitignore). O conteúdo base mora nos sofia-*.default.txt
+// (versionados). Se o arquivo "vivo" não existir (clone novo, ou o git pull que
+// removeu do índice apagou o arquivo), copiamos do .default — assim nunca caímos
+// no PROMPT_PADRAO por acidente e um clone novo já sobe com o prompt atual.
+const comDefault = (p: string) => p.replace(/\.txt$/, ".default.txt");
+function semearSeFaltar(vivo: string) {
+  try { const base = comDefault(vivo); if (!fs.existsSync(vivo) && fs.existsSync(base)) fs.copyFileSync(base, vivo); }
+  catch { /* best-effort */ }
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // RETRY — repete automaticamente quando a API está sobrecarregada (429/529)
 // A API pode responder "Overloaded" em picos; em vez de quebrar, esperamos
@@ -55,7 +66,9 @@ async function comRetry<T>(fn: () => Promise<T>, tentativas = 5): Promise<T> {
 // Ordem de prioridade: sofia-midias.txt → variável de ambiente → padrão abaixo.
 function lerMidias(): Record<string, string> {
   try {
-    const txt = fs.readFileSync(path.join(process.cwd(), "sofia-midias.txt"), "utf-8");
+    const arq = path.join(process.cwd(), "sofia-midias.txt");
+    semearSeFaltar(arq);
+    const txt = fs.readFileSync(arq, "utf-8");
     const m: Record<string, string> = {};
     for (const l of txt.split("\n")) {
       const i = l.indexOf("=");
@@ -399,6 +412,7 @@ e fará poucas perguntas.
 // Lê o prompt do arquivo a cada chamada (assim edições valem para conversas novas).
 function carregarPrompt(): string {
   try {
+    semearSeFaltar(PROMPT_FILE);
     const txt = fs.readFileSync(PROMPT_FILE, "utf-8").trim();
     return txt.length > 50 ? txt : PROMPT_PADRAO; // se vier vazio/curto, usa o padrão
   } catch {
@@ -537,6 +551,7 @@ Formato exato: {"nome_completo":"","email":"","dia":"","hora":""}
 
 function carregarPromptExtracao(): string {
   try {
+    semearSeFaltar(EXTRACAO_FILE);
     const txt = fs.readFileSync(EXTRACAO_FILE, "utf-8").trim();
     return txt.length > 30 ? txt : EXTRACAO_PADRAO;
   } catch {

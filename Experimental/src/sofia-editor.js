@@ -31,7 +31,18 @@ const RITMO_PADRAO = { humano: true, msPorChar: 45, delayMin: 1200, delayMax: 45
 
 function ler(p) { try { return fs.readFileSync(p, 'utf8'); } catch (_) { return ''; } }
 function existe(p) { try { return fs.existsSync(p); } catch (_) { return false; } }
-function disponivel() { return existe(DIR) && existe(F.prompt); }
+
+// Semeadura: prompt/extração/mídias são editáveis pelo painel e ficam FORA do Git.
+// O conteúdo base mora nos sofia-*.default.txt (versionados). Se o arquivo "vivo"
+// sumir (clone novo ou git pull), recriamos a partir do .default — assim o painel
+// nunca mostra vazio e o "git pull" e o painel nunca conflitam.
+function comDefault(p) { return p.replace(/\.txt$/, '.default.txt'); }
+function semear() {
+  for (const vivo of [F.prompt, F.extracao, F.midias]) {
+    try { const base = comDefault(vivo); if (!existe(vivo) && existe(base)) fs.copyFileSync(base, vivo); } catch (_) {}
+  }
+}
+function disponivel() { semear(); return existe(DIR) && existe(F.prompt); }
 
 // ── estado (on/off) e pausa (minutos de atendimento humano) ─────────────────
 function estadoAtivo() { return ler(F.estado).trim().toLowerCase() !== 'off'; }

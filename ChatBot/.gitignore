@@ -11,5 +11,12 @@ sofia-estado.txt
 sofia-wa-status.json
 sofia-pausa-min.txt
 sofia-ritmo.json
+# Prompt/extração/mídias: EDITÁVEIS PELO PAINEL (fonte da verdade no servidor).
+# Ficam fora do Git para o painel e o "git pull" nunca conflitarem. O conteúdo
+# base mora nos *.default.txt (versionados); se o arquivo vivo sumir, é semeado
+# de volta a partir do .default automaticamente.
+sofia-prompt.txt
+sofia-extracao.txt
+sofia-midias.txt
 # Backups do editor
 *.bak.txt
