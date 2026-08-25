@@ -324,6 +324,31 @@ function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMs
 //    processamos, renomeamos o arquivo (atômico) e lemos a cópia — novas linhas
 //    do painel caem num arquivo novo.
 const RESPOSTAS_FILE = path.join(DIR, "sofia-respostas.jsonl");
+
+// Resolve o ID de envio a partir do TELEFONE REAL — igual ao robô. Tenta as duas
+// variações brasileiras (com e sem o 9º dígito) via getNumberId, que trata o "@lid"
+// do WhatsApp. Sem isso, enviar direto por "<numero>@c.us" dá "No LID for user".
+function variantesBR(n: string): string[] {
+  const out = [n];
+  const m = /^55(\d{2})(\d+)$/.exec(n);
+  if (m) {
+    const [, ddd, local] = m;
+    if (local.length === 9 && local[0] === "9") out.push(`55${ddd}${local.slice(1)}`); // tira o 9
+    else if (local.length === 8 && "6789".includes(local[0])) out.push(`55${ddd}9${local}`); // põe o 9
+  }
+  return out;
+}
+async function resolverIdEnvio(telefone: string): Promise<string> {
+  let n = String(telefone || "").replace(/\D/g, "");
+  if (!n) throw new Error("sem telefone");
+  if (!n.startsWith("55")) n = "55" + n;
+  for (const cand of variantesBR(n)) {
+    try { const numId: any = await client.getNumberId(cand); if (numId && numId._serialized) return numId._serialized; }
+    catch {}
+  }
+  return n + "@c.us"; // último recurso: deixa o envio tentar
+}
+
 let processandoResp = false;
 async function processarRespostas() {
   if (processandoResp || !pronta) return;         // espera estar conectada
@@ -343,18 +368,22 @@ async function processarRespostas() {
     const texto = String(ent?.texto || "").trim();
     if (!texto) continue;
     const chave = String(ent?.chave || "").trim();
-    let jid = String(ent?.jid || "").trim();
-    if (!jid) jid = pareceTelefone(chave) ? `${chave}@c.us` : "";
-    if (!jid) { log(`resposta do painel sem destino (chave=${chave}) — ignorada.`); continue; }
+    const jid = String(ent?.jid || "").trim();
+    // Telefone REAL para enviar: a chave (telefone real, mesmo em contato "@lid").
+    // Só usa os dígitos do jid quando ele é "@c.us" (aí o jid já é o telefone).
+    const telefone = pareceTelefone(chave) ? chave : (jid.endsWith("@c.us") ? jidParaTel(jid) : "");
+    if (!pareceTelefone(telefone)) { log(`resposta do painel sem telefone válido (chave=${chave}) — ignorada.`); continue; }
     enfileirar(async () => {
-      const alvo = jid.replace(/@lid$/, "@c.us"); // enviar sempre por @c.us
       // NÃO usamos a pausa por tempo aqui: quem controla é o interruptor "controle
       // humano" da conversa (o painel liga/desliga em sofia-humano.json). Assim,
       // ao devolver à Sofia (desligar o interruptor), ela volta na hora.
       registrarNaMemoria(chave, "humano", texto); // Sofia "ouve" para ter contexto quando voltar
-      registrarInbox(chave, alvo, "", "humano", texto);
-      try { await enviar(alvo, texto); log(`resposta do painel enviada para ${chave}.`); }
-      catch (e: any) { log("falha ao enviar resposta do painel: " + (e?.message || e)); }
+      try {
+        const alvo = await resolverIdEnvio(telefone); // igual ao robô: trata o "@lid"
+        registrarInbox(chave, alvo, "", "humano", texto);
+        await enviar(alvo, texto);
+        log(`resposta do painel enviada para ${chave}.`);
+      } catch (e: any) { log("falha ao enviar resposta do painel: " + (e?.message || e)); }
     });
   }
   processandoResp = false;
