@@ -36,6 +36,34 @@ function setStatus(estado: string, qr = "") {
   try { fs.writeFileSync(STATUS_FILE, JSON.stringify({ estado, qr, atualizadoEm: new Date().toISOString() }), "utf8"); } catch {}
 }
 const log = (m: string) => console.log(`[sofia] ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} ${m}`);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// ── "Jeito humano": divide a resposta em várias mensagens e mostra "digitando…"
+//    com um tempo proporcional ao tamanho. Desligue com SOFIA_HUMANO=false.
+const HUMANO = process.env.SOFIA_HUMANO !== "false";
+const MS_POR_CHAR = parseInt(process.env.SOFIA_MS_POR_CHAR || "45", 10);   // "velocidade" de digitação
+const DELAY_MIN = parseInt(process.env.SOFIA_DELAY_MIN || "1200", 10);
+const DELAY_MAX = parseInt(process.env.SOFIA_DELAY_MAX || "4500", 10);
+
+// Cada parágrafo (separado por linha em branco) vira uma mensagem separada.
+function dividirEmMensagens(texto: string): string[] {
+  return String(texto || "").split(/\n{2,}/).map((p) => p.trim()).filter((p) => p.length > 0);
+}
+function delayDigitando(parte: string): number {
+  return Math.min(DELAY_MAX, Math.max(DELAY_MIN, parte.length * MS_POR_CHAR));
+}
+// Envia como gente: "digitando…" + pausa + a mensagem, uma parte de cada vez.
+async function enviarHumano(chat: any, to: string, texto: string) {
+  const partes = HUMANO ? dividirEmMensagens(texto) : [String(texto || "").trim()];
+  for (let i = 0; i < partes.length; i++) {
+    if (!partes[i]) continue;
+    try { await chat.sendStateTyping(); } catch {}
+    await sleep(delayDigitando(partes[i]));
+    await enviar(to, partes[i]);
+    if (i < partes.length - 1) await sleep(400 + Math.floor(Math.random() * 500));
+  }
+  try { await chat.clearState(); } catch {}
+}
 
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: AUTH_DIR }),
@@ -90,10 +118,19 @@ client.on("message", (msg: any) => {
     const tel = jidParaTel(msg.from);
     enfileirar(async () => {
       const reply = await responderComMemoria(tel, texto); // já cuida de on/off, handoff e memória
-      if (reply && reply.trim()) await enviar(msg.from, reply);
-      for (const url of drenarMidias()) {
-        try { const media = await MessageMedia.fromUrl(url, { unsafeMime: true }); await enviar(msg.from, media); }
-        catch (e: any) { log("falha ao enviar imagem: " + (e?.message || e)); }
+      const urls = drenarMidias(); // imagens que a Sofia pediu nesta resposta
+      if ((reply && reply.trim()) || urls.length) {
+        const chat = await msg.getChat();
+        if (reply && reply.trim()) await enviarHumano(chat, msg.from, reply);
+        for (const url of urls) {
+          try {
+            try { await chat.sendStateTyping(); } catch {}
+            await sleep(900);
+            const media = await MessageMedia.fromUrl(url, { unsafeMime: true });
+            await enviar(msg.from, media);
+          } catch (e: any) { log("falha ao enviar imagem: " + (e?.message || e)); }
+        }
+        try { await chat.clearState(); } catch {}
       }
     });
   } catch (e: any) { log("erro no on(message): " + (e?.message || e)); }
