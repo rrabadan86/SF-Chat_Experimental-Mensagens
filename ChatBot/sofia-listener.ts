@@ -283,6 +283,39 @@ function armarWatchdogBoot() {
 let fila: Promise<any> = Promise.resolve();
 function enfileirar(fn: () => Promise<void>) { fila = fila.then(fn).catch((e: any) => log("erro na fila: " + (e?.stack || e?.message || e))); return fila; }
 
+// ── Inbox (conversas em andamento) — persistido em sofia-conversas.json para o
+//    painel (aba Sofia → Conversas) ler, mostrar e responder. Guarda as últimas
+//    N mensagens por conversa e só os últimos X dias.
+const CONVERSAS_FILE = path.join(DIR, "sofia-conversas.json");
+const INBOX_MAX_MSGS = parseInt(process.env.SOFIA_INBOX_MSGS || "60", 10);
+const INBOX_RETENCAO_MS = parseInt(process.env.SOFIA_INBOX_DIAS || "7", 10) * 24 * 3600 * 1000;
+type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number };
+type InboxConversa = { jid: string; nome: string; ultimaEm: number; msgs: InboxMsg[] };
+const inbox = new Map<string, InboxConversa>();
+let inboxTimer: ReturnType<typeof setTimeout> | null = null;
+function carregarInbox() {
+  try { const o = JSON.parse(fs.readFileSync(CONVERSAS_FILE, "utf8")); if (o && typeof o === "object") for (const k of Object.keys(o)) inbox.set(k, o[k]); } catch {}
+}
+function salvarInbox() {
+  const corte = Date.now() - INBOX_RETENCAO_MS;
+  const obj: Record<string, InboxConversa> = {};
+  for (const [k, c] of inbox) { if (c.ultimaEm >= corte) obj[k] = c; else inbox.delete(k); }
+  try { fs.writeFileSync(CONVERSAS_FILE, JSON.stringify(obj), "utf8"); } catch {}
+}
+function agendarSalvarInbox() { if (inboxTimer) return; inboxTimer = setTimeout(() => { inboxTimer = null; salvarInbox(); }, 1500); }
+function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMsg["autor"], texto: string) {
+  const t = String(texto || "").trim();
+  if (!t) return;
+  let c = inbox.get(chave);
+  if (!c) { c = { jid: jid || "", nome: nome || "", ultimaEm: 0, msgs: [] }; inbox.set(chave, c); }
+  if (jid) c.jid = jid;
+  if (nome && !c.nome) c.nome = nome;
+  c.msgs.push({ autor, texto: t, em: Date.now() });
+  if (c.msgs.length > INBOX_MAX_MSGS) c.msgs.splice(0, c.msgs.length - INBOX_MAX_MSGS);
+  c.ultimaEm = Date.now();
+  agendarSalvarInbox();
+}
+
 // Mensagem RECEBIDA da aluna (não é fromMe).
 client.on("message", (msg: any) => {
   try {
@@ -291,7 +324,9 @@ client.on("message", (msg: any) => {
     if (!texto) return; // por ora só texto (áudio/imagem da aluna não são tratados aqui)
     enfileirar(async () => {
       const { chave, telefone } = await resolverTel(msg); // chave estável p/ memória + telefone real p/ agendar
+      registrarInbox(chave, msg.from, (msg._data && msg._data.notifyName) || "", "aluna", texto); // mostra no inbox mesmo se a Sofia estiver pausada
       const reply = await responderComMemoria(chave, texto, telefone); // já cuida de on/off, handoff e memória
+      if (reply && reply.trim()) registrarInbox(chave, msg.from, "", "sofia", reply);
       const urls = drenarMidias(); // imagens que a Sofia pediu nesta resposta
       if ((reply && reply.trim()) || urls.length) {
         if (reply && reply.trim()) await enviarHumano(msg.from, reply);
@@ -320,6 +355,7 @@ client.on("message_create", (msg: any) => {
     const tel = telCache.get(jid) || jidParaTel(jid); // mesma chave da memória (telefone real do "@lid")
     assumirConversa(tel);
     registrarNaMemoria(tel, "humano", msg.body || "");
+    registrarInbox(tel, jid, "", "humano", msg.body || ""); // registra sua resposta no inbox
     log(`você assumiu a conversa com ${tel} — Sofia pausada nela.`);
   } catch (e: any) { log("erro no on(message_create): " + (e?.message || e)); }
 });
@@ -328,6 +364,7 @@ const sair = async () => { try { await client.destroy(); } catch {} process.exit
 process.on("SIGINT", sair);
 process.on("SIGTERM", sair);
 
+carregarInbox(); // recupera as conversas já registradas (o painel mostra na aba Conversas)
 setStatus("iniciando");
 log("iniciando a conexão do WhatsApp da Sofia...");
 armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia sozinho

@@ -915,6 +915,61 @@ function blocoSofiaWa() {
     <p class="wa-upd">Última atualização: ${esc(quando)}</p></div>`;
 }
 
+// Sub-navegação da aba Sofia: Configuração (prompt/configs) x Conversas (inbox).
+function subnavSofia(view) {
+  const base = 'display:inline-block;padding:8px 16px;border-radius:999px;font-weight:700;font-family:Montserrat,sans-serif;font-size:.9rem;text-decoration:none;margin-right:8px;border:1px solid #e6e6e6';
+  const on = 'background:#11abae;color:#fff;border-color:#11abae';
+  const off = 'background:#fff;color:#5c5960';
+  const item = (v, rot) => `<a href="/sofia${v === 'conversas' ? '?view=conversas' : ''}" style="${base};${view === v ? on : off}">${rot}</a>`;
+  return `<div style="margin:0 0 18px">${item('config', '⚙️ Configuração')}${item('conversas', '💬 Conversas')}</div>`;
+}
+
+// Aba Sofia → Conversas: inbox das conversas da Sofia (ler e, na Parte 2, responder).
+function paginaSofiaConversas(aviso, erro) {
+  const corpo = `<div class="wrap">
+    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    ${subnavSofia('conversas')}
+    <div class="sec-t">💬 Conversas da Sofia <small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
+    <div style="display:grid;grid-template-columns:300px 1fr;gap:14px;align-items:start" id="inboxGrid">
+      <div id="convLista" style="max-height:520px;overflow:auto"></div>
+      <div id="convChat" class="card" style="min-height:200px">Selecione uma conversa à esquerda.</div>
+    </div>
+  </div>
+<script>
+  var selecionada = null;
+  function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function fmtHora(ts){ try{return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
+  function autorRot(a){ return a==='aluna'?'Aluna':(a==='humano'?'Você':'Sofia'); }
+  function renderChat(c){
+    var chat=document.getElementById('convChat'); if(!chat) return;
+    var msgs=c.msgs||[];
+    var bolhas = msgs.map(function(m){
+      var mine = (m.autor!=='aluna');
+      var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e6f6f7');
+      return '<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px"><div style="font-size:.68rem;font-weight:700;color:#888">'+autorRot(m.autor)+' · '+fmtHora(m.em)+'</div><div style="white-space:pre-wrap">'+escH(m.texto)+'</div></div></div>';
+    }).join('');
+    chat.innerHTML = '<div style="font-weight:800;margin-bottom:8px">'+escH(c.nome||'(sem nome)')+' <span class="quando" style="font-weight:400">'+escH(c.jid||'')+'</span></div><div id="bolhas" style="overflow:auto;max-height:460px;padding-right:4px">'+bolhas+'</div>';
+    var b=document.getElementById('bolhas'); if(b) b.scrollTop=b.scrollHeight;
+  }
+  function renderInbox(data){
+    var chaves = Object.keys(data||{}).sort(function(a,b){return (data[b].ultimaEm||0)-(data[a].ultimaEm||0);});
+    var lista=document.getElementById('convLista'); if(!lista) return;
+    if(!chaves.length){ lista.innerHTML='<p class="quando" style="padding:12px">Nenhuma conversa ainda. Assim que a Sofia receber mensagens, elas aparecem aqui.</p>'; return; }
+    lista.innerHTML = chaves.map(function(k){
+      var c=data[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
+      var prev = ult? (autorRot(ult.autor)+': '+ult.texto) : '';
+      var on=(k===selecionada);
+      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:10px 12px;border-radius:10px;margin-bottom:6px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':'#fff')+'"><div style="font-weight:700;font-size:.92rem">'+escH(c.nome||k)+'</div><div class="quando" style="margin:2px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(prev)+'</div><div class="quando" style="font-size:.72rem">'+fmtHora(c.ultimaEm)+'</div></div>';
+    }).join('');
+    if(selecionada && data[selecionada]) renderChat(data[selecionada]);
+  }
+  function abrir(k){ selecionada=k; atualizaInbox(); }
+  function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(renderInbox).catch(function(){}); }
+  atualizaInbox(); setInterval(atualizaInbox, 4000);
+</script>`;
+  return chrome({ tab: 'Sofia', h1: '🤖 Sofia', p: 'Conversas da Sofia — leia o histórico de cada atendimento.' }, 'sofia', corpo);
+}
+
 function paginaSofia(aviso, erro) {
   if (!sofia.disponivel()) {
     const corpo = `<div class="wrap">
@@ -942,6 +997,7 @@ function paginaSofia(aviso, erro) {
 
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    ${subnavSofia('config')}
 
     <div class="sec-t">📱 Conexão do WhatsApp da Sofia <small style="font-weight:600;color:var(--cinza)">(número próprio, diferente do robô)</small></div>
     <div id="sofiaWa">${blocoSofiaWa()}</div>
@@ -1235,7 +1291,15 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)rest=1/.test(q)) aviso = 'Restaurado para a versão anterior.';
     else if (/(?:^|&)rest=0/.test(q)) { aviso = 'Não havia versão anterior para restaurar.'; erro = true; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    if (/(?:^|&)view=conversas/.test(q)) return res.end(paginaSofiaConversas(aviso, erro));
     return res.end(paginaSofia(aviso, erro));
+  }
+  // Inbox das conversas da Sofia (JSON) — a aba Conversas atualiza sozinha com isto.
+  if (req.method === 'GET' && url === '/sofia/conversas') {
+    let obj = {};
+    try { obj = sofia.conversas() || {}; } catch (_) {}
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify(obj));
   }
   if (req.method === 'POST' && url === '/sofia/salvar') {
     return lerCorpo(req, 4e6, corpo => {

@@ -22,3 +22,4 @@ sofia-midias.txt
 *.bak.txt
 sofia-boot-fails
 .sofia-boot-fails
+sofia-conversas.json

@@ -23,6 +23,8 @@ const F = {
   midias: path.join(DIR, 'sofia-midias.txt'),
   ritmo: path.join(DIR, 'sofia-ritmo.json'), // "jeito humano" (velocidade/pausas) — lido pelo listener
   waStatus: path.join(DIR, 'sofia-wa-status.json'), // publicado pelo listener da Sofia
+  conversas: path.join(DIR, 'sofia-conversas.json'), // inbox — publicado pelo listener
+  respostas: path.join(DIR, 'sofia-respostas.jsonl'), // fila de respostas do painel → listener envia
 };
 
 // Padrões do "jeito humano" (mesmos do listener). O painel edita e o listener lê
@@ -156,7 +158,19 @@ function waStatus() {
   catch (_) { return {}; }
 }
 
+// Inbox de conversas (publicado pelo listener). Devolve objeto { chave: {jid,nome,ultimaEm,msgs[]} }.
+function conversas() {
+  try { const o = JSON.parse(ler(F.conversas)); return (o && typeof o === 'object') ? o : {}; }
+  catch (_) { return {}; }
+}
+// Enfileira uma resposta do painel para o listener enviar (Parte 2 usa isto).
+function enfileirarResposta(chave, jid, texto) {
+  const linha = JSON.stringify({ chave, jid, texto: String(texto || ''), em: Date.now() }) + '\n';
+  fs.appendFileSync(F.respostas, linha, 'utf8');
+}
+
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
-  lerPausaMin, gravarPausaMin, lerRitmo, gravarRitmo, waStatus, DIR, ARQUIVOS: F,
+  lerPausaMin, gravarPausaMin, lerRitmo, gravarRitmo, waStatus,
+  conversas, enfileirarResposta, DIR, ARQUIVOS: F,
 };
