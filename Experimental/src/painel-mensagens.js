@@ -1139,7 +1139,7 @@ function paginaIndicadores(dias, aviso) {
     const o = origMap[c.slug] || { acessos: 0, agendamentos: 0 };
     const url = `${FORM_BASE}/?origem=${c.slug}`;
     const cont = (o.acessos || o.agendamentos)
-      ? `<b style="color:var(--teal-esc)">${o.acessos}</b> acesso${o.acessos === 1 ? '' : 's'}${o.agendamentos ? ` · <span style="color:var(--coral-esc)">${o.agendamentos} agend.</span>` : ''}`
+      ? `<b style="color:var(--teal-esc)">${o.acessos}</b> acesso${o.acessos === 1 ? '' : 's'} · <span style="color:var(--coral-esc)">${o.agendamentos} agend.</span>`
       : `<span style="color:var(--cinza)">ainda sem acessos</span>`;
     return `<div class="card" style="display:flex;flex-direction:column;gap:9px">
       <div style="display:flex;align-items:flex-start;gap:8px">
@@ -1223,6 +1223,24 @@ function paginaIndicadores(dias, aviso) {
         <tbody>${logRows}</tbody></table></div>` : '<div class="vazio">Assim que alguém agendar pelo formulário, os dados aparecem aqui.</div>'}
     </details>`;
 
+  // Quebra do funil "de onde vieram": nome amigável do canal (usa o rótulo do
+  // Gerador de links quando existe; senão a própria etiqueta) e mini-pílulas com
+  // a contagem por origem. `campo` = 'pessoas' (visitantes) ou 'agendamentos'.
+  const rotDe = {}; CANAIS.forEach(c => { rotDe[c.slug] = c.rot; });
+  const nomeOrigem = k => {
+    const kl = String(k || '').trim().toLowerCase();
+    if (kl === '(sem etiqueta)') return 'Direto/app';
+    return rotDe[kl] || k;
+  };
+  const funilPorOrigem = (campo) => {
+    const its = (r.porOrigem || []).filter(o => o[campo] > 0).sort((a, b) => b[campo] - a[campo]);
+    if (!its.length) return '';
+    const pills = its.map(o => `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border:1px solid var(--linha);border-radius:999px;font-size:var(--fs-sm);background:var(--bg)">${esc(nomeOrigem(o.origem))} <b style="color:var(--teal-esc)">${o[campo]}</b></span>`).join('');
+    return `<div style="display:flex;gap:6px;flex-wrap:wrap;padding:2px 0 9px 26px">${pills}</div>`;
+  };
+  const funilPessoasOrig = funilPorOrigem('pessoas');
+  const funilAgendOrig = funilPorOrigem('agendamentos');
+
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso err">${esc(aviso)}</div>` : ''}
     <div class="segs">${segs}</div>
@@ -1235,8 +1253,10 @@ function paginaIndicadores(dias, aviso) {
     <div class="card">
       <div class="chead"><h2>Funil</h2></div>
       <div class="jobrow"><div class="jn">👥 Pessoas que visitaram</div><div class="jc">${r.pessoas}</div></div>
+      ${funilPessoasOrig}
       <div class="jobrow"><div class="jn">👀 Aberturas da página (acessos)</div><div class="jc">${r.acessos}</div></div>
       <div class="jobrow"><div class="jn">✅ Agendaram a experimental</div><div class="jc">${r.agendamentos}</div></div>
+      ${funilAgendOrig}
       <div class="jobrow"><div class="jn">↩️ Visitaram e não agendaram</div><div class="jc">${r.naoAgendaram}</div></div>
     </div>
     <div class="sec-t">📅 Por dia (pessoas ▮ · agendamentos)</div>

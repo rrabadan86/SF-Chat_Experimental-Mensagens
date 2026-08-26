@@ -90,14 +90,24 @@ function resumo(dias) {
     });
   }
 
-  // Por origem (só aparece se houver origem etiquetada).
+  // Por origem (só aparece se houver origem etiquetada). Conta acessos,
+  // agendamentos e PESSOAS únicas (por cookie vid) de cada canal — assim o funil
+  // pode mostrar "de onde vieram" as pessoas e os agendamentos.
   const porOrigemMap = {};
   for (const e of evs) {
     const o = e.origem || '(sem etiqueta)';
-    if (!porOrigemMap[o]) porOrigemMap[o] = { origem: o, acessos: 0, agendamentos: 0 };
-    if (e.tipo === 'acesso') porOrigemMap[o].acessos++; else porOrigemMap[o].agendamentos++;
+    if (!porOrigemMap[o]) porOrigemMap[o] = { origem: o, acessos: 0, agendamentos: 0, _vids: new Set(), _semVid: 0 };
+    const rec = porOrigemMap[o];
+    if (e.tipo === 'acesso') {
+      rec.acessos++;
+      if (e.vid) rec._vids.add(e.vid); else rec._semVid++;
+    } else {
+      rec.agendamentos++;
+    }
   }
-  const porOrigem = Object.values(porOrigemMap).sort((a, b) => (b.acessos + b.agendamentos) - (a.acessos + a.agendamentos));
+  const porOrigem = Object.values(porOrigemMap)
+    .map(r => ({ origem: r.origem, acessos: r.acessos, agendamentos: r.agendamentos, pessoas: r._vids.size + r._semVid }))
+    .sort((a, b) => (b.acessos + b.agendamentos) - (a.acessos + a.agendamentos));
   const temOrigem = evs.some(e => e.origem);
 
   // Picos de ACESSO por hora do dia e por dia da semana.
