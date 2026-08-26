@@ -319,7 +319,7 @@ const ESTILO = `
   footer{color:var(--cinza);font-size:var(--fs-xs);text-align:center;padding:18px}
   /* Contatos — tabela + modal */
   .ct-wrap{background:var(--card);border:1px solid var(--linha);border-radius:12px;overflow-x:auto;margin:10px 0}
-  .ct-tab{width:100%;min-width:620px;border-collapse:collapse;font-size:var(--fs-sm);table-layout:fixed}
+  .ct-tab{width:100%;border-collapse:collapse;font-size:var(--fs-sm);table-layout:fixed}
   .ct-int-tab{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
   .ct-int-tab th{text-align:left;font-family:"Montserrat";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;padding:9px 8px;border-bottom:1px solid var(--linha)}
   .ct-int-tab td{padding:10px 8px;border-bottom:1px solid var(--linha);vertical-align:middle}
@@ -327,7 +327,7 @@ const ESTILO = `
   .ct-badge{display:inline-block;font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px}
   .ct-badge.ativa{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
   .ct-badge.enc{background:#eef0f1;color:#6b6b70;border:1px solid #dfe1e3}
-  .ct-tab col.c-nome{width:34%}.ct-tab col.c-tel{width:21%}.ct-tab col.c-tags{width:29%}.ct-tab col.c-act{width:16%;min-width:150px}
+  .ct-tab col.c-nome{width:32%}.ct-tab col.c-tel{width:21%}.ct-tab col.c-tags{width:31%}.ct-tab col.c-act{width:16%}
   .ct-tab th{text-align:left;font-family:"Montserrat";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;letter-spacing:.03em;padding:11px 14px;border-bottom:1px solid var(--linha);white-space:nowrap;background:#fafbfb}
   .ct-tab td{padding:10px 14px;border-bottom:1px solid var(--linha);vertical-align:middle}
   .ct-tab tbody tr:last-child td{border-bottom:0}
@@ -336,8 +336,8 @@ const ESTILO = `
   .ct-av{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex:none;border-radius:50%;color:#fff;font-weight:700;font-size:.78rem;font-family:"Montserrat"}
   .ct-nm{font-weight:700;color:var(--tinta);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
   .ct-tel{color:var(--cinza);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .ct-acts{text-align:right;white-space:nowrap}
-  .ct-ic{background:#fff;border:1px solid var(--linha);border-radius:8px;padding:5px 7px;cursor:pointer;font-size:.85rem;line-height:1;margin-left:4px}
+  .ct-acts{text-align:right;white-space:normal}
+  .ct-ic{background:#fff;border:1px solid var(--linha);border-radius:8px;padding:4px 6px;cursor:pointer;font-size:.82rem;line-height:1;margin:2px 0 2px 3px}
   .ct-ic:hover{border-color:var(--teal)}
   .ct-ic.ct-del:hover{border-color:var(--erro);background:var(--erro-bg)}
   .ct-fil{background:none;border:0;color:var(--cinza);cursor:pointer;font-size:.85rem;padding:0 2px}
@@ -1205,11 +1205,60 @@ function paginaSofiaConversas(aviso, erro) {
       <div id="convChat" class="card" style="min-width:0;min-height:200px">Selecione uma conversa à esquerda.</div>
     </div>
   </div>
+  <div id="ctIntModal" class="ct-ov" onclick="if(event.target===this)fecharInteracoes()">
+    <div class="ct-dlg" style="max-width:600px">
+      <div class="ct-dh"><h2>Interações</h2><button type="button" class="ct-x" onclick="fecharInteracoes()">×</button></div>
+      <div id="ctIntHero" class="quando" style="margin:0 0 10px"></div>
+      <div id="ctIntBody"><p class="quando">Carregando…</p></div>
+    </div>
+  </div>
+  <div id="ctResModal" class="ct-ov" style="z-index:60" onclick="if(event.target===this)fecharResumo()">
+    <div class="ct-dlg" style="max-width:460px">
+      <div class="ct-dh"><h2>Resumo do atendimento</h2><button type="button" class="ct-x" onclick="fecharResumo()">×</button></div>
+      <div id="ctResData" class="quando" style="margin:0 0 8px"></div>
+      <div id="ctResBody" style="font-size:var(--fs-body);line-height:1.55;white-space:pre-wrap"></div>
+    </div>
+  </div>
 <script>
   var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, tagFiltro='', tagEdAberto=false, ncNome='', ncDirty=false, ncTodas=[];
   // Atalho vindo de Contatos: ?chat=<telefone> abre a conversa correspondente.
   var alvoChat=(new URLSearchParams(location.search).get('chat')||'').replace(/\\D/g,''), alvoAplicado=false;
   function mesmoTel(a,b){ a=String(a||'').replace(/\\D/g,''); b=String(b||'').replace(/\\D/g,''); if(!a||!b) return false; if(a===b) return true; var la=a.slice(-8), lb=b.slice(-8); return la.length===8 && la===lb; }
+  // ── Interações (histórico de atendimentos) — mesmo do Contatos ─────────────
+  var intSessoes=[];
+  function fmtDataHora(ts){ try{ return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})+'h'; }catch(e){ return ''; } }
+  function abrirInteracoes(tel){
+    if(!tel) return;
+    var c=ultimoData[tel]||{};
+    document.getElementById('ctIntHero').textContent=((c.nome||'(sem nome)')+' · '+fmtTel(tel));
+    document.getElementById('ctIntBody').innerHTML='<p class="quando">Carregando…</p>';
+    document.getElementById('ctIntModal').style.display='flex';
+    fetch('/sofia/contatos/interacoes?tel='+encodeURIComponent(tel),{cache:'no-store'})
+      .then(function(r){return r.json();}).then(function(j){ intSessoes=(j&&j.sessoes)||[]; renderInteracoes(); })
+      .catch(function(){ document.getElementById('ctIntBody').innerHTML='<p class="quando">❌ Não consegui carregar agora.</p>'; });
+  }
+  function renderInteracoes(){
+    var box=document.getElementById('ctIntBody');
+    if(!intSessoes.length){ box.innerHTML='<p class="quando">Nenhuma interação registrada ainda. O histórico começa a contar a partir de agora — cada atendimento encerrado aparece aqui.</p>'; return; }
+    var linhas=intSessoes.map(function(s,idx){
+      var badge=s.status==='ativa'?'<span class="ct-badge ativa">Em andamento</span>':'<span class="ct-badge enc">Encerrado</span>';
+      return '<tr><td>'+badge+'</td><td>'+fmtDataHora(s.inicioEm)+'</td><td style="color:var(--cinza)">'+(s.nMsgs||0)+' msg</td><td style="text-align:right"><button type="button" class="ct-ic" title="Ver resumo" onclick="verResumo('+idx+')">📄</button></td></tr>';
+    }).join('');
+    box.innerHTML='<div style="overflow-x:auto"><table class="ct-int-tab"><thead><tr><th>Status</th><th>Data</th><th>Trocas</th><th style="text-align:right">Resumo</th></tr></thead><tbody>'+linhas+'</tbody></table></div>'
+      +'<p class="quando" style="margin:10px 0 0">Total de '+intSessoes.length+' interaç'+(intSessoes.length===1?'ão':'ões')+'.</p>';
+  }
+  function fecharInteracoes(){ document.getElementById('ctIntModal').style.display='none'; }
+  function verResumo(idx){
+    var s=intSessoes[idx]; if(!s) return;
+    document.getElementById('ctResData').textContent=fmtDataHora(s.inicioEm);
+    var body=document.getElementById('ctResBody');
+    if(s.status==='ativa'){ body.innerHTML='<span class="quando">Este atendimento ainda está em andamento — o resumo é gerado quando a conversa encerra.</span>'; }
+    else if(!s.resumoPronto){ body.innerHTML='<span class="quando">Resumo sendo gerado… abra de novo em instantes.</span>'; }
+    else if(!s.resumo){ body.innerHTML='<span class="quando">Sem resumo para este atendimento (conversa muito curta ou sem conteúdo).</span>'; }
+    else { body.textContent=s.resumo; }
+    document.getElementById('ctResModal').style.display='flex';
+  }
+  function fecharResumo(){ document.getElementById('ctResModal').style.display='none'; }
   var TAGS_EXISTENTES = ${JSON.stringify(tagsLista)};
   var SESSAO_MS = ${Math.round(sessaoHoras * 3600 * 1000)};
   function encerrada(c){ return c && c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS); }
@@ -1229,8 +1278,10 @@ function paginaSofiaConversas(aviso, erro) {
     var hum = !!c.humano;
     // Cabeçalho enxuto: nome + telefone à esquerda, botão de controle (compacto) à direita.
     var pill='<button type="button" onclick="toggleHumano()" class="'+(hum?'save':'reset')+'" style="padding:5px 12px;font-size:.78rem;white-space:nowrap">'+(hum?'🙋 devolver à SoFIA':'assumir')+'</button>';
-    var header='<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">'
-      +'<div style="flex:1;min-width:0"><div style="font-weight:800">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin:0">'+escH(fmtTel(k))+'</div></div>'+pill+'</div>';
+    var btnInt='<button type="button" onclick="abrirInteracoes(selecionada)" class="reset" title="Interações" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">📊</button>';
+    var header='<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">'
+      +'<div style="flex:1;min-width:0"><div style="font-weight:800">'+escH(c.nome||'(sem nome)')+'</div><div class="quando" style="margin:0">'+escH(fmtTel(k))+'</div></div>'
+      +'<div style="display:flex;gap:6px;align-items:center;flex:none">'+btnInt+pill+'</div></div>';
     // Linha de tags recolhível — o editor completo só aparece ao clicar em "editar".
     var mini=function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:1px 8px;font-size:.7rem;margin:0 4px 0 0">'+escH(t)+'</span>';};
     var resumo = ncSel.length ? ncSel.map(mini).join('') : '<span class="quando" style="margin:0">sem tags</span>';
