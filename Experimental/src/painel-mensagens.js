@@ -1607,8 +1607,9 @@ function paginaSofiaConversas(aviso, erro) {
       var tgs=(c.tagsContato||[]).map(function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:0 7px;font-size:.64rem;margin-left:5px">'+escH(t)+'</span>';}).join('');
       var enc=encerrada(c)?'<span style="display:inline-block;background:#f3eaea;color:#a15a5a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🔒 encerrada</span>':'';
       var hb=c.humano?'<span style="display:inline-block;background:#e6f6ec;color:#1f8f52;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 você</span>':'';
+      var fu=c.fuEspera?'<span title="Follow-up pronto, aguardando o horário permitido" style="display:inline-block;background:#fdf2e0;color:#b8770a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">⏳ follow-up '+escH(c.fuEspera)+'</span>':'';
       var nome='<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:'+(pendente?'800':'700')+';font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escH(c.nome||fmtTel(k))+'</span>'+dot+'</div>';
-      var meta='<div class="quando" style="font-size:.72rem;margin:0;display:flex;align-items:center;flex-wrap:wrap;row-gap:3px">'+fmtHora(c.ultimaEm)+tgs+hb+enc+'</div>';
+      var meta='<div class="quando" style="font-size:.72rem;margin:0;display:flex;align-items:center;flex-wrap:wrap;row-gap:3px">'+fmtHora(c.ultimaEm)+tgs+hb+enc+fu+'</div>';
       return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:9px 12px;border-radius:10px;margin-bottom:6px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':(encerrada(c)?'#fbf7f7':'#fff'))+'">'+nome+'<div class="quando" style="margin:1px 0 3px">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
     }).join('');
     if(pag){
@@ -2399,7 +2400,7 @@ function paginaSofia(aviso, erro) {
           <div class="cfg-in"><input type="number" name="followupHoras" min="0.25" max="720" step="0.25" value="${e.followup.horas}"><span class="suf">horas (ex.: 24 = 1 dia)</span></div>
         </div>
         <div style="margin-top:14px;max-width:420px">
-          <label>Só enviar entre${infoI('Horário permitido para a retomada. Se o prazo acima vencer <b>fora</b> desta janela (ex.: 19h50), a SoFIA <b>não manda de madrugada</b> — espera e envia no <b>próximo horário permitido</b> (ex.: 8h do dia seguinte). Horário de Brasília.')}</label>
+          <label>Só enviar entre${infoI('Horário permitido para a retomada. Se o prazo acima vencer <b>fora</b> desta janela (ex.: 19h50), a SoFIA <b>não manda de madrugada</b> — espera e envia no <b>próximo horário permitido</b> (ex.: 8h do dia seguinte). Nesse meio-tempo, a conversa aparece na aba <b>Conversas</b> com o selo <b>⏳ follow-up &lt;hora&gt;</b>. Horário de Brasília.')}</label>
           <div class="cfg-in" style="gap:8px"><input type="time" name="followupJanIni" value="${esc(e.followup.janelaIni)}" style="width:auto"><span class="suf">e</span><input type="time" name="followupJanFim" value="${esc(e.followup.janelaFim)}" style="width:auto"></div>
         </div>
         <div style="margin-top:14px">
@@ -3013,6 +3014,7 @@ const server = http.createServer((req, res) => {
     try { const hum = sofia.lerHumano(); for (const k in obj) obj[k].humano = !!hum[k]; } catch (_) {} // controle humano por conversa
     try { for (const k in obj) obj[k].bloq = sofia.estaBloqueado(k); } catch (_) {} // contato bloqueado?
     try { for (const k in obj) obj[k].enc = sofia.estaEncerrada(k, obj[k].ultimaEm); } catch (_) {} // encerrada à mão (cadeado)?
+    try { for (const k in obj) obj[k].fuEspera = fuEsperando[k] || ''; } catch (_) {} // follow-up pronto, segurando pelo horário?
     let wa = ''; try { wa = (sofia.waStatus() || {}).estado || ''; } catch (_) {} // online/off-line do WhatsApp da SoFIA
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify({ conv: obj, wa }));
@@ -3399,6 +3401,10 @@ function publicarRegras() {
 // Estado do follow-up (arquivos co-locados com os demais da Sofia, fora do Git).
 const FU_AGENDOU_FILE = path.join(sofia.DIR, 'sofia-agendaram.json');   // quem já agendou (não recebe follow-up)
 const FU_FEITO_FILE = path.join(sofia.DIR, 'sofia-followup-feito.json'); // { chave: ultimoInboundSeguido }
+// Leads que ESTÃO no ponto de receber follow-up, mas seguram porque agora é FORA
+// da janela de horário. { chave: 'HH:MM' (horário em que vai sair) }. Recalculado
+// a cada varredura; o feed das Conversas expõe p/ o painel mostrar o selo ⏳.
+let fuEsperando = {};
 function fuLerJson(f, def) { try { return JSON.parse(fs.readFileSync(f, 'utf8')) || def; } catch (_) { return def; } }
 function fuSalvarJson(f, o) { try { fs.writeFileSync(f, JSON.stringify(o), 'utf8'); } catch (_) {} }
 function fuMarcarAgendou(tels) {
@@ -3426,19 +3432,20 @@ function processarAgendamentos() {
 // 3) Follow-up: enfileira retomada para leads que esfriaram SEM agendar.
 //    A Sofia (listener) é quem GERA (IA) e ENVIA — aqui só decidimos QUEM.
 function processarFollowups() {
-  let cfg; try { cfg = sofia.lerFollowupCfg(); } catch (_) { return; }
-  if (!cfg || !cfg.on) return;
-  try { if (!sofia.estadoAtivo()) return; } catch (_) {} // SoFIA pausada → não enfileira (nem marca como feito)
-  // Janela de horário: se agora está FORA dela, não enfileira nada — a próxima
-  // varredura (a cada 2 min) reavalia, então o que venceu de madrugada só sai no
-  // início da janela (ex.: 8h). Assim nunca manda tarde da noite. (Brasília.)
+  let cfg; try { cfg = sofia.lerFollowupCfg(); } catch (_) { fuEsperando = {}; return; }
+  if (!cfg || !cfg.on) { fuEsperando = {}; return; }
+  try { if (!sofia.estadoAtivo()) { fuEsperando = {}; return; } } catch (_) {} // SoFIA pausada → não faz nada
+  // Estamos DENTRO da janela de horário agora? Se não, os leads no ponto de
+  // receber follow-up ficam "aguardando" (não enfileira) e a próxima varredura
+  // (a cada 2 min) reavalia — o que venceu de madrugada só sai no início da
+  // janela (ex.: 8h). Assim nunca manda tarde da noite. (Brasília.)
+  let dentroDaJanela = true;
   try {
     const _mm = s => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '')); return m ? (+m[1]) * 60 + (+m[2]) : -1; };
     const hhmm = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
     const cur = _mm(hhmm), ini = _mm(cfg.janelaIni), fim = _mm(cfg.janelaFim);
     if (cur >= 0 && ini >= 0 && fim >= 0 && ini !== fim) {
-      const dentro = ini < fim ? (cur >= ini && cur < fim) : (cur >= ini || cur < fim); // ini<fim normal; senão cruza meia-noite
-      if (!dentro) return;
+      dentroDaJanela = ini < fim ? (cur >= ini && cur < fim) : (cur >= ini || cur < fim); // ini<fim normal; senão cruza meia-noite
     }
   } catch (_) {}
   const esperaMs = Math.max(0.25, cfg.horas) * 3600 * 1000;
@@ -3451,6 +3458,7 @@ function processarFollowups() {
   let contatosMap = {}; try { contatosMap = contatos.carregar() || {}; } catch (_) {}
   const feito = fuLerJson(FU_FEITO_FILE, {}) || {};
   let mudou = false;
+  const espera = {}; // leads prontos, mas segurados pelo horário (recalculado agora)
   for (const chave of Object.keys(inbox)) {
     const c = inbox[chave] || {}; const msgs = c.msgs || [];
     if (!msgs.length) continue;
@@ -3467,8 +3475,11 @@ function processarFollowups() {
     try { if (sofia.estaEncerrada(chave, c.ultimaEm)) continue; } catch (_) {} // encerrada à mão → não incomoda
     if (agendaram.has(d)) continue;                          // já agendou
     try { const ct = contatosMap[contatos.normTel(chave)]; if (ct && (ct.tags || []).some(t => tagsAgendou.includes(t))) continue; } catch (_) {}
+    // Chegou aqui = está no ponto de receber a retomada. Só falta o horário:
+    if (!dentroDaJanela) { espera[chave] = cfg.janelaIni; continue; } // segura p/ o próximo horário permitido
     try { sofia.enfileirarFollowup(chave, cfg.instrucao); feito[chave] = ultimoAluna; mudou = true; } catch (_) {}
   }
+  fuEsperando = espera; // publica p/ o painel mostrar o selo "⏳ aguardando horário"
   if (mudou) fuSalvarJson(FU_FEITO_FILE, feito);
 }
 // 2) Ações detectadas pelo listener (novo/palavra/campanha/encerrou).
