@@ -560,6 +560,26 @@ export function janelaSessaoMs(): number {
   return SESSAO_HORAS_PADRAO * 3_600_000;
 }
 
+// Encerramento MANUAL de conversa (painel → sofia-encerradas.json). Guarda
+// { "<chave>": <em> }. Quando o painel encerra uma conversa à mão, a próxima
+// mensagem da aluna começa uma conversa NOVA (a Sofia recomeça do zero), igual
+// a esperar o tempo da sessão — só que na hora. Lido com cache por mtime.
+const ENCERRADAS_FILE = path.join(BASE_DIR, "sofia-encerradas.json");
+let _encMtime = -1;
+let _encMap: Record<string, number> = {};
+function encerradaManualEm(chave: string): number {
+  try {
+    const st = fs.statSync(ENCERRADAS_FILE);
+    if (st.mtimeMs !== _encMtime) {
+      _encMtime = st.mtimeMs;
+      const o = JSON.parse(fs.readFileSync(ENCERRADAS_FILE, "utf-8"));
+      _encMap = (o && typeof o === "object") ? o : {};
+    }
+  } catch { _encMtime = -1; _encMap = {}; }
+  const d = String(chave || "").replace(/\D/g, "");
+  return Number(_encMap[chave] || (d && _encMap[d]) || 0) || 0;
+}
+
 // Contexto da conversa ATUAL, para a ferramenta solicitar_agendamento (que roda
 // DURANTE a resposta) usar o telefone CONFIÁVEL (resolvido pelo listener, já com
 // a correção do "@lid") e marcar a conversa como agendada. Setados no começo de
@@ -598,8 +618,12 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
 
   const janelaMs = janelaSessaoMs();
   const inativa = conversa && agora - conversa.ultimaMensagemEm > janelaMs;
-  if (!conversa || inativa) {
-    if (inativa) console.log(`⏰ ${telefone}: +${(janelaMs / 3_600_000).toFixed(1)}h de inatividade — iniciando conversa nova.`);
+  // Encerrada à mão pelo painel DEPOIS da última mensagem desta conversa → começa
+  // do zero (a aluna voltou depois de você fechar a conversa).
+  const fechadaManual = !!conversa && encerradaManualEm(telefone) >= conversa.ultimaMensagemEm;
+  if (!conversa || inativa || fechadaManual) {
+    if (fechadaManual) console.log(`🔒 ${telefone}: conversa encerrada no painel — iniciando conversa nova.`);
+    else if (inativa) console.log(`⏰ ${telefone}: +${(janelaMs / 3_600_000).toFixed(1)}h de inatividade — iniciando conversa nova.`);
     conversa = { sessionId: undefined, ultimaMensagemEm: agora, transcricao: [], resumoEnviado: false };
     conversas.set(telefone, conversa);
   }

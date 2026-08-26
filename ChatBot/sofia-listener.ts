@@ -491,14 +491,38 @@ async function fecharSessao(chave: string, sess: Sessao) {
   if (regEnc.length) { const nomeC = (historico.get(chave) || {} as any).nome || ""; for (const r of regEnc) emitirAcao(chave, nomeC, r, "encerrou"); }
 }
 
+// Encerramento MANUAL de conversa (painel → sofia-encerradas.json). Além de
+// resetar a memória da Sofia (feito no sofia.ts), fechamos aqui a interação em
+// aberto para ela ganhar o resumo e disparar o gatilho 'encerrou' na hora, sem
+// esperar o tempo da sessão. Lido com cache por mtime.
+const ENCERRADAS_FILE = path.join(DIR, "sofia-encerradas.json");
+let _encMtime = -1;
+let _encMap: Record<string, number> = {};
+function lerEncerradas(): Record<string, number> {
+  try {
+    const st = fs.statSync(ENCERRADAS_FILE);
+    if (st.mtimeMs !== _encMtime) {
+      _encMtime = st.mtimeMs;
+      const o = JSON.parse(fs.readFileSync(ENCERRADAS_FILE, "utf8"));
+      _encMap = (o && typeof o === "object") ? o : {};
+    }
+  } catch { _encMtime = -1; _encMap = {}; }
+  return _encMap;
+}
+
 // Fecha sessões paradas há mais que a janela (assim a interação encerra e ganha
-// resumo mesmo que a aluna nunca mais escreva). Roda de tempos em tempos.
+// resumo mesmo que a aluna nunca mais escreva) OU encerradas à mão pelo painel.
+// Roda de tempos em tempos.
 function varrerSessoes() {
   const janela = janelaSessaoMs();
   const agora = Date.now();
+  const enc = lerEncerradas();
   for (const [chave, h] of historico) {
     const ult = h.sessoes[h.sessoes.length - 1];
-    if (ult && ult.status === "ativa" && agora - ult.fimEm > janela) void fecharSessao(chave, ult);
+    if (!ult || ult.status !== "ativa") continue;
+    const d = String(chave).replace(/\D/g, "");
+    const fechadaManual = Number(enc[chave] || (d && enc[d]) || 0) >= ult.fimEm;
+    if (fechadaManual || agora - ult.fimEm > janela) void fecharSessao(chave, ult);
   }
 }
 

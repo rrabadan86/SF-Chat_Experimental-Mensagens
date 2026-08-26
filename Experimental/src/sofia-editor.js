@@ -39,6 +39,7 @@ const F = {
   transcricao: path.join(DIR, 'sofia-transcricao.txt'), // liga/desliga transcrição de áudio — painel escreve, listener lê
   followupCfg: path.join(DIR, 'sofia-followup-cfg.json'), // config do follow-up (ligado/tempo/instrução) — painel
   followup: path.join(DIR, 'sofia-followup.jsonl'), // fila de follow-ups a gerar+enviar — painel escreve, listener consome
+  encerradas: path.join(DIR, 'sofia-encerradas.json'), // conversas encerradas à mão (cadeado) — painel escreve; sofia.ts/listener leem
   campanhas: path.join(DIR, 'campanhas.json'), // estado das campanhas — publicado pelo listener (painel só lê)
   campanhasInbox: path.join(DIR, 'campanhas-inbox.jsonl'), // pedidos do painel → listener (criar/controle/excluir)
 };
@@ -402,6 +403,34 @@ function setBloqueio(tel, ativo) {
   return !!ativo;
 }
 
+// ── Encerrar conversa à mão (como esperar o tempo da sessão, só que agora) ────
+// Guarda { "<chave>": <em> } = instante do encerramento manual. Uma conversa é
+// considerada "encerrada à mão" enquanto NÃO houver mensagem nova depois disso
+// (ou seja, em >= ultimaEm da conversa). Assim, quando a aluna volta a escrever,
+// deixa de estar encerrada SOZINHO — ninguém precisa apagar o registro. A SoFIA
+// (sofia.ts) e o listener leem este arquivo; o painel é quem escreve.
+function lerEncerradas() {
+  try { const o = JSON.parse(ler(F.encerradas)); return (o && typeof o === 'object') ? o : {}; }
+  catch (_) { return {}; }
+}
+// Está encerrada à mão AGORA? (fechada e sem mensagem nova desde o fechamento)
+function estaEncerrada(chave, ultimaEm) {
+  const em = Number(lerEncerradas()[chave] || 0);
+  return em > 0 && em >= (Number(ultimaEm) || 0);
+}
+// Marca (ou desmarca) o encerramento manual de UMA conversa. Poda registros com
+// mais de 45 dias para o arquivo não crescer à toa.
+function setEncerrada(chave, ativo) {
+  chave = String(chave || '').trim();
+  if (!chave) return false;
+  const o = lerEncerradas();
+  const corte = Date.now() - 45 * 24 * 3600 * 1000;
+  for (const k of Object.keys(o)) if (!(Number(o[k]) > corte)) delete o[k];
+  if (ativo) o[chave] = Date.now(); else delete o[chave];
+  gravarArquivo(F.encerradas, JSON.stringify(o));
+  return !!ativo;
+}
+
 // ── Modelo de IA (conversa e extração) — lido pelo sofia.ts no boot ──────────
 const MODELO_PADRAO = 'claude-sonnet-5';
 // Lista fixa de modelos válidos (rótulo amigável + id). Menu suspenso no painel.
@@ -472,6 +501,6 @@ function setControleHumano(chave, ativo) {
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

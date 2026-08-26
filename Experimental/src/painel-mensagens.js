@@ -144,10 +144,10 @@ function sofiaHref(sess) {
 // (marcar tags/salvar contato a partir de uma conversa) vale para Conversas OU Contatos.
 function sofiaRotaPermitida(sess, url) {
   const has = k => (sess.telas || []).includes(k);
-  if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto') return has('sofia_conversas');
+  if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto' || url === '/sofia/conversas/encerrar') return has('sofia_conversas');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
   if (url === '/sofia/contatos/bloquear') return has('sofia_conversas') || has('sofia_contatos'); // bloquear vem tb do chat (Conversas)
-  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
+  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar') return has('sofia_config');
   return false;
@@ -1235,8 +1235,16 @@ function paginaIndicadores(dias, aviso) {
   const funilPorOrigem = (campo) => {
     const its = (r.porOrigem || []).filter(o => o[campo] > 0).sort((a, b) => b[campo] - a[campo]);
     if (!its.length) return '';
-    const pills = its.map(o => `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border:1px solid var(--linha);border-radius:999px;font-size:var(--fs-sm);background:var(--bg)">${esc(nomeOrigem(o.origem))} <b style="color:var(--teal-esc)">${o[campo]}</b></span>`).join('');
-    return `<div style="display:flex;gap:6px;flex-wrap:wrap;padding:2px 0 9px 26px">${pills}</div>`;
+    const tot = its.reduce((s, o) => s + o[campo], 0) || 1;
+    const rows = its.map(o => {
+      const pct = Math.max(4, Math.round((o[campo] / tot) * 100));
+      return `<div style="display:flex;align-items:center;gap:9px;font-size:var(--fs-sm)">
+        <span style="width:104px;flex:none;color:var(--cinza);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(nomeOrigem(o.origem))}">${esc(nomeOrigem(o.origem))}</span>
+        <span style="flex:1;min-width:40px;height:7px;background:var(--linha);border-radius:999px;overflow:hidden"><span style="display:block;height:100%;width:${pct}%;background:var(--teal)"></span></span>
+        <span style="width:30px;flex:none;text-align:right;font-weight:700;color:var(--teal-esc)">${o[campo]}</span>
+      </div>`;
+    }).join('');
+    return `<div style="display:flex;flex-direction:column;gap:6px;padding:4px 4px 12px 26px">${rows}</div>`;
   };
   const funilPessoasOrig = funilPorOrigem('pessoas');
   const funilAgendOrig = funilPorOrigem('agendamentos');
@@ -1411,7 +1419,7 @@ function paginaSofiaConversas(aviso, erro) {
   function fecharResumo(){ document.getElementById('ctResModal').style.display='none'; }
   var TAGS_EXISTENTES = ${JSON.stringify(tagsLista)};
   var SESSAO_MS = ${Math.round(sessaoHoras * 3600 * 1000)};
-  function encerrada(c){ return c && c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS); }
+  function encerrada(c){ return !!(c && (c.enc || (c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS)))); }
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function fmtHora(ts){ try{return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
   function autorRot(a){ return a==='aluna'?'Aluna':(a==='humano'?'Você':'SoFIA'); }
@@ -1431,12 +1439,14 @@ function paginaSofiaConversas(aviso, erro) {
     // Cabeçalho enxuto: nome + telefone à esquerda, botão de controle (compacto) à direita.
     var pill='<button type="button" onclick="toggleHumano()" class="'+(hum?'save':'reset')+'" style="padding:5px 12px;font-size:.78rem;white-space:nowrap">'+(hum?'🙋 devolver à SoFIA':'assumir')+'</button>';
     var btnInt='<button type="button" onclick="abrirInteracoes(selecionada)" class="reset" title="Interações" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">📊</button>';
+    var encM=!!c.enc; // encerrada MANUALMENTE (cadeado à mão)
+    var btnEnc='<button type="button" onclick="encerrarConversa()" class="reset" title="'+(encM?'Conversa já encerrada':'Encerrar conversa agora (cadeado — a SoFIA recomeça do zero)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(encM?';color:#a15a5a':'')+'"'+(encM?' disabled':'')+'>🔒</button>';
     var bloq=!!c.bloq;
     var btnBloq='<button type="button" onclick="bloquearConversa()" class="reset" title="'+(bloq?'Desbloquear contato':'Bloquear contato (a SoFIA ignora)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(bloq?';color:#1c8f52':'')+'">'+(bloq?'✅':'🚫')+'</button>';
     var selo=bloq?'<span title="Contato bloqueado" style="background:#fdeaea;color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700;margin-left:6px">🚫 bloqueado</span>':'';
     var header='<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">'
       +'<div style="flex:1;min-width:0"><div style="font-weight:800">'+escH(c.nome||'(sem nome)')+selo+'</div><div class="quando" style="margin:0">'+escH(fmtTel(k))+'</div></div>'
-      +'<div style="display:flex;gap:6px;align-items:center;flex:none">'+btnInt+btnBloq+pill+'</div></div>';
+      +'<div style="display:flex;gap:6px;align-items:center;flex:none">'+btnInt+btnEnc+btnBloq+pill+'</div></div>';
     // Linha de tags recolhível — o editor completo só aparece ao clicar em "editar".
     var mini=function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:1px 8px;font-size:.7rem;margin:0 4px 0 0">'+escH(t)+'</span>';};
     var resumo = ncSel.length ? ncSel.map(mini).join('') : '<span class="quando" style="margin:0">sem tags</span>';
@@ -1489,6 +1499,14 @@ function paginaSofiaConversas(aviso, erro) {
     if(novo && !confirm('Bloquear este contato? A SoFIA vai IGNORAR por completo as mensagens dele (não responde, não registra).')) return;
     fetch('/sofia/contatos/bloquear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tel:k,ativo:novo})})
       .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].bloq=novo; ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[k],k); } else { alert(j.erro||'Não consegui atualizar o bloqueio.'); } })
+      .catch(function(){ alert('Erro de rede.'); });
+  }
+  function encerrarConversa(){
+    var k=selecionada; if(!k) return;
+    var c=ultimoData[k]||{}; if(c.enc) return;
+    if(!confirm('Encerrar esta conversa agora?\\n\\nAparece o cadeado 🔒, a SoFIA recomeça do zero se a aluna voltar a escrever e o follow-up deixa de incomodar este contato.')) return;
+    fetch('/sofia/conversas/encerrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k})})
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].enc=true; ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); } else { alert(j.erro||'Não consegui encerrar a conversa.'); } })
       .catch(function(){ alert('Erro de rede.'); });
   }
   function msgKey(ev){ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); enviarMsg(); } }
@@ -1684,6 +1702,14 @@ function paginaSofiaContatos(aviso, erro, params) {
       </div>
       <p class="quando" style="margin:8px 0 0">📄 <a href="/sofia/contatos/modelo.csv" download style="color:var(--teal-esc);font-weight:700">Baixar modelo de CSV</a> — preencha por cima e reimporte. Várias tags no mesmo contato: separe por <code>;</code>.</p>
       <p class="quando" style="margin:4px 0 0">A importação <b>mescla</b> (não apaga): contatos existentes ganham as tags novas; telefones repetidos não duplicam.</p>
+    </details>
+
+    <details class="card" style="padding:10px 15px">
+      <summary style="cursor:pointer;font-weight:700">⬇️ Exportar CSV <small style="font-weight:400;color:#5c5960">(baixar toda a base)</small></summary>
+      <div style="margin-top:10px">
+        <a href="/sofia/contatos/exportar" download class="save" style="display:inline-block;padding:8px 16px;text-decoration:none">📥 Baixar contatos (${total})</a>
+      </div>
+      <p class="quando" style="margin:8px 0 0">Gera um <b>CSV</b> com <b>Nome, Telefone, Tags e Instruções</b> de todos os contatos — abre no Excel/Google Planilhas e serve para <b>migrar de plataforma</b> ou guardar backup. O próprio arquivo pode ser reimportado aqui.</p>
     </details>
 
     <form method="GET" action="/sofia" class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -2341,7 +2367,7 @@ function paginaSofia(aviso, erro) {
       <div class="card">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="followupOn" value="1"${e.followup.on ? ' checked' : ''} style="width:auto;margin:0">
-          Ativar follow-up automático${infoI('Quando uma lead conversa e <b>para de responder sem agendar</b>, a SoFIA espera o tempo abaixo e manda <b>uma</b> mensagem de retomada, escrita pela IA com base nas últimas mensagens daquela conversa. Nunca incomoda quem <b>já agendou</b>, quem está <b>bloqueado</b> ou sob <b>controle humano</b>, e manda <b>só uma vez</b> por conversa (até a lead responder de novo).')}
+          Ativar follow-up automático${infoI('Quando uma lead conversa e <b>para de responder sem agendar</b>, a SoFIA espera o tempo abaixo e manda <b>uma</b> mensagem de retomada, escrita pela IA com base nas últimas mensagens daquela conversa. Nunca incomoda quem <b>já agendou</b>, quem está <b>bloqueado</b>, sob <b>controle humano</b> ou com a conversa <b>encerrada à mão</b> (🔒), e manda <b>só uma vez</b> por conversa (até a lead responder de novo).')}
         </label>
         <p class="quando" style="margin:6px 0 14px">Desativado, a SoFIA não faz retomada nenhuma. Ao <b>ligar</b>, vale <b>só daqui pra frente</b> — o acúmulo de conversas antigas não recebe (evita disparo em massa).</p>
         <div style="max-width:420px">
@@ -2848,6 +2874,18 @@ const server = http.createServer((req, res) => {
     });
     return res.end(csv);
   }
+  // Exportar TODA a base de contatos em CSV (para migrar de plataforma / backup).
+  if (req.method === 'GET' && url === '/sofia/contatos/exportar') {
+    let csv = '﻿Nome,Telefone,Tags,Instruções\r\n';
+    try { csv = contatos.exportarCSV(); } catch (_) {}
+    const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    res.writeHead(200, {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="contatos-slimfit-${hoje}.csv"`,
+      'Cache-Control': 'no-store',
+    });
+    return res.end(csv);
+  }
   // Importar contatos (CSV enviado pelo painel, lido no navegador e postado como JSON).
   if (req.method === 'POST' && url === '/sofia/contatos/importar') {
     return lerCorpo(req, 20e6, corpo => {
@@ -2946,6 +2984,7 @@ const server = http.createServer((req, res) => {
     try { const cmap = contatos.carregar(); for (const k in obj) { const c = cmap[contatos.normTel(k)]; obj[k].salvo = !!c; obj[k].tagsContato = c ? (c.tags || []) : []; } } catch (_) {} // salvo? + tags do contato
     try { const hum = sofia.lerHumano(); for (const k in obj) obj[k].humano = !!hum[k]; } catch (_) {} // controle humano por conversa
     try { for (const k in obj) obj[k].bloq = sofia.estaBloqueado(k); } catch (_) {} // contato bloqueado?
+    try { for (const k in obj) obj[k].enc = sofia.estaEncerrada(k, obj[k].ultimaEm); } catch (_) {} // encerrada à mão (cadeado)?
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify(obj));
   }
@@ -2961,6 +3000,20 @@ const server = http.createServer((req, res) => {
     const sessoes = achado ? (achado.sessoes || []).slice().sort((a, b) => (b.inicioEm || 0) - (a.inicioEm || 0)) : [];
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify({ ok: true, nome: achado ? achado.nome : '', sessoes }));
+  }
+  // Encerrar UMA conversa à mão (mesmo efeito de esperar o tempo da sessão, só que
+  // agora): marca o cadeado, a SoFIA recomeça do zero quando a aluna voltar
+  // (sofia.ts lê sofia-encerradas.json) e o follow-up deixa de incomodar.
+  if (req.method === 'POST' && url === '/sofia/conversas/encerrar') {
+    return lerCorpo(req, 1e6, corpo => {
+      let d = {};
+      try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      const chave = String(d.chave || '').trim();
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
+      try { sofia.setEncerrada(chave, true); return res.end(JSON.stringify({ ok: true })); }
+      catch (e) { return res.end(JSON.stringify({ ok: false, erro: e.message })); }
+    });
   }
   // Liga/desliga o controle humano de UMA conversa (a Sofia para de responder só ela).
   if (req.method === 'POST' && url === '/sofia/humano') {
@@ -3370,6 +3423,7 @@ function processarFollowups() {
     const d = String(chave).replace(/\D/g, '');
     if (sofia.estaBloqueado(chave)) continue;                // bloqueado
     if (humano[chave]) continue;                             // sob controle humano
+    try { if (sofia.estaEncerrada(chave, c.ultimaEm)) continue; } catch (_) {} // encerrada à mão → não incomoda
     if (agendaram.has(d)) continue;                          // já agendou
     try { const ct = contatosMap[contatos.normTel(chave)]; if (ct && (ct.tags || []).some(t => tagsAgendou.includes(t))) continue; } catch (_) {}
     try { sofia.enfileirarFollowup(chave, cfg.instrucao); feito[chave] = ultimoAluna; mudou = true; } catch (_) {}

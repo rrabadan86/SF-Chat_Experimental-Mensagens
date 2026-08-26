@@ -109,6 +109,24 @@ function importarCSV(texto) {
   return { novos, atualizados, ignorados, total: Object.keys(map).length };
 }
 
+// Exporta TODOS os contatos em CSV (mesmo formato do modelo/importação: Nome,
+// Telefone, Tags, Instruções). Serve para levar a base para outra plataforma —
+// e o próprio arquivo pode ser reimportado aqui sem perder nada. BOM p/ Excel
+// abrir com acento certo; várias tags no mesmo contato separadas por ";".
+function exportarCSV() {
+  const map = carregar();
+  const arr = Object.values(map).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
+  const cel = v => {
+    const s = String(v == null ? '' : v);
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const linhas = ['Nome,Telefone,Tags,Instruções'];
+  for (const c of arr) {
+    linhas.push([cel(c.nome), cel(c.tel), cel((c.tags || []).join(';')), cel(c.instrucoes || '')].join(','));
+  }
+  return '﻿' + linhas.join('\r\n') + '\r\n';
+}
+
 // Substitui as tags de um contato (edição manual no painel).
 function setTags(telefone, tags) {
   const map = carregar();
@@ -333,7 +351,7 @@ function adicionar({ nome, telefone, tags, instrucoes }) {
 }
 
 module.exports = {
-  normTel, carregar, importarCSV, setTags, listar, tagsDistintas, totalContatos,
+  normTel, carregar, importarCSV, exportarCSV, setTags, listar, tagsDistintas, totalContatos,
   remover, editarContato, renomearTag, excluirTag, existe, adicionar, ARQUIVO,
   tagConfig, definirTagConfig, tagsPorGatilho, criarTag, adicionarTag, removerTag, lerTagsConfig, GATILHOS,
 };
