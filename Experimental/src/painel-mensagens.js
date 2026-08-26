@@ -2089,8 +2089,9 @@ function paginaSofia(aviso, erro) {
     <form method="POST" action="/sofia/salvar">
 
       <div class="card">
-        <label>⏳ Minutos que a SoFIA fica fora ao você assumir uma conversa</label>
-        <input type="number" name="pausaMin" min="1" max="1440" value="${e.pausaMin}" style="width:130px"> minutos
+        <label>⏳ Ao responder pelo celular, SoFIA fica fora por…</label>
+        <div><input type="number" name="pausaMin" min="1" max="1440" value="${e.pausaMin}" style="width:130px"> minutos</div>
+        <p class="quando" style="margin:6px 0 0">Se você responder uma aluna <b>direto pelo WhatsApp</b> (no celular da SoFIA), ela percebe e <b>se cala nessa conversa</b> por esse tempo, pra não falar por cima de você. <br>Isso é <b>diferente</b> do botão <b>“assumir”</b> na aba Conversas — lá você assume pelo painel e a SoFIA fica fora <b>até você devolver</b>. Se você só assume pelo painel, esse tempo quase não é usado.</p>
       </div>
 
       <div class="card">
