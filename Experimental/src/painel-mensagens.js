@@ -333,8 +333,10 @@ const ESTILO = `
   .cpf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}
   .cpf-field label{display:block;font-weight:700;font-size:.8rem;margin:0 0 5px}
   .cpf-field .sub{font-weight:400;color:var(--cinza)}
+  .cpf-grid-lim{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px}
+  @media(max-width:560px){ .cpf-grid-lim{grid-template-columns:1fr} }
   .cpf-range{display:flex;align-items:center;gap:8px}
-  .cpf-range input{width:100%;min-width:0}
+  .cpf-range input{flex:1;min-width:0;width:auto}
   .cpf-suf{color:var(--cinza);font-size:var(--fs-sm);white-space:nowrap;flex:none}
   .cpf-acc{border-top:1px solid var(--linha);margin-top:6px}
   .cpf-sum{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:"Montserrat";font-weight:700;font-size:var(--fs-sec);padding:16px 0}
@@ -1770,7 +1772,7 @@ function paginaSofiaCampanhas(aviso, erro) {
         <details class="cpf-acc">
           <summary class="cpf-sum">🛡️ Ritmo e limites <span class="sub quando" style="margin:0">— já vem com um ritmo seguro; abra para ajustar</span></summary>
           <div class="cpf-body">
-          <div class="cpf-grid">
+          <div class="cpf-grid-lim">
             <div class="cpf-field"><label>Começar em</label><input type="date" id="cpIni" name="dataInicio" value="${esc(hojeSP())}" min="${esc(hojeSP())}" oninput="estCamp()"></div>
             <div class="cpf-field"><label>Máx. por dia</label><div class="cpf-range"><input type="number" id="cpMax" name="limiteDia" min="1" max="1000" value="40" oninput="estCamp()"><span class="cpf-suf">msg</span></div></div>
             <div class="cpf-field"><label>Horário de envio</label><div class="cpf-range"><input type="time" id="cpJi" name="janelaIni" value="09:00" oninput="estCamp()"><span class="cpf-suf">até</span><input type="time" id="cpJf" name="janelaFim" value="20:00" oninput="estCamp()"></div></div>
