@@ -132,7 +132,7 @@ function sofiaRotaPermitida(sess, url) {
   const has = k => (sess.telas || []).includes(k);
   if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano') return has('sofia_conversas');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
-  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv') return has('sofia_contatos');
+  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/tagcfg') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar') return has('sofia_config');
   return false;
@@ -1483,14 +1483,18 @@ function paginaSofiaContatos(aviso, erro, params) {
     </tr>`;
   }).join('');
 
-  const gerenciarTags = tags.length ? `<details style="margin:0 0 12px"><summary style="cursor:pointer;font-weight:700;padding:6px 0">🏷️ Gerenciar tags <small style="font-weight:400;color:#5c5960">(renomear ou excluir uma tag em TODOS os contatos)</small></summary>
-    <div class="card">${tags.map(t => `<form method="POST" action="/sofia/contatos/tag" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
-      <input type="hidden" name="de" value="${esc(t.tag)}">${hidden}
-      <input type="text" name="para" value="${esc(t.tag)}" style="flex:1;min-width:220px;font-size:.85rem">
-      <span class="quando">(${t.n})</span>
-      <button type="submit" class="save" name="acao" value="renomear" style="padding:5px 10px">Renomear</button>
-      <button type="submit" class="reset" name="acao" value="excluir" onclick="return confirm('Excluir a tag em TODOS os contatos?')" style="padding:5px 10px">Excluir</button>
-    </form>`).join('')}</div></details>` : '';
+  const tagCfgMap = contatos.lerTagsConfig();
+  const gerenciarTags = tags.length ? `<details style="margin:0 0 12px"><summary style="cursor:pointer;font-weight:700;padding:6px 0">🏷️ Gerenciar tags <small style="font-weight:400;color:#5c5960">(renomear, excluir ou automatizar uma tag)</small></summary>
+    <div class="card">${tags.map((t, i) => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+      <form method="POST" action="/sofia/contatos/tag" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:1;min-width:240px;margin:0">
+        <input type="hidden" name="de" value="${esc(t.tag)}">${hidden}
+        <input type="text" name="para" value="${esc(t.tag)}" style="flex:1;min-width:170px;font-size:.85rem">
+        <span class="quando">(${t.n})</span>
+        <button type="submit" class="save" name="acao" value="renomear" style="padding:5px 10px">Renomear</button>
+        <button type="submit" class="reset" name="acao" value="excluir" onclick="return confirm('Excluir a tag em TODOS os contatos?')" style="padding:5px 10px">Excluir</button>
+      </form>
+      <button type="button" class="reset" onclick="abrirTagCfg(${i})" title="Automações desta tag" style="padding:5px 10px">⚙️ Automação${(tagCfgMap[t.tag] && tagCfgMap[t.tag].autoAgendou) ? ' <span style="color:var(--teal-esc)">⚡</span>' : ''}</button>
+    </div>`).join('')}</div></details>` : '';
 
   const opcoes = ['<option value="">Todas as tags</option>', `<option value="__sem__"${tagSel === '__sem__' ? ' selected' : ''}>Sem tag</option>`]
     .concat(tags.map(t => `<option value="${esc(t.tag)}"${t.tag === tagSel ? ' selected' : ''}>${esc(t.tag)} (${t.n})</option>`)).join('');
@@ -1557,6 +1561,26 @@ function paginaSofiaContatos(aviso, erro, params) {
     </div>
   </div>
 
+  <div id="tgModal" class="ct-ov" onclick="if(event.target===this)fecharTagCfg()">
+    <div class="ct-dlg" style="max-width:520px">
+      <div class="ct-dh"><h2>Automação da tag</h2><button type="button" class="ct-x" onclick="fecharTagCfg()">×</button></div>
+      <p class="quando" style="margin:0 0 14px">Tag: <b id="tgNome" style="color:var(--teal-esc)"></b></p>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:600">
+        <input type="checkbox" id="tgAuto" onchange="tgSyncWpp()" style="width:auto;margin-top:3px;flex:none">
+        <span>Aplicar esta tag automaticamente quando a <b>SoFIA agendar uma aula experimental</b> para o contato.</span>
+      </label>
+      <div id="tgWppBox" style="margin-top:16px">
+        <label>Avisar no WhatsApp <span class="sub" style="font-weight:400;color:var(--cinza)">— número que recebe o recado (nome + telefone) quando isso acontecer</span></label>
+        <input type="tel" id="tgWpp" placeholder="(62) 99999-9999" inputmode="tel">
+        <p class="quando" style="margin:6px 0 0">Deixe em branco para só etiquetar, sem avisar ninguém.</p>
+      </div>
+      <div class="ct-foot">
+        <button type="button" class="reset" onclick="fecharTagCfg()" style="padding:9px 16px">Cancelar</button>
+        <button type="button" class="save" id="tgSalvar" onclick="salvarTagCfg()" style="padding:9px 18px">Salvar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="ctModal" class="ct-ov" onclick="if(event.target===this)fecharModal()">
     <div class="ct-dlg">
       <div class="ct-dh"><h2>Editar contato</h2><button type="button" class="ct-x" onclick="fecharModal()">×</button></div>
@@ -1575,6 +1599,26 @@ function paginaSofiaContatos(aviso, erro, params) {
   </div>
 <script>
   var CONTATOS = ${JSON.stringify(r.itens.map(c => ({ tel: c.tel, telFmt: fmtTelP(c.tel), nome: c.nome || '', tags: c.tags || [], ini: iniciais(c.nome, c.tel), cor: corAv(c.nome || c.tel) })))};
+  var TAGS_CFG = ${JSON.stringify(tags.map(t => ({ tag: t.tag, auto: !!(tagCfgMap[t.tag] && tagCfgMap[t.tag].autoAgendou), wpp: (tagCfgMap[t.tag] && tagCfgMap[t.tag].avisarWpp) || '' })))};
+  var tgSel=null;
+  function abrirTagCfg(i){
+    var c=TAGS_CFG[i]; if(!c) return; tgSel=c;
+    document.getElementById('tgNome').textContent=c.tag;
+    document.getElementById('tgAuto').checked=!!c.auto;
+    document.getElementById('tgWpp').value=c.wpp||'';
+    tgSyncWpp();
+    document.getElementById('tgModal').style.display='flex';
+  }
+  function tgSyncWpp(){ var on=document.getElementById('tgAuto').checked; document.getElementById('tgWppBox').style.opacity=on?'1':'.5'; }
+  function fecharTagCfg(){ document.getElementById('tgModal').style.display='none'; tgSel=null; }
+  function salvarTagCfg(){
+    if(!tgSel) return;
+    var b=document.getElementById('tgSalvar'); b.disabled=true; b.textContent='Salvando…';
+    var d={ tag:tgSel.tag, autoAgendou:document.getElementById('tgAuto').checked, avisarWpp:document.getElementById('tgWpp').value };
+    fetch('/sofia/contatos/tagcfg',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.reload(); } else { b.disabled=false; b.textContent='Salvar'; alert('❌ '+(j.erro||'falha ao salvar')); } })
+      .catch(function(){ b.disabled=false; b.textContent='Salvar'; alert('❌ erro de rede'); });
+  }
   var TODAS_TAGS = ${JSON.stringify(tags.map(t => t.tag))};
   var PAL_TAG = ${JSON.stringify(PAL_TAG)};
   function _hash(s){var h=0;s=String(s||'');for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
@@ -2513,6 +2557,18 @@ const server = http.createServer((req, res) => {
       voltarContatos(p, res);
     });
   }
+  // Salvar a automação de uma tag (auto-etiquetar ao agendar + avisar no WhatsApp).
+  if (req.method === 'POST' && url === '/sofia/contatos/tagcfg') {
+    return lerCorpo(req, 1e5, corpo => {
+      try {
+        const d = JSON.parse(corpo || '{}');
+        contatos.definirTagConfig(d.tag, { autoAgendou: !!d.autoAgendou, avisarWpp: d.avisarWpp || '' });
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+  }
   // Salvar/atualizar um contato direto de uma conversa (cria se novo) e DEFINE as
   // tags exatamente como vieram (permite adicionar e remover no cabeçalho do chat).
   if (req.method === 'POST' && url === '/sofia/contatos/salvar-novo') {
@@ -2820,6 +2876,38 @@ const server = http.createServer((req, res) => {
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('Não encontrado.');
 });
+
+// ── Automação de agendamento (per-tag) ──────────────────────────────────────
+// A SoFIA registra cada agendamento concluído em sofia-agendou.jsonl. Aqui, a
+// cada poucos segundos, consumimos esses eventos: aplicamos as tags marcadas
+// como "auto ao agendar" no contato e enfileiramos o aviso por WhatsApp para os
+// números configurados nessas tags. Se nenhuma tag estiver configurada, os
+// eventos são descartados (a automação é "daqui pra frente").
+function fmtTelAviso(t) {
+  const d = String(t || '').replace(/\D/g, '');
+  if (/^55\d{10,11}$/.test(d)) { const ddd = d.slice(2, 4), x = d.slice(4); return '+55 (' + ddd + ') ' + (x.length === 9 ? x.slice(0, 5) + '-' + x.slice(5) : x.slice(0, 4) + '-' + x.slice(4)); }
+  return t || '';
+}
+function processarAgendamentos() {
+  let evs = [];
+  try { evs = sofia.consumirAgendamentos(); } catch (_) { return; }
+  if (!evs.length) return;
+  let autos = [];
+  try { autos = contatos.tagsAutoAgendou(); } catch (_) {}
+  for (const ev of evs) {
+    const tel = String(ev.telefone || '').replace(/\D/g, '');
+    if (!tel) continue;
+    const nome = ev.nome || '';
+    for (const a of autos) {
+      try { contatos.adicionarTag(tel, nome, a.tag); } catch (_) {}
+      if (a.avisarWpp) {
+        const texto = `🎉 Nova aula experimental agendada!\n👤 ${nome || '(sem nome)'}\n📱 ${fmtTelAviso(tel)}${ev.when ? `\n📅 ${ev.when}` : ''}\n🏷️ ${a.tag}\n— aviso automático da SoFIA`;
+        try { sofia.enfileirarAviso(a.avisarWpp, texto); } catch (_) {}
+      }
+    }
+  }
+}
+try { setInterval(() => { try { processarAgendamentos(); } catch (_) {} }, 4000); } catch (_) {}
 
 server.listen(PORT, HOST, () => {
   if (!SENHA) console.warn('⚠️  PAINEL_SENHA não definido no .env — o painel vai NEGAR todo acesso até você definir usuário e senha.');

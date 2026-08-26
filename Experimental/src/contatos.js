@@ -11,6 +11,7 @@ const path = require('path');
 
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
 const ARQUIVO = path.join(DATA_DIR, 'contatos.json');
+const ARQUIVO_TAGCFG = path.join(DATA_DIR, 'tags-config.json');
 
 function normTel(t) {
   let d = String(t == null ? '' : t).replace(/\D/g, '');
@@ -155,6 +156,52 @@ function editarContato(telOrig, { nome, telefone, tags }) {
   return true;
 }
 
+// ── Configuração por tag (automações estilo Zeetech) ────────────────────────
+// { "<tag>": { autoAgendou: bool, avisarWpp: "<numero>" } }. Guardado em
+// data/tags-config.json. Hoje o gatilho é "a SoFIA agendou uma aula
+// experimental"; quando dispara, as tags com autoAgendou são aplicadas ao
+// contato e os números em avisarWpp recebem um recado.
+function lerTagsConfig() {
+  try { const o = JSON.parse(fs.readFileSync(ARQUIVO_TAGCFG, 'utf8')); return (o && typeof o === 'object') ? o : {}; }
+  catch (_) { return {}; }
+}
+function salvarTagsConfig(map) {
+  try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
+  fs.writeFileSync(ARQUIVO_TAGCFG, JSON.stringify(map, null, 2), 'utf8');
+}
+function tagConfig(tag) { const c = lerTagsConfig()[String(tag || '').trim()]; return c || { autoAgendou: false, avisarWpp: '' }; }
+function definirTagConfig(tag, cfg) {
+  tag = String(tag || '').trim(); if (!tag) return false;
+  const map = lerTagsConfig();
+  const autoAgendou = !!(cfg && cfg.autoAgendou);
+  const avisarWpp = String((cfg && cfg.avisarWpp) || '').replace(/\D/g, '');
+  if (!autoAgendou && !avisarWpp) delete map[tag]; // config vazia → não guarda
+  else map[tag] = { autoAgendou, avisarWpp };
+  salvarTagsConfig(map);
+  return true;
+}
+// Tags com auto-etiquetagem ligada (para o consumidor de agendamentos).
+function tagsAutoAgendou() {
+  const map = lerTagsConfig();
+  return Object.keys(map).filter(t => map[t] && map[t].autoAgendou).map(t => ({ tag: t, avisarWpp: (map[t].avisarWpp || '') }));
+}
+
+// Adiciona UMA tag a um contato (cria o contato se não existir), sem mexer nas
+// outras tags. Usado pela automação de agendamento.
+function adicionarTag(telefone, nome, tag) {
+  const map = carregar();
+  const tel = normTel(telefone);
+  if (!tel) return false;
+  const c = map[tel] || { tel, nome: '', tags: [], instrucoes: '', criadoEm: Date.now() };
+  if (nome && !c.nome) c.nome = String(nome).trim();
+  tag = String(tag || '').trim();
+  if (tag && !c.tags.includes(tag)) c.tags.push(tag);
+  c.atualizadoEm = Date.now();
+  map[tel] = c;
+  salvar(map);
+  return true;
+}
+
 // Renomeia uma tag em TODOS os contatos. Devolve quantos foram afetados.
 function renomearTag(de, para) {
   de = String(de || '').trim(); para = String(para || '').trim();
@@ -164,6 +211,8 @@ function renomearTag(de, para) {
     if ((c.tags || []).includes(de)) { c.tags = limparTags(c.tags.map(t => t === de ? para : t)); c.atualizadoEm = Date.now(); n++; }
   }
   salvar(map);
+  // Carrega a config junto com a tag renomeada.
+  try { const cfg = lerTagsConfig(); if (cfg[de]) { cfg[para] = cfg[de]; delete cfg[de]; salvarTagsConfig(cfg); } } catch (_) {}
   return n;
 }
 
@@ -178,6 +227,7 @@ function excluirTag(tag) {
     if (c.tags.length !== antes) { c.atualizadoEm = Date.now(); n++; }
   }
   salvar(map);
+  try { const cfg = lerTagsConfig(); if (cfg[tag]) { delete cfg[tag]; salvarTagsConfig(cfg); } } catch (_) {}
   return n;
 }
 
@@ -225,4 +275,5 @@ function adicionar({ nome, telefone, tags, instrucoes }) {
 module.exports = {
   normTel, carregar, importarCSV, setTags, listar, tagsDistintas, totalContatos,
   remover, editarContato, renomearTag, excluirTag, existe, adicionar, ARQUIVO,
+  tagConfig, definirTagConfig, tagsAutoAgendou, adicionarTag, lerTagsConfig,
 };

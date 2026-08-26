@@ -33,3 +33,9 @@ campanhas.json
 campanhas-inbox.jsonl
 campanhas-inbox.*.proc
 campanha-fotos/
+
+# Automação de agendamento (dados de execução)
+sofia-agendou.jsonl
+sofia-agendou.*.proc
+sofia-avisos.jsonl
+sofia-avisos.*.proc

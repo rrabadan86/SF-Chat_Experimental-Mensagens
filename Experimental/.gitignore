@@ -52,3 +52,5 @@ data/contatos.json
 # Usuários do painel (hash de senha) e segredo de sessão — NUNCA versionar
 data/usuarios.json
 data/.sessao-segredo
+
+data/tags-config.json

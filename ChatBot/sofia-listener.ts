@@ -509,6 +509,34 @@ async function processarRespostas() {
 setInterval(() => { processarRespostas().catch(() => {}); }, 1500);
 setInterval(() => { try { varrerSessoes(); } catch {} }, 60 * 1000); // encerra + resume sessões paradas
 
+// ── Avisos internos (painel → um número seu) ────────────────────────────────
+//    O painel enfileira em sofia-avisos.jsonl {numero, texto, em} quando uma
+//    automação de tag dispara (ex.: aluna agendou aula experimental). Aqui só
+//    entregamos por WhatsApp ao número configurado — SEM registrar como conversa
+//    nem assumir nada (é um recado de sistema, não um atendimento).
+const AVISOS_FILE = path.join(DIR, "sofia-avisos.jsonl");
+let processandoAvisos = false;
+async function processarAvisos() {
+  if (processandoAvisos || !pronta) return;
+  let tam = 0; try { tam = fs.statSync(AVISOS_FILE).size; } catch { return; }
+  if (!tam) return;
+  processandoAvisos = true;
+  const tmp = AVISOS_FILE + "." + Date.now() + ".proc";
+  let linhas: string[] = [];
+  try { fs.renameSync(AVISOS_FILE, tmp); linhas = fs.readFileSync(tmp, "utf8").split("\n").map((l) => l.trim()).filter(Boolean); fs.rmSync(tmp, { force: true }); }
+  catch { processandoAvisos = false; return; }
+  for (const l of linhas) {
+    let ent: any = null; try { ent = JSON.parse(l); } catch { continue; }
+    const numero = String(ent?.numero || "").replace(/\D/g, "");
+    const texto = String(ent?.texto || "");
+    if (!numero || !texto) continue;
+    try { const alvo = await resolverIdEnvio(numero); await enviar(alvo, texto); log(`aviso enviado para ${numero}.`); }
+    catch (e: any) { log(`falha ao enviar aviso para ${numero}: ${e?.message || e}`); }
+  }
+  processandoAvisos = false;
+}
+setInterval(() => { processarAvisos().catch(() => {}); }, 2000);
+
 // ── Ponte de comando painel → Sofia ─────────────────────────────────────────
 // O painel grava sofia-comando.json para pedir ações que só dá para fazer aqui.
 // Hoje: "logout" (desconectar o WhatsApp da Sofia). Lemos, executamos e apagamos.

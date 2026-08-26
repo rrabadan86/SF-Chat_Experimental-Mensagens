@@ -26,6 +26,8 @@ const F = {
   waStatus: path.join(DIR, 'sofia-wa-status.json'), // publicado pelo listener da Sofia
   conversas: path.join(DIR, 'sofia-conversas.json'), // inbox — publicado pelo listener
   historico: path.join(DIR, 'sofia-historico.json'), // histórico de interações — publicado pelo listener
+  agendou: path.join(DIR, 'sofia-agendou.jsonl'), // agendamentos concluídos — a SoFIA escreve, o painel consome
+  avisos: path.join(DIR, 'sofia-avisos.jsonl'), // recados p/ um número — o painel escreve, o listener envia
   respostas: path.join(DIR, 'sofia-respostas.jsonl'), // fila de respostas do painel → listener envia
   humano: path.join(DIR, 'sofia-humano.json'), // conversas sob controle humano (Sofia não responde) — lido pela Sofia
   campanhas: path.join(DIR, 'campanhas.json'), // estado das campanhas — publicado pelo listener (painel só lê)
@@ -190,6 +192,29 @@ function historico() {
   try { const o = JSON.parse(ler(F.historico)); return (o && typeof o === 'object') ? o : {}; }
   catch (_) { return {}; }
 }
+// Consome (lê e apaga) os agendamentos concluídos que a SoFIA registrou.
+// Devolve um array de { telefone, nome, when, em }. Padrão atômico: renomeia
+// o arquivo antes de ler, para não perder linhas gravadas nesse meio-tempo.
+function consumirAgendamentos() {
+  let tam = 0;
+  try { tam = fs.statSync(F.agendou).size; } catch (_) { return []; }
+  if (!tam) return [];
+  const tmp = F.agendou + '.' + Date.now() + '.proc';
+  let linhas = [];
+  try { fs.renameSync(F.agendou, tmp); linhas = fs.readFileSync(tmp, 'utf8').split('\n').map(l => l.trim()).filter(Boolean); fs.rmSync(tmp, { force: true }); }
+  catch (_) { return []; }
+  const out = [];
+  for (const l of linhas) { try { out.push(JSON.parse(l)); } catch (_) {} }
+  return out;
+}
+// Enfileira um recado para o listener enviar por WhatsApp a um número.
+function enfileirarAviso(numero, texto) {
+  const n = String(numero || '').replace(/\D/g, '');
+  if (!n || !texto) return false;
+  fs.appendFileSync(F.avisos, JSON.stringify({ numero: n, texto: String(texto), em: Date.now() }) + '\n', 'utf8');
+  return true;
+}
+
 // Enfileira uma resposta do painel para o listener enviar (Parte 2 usa isto).
 function enfileirarResposta(chave, jid, texto) {
   const linha = JSON.stringify({ chave, jid, texto: String(texto || ''), em: Date.now() }) + '\n';
@@ -247,6 +272,6 @@ function setControleHumano(chave, ativo) {
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, enfileirarResposta, lerHumano, controleHumanoDe, setControleHumano, enviarComando,
+  conversas, historico, consumirAgendamentos, enfileirarAviso, enfileirarResposta, lerHumano, controleHumanoDe, setControleHumano, enviarComando,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

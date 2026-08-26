@@ -807,6 +807,17 @@ type ResultadoAgendamento =
   | { lotada: true; alternativas: string[] }
   | { erro: true; detalhe?: string };
 
+// Registra um agendamento bem-sucedido num arquivo que o PAINEL consome para
+// (a) auto-etiquetar o contato e (b) avisar no WhatsApp — configurável por tag.
+const AGENDOU_FILE = path.join(process.cwd(), "sofia-agendou.jsonl");
+function registrarAgendamento(telefone: string, nome: string, when: string) {
+  try {
+    const tel = String(telefone || "").replace(/\D/g, "");
+    if (!tel) return;
+    fs.appendFileSync(AGENDOU_FILE, JSON.stringify({ telefone: tel, nome: nome || "", when: when || "", em: Date.now() }) + "\n", "utf8");
+  } catch (e: any) { console.log("⚠️  registrarAgendamento falhou:", e?.message ?? e); }
+}
+
 // Caminho ÚNICO de agendamento no EVO (via o formulário). Devolve o resultado
 // REAL para quem chamou — usado pela ferramenta solicitar_agendamento e pelo
 // fallback automático. A aluna manda "dia"/"hora" em linguagem natural OU já
@@ -834,6 +845,7 @@ async function bookNoEvo(telefone: string, nome: string, email: string, when: st
 
   if (resp.ok && data.ok) {
     console.log(`✅ AGENDADO NO EVO: ${nome} em ${data.when} (idProspect=${data.idProspect})`);
+    registrarAgendamento(telefone, nome, data.when); // avisa o painel (auto-tag + notificação)
     return { ok: true, when: data.when };
   }
   // Turma cheia/indisponível: o lead já ficou cadastrado no EVO; a Sofia oferece
