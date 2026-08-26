@@ -604,7 +604,8 @@ async function processarRespostas() {
   for (const linha of linhas) {
     let ent: any; try { ent = JSON.parse(linha); } catch { continue; }
     const texto = String(ent?.texto || "").trim();
-    if (!texto) continue;
+    const fotoArquivo = String(ent?.fotoArquivo || "").trim();
+    if (!texto && !fotoArquivo) continue;           // sem texto e sem foto → nada a enviar
     const chave = String(ent?.chave || "").trim();
     const jid = String(ent?.jid || "").trim();
     // Telefone REAL para enviar: a chave (telefone real, mesmo em contato "@lid").
@@ -615,11 +616,20 @@ async function processarRespostas() {
       // NÃO usamos a pausa por tempo aqui: quem controla é o interruptor "controle
       // humano" da conversa (o painel liga/desliga em sofia-humano.json). Assim,
       // ao devolver à Sofia (desligar o interruptor), ela volta na hora.
-      registrarNaMemoria(chave, "humano", texto); // Sofia "ouve" para ter contexto quando voltar
+      const memo = fotoArquivo ? (texto ? texto + " [foto]" : "[foto]") : texto;
+      registrarNaMemoria(chave, "humano", memo); // Sofia "ouve" para ter contexto quando voltar
       try {
         const alvo = await resolverIdEnvio(telefone); // igual ao robô: trata o "@lid"
-        registrarInbox(chave, alvo, "", "humano", texto);
-        await enviar(alvo, texto);
+        if (fotoArquivo && fs.existsSync(fotoArquivo)) {
+          // Foto (com o texto como legenda, se houver). Registra no painel = WhatsApp.
+          const media = MessageMedia.fromFilePath(fotoArquivo);
+          await enviar(alvo, media, texto ? { caption: texto } : undefined);
+          registrarInbox(chave, alvo, "", "humano", texto ? texto + " 📷" : "📷 (foto)");
+          try { fs.rmSync(fotoArquivo, { force: true }); } catch {} // já enviada — limpa
+        } else {
+          registrarInbox(chave, alvo, "", "humano", texto);
+          await enviar(alvo, texto);
+        }
         log(`resposta do painel enviada para ${chave}.`);
       } catch (e: any) { log("falha ao enviar resposta do painel: " + (e?.message || e)); }
     });

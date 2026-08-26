@@ -1295,7 +1295,7 @@ function paginaSofiaConversas(aviso, erro) {
     </div>
   </div>
 <script>
-  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, tagFiltro='', tagEdAberto=false, ncNome='', ncDirty=false, ncTodas=[];
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', tagEdAberto=false, ncNome='', ncDirty=false, ncTodas=[];
   // Atalho vindo de Contatos: ?chat=<telefone> abre a conversa correspondente.
   var alvoChat=(new URLSearchParams(location.search).get('chat')||'').replace(/\\D/g,''), alvoAplicado=false;
   function mesmoTel(a,b){ a=String(a||'').replace(/\\D/g,''); b=String(b||'').replace(/\\D/g,''); if(!a||!b) return false; if(a===b) return true; var la=a.slice(-8), lb=b.slice(-8); return la.length===8 && la===lb; }
@@ -1380,13 +1380,20 @@ function paginaSofiaConversas(aviso, erro) {
       +'<span id="ncMsg" class="quando" style="margin:0"></span>'
       +'</div></div>') : '';
     var composer='<div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end">'
+      +'<input type="file" id="msgFoto" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="msgFotoSel()">'
+      +'<button type="button" id="msgClip" title="Anexar foto" onclick="msgAbreFoto()" '+(hum?'':'disabled')+' style="padding:9px 12px;font-size:1.05rem;line-height:1;background:#fff;border:1px solid var(--linha,#ddd);border-radius:8px;cursor:pointer'+(hum?'':';opacity:.4;cursor:not-allowed')+'">📎</button>'
       +'<textarea id="msgTxt" rows="2" '+(hum?'':'disabled')+' placeholder="'+(hum?'Escreva uma mensagem…  (Enter envia)':'🔒 Clique em “assumir” para responder')+'" oninput="if(selecionada)rascunhos[selecionada]=this.value" onkeydown="msgKey(event)" style="flex:1;resize:vertical;min-height:44px;font-size:.9rem'+(hum?'':';background:#f5f5f5;color:#aaa;cursor:not-allowed')+'"></textarea>'
       +'<button type="button" class="save" onclick="enviarMsg()" '+(hum?'':'disabled')+' style="padding:9px 16px;white-space:nowrap'+(hum?'':';opacity:.4;cursor:not-allowed')+'">Enviar ➤</button>'
       +'</div>'
+      +'<div id="msgFotoPrev" style="display:none;margin-top:6px;align-items:center;gap:8px">'
+      +'<img id="msgFotoImg" alt="prévia" style="max-width:64px;max-height:64px;border-radius:8px;border:1px solid var(--linha,#ddd);vertical-align:middle">'
+      +'<span class="quando" style="margin:0">foto anexada</span> '
+      +'<a href="javascript:void(0)" onclick="msgFotoLimpa()" class="quando" style="margin:0;text-decoration:underline">remover</a></div>'
       +'<div id="msgStatus" class="quando" style="margin-top:4px;min-height:14px;font-size:.75rem"></div>';
     chat.innerHTML = header+tagLinha+editor+'<div id="bolhas" style="flex:1;min-height:120px;overflow:auto;padding-right:4px">'+bolhas+fim+'</div>'+composer;
     if(tagEdAberto){ ncRenderTags(); ncAtualizaStatus(); }
     var ta=document.getElementById('msgTxt'); if(ta) ta.value=rascunhos[k]||'';
+    msgFotoMostra(k); // reexibe a prévia se havia foto anexada nessa conversa
     var b=document.getElementById('bolhas'); if(b) b.scrollTop=b.scrollHeight;
   }
   function toggleTagEd(){ tagEdAberto=!tagEdAberto; if(selecionada){ ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[selecionada],selecionada); } }
@@ -1397,17 +1404,31 @@ function paginaSofiaConversas(aviso, erro) {
       .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].humano=novo; ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[k],k); } });
   }
   function msgKey(ev){ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); enviarMsg(); } }
+  function msgAbreFoto(){ var inp=document.getElementById('msgFoto'); if(inp) inp.click(); }
+  function msgFotoSel(){
+    var k=selecionada; if(!k) return;
+    var inp=document.getElementById('msgFoto'); var f=inp&&inp.files&&inp.files[0]; if(!f) return;
+    if(f.size>10*1024*1024){ var st=document.getElementById('msgStatus'); if(st)st.textContent='❌ imagem muito grande (máx. 10MB).'; inp.value=''; return; }
+    var rd=new FileReader(); rd.onload=function(){ fotoPend[k]=rd.result; msgFotoMostra(k); }; rd.readAsDataURL(f);
+  }
+  function msgFotoMostra(k){
+    var box=document.getElementById('msgFotoPrev'); if(!box) return;
+    if(fotoPend[k]){ var img=document.getElementById('msgFotoImg'); if(img)img.src=fotoPend[k]; box.style.display='flex'; }
+    else { box.style.display='none'; }
+  }
+  function msgFotoLimpa(){ var k=selecionada; if(k) delete fotoPend[k]; var inp=document.getElementById('msgFoto'); if(inp)inp.value=''; msgFotoMostra(k); }
   function enviarMsg(){
     var k=selecionada; if(!k) return;
     var c=ultimoData[k]||{}; var jid=c.jid||'';
     var ta=document.getElementById('msgTxt'); var txt=(ta&&ta.value||'').trim();
+    var foto=fotoPend[k]||'';
     var st=document.getElementById('msgStatus');
     if(!c.humano){ if(st)st.textContent='Ative o controle humano para responder.'; return; }
-    if(!txt){ if(st)st.textContent=''; return; }
+    if(!txt && !foto){ if(st)st.textContent=''; return; }
     if(st)st.textContent='Enviando…';
-    fetch('/sofia/responder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,jid:jid,texto:txt})})
+    fetch('/sofia/responder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,jid:jid,texto:txt,fotoBase64:foto})})
       .then(function(r){return r.json();}).then(function(j){
-        if(j.ok){ if(ta)ta.value=''; rascunhos[k]=''; if(st)st.textContent='✓ enviada';
+        if(j.ok){ if(ta)ta.value=''; rascunhos[k]=''; delete fotoPend[k]; var inp=document.getElementById('msgFoto'); if(inp)inp.value=''; msgFotoMostra(k); if(st)st.textContent='✓ enviada';
           setTimeout(atualizaInbox,800); setTimeout(atualizaInbox,2000); setTimeout(atualizaInbox,3600); }
         else if(st){ st.textContent='❌ '+(j.erro||'não consegui enviar'); }
       }).catch(function(){ if(st)st.textContent='❌ erro de rede'; });
@@ -2779,15 +2800,19 @@ const server = http.createServer((req, res) => {
   // Responder uma conversa pelo painel: enfileira para o listener da Sofia enviar
   // pelo WhatsApp (e assumir a conversa, pausando a Sofia nela).
   if (req.method === 'POST' && url === '/sofia/responder') {
-    return lerCorpo(req, 1e6, corpo => {
+    return lerCorpo(req, 12e6, corpo => { // cabe a foto anexada em base64 (~10-12 MB)
       let d = {};
       try { d = JSON.parse(corpo || '{}'); } catch (_) {}
       const chave = String(d.chave || '').trim();
       const jid = String(d.jid || '').trim();
       const texto = String(d.texto || '').trim();
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      if (!chave || !texto) return res.end(JSON.stringify({ ok: false, erro: 'faltou destinatário ou texto' }));
-      try { sofia.enfileirarResposta(chave, jid, texto); res.end(JSON.stringify({ ok: true })); }
+      if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'faltou destinatário' }));
+      // Pode enviar só texto, só foto (com ou sem legenda), ou os dois.
+      if (!texto && !d.fotoBase64) return res.end(JSON.stringify({ ok: false, erro: 'faltou texto ou foto' }));
+      let fotoArquivo = '';
+      if (d.fotoBase64) { try { fotoArquivo = sofia.salvarFotoResposta(d.fotoBase64); } catch (e) { return res.end(JSON.stringify({ ok: false, erro: 'Foto: ' + e.message })); } }
+      try { sofia.enfileirarResposta(chave, jid, texto, fotoArquivo); res.end(JSON.stringify({ ok: true })); }
       catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
   }

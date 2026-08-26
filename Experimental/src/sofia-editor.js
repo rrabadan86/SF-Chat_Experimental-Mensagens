@@ -281,9 +281,25 @@ function enfileirarAviso(numero, texto) {
 }
 
 // Enfileira uma resposta do painel para o listener enviar (Parte 2 usa isto).
-function enfileirarResposta(chave, jid, texto) {
-  const linha = JSON.stringify({ chave, jid, texto: String(texto || ''), em: Date.now() }) + '\n';
+function enfileirarResposta(chave, jid, texto, fotoArquivo) {
+  const linha = JSON.stringify({ chave, jid, texto: String(texto || ''),
+    fotoArquivo: fotoArquivo || '', em: Date.now() }) + '\n';
   fs.appendFileSync(F.respostas, linha, 'utf8');
+}
+
+// Salva a foto anexada numa resposta manual (dataURL base64) em
+// ChatBot/humano-fotos/<timestamp>.<ext> e devolve o caminho absoluto. O listener,
+// na mesma máquina, envia a foto a partir desse caminho (igual às campanhas).
+function salvarFotoResposta(dataUrl) {
+  const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(String(dataUrl || '').replace(/\s/g, ''));
+  if (!m) throw new Error('Imagem inválida.');
+  let ext = (m[1].split('/')[1] || 'jpg').toLowerCase().replace('jpeg', 'jpg');
+  if (!/^[a-z0-9]+$/.test(ext)) ext = 'jpg';
+  const dir = path.join(DIR, 'humano-fotos');
+  try { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
+  const arq = path.join(dir, Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext);
+  fs.writeFileSync(arq, Buffer.from(m[2], 'base64'));
+  return arq;
 }
 
 // ── controle humano por conversa (interruptor no painel) ────────────────────
@@ -337,6 +353,6 @@ function setControleHumano(chave, ativo) {
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, lerHumano, controleHumanoDe, setControleHumano, enviarComando,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, enviarComando,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };
