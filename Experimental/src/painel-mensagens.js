@@ -357,6 +357,16 @@ const ESTILO = `
   .cpf-sum::after{content:"▾";margin-left:auto;font-size:.9rem;color:var(--cinza);transition:transform .2s}
   .cpf-acc[open] .cpf-sum::after{transform:rotate(180deg)}
   .cpf-body{padding:2px 0 14px}
+  .tagrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--linha)}
+  .tagrow:last-child{border-bottom:0}
+  .tagrow form{display:flex;gap:8px;align-items:center;flex:1;min-width:250px;margin:0;flex-wrap:wrap}
+  .tagrow input[type=text]{flex:1;min-width:180px;font-size:.85rem}
+  .tagrow .tagn{color:var(--cinza);font-size:.78rem;min-width:46px;text-align:right;font-variant-numeric:tabular-nums;flex:none}
+  .tagbtn{padding:6px 12px;font-size:.8rem;white-space:nowrap;background:#fff;color:var(--cinza);border:1px solid var(--linha);border-radius:9px;cursor:pointer;font-weight:700}
+  .tagbtn:hover{border-color:var(--teal);color:var(--teal-esc)}
+  .tagbtn.ren:hover{border-color:var(--teal);color:var(--teal-esc)}
+  .tagbtn.rm:hover{border-color:var(--erro);color:var(--erro);background:var(--erro-bg)}
+  .tagbtn.on{border-color:var(--teal);color:var(--teal-esc);background:#eef7f7}
   .cp-sec{margin:0 0 14px}
   .cp-h{font-family:"Montserrat";font-weight:700;font-size:var(--fs-sm);margin:0 0 4px}
   .cp-list{max-height:200px;overflow-y:auto;border:1px solid var(--linha);border-radius:10px;padding:2px 12px}
@@ -1497,16 +1507,16 @@ function paginaSofiaContatos(aviso, erro, params) {
 
   const gerenciarTags = `<details style="margin:0 0 12px"${tags.length ? '' : ' open'}><summary style="cursor:pointer;font-weight:700;padding:6px 0">🏷️ Gerenciar tags <small style="font-weight:400;color:#5c5960">(criar, renomear, excluir ou automatizar)</small></summary>
     <div class="card">
-      <div style="margin-bottom:10px"><button type="button" class="save" onclick="criarTagNova()" style="padding:7px 14px">＋ Criar tag</button></div>
-      ${tags.length ? tags.map((t, i) => { const cfg = contatos.tagConfig(t.tag); return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
-      <form method="POST" action="/sofia/contatos/tag" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:1;min-width:240px;margin:0">
+      <div style="margin-bottom:12px"><button type="button" class="save" onclick="criarTagNova()" style="padding:8px 16px">＋ Criar tag</button></div>
+      ${tags.length ? tags.map((t, i) => { const cfg = contatos.tagConfig(t.tag); return `<div class="tagrow">
+      <form method="POST" action="/sofia/contatos/tag">
         <input type="hidden" name="de" value="${esc(t.tag)}">${hidden}
-        <input type="text" name="para" value="${esc(t.tag)}" style="flex:1;min-width:170px;font-size:.85rem">
-        <span class="quando">(${t.n})</span>
-        <button type="submit" class="save" name="acao" value="renomear" style="padding:5px 10px">Renomear</button>
-        <button type="submit" class="reset" name="acao" value="excluir" onclick="return confirm('Excluir a tag em TODOS os contatos?')" style="padding:5px 10px">Excluir</button>
+        <input type="text" name="para" value="${esc(t.tag)}">
+        <span class="tagn">${t.n}</span>
+        <button type="submit" class="tagbtn ren" name="acao" value="renomear">Renomear</button>
+        <button type="submit" class="tagbtn rm" name="acao" value="excluir" onclick="return confirm('Excluir a tag em TODOS os contatos?')">Excluir</button>
       </form>
-      <button type="button" class="reset" onclick="abrirTagCfg(${i})" title="Automação desta tag" style="padding:5px 10px">⚙️ Automação${cfg.gatilho ? ' <span style="color:var(--teal-esc)">⚡</span>' : ''}</button>
+      <button type="button" class="tagbtn${cfg.gatilho ? ' on' : ''}" onclick="abrirTagCfg(${i})" title="Automação desta tag">⚙️ Automação${cfg.gatilho ? ' ⚡' : ''}</button>
     </div>`; }).join('') : '<p class="quando" style="margin:0">Nenhuma tag ainda. Crie uma acima ou etiquete um contato.</p>'}
     </div></details>`;
 
