@@ -357,6 +357,19 @@ def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_i
     vistos, itens = set(), []
     d = inicio
     while d < fim:                                # cobre as semanas do intervalo
+        # Turmas que o EVO considera ABERTAS para aula experimental nessa semana
+        # (respeita turma FECHADA/cadeado e sem vaga de experimental). É a verdade
+        # do EVO: uma turma fechada simplesmente não vem aqui. Se a chamada falhar,
+        # abertas=None e NÃO aplicamos o filtro (fallback: a marcação revalida).
+        abertas = set()
+        try:
+            for es in (evo.list_experimental_schedule(d, show_full_week=True, branch_id=branch_id) or []):
+                edt = session_start_datetime(es)
+                if edt is not None:
+                    abertas.add((es.get("idConfiguration"), edt.isoformat()))
+        except Exception as _e:                    # noqa: BLE001 — grade não pode quebrar por isso
+            log.warning("list_experimental_schedule falhou (%s) — sigo sem o filtro de turma fechada.", _e)
+            abertas = None
         for s in (evo.list_schedule(d, show_full_week=True, branch_id=branch_id) or []):
             if not _match_activity(s, activity, id_activity):
                 continue
@@ -370,6 +383,10 @@ def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_i
             cap = s.get("capacity")
             ocup = s.get("ocupation") or 0
             disponivel = (ocup <= max_ocupacao)
+            # Turma FECHADA (cadeado) ou sem vaga de experimental no EVO → indisponível,
+            # mesmo com 0 matriculadas. O EVO é a fonte da verdade aqui.
+            if abertas is not None and key not in abertas:
+                disponivel = False
             n_exp = None
             # Só checa experimentais nas turmas que, de outra forma, estariam
             # disponíveis (evita uma chamada /detail por turma já cheia).
