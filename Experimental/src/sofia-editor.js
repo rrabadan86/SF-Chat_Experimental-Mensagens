@@ -27,6 +27,8 @@ const F = {
   conversas: path.join(DIR, 'sofia-conversas.json'), // inbox — publicado pelo listener
   respostas: path.join(DIR, 'sofia-respostas.jsonl'), // fila de respostas do painel → listener envia
   humano: path.join(DIR, 'sofia-humano.json'), // conversas sob controle humano (Sofia não responde) — lido pela Sofia
+  campanhas: path.join(DIR, 'campanhas.json'), // estado das campanhas — publicado pelo listener (painel só lê)
+  campanhasInbox: path.join(DIR, 'campanhas-inbox.jsonl'), // pedidos do painel → listener (criar/controle/excluir)
 };
 
 // Padrões do "jeito humano" (mesmos do listener). O painel edita e o listener lê
@@ -202,6 +204,19 @@ function enviarComando(cmd) {
   const arq = path.join(DIR, 'sofia-comando.json');
   fs.writeFileSync(arq, JSON.stringify({ cmd: String(cmd || ''), em: Date.now() }), 'utf8');
 }
+
+// ── campanhas (envio em massa por tag, pela SoFIA) ──────────────────────────
+// O painel cria a campanha e controla (iniciar/pausar/cancelar/excluir) gravando
+// pedidos em campanhas-inbox.jsonl; o listener executa e publica o estado em
+// campanhas.json (que o painel só lê).
+function lerCampanhas() {
+  try { const o = JSON.parse(ler(F.campanhas)); return Array.isArray(o) ? o : []; }
+  catch (_) { return []; }
+}
+function opCampanha(obj) {
+  const linha = JSON.stringify(Object.assign({ em: Date.now() }, obj)) + '\n';
+  fs.appendFileSync(F.campanhasInbox, linha, 'utf8');
+}
 function setControleHumano(chave, ativo) {
   const o = lerHumano();
   if (ativo) o[chave] = Date.now(); else delete o[chave];
@@ -212,5 +227,6 @@ function setControleHumano(chave, ativo) {
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerRitmo, gravarRitmo, waStatus,
-  conversas, enfileirarResposta, lerHumano, controleHumanoDe, setControleHumano, enviarComando, DIR, ARQUIVOS: F,
+  conversas, enfileirarResposta, lerHumano, controleHumanoDe, setControleHumano, enviarComando,
+  lerCampanhas, opCampanha, DIR, ARQUIVOS: F,
 };

@@ -672,6 +672,40 @@ function carregarPromptExtracao(): string {
   }
 }
 
+// Gera N variações NATURAIS de um texto de campanha, para o envio não parecer
+// robótico/spam (cada contato recebe uma redação diferente). Usada pelo listener
+// nas campanhas por tag. Se a IA falhar, cai no texto original (nunca quebra).
+export async function gerarVariacoes(texto: string, n = 10): Promise<string[]> {
+  const base = String(texto || "").trim();
+  if (!base) return [];
+  const instr = `Você reescreve mensagens de WhatsApp de um Studio de treino para mulheres.
+Reescreva a mensagem abaixo em ${n} variações DIFERENTES entre si, mantendo EXATAMENTE o mesmo sentido,
+o mesmo idioma (português do Brasil) e um tom amigável e humano de WhatsApp. Pode variar saudação,
+ordem das frases e palavras, mas NÃO invente informação, preço, data ou promoção que não esteja no texto.
+Mantenha eventuais *negritos* e links iguais. Responda APENAS um array JSON de strings, sem explicação, sem markdown.
+
+Mensagem:
+"""${base}"""`;
+  try {
+    const resp = await comRetry(() =>
+      anthropic.messages.create({
+        model: MODELO_EXTRACAO,
+        max_tokens: 3000,
+        messages: [{ role: "user", content: instr }],
+      }),
+    );
+    const txt = resp.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.TextBlock).text).join("").replace(/```json|```/g, "").trim();
+    const arr = JSON.parse(txt);
+    if (Array.isArray(arr)) {
+      const limpas = arr.map((s) => String(s || "").trim()).filter(Boolean);
+      if (limpas.length) return limpas.slice(0, n);
+    }
+  } catch (e: any) {
+    console.log("⚠️  gerarVariacoes falhou:", e?.message ?? e);
+  }
+  return [base]; // fallback: usa o texto original
+}
+
 interface ResumoAgendamento { nome_completo: string; email: string; dia: string; hora: string; }
 
 async function extrairResumo(conversa: Conversa, nomeWhatsapp: string): Promise<ResumoAgendamento> {

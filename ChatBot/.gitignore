@@ -28,3 +28,6 @@ sofia-respostas.jsonl
 sofia-respostas.*.proc
 sofia-humano.json
 sofia-comando.json
+campanhas.json
+campanhas-inbox.jsonl
+campanhas-inbox.*.proc

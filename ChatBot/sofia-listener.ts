@@ -22,7 +22,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
-import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias } from "./sofia";
+import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes } from "./sofia";
 
 const DIR = process.cwd();
 const STATUS_FILE = path.join(DIR, "sofia-wa-status.json");
@@ -430,6 +430,131 @@ setInterval(async () => {
   // Sai para o PM2 reiniciar: sem a sessão salva, sobe um QR novo no painel.
   setTimeout(() => process.exit(0), 500);
 }, 4000);
+
+// ══════════════════════════════════════════════════════════════════════════
+// CAMPANHAS (envio em massa por tag, pela SoFIA) — limites definidos no painel
+// O painel grava pedidos em campanhas-inbox.jsonl (criar/controle/excluir) e a
+// LISTA de destinatários (o painel resolve a tag → telefones). Aqui geramos as
+// variações do texto (IA) e enviamos com delays aleatórios, respeitando teto/dia
+// e janela de horário. O estado vai para campanhas.json (o painel só lê).
+// ══════════════════════════════════════════════════════════════════════════
+type CampDest = { tel: string; nome?: string };
+type Campanha = {
+  id: string; nome: string; tag: string; textoBase: string; variacoes: string[];
+  limiteDia: number; delayMinSeg: number; delayMaxSeg: number; janelaIni: string; janelaFim: string;
+  status: "gerando" | "pronta" | "enviando" | "pausada" | "concluida" | "cancelada";
+  pendentes: CampDest[]; enviados: { tel: string; nome?: string; em: number }[]; falhas: { tel: string; erro: string; em: number }[];
+  enviadosHoje: number; diaRef: string; proxEnvioEm: number; criadoEm: number; atualizadoEm: number;
+};
+const CAMP_FILE = path.join(DIR, "campanhas.json");
+const CAMP_INBOX = path.join(DIR, "campanhas-inbox.jsonl");
+let campanhas: Campanha[] = [];
+let campSalvarTimer: ReturnType<typeof setTimeout> | null = null;
+function carregarCampanhas() {
+  try { const o = JSON.parse(fs.readFileSync(CAMP_FILE, "utf8")); if (Array.isArray(o)) campanhas = o; } catch {}
+  // Nunca retoma sozinha em "enviando" após um restart — evita reenvio inesperado.
+  for (const c of campanhas) if (c.status === "enviando") c.status = "pausada";
+}
+function salvarCampanhas() { try { fs.writeFileSync(CAMP_FILE, JSON.stringify(campanhas), "utf8"); } catch {} }
+function agendarSalvarCampanhas() { if (campSalvarTimer) return; campSalvarTimer = setTimeout(() => { campSalvarTimer = null; salvarCampanhas(); }, 800); }
+function hojeSP(): string { return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); }
+function agoraHHMM(): string { return new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false }); }
+function dentroJanela(ini: string, fim: string): boolean {
+  const a = agoraHHMM();
+  if (!ini || !fim) return true;
+  return a >= ini && a <= fim; // janela simples no mesmo dia
+}
+function aleatorio(min: number, max: number) { return min + Math.floor(Math.random() * Math.max(0, max - min + 1)); }
+
+// Consome os pedidos do painel (criar/controle/excluir).
+let processandoCampInbox = false;
+async function processarCampInbox() {
+  if (processandoCampInbox) return;
+  let tam = 0; try { tam = fs.statSync(CAMP_INBOX).size; } catch { return; }
+  if (!tam) return;
+  processandoCampInbox = true;
+  const tmp = CAMP_INBOX + "." + Date.now() + ".proc";
+  let linhas: string[] = [];
+  try { fs.renameSync(CAMP_INBOX, tmp); linhas = fs.readFileSync(tmp, "utf8").split("\n").map((l) => l.trim()).filter(Boolean); fs.rmSync(tmp, { force: true }); }
+  catch (e: any) { log("erro lendo campanhas-inbox: " + (e?.message || e)); processandoCampInbox = false; return; }
+  for (const linha of linhas) {
+    let op: any; try { op = JSON.parse(linha); } catch { continue; }
+    try {
+      if (op.op === "criar" && op.campanha) {
+        const p = op.campanha;
+        const dests: CampDest[] = Array.isArray(p.destinatarios) ? p.destinatarios.filter((d: any) => d && d.tel) : [];
+        const camp: Campanha = {
+          id: String(p.id || Date.now()), nome: String(p.nome || "Campanha"), tag: String(p.tag || ""),
+          textoBase: String(p.textoBase || ""), variacoes: [],
+          limiteDia: Math.max(1, parseInt(p.limiteDia, 10) || 40),
+          delayMinSeg: Math.max(1, parseInt(p.delayMinSeg, 10) || 20),
+          delayMaxSeg: Math.max(1, parseInt(p.delayMaxSeg, 10) || 60),
+          janelaIni: String(p.janelaIni || "09:00"), janelaFim: String(p.janelaFim || "20:00"),
+          status: "gerando", pendentes: dests, enviados: [], falhas: [],
+          enviadosHoje: 0, diaRef: hojeSP(), proxEnvioEm: 0, criadoEm: Date.now(), atualizadoEm: Date.now(),
+        };
+        if (camp.delayMaxSeg < camp.delayMinSeg) camp.delayMaxSeg = camp.delayMinSeg;
+        campanhas.unshift(camp);
+        agendarSalvarCampanhas();
+        log(`campanha "${camp.nome}" criada (${dests.length} destinatários) — gerando variações…`);
+        gerarVariacoes(camp.textoBase, 10).then((vs) => {
+          camp.variacoes = vs.length ? vs : [camp.textoBase];
+          camp.status = "pronta"; camp.atualizadoEm = Date.now(); agendarSalvarCampanhas();
+          log(`campanha "${camp.nome}": ${camp.variacoes.length} variações prontas.`);
+        }).catch(() => { camp.variacoes = [camp.textoBase]; camp.status = "pronta"; agendarSalvarCampanhas(); });
+      } else if (op.op === "controle" && op.id) {
+        const c = campanhas.find((x) => x.id === String(op.id));
+        if (c) {
+          if (op.acao === "iniciar" && (c.status === "pronta" || c.status === "pausada") && c.pendentes.length) { c.status = "enviando"; c.proxEnvioEm = 0; }
+          else if (op.acao === "pausar" && c.status === "enviando") c.status = "pausada";
+          else if (op.acao === "cancelar") { c.status = "cancelada"; c.pendentes = []; }
+          c.atualizadoEm = Date.now(); agendarSalvarCampanhas();
+        }
+      } else if (op.op === "excluir" && op.id) {
+        campanhas = campanhas.filter((x) => x.id !== String(op.id)); agendarSalvarCampanhas();
+      }
+    } catch (e: any) { log("erro aplicando op de campanha: " + (e?.message || e)); }
+  }
+  processandoCampInbox = false;
+}
+
+// Runner: manda no máximo UMA mensagem por tick, respeitando delay/teto/janela.
+let campanhaEnviando = false;
+async function tickCampanha() {
+  if (campanhaEnviando || !pronta) return;
+  const c = campanhas.find((x) => x.status === "enviando");
+  if (!c) return;
+  if (c.diaRef !== hojeSP()) { c.diaRef = hojeSP(); c.enviadosHoje = 0; } // vira o dia → zera o contador
+  if (!c.pendentes.length) { c.status = "concluida"; c.atualizadoEm = Date.now(); agendarSalvarCampanhas(); return; }
+  if (!dentroJanela(c.janelaIni, c.janelaFim)) return;        // fora do horário → espera
+  if (c.enviadosHoje >= c.limiteDia) return;                  // bateu o teto do dia → espera amanhã
+  if (Date.now() < c.proxEnvioEm) return;                     // ainda no intervalo entre envios
+  const alvoDest = c.pendentes[0];
+  const variacao = (c.variacoes.length ? c.variacoes[(c.enviados.length) % c.variacoes.length] : c.textoBase) || c.textoBase;
+  campanhaEnviando = true;
+  try {
+    const alvo = await resolverIdEnvio(alvoDest.tel);
+    await enviar(alvo, variacao);
+    c.pendentes.shift();
+    c.enviados.push({ tel: alvoDest.tel, nome: alvoDest.nome, em: Date.now() });
+    c.enviadosHoje++;
+    registrarInbox(alvoDest.tel, alvo, alvoDest.nome || "", "sofia", variacao); // aparece nas Conversas
+    log(`campanha "${c.nome}": enviada ${c.enviados.length}/${c.enviados.length + c.pendentes.length} (${alvoDest.tel}).`);
+  } catch (e: any) {
+    c.pendentes.shift();
+    c.falhas.push({ tel: alvoDest.tel, erro: (e?.message || String(e)).slice(0, 120), em: Date.now() });
+    log(`campanha "${c.nome}": FALHA em ${alvoDest.tel} (${e?.message || e}).`);
+  } finally {
+    c.proxEnvioEm = Date.now() + aleatorio(c.delayMinSeg, c.delayMaxSeg) * 1000;
+    if (!c.pendentes.length) c.status = "concluida";
+    c.atualizadoEm = Date.now();
+    agendarSalvarCampanhas();
+    campanhaEnviando = false;
+  }
+}
+carregarCampanhas();
+setInterval(() => { processarCampInbox().catch(() => {}); }, 2000);
+setInterval(() => { tickCampanha().catch(() => {}); }, 3000);
 
 // Mensagem RECEBIDA da aluna (não é fromMe).
 client.on("message", (msg: any) => {

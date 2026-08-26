@@ -28,6 +28,7 @@ const TELAS = [
   { key: 'sofia_conversas', rot: '💬 Conversas', grupo: '🤖 Sofia' },
   { key: 'sofia_config', rot: '⚙️ Configuração', grupo: '🤖 Sofia' },
   { key: 'sofia_contatos', rot: '📇 Contatos', grupo: '🤖 Sofia' },
+  { key: 'sofia_campanhas', rot: '📣 Campanhas', grupo: '🤖 Sofia' },
 ];
 const TELAS_KEYS = TELAS.map(t => t.key);
 // Chaves "legado" (abas inteiras) que expandem para as sub-telas ao salvar.

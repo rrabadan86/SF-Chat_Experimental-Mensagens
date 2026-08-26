@@ -116,13 +116,14 @@ function telaDaUrl(u) {
   return 'msg';
 }
 // Sofia é dividida em três sub-abas com permissão própria.
-const SOFIA_SUBS = ['conversas', 'config', 'contatos'];
+const SOFIA_SUBS = ['conversas', 'config', 'contatos', 'campanhas'];
 function podeSofiaSub(sess, sub) { return sess.admin || (sess.telas || []).includes('sofia_' + sub); }
 function temSofia(sess) { return sess.admin || SOFIA_SUBS.some(s => podeSofiaSub(sess, s)); }
 function sofiaHref(sess) {
   if (podeSofiaSub(sess, 'conversas')) return '/sofia?view=conversas';
   if (podeSofiaSub(sess, 'config')) return '/sofia';
   if (podeSofiaSub(sess, 'contatos')) return '/sofia?view=contatos';
+  if (podeSofiaSub(sess, 'campanhas')) return '/sofia?view=campanhas';
   return '/sofia';
 }
 // Rota /sofia/* (fora o GET da página) → sub-permissão exigida. O "salvar-novo"
@@ -132,6 +133,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano') return has('sofia_conversas');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag') return has('sofia_contatos');
+  if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar') return has('sofia_config');
   return false;
 }
@@ -1074,6 +1076,7 @@ function subnavSofia(view) {
   if (podeSofiaSub(sess, 'config')) its += item('config', '⚙️ Configuração');
   if (podeSofiaSub(sess, 'conversas')) its += item('conversas', '💬 Conversas');
   if (podeSofiaSub(sess, 'contatos')) its += item('contatos', '📇 Contatos');
+  if (podeSofiaSub(sess, 'campanhas')) its += item('campanhas', '📣 Campanhas');
   return `<div style="margin:0 0 18px">${its}</div>`;
 }
 
@@ -1323,6 +1326,83 @@ function paginaSofiaContatos(aviso, erro, params) {
   }
 </script>`;
   return chrome({ tab: 'Contatos', h1: '🤖 SoFIA', p: 'Contatos — importe, etiquete e filtre por tag.' }, 'sofia', corpo);
+}
+
+// Aba SoFIA → Campanhas: envio em massa por tag (com variações da IA e limites).
+function paginaSofiaCampanhas(aviso, erro) {
+  const tags = contatos.tagsDistintas();
+  let campanhas = []; try { campanhas = sofia.lerCampanhas(); } catch (_) {}
+  const rotStatus = { gerando: '⏳ gerando variações', pronta: '✅ pronta p/ iniciar', enviando: '📤 enviando', pausada: '⏸️ pausada', concluida: '✔️ concluída', cancelada: '🚫 cancelada' };
+  const fmtTelC = (t) => { const d = String(t || '').replace(/\D/g, ''); if (/^55\d{10,11}$/.test(d)) { const x = d.slice(4); return '(' + d.slice(2, 4) + ') ' + (x.length === 9 ? x.slice(0, 5) + '-' + x.slice(5) : x.slice(0, 4) + '-' + x.slice(4)); } return t || ''; };
+
+  const opcoesTag = tags.length
+    ? tags.map(t => `<option value="${esc(t.tag)}">${esc(t.tag)} (${t.n})</option>`).join('')
+    : '';
+
+  const novo = `
+    <div class="sec-t">📣 Nova campanha</div>
+    <div class="card">
+      ${tags.length ? `<form method="POST" action="/sofia/campanhas/criar" onsubmit="return confirm('Criar a campanha e preparar o envio? Nada é enviado até você clicar em Iniciar.')">
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="flex:2;min-width:180px"><label>Nome da campanha</label><input type="text" name="nome" placeholder="ex.: Reativação outubro" required></div>
+          <div style="flex:1;min-width:150px"><label>Enviar para a tag</label><select name="tag" required>${opcoesTag}</select></div>
+        </div>
+        <label style="margin-top:12px">Mensagem base <small style="font-weight:400;color:var(--cinza)">(a IA cria ~10 variações naturais a partir dela)</small></label>
+        <textarea name="textoBase" rows="4" placeholder="Escreva a mensagem como você mandaria para uma aluna…" required></textarea>
+        <div class="sec-t" style="margin:14px 0 4px">🛡️ Limites de envio</div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+          <div><label style="margin:0 0 4px">Máx. por dia</label><input type="number" name="limiteDia" min="1" max="1000" value="40" style="width:110px"></div>
+          <div><label style="margin:0 0 4px">Delay mín. (seg)</label><input type="number" name="delayMinSeg" min="1" max="3600" value="25" style="width:110px"></div>
+          <div><label style="margin:0 0 4px">Delay máx. (seg)</label><input type="number" name="delayMaxSeg" min="1" max="3600" value="70" style="width:110px"></div>
+          <div><label style="margin:0 0 4px">Das</label><input type="time" name="janelaIni" value="09:00" style="width:120px"></div>
+          <div><label style="margin:0 0 4px">Até</label><input type="time" name="janelaFim" value="20:00" style="width:120px"></div>
+        </div>
+        <div class="acts"><button type="submit" class="save">Criar campanha</button></div>
+        <p class="quando" style="margin:8px 0 0">⚠️ Envio em massa tem risco de bloqueio do número. Comece com poucos por dia e delays altos. Você controla tudo: só envia depois de clicar em <b>Iniciar</b>, e pode pausar quando quiser.</p>
+      </form>`
+      : `<p class="vazio">Você ainda não tem contatos com tags. Vá em <b>Contatos</b>, importe e etiquete primeiro — as campanhas são enviadas por tag.</p>`}
+    </div>`;
+
+  const lista = campanhas.length ? campanhas.map(c => {
+    const total = (c.enviados ? c.enviados.length : 0) + (c.pendentes ? c.pendentes.length : 0) + (c.falhas ? c.falhas.length : 0);
+    const enviados = c.enviados ? c.enviados.length : 0;
+    const pct = total ? Math.round((enviados + (c.falhas ? c.falhas.length : 0)) / total * 100) : 0;
+    const podeIniciar = (c.status === 'pronta' || c.status === 'pausada') && (c.pendentes || []).length;
+    const podePausar = c.status === 'enviando';
+    const ativa = c.status === 'enviando' || c.status === 'gerando';
+    const variacoes = (c.variacoes || []).slice(0, 12).map((v, i) => `<div style="padding:6px 0;border-bottom:1px solid var(--linha);font-size:var(--fs-sm)"><b style="color:var(--teal-esc)">#${i + 1}</b> ${esc(v)}</div>`).join('');
+    const btn = (acao, rot, cls) => `<form method="POST" action="/sofia/campanhas/${acao === 'excluir' ? 'excluir' : 'controle'}"${acao === 'cancelar' || acao === 'excluir' ? ` onsubmit="return confirm('${acao === 'excluir' ? 'Excluir esta campanha do painel?' : 'Cancelar o envio desta campanha?'}')"` : ''} style="display:inline"><input type="hidden" name="id" value="${esc(c.id)}">${acao !== 'excluir' ? `<input type="hidden" name="acao" value="${acao}">` : ''}<button type="submit" class="${cls}" style="padding:5px 12px;font-size:var(--fs-sm)">${rot}</button></form>`;
+    return `<div class="card">
+      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+        <span style="font-weight:700;font-size:var(--fs-h2)">${esc(c.nome)}</span>
+        <span class="pill" style="border-color:var(--linha)">🏷️ ${esc(c.tag)}</span>
+        <span class="quando" style="margin:0">${rotStatus[c.status] || c.status}</span>
+      </div>
+      <div style="margin:8px 0">
+        <div style="background:#eef1f2;border-radius:6px;height:16px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div>
+        <div class="quando" style="margin:4px 0 0">${enviados} enviadas · ${(c.pendentes || []).length} na fila · ${(c.falhas || []).length} falha(s) · ${total} no total · hoje: ${c.enviadosHoje || 0}/${c.limiteDia}</div>
+        <div class="quando" style="margin:2px 0 0">Delay ${c.delayMinSeg}–${c.delayMaxSeg}s · janela ${esc(c.janelaIni)}–${esc(c.janelaFim)}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        ${podeIniciar ? btn('iniciar', '▶️ Iniciar', 'save') : ''}
+        ${podePausar ? btn('pausar', '⏸️ Pausar', 'reset') : ''}
+        ${(c.status !== 'concluida' && c.status !== 'cancelada') ? btn('cancelar', '🚫 Cancelar', 'reset') : ''}
+        ${btn('excluir', '🗑️ Excluir', 'reset')}
+        ${(c.variacoes || []).length ? `<a href="javascript:void(0)" onclick="var d=this.parentNode.parentNode.querySelector('.vars-'+'${esc(c.id)}');if(d)d.style.display=d.style.display==='none'?'block':'none'" class="quando" style="margin:0;text-decoration:underline">ver variações (${(c.variacoes || []).length})</a>` : ''}
+      </div>
+      <div class="vars-${esc(c.id)}" style="display:none;margin-top:8px">${variacoes}</div>
+    </div>`;
+  }).join('') : '<p class="vazio">Nenhuma campanha ainda.</p>';
+
+  const temAtiva = campanhas.some(c => c.status === 'enviando' || c.status === 'gerando');
+  const corpo = `<div class="wrap">
+    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    ${subnavSofia('campanhas')}
+    ${novo}
+    <div class="sec-t">📋 Campanhas</div>
+    ${lista}
+  </div>${temAtiva ? '<script>setTimeout(function(){location.reload()},8000)</script>' : ''}`;
+  return chrome({ tab: 'Campanhas', h1: '🤖 SoFIA', p: 'Campanhas — envio em massa por tag, com variações e limites.' }, 'sofia', corpo);
 }
 
 function paginaSofia(aviso, erro) {
@@ -1851,6 +1931,9 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)rest=0/.test(q)) { aviso = 'Não havia versão anterior para restaurar.'; erro = true; }
     else if (/(?:^|&)ctok=1/.test(q)) aviso = 'Tags salvas.';
     else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. A SoFIA vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
+    else if (/(?:^|&)okc=criada/.test(q)) aviso = '📣 Campanha criada! A IA está gerando as variações. Quando ficar “pronta”, clique em ▶️ Iniciar para começar o envio.';
+    else if (/(?:^|&)okc=ok/.test(q)) aviso = '✔️ Feito.';
+    else if (/(?:^|&)errc=/.test(q)) { aviso = decodeURIComponent((q.match(/errc=([^&]*)/) || [])[1] || 'Erro na campanha.'); erro = true; }
     const sp = new URLSearchParams(q);
     // Só renderiza a sub-aba que o usuário pode ver; se pediu uma sem acesso,
     // cai na primeira permitida (config → conversas → contatos).
@@ -1859,6 +1942,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     if (view === 'contatos') return res.end(paginaSofiaContatos(aviso, erro, { q: sp.get('q') || '', tag: sp.get('tag') || '', pagina: sp.get('pagina') || 0 }));
     if (view === 'conversas') return res.end(paginaSofiaConversas(aviso, erro));
+    if (view === 'campanhas') return res.end(paginaSofiaCampanhas(aviso, erro));
     return res.end(paginaSofia(aviso, erro));
   }
   // Importar contatos (CSV enviado pelo painel, lido no navegador e postado como JSON).
@@ -2017,6 +2101,47 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e5, () => {
       try { sofia.enviarComando('logout'); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?dcon=1' }); res.end();
+    });
+  }
+  // Criar campanha: resolve os contatos da tag e enfileira o pedido para o listener.
+  if (req.method === 'POST' && url === '/sofia/campanhas/criar') {
+    return lerCorpo(req, 2e6, corpo => {
+      const p = new URLSearchParams(corpo);
+      const tag = (p.get('tag') || '').trim();
+      const textoBase = (p.get('textoBase') || '').trim();
+      const nome = (p.get('nome') || '').trim() || 'Campanha';
+      try {
+        if (!tag || !textoBase) throw new Error('Preencha a tag e a mensagem.');
+        const alvo = contatos.listar({ tag, pagina: 0, porPagina: 100000 });
+        const destinatarios = (alvo.itens || []).map(c => ({ tel: c.tel, nome: c.nome || '' })).filter(d => d.tel);
+        if (!destinatarios.length) throw new Error('Nenhum contato com essa tag.');
+        sofia.opCampanha({
+          op: 'criar',
+          campanha: {
+            id: 'c' + Date.now(), nome, tag, textoBase,
+            limiteDia: p.get('limiteDia') || '40', delayMinSeg: p.get('delayMinSeg') || '25', delayMaxSeg: p.get('delayMaxSeg') || '70',
+            janelaIni: p.get('janelaIni') || '09:00', janelaFim: p.get('janelaFim') || '20:00',
+            destinatarios,
+          },
+        });
+        res.writeHead(303, { Location: '/sofia?view=campanhas&okc=criada' }); res.end();
+      } catch (e) {
+        res.writeHead(303, { Location: '/sofia?view=campanhas&errc=' + encodeURIComponent(e.message) }); res.end();
+      }
+    });
+  }
+  if (req.method === 'POST' && url === '/sofia/campanhas/controle') {
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      try { sofia.opCampanha({ op: 'controle', id: p.get('id'), acao: p.get('acao') }); } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?view=campanhas&okc=ok' }); res.end();
+    });
+  }
+  if (req.method === 'POST' && url === '/sofia/campanhas/excluir') {
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      try { sofia.opCampanha({ op: 'excluir', id: p.get('id') }); } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?view=campanhas&okc=ok' }); res.end();
     });
   }
 
