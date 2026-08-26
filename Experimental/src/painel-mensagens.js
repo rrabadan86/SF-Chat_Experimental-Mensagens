@@ -1196,10 +1196,10 @@ function paginaSofiaConversas(aviso, erro) {
     ${subnavSofia('conversas')}
     <div class="sec-t">💬 Conversas da SoFIA <small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
     <style>
-      .inbox-grid{display:grid;grid-template-columns:236px minmax(0,1fr);gap:14px;align-items:start}
+      .inbox-grid{display:grid;grid-template-columns:236px minmax(0,1fr);gap:14px;align-items:stretch}
       .inbox-grid>div{min-width:0}
-      #convChat{display:flex;flex-direction:column;height:calc(100vh - 200px);min-height:420px;position:sticky;top:14px}
-      @media(max-width:760px){ .inbox-grid{grid-template-columns:minmax(0,1fr)} #convLista{max-height:260px;overflow:auto} #convChat{height:auto;min-height:340px;position:static} }
+      #convChat{display:flex;flex-direction:column;min-height:360px;max-height:calc(100vh - 190px)}
+      @media(max-width:760px){ .inbox-grid{grid-template-columns:minmax(0,1fr);align-items:start} #convLista{max-height:260px;overflow:auto} #convChat{max-height:none;min-height:340px} }
     </style>
     <div class="inbox-grid">
       <div>
