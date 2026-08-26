@@ -34,6 +34,7 @@ const F = {
   eventos: path.join(DIR, 'sofia-eventos.jsonl'), // ações de automação — listener escreve, painel consome
   respostas: path.join(DIR, 'sofia-respostas.jsonl'), // fila de respostas do painel → listener envia
   humano: path.join(DIR, 'sofia-humano.json'), // conversas sob controle humano (Sofia não responde) — lido pela Sofia
+  bloqueios: path.join(DIR, 'sofia-bloqueios.json'), // números bloqueados (Sofia ignora) — painel escreve, listener lê
   campanhas: path.join(DIR, 'campanhas.json'), // estado das campanhas — publicado pelo listener (painel só lê)
   campanhasInbox: path.join(DIR, 'campanhas-inbox.jsonl'), // pedidos do painel → listener (criar/controle/excluir)
 };
@@ -343,6 +344,25 @@ function salvarFotoCampanha(id, dataUrl) {
   fs.writeFileSync(arq, Buffer.from(m[2], 'base64'));
   return arq;
 }
+// ── Lista de bloqueio (Sofia ignora estes números, como o "Bloquear" do WhatsApp) ──
+// Array de telefones (só dígitos). O painel escreve; o listener lê a cada mensagem.
+function lerBloqueios() {
+  try { const a = JSON.parse(ler(F.bloqueios)); return Array.isArray(a) ? a.map(x => String(x).replace(/\D/g, '')).filter(Boolean) : []; }
+  catch (_) { return []; }
+}
+function estaBloqueado(tel) {
+  const d = String(tel || '').replace(/\D/g, '');
+  return !!d && lerBloqueios().indexOf(d) >= 0;
+}
+function setBloqueio(tel, ativo) {
+  const d = String(tel || '').replace(/\D/g, '');
+  if (!d) return false;
+  let a = lerBloqueios().filter(x => x !== d);
+  if (ativo) a.push(d);
+  fs.writeFileSync(F.bloqueios, JSON.stringify(a), 'utf8');
+  return !!ativo;
+}
+
 function setControleHumano(chave, ativo) {
   const o = lerHumano();
   if (ativo) o[chave] = Date.now(); else delete o[chave];
@@ -353,6 +373,6 @@ function setControleHumano(chave, ativo) {
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, enviarComando,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, enviarComando,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

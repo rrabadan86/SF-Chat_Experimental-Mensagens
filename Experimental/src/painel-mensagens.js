@@ -146,7 +146,7 @@ function sofiaRotaPermitida(sess, url) {
   const has = k => (sess.telas || []).includes(k);
   if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto') return has('sofia_conversas');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
-  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
+  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag' || url === '/sofia/contatos/bloquear') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar') return has('sofia_config');
   return false;
@@ -1589,11 +1589,13 @@ function paginaSofiaContatos(aviso, erro, params) {
     const nm = c.nome || '';
     const jc = esc(JSON.stringify(c.tel));
     const btnConversa = podeConversa ? `<button type="button" class="ct-ic" title="Ir para a conversa" onclick='irConversa(${jc})'>💬</button>` : '';
-    return `<tr class="ct-row" data-nome="${esc((nm || '').toLowerCase())}" onclick='abrirModal(${jc})'>
+    const bloq = sofia.estaBloqueado(c.tel);
+    return `<tr class="ct-row" data-nome="${esc((nm || '').toLowerCase())}" data-tel="${esc(c.tel)}" data-bloq="${bloq ? '1' : '0'}" onclick='abrirModal(${jc})'>
       <td>
         <div style="display:flex;align-items:center;gap:10px;min-width:0">
           <span class="ct-av" style="background:${corAv(nm || c.tel)}">${esc(iniciais(nm, c.tel))}</span>
           <span class="ct-nm">${esc(nm || '(sem nome)')}</span>
+          ${bloq ? '<span title="Contato bloqueado" style="flex:none;color:#c0392b;font-size:.9rem">🚫</span>' : ''}
         </div>
       </td>
       <td class="ct-tel">${esc(fmtTelP(c.tel))}</td>
@@ -1653,6 +1655,7 @@ function paginaSofiaContatos(aviso, erro, params) {
       <select id="ctTagSel" name="tag" style="min-width:200px" onchange="this.form.submit()">${opcoes}</select>
       <button type="submit" class="save" style="padding:8px 14px">Filtrar</button>
       ${(q || tagSel) ? `<a href="/sofia?view=contatos" class="reset" style="padding:8px 14px">Limpar</a>` : ''}
+      <button type="button" id="ctBloqFil" class="reset" onclick="filtrarBloqueados()" style="padding:8px 14px" title="Mostrar só os contatos bloqueados">🚫 Bloqueados</button>
     </form>
 
     ${gerenciarTags}
@@ -1725,7 +1728,7 @@ function paginaSofiaContatos(aviso, erro, params) {
   <div id="ctModal" class="ct-ov" onclick="if(event.target===this)fecharModal()">
     <div class="ct-dlg">
       <div class="ct-dh"><h2>Editar contato</h2><button type="button" class="ct-x" onclick="fecharModal()">×</button></div>
-      <div class="ct-hero"><span id="ctAv" class="ct-av ct-av-lg"></span><div id="ctHnome" class="ct-hnome"></div><div id="ctHtel" class="ct-htel"></div></div>
+      <div class="ct-hero"><span id="ctAv" class="ct-av ct-av-lg"></span><div id="ctHnome" class="ct-hnome"></div><div id="ctHtel" class="ct-htel"></div><div id="ctBloqTag" style="display:none;margin-top:6px"><span style="background:#fdeaea;color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:2px 12px;font-size:.74rem;font-weight:700">🚫 Contato bloqueado</span></div></div>
       <label>Nome</label>
       <input type="text" id="ctNome" placeholder="Nome do contato">
       <label style="margin-top:12px">Tags</label>
@@ -1733,13 +1736,14 @@ function paginaSofiaContatos(aviso, erro, params) {
       <div class="ct-nova"><input type="text" id="ctNovaTag" placeholder="Nova tag" onkeydown="if(event.key==='Enter'){event.preventDefault();addNovaTag();}"><button type="button" class="reset" onclick="addNovaTag()" style="padding:7px 12px">＋ Adicionar</button></div>
       <div class="ct-foot">
         ${podeConversa ? `<button type="button" class="reset" id="ctConversa" onclick="irConversaModal()" style="padding:9px 16px;margin-right:auto">💬 Ver conversa</button>` : ''}
+        <button type="button" class="reset" id="ctBloq" onclick="alternarBloqueio()" style="padding:9px 16px${podeConversa ? '' : ';margin-right:auto'}">🚫 Bloquear</button>
         <button type="button" class="reset" onclick="fecharModal()" style="padding:9px 16px">Cancelar</button>
         <button type="button" class="save" id="ctSalvar" onclick="salvarContato()" style="padding:9px 18px">Salvar</button>
       </div>
     </div>
   </div>
 <script>
-  var CONTATOS = ${JSON.stringify(r.itens.map(c => ({ tel: c.tel, telFmt: fmtTelP(c.tel), nome: c.nome || '', tags: c.tags || [], ini: iniciais(c.nome, c.tel), cor: corAv(c.nome || c.tel) })))};
+  var CONTATOS = ${JSON.stringify(r.itens.map(c => ({ tel: c.tel, telFmt: fmtTelP(c.tel), nome: c.nome || '', tags: c.tags || [], ini: iniciais(c.nome, c.tel), cor: corAv(c.nome || c.tel), bloq: sofia.estaBloqueado(c.tel) })))};
   var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, wpp: c.avisarWpp, remove: c.remove }; }))};
   var TODAS_TAGS_LISTA = ${JSON.stringify(tags.map(t => t.tag))};
   var tgRemove = [];
@@ -1795,6 +1799,18 @@ function paginaSofiaContatos(aviso, erro, params) {
   function corTagJs(t){return PAL_TAG[_hash(t)%PAL_TAG.length];}
   var ctSel=null, ctTags=[];
   function abrirFiltroTag(){var s=document.getElementById('ctTagSel');if(s){s.focus();if(s.showPicker)try{s.showPicker();}catch(e){}}}
+  var ctSoBloq=false;
+  function filtrarBloqueados(){
+    ctSoBloq=!ctSoBloq;
+    var btn=document.getElementById('ctBloqFil');
+    if(btn){ btn.classList.toggle('save',ctSoBloq); btn.classList.toggle('reset',!ctSoBloq); btn.textContent=ctSoBloq?'✅ Ver todos':'🚫 Bloqueados'; }
+    var linhas=document.querySelectorAll('.ct-tab tbody tr');
+    var n=0;
+    linhas.forEach(function(tr){ var bl=tr.getAttribute('data-bloq')==='1'; var mostra=!ctSoBloq||bl; tr.style.display=mostra?'':'none'; if(mostra&&bl)n++; });
+    var av=document.getElementById('ctBloqAviso');
+    if(ctSoBloq&&!n&&!av){ var tb=document.querySelector('.ct-tab tbody'); if(tb){ var tr=document.createElement('tr'); tr.id='ctBloqAviso'; tr.innerHTML='<td colspan="4" style="text-align:center;color:var(--cinza);padding:18px">Nenhum contato bloqueado.</td>'; tb.appendChild(tr); } }
+    else if(av){ av.style.display=(ctSoBloq&&!n)?'':'none'; }
+  }
   var ctOrdemNome=0; // 0=original, 1=crescente (A→Z), 2=decrescente (Z→A)
   function ordenarContatos(){
     var tb=document.querySelector('.ct-tab tbody'); if(!tb) return;
@@ -1822,7 +1838,26 @@ function paginaSofiaContatos(aviso, erro, params) {
     document.getElementById('ctNome').value=c.nome||'';
     document.getElementById('ctNovaTag').value='';
     renderTags();
+    ctPintaBloqueio(!!c.bloq);
     document.getElementById('ctModal').style.display='flex';
+  }
+  function ctPintaBloqueio(bl){
+    var b=document.getElementById('ctBloq'), tag=document.getElementById('ctBloqTag');
+    if(b){ b.textContent=bl?'✅ Desbloquear':'🚫 Bloquear'; b.style.color=bl?'#1c8f52':'#c0392b'; }
+    if(tag) tag.style.display=bl?'block':'none';
+  }
+  function alternarBloqueio(){
+    if(!ctSel) return;
+    var novo=!ctSel.bloq;
+    var b=document.getElementById('ctBloq'); if(b){ b.disabled=true; b.textContent='…'; }
+    fetch('/sofia/contatos/bloquear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tel:ctSel.tel,ativo:novo})})
+      .then(function(r){return r.json();}).then(function(j){
+        if(b) b.disabled=false;
+        if(j.ok){ ctSel.bloq=novo; ctPintaBloqueio(novo);
+          for(var i=0;i<CONTATOS.length;i++){ if(CONTATOS[i].tel===ctSel.tel){ CONTATOS[i].bloq=novo; break; } }
+          var row=document.querySelector('.ct-row[data-tel="'+ctSel.tel.replace(/"/g,'')+'"]'); if(row) row.setAttribute('data-bloq',novo?'1':'0');
+        } else { ctPintaBloqueio(ctSel.bloq); alert(j.erro||'Não consegui atualizar o bloqueio.'); }
+      }).catch(function(){ if(b) b.disabled=false; ctPintaBloqueio(ctSel.bloq); alert('Erro de rede.'); });
   }
   function fecharModal(){document.getElementById('ctModal').style.display='none';ctSel=null;}
   function renderTags(){
@@ -2762,6 +2797,17 @@ const server = http.createServer((req, res) => {
         else contatos.editarContato(p.get('telOrig'), { nome: p.get('nome'), telefone: p.get('telefone'), tags: p.get('tags') || '' });
       } catch (_) {}
       voltarContatos(p, res);
+    });
+  }
+  // Bloquear / desbloquear um contato (a Sofia ignora quem está bloqueado).
+  if (req.method === 'POST' && url === '/sofia/contatos/bloquear') {
+    return lerCorpo(req, 1e5, corpo => {
+      let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      const tel = String(d.tel || '').trim();
+      if (!tel) return res.end(JSON.stringify({ ok: false, erro: 'faltou o telefone' }));
+      try { const bl = sofia.setBloqueio(tel, !!d.ativo); res.end(JSON.stringify({ ok: true, bloqueado: bl })); }
+      catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
   }
   // Renomear/excluir uma tag em TODOS os contatos.

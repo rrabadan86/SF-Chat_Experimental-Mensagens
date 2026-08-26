@@ -516,6 +516,29 @@ function lerRegras(): Record<string, RegraTag[]> {
   } catch { regras = {}; regrasMtime = -1; }
   return regras;
 }
+// ── Lista de bloqueio (Sofia ignora, como o "Bloquear" do WhatsApp) ──────────
+//    Array de telefones (só dígitos) em sofia-bloqueios.json. O painel escreve;
+//    lemos aqui a cada mensagem (cache por mtime).
+const BLOQUEIOS_FILE = path.join(DIR, "sofia-bloqueios.json");
+let bloqueios = new Set<string>();
+let bloqueiosMtime = -1;
+function lerBloqueios(): Set<string> {
+  try {
+    const st = fs.statSync(BLOQUEIOS_FILE);
+    if (st.mtimeMs !== bloqueiosMtime) {
+      const arr = JSON.parse(fs.readFileSync(BLOQUEIOS_FILE, "utf8"));
+      bloqueios = new Set((Array.isArray(arr) ? arr : []).map((x: any) => String(x).replace(/\D/g, "")).filter(Boolean));
+      bloqueiosMtime = st.mtimeMs;
+    }
+  } catch { bloqueios = new Set(); bloqueiosMtime = -1; }
+  return bloqueios;
+}
+function estaBloqueado(...tels: string[]): boolean {
+  const set = lerBloqueios();
+  if (!set.size) return false;
+  return tels.some((t) => { const d = String(t || "").replace(/\D/g, ""); return !!d && set.has(d); });
+}
+
 function emitirAcao(telefone: string, nome: string, r: RegraTag, motivo: string, extra?: string) {
   try {
     fs.appendFileSync(EVENTOS_FILE, JSON.stringify({
@@ -954,6 +977,9 @@ client.on("message", (msg: any) => {
     if (!texto) { tratarSemTexto(msg); return; } // áudio/imagem sem legenda → aviso educado (a Sofia ainda não escuta áudio)
     enfileirar(async () => {
       const { chave, telefone } = await resolverTel(msg); // chave estável p/ memória + telefone real p/ agendar
+      // Contato bloqueado (como o "Bloquear" do WhatsApp): a Sofia ignora por
+      // completo — não responde, não registra no inbox, não roda automações.
+      if (estaBloqueado(chave, telefone, jidParaTel(msg.from))) { log(`mensagem de contato bloqueado (${chave}) — ignorada.`); return; }
       const nomeAluna = (msg._data && msg._data.notifyName) || "";
       registrarInbox(chave, msg.from, nomeAluna, "aluna", texto); // mostra no inbox NA HORA (painel ao vivo)
       try { checarGatilhosAluna(chave, nomeAluna, texto); } catch (e: any) { log("gatilhos: " + (e?.message || e)); } // automações por tag (palavra/campanha)

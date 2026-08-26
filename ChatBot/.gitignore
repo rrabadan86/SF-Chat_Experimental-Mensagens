@@ -47,3 +47,5 @@ sofia-eventos.*.proc
 sofia-health-min.txt
 
 sofia-agrupar-seg.txt
+
+sofia-bloqueios.json
