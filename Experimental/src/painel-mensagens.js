@@ -2216,7 +2216,6 @@ function paginaSofia(aviso, erro) {
       <span style="margin-right:auto;font-weight:700;font-size:.95rem">${e.ativa ? '🟢 IA ativa' : '⏸️ IA pausada'}<small style="font-weight:400;color:var(--cinza)"> — ${e.ativa ? 'respondendo as alunas' : 'não responde (atenda manual)'}</small></span>
       <form method="POST" action="/sofia/toggle" style="margin:0;display:inline"><button type="submit" class="${e.ativa ? 'reset' : 'save'}" style="padding:6px 14px">${e.ativa ? '⏸️ Pausar SoFIA' : '▶️ Ativar SoFIA'}</button></form>
       <form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="margin:0;display:inline"><button type="submit" class="reset" style="padding:6px 14px">🔌 Desconectar</button></form>
-      <button type="submit" form="formSalvar" class="save" style="padding:6px 14px">💾 Salvar tudo</button>
     </div>
 
     <form id="formSalvar" method="POST" action="/sofia/salvar">
