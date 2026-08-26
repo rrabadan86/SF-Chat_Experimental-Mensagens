@@ -973,9 +973,19 @@ function transcricaoLigadaNoPainel(): boolean {
   catch { return true; } // sem arquivo = ligado (padrão)
 }
 function transcricaoAtiva(): boolean { return !!TRANSCRICAO_KEY && transcricaoLigadaNoPainel(); }
+async function baixarMidia(msg: any): Promise<any> {
+  // downloadMedia às vezes falha com um erro interno minificado ("r"). Tentamos
+  // de novo e, se preciso, re-buscamos a mensagem pelo id (media mais "fresca").
+  for (let i = 0; i < 2; i++) {
+    try { const m = await msg.downloadMedia(); if (m && m.data) return m; } catch (e: any) { log("downloadMedia falhou (tentativa " + (i + 1) + "): " + (e?.message || e)); }
+    try { const id = msg.id && (msg.id._serialized || msg.id); if (id) { const m2 = await client.getMessageById(id); const md = await m2.downloadMedia(); if (md && md.data) return md; } } catch (e: any) { log("re-baixar por id falhou: " + (e?.message || e)); }
+    await sleep(800);
+  }
+  return null;
+}
 async function transcreverAudio(msg: any): Promise<string> {
-  const media = await msg.downloadMedia();
-  if (!media || !media.data) return "";
+  const media = await baixarMidia(msg);
+  if (!media || !media.data) { log("transcrição: não consegui baixar o áudio."); return ""; }
   const bytes = Buffer.from(media.data, "base64");
   const mime = media.mimetype || "audio/ogg";
   const ext = mime.includes("mp4") || mime.includes("m4a") ? "m4a" : mime.includes("mpeg") ? "mp3" : mime.includes("wav") ? "wav" : "ogg";
@@ -1073,7 +1083,7 @@ client.on("message", (msg: any) => {
     if ((tipo === "ptt" || tipo === "audio") && transcricaoAtiva()) {
       enfileirar(async () => {
         let txt = "";
-        try { txt = await transcreverAudio(msg); } catch (e: any) { log("transcrição falhou: " + (e?.message || e)); }
+        try { txt = await transcreverAudio(msg); } catch (e: any) { log("transcrição falhou: " + (e?.stack || e?.message || e)); }
         if (txt) { log(`🎤 áudio transcrito (${txt.length} car.)`); await processarTextoDaAluna(msg, txt, "🎤 " + txt); }
         else { await avisarAudioPorTexto(msg); } // não deu para transcrever → pede texto
       });
