@@ -132,7 +132,7 @@ function sofiaRotaPermitida(sess, url) {
   const has = k => (sess.telas || []).includes(k);
   if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano') return has('sofia_conversas');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
-  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag') return has('sofia_contatos');
+  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/interacoes') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar') return has('sofia_config');
   return false;
@@ -319,8 +319,15 @@ const ESTILO = `
   footer{color:var(--cinza);font-size:var(--fs-xs);text-align:center;padding:18px}
   /* Contatos — tabela + modal */
   .ct-wrap{background:var(--card);border:1px solid var(--linha);border-radius:12px;overflow-x:auto;margin:10px 0}
-  .ct-tab{width:100%;min-width:560px;border-collapse:collapse;font-size:var(--fs-sm);table-layout:fixed}
-  .ct-tab col.c-nome{width:38%}.ct-tab col.c-tel{width:23%}.ct-tab col.c-tags{width:27%}.ct-tab col.c-act{width:12%;min-width:104px}
+  .ct-tab{width:100%;min-width:620px;border-collapse:collapse;font-size:var(--fs-sm);table-layout:fixed}
+  .ct-int-tab{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
+  .ct-int-tab th{text-align:left;font-family:"Montserrat";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;padding:9px 8px;border-bottom:1px solid var(--linha)}
+  .ct-int-tab td{padding:10px 8px;border-bottom:1px solid var(--linha);vertical-align:middle}
+  .ct-int-tab tr:last-child td{border-bottom:0}
+  .ct-badge{display:inline-block;font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px}
+  .ct-badge.ativa{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+  .ct-badge.enc{background:#eef0f1;color:#6b6b70;border:1px solid #dfe1e3}
+  .ct-tab col.c-nome{width:34%}.ct-tab col.c-tel{width:21%}.ct-tab col.c-tags{width:29%}.ct-tab col.c-act{width:16%;min-width:150px}
   .ct-tab th{text-align:left;font-family:"Montserrat";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;letter-spacing:.03em;padding:11px 14px;border-bottom:1px solid var(--linha);white-space:nowrap;background:#fafbfb}
   .ct-tab td{padding:10px 14px;border-bottom:1px solid var(--linha);vertical-align:middle}
   .ct-tab tbody tr:last-child td{border-bottom:0}
@@ -1394,6 +1401,7 @@ function paginaSofiaContatos(aviso, erro, params) {
       <td class="ct-tel">${esc(fmtTelP(c.tel))}</td>
       <td>${(c.tags || []).map(chipTag).join('') || '<span class="quando" style="font-size:.74rem">—</span>'}</td>
       <td class="ct-acts" onclick="event.stopPropagation()">
+        <button type="button" class="ct-ic" title="Interações" onclick='abrirInteracoes(${jc})'>📊</button>
         ${btnConversa}
         <button type="button" class="ct-ic" title="Editar" onclick='abrirModal(${jc})'>✏️</button>
         <button type="button" class="ct-ic ct-del" title="Excluir" onclick='excluirContato(${jc})'>🗑️</button>
@@ -1457,6 +1465,21 @@ function paginaSofiaContatos(aviso, erro, params) {
       </table>
     </div>` : '<div class="card"><p class="quando">Nenhum contato encontrado. Importe um CSV acima ou ajuste o filtro.</p></div>'}
     ${pag}
+  </div>
+
+  <div id="ctIntModal" class="ct-ov" onclick="if(event.target===this)fecharInteracoes()">
+    <div class="ct-dlg" style="max-width:600px">
+      <div class="ct-dh"><h2>Interações</h2><button type="button" class="ct-x" onclick="fecharInteracoes()">×</button></div>
+      <div id="ctIntHero" class="quando" style="margin:0 0 10px"></div>
+      <div id="ctIntBody"><p class="quando">Carregando…</p></div>
+    </div>
+  </div>
+  <div id="ctResModal" class="ct-ov" style="z-index:60" onclick="if(event.target===this)fecharResumo()">
+    <div class="ct-dlg" style="max-width:460px">
+      <div class="ct-dh"><h2>Resumo do atendimento</h2><button type="button" class="ct-x" onclick="fecharResumo()">×</button></div>
+      <div id="ctResData" class="quando" style="margin:0 0 8px"></div>
+      <div id="ctResBody" style="font-size:var(--fs-body);line-height:1.55;white-space:pre-wrap"></div>
+    </div>
   </div>
 
   <div id="ctModal" class="ct-ov" onclick="if(event.target===this)fecharModal()">
@@ -1527,6 +1550,41 @@ function paginaSofiaContatos(aviso, erro, params) {
   }
   function irConversa(tel){ location.href='/sofia?view=conversas&chat='+encodeURIComponent(tel); }
   function irConversaModal(){ if(ctSel) irConversa(ctSel.tel); }
+  var intSessoes=[];
+  function fmtDataHora(ts){ try{ return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})+'h'; }catch(e){ return ''; } }
+  function abrirInteracoes(tel){
+    var c=null; for(var i=0;i<CONTATOS.length;i++){if(CONTATOS[i].tel===tel){c=CONTATOS[i];break;}}
+    document.getElementById('ctIntHero').textContent=c?((c.nome||'(sem nome)')+' · '+c.telFmt):'';
+    document.getElementById('ctIntBody').innerHTML='<p class="quando">Carregando…</p>';
+    document.getElementById('ctIntModal').style.display='flex';
+    fetch('/sofia/contatos/interacoes?tel='+encodeURIComponent(tel),{cache:'no-store'})
+      .then(function(r){return r.json();}).then(function(j){
+        intSessoes=(j&&j.sessoes)||[];
+        renderInteracoes();
+      }).catch(function(){ document.getElementById('ctIntBody').innerHTML='<p class="quando">❌ Não consegui carregar agora.</p>'; });
+  }
+  function renderInteracoes(){
+    var box=document.getElementById('ctIntBody');
+    if(!intSessoes.length){ box.innerHTML='<p class="quando">Nenhuma interação registrada ainda. O histórico começa a contar a partir de agora — quando a aluna conversar com a SoFIA, cada atendimento aparece aqui.</p>'; return; }
+    var linhas=intSessoes.map(function(s,idx){
+      var badge=s.status==='ativa'?'<span class="ct-badge ativa">Em andamento</span>':'<span class="ct-badge enc">Encerrado</span>';
+      return '<tr><td>'+badge+'</td><td>'+fmtDataHora(s.inicioEm)+'</td><td style="color:var(--cinza)">'+(s.nMsgs||0)+' msg</td><td style="text-align:right"><button type="button" class="ct-ic" title="Ver resumo" onclick="verResumo('+idx+')">📄</button></td></tr>';
+    }).join('');
+    box.innerHTML='<div style="overflow-x:auto"><table class="ct-int-tab"><thead><tr><th>Status</th><th>Data</th><th>Trocas</th><th style="text-align:right">Resumo</th></tr></thead><tbody>'+linhas+'</tbody></table></div>'
+      +'<p class="quando" style="margin:10px 0 0">Total de '+intSessoes.length+' interaç'+(intSessoes.length===1?'ão':'ões')+'.</p>';
+  }
+  function fecharInteracoes(){ document.getElementById('ctIntModal').style.display='none'; }
+  function verResumo(idx){
+    var s=intSessoes[idx]; if(!s) return;
+    document.getElementById('ctResData').textContent=fmtDataHora(s.inicioEm);
+    var body=document.getElementById('ctResBody');
+    if(s.status==='ativa'){ body.innerHTML='<span class="quando">Este atendimento ainda está em andamento — o resumo é gerado quando a conversa encerra.</span>'; }
+    else if(!s.resumoPronto){ body.innerHTML='<span class="quando">Resumo sendo gerado… abra de novo em instantes.</span>'; }
+    else if(!s.resumo){ body.innerHTML='<span class="quando">Sem resumo para este atendimento (conversa muito curta ou sem conteúdo).</span>'; }
+    else { body.textContent=s.resumo; }
+    document.getElementById('ctResModal').style.display='flex';
+  }
+  function fecharResumo(){ document.getElementById('ctResModal').style.display='none'; }
   function excluirContato(tel){
     if(!confirm('Excluir este contato de vez?')) return;
     fetch('/sofia/contatos/salvar',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'acao=excluir&telOrig='+encodeURIComponent(tel)})
@@ -2333,6 +2391,19 @@ const server = http.createServer((req, res) => {
     try { const hum = sofia.lerHumano(); for (const k in obj) obj[k].humano = !!hum[k]; } catch (_) {} // controle humano por conversa
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify(obj));
+  }
+  // Interações (histórico de sessões) de UM contato — aba Contatos → Interações.
+  if (req.method === 'GET' && url === '/sofia/contatos/interacoes') {
+    const tel = (new URLSearchParams(req.url.split('?')[1] || '')).get('tel') || '';
+    const alvo = String(tel).replace(/\D/g, '');
+    const ult8 = s => { const d = String(s).replace(/\D/g, ''); return d.length >= 8 ? d.slice(-8) : d; };
+    let hist = {};
+    try { hist = sofia.historico() || {}; } catch (_) {}
+    let achado = null;
+    for (const k in hist) { if (k.replace(/\D/g, '') === alvo || (ult8(k) && ult8(k) === ult8(alvo))) { achado = hist[k]; break; } }
+    const sessoes = achado ? (achado.sessoes || []).slice().sort((a, b) => (b.inicioEm || 0) - (a.inicioEm || 0)) : [];
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ ok: true, nome: achado ? achado.nome : '', sessoes }));
   }
   // Liga/desliga o controle humano de UMA conversa (a Sofia para de responder só ela).
   if (req.method === 'POST' && url === '/sofia/humano') {

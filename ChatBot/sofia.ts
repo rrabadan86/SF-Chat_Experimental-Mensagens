@@ -718,6 +718,36 @@ Mensagem:
   return [base]; // fallback: usa o texto original
 }
 
+// Resumo curto e natural de UMA sessão de atendimento (para a aba Contatos →
+// Interações do painel). Recebe as linhas da conversa e devolve 2–4 frases em
+// português. Usado pelo listener quando uma sessão encerra. Best-effort: em
+// qualquer falha devolve "" (o painel mostra um aviso simpático no lugar).
+export async function resumirConversa(linhas: { autor: string; texto: string }[]): Promise<string> {
+  const texto = (linhas || [])
+    .map((l) => `${l.autor === "aluna" ? "Aluna" : l.autor === "humano" ? "Atendente" : "SoFIA"}: ${l.texto}`)
+    .join("\n")
+    .slice(0, 8000);
+  if (!texto.trim()) return "";
+  try {
+    const resp = await comRetry(() =>
+      anthropic.messages.create({
+        model: MODELO_EXTRACAO,
+        max_tokens: 260,
+        system:
+          "Você resume atendimentos de um Studio de treinamento para mulheres (SlimFit). " +
+          "Leia a conversa entre a aluna e a SoFIA (assistente) e escreva um resumo curto em português do Brasil, " +
+          "de 2 a 4 frases, dizendo o que a aluna queria e como terminou (agendou aula experimental? ficou de pensar? " +
+          "tirou dúvida de plano ou preço? não respondeu?). Seja objetivo e fiel — não invente nada. Sem listas, sem títulos.",
+        messages: [{ role: "user", content: `Resuma este atendimento:\n\n${texto}` }],
+      }),
+    );
+    return resp.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.TextBlock).text).join("").trim();
+  } catch (e: any) {
+    console.log("⚠️  resumirConversa falhou:", e?.message ?? e);
+    return "";
+  }
+}
+
 interface ResumoAgendamento { nome_completo: string; email: string; dia: string; hora: string; }
 
 async function extrairResumo(conversa: Conversa, nomeWhatsapp: string): Promise<ResumoAgendamento> {

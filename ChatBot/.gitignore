@@ -24,6 +24,7 @@ sofia-midias.txt
 sofia-boot-fails
 .sofia-boot-fails
 sofia-conversas.json
+sofia-historico.json
 sofia-respostas.jsonl
 sofia-respostas.*.proc
 sofia-humano.json

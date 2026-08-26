@@ -22,7 +22,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
-import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, deveResponder } from "./sofia";
+import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, deveResponder, janelaSessaoMs, resumirConversa } from "./sofia";
 
 const DIR = process.cwd();
 const STATUS_FILE = path.join(DIR, "sofia-wa-status.json");
@@ -344,10 +344,94 @@ function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMs
   if (!c) { c = { jid: jid || "", nome: nome || "", ultimaEm: 0, msgs: [] }; inbox.set(chave, c); }
   if (jid) c.jid = jid;
   if (nome && !c.nome) c.nome = nome;
-  c.msgs.push({ autor, texto: t, em: Date.now() });
+  const em = Date.now();
+  c.msgs.push({ autor, texto: t, em });
   if (c.msgs.length > INBOX_MAX_MSGS) c.msgs.splice(0, c.msgs.length - INBOX_MAX_MSGS);
-  c.ultimaEm = Date.now();
+  c.ultimaEm = em;
   agendarSalvarInbox();
+  registrarSessao(chave, nome || c.nome, autor, t, em);
+}
+
+// ── Histórico de INTERAÇÕES (aba Contatos → Interações do painel) ────────────
+//    Permanente e separado do inbox (que só guarda 7 dias). Uma "interação" é
+//    uma sessão: começa numa mensagem da aluna e vai se estendendo enquanto as
+//    respostas chegam dentro da janela de sessão (a mesma da memória da Sofia).
+//    Quando passa a janela sem novidade, a sessão ENCERRA e ganha um resumo
+//    curto (gerado pela Claude). Guardamos só metadados + resumo (sem transcrição
+//    — leve e discreto). O arquivo cresce para sempre; o painel só lê.
+const HISTORICO_FILE = path.join(DIR, "sofia-historico.json");
+type SessaoMsg = { autor: string; texto: string };
+type Sessao = { id: string; inicioEm: number; fimEm: number; nMsgs: number; status: "ativa" | "encerrada"; resumo: string; resumoPronto: boolean; _buf?: SessaoMsg[] };
+type HistContato = { nome: string; sessoes: Sessao[] };
+const historico = new Map<string, HistContato>();
+let histTimer: ReturnType<typeof setTimeout> | null = null;
+const HIST_MAX_SESSOES = 200; // teto por contato (mantém as mais recentes)
+
+function carregarHistorico() {
+  try {
+    const o = JSON.parse(fs.readFileSync(HISTORICO_FILE, "utf8"));
+    if (o && typeof o === "object") for (const k of Object.keys(o)) historico.set(k, o[k]);
+  } catch {}
+}
+function salvarHistorico() {
+  const obj: Record<string, HistContato> = {};
+  for (const [k, h] of historico) {
+    obj[k] = { nome: h.nome, sessoes: h.sessoes.map((s) => ({ id: s.id, inicioEm: s.inicioEm, fimEm: s.fimEm, nMsgs: s.nMsgs, status: s.status, resumo: s.resumo, resumoPronto: s.resumoPronto })) };
+  }
+  try { fs.writeFileSync(HISTORICO_FILE, JSON.stringify(obj), "utf8"); } catch {}
+}
+function agendarSalvarHistorico() { if (histTimer) return; histTimer = setTimeout(() => { histTimer = null; salvarHistorico(); }, 1500); }
+
+function registrarSessao(chave: string, nome: string, autor: string, texto: string, em: number) {
+  const janela = janelaSessaoMs();
+  let h = historico.get(chave);
+  const aberta = h && h.sessoes.length && h.sessoes[h.sessoes.length - 1].status === "ativa" ? h.sessoes[h.sessoes.length - 1] : null;
+  const expirada = aberta && em - aberta.fimEm > janela;
+
+  if (aberta && !expirada) {
+    // Estende a sessão em andamento (qualquer autor).
+    aberta.fimEm = em; aberta.nMsgs++;
+    (aberta._buf || (aberta._buf = [])).push({ autor, texto });
+    if (nome && (!h!.nome || h!.nome !== nome)) h!.nome = nome;
+    agendarSalvarHistorico();
+    return;
+  }
+  if (aberta && expirada) { void fecharSessao(chave, aberta); }
+  // Só a mensagem da ALUNA abre uma interação nova (evita sessão só de campanha).
+  if (autor !== "aluna") return;
+  if (!h) { h = { nome: nome || "", sessoes: [] }; historico.set(chave, h); }
+  if (nome) h.nome = nome;
+  const nova: Sessao = { id: "s" + em.toString(36), inicioEm: em, fimEm: em, nMsgs: 1, status: "ativa", resumo: "", resumoPronto: false, _buf: [{ autor, texto }] };
+  h.sessoes.push(nova);
+  if (h.sessoes.length > HIST_MAX_SESSOES) h.sessoes.splice(0, h.sessoes.length - HIST_MAX_SESSOES);
+  agendarSalvarHistorico();
+}
+
+async function fecharSessao(chave: string, sess: Sessao) {
+  if (sess.status === "encerrada") return;
+  sess.status = "encerrada";
+  agendarSalvarHistorico();
+  // Transcrição: o buffer em memória; se vazio (reinício), reconstrói do inbox.
+  let linhas = sess._buf && sess._buf.length ? sess._buf : [];
+  if (!linhas.length) {
+    const c = inbox.get(chave);
+    if (c) linhas = c.msgs.filter((m) => m.em >= sess.inicioEm && m.em <= sess.fimEm + 1000).map((m) => ({ autor: m.autor, texto: m.texto }));
+  }
+  try { sess.resumo = await resumirConversa(linhas); } catch { sess.resumo = ""; }
+  sess.resumoPronto = true;
+  delete sess._buf;
+  agendarSalvarHistorico();
+}
+
+// Fecha sessões paradas há mais que a janela (assim a interação encerra e ganha
+// resumo mesmo que a aluna nunca mais escreva). Roda de tempos em tempos.
+function varrerSessoes() {
+  const janela = janelaSessaoMs();
+  const agora = Date.now();
+  for (const [chave, h] of historico) {
+    const ult = h.sessoes[h.sessoes.length - 1];
+    if (ult && ult.status === "ativa" && agora - ult.fimEm > janela) void fecharSessao(chave, ult);
+  }
 }
 
 // ── Respostas ENVIADAS PELO PAINEL (aba Sofia → Conversas) ──────────────────
@@ -423,6 +507,7 @@ async function processarRespostas() {
   processandoResp = false;
 }
 setInterval(() => { processarRespostas().catch(() => {}); }, 1500);
+setInterval(() => { try { varrerSessoes(); } catch {} }, 60 * 1000); // encerra + resume sessões paradas
 
 // ── Ponte de comando painel → Sofia ─────────────────────────────────────────
 // O painel grava sofia-comando.json para pedir ações que só dá para fazer aqui.
@@ -668,6 +753,7 @@ process.on("SIGINT", sair);
 process.on("SIGTERM", sair);
 
 carregarInbox(); // recupera as conversas já registradas (o painel mostra na aba Conversas)
+carregarHistorico(); // recupera o histórico de interações (aba Contatos → Interações)
 setStatus("iniciando");
 log("iniciando a conexão do WhatsApp da Sofia...");
 armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia sozinho

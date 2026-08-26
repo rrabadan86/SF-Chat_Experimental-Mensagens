@@ -25,6 +25,7 @@ const F = {
   ritmo: path.join(DIR, 'sofia-ritmo.json'), // "jeito humano" (velocidade/pausas) — lido pelo listener
   waStatus: path.join(DIR, 'sofia-wa-status.json'), // publicado pelo listener da Sofia
   conversas: path.join(DIR, 'sofia-conversas.json'), // inbox — publicado pelo listener
+  historico: path.join(DIR, 'sofia-historico.json'), // histórico de interações — publicado pelo listener
   respostas: path.join(DIR, 'sofia-respostas.jsonl'), // fila de respostas do painel → listener envia
   humano: path.join(DIR, 'sofia-humano.json'), // conversas sob controle humano (Sofia não responde) — lido pela Sofia
   campanhas: path.join(DIR, 'campanhas.json'), // estado das campanhas — publicado pelo listener (painel só lê)
@@ -183,6 +184,12 @@ function conversas() {
   try { const o = JSON.parse(ler(F.conversas)); return (o && typeof o === 'object') ? o : {}; }
   catch (_) { return {}; }
 }
+// Histórico de interações (publicado pelo listener em sofia-historico.json).
+// Devolve objeto { <chave>: { nome, sessoes:[{id,inicioEm,fimEm,nMsgs,status,resumo,resumoPronto}] } }.
+function historico() {
+  try { const o = JSON.parse(ler(F.historico)); return (o && typeof o === 'object') ? o : {}; }
+  catch (_) { return {}; }
+}
 // Enfileira uma resposta do painel para o listener enviar (Parte 2 usa isto).
 function enfileirarResposta(chave, jid, texto) {
   const linha = JSON.stringify({ chave, jid, texto: String(texto || ''), em: Date.now() }) + '\n';
@@ -240,6 +247,6 @@ function setControleHumano(chave, ativo) {
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerRitmo, gravarRitmo, waStatus,
-  conversas, enfileirarResposta, lerHumano, controleHumanoDe, setControleHumano, enviarComando,
+  conversas, historico, enfileirarResposta, lerHumano, controleHumanoDe, setControleHumano, enviarComando,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };
