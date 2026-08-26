@@ -1365,7 +1365,7 @@ function paginaSofiaConversas(aviso, erro) {
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('conversas')}
-    <div class="sec-t">💬 Conversas da SoFIA <small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
+    <div class="sec-t">💬 Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span><small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
     <style>
       .inbox-grid{display:grid;grid-template-columns:236px minmax(0,1fr);gap:14px;align-items:stretch}
       .inbox-grid>div{min-width:0}
@@ -1624,7 +1624,13 @@ function paginaSofiaConversas(aviso, erro) {
   }
   function mudarPag(d){ pagina+=d; renderInbox(ultimoData); }
   function abrir(k){ selecionada=k; ncSel=(ultimoData[k]&&ultimoData[k].tagsContato?ultimoData[k].tagsContato.slice():[]); ncNome=(ultimoData[k]&&ultimoData[k].nome)||''; ncDirty=false; tagEdAberto=false; ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); }
-  function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(renderInbox).catch(function(){}); }
+  function atualizaWa(e){
+    var b=document.getElementById('waTag'); if(!b) return;
+    var m={conectado:['🟢','online','#1c8f52','#e6f6ec'],desconectado:['🔴','off-line','#c0392b','#fdeaea'],qr:['🟠','reconectar','#b8770a','#fdf2e0'],iniciando:['🟡','conectando','#b8770a','#fdf2e0']};
+    var s=m[e]||['⚪','—','#7a7a7a','#eee'];
+    b.textContent=s[0]+' '+s[1]; b.style.color=s[2]; b.style.background=s[3];
+  }
+  function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){ j=j||{}; atualizaWa(j.wa); renderInbox(j.conv||{}); }).catch(function(){}); }
   atualizaInbox(); setInterval(atualizaInbox, 4000);
 </script>`;
   return chrome({ tab: 'SoFIA', h1: '🤖 SoFIA', p: 'Conversas da SoFIA — leia o histórico de cada atendimento.' }, 'sofia', corpo);
@@ -2392,6 +2398,10 @@ function paginaSofia(aviso, erro) {
           <label>Esperar sem resposta</label>
           <div class="cfg-in"><input type="number" name="followupHoras" min="0.25" max="720" step="0.25" value="${e.followup.horas}"><span class="suf">horas (ex.: 24 = 1 dia)</span></div>
         </div>
+        <div style="margin-top:14px;max-width:420px">
+          <label>Só enviar entre${infoI('Horário permitido para a retomada. Se o prazo acima vencer <b>fora</b> desta janela (ex.: 19h50), a SoFIA <b>não manda de madrugada</b> — espera e envia no <b>próximo horário permitido</b> (ex.: 8h do dia seguinte). Horário de Brasília.')}</label>
+          <div class="cfg-in" style="gap:8px"><input type="time" name="followupJanIni" value="${esc(e.followup.janelaIni)}" style="width:auto"><span class="suf">e</span><input type="time" name="followupJanFim" value="${esc(e.followup.janelaFim)}" style="width:auto"></div>
+        </div>
         <div style="margin-top:14px">
           <label>Instrução para a IA gerar a mensagem</label>
           <textarea name="followupInstrucao" rows="3" maxlength="1000" placeholder="Ex.: Pergunte se ela ainda tem interesse e retome o convite para a aula experimental gratuita, de forma calorosa." style="width:100%;resize:vertical">${esc(e.followup.instrucao)}</textarea>
@@ -3003,8 +3013,9 @@ const server = http.createServer((req, res) => {
     try { const hum = sofia.lerHumano(); for (const k in obj) obj[k].humano = !!hum[k]; } catch (_) {} // controle humano por conversa
     try { for (const k in obj) obj[k].bloq = sofia.estaBloqueado(k); } catch (_) {} // contato bloqueado?
     try { for (const k in obj) obj[k].enc = sofia.estaEncerrada(k, obj[k].ultimaEm); } catch (_) {} // encerrada à mão (cadeado)?
+    let wa = ''; try { wa = (sofia.waStatus() || {}).estado || ''; } catch (_) {} // online/off-line do WhatsApp da SoFIA
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    return res.end(JSON.stringify(obj));
+    return res.end(JSON.stringify({ conv: obj, wa }));
   }
   // Interações (histórico de sessões) de UM contato — aba Contatos → Interações.
   if (req.method === 'GET' && url === '/sofia/contatos/interacoes') {
@@ -3115,7 +3126,7 @@ const server = http.createServer((req, res) => {
           sessaoHoras: p.get('sessaoHoras') || '12',
           healthMin: p.get('healthMin') != null ? p.get('healthMin') : '3',
           agruparSeg: p.get('agruparSeg') != null ? p.get('agruparSeg') : '7',
-          followup: { on: p.get('followupOn') === '1', horas: p.get('followupHoras') || '24', instrucao: p.get('followupInstrucao') || '' },
+          followup: { on: p.get('followupOn') === '1', horas: p.get('followupHoras') || '24', instrucao: p.get('followupInstrucao') || '', janelaIni: p.get('followupJanIni') || '08:00', janelaFim: p.get('followupJanFim') || '19:00' },
           modelos: { conversa: p.get('modeloConversa') || '', extracao: p.get('modeloExtracao') || '' },
           transcricaoOn: p.get('transcricaoOn') === '1',
           midias: {
@@ -3418,6 +3429,18 @@ function processarFollowups() {
   let cfg; try { cfg = sofia.lerFollowupCfg(); } catch (_) { return; }
   if (!cfg || !cfg.on) return;
   try { if (!sofia.estadoAtivo()) return; } catch (_) {} // SoFIA pausada → não enfileira (nem marca como feito)
+  // Janela de horário: se agora está FORA dela, não enfileira nada — a próxima
+  // varredura (a cada 2 min) reavalia, então o que venceu de madrugada só sai no
+  // início da janela (ex.: 8h). Assim nunca manda tarde da noite. (Brasília.)
+  try {
+    const _mm = s => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '')); return m ? (+m[1]) * 60 + (+m[2]) : -1; };
+    const hhmm = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+    const cur = _mm(hhmm), ini = _mm(cfg.janelaIni), fim = _mm(cfg.janelaFim);
+    if (cur >= 0 && ini >= 0 && fim >= 0 && ini !== fim) {
+      const dentro = ini < fim ? (cur >= ini && cur < fim) : (cur >= ini || cur < fim); // ini<fim normal; senão cruza meia-noite
+      if (!dentro) return;
+    }
+  } catch (_) {}
   const esperaMs = Math.max(0.25, cfg.horas) * 3600 * 1000;
   const CAP = Math.max(esperaMs * 3, 14 * 24 * 3600 * 1000); // não pinga conversas muito antigas
   const agora = Date.now();

@@ -457,6 +457,12 @@ function gravarTranscricaoOn(on) { gravarArquivo(F.transcricao, on ? 'on' : 'off
 
 // ── Follow-up (retomada de leads que esfriaram sem agendar) ──────────────────
 const FOLLOWUP_INSTRUCAO_PADRAO = 'Pergunte de forma leve se ela ainda tem interesse em conhecer o Studio e que estamos de portas abertas para ela fazer a aula experimental gratuita. Seja calorosa e natural.';
+// Valida um horário "HH:MM" (24h); devolve normalizado ("8:00" -> "08:00") ou o padrão.
+function _hhmm(v, def) {
+  const s = String(v == null ? '' : v).trim();
+  if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(s)) return def;
+  return s.length === 4 ? '0' + s : s;
+}
 function lerFollowupCfg() {
   let o = {};
   try { o = JSON.parse(ler(F.followupCfg)) || {}; } catch (_) { o = {}; }
@@ -466,12 +472,17 @@ function lerFollowupCfg() {
     on: !!o.on,
     horas: (isFinite(horas) && horas > 0) ? horas : 24,
     instrucao: typeof o.instrucao === 'string' && o.instrucao.trim() ? o.instrucao : FOLLOWUP_INSTRUCAO_PADRAO,
+    // Janela de horário em que É permitido enviar a retomada. Se o prazo vencer
+    // fora dela (ex.: 19h50), a mensagem só sai no próximo horário permitido
+    // (ex.: 8h do dia seguinte) — nunca de madrugada.
+    janelaIni: _hhmm(o.janelaIni, '08:00'),
+    janelaFim: _hhmm(o.janelaFim, '19:00'),
     // Instante em que foi LIGADO. O detector só considera leads cuja última
     // mensagem veio DEPOIS disso ("só daqui pra frente" — ignora o acúmulo).
     ligadoEm: isFinite(ligadoEm) && ligadoEm > 0 ? ligadoEm : 0,
   };
 }
-function gravarFollowupCfg({ on, horas, instrucao }) {
+function gravarFollowupCfg({ on, horas, instrucao, janelaIni, janelaFim }) {
   const h = Math.max(0.25, Math.min(720, parseFloat(horas) || 24)); // 15 min a 30 dias
   const atual = lerFollowupCfg();
   // Marca o corte "daqui pra frente" só na TRANSIÇÃO desligado→ligado; se já
@@ -479,7 +490,7 @@ function gravarFollowupCfg({ on, horas, instrucao }) {
   let ligadoEm = atual.ligadoEm;
   if (on && !atual.on) ligadoEm = Date.now();
   if (!on) ligadoEm = 0;
-  const cfg = { on: !!on, horas: h, instrucao: String(instrucao || '').trim() || FOLLOWUP_INSTRUCAO_PADRAO, ligadoEm };
+  const cfg = { on: !!on, horas: h, instrucao: String(instrucao || '').trim() || FOLLOWUP_INSTRUCAO_PADRAO, janelaIni: _hhmm(janelaIni, '08:00'), janelaFim: _hhmm(janelaFim, '19:00'), ligadoEm };
   gravarArquivo(F.followupCfg, JSON.stringify(cfg));
   return cfg;
 }
