@@ -378,7 +378,7 @@ function enfileirar(fn: () => Promise<void>) { fila = fila.then(fn).catch((e: an
 const CONVERSAS_FILE = path.join(DIR, "sofia-conversas.json");
 const INBOX_MAX_MSGS = parseInt(process.env.SOFIA_INBOX_MSGS || "60", 10);
 const INBOX_RETENCAO_MS = parseInt(process.env.SOFIA_INBOX_DIAS || "7", 10) * 24 * 3600 * 1000;
-type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number };
+type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string };
 type InboxConversa = { jid: string; nome: string; ultimaEm: number; msgs: InboxMsg[] };
 const inbox = new Map<string, InboxConversa>();
 let inboxTimer: ReturnType<typeof setTimeout> | null = null;
@@ -392,19 +392,21 @@ function salvarInbox() {
   try { fs.writeFileSync(CONVERSAS_FILE, JSON.stringify(obj), "utf8"); } catch {}
 }
 function agendarSalvarInbox() { if (inboxTimer) return; inboxTimer = setTimeout(() => { inboxTimer = null; salvarInbox(); }, 1500); }
-function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMsg["autor"], texto: string) {
+function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMsg["autor"], texto: string, foto?: string) {
   const t = String(texto || "").trim();
-  if (!t) return;
+  if (!t && !foto) return;                         // nada de texto e nada de foto → ignora
   let c = inbox.get(chave);
   if (!c) { c = { jid: jid || "", nome: nome || "", ultimaEm: 0, msgs: [] }; inbox.set(chave, c); }
   if (jid) c.jid = jid;
   if (nome && !c.nome) c.nome = nome;
   const em = Date.now();
-  c.msgs.push({ autor, texto: t, em });
+  const msg: InboxMsg = { autor, texto: t, em };
+  if (foto) msg.foto = foto;                        // nome do arquivo em humano-fotos/ (o painel serve)
+  c.msgs.push(msg);
   if (c.msgs.length > INBOX_MAX_MSGS) c.msgs.splice(0, c.msgs.length - INBOX_MAX_MSGS);
   c.ultimaEm = em;
   agendarSalvarInbox();
-  registrarSessao(chave, nome || c.nome, autor, t, em);
+  registrarSessao(chave, nome || c.nome, autor, t || "📷 (foto)", em);
 }
 
 // ── Histórico de INTERAÇÕES (aba Contatos → Interações do painel) ────────────
@@ -621,11 +623,12 @@ async function processarRespostas() {
       try {
         const alvo = await resolverIdEnvio(telefone); // igual ao robô: trata o "@lid"
         if (fotoArquivo && fs.existsSync(fotoArquivo)) {
-          // Foto (com o texto como legenda, se houver). Registra no painel = WhatsApp.
+          // Foto (com o texto como legenda, se houver). O arquivo é MANTIDO em
+          // humano-fotos/ para o painel exibir a imagem na bolha (limpo depois por
+          // idade — ver limparFotosAntigas). Registra no painel = WhatsApp.
           const media = MessageMedia.fromFilePath(fotoArquivo);
           await enviar(alvo, media, texto ? { caption: texto } : undefined);
-          registrarInbox(chave, alvo, "", "humano", texto ? texto + " 📷" : "📷 (foto)");
-          try { fs.rmSync(fotoArquivo, { force: true }); } catch {} // já enviada — limpa
+          registrarInbox(chave, alvo, "", "humano", texto, path.basename(fotoArquivo));
         } else {
           registrarInbox(chave, alvo, "", "humano", texto);
           await enviar(alvo, texto);
@@ -638,6 +641,23 @@ async function processarRespostas() {
 }
 setInterval(() => { processarRespostas().catch(() => {}); }, 1500);
 setInterval(() => { try { varrerSessoes(); } catch {} }, 60 * 1000); // encerra + resume sessões paradas
+
+// Fotos que você anexou nas respostas ficam em humano-fotos/ para o painel exibir
+// na bolha. O inbox só guarda ~7 dias, então apagamos as fotos mais antigas que a
+// retenção do inbox para o diretório não crescer sem fim. Best-effort.
+const HUMANO_FOTOS_DIR = path.join(DIR, "humano-fotos");
+function limparFotosAntigas() {
+  try {
+    if (!fs.existsSync(HUMANO_FOTOS_DIR)) return;
+    const corte = Date.now() - INBOX_RETENCAO_MS - 24 * 3600 * 1000; // 1 dia de folga
+    for (const nome of fs.readdirSync(HUMANO_FOTOS_DIR)) {
+      const p = path.join(HUMANO_FOTOS_DIR, nome);
+      try { if (fs.statSync(p).mtimeMs < corte) fs.rmSync(p, { force: true }); } catch {}
+    }
+  } catch {}
+}
+setInterval(limparFotosAntigas, 6 * 3600 * 1000); // a cada 6 h
+setTimeout(limparFotosAntigas, 30000);            // uma vez no boot
 
 // ── Avisos internos (painel → um número seu) ────────────────────────────────
 //    O painel enfileira em sofia-avisos.jsonl {numero, texto, em} quando uma

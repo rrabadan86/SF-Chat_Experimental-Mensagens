@@ -144,7 +144,7 @@ function sofiaHref(sess) {
 // (marcar tags/salvar contato a partir de uma conversa) vale para Conversas OU Contatos.
 function sofiaRotaPermitida(sess, url) {
   const has = k => (sess.telas || []).includes(k);
-  if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano') return has('sofia_conversas');
+  if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto') return has('sofia_conversas');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
@@ -1388,7 +1388,9 @@ function paginaSofiaConversas(aviso, erro) {
     var bolhas = msgs.map(function(m){
       var mine = (m.autor!=='aluna');
       var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e6f6f7');
-      return '<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+autorRot(m.autor)+' · '+fmtHora(m.em)+'</div><div style="white-space:pre-wrap">'+escH(m.texto)+'</div></div></div>';
+      var img = m.foto ? '<img src="/sofia/humano-foto?arq='+encodeURIComponent(m.foto)+'" alt="foto enviada" style="display:block;max-width:100%;max-height:220px;border-radius:9px;margin:'+(m.texto?'6px 0 0':'2px 0 0')+';cursor:pointer" onclick="window.open(this.src,\\'_blank\\')">' : '';
+      var corpoMsg = (m.texto?'<div style="white-space:pre-wrap">'+escH(m.texto)+'</div>':'') + img;
+      return '<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+autorRot(m.autor)+' · '+fmtHora(m.em)+'</div>'+corpoMsg+'</div></div>';
     }).join('');
     var fim = encerrada(c) ? '<div style="text-align:center;margin:10px 0 2px"><span style="display:inline-block;background:#f3eaea;color:#a15a5a;border:1px solid #e6cfcf;border-radius:999px;padding:3px 12px;font-size:.72rem;font-weight:700">🔒 Sessão encerrada · a SoFIA recomeça do zero se a aluna voltar</span></div>' : '';
     var hum = !!c.humano;
@@ -2856,6 +2858,18 @@ const server = http.createServer((req, res) => {
       try { sofia.enfileirarResposta(chave, jid, texto, fotoArquivo); res.end(JSON.stringify({ ok: true })); }
       catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
+  }
+  // Serve a foto que VOCÊ enviou numa resposta manual (mostrada na bolha do chat).
+  // Os arquivos ficam em ChatBot/humano-fotos/ (mesma máquina do listener).
+  if (req.method === 'GET' && url === '/sofia/humano-foto') {
+    const arq = new URLSearchParams(req.url.split('?')[1] || '').get('arq') || '';
+    if (!/^[\w.-]+$/.test(arq) || arq.includes('..')) { res.writeHead(400); return res.end('nome inválido'); }
+    const caminho = p.join(sofia.DIR, 'humano-fotos', arq);
+    if (!fs.existsSync(caminho)) { res.writeHead(404); return res.end('não encontrada'); }
+    const ext = arq.split('.').pop().toLowerCase();
+    const tipo = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    res.writeHead(200, { 'Content-Type': tipo, 'Cache-Control': 'private, max-age=86400' });
+    return fs.createReadStream(caminho).pipe(res);
   }
   if (req.method === 'POST' && url === '/sofia/salvar') {
     return lerCorpo(req, 4e6, corpo => {
