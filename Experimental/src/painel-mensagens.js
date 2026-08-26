@@ -1104,7 +1104,7 @@ function paginaSofiaConversas(aviso, erro) {
     </div>
   </div>
 <script>
-  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, tagFiltro='', tagEdAberto=false, ncNome='', ncDirty=false;
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, tagFiltro='', tagEdAberto=false, ncNome='', ncDirty=false, ncTodas=[];
   var TAGS_EXISTENTES = ${JSON.stringify(tagsLista)};
   var SESSAO_MS = ${Math.round(sessaoHoras * 3600 * 1000)};
   function encerrada(c){ return c && c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS); }
@@ -1129,7 +1129,6 @@ function paginaSofiaConversas(aviso, erro) {
     // Linha de tags recolhível — o editor completo só aparece ao clicar em "editar".
     var mini=function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:1px 8px;font-size:.7rem;margin:0 4px 0 0">'+escH(t)+'</span>';};
     var resumo = ncSel.length ? ncSel.map(mini).join('') : '<span class="quando" style="margin:0">sem tags</span>';
-    var opts='<option value="">＋ escolher tag…</option>'+TAGS_EXISTENTES.map(function(t){return '<option>'+escH(t)+'</option>';}).join('');
     var tagLinha='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:.82rem">'
       +'🏷️ '+(tagEdAberto?'':resumo)
       +'<a href="javascript:void(0)" onclick="toggleTagEd()" class="quando" style="margin:0;text-decoration:underline">'+(tagEdAberto?'fechar':'editar')+'</a>'
@@ -1139,11 +1138,14 @@ function paginaSofiaConversas(aviso, erro) {
       +'<span class="quando" style="margin:0">Nome</span>'
       +'<input id="ncNome" value="'+escH(ncNome)+'" placeholder="nome do contato" oninput="ncNome=this.value;ncMarcaSujo()" style="flex:1;min-width:150px;font-size:.85rem">'
       +'</div>'
-      +'<div id="ncChips" style="margin-bottom:6px"></div>'
-      +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
-      +'<select id="ncTagSel" onchange="ncAddTag(this.value);this.selectedIndex=0" style="min-width:150px;font-size:.85rem">'+opts+'</select>'
-      +'<input id="ncNovaTag" placeholder="nova tag" style="width:110px;font-size:.85rem" onkeydown="if(event.key===\\'Enter\\'){event.preventDefault();ncAddTag(this.value);this.value=\\'\\';}" onblur="if(this.value.trim()){ncAddTag(this.value);this.value=\\'\\';}">'
-      +'<button type="button" id="ncSalvar" class="save" style="padding:5px 10px" onclick="salvarContato(\\''+k+'\\')">💾 '+(c.salvo?'Salvar tags':'Salvar contato')+'</button>'
+      +'<div class="quando" style="margin:0 0 4px">Tags <small>(marque as que se aplicam)</small></div>'
+      +'<div id="ncTags" style="max-height:190px;overflow:auto;border:1px solid #eee;border-radius:8px;padding:6px 10px;background:#fff;margin-bottom:8px"></div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
+      +'<input id="ncNovaTag" placeholder="criar nova tag" style="flex:1;min-width:150px;font-size:.85rem" onkeydown="if(event.key===\\'Enter\\'){event.preventDefault();ncAddNovaTag();}">'
+      +'<button type="button" class="reset" style="padding:5px 12px" onclick="ncAddNovaTag()">+ criar</button>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+      +'<button type="button" id="ncSalvar" class="save" style="padding:5px 12px" onclick="salvarContato(\\''+k+'\\')">💾 '+(c.salvo?'Salvar tags':'Salvar contato')+'</button>'
       +'<span id="ncMsg" class="quando" style="margin:0"></span>'
       +'</div></div>') : '';
     var composer='<div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end">'
@@ -1152,7 +1154,7 @@ function paginaSofiaConversas(aviso, erro) {
       +'</div>'
       +'<div id="msgStatus" class="quando" style="margin-top:4px;min-height:14px;font-size:.75rem"></div>';
     chat.innerHTML = header+tagLinha+editor+'<div id="bolhas" style="overflow:auto;max-height:360px;padding-right:4px">'+bolhas+fim+'</div>'+composer;
-    if(tagEdAberto){ ncRenderChips(); ncAtualizaStatus(); }
+    if(tagEdAberto){ ncRenderTags(); ncAtualizaStatus(); }
     var ta=document.getElementById('msgTxt'); if(ta) ta.value=rascunhos[k]||'';
     var b=document.getElementById('bolhas'); if(b) b.scrollTop=b.scrollHeight;
   }
@@ -1179,12 +1181,17 @@ function paginaSofiaConversas(aviso, erro) {
         else if(st){ st.textContent='❌ '+(j.erro||'não consegui enviar'); }
       }).catch(function(){ if(st)st.textContent='❌ erro de rede'; });
   }
-  function ncRenderChips(){
-    var el=document.getElementById('ncChips'); if(!el) return;
-    el.innerHTML = ncSel.map(function(t,i){ return '<span style="display:inline-flex;align-items:center;gap:5px;background:#e6f6f7;color:#0e8e91;border:1px solid #b8e6e7;border-radius:999px;padding:2px 9px;font-size:.74rem;margin:2px 4px 2px 0">'+escH(t)+'<a href="javascript:void(0)" onclick="ncRmTag('+i+')" style="color:#0e8e91;font-weight:800;text-decoration:none">×</a></span>'; }).join('') || '<span class="quando">sem tags</span>';
+  function ncRenderTags(){
+    var el=document.getElementById('ncTags'); if(!el) return;
+    ncTodas = TAGS_EXISTENTES.slice();
+    ncSel.forEach(function(t){ if(ncTodas.indexOf(t)<0) ncTodas.push(t); });
+    ncTodas.sort(function(a,b){ return a.localeCompare(b,'pt-BR'); });
+    el.innerHTML = ncTodas.map(function(t,i){ var on=ncSel.indexOf(t)>=0;
+      return '<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:.85rem;cursor:pointer"><input type="checkbox" '+(on?'checked':'')+' onchange="ncToggleTagIdx('+i+',this.checked)" style="width:16px;height:16px;margin:0;flex:none"> '+escH(t)+'</label>';
+    }).join('') || '<span class="quando" style="margin:0">Nenhuma tag ainda — crie a primeira em "criar nova tag".</span>';
   }
-  function ncAddTag(t){ t=(t||'').trim(); if(t && ncSel.indexOf(t)<0){ ncSel.push(t); ncRenderChips(); ncMarcaSujo(); } }
-  function ncRmTag(i){ ncSel.splice(i,1); ncRenderChips(); ncMarcaSujo(); }
+  function ncToggleTagIdx(i,checked){ var t=ncTodas[i]; if(!t) return; var idx=ncSel.indexOf(t); if(checked){ if(idx<0) ncSel.push(t); } else if(idx>=0){ ncSel.splice(idx,1); } ncMarcaSujo(); }
+  function ncAddNovaTag(){ var inp=document.getElementById('ncNovaTag'); if(!inp) return; var t=(inp.value||'').trim(); inp.value=''; if(!t) return; if(ncSel.indexOf(t)<0) ncSel.push(t); ncRenderTags(); ncMarcaSujo(); }
   function ncMarcaSujo(){ ncDirty=true; ncAtualizaStatus(); }
   function ncAtualizaStatus(){
     var msg=document.getElementById('ncMsg'), btn=document.getElementById('ncSalvar'); if(!msg) return;
@@ -1192,7 +1199,7 @@ function paginaSofiaConversas(aviso, erro) {
     else { var c=ultimoData[selecionada]||{}; msg.innerHTML=c.salvo?'<span style="color:#1c8f52">✓ salvo</span>':''; if(btn)btn.style.boxShadow='none'; }
   }
   function salvarContato(k){
-    var nova=document.getElementById('ncNovaTag'); if(nova && nova.value.trim()){ ncAddTag(nova.value); nova.value=''; } // comita a "nova tag" digitada
+    ncAddNovaTag(); // comita qualquer "nova tag" digitada e não adicionada
     var msg=document.getElementById('ncMsg'); if(msg)msg.textContent='Salvando…';
     var nome=(ncNome||'').trim();
     fetch('/sofia/contatos/salvar-novo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:k,nome:nome,tags:ncSel})})
