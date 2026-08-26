@@ -48,6 +48,34 @@ const RITMO_PADRAO = { humano: true, msPorChar: 45, delayMin: 1200, delayMax: 45
 function ler(p) { try { return fs.readFileSync(p, 'utf8'); } catch (_) { return ''; } }
 function existe(p) { try { return fs.existsSync(p); } catch (_) { return false; } }
 
+// Gravação ATÔMICA e à prova de dono: escreve num arquivo temporário e faz
+// rename por cima do destino. O rename substitui o alvo mesmo que ele seja de
+// OUTRO usuário (ex.: criado como root), desde que a PASTA seja gravável —
+// resolve o caso em que sofia-prompt.txt não podia ser sobrescrito e o prompt
+// "voltava para o original". Confere lendo de volta; lança erro claro se falhar.
+function gravarArquivo(destino, conteudo) {
+  const dir = path.dirname(destino);
+  const tmp = path.join(dir, '.' + path.basename(destino) + '.tmp-' + process.pid + '-' + Date.now());
+  try {
+    fs.writeFileSync(tmp, conteudo, 'utf8');
+    fs.renameSync(tmp, destino); // atômico; troca mesmo arquivo de outro dono (precisa dir gravável)
+  } catch (e1) {
+    // Plano B: apagar o alvo (precisa só de permissão na PASTA) e escrever direto.
+    try { fs.rmSync(tmp, { force: true }); } catch (_) {}
+    try { fs.rmSync(destino, { force: true }); fs.writeFileSync(destino, conteudo, 'utf8'); }
+    catch (e2) {
+      throw new Error('Não consegui gravar "' + path.basename(destino) + '": ' + (e2 && e2.message || e1 && e1.message) +
+        '. Verifique as permissões da pasta da SoFIA (' + dir + ') — o usuário do painel precisa poder gravar nela.');
+    }
+  }
+  // Confirma que o conteúdo REALMENTE ficou salvo (pega falha silenciosa/parcial).
+  let lido = '';
+  try { lido = fs.readFileSync(destino, 'utf8'); } catch (_) {}
+  if (lido !== conteudo) {
+    throw new Error('Gravei "' + path.basename(destino) + '" mas a releitura não bateu — provável problema de permissão/disco na pasta ' + dir + '.');
+  }
+}
+
 // Semeadura: prompt/extração/mídias são editáveis pelo painel e ficam FORA do Git.
 // O conteúdo base mora nos sofia-*.default.txt (versionados). Se o arquivo "vivo"
 // sumir (clone novo ou git pull), recriamos a partir do .default — assim o painel
@@ -62,9 +90,9 @@ function disponivel() { semear(); return existe(DIR) && existe(F.prompt); }
 
 // ── estado (on/off) e pausa (minutos de atendimento humano) ─────────────────
 function estadoAtivo() { return ler(F.estado).trim().toLowerCase() !== 'off'; }
-function gravarEstado(ativo) { fs.writeFileSync(F.estado, ativo ? 'on' : 'off', 'utf8'); }
+function gravarEstado(ativo) { gravarArquivo(F.estado, ativo ? 'on' : 'off'); }
 function lerPausaMin() { const n = parseInt(ler(F.pausa).trim(), 10); return Number.isFinite(n) && n > 0 ? n : 30; }
-function gravarPausaMin(n) { fs.writeFileSync(F.pausa, String(n), 'utf8'); }
+function gravarPausaMin(n) { gravarArquivo(F.pausa, String(n)); }
 
 // ── janela de sessão (memória da conversa), em HORAS ────────────────────────
 // Padrão 12h (mesmo da Sofia). Depois desse tempo sem mensagens, a próxima
@@ -77,7 +105,7 @@ function lerSessaoHoras() {
 function gravarSessaoHoras(h) {
   const n = parseFloat(String(h).replace(',', '.'));
   const val = Number.isFinite(n) && n > 0 ? Math.min(n, 720) : SESSAO_HORAS_PADRAO;
-  fs.writeFileSync(F.sessao, String(val), 'utf8');
+  gravarArquivo(F.sessao, String(val));
 }
 
 // ── verificação de conexão (health-check), em MINUTOS ───────────────────────
@@ -92,7 +120,7 @@ function lerHealthMin() {
 function gravarHealthMin(m) {
   const n = parseFloat(String(m).replace(',', '.'));
   const val = Number.isFinite(n) && n >= 0 ? Math.min(n, 120) : HEALTH_MIN_PADRAO;
-  fs.writeFileSync(F.healthMin, String(val), 'utf8');
+  gravarArquivo(F.healthMin, String(val));
 }
 
 // ── agrupamento de mensagens (debounce), em SEGUNDOS ────────────────────────
@@ -107,7 +135,7 @@ function lerAgruparSeg() {
 function gravarAgruparSeg(s) {
   const n = parseFloat(String(s).replace(',', '.'));
   const val = Number.isFinite(n) && n >= 0 ? Math.min(n, 120) : AGRUPAR_SEG_PADRAO;
-  fs.writeFileSync(F.agruparSeg, String(val), 'utf8');
+  gravarArquivo(F.agruparSeg, String(val));
 }
 
 // ── mídias (URLs de imagens de preços/grade) ────────────────────────────────
@@ -124,7 +152,7 @@ function gravarMidias(m) {
     + 'grade_link=' + (m.grade_link || '') + '\n'
     + 'precos_imagem=' + (m.precos_imagem || '') + '\n'
     + 'precos_link=' + (m.precos_link || '') + '\n';
-  fs.writeFileSync(F.midias, txt, 'utf8');
+  gravarArquivo(F.midias, txt);
 }
 
 // ── ritmo ("jeito humano": velocidade de digitação e pausas) ────────────────
@@ -148,7 +176,7 @@ function gravarRitmo(r) {
     delayMax: Math.max(0, Math.min(60000, inteiro(r.delayMax, atual.delayMax))),
   };
   if (novo.delayMax < novo.delayMin) novo.delayMax = novo.delayMin;
-  fs.writeFileSync(F.ritmo, JSON.stringify(novo, null, 2), 'utf8');
+  gravarArquivo(F.ritmo, JSON.stringify(novo, null, 2));
 }
 
 // ── prompt em seções (linhas que começam com "# ") ──────────────────────────
@@ -200,8 +228,8 @@ function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg
   }
   try { if (existe(F.prompt)) fs.copyFileSync(F.prompt, F.promptBak); } catch (_) {}
   try { if (existe(F.extracao)) fs.copyFileSync(F.extracao, F.extracaoBak); } catch (_) {}
-  fs.writeFileSync(F.prompt, promptMontado, 'utf8');
-  fs.writeFileSync(F.extracao, ext, 'utf8');
+  gravarArquivo(F.prompt, promptMontado);   // atômico + confere a releitura
+  gravarArquivo(F.extracao, ext);
   gravarPausaMin(Math.max(1, Math.min(1440, parseInt(pausaMin, 10) || 30)));
   if (sessaoHoras !== undefined) gravarSessaoHoras(sessaoHoras);
   if (healthMin !== undefined) gravarHealthMin(healthMin);
@@ -363,7 +391,7 @@ function setBloqueio(tel, ativo) {
   if (!d) return false;
   let a = lerBloqueios().filter(x => x !== d);
   if (ativo) a.push(d);
-  fs.writeFileSync(F.bloqueios, JSON.stringify(a), 'utf8');
+  gravarArquivo(F.bloqueios, JSON.stringify(a));
   return !!ativo;
 }
 
@@ -382,7 +410,7 @@ function lerFollowupCfg() {
 function gravarFollowupCfg({ on, horas, instrucao }) {
   const h = Math.max(0.25, Math.min(720, parseFloat(horas) || 24)); // 15 min a 30 dias
   const cfg = { on: !!on, horas: h, instrucao: String(instrucao || '').trim() || FOLLOWUP_INSTRUCAO_PADRAO };
-  fs.writeFileSync(F.followupCfg, JSON.stringify(cfg), 'utf8');
+  gravarArquivo(F.followupCfg, JSON.stringify(cfg));
   return cfg;
 }
 // O painel enfileira um follow-up para a Sofia gerar (com IA) e enviar.
