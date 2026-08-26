@@ -327,6 +327,15 @@ const ESTILO = `
   .ct-badge{display:inline-block;font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px}
   .ct-badge.ativa{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
   .ct-badge.enc{background:#eef0f1;color:#6b6b70;border:1px solid #dfe1e3}
+  .cpf-sec{border-top:1px solid var(--linha);margin-top:20px;padding-top:18px}
+  .cpf-sec.first{border-top:0;margin-top:0;padding-top:0}
+  .cpf-h{font-family:"Montserrat";font-weight:700;font-size:var(--fs-sec);margin:0 0 14px;display:flex;align-items:center;gap:8px}
+  .cpf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}
+  .cpf-field label{display:block;font-weight:700;font-size:.8rem;margin:0 0 5px}
+  .cpf-field .sub{font-weight:400;color:var(--cinza)}
+  .cpf-range{display:flex;align-items:center;gap:8px}
+  .cpf-range input{width:100%;min-width:0}
+  .cpf-suf{color:var(--cinza);font-size:var(--fs-sm);white-space:nowrap;flex:none}
   .cp-sec{margin:0 0 14px}
   .cp-h{font-family:"Montserrat";font-weight:700;font-size:var(--fs-sm);margin:0 0 4px}
   .cp-list{max-height:200px;overflow-y:auto;border:1px solid var(--linha);border-radius:10px;padding:2px 12px}
@@ -1733,42 +1742,49 @@ function paginaSofiaCampanhas(aviso, erro) {
     <div class="sec-t">📣 Nova campanha</div>
     <div class="card">
       ${tags.length ? `<form id="cpForm" onsubmit="return enviarCampanha(event)">
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <div style="flex:2;min-width:180px"><label>Nome da campanha</label><input type="text" name="nome" placeholder="ex.: Reativação outubro" required></div>
-          <div style="flex:1;min-width:180px;max-width:100%"><label>Enviar para a tag</label><select name="tag" required style="text-overflow:ellipsis">${opcoesTag}</select></div>
+        <div class="cpf-sec first">
+          <div class="cpf-h">✍️ Mensagem</div>
+          <div class="cpf-grid">
+            <div class="cpf-field"><label>Nome da campanha</label><input type="text" name="nome" placeholder="ex.: Reativação outubro" required></div>
+            <div class="cpf-field"><label>Enviar para a tag</label><select name="tag" required style="text-overflow:ellipsis">${opcoesTag}</select></div>
+          </div>
+          <div class="cpf-field" style="margin-top:14px">
+            <label>Mensagem base <span class="sub">— a IA cria ~10 variações naturais a partir dela</span></label>
+            <textarea name="textoBase" rows="4" placeholder="Escreva como você mandaria para uma aluna…  Use {nome} para personalizar (ex.: Oi, {nome}!)" required></textarea>
+            <p class="quando" style="margin:6px 0 0">💡 <b>{nome}</b> vira o primeiro nome do contato. Quem não tem nome salvo recebe a versão sem o nome.</p>
+          </div>
+          <div class="cpf-field" style="margin-top:14px">
+            <label>Foto <span class="sub">— opcional, enviada junto com a mensagem como legenda</span></label>
+            <input type="file" id="cpFoto" accept="image/*" onchange="prevFoto()" style="padding:8px">
+            <div id="cpFotoPrev" style="display:none;margin-top:8px"><img id="cpFotoImg" alt="prévia" style="max-width:180px;max-height:180px;border-radius:10px;border:1px solid var(--linha)"><br><a href="javascript:void(0)" onclick="limpaFoto()" class="quando" style="text-decoration:underline">remover foto</a></div>
+          </div>
         </div>
-        <label style="margin-top:12px">Mensagem base <small style="font-weight:400;color:var(--cinza)">(a IA cria ~10 variações naturais a partir dela)</small></label>
-        <textarea name="textoBase" rows="4" placeholder="Escreva a mensagem como você mandaria para uma aluna…  Dica: use {nome} para personalizar (ex.: Oi, {nome}!)" required></textarea>
-        <p class="quando" style="margin:4px 0 0">💡 Use <b>{nome}</b> na mensagem para inserir o primeiro nome do contato (ex.: <i>"Oi, {nome}! Tudo bem?"</i>). Contatos sem nome recebem a versão sem o nome.</p>
-        <label style="margin-top:12px">📷 Foto (opcional) <small style="font-weight:400;color:var(--cinza)">— enviada junto, com a mensagem como legenda</small></label>
-        <input type="file" id="cpFoto" accept="image/*" onchange="prevFoto()" style="padding:8px">
-        <div id="cpFotoPrev" style="display:none;margin-top:8px"><img id="cpFotoImg" alt="prévia" style="max-width:180px;max-height:180px;border-radius:10px;border:1px solid var(--linha)"><br><a href="javascript:void(0)" onclick="limpaFoto()" class="quando" style="text-decoration:underline">remover foto</a></div>
-        <div class="sec-t" style="margin:14px 0 6px">🛡️ Limites de envio</div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
-          <div><label style="margin:0 0 4px">Começar em</label><input type="date" id="cpIni" name="dataInicio" value="${esc(hojeSP())}" min="${esc(hojeSP())}" style="width:160px" oninput="estCamp()"></div>
-          <div><label style="margin:0 0 4px">Máx. por dia</label><input type="number" id="cpMax" name="limiteDia" min="1" max="1000" value="40" style="width:120px" oninput="estCamp()"> mensagens</div>
+
+        <div class="cpf-sec">
+          <div class="cpf-h">🛡️ Ritmo e limites</div>
+          <div class="cpf-grid">
+            <div class="cpf-field"><label>Começar em</label><input type="date" id="cpIni" name="dataInicio" value="${esc(hojeSP())}" min="${esc(hojeSP())}" oninput="estCamp()"></div>
+            <div class="cpf-field"><label>Máx. por dia</label><div class="cpf-range"><input type="number" id="cpMax" name="limiteDia" min="1" max="1000" value="40" oninput="estCamp()"><span class="cpf-suf">msg</span></div></div>
+            <div class="cpf-field"><label>Horário de envio</label><div class="cpf-range"><input type="time" id="cpJi" name="janelaIni" value="09:00" oninput="estCamp()"><span class="cpf-suf">até</span><input type="time" id="cpJf" name="janelaFim" value="20:00" oninput="estCamp()"></div></div>
+            <div class="cpf-field"><label>Intervalo entre envios</label><div class="cpf-range"><input type="number" id="cpDmin" name="delayMinSeg" min="1" max="3600" value="25" oninput="estCamp()"><span class="cpf-suf">a</span><input type="number" id="cpDmax" name="delayMaxSeg" min="1" max="3600" value="70" oninput="estCamp()"><span class="cpf-suf">s</span></div></div>
+          </div>
+          <p class="quando" style="margin:10px 0 0">Intervalo aleatório entre cada mensagem — quanto maior, mais natural e seguro.</p>
+          <div id="cpEst" class="aviso" style="margin:14px 0 0;display:none"></div>
         </div>
-        <label style="margin-top:12px">Horário de envio</label>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span class="quando" style="margin:0">das</span><input type="time" id="cpJi" name="janelaIni" value="09:00" style="width:130px" oninput="estCamp()">
-          <span class="quando" style="margin:0">até</span><input type="time" id="cpJf" name="janelaFim" value="20:00" style="width:130px" oninput="estCamp()">
+
+        <div class="cpf-sec">
+          <div class="cpf-h">🚀 Testar e criar</div>
+          <p class="quando" style="margin:0 0 10px">Mande a mensagem (e a foto) para um número seu antes, pra conferir como chega.</p>
+          <div class="cpf-range" style="flex-wrap:wrap">
+            <input type="tel" id="cpTesteTel" placeholder="(62) 99999-9999" style="max-width:220px">
+            <button type="button" class="reset" onclick="testarCampanha()" style="padding:9px 16px;flex:none">Enviar teste</button>
+            <span id="cpTesteMsg" class="quando" style="margin:0"></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:18px">
+            <button type="submit" class="save" style="padding:11px 24px">📣 Criar campanha</button>
+            <span class="quando" style="margin:0;flex:1;min-width:220px">⚠️ Só envia depois de você clicar em <b>Iniciar</b>. Comece com poucos por dia e delays altos — envio em massa pode bloquear o número.</span>
+          </div>
         </div>
-        <label style="margin-top:12px">Tempo entre um envio e outro</label>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span class="quando" style="margin:0">de</span><input type="number" id="cpDmin" name="delayMinSeg" min="1" max="3600" value="25" style="width:90px" oninput="estCamp()">
-          <span class="quando" style="margin:0">a</span><input type="number" id="cpDmax" name="delayMaxSeg" min="1" max="3600" value="70" style="width:90px" oninput="estCamp()">
-          <span class="quando" style="margin:0">segundos</span>
-        </div>
-        <p class="quando" style="margin:6px 0 0">Um tempo aleatório dentro dessa faixa entre cada mensagem — quanto maior, mais natural e seguro.</p>
-        <div id="cpEst" class="aviso" style="margin:12px 0 0;display:none"></div>
-        <div class="sec-t" style="margin:14px 0 6px">🧪 Enviar teste <small style="font-weight:400;color:var(--cinza)">(manda a mensagem e a foto para um número seu, pra conferir como chega)</small></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <input type="tel" id="cpTesteTel" placeholder="(62) 99999-9999" style="width:200px">
-          <button type="button" class="reset" onclick="testarCampanha()" style="padding:8px 14px">Enviar teste</button>
-          <span id="cpTesteMsg" class="quando" style="margin:0"></span>
-        </div>
-        <div class="acts" style="margin-top:14px"><button type="submit" class="save">Criar campanha</button></div>
-        <p class="quando" style="margin:8px 0 0">⚠️ Envio em massa tem risco de bloqueio do número. Comece com poucos por dia e delays altos. Você controla tudo: só envia depois de clicar em <b>Iniciar</b>, e pode pausar quando quiser.</p>
         <script>
           var TAGN = ${JSON.stringify(Object.fromEntries(tags.map(t => [t.tag, t.n])))};
           function selTagEl(){ return document.querySelector('select[name=tag]'); }
