@@ -556,7 +556,7 @@ async function tickCampanha() {
   }
 }
 carregarCampanhas();
-setInterval(() => { processarCampInbox().catch(() => {}); }, 2000);
+setInterval(() => { processarCampInbox().catch(() => {}); }, 800); // aplica pedidos do painel rápido
 setInterval(() => { tickCampanha().catch(() => {}); }, 3000);
 
 // Mensagem RECEBIDA da aluna (não é fromMe).

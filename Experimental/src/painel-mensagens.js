@@ -1348,7 +1348,7 @@ function estimarCampanha(c) {
 const fmtDataBR = (s) => { const p = String(s || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : (s || ''); };
 
 // Aba SoFIA → Campanhas: envio em massa por tag (com variações da IA e limites).
-function paginaSofiaCampanhas(aviso, erro) {
+function paginaSofiaCampanhas(aviso, erro, recarregar) {
   const tags = contatos.tagsDistintas();
   let campanhas = []; try { campanhas = sofia.lerCampanhas(); } catch (_) {}
   const rotStatus = { gerando: '⏳ gerando variações', pronta: '✅ pronta p/ iniciar', enviando: '📤 enviando', pausada: '⏸️ pausada', concluida: '✔️ concluída', cancelada: '🚫 cancelada' };
@@ -1457,7 +1457,9 @@ function paginaSofiaCampanhas(aviso, erro) {
     ${novo}
     <div class="sec-t">📋 Campanhas</div>
     ${lista}
-  </div>${temAtiva ? '<script>setTimeout(function(){location.reload()},8000)</script>' : ''}`;
+  </div>${recarregar
+    ? `<script>(function(){var u=new URL(location.href);var r=parseInt(u.searchParams.get('r')||'1',10);if(r<2){setTimeout(function(){u.searchParams.set('r',String(r+1));location.replace(u.pathname+'?'+u.searchParams.toString());},1400);}else{setTimeout(function(){location.replace('/sofia?view=campanhas');},1400);}})();</script>`
+    : (temAtiva ? `<script>setTimeout(function(){location.replace('/sofia?view=campanhas')},8000)</script>` : '')}`;
   return chrome({ tab: 'Campanhas', h1: '🤖 SoFIA', p: 'Campanhas — envio em massa por tag, com variações e limites.' }, 'sofia', corpo);
 }
 
@@ -1998,7 +2000,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     if (view === 'contatos') return res.end(paginaSofiaContatos(aviso, erro, { q: sp.get('q') || '', tag: sp.get('tag') || '', pagina: sp.get('pagina') || 0 }));
     if (view === 'conversas') return res.end(paginaSofiaConversas(aviso, erro));
-    if (view === 'campanhas') return res.end(paginaSofiaCampanhas(aviso, erro));
+    if (view === 'campanhas') return res.end(paginaSofiaCampanhas(aviso, erro, /(?:^|&)r=\d/.test(q)));
     return res.end(paginaSofia(aviso, erro));
   }
   // Importar contatos (CSV enviado pelo painel, lido no navegador e postado como JSON).
@@ -2181,7 +2183,7 @@ const server = http.createServer((req, res) => {
             destinatarios,
           },
         });
-        res.writeHead(303, { Location: '/sofia?view=campanhas&okc=criada' }); res.end();
+        res.writeHead(303, { Location: '/sofia?view=campanhas&okc=criada&r=1' }); res.end();
       } catch (e) {
         res.writeHead(303, { Location: '/sofia?view=campanhas&errc=' + encodeURIComponent(e.message) }); res.end();
       }
@@ -2191,14 +2193,14 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e5, corpo => {
       const p = new URLSearchParams(corpo);
       try { sofia.opCampanha({ op: 'controle', id: p.get('id'), acao: p.get('acao') }); } catch (_) {}
-      res.writeHead(303, { Location: '/sofia?view=campanhas&okc=ok' }); res.end();
+      res.writeHead(303, { Location: '/sofia?view=campanhas&okc=ok&r=1' }); res.end();
     });
   }
   if (req.method === 'POST' && url === '/sofia/campanhas/excluir') {
     return lerCorpo(req, 1e5, corpo => {
       const p = new URLSearchParams(corpo);
       try { sofia.opCampanha({ op: 'excluir', id: p.get('id') }); } catch (_) {}
-      res.writeHead(303, { Location: '/sofia?view=campanhas&okc=ok' }); res.end();
+      res.writeHead(303, { Location: '/sofia?view=campanhas&okc=ok&r=1' }); res.end();
     });
   }
 
