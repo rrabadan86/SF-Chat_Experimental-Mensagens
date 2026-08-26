@@ -1198,7 +1198,8 @@ function paginaSofiaConversas(aviso, erro) {
     <style>
       .inbox-grid{display:grid;grid-template-columns:236px minmax(0,1fr);gap:14px;align-items:start}
       .inbox-grid>div{min-width:0}
-      @media(max-width:760px){ .inbox-grid{grid-template-columns:minmax(0,1fr)} #convLista{max-height:260px;overflow:auto} }
+      #convChat{display:flex;flex-direction:column;height:calc(100vh - 200px);min-height:420px;position:sticky;top:14px}
+      @media(max-width:760px){ .inbox-grid{grid-template-columns:minmax(0,1fr)} #convLista{max-height:260px;overflow:auto} #convChat{height:auto;min-height:340px;position:static} }
     </style>
     <div class="inbox-grid">
       <div>
@@ -1206,7 +1207,7 @@ function paginaSofiaConversas(aviso, erro) {
         <div id="convLista" style="min-height:120px"></div>
         <div id="convPag" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px"></div>
       </div>
-      <div id="convChat" class="card" style="min-width:0;min-height:200px">Selecione uma conversa à esquerda.</div>
+      <div id="convChat" class="card" style="min-width:0">Selecione uma conversa à esquerda.</div>
     </div>
   </div>
   <div id="ctIntModal" class="ct-ov" onclick="if(event.target===this)fecharInteracoes()">
@@ -1313,7 +1314,7 @@ function paginaSofiaConversas(aviso, erro) {
       +'<button type="button" class="save" onclick="enviarMsg()" '+(hum?'':'disabled')+' style="padding:9px 16px;white-space:nowrap'+(hum?'':';opacity:.4;cursor:not-allowed')+'">Enviar ➤</button>'
       +'</div>'
       +'<div id="msgStatus" class="quando" style="margin-top:4px;min-height:14px;font-size:.75rem"></div>';
-    chat.innerHTML = header+tagLinha+editor+'<div id="bolhas" style="overflow:auto;max-height:360px;padding-right:4px">'+bolhas+fim+'</div>'+composer;
+    chat.innerHTML = header+tagLinha+editor+'<div id="bolhas" style="flex:1;min-height:120px;overflow:auto;padding-right:4px">'+bolhas+fim+'</div>'+composer;
     if(tagEdAberto){ ncRenderTags(); ncAtualizaStatus(); }
     var ta=document.getElementById('msgTxt'); if(ta) ta.value=rascunhos[k]||'';
     var b=document.getElementById('bolhas'); if(b) b.scrollTop=b.scrollHeight;
