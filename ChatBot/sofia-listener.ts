@@ -940,21 +940,64 @@ setInterval(() => { tickCampanha().catch(() => {}); }, 3000);
 // então respondemos com educação pedindo por texto — em vez de ignorar e deixar
 // a lead no vácuo. Respeita liga/desliga, controle humano e handoff; com anti-spam.
 const ultimoAvisoAudio = new Map<string, number>();
+// Aviso educado quando NÃO dá para "ouvir" o áudio (transcrição desligada ou falhou).
+async function avisarAudioPorTexto(msg: any) {
+  const { chave } = await resolverTel(msg);
+  registrarInbox(chave, msg.from, (msg._data && msg._data.notifyName) || "", "aluna", "🎤 (áudio)"); // aparece nas Conversas
+  if (!deveResponder(chave)) return; // desligada / controle humano / handoff → não responde
+  const agora = Date.now();
+  if (agora - (ultimoAvisoAudio.get(chave) || 0) < 5 * 60 * 1000) return; // não repete o aviso a cada áudio
+  ultimoAvisoAudio.set(chave, agora);
+  const resp = "Recebi seu áudio! 😊 Por aqui eu consigo te ajudar melhor por *texto* — consegue me mandar escrito o que você precisa?";
+  registrarInbox(chave, msg.from, "", "sofia", resp);
+  try { await enviarHumano(msg.from, resp); } catch (e: any) { log("falha ao avisar sobre áudio: " + (e?.message || e)); }
+}
 function tratarSemTexto(msg: any) {
   const t = msg.type || "";
-  const ehAudio = t === "ptt" || t === "audio";
-  if (!ehAudio) return; // por ora só tratamos áudio (figurinha/imagem seguem ignoradas)
-  enfileirar(async () => {
-    const { chave } = await resolverTel(msg);
-    registrarInbox(chave, msg.from, (msg._data && msg._data.notifyName) || "", "aluna", "🎤 (áudio)"); // aparece nas Conversas
-    if (!deveResponder(chave)) return; // desligada / controle humano / handoff → não responde
-    const agora = Date.now();
-    if (agora - (ultimoAvisoAudio.get(chave) || 0) < 5 * 60 * 1000) return; // não repete o aviso a cada áudio
-    ultimoAvisoAudio.set(chave, agora);
-    const resp = "Recebi seu áudio! 😊 Por aqui eu consigo te ajudar melhor por *texto* — consegue me mandar escrito o que você precisa?";
-    registrarInbox(chave, msg.from, "", "sofia", resp);
-    try { await enviarHumano(msg.from, resp); } catch (e: any) { log("falha ao avisar sobre áudio: " + (e?.message || e)); }
+  if (t !== "ptt" && t !== "audio") return; // por ora só tratamos áudio (figurinha/imagem seguem ignoradas)
+  enfileirar(() => avisarAudioPorTexto(msg));
+}
+
+// ── Transcrição de áudio (opt-in) ────────────────────────────────────────────
+//    O Claude não "ouve" áudio, então usamos um serviço de fala→texto (Whisper).
+//    LIGA sozinho quando TRANSCRICAO_API_KEY existe no .env. Compatível com
+//    OpenAI (padrão) e Groq (basta trocar TRANSCRICAO_URL). Se não houver chave
+//    ou a transcrição falhar, cai no aviso educado pedindo texto.
+const TRANSCRICAO_KEY = process.env.TRANSCRICAO_API_KEY || "";
+const TRANSCRICAO_URL = process.env.TRANSCRICAO_URL || "https://api.openai.com/v1/audio/transcriptions";
+const TRANSCRICAO_MODELO = process.env.TRANSCRICAO_MODELO || "whisper-1";
+function transcricaoAtiva(): boolean { return !!TRANSCRICAO_KEY; }
+async function transcreverAudio(msg: any): Promise<string> {
+  const media = await msg.downloadMedia();
+  if (!media || !media.data) return "";
+  const bytes = Buffer.from(media.data, "base64");
+  const mime = media.mimetype || "audio/ogg";
+  const ext = mime.includes("mp4") || mime.includes("m4a") ? "m4a" : mime.includes("mpeg") ? "mp3" : mime.includes("wav") ? "wav" : "ogg";
+  const fd = new FormData();
+  fd.append("file", new Blob([bytes], { type: mime }), `audio.${ext}`);
+  fd.append("model", TRANSCRICAO_MODELO);
+  fd.append("language", "pt");
+  const resp = await fetch(TRANSCRICAO_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TRANSCRICAO_KEY}` },
+    body: fd as any,
+    signal: AbortSignal.timeout(30000),
   });
+  if (!resp.ok) { log(`transcrição HTTP ${resp.status}: ${(await resp.text().catch(() => "")).slice(0, 200)}`); return ""; }
+  const j: any = await resp.json().catch(() => ({}));
+  return String(j?.text || "").trim();
+}
+
+// Processa uma mensagem de TEXTO da aluna (mesmo caminho para texto e para o
+// áudio transcrito). textoInbox permite mostrar "🎤 ..." no painel.
+async function processarTextoDaAluna(msg: any, texto: string, textoInbox?: string) {
+  const { chave, telefone } = await resolverTel(msg); // chave estável p/ memória + telefone real p/ agendar
+  // Contato bloqueado (como o "Bloquear" do WhatsApp): ignora por completo.
+  if (estaBloqueado(chave, telefone, jidParaTel(msg.from))) { log(`mensagem de contato bloqueado (${chave}) — ignorada.`); return; }
+  const nomeAluna = (msg._data && msg._data.notifyName) || "";
+  registrarInbox(chave, msg.from, nomeAluna, "aluna", textoInbox || texto); // painel ao vivo
+  try { checarGatilhosAluna(chave, nomeAluna, texto); } catch (e: any) { log("gatilhos: " + (e?.message || e)); }
+  agendarResposta(chave, msg.from, telefone, texto); // debounce + resposta
 }
 
 // ── Agrupamento de mensagens (debounce) ─────────────────────────────────────
@@ -1017,17 +1060,20 @@ client.on("message", (msg: any) => {
   try {
     if (!msg.from || msg.from.endsWith("@g.us") || msg.from === "status@broadcast") return; // ignora grupos/status
     const texto = (msg.body || "").trim();
-    if (!texto) { tratarSemTexto(msg); return; } // áudio/imagem sem legenda → aviso educado (a Sofia ainda não escuta áudio)
-    enfileirar(async () => {
-      const { chave, telefone } = await resolverTel(msg); // chave estável p/ memória + telefone real p/ agendar
-      // Contato bloqueado (como o "Bloquear" do WhatsApp): a Sofia ignora por
-      // completo — não responde, não registra no inbox, não roda automações.
-      if (estaBloqueado(chave, telefone, jidParaTel(msg.from))) { log(`mensagem de contato bloqueado (${chave}) — ignorada.`); return; }
-      const nomeAluna = (msg._data && msg._data.notifyName) || "";
-      registrarInbox(chave, msg.from, nomeAluna, "aluna", texto); // mostra no inbox NA HORA (painel ao vivo)
-      try { checarGatilhosAluna(chave, nomeAluna, texto); } catch (e: any) { log("gatilhos: " + (e?.message || e)); } // automações por tag (palavra/campanha)
-      agendarResposta(chave, msg.from, telefone, texto); // espera as próximas e responde juntando (debounce)
-    });
+    if (texto) { enfileirar(() => processarTextoDaAluna(msg, texto)); return; }
+    // Sem texto: se for ÁUDIO e a transcrição estiver ligada, transcreve e trata
+    // como se a aluna tivesse escrito. Senão, aviso educado pedindo texto.
+    const tipo = msg.type || "";
+    if ((tipo === "ptt" || tipo === "audio") && transcricaoAtiva()) {
+      enfileirar(async () => {
+        let txt = "";
+        try { txt = await transcreverAudio(msg); } catch (e: any) { log("transcrição falhou: " + (e?.message || e)); }
+        if (txt) { log(`🎤 áudio transcrito (${txt.length} car.)`); await processarTextoDaAluna(msg, txt, "🎤 " + txt); }
+        else { await avisarAudioPorTexto(msg); } // não deu para transcrever → pede texto
+      });
+      return;
+    }
+    tratarSemTexto(msg);
   } catch (e: any) { log("erro no on(message): " + (e?.message || e)); }
 });
 
