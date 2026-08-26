@@ -966,7 +966,13 @@ function tratarSemTexto(msg: any) {
 const TRANSCRICAO_KEY = process.env.TRANSCRICAO_API_KEY || "";
 const TRANSCRICAO_URL = process.env.TRANSCRICAO_URL || "https://api.openai.com/v1/audio/transcriptions";
 const TRANSCRICAO_MODELO = process.env.TRANSCRICAO_MODELO || "whisper-1";
-function transcricaoAtiva(): boolean { return !!TRANSCRICAO_KEY; }
+// Liga/desliga pelo painel (sofia-transcricao.txt): 'off' desliga mesmo com chave.
+const TRANSCRICAO_FILE = path.join(DIR, "sofia-transcricao.txt");
+function transcricaoLigadaNoPainel(): boolean {
+  try { return fs.readFileSync(TRANSCRICAO_FILE, "utf-8").trim().toLowerCase() !== "off"; }
+  catch { return true; } // sem arquivo = ligado (padrão)
+}
+function transcricaoAtiva(): boolean { return !!TRANSCRICAO_KEY && transcricaoLigadaNoPainel(); }
 async function transcreverAudio(msg: any): Promise<string> {
   const media = await msg.downloadMedia();
   if (!media || !media.data) return "";

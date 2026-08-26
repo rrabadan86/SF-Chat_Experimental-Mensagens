@@ -2279,6 +2279,13 @@ function paginaSofia(aviso, erro) {
       </div>
       <div class="card">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" name="transcricaoOn" value="1"${e.transcricaoOn ? ' checked' : ''} style="width:auto;margin:0">
+          🎤 Transcrever áudios das alunas${infoI('Quando a aluna manda <b>áudio</b>, a SoFIA transcreve (fala→texto) e responde ao conteúdo — aparece como “🎤 …” no painel. Precisa de uma <b>chave de transcrição</b> no arquivo <code>.env</code> (<code>TRANSCRICAO_API_KEY</code>, OpenAI ou Groq). Desligado, a SoFIA pede para a aluna mandar por texto.')}
+        </label>
+        <p class="quando" style="margin:6px 0 0">Precisa da chave no <code>ChatBot/.env</code>. Sem chave, fica sem efeito. Vale <b>após reiniciar</b> a SoFIA.</p>
+      </div>
+      <div class="card">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="ritHumano" value="1"${e.ritmo.humano ? ' checked' : ''} style="width:auto;margin:0">
           Modo humano — quebra respostas longas em várias mensagens e mostra “digitando…”
         </label>
@@ -3014,6 +3021,7 @@ const server = http.createServer((req, res) => {
           agruparSeg: p.get('agruparSeg') != null ? p.get('agruparSeg') : '7',
           followup: { on: p.get('followupOn') === '1', horas: p.get('followupHoras') || '24', instrucao: p.get('followupInstrucao') || '' },
           modelos: { conversa: p.get('modeloConversa') || '', extracao: p.get('modeloExtracao') || '' },
+          transcricaoOn: p.get('transcricaoOn') === '1',
           midias: {
             grade_imagem: (p.get('grade_imagem') || '').trim(),
             grade_link: (p.get('grade_link') || '').trim(),

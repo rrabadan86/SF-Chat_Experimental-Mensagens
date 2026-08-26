@@ -36,6 +36,7 @@ const F = {
   humano: path.join(DIR, 'sofia-humano.json'), // conversas sob controle humano (Sofia não responde) — lido pela Sofia
   bloqueios: path.join(DIR, 'sofia-bloqueios.json'), // números bloqueados (Sofia ignora) — painel escreve, listener lê
   modelo: path.join(DIR, 'sofia-modelo.json'), // modelo de IA (conversa/extração) — painel escreve, sofia.ts lê no boot
+  transcricao: path.join(DIR, 'sofia-transcricao.txt'), // liga/desliga transcrição de áudio — painel escreve, listener lê
   followupCfg: path.join(DIR, 'sofia-followup-cfg.json'), // config do follow-up (ligado/tempo/instrução) — painel
   followup: path.join(DIR, 'sofia-followup.jsonl'), // fila de follow-ups a gerar+enviar — painel escreve, listener consome
   campanhas: path.join(DIR, 'campanhas.json'), // estado das campanhas — publicado pelo listener (painel só lê)
@@ -215,6 +216,7 @@ function estado() {
     followup: lerFollowupCfg(),
     modelos: lerModelos(),
     modelosValidos: MODELOS_VALIDOS,
+    transcricaoOn: lerTranscricaoOn(),
     secoes: parseSecoes(ler(F.prompt)),
     extracao: ler(F.extracao),
     midias: lerMidias(),
@@ -223,7 +225,7 @@ function estado() {
 }
 
 // Salva tudo (com backup e validação mínima). Lança Error em caso de recusa.
-function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg, followup, modelos, midias, ritmo }) {
+function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg, followup, modelos, transcricaoOn, midias, ritmo }) {
   const promptMontado = montarPrompt(secoes || []);
   const ext = String(extracao || '').trim();
   if (promptMontado.trim().length < 50 || ext.length < 30) {
@@ -239,6 +241,7 @@ function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg
   if (agruparSeg !== undefined) gravarAgruparSeg(agruparSeg);
   if (followup !== undefined) gravarFollowupCfg(followup || {});
   if (modelos !== undefined) gravarModelos(modelos || {});
+  if (transcricaoOn !== undefined) gravarTranscricaoOn(!!transcricaoOn);
   gravarMidias(midias || {});
   if (ritmo) gravarRitmo(ritmo);
 }
@@ -418,6 +421,10 @@ function gravarModelos({ conversa, extracao }) {
   gravarArquivo(F.modelo, JSON.stringify(cfg));
   return cfg;
 }
+// Liga/desliga da transcrição de áudio (a chave fica no .env; isto só controla
+// se usamos ou não). Padrão: ligado (se houver chave, transcreve).
+function lerTranscricaoOn() { return ler(F.transcricao).trim().toLowerCase() !== 'off'; }
+function gravarTranscricaoOn(on) { gravarArquivo(F.transcricao, on ? 'on' : 'off'); return !!on; }
 
 // ── Follow-up (retomada de leads que esfriaram sem agendar) ──────────────────
 const FOLLOWUP_INSTRUCAO_PADRAO = 'Pergunte de forma leve se ela ainda tem interesse em conhecer o Studio e que estamos de portas abertas para ela fazer a aula experimental gratuita. Seja calorosa e natural.';
@@ -465,6 +472,6 @@ function setControleHumano(chave, ativo) {
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, enviarComando,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };
