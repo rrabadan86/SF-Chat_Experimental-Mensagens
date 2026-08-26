@@ -1520,7 +1520,7 @@ function paginaSofiaContatos(aviso, erro, params) {
         <button type="submit" class="tagbtn ren" name="acao" value="renomear">Renomear</button>
         <button type="submit" class="tagbtn rm" name="acao" value="excluir" onclick="return confirm('Excluir a tag em TODOS os contatos?')">Excluir</button>
       </form>
-      <button type="button" class="tagbtn aut${cfg.gatilho ? ' on' : ''}" onclick="abrirTagCfg(${i})" title="Automação desta tag">⚙️ Automação${cfg.gatilho ? ' ⚡' : ''}</button>
+      <button type="button" class="tagbtn aut${(cfg.gatilho || cfg.remove.length) ? ' on' : ''}" onclick="abrirTagCfg(${i})" title="Automação desta tag">⚙️ Automação${(cfg.gatilho || cfg.remove.length) ? ' ⚡' : ''}</button>
     </div>`; }).join('') : '<p class="quando" style="margin:0">Nenhuma tag ainda. Crie uma acima ou etiquete um contato.</p>'}
     </div></details>`;
 
@@ -1613,6 +1613,10 @@ function paginaSofiaContatos(aviso, erro, params) {
         <input type="tel" id="tgWpp" placeholder="(62) 99999-9999" inputmode="tel">
         <p class="quando" style="margin:6px 0 0">Deixe em branco para só etiquetar, sem avisar ninguém.</p>
       </div>
+      <div style="margin-top:16px">
+        <label>Ao aplicar esta tag, remover <span class="sub" style="font-weight:400;color:var(--cinza)">— transição de funil (ex.: entrar em "Agendou" tira "Contato inicial")</span></label>
+        <div id="tgRemove" class="ct-tglist" style="max-height:150px;overflow:auto"></div>
+      </div>
       <div class="ct-foot">
         <button type="button" class="reset" onclick="fecharTagCfg()" style="padding:9px 16px">Cancelar</button>
         <button type="button" class="save" id="tgSalvar" onclick="salvarTagCfg()" style="padding:9px 18px">Salvar</button>
@@ -1638,7 +1642,9 @@ function paginaSofiaContatos(aviso, erro, params) {
   </div>
 <script>
   var CONTATOS = ${JSON.stringify(r.itens.map(c => ({ tel: c.tel, telFmt: fmtTelP(c.tel), nome: c.nome || '', tags: c.tags || [], ini: iniciais(c.nome, c.tel), cor: corAv(c.nome || c.tel) })))};
-  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, wpp: c.avisarWpp }; }))};
+  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, wpp: c.avisarWpp, remove: c.remove }; }))};
+  var TODAS_TAGS_LISTA = ${JSON.stringify(tags.map(t => t.tag))};
+  var tgRemove = [];
   var tgSel=null;
   function abrirTagCfg(i){
     var c=TAGS_CFG[i]; if(!c) return; tgSel=c;
@@ -1646,9 +1652,21 @@ function paginaSofiaContatos(aviso, erro, params) {
     document.getElementById('tgGatilho').value=c.gatilho||'';
     document.getElementById('tgPalavras').value=(c.palavras||[]).join(', ');
     document.getElementById('tgWpp').value=c.wpp||'';
+    tgRemove=(c.remove||[]).slice();
+    tgRenderRemove();
     tgSync();
     document.getElementById('tgModal').style.display='flex';
   }
+  function tgRenderRemove(){
+    var box=document.getElementById('tgRemove');
+    var outras=TODAS_TAGS_LISTA.filter(function(t){return !tgSel||t!==tgSel.tag;});
+    if(!outras.length){ box.innerHTML='<span class="quando">Nenhuma outra tag ainda.</span>'; return; }
+    box.innerHTML=outras.map(function(t){
+      var on=tgRemove.indexOf(t)>=0;
+      return '<button type="button" class="ct-tg'+(on?' on':'')+'" style="'+(on?'background:#fdecea;color:#c0392b;border-color:#f5c6cb':'background:#fff;color:#5c5960;border-color:#e8e8ea')+'" onclick="tgToggleRemove(this,\\''+t.replace(/'/g,"\\\\'")+'\\')">'+(on?'✕ ':'')+esc(t)+'</button>';
+    }).join('');
+  }
+  function tgToggleRemove(btn,t){ var i=tgRemove.indexOf(t); if(i>=0)tgRemove.splice(i,1); else tgRemove.push(t); tgRenderRemove(); }
   function tgSync(){
     var g=document.getElementById('tgGatilho').value;
     document.getElementById('tgPalBox').style.display=(g==='palavra')?'block':'none';
@@ -1661,7 +1679,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     if(g==='palavra' && !document.getElementById('tgPalavras').value.trim()){ alert('Informe ao menos uma palavra-chave.'); return; }
     var b=document.getElementById('tgSalvar'); b.disabled=true; b.textContent='Salvando…';
     var pals=document.getElementById('tgPalavras').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
-    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, avisarWpp:document.getElementById('tgWpp').value };
+    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove };
     fetch('/sofia/contatos/tagcfg',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
       .then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.reload(); } else { b.disabled=false; b.textContent='Salvar'; alert('❌ '+(j.erro||'falha ao salvar')); } })
       .catch(function(){ b.disabled=false; b.textContent='Salvar'; alert('❌ erro de rede'); });
@@ -2622,7 +2640,7 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e5, corpo => {
       try {
         const d = JSON.parse(corpo || '{}');
-        contatos.definirTagConfig(d.tag, { gatilho: d.gatilho || '', palavras: d.palavras || [], avisarWpp: d.avisarWpp || '' });
+        contatos.definirTagConfig(d.tag, { gatilho: d.gatilho || '', palavras: d.palavras || [], avisarWpp: d.avisarWpp || '', remove: d.remove || [] });
         try { publicarRegras(); } catch (_) {} // atualiza o listener na hora
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true }));
       } catch (e) {

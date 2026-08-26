@@ -114,7 +114,7 @@ function setTags(telefone, tags) {
   const map = carregar();
   const tel = normTel(telefone);
   if (!map[tel]) return false;
-  map[tel].tags = limparTags(tags);
+  map[tel].tags = tagsAposRegras(limparTags(tags)); // aplica transições entre tags
   map[tel].atualizadoEm = Date.now();
   salvar(map);
   return true;
@@ -181,10 +181,13 @@ function normCfg(c) {
   palavras = palavras.map(s => String(s).trim().toLowerCase()).filter(Boolean);
   let wpp = String(c.avisarWpp || '').replace(/\D/g, '');
   if (wpp && wpp.length >= 10 && wpp.length <= 11) wpp = '55' + wpp; // garante o DDI (Brasil)
+  let remove = Array.isArray(c.remove) ? c.remove : (c.remove ? String(c.remove).split(/[;\n]/) : []);
+  remove = remove.map(s => String(s).trim()).filter(Boolean);
   return {
     gatilho: GATILHOS.includes(gatilho) ? gatilho : '',
     palavras,
     avisarWpp: wpp,
+    remove,       // tags a remover do contato quando ESTA tag for aplicada
     criada: !!c.criada,
   };
 }
@@ -195,10 +198,19 @@ function definirTagConfig(tag, cfg) {
   const n = normCfg(cfg);
   n.criada = !!(map[tag] && map[tag].criada) || !!(cfg && cfg.criada); // uma vez criada, permanece "conhecida"
   // Config totalmente vazia e não-criada → não guarda (evita lixo).
-  if (!n.gatilho && !n.avisarWpp && !n.palavras.length && !n.criada) delete map[tag];
+  if (!n.gatilho && !n.avisarWpp && !n.palavras.length && !n.remove.length && !n.criada) delete map[tag];
   else map[tag] = n;
   salvarTagsConfig(map);
   return true;
+}
+// Aplica as regras de exclusão entre tags: se um contato tem uma tag cuja config
+// diz "remover X", tira X do conjunto. Usado ao adicionar/definir tags de um
+// contato (transição de funil, ex.: entrar em "Agendou" tira "Contato inicial").
+function tagsAposRegras(tags) {
+  let cfg = {}; try { cfg = lerTagsConfig(); } catch (_) {}
+  const set = new Set(tags);
+  for (const t of tags) { const rem = normCfg(cfg[t]).remove || []; for (const r of rem) if (r !== t) set.delete(r); }
+  return [...set];
 }
 // Cria uma tag "conhecida" (aparece nas listas mesmo sem contato).
 function criarTag(nome) {
@@ -228,6 +240,7 @@ function adicionarTag(telefone, nome, tag) {
   if (nome && !c.nome) c.nome = String(nome).trim();
   tag = String(tag || '').trim();
   if (tag && !c.tags.includes(tag)) c.tags.push(tag);
+  c.tags = tagsAposRegras(c.tags); // aplica transições (ex.: sai de "Contato inicial")
   c.atualizadoEm = Date.now();
   map[tel] = c;
   salvar(map);
