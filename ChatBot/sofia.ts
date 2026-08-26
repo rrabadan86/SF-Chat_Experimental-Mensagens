@@ -212,9 +212,11 @@ const solicitarAgendamento = tool(
 const consultarVaga = tool(
   "consultar_vaga",
   "Verifica se um dia/horário da aula experimental TEM VAGA (turma não lotada), consultando a grade real. " +
-    "Use ASSIM QUE a aluna informar o dia/horário e ANTES de pedir nome/e-mail. Se vaga=true, prossiga; " +
-    "se vaga=false, ofereça as 'alternativas' retornadas (horários com vaga) sem pedir dados. " +
-    "Complementa a verificar_disponibilidade (que só checa a grade/antecedência).",
+    "Use ASSIM QUE a aluna informar o dia (e ANTES de pedir nome/e-mail), mesmo que ela não diga a hora — " +
+    "passe qualquer hora do dia só para consultar. Se vaga=true, prossiga. Se vaga=false, ofereça SOMENTE os " +
+    "horários de 'disponiveis_do_dia' (os que têm vaga NAQUELE dia); se esse estiver vazio, use 'alternativas' " +
+    "(outros dias). NUNCA ofereça horário que não esteja em disponiveis_do_dia/alternativas — não use a grade "
+    + "para dizer o que está disponível. Complementa a verificar_disponibilidade (que só checa grade/antecedência).",
   { data: z.string().describe("AAAA-MM-DD"), horario: z.string().describe("HH:MM") },
   async ({ data, horario }) => {
     const base = process.env.SOFIA_BOOK_URL || "https://sf-formularioexperimental.onrender.com/api/book-sofia";
@@ -236,9 +238,11 @@ const consultarVaga = tool(
       juntar(doDia);
       for (const d of Object.keys(dias).sort()) { if (d !== data) juntar(dias[d] || []); }
       const alternativas = comVaga.slice(0, 5);
-      if (alvo && alvo.disponivel) return json({ vaga: true, freeSpots: alvo.freeSpots });
-      if (alvo && !alvo.disponivel) return json({ vaga: false, motivo: "lotada", alternativas });
-      return json({ vaga: false, motivo: "inexistente", alternativas });
+      // Horários COM VAGA no MESMO dia pedido (para oferecer só o que dá pra marcar).
+      const disponiveis_do_dia = doDia.filter((s) => s && s.disponivel).map((s) => String(s.time).slice(0, 5));
+      if (alvo && alvo.disponivel) return json({ vaga: true, freeSpots: alvo.freeSpots, disponiveis_do_dia });
+      if (alvo && !alvo.disponivel) return json({ vaga: false, motivo: "lotada", disponiveis_do_dia, alternativas });
+      return json({ vaga: false, motivo: "inexistente", disponiveis_do_dia, alternativas });
     } catch (e: any) {
       // Se a grade não responder, NÃO trava o atendimento: segue (a
       // solicitar_agendamento ainda valida a vaga de verdade na hora de agendar).
