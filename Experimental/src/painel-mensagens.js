@@ -26,6 +26,7 @@ const igcfg = require('./instagram-config');
 const igcookies = require('./instagram-cookies');
 const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
+const origens = require('./origens');
 const sofia = require('./sofia-editor');
 const contatos = require('./contatos');
 const usuarios = require('./usuarios');
@@ -121,7 +122,7 @@ function validarLogin(usuario, senha) {
 // Qual aba uma URL pertence (para a checagem de acesso). O resto é a aba WhatsApp.
 function telaDaUrl(u) {
   if (u === '/hoje') return 'msg'; // Hoje virou sub-aba do WhatsApp
-  if (u === '/indicadores') return 'ind';
+  if (u === '/indicadores' || u === '/origens/criar' || u === '/origens/excluir') return 'ind';
   if (u === '/instagram' || u.startsWith('/instagram/')) return 'ig';
   if (u === '/sofia' || u.startsWith('/sofia/')) return 'sofia';
   if (u === '/perfis' || u.startsWith('/perfis/')) return 'perfis';
@@ -1066,7 +1067,7 @@ function paginaInstagram(aviso, erro) {
 }
 
 // ── Página: Indicadores do formulário ───────────────────────────────────────
-function paginaIndicadores(dias) {
+function paginaIndicadores(dias, aviso) {
   const janelas = [[1, 'Hoje'], [7, '7 dias'], [30, '30 dias'], [0, 'Tudo']];
   const jan = janelas.some(([d]) => d === dias) ? dias : 7;
   const r = indicadores.resumo(jan);
@@ -1095,12 +1096,7 @@ function paginaIndicadores(dias) {
 
   // Gerador de links por origem: um link etiquetado por canal + botão "Copiar".
   const FORM_BASE = (process.env.FORM_CLOUD_URL || 'https://sf-formularioexperimental.onrender.com').replace(/\/+$/, '');
-  const CANAIS = [
-    { slug: 'instagram',  rot: '📸 Instagram',  desc: 'Coloque na bio, nos stories e nos posts.' },
-    { slug: 'whatsapp',   rot: '💬 WhatsApp',   desc: 'Envie nas conversas, status e grupos.' },
-    { slug: 'indicacao',  rot: '🤝 Indicação',  desc: 'Para quando uma aluna indica uma amiga.' },
-    { slug: 'propaganda', rot: '📣 Propaganda', desc: 'Anúncios pagos, panfletos e parcerias.' },
-  ];
+  let CANAIS = []; try { CANAIS = origens.listar(); } catch (_) {}
   // Casa os contadores já registrados (r.porOrigem) com cada canal, sem diferenciar maiúsculas.
   const origMap = {};
   (r.porOrigem || []).forEach(o => { origMap[String(o.origem || '').trim().toLowerCase()] = o; });
@@ -1118,9 +1114,15 @@ function paginaIndicadores(dias) {
       ? `<b style="color:var(--teal-esc)">${o.acessos}</b> acesso${o.acessos === 1 ? '' : 's'}${o.agendamentos ? ` · <span style="color:var(--coral-esc)">${o.agendamentos} agend.</span>` : ''}`
       : `<span style="color:var(--cinza)">ainda sem acessos</span>`;
     return `<div class="card" style="display:flex;flex-direction:column;gap:9px">
-      <div>
-        <div style="font-weight:700">${c.rot}</div>
-        <div class="quando" style="margin:2px 0 0">${c.desc}</div>
+      <div style="display:flex;align-items:flex-start;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700">${esc(c.rot)}</div>
+          <div class="quando" style="margin:2px 0 0">${esc(c.desc || '')}</div>
+        </div>
+        <form method="POST" action="/origens/excluir" style="margin:0;flex:none" onsubmit="return confirm('Excluir o canal “${esc(c.rot)}”? (os acessos já registrados continuam no histórico)')">
+          <input type="hidden" name="slug" value="${esc(c.slug)}">
+          <button type="submit" class="tagbtn rm" title="Excluir canal" style="width:auto">🗑️</button>
+        </form>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <code style="flex:1 1 220px;min-width:0;background:var(--bg);border:1px solid var(--linha);border-radius:8px;padding:8px 10px;font-size:var(--fs-sm);word-break:break-all">${esc(url)}</code>
@@ -1147,10 +1149,19 @@ function paginaIndicadores(dias) {
       <p class="quando" style="margin:0">De onde vem cada pessoa? Use um <b>link diferente em cada lugar</b> — Instagram, WhatsApp, indicação, anúncio. Quem acessar por ele já entra etiquetado e a conversão de cada canal aparece aqui embaixo. Copie o link do canal e use no lugar do link comum.</p>
     </div>
     ${CANAIS.map(cardCanal).join('')}
+    <details class="card"><summary style="cursor:pointer;font-weight:700">＋ Criar canal</summary>
+      <form method="POST" action="/origens/criar" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:160px"><label style="margin:0 0 4px">Nome do canal</label><input type="text" name="rot" placeholder="ex.: Facebook, Panfleto, TikTok" required></div>
+        <div style="flex:2;min-width:180px"><label style="margin:0 0 4px">Descrição <small style="color:var(--cinza)">(opcional)</small></label><input type="text" name="desc" placeholder="onde você vai usar este link"></div>
+        <button type="submit" class="save" style="padding:9px 16px">Criar</button>
+      </form>
+      <p class="quando" style="margin:8px 0 0">O link vira <code>…/?origem=&lt;nome&gt;</code> (sem acento/espaço). Os 4 canais iniciais também podem ser excluídos.</p>
+    </details>
     ${semTagHtml}
     ${outrasHtml}`;
 
   const corpo = `<div class="wrap">
+    ${aviso ? `<div class="aviso err">${esc(aviso)}</div>` : ''}
     <div class="segs">${segs}</div>
     <div class="stats">
       <div class="stat tot"><div class="n">${r.pessoas}</div><div class="l">👥 pessoas</div></div>
@@ -2540,9 +2551,26 @@ const server = http.createServer((req, res) => {
 
   // Página de indicadores do formulário
   if (req.method === 'GET' && url === '/indicadores') {
-    const d = new URLSearchParams(req.url.split('?')[1] || '').get('dias');
+    const sp2 = new URLSearchParams(req.url.split('?')[1] || '');
+    const d = sp2.get('dias');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(paginaIndicadores(d == null ? 7 : parseInt(d, 10)));
+    return res.end(paginaIndicadores(d == null ? 7 : parseInt(d, 10), sp2.get('erro') || ''));
+  }
+  // Criar / excluir canal de origem (gerador de links).
+  if (req.method === 'POST' && url === '/origens/criar') {
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      let ok = true, msg = '';
+      try { origens.criar({ rot: p.get('rot'), desc: p.get('desc') }); } catch (e) { ok = false; msg = e.message; }
+      res.writeHead(303, { Location: '/indicadores' + (ok ? '' : '?erro=' + encodeURIComponent(msg)) }); res.end();
+    });
+  }
+  if (req.method === 'POST' && url === '/origens/excluir') {
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      try { origens.remover(p.get('slug')); } catch (_) {}
+      res.writeHead(303, { Location: '/indicadores' }); res.end();
+    });
   }
 
   // Página "Hoje" (o que o robô enviou)

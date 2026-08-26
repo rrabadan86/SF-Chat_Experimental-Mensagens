@@ -56,3 +56,5 @@ data/.sessao-segredo
 data/tags-config.json
 
 data/sofia-exp-limite.txt
+
+data/origens.json
