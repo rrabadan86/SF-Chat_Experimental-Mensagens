@@ -2688,18 +2688,20 @@ const server = http.createServer((req, res) => {
       if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
       try {
         const ativo = sofia.setControleHumano(chave, !!d.ativo);
-        // Gatilho 'humano': ao ASSUMIR (ligar o controle humano), aplica as tags
-        // configuradas com esse gatilho + avisa. Só na virada para ligado.
-        if (ativo) {
-          try {
-            const autos = contatos.tagsPorGatilho('humano');
-            if (autos.length) {
+        // Gatilho 'humano' (estado): ao ASSUMIR aplica a tag + avisa; ao DEVOLVER
+        // à SoFIA, remove a tag (é um marcador de "sob controle humano agora").
+        try {
+          const autos = contatos.tagsPorGatilho('humano');
+          if (autos.length) {
+            if (ativo) {
               let nome = '';
               try { const c = contatos.carregar()[contatos.normTel(chave)]; if (c) nome = c.nome || ''; } catch (_) {}
               for (const a of autos) aplicarAutomacao({ telefone: chave, nome, tag: a.tag, avisarWpp: a.avisarWpp, motivo: 'humano' });
+            } else {
+              for (const a of autos) { try { contatos.removerTag(chave, a.tag); } catch (_) {} }
             }
-          } catch (_) {}
-        }
+          }
+        } catch (_) {}
         res.end(JSON.stringify({ ok: true, ativo }));
       }
       catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }

@@ -234,6 +234,19 @@ function adicionarTag(telefone, nome, tag) {
   return true;
 }
 
+// Remove UMA tag de um contato (não mexe nas outras). Usado por automações de
+// estado (ex.: tira "Atendimento Humano" quando você devolve a conversa).
+function removerTag(telefone, tag) {
+  const map = carregar();
+  const tel = normTel(telefone);
+  if (!map[tel]) return false;
+  tag = String(tag || '').trim();
+  const antes = (map[tel].tags || []).length;
+  map[tel].tags = (map[tel].tags || []).filter(t => t !== tag);
+  if (map[tel].tags.length !== antes) { map[tel].atualizadoEm = Date.now(); salvar(map); return true; }
+  return false;
+}
+
 // Renomeia uma tag em TODOS os contatos. Devolve quantos foram afetados.
 function renomearTag(de, para) {
   de = String(de || '').trim(); para = String(para || '').trim();
@@ -309,5 +322,5 @@ function adicionar({ nome, telefone, tags, instrucoes }) {
 module.exports = {
   normTel, carregar, importarCSV, setTags, listar, tagsDistintas, totalContatos,
   remover, editarContato, renomearTag, excluirTag, existe, adicionar, ARQUIVO,
-  tagConfig, definirTagConfig, tagsPorGatilho, criarTag, adicionarTag, lerTagsConfig, GATILHOS,
+  tagConfig, definirTagConfig, tagsPorGatilho, criarTag, adicionarTag, removerTag, lerTagsConfig, GATILHOS,
 };
