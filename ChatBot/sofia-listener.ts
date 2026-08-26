@@ -24,7 +24,10 @@ import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
 import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, deveResponder, janelaSessaoMs, resumirConversa, gerarFollowup } from "./sofia";
 
-const DIR = process.cwd();
+// Pasta dos arquivos da Sofia. Por padrão, a pasta de trabalho (comportamento
+// atual). Se SOFIA_DIR estiver definida, usa ela — permite guardar prompt/estado
+// FORA do repositório, para o "git pull" nunca sobrescrever suas edições.
+const DIR = process.env.SOFIA_DIR || process.cwd();
 const STATUS_FILE = path.join(DIR, "sofia-wa-status.json");
 const AUTH_DIR = process.env.SOFIA_WA_AUTH || path.join(DIR, ".wwebjs_auth");
 const HEADLESS = process.env.SOFIA_HEADLESS !== "false";

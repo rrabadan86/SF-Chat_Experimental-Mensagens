@@ -27,6 +27,11 @@ import * as path from "node:path";
 
 const anthropic = new Anthropic(); // usado só na extração do resumo
 
+// Pasta dos arquivos da Sofia (prompt/estado/etc.). Por padrão a pasta de
+// trabalho (comportamento atual); se SOFIA_DIR estiver definida, usa ela — assim
+// dá para guardar os editáveis FORA do repositório (o git pull nunca os toca).
+const BASE_DIR = process.env.SOFIA_DIR || process.cwd();
+
 // Semeadura: prompt/extração/mídias são editáveis pelo painel e ficam FORA do Git
 // (sofia-*.txt no .gitignore). O conteúdo base mora nos sofia-*.default.txt
 // (versionados). Se o arquivo "vivo" não existir (clone novo, ou o git pull que
@@ -66,7 +71,7 @@ async function comRetry<T>(fn: () => Promise<T>, tentativas = 5): Promise<T> {
 // Ordem de prioridade: sofia-midias.txt → variável de ambiente → padrão abaixo.
 function lerMidias(): Record<string, string> {
   try {
-    const arq = path.join(process.cwd(), "sofia-midias.txt");
+    const arq = path.join(BASE_DIR, "sofia-midias.txt");
     semearSeFaltar(arq);
     const txt = fs.readFileSync(arq, "utf-8");
     const m: Record<string, string> = {};
@@ -264,11 +269,11 @@ const servidor = createSdkMcpServer({
 // O prompt fica num ARQUIVO EXTERNO (sofia-prompt.txt), editável pela telinha web,
 // para você mudar o comportamento da Sofia sem tocar no código nem reiniciar nada.
 // Se o arquivo não existir, usamos PROMPT_PADRAO abaixo como reserva.
-const PROMPT_FILE = path.join(process.cwd(), "sofia-prompt.txt");
+const PROMPT_FILE = path.join(BASE_DIR, "sofia-prompt.txt");
 
 // Interruptor liga/desliga (controlado pela telinha). Se o arquivo disser "off",
 // a Sofia fica em SILÊNCIO — não responde nada (você atende manualmente).
-const ESTADO_FILE = path.join(process.cwd(), "sofia-estado.txt");
+const ESTADO_FILE = path.join(BASE_DIR, "sofia-estado.txt");
 function sofiaAtiva(): boolean {
   try {
     return fs.readFileSync(ESTADO_FILE, "utf-8").trim().toLowerCase() !== "off";
@@ -281,7 +286,7 @@ function sofiaAtiva(): boolean {
 // Quando VOCÊ responde manualmente uma aluna pelo WhatsApp, o listener (na VPS)
 // chama assumirConversa(telefone). A Sofia então fica fora DAQUELA conversa por
 // X minutos (configurável na telinha, arquivo sofia-pausa-min.txt).
-const PAUSA_FILE = path.join(process.cwd(), "sofia-pausa-min.txt");
+const PAUSA_FILE = path.join(BASE_DIR, "sofia-pausa-min.txt");
 function pausaMinutos(): number {
   try { const n = parseInt(fs.readFileSync(PAUSA_FILE, "utf-8").trim(), 10); return n > 0 ? n : 30; }
   catch { return 30; }
@@ -292,7 +297,7 @@ function pausaMinutos(): number {
 // para uma conversa, a Sofia NÃO responde AQUELA conversa (você conversa manualmente);
 // as demais conversas seguem com a Sofia normalmente. Gravado em sofia-humano.json
 // pelo painel e lido AQUI a cada mensagem — muda sem reiniciar.
-const HUMANO_FILE = path.join(process.cwd(), "sofia-humano.json");
+const HUMANO_FILE = path.join(BASE_DIR, "sofia-humano.json");
 function controleHumanoAtivo(chave: string): boolean {
   try {
     const o = JSON.parse(fs.readFileSync(HUMANO_FILE, "utf-8"));
@@ -534,7 +539,7 @@ const conversas = new Map<string, Conversa>();
 // próxima mensagem da aluna começa uma conversa NOVA (a Sofia não lembra do que
 // foi dito antes). É editável pelo painel (aba Sofia → Configuração), gravado em
 // sofia-sessao-horas.txt e lido AQUI a cada mensagem — muda sem reiniciar.
-const SESSAO_FILE = path.join(process.cwd(), "sofia-sessao-horas.txt");
+const SESSAO_FILE = path.join(BASE_DIR, "sofia-sessao-horas.txt");
 const SESSAO_HORAS_PADRAO = 12;
 export function janelaSessaoMs(): number {
   try {
@@ -650,7 +655,7 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
 // ══════════════════════════════════════════════════════════════════════════
 // 6) RESUMO (extração dos 4 campos) + DISPARO PARA O SEU SISTEMA
 // ══════════════════════════════════════════════════════════════════════════
-const EXTRACAO_FILE = path.join(process.cwd(), "sofia-extracao.txt");
+const EXTRACAO_FILE = path.join(BASE_DIR, "sofia-extracao.txt");
 const EXTRACAO_PADRAO = `
 Você é um extrator de dados. Sua única função é ler a conversa entre a aluna e a Sofia e retornar os dados para agendar a aula experimental.
 
@@ -845,7 +850,7 @@ type ResultadoAgendamento =
 
 // Registra um agendamento bem-sucedido num arquivo que o PAINEL consome para
 // (a) auto-etiquetar o contato e (b) avisar no WhatsApp — configurável por tag.
-const AGENDOU_FILE = path.join(process.cwd(), "sofia-agendou.jsonl");
+const AGENDOU_FILE = path.join(BASE_DIR, "sofia-agendou.jsonl");
 function registrarAgendamento(telefone: string, nome: string, when: string) {
   try {
     const tel = String(telefone || "").replace(/\D/g, "");
