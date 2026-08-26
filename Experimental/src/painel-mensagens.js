@@ -798,8 +798,10 @@ function paginaAgendar(aviso, erro) {
   <div class="sec-t">⏳ Pendentes (${pend.length})</div>
   ${pend.length ? pend.map(itemHtml).join('') : '<div class="vazio">Nenhum envio pendente.</div>'}
 
-  <div class="sec-t">📜 Histórico</div>
-  ${hist.length ? hist.map(itemHtml).join('') : '<div class="vazio">Sem envios recentes.</div>'}
+  <details class="acc-sec">
+    <summary class="sec-t" style="cursor:pointer;padding:4px 0">📜 Histórico <small style="font-weight:400;color:var(--cinza)">(${hist.length} envio${hist.length === 1 ? '' : 's'} — clique para abrir)</small></summary>
+    ${hist.length ? hist.map(itemHtml).join('') : '<div class="vazio">Sem envios recentes.</div>'}
+  </details>
   ${cardHorariosAgendados()}
   `;
 
@@ -1162,7 +1164,8 @@ function paginaIndicadores(dias, aviso) {
     </div>` : '';
 
   const origemBloco = `
-    <div class="sec-t">🔗 Gerador de links por origem</div>
+    <details class="acc-sec">
+      <summary class="sec-t" style="cursor:pointer;padding:4px 0">🔗 Gerador de links por origem <small style="font-weight:400;color:var(--cinza)">(${CANAIS.length} cana${CANAIS.length === 1 ? 'l' : 'is'} — clique para abrir)</small></summary>
     <div class="card" style="border-style:dashed">
       <p class="quando" style="margin:0">De onde vem cada pessoa? Use um <b>link diferente em cada lugar</b> — Instagram, WhatsApp, indicação, anúncio. Quem acessar por ele já entra etiquetado e a conversão de cada canal aparece aqui embaixo. Copie o link do canal e use no lugar do link comum.</p>
     </div>
@@ -1176,7 +1179,8 @@ function paginaIndicadores(dias, aviso) {
       <p class="quando" style="margin:8px 0 0">O link vira <code>…/?origem=&lt;nome&gt;</code> (sem acento/espaço). Os 4 canais iniciais também podem ser excluídos.</p>
     </details>
     ${semTagHtml}
-    ${outrasHtml}`;
+    ${outrasHtml}
+    </details>`;
 
   // Log completo dos agendamentos (dados da aluna). Mostra os mais recentes; o
   // conteúdo completo fica num <details> para não pesar a página.
