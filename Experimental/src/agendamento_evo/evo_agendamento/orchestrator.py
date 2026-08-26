@@ -165,10 +165,14 @@ def count_experimentais(evo, id_configuration, when, branch_id=None):
     """Quantas aulas experimentais ATIVAS já existem na turma (idConfiguration) no
     dia `when`. Usa GET /activities/schedule/detail (campo `enrollments`).
     Retorna int, ou None se não conseguir consultar (aí não bloqueia)."""
+    # Qualquer falha ao consultar (EvoError OU timeout/rede crua do EVO) → None:
+    # a grade cai na disponibilidade por ocupação e o /api/book revalida as
+    # experimentais AO VIVO na marcação. Assim um soluço isolado do EVO nunca
+    # derruba o cálculo da grade inteira (push_slots) nem dispara alerta.
     try:
         detail = evo.schedule_detail(id_configuration=id_configuration,
                                      activity_date=when, branch_id=branch_id) or {}
-    except EvoError as e:
+    except Exception as e:
         log.warning("Não consegui checar experimentais da turma %s (%s): %s",
                     id_configuration, when, e)
         return None
