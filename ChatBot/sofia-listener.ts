@@ -129,7 +129,10 @@ async function pararDigitando(jid: string) { await chatstate(jid, "stop"); }
 // Envia como gente: "digitando…" + pausa + a mensagem, uma parte de cada vez.
 // O envio de verdade é client.sendMessage (não serializa chat) — a mensagem vai
 // mesmo que a bolinha de "digitando" não apareça.
-async function enviarHumano(to: string, texto: string) {
+// `chaveRegistro` (opcional): quando informado, registra CADA parte enviada no
+// inbox — assim o painel mostra as mesmas bolhas que a aluna vê no WhatsApp (no
+// modo humano a resposta vira várias mensagens).
+async function enviarHumano(to: string, texto: string, chaveRegistro?: string) {
   const r = lerRitmo(); // fresco a cada resposta — o painel manda no ritmo
   const partes = r.humano ? dividirEmMensagens(texto) : [String(texto || "").trim()];
   for (let i = 0; i < partes.length; i++) {
@@ -137,6 +140,7 @@ async function enviarHumano(to: string, texto: string) {
     await mostrarDigitando(to);
     await sleep(delayDigitando(partes[i], r));
     await enviar(to, partes[i]);
+    if (chaveRegistro) registrarInbox(chaveRegistro, to, "", "sofia", partes[i]); // painel = WhatsApp
     if (i < partes.length - 1) await sleep(400 + Math.floor(Math.random() * 500));
   }
   await pararDigitando(to);
@@ -869,10 +873,10 @@ client.on("message", (msg: any) => {
       registrarInbox(chave, msg.from, nomeAluna, "aluna", texto); // mostra no inbox mesmo se a Sofia estiver pausada
       try { checarGatilhosAluna(chave, nomeAluna, texto); } catch (e: any) { log("gatilhos: " + (e?.message || e)); } // automações por tag (palavra/campanha)
       const reply = await responderComMemoria(chave, texto, telefone); // já cuida de on/off, handoff e memória
-      if (reply && reply.trim()) registrarInbox(chave, msg.from, "", "sofia", reply);
       const urls = drenarMidias(); // imagens que a Sofia pediu nesta resposta
       if ((reply && reply.trim()) || urls.length) {
-        if (reply && reply.trim()) await enviarHumano(msg.from, reply);
+        // registra CADA parte enviada (igual às bolhas do WhatsApp no modo humano)
+        if (reply && reply.trim()) await enviarHumano(msg.from, reply, chave);
         for (const url of urls) {
           try {
             await mostrarDigitando(msg.from);
