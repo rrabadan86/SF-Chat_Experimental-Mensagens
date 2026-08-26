@@ -20,6 +20,7 @@ import "dotenv/config";
 import { Client, LocalAuth, MessageMedia } from "whatsapp-web.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as crypto from "node:crypto";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
 import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, deveResponder, janelaSessaoMs, resumirConversa, gerarFollowup } from "./sofia";
@@ -983,11 +984,38 @@ async function baixarMidia(msg: any): Promise<any> {
   }
   return null;
 }
+// Baixa e DESCRIPTOGRAFA o áudio direto do servidor do WhatsApp (mmg.whatsapp.net),
+// usando a mediaKey/directPath que já vêm na mensagem — MESMA criptografia do app
+// (HKDF-SHA256 + AES-256-CBC). Não usa o navegador nem o downloadMedia (que quebra
+// com a versão fixada), então NÃO mexe na conexão/versão do WhatsApp.
+async function baixarAudioDescriptografado(msg: any): Promise<Buffer | null> {
+  try {
+    const d = (msg && msg._data) || {};
+    const mediaKeyB64 = d.mediaKey || msg.mediaKey;
+    const directPath = d.directPath || msg.directPath;
+    if (!mediaKeyB64 || !directPath) { log("áudio sem mediaKey/directPath — não dá p/ baixar manualmente."); return null; }
+    const mediaKey = Buffer.from(String(mediaKeyB64), "base64");
+    // "WhatsApp Audio Keys" vale para áudio e ptt (nota de voz).
+    const expanded = Buffer.from(crypto.hkdfSync("sha256", mediaKey, Buffer.alloc(0), Buffer.from("WhatsApp Audio Keys"), 112));
+    const iv = expanded.subarray(0, 16);
+    const cipherKey = expanded.subarray(16, 48);
+    const dp = String(directPath);
+    const url = "https://mmg.whatsapp.net" + (dp.startsWith("/") ? dp : "/" + dp);
+    const resp = await fetch(url, { signal: AbortSignal.timeout(30000) });
+    if (!resp.ok) { log("download cifrado HTTP " + resp.status); return null; }
+    const enc = Buffer.from(await resp.arrayBuffer());
+    if (enc.length <= 10) return null;
+    const file = enc.subarray(0, enc.length - 10); // últimos 10 bytes = MAC (ignorado)
+    const decipher = crypto.createDecipheriv("aes-256-cbc", cipherKey, iv);
+    return Buffer.concat([decipher.update(file), decipher.final()]);
+  } catch (e: any) { log("download manual do áudio falhou: " + (e?.message || e)); return null; }
+}
 async function transcreverAudio(msg: any): Promise<string> {
-  const media = await baixarMidia(msg);
-  if (!media || !media.data) { log("transcrição: não consegui baixar o áudio."); return ""; }
-  const bytes = Buffer.from(media.data, "base64");
-  const mime = media.mimetype || "audio/ogg";
+  const mime = (msg._data && msg._data.mimetype) || "audio/ogg";
+  // 1º tenta o download manual (não depende do navegador); 2º o downloadMedia.
+  let bytes: Buffer | null = await baixarAudioDescriptografado(msg);
+  if (!bytes) { const media = await baixarMidia(msg); if (media && media.data) bytes = Buffer.from(media.data, "base64"); }
+  if (!bytes) { log("transcrição: não consegui baixar o áudio."); return ""; }
   const ext = mime.includes("mp4") || mime.includes("m4a") ? "m4a" : mime.includes("mpeg") ? "mp3" : mime.includes("wav") ? "wav" : "ogg";
   const fd = new FormData();
   fd.append("file", new Blob([bytes], { type: mime }), `audio.${ext}`);
