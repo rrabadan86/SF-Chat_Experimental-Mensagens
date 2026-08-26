@@ -180,6 +180,10 @@ let _navSess = null;
 const esc = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+// Ícone de ajuda (ⓘ) com explicação ao passar o mouse / tocar. O texto é HTML
+// estático (confiável) — pode ter <b>. Usado ao lado dos rótulos de config.
+const infoI = html => `<span class="info" tabindex="0">i<span class="info-pop">${html}</span></span>`;
+
 function hojeSP() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); }
 function fmtData(d) { const p = String(d || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : d; }
 function fmtTel(t) { // 5562999999999 → (62) 99999-9999
@@ -351,6 +355,12 @@ const ESTILO = `
   .cpf-range{display:flex;align-items:center;gap:8px}
   .cpf-range input{flex:1;min-width:0;width:auto}
   .cpf-suf{color:var(--cinza);font-size:var(--fs-sm);white-space:nowrap;flex:none}
+  .info{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#e2e4e6;color:#5c5960;font-size:.66rem;font-weight:800;font-style:normal;cursor:help;margin-left:6px;position:relative;vertical-align:middle;user-select:none}
+  .info:hover,.info:focus{background:var(--teal);color:#fff;outline:none}
+  .info .info-pop{display:none;position:absolute;left:0;top:calc(100% + 8px);width:280px;max-width:72vw;background:#2d2a2f;color:#fff;font-size:.78rem;font-weight:400;font-style:normal;line-height:1.45;text-align:left;padding:9px 12px;border-radius:9px;box-shadow:0 6px 18px rgba(0,0,0,.28);z-index:40;white-space:normal}
+  .info .info-pop b{color:#fff}
+  .info:hover .info-pop,.info:focus .info-pop{display:block}
+  .info .info-pop::before{content:"";position:absolute;left:6px;top:-5px;border:5px solid transparent;border-top:0;border-bottom-color:#2d2a2f}
   .cpf-acc{border-top:1px solid var(--linha);margin-top:6px}
   .cpf-sum{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:"Montserrat";font-weight:700;font-size:var(--fs-sec);padding:16px 0}
   .cpf-sum::-webkit-details-marker{display:none}
@@ -2089,27 +2099,23 @@ function paginaSofia(aviso, erro) {
     <form method="POST" action="/sofia/salvar">
 
       <div class="card">
-        <label>⏳ Ao responder pelo celular, SoFIA fica fora por…</label>
+        <label>⏳ Ao responder pelo celular, SoFIA fica fora por…${infoI('Se você responder uma aluna <b>direto pelo WhatsApp</b> (no celular da SoFIA), ela se cala nessa conversa por esse tempo, pra não falar por cima de você. É <b>diferente</b> do botão “assumir” do painel, que deixa a SoFIA fora <b>até você devolver</b>.')}</label>
         <div><input type="number" name="pausaMin" min="1" max="1440" value="${e.pausaMin}" style="width:130px"> minutos</div>
-        <p class="quando" style="margin:6px 0 0">Se você responder uma aluna <b>direto pelo WhatsApp</b> (no celular da SoFIA), ela percebe e <b>se cala nessa conversa</b> por esse tempo, pra não falar por cima de você. <br>Isso é <b>diferente</b> do botão <b>“assumir”</b> na aba Conversas — lá você assume pelo painel e a SoFIA fica fora <b>até você devolver</b>. Se você só assume pelo painel, esse tempo quase não é usado.</p>
       </div>
 
       <div class="card">
-        <label>🧠 Tempo de sessão (memória da conversa)</label>
+        <label>🧠 Tempo de sessão (memória da conversa)${infoI('Depois desse tempo <b>sem mensagens</b>, a próxima mensagem da aluna começa uma conversa <b>nova</b> — a SoFIA não lembra do que foi dito antes. Na aba Conversas aparece como <b>“Sessão encerrada”</b>. Padrão: 12 horas.')}</label>
         <div><input type="number" name="sessaoHoras" min="1" max="720" step="1" value="${e.sessaoHoras}" style="width:130px"> horas</div>
-        <p class="quando" style="margin:6px 0 0">Depois desse tempo <b>sem mensagens</b>, a próxima mensagem da aluna começa uma conversa <b>nova</b> — a SoFIA não lembra do que foi dito antes. No painel (aba Conversas), a conversa aparece como <b>“Sessão encerrada”</b> quando passa desse tempo. Padrão: 12 horas.</p>
       </div>
 
       <div class="card">
-        <label>🩺 Verificação de conexão (health-check)</label>
+        <label>🩺 Verificação de conexão (health-check)${infoI('De tempos em tempos a SoFIA confere se o WhatsApp dela ainda está <b>de verdade</b> conectado. Se travar (parar de responder sem cair o QR), ela <b>te avisa no celular</b> e <b>reinicia sozinha</b>. Padrão: 3 minutos. Vale na hora, sem reiniciar.')}</label>
         <div>checar a cada <input type="number" name="healthMin" min="0" max="120" step="1" value="${e.healthMin}" style="width:100px"> minutos <small style="color:var(--cinza)">(0 = desligado)</small></div>
-        <p class="quando" style="margin:6px 0 0">De tempos em tempos a SoFIA confere se o WhatsApp dela ainda está <b>de verdade</b> conectado. Se travar (parar de responder sem cair o QR), ela <b>te avisa no celular</b> (mesmo app do QR) e <b>reinicia sozinha</b>. Padrão: 3 minutos. Vale na hora, sem reiniciar.</p>
       </div>
 
       <div class="card">
-        <label>🎟️ Máx. de aulas experimentais por turma</label>
+        <label>🎟️ Máx. de aulas experimentais por turma${infoI('Quando uma turma já tem esse número de experimentais marcadas, a SoFIA <b>para de oferecer</b> aquele horário (mesmo com vaga normal). Aumente para aceitar mais. Padrão: 2. Vale na próxima atualização da grade. <b>Atenção:</b> a checagem final roda no formulário (Render) — se aumentar muito aqui, ajuste o EVO_MAX_EXPERIMENTAIS lá também.')}</label>
         <div><input type="number" name="expLimite" min="0" max="50" step="1" value="${lerExpLimite() == null ? 2 : lerExpLimite()}" style="width:130px"> por turma <small style="color:var(--cinza)">(0 = sem limite)</small></div>
-        <p class="quando" style="margin:6px 0 0">Quando uma turma já tem esse número de aulas experimentais marcadas, a SoFIA <b>para de oferecer</b> aquele horário (mesmo com vaga normal). Aumente para aceitar mais experimentais por turma. Padrão: 2. Vale na próxima atualização da grade (poucos minutos). <b>Atenção:</b> a checagem final do agendamento roda no formulário (Render) — se aumentar muito aqui, garanta que o <code>EVO_MAX_EXPERIMENTAIS</code> lá também acompanha.</p>
       </div>
 
       <div class="sec-t">⌨️ Jeito de responder <small style="font-weight:600;color:var(--cinza)">(deixa a SoFIA mais humana — vale na hora, sem reiniciar)</small></div>
