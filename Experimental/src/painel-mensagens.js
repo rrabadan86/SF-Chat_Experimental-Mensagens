@@ -1367,7 +1367,7 @@ function campListHTML() {
         <span style="font-weight:700;font-size:var(--fs-h2)">${esc(c.nome)}</span>
         <span class="pill" style="border-color:var(--linha)">🏷️ ${esc(c.tag)}</span>
         ${c.fotoArquivo ? '<span class="pill" style="border-color:var(--linha)">📷 com foto</span>' : ''}
-        <span class="quando" style="margin:0">${rotStatus[c.status] || c.status}</span>
+        <span class="quando" style="margin:0">${rotStatus[c.status] || c.status}${(c.status === 'pausada' && (c.falhasSeguidas || 0) >= 3) ? ' <span style="color:var(--erro)">(pausada por falhas — verifique a conexão)</span>' : ''}</span>
       </div>
       <div style="margin:8px 0">
         <div style="background:#eef1f2;border-radius:6px;height:16px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div>
@@ -1403,7 +1403,8 @@ function paginaSofiaCampanhas(aviso, erro) {
           <div style="flex:1;min-width:180px;max-width:100%"><label>Enviar para a tag</label><select name="tag" required style="text-overflow:ellipsis">${opcoesTag}</select></div>
         </div>
         <label style="margin-top:12px">Mensagem base <small style="font-weight:400;color:var(--cinza)">(a IA cria ~10 variações naturais a partir dela)</small></label>
-        <textarea name="textoBase" rows="4" placeholder="Escreva a mensagem como você mandaria para uma aluna…" required></textarea>
+        <textarea name="textoBase" rows="4" placeholder="Escreva a mensagem como você mandaria para uma aluna…  Dica: use {nome} para personalizar (ex.: Oi, {nome}!)" required></textarea>
+        <p class="quando" style="margin:4px 0 0">💡 Use <b>{nome}</b> na mensagem para inserir o primeiro nome do contato (ex.: <i>"Oi, {nome}! Tudo bem?"</i>). Contatos sem nome recebem a versão sem o nome.</p>
         <label style="margin-top:12px">📷 Foto (opcional) <small style="font-weight:400;color:var(--cinza)">— enviada junto, com a mensagem como legenda</small></label>
         <input type="file" id="cpFoto" accept="image/*" onchange="prevFoto()" style="padding:8px">
         <div id="cpFotoPrev" style="display:none;margin-top:8px"><img id="cpFotoImg" alt="prévia" style="max-width:180px;max-height:180px;border-radius:10px;border:1px solid var(--linha)"><br><a href="javascript:void(0)" onclick="limpaFoto()" class="quando" style="text-decoration:underline">remover foto</a></div>
@@ -1425,7 +1426,13 @@ function paginaSofiaCampanhas(aviso, erro) {
         </div>
         <p class="quando" style="margin:6px 0 0">Um tempo aleatório dentro dessa faixa entre cada mensagem — quanto maior, mais natural e seguro.</p>
         <div id="cpEst" class="aviso" style="margin:12px 0 0;display:none"></div>
-        <div class="acts"><button type="submit" class="save">Criar campanha</button></div>
+        <div class="sec-t" style="margin:14px 0 6px">🧪 Enviar teste <small style="font-weight:400;color:var(--cinza)">(manda a mensagem e a foto para um número seu, pra conferir como chega)</small></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="tel" id="cpTesteTel" placeholder="(62) 99999-9999" style="width:200px">
+          <button type="button" class="reset" onclick="testarCampanha()" style="padding:8px 14px">Enviar teste</button>
+          <span id="cpTesteMsg" class="quando" style="margin:0"></span>
+        </div>
+        <div class="acts" style="margin-top:14px"><button type="submit" class="save">Criar campanha</button></div>
         <p class="quando" style="margin:8px 0 0">⚠️ Envio em massa tem risco de bloqueio do número. Comece com poucos por dia e delays altos. Você controla tudo: só envia depois de clicar em <b>Iniciar</b>, e pode pausar quando quiser.</p>
         <script>
           var TAGN = ${JSON.stringify(Object.fromEntries(tags.map(t => [t.tag, t.n])))};
@@ -1453,6 +1460,18 @@ function paginaSofiaCampanhas(aviso, erro) {
           document.addEventListener('DOMContentLoaded',estCamp);
           var _st=selTagEl(); if(_st) _st.addEventListener('change',estCamp);
           function prevFoto(){ var f=document.getElementById('cpFoto').files[0]; var box=document.getElementById('cpFotoPrev'); if(!f){box.style.display='none';return;} var rd=new FileReader(); rd.onload=function(){ document.getElementById('cpFotoImg').src=rd.result; box.style.display='block'; }; rd.readAsDataURL(f); }
+          function testarCampanha(){
+            var tel=document.getElementById('cpTesteTel').value.replace(/\\D/g,''); var msg=document.getElementById('cpTesteMsg');
+            var texto=document.querySelector('textarea[name=textoBase]').value.trim();
+            if(!tel || tel.length<10){ if(msg)msg.textContent='Informe um número válido.'; return; }
+            if(!texto){ if(msg)msg.textContent='Escreva a mensagem primeiro.'; return; }
+            if(msg)msg.textContent='Enviando teste…';
+            var d={ telefone:tel, texto:texto };
+            function post(){ fetch('/sofia/campanhas/teste',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(function(r){return r.json();}).then(function(j){ if(msg)msg.textContent=j.ok?'✓ teste enviado (confira o WhatsApp).':'❌ '+(j.erro||'falha'); }).catch(function(){ if(msg)msg.textContent='❌ erro de rede'; }); }
+            var file=document.getElementById('cpFoto').files[0];
+            if(file){ if(file.size>10*1024*1024){ if(msg)msg.textContent='Imagem muito grande (máx. 10MB).'; return; } var rd=new FileReader(); rd.onload=function(){ d.fotoBase64=rd.result; post(); }; rd.readAsDataURL(file); }
+            else post();
+          }
           function limpaFoto(){ document.getElementById('cpFoto').value=''; document.getElementById('cpFotoPrev').style.display='none'; }
           function enviarCampanha(ev){
             ev.preventDefault();
@@ -2219,6 +2238,24 @@ const server = http.createServer((req, res) => {
       } catch (e) {
         res.end(JSON.stringify({ ok: false, erro: e.message }));
       }
+    });
+  }
+  // Enviar teste da campanha (JSON): manda a mensagem+foto para um número seu.
+  if (req.method === 'POST' && url === '/sofia/campanhas/teste') {
+    return lerCorpo(req, 14e6, corpo => {
+      let d = {};
+      try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      const telefone = String(d.telefone || '').replace(/\D/g, '');
+      const texto = String(d.texto || '').trim();
+      try {
+        if (telefone.length < 10) throw new Error('Número inválido.');
+        if (!texto) throw new Error('Mensagem vazia.');
+        let fotoArquivo = '';
+        if (d.fotoBase64) { try { fotoArquivo = sofia.salvarFotoCampanha('teste-' + Date.now(), d.fotoBase64); } catch (e) { throw new Error('Foto: ' + e.message); } }
+        sofia.opCampanha({ op: 'teste', telefone, texto, fotoArquivo });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
   }
   // Fragmento HTML só da lista de campanhas — o painel busca a cada poucos segundos

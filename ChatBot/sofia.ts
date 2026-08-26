@@ -686,7 +686,9 @@ export async function gerarVariacoes(texto: string, n = 10): Promise<string[]> {
 Reescreva a mensagem abaixo em ${n} variações DIFERENTES entre si, mantendo EXATAMENTE o mesmo sentido,
 o mesmo idioma (português do Brasil) e um tom amigável e humano de WhatsApp. Pode variar saudação,
 ordem das frases e palavras, mas NÃO invente informação, preço, data ou promoção que não esteja no texto.
-Mantenha eventuais *negritos* e links iguais. Responda APENAS um array JSON de strings, sem explicação, sem markdown.
+Mantenha eventuais *negritos* e links iguais. Se houver o marcador literal {nome} no texto, MANTENHA {nome}
+em TODAS as variações, exatamente assim (é substituído depois pelo nome da pessoa). Responda APENAS um array
+JSON de strings, sem explicação, sem markdown.
 
 Mensagem:
 """${base}"""`;

@@ -44,21 +44,31 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // isso, não faz nada. Anti-spam de 30 min para o QR não repetir a cada refresh.
 const NTFY_BASE = (process.env.NTFY_URL || "https://ntfy.sh").replace(/\/+$/, "");
 const NTFY_TOPIC = process.env.NTFY_TOPIC || "";
-let ultimoAlertaQr = 0;
-async function alertarQuedaQR() {
+async function enviarNtfy(title: string, body: string, tags = "warning", priority = "high") {
   if (!NTFY_TOPIC) return; // não configurado → silêncio
-  const agora = Date.now();
-  if (agora - ultimoAlertaQr < 30 * 60 * 1000) return; // já avisei há pouco
-  ultimoAlertaQr = agora;
   try {
     await fetch(`${NTFY_BASE}/${encodeURIComponent(NTFY_TOPIC)}`, {
       method: "POST",
-      headers: { Title: "SoFIA caiu - precisa de QR", Priority: "urgent", Tags: "rotating_light" },
-      body: "O WhatsApp da SoFIA desconectou. Abra o painel (aba SoFIA -> Configuracao) e escaneie o QR. Ate la, ela nao responde as alunas.",
+      headers: { Title: title, Priority: priority, Tags: tags },
+      body,
       signal: AbortSignal.timeout(15000),
     });
-    log("alerta de QR enviado (ntfy).");
+    log(`alerta enviado (ntfy): ${title}`);
   } catch (e: any) { log("falha ao enviar alerta ntfy: " + (e?.message || e)); }
+}
+let ultimoAlertaQr = 0;
+async function alertarQuedaQR() {
+  const agora = Date.now();
+  if (agora - ultimoAlertaQr < 30 * 60 * 1000) return; // anti-spam do QR
+  ultimoAlertaQr = agora;
+  await enviarNtfy("SoFIA caiu - precisa de QR", "O WhatsApp da SoFIA desconectou. Abra o painel (aba SoFIA -> Configuracao) e escaneie o QR. Ate la, ela nao responde as alunas.", "rotating_light", "urgent");
+}
+// Personalização: troca {nome} pelo primeiro nome do contato; sem nome, remove o
+// marcador de forma limpa (", {nome}" ou "{nome}" viram vazio).
+function aplicarNome(texto: string, nome?: string): string {
+  const primeiro = String(nome || "").trim().split(/\s+/)[0] || "";
+  if (primeiro) return texto.replace(/\{nome\}/gi, primeiro);
+  return texto.replace(/\s*,?\s*\{nome\}/gi, "").replace(/\{nome\}/gi, "");
 }
 
 // ── "Jeito humano": divide a resposta em várias mensagens e mostra "digitando…"
@@ -447,7 +457,9 @@ type Campanha = {
   status: "gerando" | "pronta" | "enviando" | "pausada" | "concluida" | "cancelada";
   pendentes: CampDest[]; enviados: { tel: string; nome?: string; em: number }[]; falhas: { tel: string; erro: string; em: number }[];
   enviadosHoje: number; diaRef: string; proxEnvioEm: number; criadoEm: number; atualizadoEm: number;
+  falhasSeguidas?: number; // falhas consecutivas — se estourar, pausa sozinha e alerta
 };
+const CAMP_MAX_FALHAS_SEGUIDAS = parseInt(process.env.SOFIA_CAMP_MAX_FALHAS || "5", 10);
 const CAMP_FILE = path.join(DIR, "campanhas.json");
 const CAMP_INBOX = path.join(DIR, "campanhas-inbox.jsonl");
 let campanhas: Campanha[] = [];
@@ -516,6 +528,18 @@ async function processarCampInbox() {
         }
       } else if (op.op === "excluir" && op.id) {
         campanhas = campanhas.filter((x) => x.id !== String(op.id)); agendarSalvarCampanhas();
+      } else if (op.op === "teste" && op.telefone) {
+        // Enviar teste: manda a mensagem (com foto) para um número seu, na hora.
+        const texto = aplicarNome(String(op.texto || ""), op.nome || "Maria");
+        if (!pronta) { log("teste de campanha ignorado — SoFIA não está conectada."); }
+        else {
+          try {
+            const alvo = await resolverIdEnvio(String(op.telefone));
+            if (op.fotoArquivo && fs.existsSync(op.fotoArquivo)) { const m = MessageMedia.fromFilePath(op.fotoArquivo); await enviar(alvo, m, { caption: texto }); }
+            else await enviar(alvo, texto);
+            log(`teste de campanha enviado para ${op.telefone}.`);
+          } catch (e: any) { log("falha no teste de campanha: " + (e?.message || e)); }
+        }
       }
     } catch (e: any) { log("erro aplicando op de campanha: " + (e?.message || e)); }
   }
@@ -535,7 +559,8 @@ async function tickCampanha() {
   if (c.enviadosHoje >= c.limiteDia) return;                  // bateu o teto do dia → espera amanhã
   if (Date.now() < c.proxEnvioEm) return;                     // ainda no intervalo entre envios
   const alvoDest = c.pendentes[0];
-  const variacao = (c.variacoes.length ? c.variacoes[(c.enviados.length) % c.variacoes.length] : c.textoBase) || c.textoBase;
+  const variacaoBase = (c.variacoes.length ? c.variacoes[(c.enviados.length) % c.variacoes.length] : c.textoBase) || c.textoBase;
+  const variacao = aplicarNome(variacaoBase, alvoDest.nome); // personaliza com o 1º nome
   campanhaEnviando = true;
   try {
     const alvo = await resolverIdEnvio(alvoDest.tel);
@@ -548,12 +573,19 @@ async function tickCampanha() {
     c.pendentes.shift();
     c.enviados.push({ tel: alvoDest.tel, nome: alvoDest.nome, em: Date.now() });
     c.enviadosHoje++;
+    c.falhasSeguidas = 0; // deu certo → zera o contador de falhas seguidas
     registrarInbox(alvoDest.tel, alvo, alvoDest.nome || "", "sofia", (c.fotoArquivo ? "📷 " : "") + variacao); // aparece nas Conversas
     log(`campanha "${c.nome}": enviada ${c.enviados.length}/${c.enviados.length + c.pendentes.length} (${alvoDest.tel}).`);
   } catch (e: any) {
     c.pendentes.shift();
     c.falhas.push({ tel: alvoDest.tel, erro: (e?.message || String(e)).slice(0, 120), em: Date.now() });
-    log(`campanha "${c.nome}": FALHA em ${alvoDest.tel} (${e?.message || e}).`);
+    c.falhasSeguidas = (c.falhasSeguidas || 0) + 1;
+    log(`campanha "${c.nome}": FALHA em ${alvoDest.tel} (${e?.message || e}). Seguidas: ${c.falhasSeguidas}.`);
+    if (c.falhasSeguidas >= CAMP_MAX_FALHAS_SEGUIDAS) {
+      c.status = "pausada"; // auto-pausa para não queimar o número
+      log(`campanha "${c.nome}": PAUSADA automaticamente após ${c.falhasSeguidas} falhas seguidas.`);
+      enviarNtfy("Campanha pausada", `A campanha "${c.nome}" foi pausada apos ${c.falhasSeguidas} falhas seguidas. Verifique a conexao da SoFIA e os numeros. Retome pelo painel quando estiver ok.`, "warning", "high");
+    }
   } finally {
     c.proxEnvioEm = Date.now() + aleatorio(c.delayMinSeg, c.delayMaxSeg) * 1000;
     if (!c.pendentes.length) c.status = "concluida";
