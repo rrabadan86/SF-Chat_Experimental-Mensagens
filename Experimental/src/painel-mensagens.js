@@ -785,6 +785,10 @@ function paginaAgendar(aviso, erro) {
     <input id="telefone" inputmode="numeric" placeholder="(62) 99999-9999" maxlength="16">
     <label>Mensagem</label>
     <textarea id="mensagem" rows="5" placeholder="Escreva a mensagem que será enviada…" spellcheck="true"></textarea>
+    <div style="position:relative;margin:6px 0 2px">
+      <button type="button" id="emojiBtn" class="reset" onclick="toggleEmoji()" style="padding:5px 12px;font-size:.95rem" title="Inserir emoji">😊 Emoji</button>
+      <div id="emojiPop" style="display:none;position:absolute;z-index:60;top:40px;left:0;background:#fff;border:1px solid var(--linha);border-radius:12px;box-shadow:0 10px 28px -10px rgba(0,0,0,.30);padding:8px;width:min(340px,92vw);max-height:230px;overflow:auto;flex-wrap:wrap;gap:1px"></div>
+    </div>
     <div class="fotorow">
       <label class="chk"><input type="checkbox" id="temFoto"> Enviar com foto</label>
       <div id="fotoWrap"><input type="file" id="foto" accept="image/png,image/jpeg,image/webp"></div>
@@ -826,6 +830,20 @@ function paginaAgendar(aviso, erro) {
     else if(v.length>=3)e.target.value=v.replace(/(\\d{2})(\\d{0,5})/,'($1) $2'); else e.target.value=v;
   });
   function lerArquivo(f){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result);};r.onerror=rej;r.readAsDataURL(f);});}
+  // Seletor de emoji (offline, sem dependências): grade de emojis comuns; clicar
+  // insere no cursor da Mensagem. Fica aberto p/ escolher vários; fecha ao clicar fora.
+  var EMOJIS='😀 😃 😄 😁 😊 🙂 😉 😍 🥰 😘 😎 🤩 🥳 🤗 🤔 😅 😂 🤣 😌 😋 😇 🙃 😴 🥲 😢 😭 🥺 😳 🙄 😬 🤫 😮 👍 👎 👌 🙏 👏 🙌 💪 🤝 👋 🤙 ✌️ 💃 🕺 🏃 🎉 🎊 🎈 🎁 ✨ ⭐ 🌟 💫 🔥 💯 ✅ ❌ ❤️ 🧡 💛 💚 💙 💜 🤍 💖 💕 💞 💗 😻 🥇 🏆 🎯 📅 📆 ⏰ ⏳ 📍 📌 📎 📞 📱 💬 💡 ☀️ 🌇 🌈 🌸 🌺 🌻 💐 🏋️ 🧘 🚴 🏊 🥊 🏅 💧 🍏'.split(' ');
+  function inserirEmoji(e){ var ta=document.getElementById('mensagem'); if(!ta) return; var s=ta.selectionStart==null?ta.value.length:ta.selectionStart, en=ta.selectionEnd==null?ta.value.length:ta.selectionEnd; ta.value=ta.value.slice(0,s)+e+ta.value.slice(en); var pos=s+e.length; ta.selectionStart=ta.selectionEnd=pos; ta.focus(); }
+  function toggleEmoji(){
+    var p=document.getElementById('emojiPop'); if(!p) return;
+    if(!p.dataset.done){
+      p.innerHTML=EMOJIS.map(function(e){return '<button type="button" class="emj" style="border:0;background:transparent;font-size:1.3rem;line-height:1;cursor:pointer;padding:4px 5px;border-radius:8px">'+e+'</button>';}).join('');
+      p.addEventListener('click',function(ev){ var b=ev.target.closest?ev.target.closest('.emj'):null; if(b) inserirEmoji(b.textContent); });
+      p.dataset.done='1';
+    }
+    p.style.display=(p.style.display==='none'||!p.style.display)?'flex':'none';
+  }
+  document.addEventListener('click',function(ev){ var p=document.getElementById('emojiPop'), b=document.getElementById('emojiBtn'); if(!p||p.style.display==='none') return; if((p.contains&&p.contains(ev.target))||(b&&b.contains(ev.target))) return; p.style.display='none'; });
   function rotuloBtn(){ return editId.value ? 'Salvar alterações' : 'Agendar'; }
   window.editarAg=function(id){
     var a=AGS[id]; if(!a) return;
