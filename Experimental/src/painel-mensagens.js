@@ -3321,6 +3321,7 @@ function processarAgendamentos() {
 function processarFollowups() {
   let cfg; try { cfg = sofia.lerFollowupCfg(); } catch (_) { return; }
   if (!cfg || !cfg.on) return;
+  try { if (!sofia.estadoAtivo()) return; } catch (_) {} // SoFIA pausada → não enfileira (nem marca como feito)
   const esperaMs = Math.max(0.25, cfg.horas) * 3600 * 1000;
   const CAP = Math.max(esperaMs * 3, 14 * 24 * 3600 * 1000); // não pinga conversas muito antigas
   const agora = Date.now();

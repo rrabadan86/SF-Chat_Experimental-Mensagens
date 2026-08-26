@@ -735,6 +735,9 @@ async function processarFollowups() {
     // Trava de segurança: nunca faz follow-up de bloqueado nem de quem está sob
     // controle humano (o painel já filtra, mas conferimos de novo aqui).
     if (estaBloqueado(tel)) { log(`follow-up de bloqueado (${tel}) — ignorado.`); continue; }
+    // Respeita o "Pausar SoFIA" (estado global), o controle humano e o handoff
+    // (você respondeu pelo celular): nada de follow-up automático nesses casos.
+    if (!deveResponder(tel)) { log(`follow-up de ${tel} pulado — SoFIA pausada/controle humano/handoff.`); continue; }
     enfileirar(async () => {
       try {
         // Contexto: as últimas mensagens dessa conversa no inbox.
