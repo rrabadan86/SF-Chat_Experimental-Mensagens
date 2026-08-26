@@ -795,8 +795,10 @@ function paginaAgendar(aviso, erro) {
     <div id="msg" class="aviso" style="display:none"></div>
   </form>
 
-  <div class="sec-t">⏳ Pendentes (${pend.length})</div>
-  ${pend.length ? pend.map(itemHtml).join('') : '<div class="vazio">Nenhum envio pendente.</div>'}
+  <details class="acc-sec"${pend.length ? ' open' : ''}>
+    <summary class="sec-t" style="cursor:pointer;padding:4px 0">⏳ Pendentes (${pend.length})<small style="font-weight:400;color:var(--cinza)"> — clique para ${pend.length ? 'recolher' : 'abrir'}</small></summary>
+    ${pend.length ? pend.map(itemHtml).join('') : '<div class="vazio">Nenhum envio pendente.</div>'}
+  </details>
 
   <details class="acc-sec">
     <summary class="sec-t" style="cursor:pointer;padding:4px 0">📜 Histórico <small style="font-weight:400;color:var(--cinza)">(${hist.length} envio${hist.length === 1 ? '' : 's'} — clique para abrir)</small></summary>
