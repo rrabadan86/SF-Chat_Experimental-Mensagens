@@ -442,6 +442,7 @@ type CampDest = { tel: string; nome?: string };
 type Campanha = {
   id: string; nome: string; tag: string; textoBase: string; variacoes: string[];
   limiteDia: number; delayMinSeg: number; delayMaxSeg: number; janelaIni: string; janelaFim: string;
+  dataInicio: string; // YYYY-MM-DD (não envia antes deste dia)
   status: "gerando" | "pronta" | "enviando" | "pausada" | "concluida" | "cancelada";
   pendentes: CampDest[]; enviados: { tel: string; nome?: string; em: number }[]; falhas: { tel: string; erro: string; em: number }[];
   enviadosHoje: number; diaRef: string; proxEnvioEm: number; criadoEm: number; atualizadoEm: number;
@@ -490,6 +491,7 @@ async function processarCampInbox() {
           delayMinSeg: Math.max(1, parseInt(p.delayMinSeg, 10) || 20),
           delayMaxSeg: Math.max(1, parseInt(p.delayMaxSeg, 10) || 60),
           janelaIni: String(p.janelaIni || "09:00"), janelaFim: String(p.janelaFim || "20:00"),
+          dataInicio: String(p.dataInicio || hojeSP()),
           status: "gerando", pendentes: dests, enviados: [], falhas: [],
           enviadosHoje: 0, diaRef: hojeSP(), proxEnvioEm: 0, criadoEm: Date.now(), atualizadoEm: Date.now(),
         };
@@ -526,6 +528,7 @@ async function tickCampanha() {
   if (!c) return;
   if (c.diaRef !== hojeSP()) { c.diaRef = hojeSP(); c.enviadosHoje = 0; } // vira o dia → zera o contador
   if (!c.pendentes.length) { c.status = "concluida"; c.atualizadoEm = Date.now(); agendarSalvarCampanhas(); return; }
+  if (c.dataInicio && hojeSP() < c.dataInicio) return;        // ainda não chegou a data de início
   if (!dentroJanela(c.janelaIni, c.janelaFim)) return;        // fora do horário → espera
   if (c.enviadosHoje >= c.limiteDia) return;                  // bateu o teto do dia → espera amanhã
   if (Date.now() < c.proxEnvioEm) return;                     // ainda no intervalo entre envios

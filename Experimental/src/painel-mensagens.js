@@ -218,7 +218,7 @@ const ESTILO = `
   .var{display:inline-block;background:#eef7f7;color:var(--teal-esc);border:1px solid #cdeaea;border-radius:6px;padding:2px 8px;font-family:ui-monospace,monospace;font-size:var(--fs-sm);cursor:pointer;user-select:none;transition:.12s}
   .var:hover{background:var(--teal);color:#fff;border-color:var(--teal)}
   label{display:block;font-weight:600;font-size:var(--fs-sm);margin:12px 0 4px}
-  input[type=text],input[type=tel],input[type=date],textarea{width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
+  input[type=text],input[type=tel],input[type=date],input[type=time],input[type=number],textarea{width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
   select{width:100%;max-width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:9px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
   textarea{line-height:1.5;resize:vertical}
   input:focus,textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(17,171,174,.15)}
@@ -1329,6 +1329,24 @@ function paginaSofiaContatos(aviso, erro, params) {
   return chrome({ tab: 'Contatos', h1: '🤖 SoFIA', p: 'Contatos — importe, etiquete e filtre por tag.' }, 'sofia', corpo);
 }
 
+// Estimativa de término de uma campanha, a partir do que falta e das configs.
+function estimarCampanha(c) {
+  const restantes = (c.pendentes || []).length;
+  if (!restantes) return null;
+  const mm = (h) => { const p = String(h || '').split(':'); return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0); };
+  const avg = Math.max(1, ((Number(c.delayMinSeg) || 1) + (Number(c.delayMaxSeg) || 1)) / 2);
+  const win = mm(c.janelaFim) - mm(c.janelaIni);
+  const maxWin = win > 0 ? Math.max(1, Math.floor(win * 60 / avg)) : 1;
+  const porDia = Math.max(1, Math.min(Number(c.limiteDia) || 1, maxWin));
+  const dias = Math.max(1, Math.ceil(restantes / porDia));
+  const hoje = hojeSP();
+  const iniStr = (c.dataInicio && c.dataInicio > hoje) ? c.dataInicio : hoje;
+  const d = new Date(iniStr + 'T12:00:00'); d.setDate(d.getDate() + (dias - 1));
+  const fim = `${('0' + d.getDate()).slice(-2)}/${('0' + (d.getMonth() + 1)).slice(-2)}/${d.getFullYear()}`;
+  return { porDia, dias, fim };
+}
+const fmtDataBR = (s) => { const p = String(s || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : (s || ''); };
+
 // Aba SoFIA → Campanhas: envio em massa por tag (com variações da IA e limites).
 function paginaSofiaCampanhas(aviso, erro) {
   const tags = contatos.tagsDistintas();
@@ -1350,16 +1368,52 @@ function paginaSofiaCampanhas(aviso, erro) {
         </div>
         <label style="margin-top:12px">Mensagem base <small style="font-weight:400;color:var(--cinza)">(a IA cria ~10 variações naturais a partir dela)</small></label>
         <textarea name="textoBase" rows="4" placeholder="Escreva a mensagem como você mandaria para uma aluna…" required></textarea>
-        <div class="sec-t" style="margin:14px 0 4px">🛡️ Limites de envio</div>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
-          <div><label style="margin:0 0 4px">Máx. por dia</label><input type="number" name="limiteDia" min="1" max="1000" value="40" style="width:110px"></div>
-          <div><label style="margin:0 0 4px">Delay mín. (seg)</label><input type="number" name="delayMinSeg" min="1" max="3600" value="25" style="width:110px"></div>
-          <div><label style="margin:0 0 4px">Delay máx. (seg)</label><input type="number" name="delayMaxSeg" min="1" max="3600" value="70" style="width:110px"></div>
-          <div><label style="margin:0 0 4px">Das</label><input type="time" name="janelaIni" value="09:00" style="width:120px"></div>
-          <div><label style="margin:0 0 4px">Até</label><input type="time" name="janelaFim" value="20:00" style="width:120px"></div>
+        <div class="sec-t" style="margin:14px 0 6px">🛡️ Limites de envio</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+          <div><label style="margin:0 0 4px">Começar em</label><input type="date" id="cpIni" name="dataInicio" value="${esc(hojeSP())}" min="${esc(hojeSP())}" style="width:160px" oninput="estCamp()"></div>
+          <div><label style="margin:0 0 4px">Máx. por dia</label><input type="number" id="cpMax" name="limiteDia" min="1" max="1000" value="40" style="width:120px" oninput="estCamp()"> mensagens</div>
         </div>
+        <label style="margin-top:12px">Horário de envio</label>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="quando" style="margin:0">das</span><input type="time" id="cpJi" name="janelaIni" value="09:00" style="width:130px" oninput="estCamp()">
+          <span class="quando" style="margin:0">até</span><input type="time" id="cpJf" name="janelaFim" value="20:00" style="width:130px" oninput="estCamp()">
+        </div>
+        <label style="margin-top:12px">Tempo entre um envio e outro</label>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="quando" style="margin:0">de</span><input type="number" id="cpDmin" name="delayMinSeg" min="1" max="3600" value="25" style="width:90px" oninput="estCamp()">
+          <span class="quando" style="margin:0">a</span><input type="number" id="cpDmax" name="delayMaxSeg" min="1" max="3600" value="70" style="width:90px" oninput="estCamp()">
+          <span class="quando" style="margin:0">segundos</span>
+        </div>
+        <p class="quando" style="margin:6px 0 0">Um tempo aleatório dentro dessa faixa entre cada mensagem — quanto maior, mais natural e seguro.</p>
+        <div id="cpEst" class="aviso" style="margin:12px 0 0;display:none"></div>
         <div class="acts"><button type="submit" class="save">Criar campanha</button></div>
         <p class="quando" style="margin:8px 0 0">⚠️ Envio em massa tem risco de bloqueio do número. Comece com poucos por dia e delays altos. Você controla tudo: só envia depois de clicar em <b>Iniciar</b>, e pode pausar quando quiser.</p>
+        <script>
+          var TAGN = ${JSON.stringify(Object.fromEntries(tags.map(t => [t.tag, t.n])))};
+          function selTagEl(){ return document.querySelector('select[name=tag]'); }
+          function mm(h){ var p=String(h||'').split(':'); return (parseInt(p[0],10)||0)*60+(parseInt(p[1],10)||0); }
+          function fmtD(d){ return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear(); }
+          function estCamp(){
+            var el=document.getElementById('cpEst'); if(!el) return;
+            var tag=selTagEl()?selTagEl().value:''; var n=TAGN[tag]||0;
+            if(!n){ el.style.display='none'; return; }
+            var maxd=Math.max(1,parseInt(document.getElementById('cpMax').value,10)||1);
+            var dmin=Math.max(1,parseInt(document.getElementById('cpDmin').value,10)||1);
+            var dmax=Math.max(dmin,parseInt(document.getElementById('cpDmax').value,10)||dmin);
+            var avg=(dmin+dmax)/2;
+            var win=mm(document.getElementById('cpJf').value)-mm(document.getElementById('cpJi').value);
+            if(win<=0){ el.style.display='block'; el.className='aviso err'; el.textContent='O horário "até" precisa ser depois do "das".'; return; }
+            var maxWin=Math.max(1,Math.floor(win*60/avg));
+            var porDia=Math.max(1,Math.min(maxd,maxWin));
+            var dias=Math.max(1,Math.ceil(n/porDia));
+            var ini=document.getElementById('cpIni').value; var d=ini?new Date(ini+'T12:00:00'):new Date();
+            d.setDate(d.getDate()+(dias-1));
+            el.className='aviso'; el.style.display='block';
+            el.innerHTML='📊 <b>'+n+' contatos</b> nesta tag · ~<b>'+porDia+'/dia</b> · leva ~<b>'+dias+' dia'+(dias>1?'s':'')+'</b> · término previsto: <b>'+fmtD(d)+'</b>'+(porDia<maxd?' <span style="opacity:.8">(a janela de horário limita a '+porDia+'/dia)</span>':'');
+          }
+          document.addEventListener('DOMContentLoaded',estCamp);
+          var _st=selTagEl(); if(_st) _st.addEventListener('change',estCamp);
+        </script>
       </form>`
       : `<p class="vazio">Você ainda não tem contatos com tags. Vá em <b>Contatos</b>, importe e etiquete primeiro — as campanhas são enviadas por tag.</p>`}
     </div>`;
@@ -1368,6 +1422,7 @@ function paginaSofiaCampanhas(aviso, erro) {
     const total = (c.enviados ? c.enviados.length : 0) + (c.pendentes ? c.pendentes.length : 0) + (c.falhas ? c.falhas.length : 0);
     const enviados = c.enviados ? c.enviados.length : 0;
     const pct = total ? Math.round((enviados + (c.falhas ? c.falhas.length : 0)) / total * 100) : 0;
+    const est = (c.status === 'pronta' || c.status === 'pausada' || c.status === 'enviando') ? estimarCampanha(c) : null;
     const podeIniciar = (c.status === 'pronta' || c.status === 'pausada') && (c.pendentes || []).length;
     const podePausar = c.status === 'enviando';
     const ativa = c.status === 'enviando' || c.status === 'gerando';
@@ -1382,7 +1437,7 @@ function paginaSofiaCampanhas(aviso, erro) {
       <div style="margin:8px 0">
         <div style="background:#eef1f2;border-radius:6px;height:16px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div>
         <div class="quando" style="margin:4px 0 0">${enviados} enviadas · ${(c.pendentes || []).length} na fila · ${(c.falhas || []).length} falha(s) · ${total} no total · hoje: ${c.enviadosHoje || 0}/${c.limiteDia}</div>
-        <div class="quando" style="margin:2px 0 0">Delay ${c.delayMinSeg}–${c.delayMaxSeg}s · janela ${esc(c.janelaIni)}–${esc(c.janelaFim)}</div>
+        <div class="quando" style="margin:2px 0 0">📅 início ${esc(fmtDataBR(c.dataInicio))} · das ${esc(c.janelaIni)} às ${esc(c.janelaFim)} · ${c.delayMinSeg}–${c.delayMaxSeg}s entre envios${est ? ` · <b>término previsto ${est.fim}</b> (~${est.dias} dia${est.dias > 1 ? 's' : ''}, ~${est.porDia}/dia)` : ''}</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         ${podeIniciar ? btn('iniciar', '▶️ Iniciar', 'save') : ''}
@@ -2122,6 +2177,7 @@ const server = http.createServer((req, res) => {
             id: 'c' + Date.now(), nome, tag, textoBase,
             limiteDia: p.get('limiteDia') || '40', delayMinSeg: p.get('delayMinSeg') || '25', delayMaxSeg: p.get('delayMaxSeg') || '70',
             janelaIni: p.get('janelaIni') || '09:00', janelaFim: p.get('janelaFim') || '20:00',
+            dataInicio: p.get('dataInicio') || hojeSP(),
             destinatarios,
           },
         });
