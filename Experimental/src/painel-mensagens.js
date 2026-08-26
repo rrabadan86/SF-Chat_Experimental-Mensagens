@@ -2212,20 +2212,14 @@ function paginaSofia(aviso, erro) {
 
     <div class="sec-t">📱 Conexão do WhatsApp da SoFIA <small style="font-weight:600;color:var(--cinza)">(número próprio, diferente do robô)</small></div>
     <div id="sofiaWa">${blocoSofiaWa()}</div>
-    <div style="text-align:right;margin:-4px 0 0"><form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔌 Desconectar</button></form></div>
-
-    <div class="sec-t">⚡ SoFIA</div>
-    <div class="card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-      <div style="flex:1;min-width:200px">
-        <h2 style="margin:0 0 4px">${e.ativa ? '🟢 IA ativa' : '⏸️ IA pausada'}</h2>
-        <p class="quando" style="margin:0">${e.ativa ? 'A SoFIA está respondendo as alunas.' : 'A SoFIA NÃO responde — atenda manualmente pelo WhatsApp.'}</p>
-      </div>
-      <form method="POST" action="/sofia/toggle" style="margin:0">
-        <button type="submit" class="${e.ativa ? 'reset' : 'save'}">${e.ativa ? '⏸️ Pausar SoFIA' : '▶️ Ativar SoFIA'}</button>
-      </form>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 6px">
+      <span style="margin-right:auto;font-weight:700;font-size:.95rem">${e.ativa ? '🟢 IA ativa' : '⏸️ IA pausada'}<small style="font-weight:400;color:var(--cinza)"> — ${e.ativa ? 'respondendo as alunas' : 'não responde (atenda manual)'}</small></span>
+      <form method="POST" action="/sofia/toggle" style="margin:0;display:inline"><button type="submit" class="${e.ativa ? 'reset' : 'save'}" style="padding:6px 14px">${e.ativa ? '⏸️ Pausar SoFIA' : '▶️ Ativar SoFIA'}</button></form>
+      <form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="margin:0;display:inline"><button type="submit" class="reset" style="padding:6px 14px">🔌 Desconectar</button></form>
+      <button type="submit" form="formSalvar" class="save" style="padding:6px 14px">💾 Salvar tudo</button>
     </div>
 
-    <form method="POST" action="/sofia/salvar">
+    <form id="formSalvar" method="POST" action="/sofia/salvar">
 
       <details class="acc-sec">
         <summary class="sec-t" style="cursor:pointer;padding:4px 0">⚙️ Ajustes gerais <small style="font-weight:400;color:var(--cinza)">— pausa, sessão, agrupamento, verificação, limite</small></summary>
