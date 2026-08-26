@@ -36,22 +36,16 @@ def dump_sessions(titulo, sessions, hora_foco):
         nome = s.get("name") or s.get("activity") or ""
         marca = "   <<<<<< HORÁRIO EM FOCO" if (hora_foco and hhmm == hora_foco) else ""
         print(f"\n--- {hhmm}  {nome}  (idConfiguration={s.get('idConfiguration')}){marca}")
-        # campos "resumo" mais prováveis de conter a info
-        for k in ("capacity", "ocupation", "experimentalClassSlots",
-                  "allowExperimentalClass", "experimentalClass", "totalExperimental",
-                  "experimentalCount", "slots", "vacancies"):
-            if k in s:
-                print(f"      {k} = {s.get(k)!r}")
-        # se for o horário em foco, imprime o JSON COMPLETO (pra não perder nada)
-        if hora_foco and hhmm == hora_foco:
-            print("      >>> JSON COMPLETO desta turma:")
-            print(json.dumps(s, ensure_ascii=False, indent=2, default=str))
+        # JSON COMPLETO de TODAS as turmas — é onde o campo de "turma fechada"
+        # (cadeado) deve aparecer. Comparando a turma fechada com as abertas,
+        # achamos qual campo muda.
+        print(json.dumps(s, ensure_ascii=False, indent=2, default=str))
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", help="Data yyyy-MM-dd (padrão: hoje)")
-    ap.add_argument("--hora", default="19:30", help="Horário a focar (padrão 19:30)")
+    ap.add_argument("--hora", default="16:15", help="Horário a focar (padrão 16:15)")
     args = ap.parse_args()
 
     data = datetime.strptime(args.data, "%Y-%m-%d") if args.data else datetime.now()
@@ -76,10 +70,10 @@ def main():
         print(f"  ERRO list_experimental_schedule: {e}")
 
     print("\n----------------------------------------------------------------")
-    print("Me manda TODA a saída acima (principalmente a do horário 19:30).")
-    print("Quero achar um campo que diga 'quantas experimentais' ou 'vagas de")
-    print("experimental restantes' nessa turma. Se não houver, a gente parte")
-    print("para listar os participantes da turma.")
+    print("Rode com a data da SEXTA e o horário FECHADO, ex.:")
+    print("   python3 diag_experimentais.py --data 2026-08-28 --hora 16:15")
+    print("Me manda TODA a saída. Vou comparar o JSON da turma FECHADA (16:15)")
+    print("com o das abertas para achar o campo que marca o 'cadeado'.")
 
 
 def _mesmo_dia(dt, ref):
