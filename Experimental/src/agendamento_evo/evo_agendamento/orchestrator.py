@@ -81,12 +81,20 @@ def _find_session(schedule, when, activity=None, id_activity=None):
     return None
 
 
+# Turma FECHADA (cadeado no EVO): status 6 / "Finalized" (as abertas vêm com
+# status 4 / "Restrict"). Barramos também estados de cancelado/encerrado.
+def turma_fechada(s):
+    stn = str((s or {}).get("statusName") or "").strip().lower()
+    return (s or {}).get("status") == 6 or stn in (
+        "finalized", "finalizado", "canceled", "cancelled", "cancelado", "closed", "encerrado")
+
+
 def list_alternatives(evo, when, activity=None, id_activity=None, branch_id=None, limit=5):
     """Turmas futuras da mesma atividade que ainda têm vaga (por capacidade)."""
     schedule = evo.list_schedule(when, show_full_week=True, branch_id=branch_id)
     out = []
     for s in schedule:
-        if not session_has_room_normal(s) or not _match_activity(s, activity, id_activity):
+        if turma_fechada(s) or not session_has_room_normal(s) or not _match_activity(s, activity, id_activity):
             continue
         start = session_start_datetime(s)
         if start is None:
@@ -224,6 +232,14 @@ def book_experimental(
             alternatives=list_alternatives(evo, when, activity, id_activity, branch_id),
             reason="não há turma nesse horário",
         )
+    # Turma FECHADA (cadeado): status 6 / "Finalized". Não deixa agendar mesmo
+    # com vaga de capacidade — a aula não vai acontecer nesse horário.
+    if check_capacity and turma_fechada(session):
+        raise TurmaLotadaError(
+            fmt_datetime_evo(when),
+            alternatives=list_alternatives(evo, when, activity, id_activity, branch_id),
+            reason="turma fechada nesse horário",
+        )
     if check_capacity and not session_has_room_normal(session):
         raise TurmaLotadaError(
             fmt_datetime_evo(when),
@@ -357,33 +373,7 @@ def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_i
     vistos, itens = set(), []
     d = inicio
     while d < fim:                                # cobre as semanas do intervalo
-        sched = evo.list_schedule(d, show_full_week=True, branch_id=branch_id) or []
-        # Turmas que o EVO considera ABERTAS para aula experimental nessa semana
-        # (respeita turma FECHADA/cadeado). É a verdade do EVO: uma turma fechada
-        # não vem aqui. MAS só confiamos nesse filtro se ele CASAR com a grade —
-        # se vier vazio ou com chaves que não batem (diferença de formato entre os
-        # endpoints), ignoramos, para NÃO marcar tudo como indisponível por engano.
-        # Se a chamada falhar, também ignoramos (a marcação revalida no EVO).
-        abertas = None
-        try:
-            ab = set()
-            for es in (evo.list_experimental_schedule(d, show_full_week=True, branch_id=branch_id) or []):
-                edt = session_start_datetime(es)
-                if edt is not None:
-                    ab.add((es.get("idConfiguration"), edt.isoformat()))
-            sched_keys = set()
-            for s in sched:
-                sdt = session_start_datetime(s)
-                if sdt is not None:
-                    sched_keys.add((s.get("idConfiguration"), sdt.isoformat()))
-            if ab and (ab & sched_keys):           # só aplica se realmente casa com a grade
-                abertas = ab
-            elif ab:
-                log.warning("list_experimental_schedule não casou com a grade (%d itens, 0 em comum) — ignorando o filtro de turma fechada nesta semana.", len(ab))
-        except Exception as _e:                    # noqa: BLE001 — grade não pode quebrar por isso
-            log.warning("list_experimental_schedule falhou (%s) — sigo sem o filtro de turma fechada.", _e)
-            abertas = None
-        for s in sched:
+        for s in (evo.list_schedule(d, show_full_week=True, branch_id=branch_id) or []):
             if not _match_activity(s, activity, id_activity):
                 continue
             dt = session_start_datetime(s)
@@ -396,9 +386,11 @@ def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_i
             cap = s.get("capacity")
             ocup = s.get("ocupation") or 0
             disponivel = (ocup <= max_ocupacao)
-            # Turma FECHADA (cadeado) ou sem vaga de experimental no EVO → indisponível,
-            # mesmo com 0 matriculadas. O EVO é a fonte da verdade aqui.
-            if abertas is not None and key not in abertas:
+            # Turma FECHADA (cadeado) → indisponível, mesmo com 0 matriculadas. O EVO
+            # marca isso no status da sessão: status 6 / "Finalized" = fechada. As
+            # turmas ABERTAS normais vêm com status 4 / "Restrict". (Também barramos
+            # status cancelado/encerrado por segurança.)
+            if turma_fechada(s):
                 disponivel = False
             n_exp = None
             # Só checa experimentais nas turmas que, de outra forma, estariam
