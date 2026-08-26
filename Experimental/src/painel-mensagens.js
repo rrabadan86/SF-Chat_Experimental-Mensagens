@@ -2100,6 +2100,12 @@ function paginaSofia(aviso, erro) {
       </div>
 
       <div class="card">
+        <label>🩺 Verificação de conexão (health-check)</label>
+        <div>checar a cada <input type="number" name="healthMin" min="0" max="120" step="1" value="${e.healthMin}" style="width:100px"> minutos <small style="color:var(--cinza)">(0 = desligado)</small></div>
+        <p class="quando" style="margin:6px 0 0">De tempos em tempos a SoFIA confere se o WhatsApp dela ainda está <b>de verdade</b> conectado. Se travar (parar de responder sem cair o QR), ela <b>te avisa no celular</b> (mesmo app do QR) e <b>reinicia sozinha</b>. Padrão: 3 minutos. Vale na hora, sem reiniciar.</p>
+      </div>
+
+      <div class="card">
         <label>🎟️ Máx. de aulas experimentais por turma</label>
         <div><input type="number" name="expLimite" min="0" max="50" step="1" value="${lerExpLimite() == null ? 2 : lerExpLimite()}" style="width:130px"> por turma <small style="color:var(--cinza)">(0 = sem limite)</small></div>
         <p class="quando" style="margin:6px 0 0">Quando uma turma já tem esse número de aulas experimentais marcadas, a SoFIA <b>para de oferecer</b> aquele horário (mesmo com vaga normal). Aumente para aceitar mais experimentais por turma. Padrão: 2. Vale na próxima atualização da grade (poucos minutos). <b>Atenção:</b> a checagem final do agendamento roda no formulário (Render) — se aumentar muito aqui, garanta que o <code>EVO_MAX_EXPERIMENTAIS</code> lá também acompanha.</p>
@@ -2788,6 +2794,7 @@ const server = http.createServer((req, res) => {
           extracao: p.get('extracao') || '',
           pausaMin: p.get('pausaMin') || '30',
           sessaoHoras: p.get('sessaoHoras') || '12',
+          healthMin: p.get('healthMin') != null ? p.get('healthMin') : '3',
           midias: {
             grade_imagem: (p.get('grade_imagem') || '').trim(),
             grade_link: (p.get('grade_link') || '').trim(),

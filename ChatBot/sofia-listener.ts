@@ -319,7 +319,17 @@ function armarWatchdogBoot() {
 //    avisa. Aqui, de tempos em tempos, perguntamos o estado real (getState, com
 //    timeout). Se não estiver CONNECTED em 2 checagens seguidas, avisamos no
 //    celular (ntfy) e reiniciamos (pm2 sobe de novo). Desliga com SOFIA_HEALTH_MS=0.
-const HEALTH_MS = parseInt(process.env.SOFIA_HEALTH_MS || "180000", 10); // 3 min
+// Intervalo editável pelo painel (SoFIA → Configuração), em minutos, gravado em
+// sofia-health-min.txt. Lido a cada ciclo — muda sem reiniciar. 0 = desligado.
+const HEALTH_FILE = path.join(DIR, "sofia-health-min.txt");
+function healthMs(): number {
+  try {
+    const n = parseFloat(fs.readFileSync(HEALTH_FILE, "utf8").trim().replace(",", "."));
+    if (Number.isFinite(n) && n >= 0) return Math.round(n * 60000);
+  } catch {}
+  const env = parseInt(process.env.SOFIA_HEALTH_MS || "", 10);
+  return Number.isFinite(env) ? env : 180000; // padrão 3 min
+}
 let healthFails = 0;
 async function checarSaude() {
   if (!pronta) return; // só cobramos saúde quando a sessão deveria estar no ar
@@ -341,7 +351,17 @@ async function checarSaude() {
     process.exit(1); // pm2 reinicia o processo
   }
 }
-if (HEALTH_MS > 0) setInterval(() => { checarSaude().catch(() => {}); }, HEALTH_MS);
+// Timer que se reagenda lendo o intervalo do arquivo a cada ciclo (assim mudar
+// no painel — ou desligar com 0 — vale sem reiniciar).
+function agendarSaude() {
+  const ms = healthMs();
+  const espera = ms > 0 ? Math.max(30000, ms) : 60000; // desligado: só re-lê o arquivo a cada 1 min
+  setTimeout(async () => {
+    if (healthMs() > 0) { try { await checarSaude(); } catch {} }
+    agendarSaude();
+  }, espera);
+}
+agendarSaude();
 
 // Serializa o processamento (uma mensagem por vez): mantém a fila de mídias
 // (drenarMidias) coerente e é mais gentil com a API da Claude.

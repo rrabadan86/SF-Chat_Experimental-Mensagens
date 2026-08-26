@@ -21,6 +21,7 @@ const F = {
   estado: path.join(DIR, 'sofia-estado.txt'),
   pausa: path.join(DIR, 'sofia-pausa-min.txt'),
   sessao: path.join(DIR, 'sofia-sessao-horas.txt'), // janela de memória da conversa (horas) — lida pela Sofia
+  healthMin: path.join(DIR, 'sofia-health-min.txt'), // intervalo do health-check (min) — lido pelo listener
   midias: path.join(DIR, 'sofia-midias.txt'),
   ritmo: path.join(DIR, 'sofia-ritmo.json'), // "jeito humano" (velocidade/pausas) — lido pelo listener
   waStatus: path.join(DIR, 'sofia-wa-status.json'), // publicado pelo listener da Sofia
@@ -73,6 +74,21 @@ function gravarSessaoHoras(h) {
   const n = parseFloat(String(h).replace(',', '.'));
   const val = Number.isFinite(n) && n > 0 ? Math.min(n, 720) : SESSAO_HORAS_PADRAO;
   fs.writeFileSync(F.sessao, String(val), 'utf8');
+}
+
+// ── verificação de conexão (health-check), em MINUTOS ───────────────────────
+// Padrão 3 min. 0 = desligado. Lido pelo listener a cada ciclo (muda sem reiniciar).
+const HEALTH_MIN_PADRAO = 3;
+function lerHealthMin() {
+  const s = ler(F.healthMin).trim();
+  if (s === '') return HEALTH_MIN_PADRAO;
+  const n = parseFloat(s.replace(',', '.'));
+  return Number.isFinite(n) && n >= 0 ? Math.min(n, 120) : HEALTH_MIN_PADRAO;
+}
+function gravarHealthMin(m) {
+  const n = parseFloat(String(m).replace(',', '.'));
+  const val = Number.isFinite(n) && n >= 0 ? Math.min(n, 120) : HEALTH_MIN_PADRAO;
+  fs.writeFileSync(F.healthMin, String(val), 'utf8');
 }
 
 // ── mídias (URLs de imagens de preços/grade) ────────────────────────────────
@@ -146,6 +162,7 @@ function estado() {
     ativa: estadoAtivo(),
     pausaMin: lerPausaMin(),
     sessaoHoras: lerSessaoHoras(),
+    healthMin: lerHealthMin(),
     secoes: parseSecoes(ler(F.prompt)),
     extracao: ler(F.extracao),
     midias: lerMidias(),
@@ -154,7 +171,7 @@ function estado() {
 }
 
 // Salva tudo (com backup e validação mínima). Lança Error em caso de recusa.
-function salvar({ secoes, extracao, pausaMin, sessaoHoras, midias, ritmo }) {
+function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, midias, ritmo }) {
   const promptMontado = montarPrompt(secoes || []);
   const ext = String(extracao || '').trim();
   if (promptMontado.trim().length < 50 || ext.length < 30) {
@@ -166,6 +183,7 @@ function salvar({ secoes, extracao, pausaMin, sessaoHoras, midias, ritmo }) {
   fs.writeFileSync(F.extracao, ext, 'utf8');
   gravarPausaMin(Math.max(1, Math.min(1440, parseInt(pausaMin, 10) || 30)));
   if (sessaoHoras !== undefined) gravarSessaoHoras(sessaoHoras);
+  if (healthMin !== undefined) gravarHealthMin(healthMin);
   gravarMidias(midias || {});
   if (ritmo) gravarRitmo(ritmo);
 }
@@ -300,7 +318,7 @@ function setControleHumano(chave, ativo) {
 
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
-  lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerRitmo, gravarRitmo, waStatus,
+  lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerRitmo, gravarRitmo, waStatus,
   conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, lerHumano, controleHumanoDe, setControleHumano, enviarComando,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

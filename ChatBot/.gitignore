@@ -42,3 +42,5 @@ sofia-avisos.*.proc
 sofia-regras.json
 sofia-eventos.jsonl
 sofia-eventos.*.proc
+
+sofia-health-min.txt
