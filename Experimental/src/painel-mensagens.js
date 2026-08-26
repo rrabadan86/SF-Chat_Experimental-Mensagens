@@ -1199,6 +1199,9 @@ function paginaSofiaConversas(aviso, erro) {
   </div>
 <script>
   var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, tagFiltro='', tagEdAberto=false, ncNome='', ncDirty=false, ncTodas=[];
+  // Atalho vindo de Contatos: ?chat=<telefone> abre a conversa correspondente.
+  var alvoChat=(new URLSearchParams(location.search).get('chat')||'').replace(/\\D/g,''), alvoAplicado=false;
+  function mesmoTel(a,b){ a=String(a||'').replace(/\\D/g,''); b=String(b||'').replace(/\\D/g,''); if(!a||!b) return false; if(a===b) return true; var la=a.slice(-8), lb=b.slice(-8); return la.length===8 && la===lb; }
   var TAGS_EXISTENTES = ${JSON.stringify(tagsLista)};
   var SESSAO_MS = ${Math.round(sessaoHoras * 3600 * 1000)};
   function encerrada(c){ return c && c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS); }
@@ -1303,6 +1306,12 @@ function paginaSofiaConversas(aviso, erro) {
   function filtrarTag(t){ tagFiltro=t||''; pagina=0; renderInbox(ultimoData); }
   function renderInbox(data){
     ultimoData = data||{};
+    // Atalho de Contatos: assim que os dados chegam, seleciona a conversa alvo (uma vez).
+    if(alvoChat && !alvoAplicado){
+      alvoAplicado=true;
+      var alvoK=Object.keys(ultimoData).filter(function(k){return mesmoTel(k,alvoChat);})[0];
+      if(alvoK){ selecionada=alvoK; ncSel=(ultimoData[alvoK].tagsContato||[]).slice(); ncNome=ultimoData[alvoK].nome||''; ncDirty=false; ultimoRender={chave:null,n:-1,humano:null}; }
+    }
     var chaves = Object.keys(ultimoData).sort(function(a,b){return (ultimoData[b].ultimaEm||0)-(ultimoData[a].ultimaEm||0);});
     if(tagFiltro==='__sem__') chaves = chaves.filter(function(k){ return !((ultimoData[k].tagsContato||[]).length); });
     else if(tagFiltro) chaves = chaves.filter(function(k){ return (ultimoData[k].tagsContato||[]).indexOf(tagFiltro)>=0; });
@@ -1368,10 +1377,12 @@ function paginaSofiaContatos(aviso, erro, params) {
     return '#';
   };
   const chipTag = (t) => { const [bg, fg, bd] = corTag(t); return `<span style="display:inline-block;background:${bg};color:${fg};border:1px solid ${bd};border-radius:6px;padding:2px 8px;font-size:.74rem;font-weight:600;margin:2px 4px 2px 0;white-space:nowrap">${esc(t)}</span>`; };
+  const podeConversa = podeSofiaSub(_navSess || { admin: true, telas: [] }, 'conversas');
 
   const linhas = r.itens.map(c => {
     const nm = c.nome || '';
     const jc = esc(JSON.stringify(c.tel));
+    const btnConversa = podeConversa ? `<button type="button" class="ct-ic" title="Ir para a conversa" onclick='irConversa(${jc})'>💬</button>` : '';
     return `<tr class="ct-row" onclick='abrirModal(${jc})'>
       <td>
         <div style="display:flex;align-items:center;gap:10px;min-width:0">
@@ -1382,6 +1393,7 @@ function paginaSofiaContatos(aviso, erro, params) {
       <td class="ct-tel">${esc(fmtTelP(c.tel))}</td>
       <td>${(c.tags || []).map(chipTag).join('') || '<span class="quando" style="font-size:.74rem">—</span>'}</td>
       <td class="ct-acts" onclick="event.stopPropagation()">
+        ${btnConversa}
         <button type="button" class="ct-ic" title="Editar" onclick='abrirModal(${jc})'>✏️</button>
         <button type="button" class="ct-ic ct-del" title="Excluir" onclick='excluirContato(${jc})'>🗑️</button>
       </td>
@@ -1455,6 +1467,7 @@ function paginaSofiaContatos(aviso, erro, params) {
       <div id="ctTags" class="ct-tglist"></div>
       <div class="ct-nova"><input type="text" id="ctNovaTag" placeholder="Nova tag" onkeydown="if(event.key==='Enter'){event.preventDefault();addNovaTag();}"><button type="button" class="reset" onclick="addNovaTag()" style="padding:7px 12px">＋ Adicionar</button></div>
       <div class="ct-foot">
+        ${podeConversa ? `<button type="button" class="reset" id="ctConversa" onclick="irConversaModal()" style="padding:9px 16px;margin-right:auto">💬 Ver conversa</button>` : ''}
         <button type="button" class="reset" onclick="fecharModal()" style="padding:9px 16px">Cancelar</button>
         <button type="button" class="save" id="ctSalvar" onclick="salvarContato()" style="padding:9px 18px">Salvar</button>
       </div>
@@ -1510,6 +1523,8 @@ function paginaSofiaContatos(aviso, erro, params) {
         else { b.disabled=false; b.textContent='Salvar'; alert('❌ '+(j.erro||'falha ao salvar')); }
       }).catch(function(){ b.disabled=false; b.textContent='Salvar'; alert('❌ erro de rede'); });
   }
+  function irConversa(tel){ location.href='/sofia?view=conversas&chat='+encodeURIComponent(tel); }
+  function irConversaModal(){ if(ctSel) irConversa(ctSel.tel); }
   function excluirContato(tel){
     if(!confirm('Excluir este contato de vez?')) return;
     fetch('/sofia/contatos/salvar',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'acao=excluir&telOrig='+encodeURIComponent(tel)})
