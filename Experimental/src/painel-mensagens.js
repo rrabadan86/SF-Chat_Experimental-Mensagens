@@ -225,6 +225,11 @@ const ESTILO = `
   .tabs a .tic{font-size:1.2rem;line-height:1}
   .tabs a .ttx{font-size:.78rem}
   .tabs a.on{background:var(--teal);color:#fff;border-color:var(--teal)}
+  /* No mobile: a barra de abas fica GRUDADA no topo ao rolar (o cabeçalho da
+     logo pode sair da tela). Só as abas ficam fixas. */
+  @media(max-width:760px){
+    .tabs{position:sticky;top:0;z-index:50;margin-top:0;padding:8px 12px 10px;background:var(--bg);box-shadow:0 4px 12px -6px rgba(0,0,0,.22)}
+  }
   .aviso{background:var(--avi-bg);border:1px solid var(--avi-bd);color:var(--avi-tx);border-radius:10px;padding:10px 14px;margin:14px 0;font-size:var(--fs-sm)}
   .aviso.err{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
   .card{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:13px 15px;margin:10px 0}
