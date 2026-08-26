@@ -43,6 +43,8 @@ data/watchdog-estado.json
 backups/
 # Indicadores do formulario (acessos/agendamentos) — por VPS
 data/indicadores.json
+# Log completo dos agendamentos do formulario (dados da aluna) — por VPS
+data/bookings.json
 # DM de teste do Instagram (ponte painel<->robo) — por VPS
 data/teste-instagram.json
 # Fotos (flyers) das mensagens (Circuito/Aniversario) — por VPS

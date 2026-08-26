@@ -959,6 +959,20 @@ async function main() {
   setTimeout(puxarIndicadores, 20000); // uma vez no boot (após estabilizar)
   log('📈 Indicadores do formulário agendados: a cada 2 min');
 
+  // Log completo dos agendamentos do formulário (dados da aluna) — puxa a cada
+  // 2 min e grava em data/bookings.json (aba Formulário do painel). Leve.
+  let pullingBook = false;
+  const puxarBookings = async () => {
+    if (pullingBook) return;
+    pullingBook = true;
+    try { await require('./pull-bookings').pullBookings(); }
+    catch (err) { logError('Agendamentos (nuvem)', err); }
+    finally { pullingBook = false; }
+  };
+  cron.schedule('*/2 * * * *', puxarBookings, { timezone: 'America/Sao_Paulo' });
+  setTimeout(puxarBookings, 25000); // uma vez no boot (após estabilizar)
+  log('🗒️  Log de agendamentos do formulário agendado: a cada 2 min');
+
   // ─── Heartbeat: log a cada 15 minutos para saber que o processo está vivo ───
   const HEARTBEAT_INTERVAL = 15 * 60 * 1000; // 15 min
   setInterval(() => {

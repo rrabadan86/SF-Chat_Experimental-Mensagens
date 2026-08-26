@@ -26,6 +26,7 @@ const igcfg = require('./instagram-config');
 const igcookies = require('./instagram-cookies');
 const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
+const bookings = require('./bookings');
 const origens = require('./origens');
 const sofia = require('./sofia-editor');
 const contatos = require('./contatos');
@@ -1175,6 +1176,39 @@ function paginaIndicadores(dias, aviso) {
     ${semTagHtml}
     ${outrasHtml}`;
 
+  // Log completo dos agendamentos (dados da aluna). Mostra os mais recentes; o
+  // conteúdo completo fica num <details> para não pesar a página.
+  let LOG = []; try { LOG = bookings.listar(300); } catch (_) {}
+  const fmtQuando = ts => { try { const d = new Date(ts); return isNaN(d) ? esc(ts || '—') : d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return esc(ts || '—'); } };
+  const cadCelula = b => {
+    if (b.cadastroNovo) return '<span class="pill" style="border-color:var(--teal)">cadastro novo</span>';
+    const a = b.atualizacao;
+    let extra = '';
+    if (a && a.ok === true) extra = ' <span class="pill" style="border-color:var(--teal)">✓ dados atualizados</span>';
+    else if (a && a.ok === false) extra = ' <span class="pill" style="border-color:var(--coral)" title="' + esc(String(a.erro || '')) + '">⚠ não atualizado</span>';
+    return '<span class="pill" style="border-color:var(--linha)">já existia</span>' + extra;
+  };
+  const logRows = LOG.map(b => `<tr>
+      <td style="white-space:nowrap">${fmtQuando(b.ts)}</td>
+      <td>${esc(b.nome || '—')}</td>
+      <td style="white-space:nowrap">${esc(fmtTel ? fmtTel(b.telefone) : b.telefone)}</td>
+      <td style="white-space:nowrap">${esc(b.cpf || '—')}</td>
+      <td>${esc(b.email || '—')}</td>
+      <td style="white-space:nowrap">${esc(b.nascimento || '—')}</td>
+      <td style="white-space:nowrap">${esc(b.when || '—')}</td>
+      <td>${esc(b.origem || '—')}</td>
+      <td>${cadCelula(b)}</td>
+    </tr>`).join('');
+  const logBloco = `
+    <div class="sec-t">🗒️ Agendamentos pelo formulário (dados completos)</div>
+    <details class="card"${LOG.length ? '' : ' open'}>
+      <summary style="cursor:pointer;font-weight:700">${LOG.length ? `Ver os ${LOG.length} agendamento${LOG.length === 1 ? '' : 's'} registrado${LOG.length === 1 ? '' : 's'}` : 'Nenhum agendamento registrado ainda'}</summary>
+      <p class="quando" style="margin:10px 0">Tudo o que a aluna digitou no formulário (nome, CPF, telefone, e-mail e nascimento), o horário da aula e o que o EVO fez com o cadastro. Serve para conferir os dados quando o cadastro do EVO veio incompleto (ex.: cadastro antigo). Atualiza a cada ~2 min.</p>
+      ${LOG.length ? `<div style="overflow-x:auto"><table class="logtab">
+        <thead><tr><th>Quando</th><th>Nome</th><th>Telefone</th><th>CPF</th><th>E-mail</th><th>Nascimento</th><th>Aula</th><th>Origem</th><th>Cadastro no EVO</th></tr></thead>
+        <tbody>${logRows}</tbody></table></div>` : '<div class="vazio">Assim que alguém agendar pelo formulário, os dados aparecem aqui.</div>'}
+    </details>`;
+
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso err">${esc(aviso)}</div>` : ''}
     <div class="segs">${segs}</div>
@@ -1207,8 +1241,15 @@ function paginaIndicadores(dias, aviso) {
       ${aulaHtml || '<div class="vazio">Ainda sem agendamentos com horário registrado neste período — passa a contar a partir dos próximos agendamentos.</div>'}
     </div>
     ${origemBloco}
+    ${logBloco}
     <p class="quando" style="text-align:center">Coletado do formulário a cada ~2 min. ${r.primeiroDia ? `Desde ${esc(fmtData(r.primeiroDia))}.` : 'Ainda começando a coletar.'}</p>
   </div>
+  <style>
+  .logtab{width:100%;border-collapse:collapse;font-size:var(--fs-sm,.85rem)}
+  .logtab th,.logtab td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--linha)}
+  .logtab th{color:var(--cinza);font-weight:700;white-space:nowrap}
+  .logtab tbody tr:hover{background:var(--bg)}
+  </style>
   <script>
   function copiarLink(btn, url){
     var ok=function(){var t=btn.textContent;btn.textContent='✅ Copiado';btn.disabled=true;setTimeout(function(){btn.textContent=t;btn.disabled=false;},1500);};
