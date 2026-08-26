@@ -551,8 +551,17 @@ let campanhas: Campanha[] = [];
 let campSalvarTimer: ReturnType<typeof setTimeout> | null = null;
 function carregarCampanhas() {
   try { const o = JSON.parse(fs.readFileSync(CAMP_FILE, "utf8")); if (Array.isArray(o)) campanhas = o; } catch {}
-  // Nunca retoma sozinha em "enviando" após um restart — evita reenvio inesperado.
-  for (const c of campanhas) if (c.status === "enviando") c.status = "pausada";
+  // Retoma sozinha o que estava "enviando" antes do restart — campanhas longas
+  // atravessam vários restarts (deploy, reboot, watchdog) e não podem parar sem
+  // avisar. O runner só envia aos "pendentes" e os remove conforme envia (gravado
+  // logo após cada envio), então o pior caso é reenviar 1 mensagem se o processo
+  // cair no exato momento de um envio — risco pequeno perto de a campanha travar.
+  for (const c of campanhas) {
+    if (c.status === "enviando") {
+      if (!c.pendentes || !c.pendentes.length) c.status = "concluida";
+      else c.proxEnvioEm = 0; // libera o próximo tick (ainda respeita janela/teto/delay)
+    }
+  }
 }
 function salvarCampanhas() { try { fs.writeFileSync(CAMP_FILE, JSON.stringify(campanhas), "utf8"); } catch {} }
 function agendarSalvarCampanhas() { if (campSalvarTimer) return; campSalvarTimer = setTimeout(() => { campSalvarTimer = null; salvarCampanhas(); }, 800); }
