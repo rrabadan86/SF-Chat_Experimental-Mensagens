@@ -2262,8 +2262,9 @@ function paginaSofia(aviso, erro) {
       </details>
 
       <details class="acc-sec">
-        <summary class="sec-t" style="cursor:pointer;padding:4px 0">🧠 Modelo de IA <small style="font-weight:400;color:var(--cinza)">— qual Claude a SoFIA usa (vale após reiniciar)</small></summary>
+        <summary class="sec-t" style="cursor:pointer;padding:4px 0">⌨️ Jeito de responder <small style="font-weight:400;color:var(--cinza)">— modelo de IA, mensagens, “digitando…”, velocidade</small></summary>
       <div class="card">
+        <div style="font-family:Montserrat,sans-serif;font-weight:700;font-size:.92rem;margin:0 0 10px">🧠 Modelo de IA <small style="font-weight:400;color:var(--cinza)">— qual Claude a SoFIA usa (vale após reiniciar)</small></div>
         <div style="display:flex;gap:18px;flex-wrap:wrap">
           <div style="flex:1;min-width:240px">
             <label>Conversa ${infoI('Modelo que <b>conversa com as alunas</b> e gera o <b>follow-up</b>. É o mais importante para a qualidade do atendimento. Padrão: Sonnet 5.')}</label>
@@ -2276,10 +2277,6 @@ function paginaSofia(aviso, erro) {
         </div>
         <p class="quando" style="margin:10px 0 0">Modelos maiores custam mais por conversa. A troca vale <b>após reiniciar a SoFIA</b> (<code>pm2 restart sofia-listener</code>).</p>
       </div>
-      </details>
-
-      <details class="acc-sec">
-        <summary class="sec-t" style="cursor:pointer;padding:4px 0">⌨️ Jeito de responder <small style="font-weight:400;color:var(--cinza)">— quebra em várias mensagens, “digitando…”, velocidade</small></summary>
       <div class="card">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="ritHumano" value="1"${e.ritmo.humano ? ' checked' : ''} style="width:auto;margin:0">
