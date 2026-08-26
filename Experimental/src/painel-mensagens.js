@@ -406,6 +406,8 @@ const ESTILO = `
   .ct-ic:hover{border-color:var(--teal)}
   .ct-ic.ct-del:hover{border-color:var(--erro);background:var(--erro-bg)}
   .ct-fil{background:none;border:0;color:var(--cinza);cursor:pointer;font-size:.85rem;padding:0 2px}
+  .ct-sort{background:none;border:0;cursor:pointer;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;padding:0;display:inline-flex;align-items:center;gap:5px}
+  .ct-sort:hover{color:var(--teal-esc)}
   .ct-ov{display:none;position:fixed;inset:0;background:rgba(30,28,32,.5);z-index:50;align-items:flex-start;justify-content:center;padding:20px 14px;overflow-y:auto}
   .ct-dlg{background:#fff;border-radius:16px;max-width:520px;width:100%;padding:20px 22px;margin:auto;box-shadow:0 10px 40px rgba(0,0,0,.25)}
   .ct-dh{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
@@ -1581,7 +1583,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     const nm = c.nome || '';
     const jc = esc(JSON.stringify(c.tel));
     const btnConversa = podeConversa ? `<button type="button" class="ct-ic" title="Ir para a conversa" onclick='irConversa(${jc})'>💬</button>` : '';
-    return `<tr class="ct-row" onclick='abrirModal(${jc})'>
+    return `<tr class="ct-row" data-nome="${esc((nm || '').toLowerCase())}" onclick='abrirModal(${jc})'>
       <td>
         <div style="display:flex;align-items:center;gap:10px;min-width:0">
           <span class="ct-av" style="background:${corAv(nm || c.tel)}">${esc(iniciais(nm, c.tel))}</span>
@@ -1653,7 +1655,7 @@ function paginaSofiaContatos(aviso, erro, params) {
       <table class="ct-tab">
         <colgroup><col class="c-nome"><col class="c-tel"><col class="c-tags"><col class="c-act"></colgroup>
         <thead><tr>
-          <th>Nome</th>
+          <th><button type="button" class="ct-sort" title="Ordenar por nome" onclick="ordenarContatos()">Nome <span id="ctSortArr" style="opacity:.4">↕</span></button></th>
           <th>Telefone</th>
           <th>Tags <button type="button" class="ct-fil" title="Filtrar por tag" onclick="abrirFiltroTag()">▾</button></th>
           <th style="text-align:right">Ações</th>
@@ -1787,6 +1789,23 @@ function paginaSofiaContatos(aviso, erro, params) {
   function corTagJs(t){return PAL_TAG[_hash(t)%PAL_TAG.length];}
   var ctSel=null, ctTags=[];
   function abrirFiltroTag(){var s=document.getElementById('ctTagSel');if(s){s.focus();if(s.showPicker)try{s.showPicker();}catch(e){}}}
+  var ctOrdemNome=0; // 0=original, 1=crescente (A→Z), 2=decrescente (Z→A)
+  function ordenarContatos(){
+    var tb=document.querySelector('.ct-tab tbody'); if(!tb) return;
+    ctOrdemNome=(ctOrdemNome+1)%3; // alterna: original → crescente → decrescente
+    var arr=document.querySelector('#ctSortArr');
+    if(ctOrdemNome===0){ if(arr){arr.textContent='↕';arr.style.opacity='.4';} location.reload(); return; }
+    var asc=(ctOrdemNome===1);
+    if(arr){ arr.textContent=asc?'▲':'▼'; arr.style.opacity='1'; }
+    var linhas=Array.prototype.slice.call(tb.querySelectorAll('tr'));
+    linhas.sort(function(a,b){
+      var na=a.getAttribute('data-nome')||'', nb=b.getAttribute('data-nome')||'';
+      if(!na&&nb) return 1; if(na&&!nb) return -1; // sem nome sempre por último
+      var c=na.localeCompare(nb,'pt-BR',{sensitivity:'base',numeric:true});
+      return asc?c:-c;
+    });
+    linhas.forEach(function(tr){ tb.appendChild(tr); });
+  }
   function abrirModal(tel){
     var c=null; for(var i=0;i<CONTATOS.length;i++){if(CONTATOS[i].tel===tel){c=CONTATOS[i];break;}}
     if(!c) return;
