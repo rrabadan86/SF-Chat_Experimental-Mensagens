@@ -336,6 +336,13 @@ const ESTILO = `
   .cpf-range{display:flex;align-items:center;gap:8px}
   .cpf-range input{width:100%;min-width:0}
   .cpf-suf{color:var(--cinza);font-size:var(--fs-sm);white-space:nowrap;flex:none}
+  .cpf-acc{border-top:1px solid var(--linha);margin-top:6px}
+  .cpf-sum{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:"Montserrat";font-weight:700;font-size:var(--fs-sec);padding:16px 0}
+  .cpf-sum::-webkit-details-marker{display:none}
+  .cpf-sum .sub{font-weight:400;font-size:.8rem}
+  .cpf-sum::after{content:"▾";margin-left:auto;font-size:.9rem;color:var(--cinza);transition:transform .2s}
+  .cpf-acc[open] .cpf-sum::after{transform:rotate(180deg)}
+  .cpf-body{padding:2px 0 14px}
   .cp-sec{margin:0 0 14px}
   .cp-h{font-family:"Montserrat";font-weight:700;font-size:var(--fs-sm);margin:0 0 4px}
   .cp-list{max-height:200px;overflow-y:auto;border:1px solid var(--linha);border-radius:10px;padding:2px 12px}
@@ -1760,8 +1767,9 @@ function paginaSofiaCampanhas(aviso, erro) {
           </div>
         </div>
 
-        <div class="cpf-sec">
-          <div class="cpf-h">🛡️ Ritmo e limites</div>
+        <details class="cpf-acc">
+          <summary class="cpf-sum">🛡️ Ritmo e limites <span class="sub quando" style="margin:0">— já vem com um ritmo seguro; abra para ajustar</span></summary>
+          <div class="cpf-body">
           <div class="cpf-grid">
             <div class="cpf-field"><label>Começar em</label><input type="date" id="cpIni" name="dataInicio" value="${esc(hojeSP())}" min="${esc(hojeSP())}" oninput="estCamp()"></div>
             <div class="cpf-field"><label>Máx. por dia</label><div class="cpf-range"><input type="number" id="cpMax" name="limiteDia" min="1" max="1000" value="40" oninput="estCamp()"><span class="cpf-suf">msg</span></div></div>
@@ -1769,11 +1777,13 @@ function paginaSofiaCampanhas(aviso, erro) {
             <div class="cpf-field"><label>Intervalo entre envios</label><div class="cpf-range"><input type="number" id="cpDmin" name="delayMinSeg" min="1" max="3600" value="25" oninput="estCamp()"><span class="cpf-suf">a</span><input type="number" id="cpDmax" name="delayMaxSeg" min="1" max="3600" value="70" oninput="estCamp()"><span class="cpf-suf">s</span></div></div>
           </div>
           <p class="quando" style="margin:10px 0 0">Intervalo aleatório entre cada mensagem — quanto maior, mais natural e seguro.</p>
-          <div id="cpEst" class="aviso" style="margin:14px 0 0;display:none"></div>
-        </div>
+          </div>
+        </details>
+        <div id="cpEst" class="aviso" style="margin:14px 0 0;display:none"></div>
 
-        <div class="cpf-sec">
-          <div class="cpf-h">🚀 Testar e criar</div>
+        <details class="cpf-acc">
+          <summary class="cpf-sum">🚀 Testar e criar</summary>
+          <div class="cpf-body">
           <p class="quando" style="margin:0 0 10px">Mande a mensagem (e a foto) para um número seu antes, pra conferir como chega.</p>
           <div class="cpf-range" style="flex-wrap:wrap">
             <input type="tel" id="cpTesteTel" placeholder="(62) 99999-9999" style="max-width:220px">
@@ -1784,7 +1794,8 @@ function paginaSofiaCampanhas(aviso, erro) {
             <button type="submit" class="save" style="padding:11px 24px">📣 Criar campanha</button>
             <span class="quando" style="margin:0;flex:1;min-width:220px">⚠️ Só envia depois de você clicar em <b>Iniciar</b>. Comece com poucos por dia e delays altos — envio em massa pode bloquear o número.</span>
           </div>
-        </div>
+          </div>
+        </details>
         <script>
           var TAGN = ${JSON.stringify(Object.fromEntries(tags.map(t => [t.tag, t.n])))};
           function selTagEl(){ return document.querySelector('select[name=tag]'); }
