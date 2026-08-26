@@ -317,6 +317,37 @@ const ESTILO = `
   .prev-b.err{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
   .tbtn{background:#fff;color:var(--cinza);border:1px solid #dcdcdc}
   footer{color:var(--cinza);font-size:var(--fs-xs);text-align:center;padding:18px}
+  /* Contatos — tabela + modal */
+  .ct-wrap{background:var(--card);border:1px solid var(--linha);border-radius:12px;overflow-x:auto;margin:10px 0}
+  .ct-tab{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
+  .ct-tab th{text-align:left;font-family:"Montserrat";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;letter-spacing:.03em;padding:11px 14px;border-bottom:1px solid var(--linha);white-space:nowrap;background:#fafbfb}
+  .ct-tab td{padding:10px 14px;border-bottom:1px solid var(--linha);vertical-align:middle}
+  .ct-tab tbody tr:last-child td{border-bottom:0}
+  .ct-row{cursor:pointer;transition:background .12s}
+  .ct-row:hover{background:#f6fbfb}
+  .ct-av{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex:none;border-radius:50%;color:#fff;font-weight:700;font-size:.78rem;font-family:"Montserrat"}
+  .ct-nm{font-weight:700;color:var(--tinta);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px}
+  .ct-tel{color:var(--cinza);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .ct-acts{text-align:right;white-space:nowrap}
+  .ct-ic{background:#fff;border:1px solid var(--linha);border-radius:8px;padding:5px 8px;cursor:pointer;font-size:.9rem;line-height:1;margin-left:5px}
+  .ct-ic:hover{border-color:var(--teal)}
+  .ct-ic.ct-del:hover{border-color:var(--erro);background:var(--erro-bg)}
+  .ct-fil{background:none;border:0;color:var(--cinza);cursor:pointer;font-size:.85rem;padding:0 2px}
+  .ct-ov{display:none;position:fixed;inset:0;background:rgba(30,28,32,.5);z-index:50;align-items:flex-start;justify-content:center;padding:20px 14px;overflow-y:auto}
+  .ct-dlg{background:#fff;border-radius:16px;max-width:520px;width:100%;padding:20px 22px;margin:auto;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+  .ct-dh{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .ct-dh h2{margin:0;font-size:var(--fs-h2)}
+  .ct-x{background:none;border:0;font-size:1.5rem;line-height:1;color:var(--cinza);cursor:pointer;padding:0 4px}
+  .ct-hero{text-align:center;margin:0 0 16px}
+  .ct-av-lg{width:76px;height:76px;font-size:1.5rem;margin:0 auto 8px}
+  .ct-hnome{font-family:"Montserrat";font-weight:700;font-size:1.05rem}
+  .ct-htel{color:var(--cinza);font-size:var(--fs-sm);font-variant-numeric:tabular-nums}
+  .ct-dlg label{display:block;font-weight:700;font-size:var(--fs-sm);margin:0 0 5px}
+  .ct-tglist{display:flex;flex-wrap:wrap;gap:7px}
+  .ct-tg{border:1px solid #e8e8ea;border-radius:999px;padding:5px 12px;font-size:.78rem;font-weight:600;cursor:pointer;transition:.12s}
+  .ct-nova{display:flex;gap:8px;margin-top:10px}
+  .ct-nova input{flex:1}
+  .ct-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--linha)}
 `;
 
 // Menu de abas, mostrando só as telas que o usuário logado pode ver (+ Perfis p/ admin).
@@ -1322,25 +1353,40 @@ function paginaSofiaContatos(aviso, erro, params) {
   const total = contatos.totalContatos();
 
   const fmtTelP = (t) => { const d = String(t || '').replace(/\D/g, ''); if (/^55\d{10,11}$/.test(d)) { const ddd = d.slice(2, 4), x = d.slice(4); return '+55 (' + ddd + ') ' + (x.length === 9 ? x.slice(0, 5) + '-' + x.slice(5) : x.slice(0, 4) + '-' + x.slice(4)); } return t || ''; };
-  const chip = (t) => `<span style="display:inline-flex;align-items:center;gap:5px;background:#e6f6f7;color:#0e8e91;border:1px solid #b8e6e7;border-radius:999px;padding:2px 9px;font-size:.74rem;margin:2px 4px 2px 0">${esc(t)}<a href="javascript:void(0)" data-tag="${esc(t)}" onclick="rmChip(this)" title="tirar esta tag" style="color:#0e8e91;font-weight:800;text-decoration:none">×</a></span>`;
   const qs = (pg) => { const p = new URLSearchParams(); p.set('view', 'contatos'); if (q) p.set('q', q); if (tagSel) p.set('tag', tagSel); p.set('pagina', pg); return '/sofia?' + p.toString(); };
   const hidden = `<input type="hidden" name="q" value="${esc(q)}"><input type="hidden" name="tag" value="${esc(tagSel)}"><input type="hidden" name="pagina" value="${pagina}">`;
 
-  const linhas = r.itens.map(c => `<div class="card" style="padding:12px 14px;margin-bottom:8px">
-      <form method="POST" action="/sofia/contatos/salvar">
-        <input type="hidden" name="telOrig" value="${esc(c.tel)}">${hidden}
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
-          <input type="text" name="nome" value="${esc(c.nome || '')}" placeholder="Nome" style="flex:2;min-width:160px;font-weight:700">
-          <input type="text" name="telefone" value="${esc(fmtTelP(c.tel))}" placeholder="Telefone" style="flex:1;min-width:140px">
+  // Cores estáveis por texto (mesma tag/nome → mesma cor, no servidor e no navegador).
+  const _hash = (s) => { let h = 0; s = String(s || ''); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
+  const PAL_TAG = [['#e6f6f7', '#0e8e91', '#b8e6e7'], ['#fdecea', '#c0392b', '#f5c6cb'], ['#eef9f2', '#1c8f52', '#cbe8d5'], ['#fff4e5', '#b26a00', '#ffe0b2'], ['#eef1fb', '#3b4fb0', '#d3dcf7'], ['#f3e9fb', '#7a3fb0', '#e2cff5'], ['#fce8f1', '#b0367a', '#f7cfe0']];
+  const PAL_AV = ['#f39c12', '#3498db', '#9b59b6', '#1abc9c', '#e67e22', '#2ecc71', '#e74c3c', '#5567c9'];
+  const corTag = (t) => PAL_TAG[_hash(t) % PAL_TAG.length];
+  const corAv = (s) => PAL_AV[_hash(s) % PAL_AV.length];
+  const iniciais = (nome, tel) => {
+    const nm = String(nome || '').trim();
+    if (nm) { const p = nm.split(/\s+/); return ((p[0][0] || '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); }
+    return '#';
+  };
+  const chipTag = (t) => { const [bg, fg, bd] = corTag(t); return `<span style="display:inline-block;background:${bg};color:${fg};border:1px solid ${bd};border-radius:6px;padding:2px 8px;font-size:.74rem;font-weight:600;margin:2px 4px 2px 0;white-space:nowrap">${esc(t)}</span>`; };
+
+  const linhas = r.itens.map(c => {
+    const nm = c.nome || '';
+    const jc = esc(JSON.stringify(c.tel));
+    return `<tr class="ct-row" onclick='abrirModal(${jc})'>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px;min-width:0">
+          <span class="ct-av" style="background:${corAv(nm || c.tel)}">${esc(iniciais(nm, c.tel))}</span>
+          <span class="ct-nm">${esc(nm || '(sem nome)')}</span>
         </div>
-        <div style="margin:2px 0 6px">${(c.tags || []).map(chip).join('') || '<span class="quando">sem tags</span>'}</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <input type="text" name="tags" value="${esc((c.tags || []).join(', '))}" placeholder="tags separadas por vírgula" style="flex:1;min-width:200px;font-size:.85rem">
-          <button type="submit" class="save" name="acao" value="salvar" style="padding:6px 12px">💾 Salvar</button>
-          <button type="submit" class="reset" name="acao" value="excluir" onclick="return confirm('Excluir este contato de vez?')" style="padding:6px 12px">🗑️ Excluir</button>
-        </div>
-      </form>
-    </div>`).join('');
+      </td>
+      <td class="ct-tel">${esc(fmtTelP(c.tel))}</td>
+      <td>${(c.tags || []).map(chipTag).join('') || '<span class="quando" style="font-size:.74rem">—</span>'}</td>
+      <td class="ct-acts" onclick="event.stopPropagation()">
+        <button type="button" class="ct-ic" title="Editar" onclick='abrirModal(${jc})'>✏️</button>
+        <button type="button" class="ct-ic ct-del" title="Excluir" onclick='excluirContato(${jc})'>🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
 
   const gerenciarTags = tags.length ? `<details style="margin:0 0 12px"><summary style="cursor:pointer;font-weight:700;padding:6px 0">🏷️ Gerenciar tags <small style="font-weight:400;color:#5c5960">(renomear ou excluir uma tag em TODOS os contatos)</small></summary>
     <div class="card">${tags.map(t => `<form method="POST" action="/sofia/contatos/tag" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
@@ -1378,21 +1424,96 @@ function paginaSofiaContatos(aviso, erro, params) {
     <form method="GET" action="/sofia" class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <input type="hidden" name="view" value="contatos">
       <input type="text" name="q" value="${esc(q)}" placeholder="Buscar por nome ou telefone" style="flex:1;min-width:180px">
-      <select name="tag" style="min-width:200px">${opcoes}</select>
+      <select id="ctTagSel" name="tag" style="min-width:200px" onchange="this.form.submit()">${opcoes}</select>
       <button type="submit" class="save" style="padding:8px 14px">Filtrar</button>
       ${(q || tagSel) ? `<a href="/sofia?view=contatos" class="reset" style="padding:8px 14px">Limpar</a>` : ''}
     </form>
 
     ${gerenciarTags}
-    ${linhas || '<div class="card"><p class="quando">Nenhum contato encontrado. Importe um CSV acima ou ajuste o filtro.</p></div>'}
+
+    ${r.itens.length ? `<div class="ct-wrap">
+      <table class="ct-tab">
+        <thead><tr>
+          <th>Nome</th>
+          <th>Telefone</th>
+          <th>Tags <button type="button" class="ct-fil" title="Filtrar por tag" onclick="abrirFiltroTag()">▾</button></th>
+          <th style="text-align:right">Ações</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>` : '<div class="card"><p class="quando">Nenhum contato encontrado. Importe um CSV acima ou ajuste o filtro.</p></div>'}
     ${pag}
   </div>
+
+  <div id="ctModal" class="ct-ov" onclick="if(event.target===this)fecharModal()">
+    <div class="ct-dlg">
+      <div class="ct-dh"><h2>Editar contato</h2><button type="button" class="ct-x" onclick="fecharModal()">×</button></div>
+      <div class="ct-hero"><span id="ctAv" class="ct-av ct-av-lg"></span><div id="ctHnome" class="ct-hnome"></div><div id="ctHtel" class="ct-htel"></div></div>
+      <label>Nome</label>
+      <input type="text" id="ctNome" placeholder="Nome do contato">
+      <label style="margin-top:12px">Tags</label>
+      <div id="ctTags" class="ct-tglist"></div>
+      <div class="ct-nova"><input type="text" id="ctNovaTag" placeholder="Nova tag" onkeydown="if(event.key==='Enter'){event.preventDefault();addNovaTag();}"><button type="button" class="reset" onclick="addNovaTag()" style="padding:7px 12px">＋ Adicionar</button></div>
+      <div class="ct-foot">
+        <button type="button" class="reset" onclick="fecharModal()" style="padding:9px 16px">Cancelar</button>
+        <button type="button" class="save" id="ctSalvar" onclick="salvarContato()" style="padding:9px 18px">Salvar</button>
+      </div>
+    </div>
+  </div>
 <script>
-  function rmChip(a){
-    var tag=a.getAttribute('data-tag'), form=a.closest('form'); if(!form) return;
-    var inp=form.querySelector('input[name=tags]');
-    if(inp){ inp.value=inp.value.split(',').map(function(s){return s.trim();}).filter(function(s){return s && s!==tag;}).join(', '); }
-    var chip=a.closest('span'); if(chip && chip.parentNode) chip.parentNode.removeChild(chip);
+  var CONTATOS = ${JSON.stringify(r.itens.map(c => ({ tel: c.tel, telFmt: fmtTelP(c.tel), nome: c.nome || '', tags: c.tags || [], ini: iniciais(c.nome, c.tel), cor: corAv(c.nome || c.tel) })))};
+  var TODAS_TAGS = ${JSON.stringify(tags.map(t => t.tag))};
+  var PAL_TAG = ${JSON.stringify(PAL_TAG)};
+  function _hash(s){var h=0;s=String(s||'');for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
+  function corTagJs(t){return PAL_TAG[_hash(t)%PAL_TAG.length];}
+  var ctSel=null, ctTags=[];
+  function abrirFiltroTag(){var s=document.getElementById('ctTagSel');if(s){s.focus();if(s.showPicker)try{s.showPicker();}catch(e){}}}
+  function abrirModal(tel){
+    var c=null; for(var i=0;i<CONTATOS.length;i++){if(CONTATOS[i].tel===tel){c=CONTATOS[i];break;}}
+    if(!c) return;
+    ctSel=c; ctTags=(c.tags||[]).slice();
+    var av=document.getElementById('ctAv'); av.textContent=c.ini; av.style.background=c.cor;
+    document.getElementById('ctHnome').textContent=c.nome||'(sem nome)';
+    document.getElementById('ctHtel').textContent=c.telFmt;
+    document.getElementById('ctNome').value=c.nome||'';
+    document.getElementById('ctNovaTag').value='';
+    renderTags();
+    document.getElementById('ctModal').style.display='flex';
+  }
+  function fecharModal(){document.getElementById('ctModal').style.display='none';ctSel=null;}
+  function renderTags(){
+    var todas=TODAS_TAGS.slice();
+    for(var i=0;i<ctTags.length;i++) if(todas.indexOf(ctTags[i])<0) todas.push(ctTags[i]);
+    var box=document.getElementById('ctTags');
+    if(!todas.length){box.innerHTML='<span class="quando">Nenhuma tag ainda — crie uma abaixo.</span>';return;}
+    box.innerHTML=todas.map(function(t){
+      var on=ctTags.indexOf(t)>=0, c=corTagJs(t);
+      var st=on?('background:'+c[0]+';color:'+c[1]+';border-color:'+c[2]):'background:#fff;color:#5c5960;border-color:#e8e8ea';
+      return '<button type="button" class="ct-tg'+(on?' on':'')+'" style="'+st+'" onclick="toggleTag(this,\\''+t.replace(/'/g,"\\\\'")+'\\')">'+(on?'✓ ':'')+esc(t)+'</button>';
+    }).join('');
+  }
+  function esc(s){return String(s).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];});}
+  function toggleTag(btn,t){var i=ctTags.indexOf(t);if(i>=0)ctTags.splice(i,1);else ctTags.push(t);renderTags();}
+  function addNovaTag(){
+    var inp=document.getElementById('ctNovaTag'), t=(inp.value||'').trim();
+    if(!t) return;
+    if(ctTags.indexOf(t)<0) ctTags.push(t);
+    if(TODAS_TAGS.indexOf(t)<0) TODAS_TAGS.push(t);
+    inp.value=''; renderTags();
+  }
+  function salvarContato(){
+    if(!ctSel) return;
+    var b=document.getElementById('ctSalvar'); b.disabled=true; b.textContent='Salvando…';
+    fetch('/sofia/contatos/salvar-novo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:ctSel.tel,nome:document.getElementById('ctNome').value,tags:ctTags})})
+      .then(function(r){return r.json();}).then(function(j){
+        if(j.ok){ location.reload(); }
+        else { b.disabled=false; b.textContent='Salvar'; alert('❌ '+(j.erro||'falha ao salvar')); }
+      }).catch(function(){ b.disabled=false; b.textContent='Salvar'; alert('❌ erro de rede'); });
+  }
+  function excluirContato(tel){
+    if(!confirm('Excluir este contato de vez?')) return;
+    fetch('/sofia/contatos/salvar',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'acao=excluir&telOrig='+encodeURIComponent(tel)})
+      .then(function(){ location.reload(); }).catch(function(){ alert('❌ erro de rede'); });
   }
   function importarCsv(){
     var f=document.getElementById('csvFile'), msg=document.getElementById('impMsg');
