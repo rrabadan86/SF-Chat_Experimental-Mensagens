@@ -216,7 +216,7 @@ async function executeMorningJob() {
   const whatsapp = new WhatsAppSender(); // conexão própria deste job
   try {
     await whatsapp.init();
-    const results = await whatsapp.sendBulkMessages(classes, config.messagesToday);
+    const results = await whatsapp.sendBulkMessages(classes, config.messagesToday, 'confirmacao_hoje');
     printJobSummary('Hoje (após 12h)', classes, results);
   } finally {
     try { await whatsapp.close(); } catch (e) { /* ignore */ }
@@ -230,7 +230,7 @@ async function executeAfternoonJob() {
   const whatsapp = new WhatsAppSender(); // conexão própria deste job
   try {
     await whatsapp.init();
-    const results = await whatsapp.sendBulkMessages(classes, config.messagesTomorrow);
+    const results = await whatsapp.sendBulkMessages(classes, config.messagesTomorrow, 'confirmacao_amanha');
     printJobSummary('Amanhã (até 11:30)', classes, results);
   } finally {
     try { await whatsapp.close(); } catch (e) { /* ignore */ }

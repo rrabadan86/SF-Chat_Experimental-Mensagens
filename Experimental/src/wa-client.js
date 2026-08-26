@@ -292,12 +292,23 @@ async function resolverId(telefone) {
   return n + '@c.us';                 // só instabilidade → deixa o envio tentar
 }
 
-async function sendTexto(telefone, texto, contexto) {
+// Envia texto para uma pessoa. `chaveFoto` (opcional): se houver uma foto (flyer)
+// salva no painel para essa mensagem, ela é enviada JUNTO, com o texto como
+// legenda. Sem foto salva, envia só o texto — comportamento idêntico ao antigo.
+async function sendTexto(telefone, texto, contexto, chaveFoto) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
+  let fotoPath = null;
+  if (chaveFoto) { try { fotoPath = require('./mensagens').fotoPath(chaveFoto); } catch (_) {} }
   try {
     const id = await resolverId(telefone);
-    const r = await comRetry(() => client.sendMessage(id, texto));
-    atividade.registrar({ destino: telefone, preview: texto, ok: true, contexto });
+    let r;
+    if (fotoPath) {
+      const media = MessageMedia.fromFilePath(fotoPath); // flyer com o texto como legenda
+      r = await comRetry(() => client.sendMessage(id, media, { caption: texto || undefined }));
+    } else {
+      r = await comRetry(() => client.sendMessage(id, texto));
+    }
+    atividade.registrar({ destino: telefone, preview: (fotoPath ? '📎 ' : '') + texto, midia: !!fotoPath, ok: true, contexto });
     return r;
   } catch (e) {
     atividade.registrar({ destino: telefone, preview: texto, ok: false, erro: e && e.message, contexto });

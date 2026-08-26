@@ -448,12 +448,12 @@ async function sendAudioFile(page, audioPath) {
 /**
  * Envia texto + áudio para um número.
  */
-async function sendFollowupMessage(page, phoneNumber, text, audioPath) {
+async function sendFollowupMessage(page, phoneNumber, text, audioPath, chaveFoto) {
   // page ignorado (compat). Envia pelo cliente único: texto + áudio (como voz).
   {
     const wa = require('./wa-client');
     try {
-      await wa.sendTexto(phoneNumber, text);
+      await wa.sendTexto(phoneNumber, text, undefined, chaveFoto);
       if (audioPath) {
         await sleep(1500);
         console.log(`   🎧 Enviando áudio como voz: ${path.basename(audioPath)}`);
@@ -623,7 +623,7 @@ async function runFollowup(periodoFiltro, dataOverride = null) {
 
       let status = '❌';
       try {
-        const ok = await sendFollowupMessage(page, aluno.phone, texto, audioPath);
+        const ok = await sendFollowupMessage(page, aluno.phone, texto, audioPath, aluno.virouAluna ? 'followup_aluna' : 'followup');
         if (ok) { enviadas++; status = '✅'; } else falhas++;
       } catch (err) {
         console.log(`   ❌ Erro: ${err.message}`);
@@ -689,7 +689,7 @@ async function runTeste(numero, professorKey = 'taynara', vezes = 1) {
   try {
     for (let i = 1; i <= vezes; i++) {
       console.log(`\n📨 (${i}/${vezes}) Enviando teste para ${numero}...`);
-      const enviado = await sendFollowupMessage(page, numero, texto, audioPath);
+      const enviado = await sendFollowupMessage(page, numero, texto, audioPath, 'followup');
       if (enviado) ok++; else fail++;
       if (i < vezes) await sleep(12000); // mesma pausa do fluxo real entre contatos
     }

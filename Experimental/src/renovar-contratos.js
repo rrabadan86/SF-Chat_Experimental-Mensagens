@@ -575,7 +575,7 @@ async function enviarWhatsApp(clientes) {
     if (!numero.startsWith('55')) numero = '55' + numero;
     console.log(`📨 Enviando para ${cliente.nome} (${numero})...`);
     try {
-      await wa.sendTexto(numero, mensagem);
+      await wa.sendTexto(numero, mensagem, undefined, 'renovacao');
       console.log(`   ✅ Enviada!`);
       resultados.enviadas++;
     } catch (err) { console.log(`   ❌ Erro: ${err.message}`); resultados.falhas++; }

@@ -150,11 +150,11 @@ async function esperarConversaPronta(page, timeoutMs = 45000) {
 }
 
 // Envia UMA mensagem usando uma page do WhatsApp Web já aberta/conectada.
-async function enviarUma(page, phone, texto) {
+async function enviarUma(page, phone, texto, chaveFoto) {
   // page ignorado (compat). Envia pelo cliente único (whatsapp-web.js).
   {
     const wa = require('./wa-client');
-    await wa.sendTexto(phone, texto);
+    await wa.sendTexto(phone, texto, undefined, chaveFoto);
     return;
   }
   // ── (código antigo via page abaixo fica inacessível) ──
@@ -247,7 +247,7 @@ async function enviarConfirmacoes(page) {
   for (const row of pendentes) {
     const k = chave(row);
     try {
-      await enviarUma(page, row.phone, mensagemDaConfirmacao(row));
+      await enviarUma(page, row.phone, mensagemDaConfirmacao(row), 'confirmacao_experimental');
       enviados.add(k);
       salvarEnviados(enviados);
       if (falhas[k]) { delete falhas[k]; salvarFalhas(falhas); }
@@ -296,7 +296,7 @@ async function reenviarRetido({ chave: k, nome, telefone } = {}) {
   const item = retidos[alvo];
   const destino = normalizar(telefone || item.phone);
   const wa = require('./wa-client');
-  await wa.sendTexto(destino, mensagemDaConfirmacao(item));
+  await wa.sendTexto(destino, mensagemDaConfirmacao(item), undefined, 'confirmacao_experimental');
   delete retidos[alvo]; salvarRetidos(retidos);
   const enviados = lerEnviados(); enviados.add(alvo); salvarEnviados(enviados);
   const falhas = lerFalhas(); if (falhas[alvo] != null) { delete falhas[alvo]; salvarFalhas(falhas); }

@@ -232,7 +232,9 @@ function removerFoto(chave) {
     try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
   }
 }
-function aceitaFoto(chave) { const m = CATALOGO.find(x => x.chave === chave); return !!(m && m.foto); }
+// Todas as mensagens de WhatsApp aceitam foto (flyer). Exceção: 'instagram' é DM
+// do Instagram (canal diferente, tratado na aba Instagram), então não entra aqui.
+function aceitaFoto(chave) { const m = CATALOGO.find(x => x.chave === chave); return !!(m && m.chave !== 'instagram'); }
 function salvarFoto(chave, dataUrl) {
   if (!aceitaFoto(chave)) throw new Error('Esta mensagem não aceita foto.');
   const m = /^data:(image\/(png|jpe?g|webp));base64,(.+)$/i.exec(dataUrl || '');
@@ -259,8 +261,8 @@ function listar() {
     padrao: m.padrao,
     texto: (ov[m.chave] != null && String(ov[m.chave]).trim() !== '') ? ov[m.chave] : m.padrao,
     editado: ov[m.chave] != null && String(ov[m.chave]).trim() !== '' && ov[m.chave] !== m.padrao,
-    aceitaFoto: !!m.foto,
-    fotoNome: m.foto ? fotoNome(m.chave) : null,
+    aceitaFoto: aceitaFoto(m.chave),
+    fotoNome: aceitaFoto(m.chave) ? fotoNome(m.chave) : null,
   }));
 }
 

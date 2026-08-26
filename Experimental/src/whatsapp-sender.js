@@ -21,9 +21,9 @@ class WhatsAppSender {
     return this.ready;
   }
 
-  async sendMessage(phoneNumber, message) {
+  async sendMessage(phoneNumber, message, chaveFoto) {
     try {
-      await wa.sendTexto(phoneNumber, message);
+      await wa.sendTexto(phoneNumber, message, undefined, chaveFoto);
       console.log(`   ✅ Mensagem enviada para ${phoneNumber}`);
       return true;
     } catch (error) {
@@ -32,7 +32,7 @@ class WhatsAppSender {
     }
   }
 
-  async sendBulkMessages(students, messageBuilder) {
+  async sendBulkMessages(students, messageBuilder, chaveFoto) {
     const results = { sent: 0, failed: 0, skipped: 0, details: [] };
     console.log(`\n📨 Enviando ${students.length} mensagem(ns)...\n`);
 
@@ -46,7 +46,7 @@ class WhatsAppSender {
 
       const message = messageBuilder(student.name, student.time, student);
       console.log(`   📨 Enviando para ${student.name} (${student.phone})...`);
-      const success = await this.sendMessage(student.phone, message);
+      const success = await this.sendMessage(student.phone, message, chaveFoto);
 
       if (success) {
         results.sent++;

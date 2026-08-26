@@ -80,7 +80,7 @@ async function runNoShow(periodoFiltro) {
 
       console.log(`\n📨 Enviando para ${aluno.name} (${destino})${argTeste ? ' [TESTE]' : ''}...`);
       try {
-        await enviarUma(page, destino, texto);
+        await enviarUma(page, destino, texto, 'no_show');
         enviadas++;
         console.log('   ✅ Enviada');
       } catch (err) {
