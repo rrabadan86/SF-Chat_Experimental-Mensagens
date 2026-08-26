@@ -359,14 +359,18 @@ const ESTILO = `
   .cpf-body{padding:2px 0 14px}
   .tagrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--linha)}
   .tagrow:last-child{border-bottom:0}
-  .tagrow form{display:flex;gap:8px;align-items:center;flex:1;min-width:250px;margin:0;flex-wrap:wrap}
-  .tagrow input[type=text]{flex:1;min-width:180px;font-size:.85rem}
-  .tagrow .tagn{color:var(--cinza);font-size:.78rem;min-width:46px;text-align:right;font-variant-numeric:tabular-nums;flex:none}
-  .tagbtn{padding:6px 12px;font-size:.8rem;white-space:nowrap;background:#fff;color:var(--cinza);border:1px solid var(--linha);border-radius:9px;cursor:pointer;font-weight:700}
-  .tagbtn:hover{border-color:var(--teal);color:var(--teal-esc)}
+  .tagrow form{display:flex;gap:8px;align-items:center;flex:1;min-width:250px;margin:0;flex-wrap:nowrap}
+  .tagrow input[type=text]{flex:1;min-width:120px;font-size:.85rem}
+  .tagrow .tagn{color:var(--cinza);font-size:.78rem;width:46px;text-align:right;font-variant-numeric:tabular-nums;flex:none}
+  .tagbtn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 12px;font-size:.8rem;white-space:nowrap;background:#fff;color:var(--cinza);border:1px solid var(--linha);border-radius:9px;cursor:pointer;font-weight:700;flex:none}
+  .tagbtn.ren{width:96px}
+  .tagbtn.rm{width:82px}
+  .tagbtn.aut{width:140px}
   .tagbtn.ren:hover{border-color:var(--teal);color:var(--teal-esc)}
   .tagbtn.rm:hover{border-color:var(--erro);color:var(--erro);background:var(--erro-bg)}
+  .tagbtn.aut:hover{border-color:var(--teal);color:var(--teal-esc)}
   .tagbtn.on{border-color:var(--teal);color:var(--teal-esc);background:#eef7f7}
+  @media(max-width:640px){ .tagrow form{flex-wrap:wrap} .tagrow input[type=text]{min-width:100%} }
   .cp-sec{margin:0 0 14px}
   .cp-h{font-family:"Montserrat";font-weight:700;font-size:var(--fs-sm);margin:0 0 4px}
   .cp-list{max-height:200px;overflow-y:auto;border:1px solid var(--linha);border-radius:10px;padding:2px 12px}
@@ -1516,7 +1520,7 @@ function paginaSofiaContatos(aviso, erro, params) {
         <button type="submit" class="tagbtn ren" name="acao" value="renomear">Renomear</button>
         <button type="submit" class="tagbtn rm" name="acao" value="excluir" onclick="return confirm('Excluir a tag em TODOS os contatos?')">Excluir</button>
       </form>
-      <button type="button" class="tagbtn${cfg.gatilho ? ' on' : ''}" onclick="abrirTagCfg(${i})" title="Automação desta tag">⚙️ Automação${cfg.gatilho ? ' ⚡' : ''}</button>
+      <button type="button" class="tagbtn aut${cfg.gatilho ? ' on' : ''}" onclick="abrirTagCfg(${i})" title="Automação desta tag">⚙️ Automação${cfg.gatilho ? ' ⚡' : ''}</button>
     </div>`; }).join('') : '<p class="quando" style="margin:0">Nenhuma tag ainda. Crie uma acima ou etiquete um contato.</p>'}
     </div></details>`;
 
