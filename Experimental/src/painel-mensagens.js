@@ -1845,7 +1845,8 @@ function paginaSofiaCampanhas(aviso, erro) {
       function poll(){ fetch('/sofia/campanhas/lista',{cache:'no-store'}).then(function(r){return r.text();}).then(function(h){ if(h && h!==ultimo){ ultimo=h; box.innerHTML=h; } }).catch(function(){}); }
       var n=0, iv=setInterval(function(){ n++; poll(); if(n>=3){ clearInterval(iv); setInterval(poll,6000); } },1200);
     })();
-    var cpId=null, cpTimer=null;
+    var cpId=null, cpTimer=null, CP_CONV=${podeSofiaSub(_navSess || { admin: true, telas: [] }, 'conversas') ? 'true' : 'false'};
+    function irConversaCamp(tel){ location.href='/sofia?view=conversas&chat='+encodeURIComponent(tel); }
     function cpEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];}); }
     function cpFmtTel(k){ var d=String(k||'').replace(/\\D/g,''); if(/^55\\d{10,11}$/.test(d)){ var ddd=d.slice(2,4), r=d.slice(4); return '+55 ('+ddd+') '+(r.length===9?r.slice(0,5)+'-'+r.slice(5):r.slice(0,4)+'-'+r.slice(4)); } return k||''; }
     function cpFmtHora(ts){ if(!ts) return ''; try{ return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
@@ -1868,7 +1869,7 @@ function paginaSofiaCampanhas(aviso, erro) {
       var tEnv=j.enviadosTotal!=null?j.enviadosTotal:j.enviados.length, tPen=j.pendentesTotal!=null?j.pendentesTotal:j.pendentes.length, tFal=j.falhasTotal!=null?j.falhasTotal:j.falhas.length;
       document.getElementById('cpTit').textContent='Envio · '+(j.nome||'');
       document.getElementById('cpStats').innerHTML='<b style="color:var(--ok)">'+tEnv+'</b> enviadas · <b>'+tPen+'</b> na fila · <b style="color:var(--erro)">'+tFal+'</b> falha(s) · hoje '+(j.enviadosHoje||0)+'/'+(j.limiteDia||0);
-      function linha(nome,tel,dir){ return '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--linha)"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>'+cpEsc(nome||'(sem nome)')+'</b> <span class="quando">'+cpEsc(cpFmtTel(tel))+'</span></span><span class="quando" style="white-space:nowrap;flex:none">'+dir+'</span></div>'; }
+      function linha(nome,tel,dir){ var ir=CP_CONV?('<button type="button" class="ct-ic" title="Ir para a conversa" style="margin:0" onclick="irConversaCamp(\\''+cpEsc(String(tel).replace(/[^0-9]/g,''))+'\\')">💬</button>'):''; return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--linha)"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>'+cpEsc(nome||'(sem nome)')+'</b> <span class="quando">'+cpEsc(cpFmtTel(tel))+'</span></span><span style="white-space:nowrap;flex:none;display:flex;align-items:center;gap:8px"><span class="quando" style="margin:0">'+dir+'</span>'+ir+'</span></div>'; }
       function maisN(mostrados,total){ return total>mostrados?('<div class="quando" style="padding:7px 0">…e mais '+(total-mostrados)+'</div>'):''; }
       var env=j.enviados.slice().reverse().map(function(x){ return linha(x.nome,x.tel,'✅ '+cpFmtHora(x.em)); }).join('')+maisN(j.enviados.length,tEnv) || '<p class="quando">Ninguém ainda.</p>';
       var fila=j.pendentes.map(function(x){ return linha(x.nome,x.tel,'⏳ na fila'); }).join('')+maisN(j.pendentes.length,tPen) || '<p class="quando">Fila vazia.</p>';
