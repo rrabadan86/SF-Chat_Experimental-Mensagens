@@ -1142,7 +1142,7 @@ function paginaSofiaConversas(aviso, erro) {
       +'<div id="ncChips" style="margin-bottom:6px"></div>'
       +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
       +'<select id="ncTagSel" onchange="ncAddTag(this.value);this.selectedIndex=0" style="min-width:150px;font-size:.85rem">'+opts+'</select>'
-      +'<input id="ncNovaTag" placeholder="nova tag" style="width:110px;font-size:.85rem" onkeydown="if(event.key===\\'Enter\\'){event.preventDefault();ncAddTag(this.value);this.value=\\'\\';}">'
+      +'<input id="ncNovaTag" placeholder="nova tag" style="width:110px;font-size:.85rem" onkeydown="if(event.key===\\'Enter\\'){event.preventDefault();ncAddTag(this.value);this.value=\\'\\';}" onblur="if(this.value.trim()){ncAddTag(this.value);this.value=\\'\\';}">'
       +'<button type="button" id="ncSalvar" class="save" style="padding:5px 10px" onclick="salvarContato(\\''+k+'\\')">💾 '+(c.salvo?'Salvar tags':'Salvar contato')+'</button>'
       +'<span id="ncMsg" class="quando" style="margin:0"></span>'
       +'</div></div>') : '';
@@ -1192,6 +1192,7 @@ function paginaSofiaConversas(aviso, erro) {
     else { var c=ultimoData[selecionada]||{}; msg.innerHTML=c.salvo?'<span style="color:#1c8f52">✓ salvo</span>':''; if(btn)btn.style.boxShadow='none'; }
   }
   function salvarContato(k){
+    var nova=document.getElementById('ncNovaTag'); if(nova && nova.value.trim()){ ncAddTag(nova.value); nova.value=''; } // comita a "nova tag" digitada
     var msg=document.getElementById('ncMsg'); if(msg)msg.textContent='Salvando…';
     var nome=(ncNome||'').trim();
     fetch('/sofia/contatos/salvar-novo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:k,nome:nome,tags:ncSel})})
