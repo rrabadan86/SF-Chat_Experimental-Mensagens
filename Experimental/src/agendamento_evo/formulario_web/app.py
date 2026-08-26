@@ -16,9 +16,10 @@ import os
 import re
 import threading
 import time
+import uuid
 from datetime import datetime, timedelta
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, make_response, request, send_from_directory
 
 from evo_agendamento import EvoClient, TurmaLotadaError, available_slots, book_experimental
 from evo_agendamento import config
@@ -34,6 +35,31 @@ FORM_MAX_OCUPACAO = int(os.getenv("FORM_MAX_OCUPACAO", "7"))  # turma com >7 fic
 # token que o PC usa para puxar a outbox (defina o MESMO valor no PC e no Render):
 OUTBOX_TOKEN = os.getenv("FORM_OUTBOX_TOKEN", "")
 OUTBOX_FILE = os.getenv("FORM_OUTBOX_FILE", "web_outbox.jsonl")
+# indicadores (acessos/agendamentos) que o VPS puxa e persiste:
+IND_FILE = os.getenv("FORM_IND_FILE", "web_indicadores.jsonl")
+# log de auditoria de TODO agendamento feito pelo formulário: guarda os dados
+# completos que a pessoa digitou (nome, CPF, telefone, e-mail, nascimento), o
+# horário, e se o cadastro no EVO foi criado, reaproveitado ou atualizado. Serve
+# para conferir "o que entrou pelo formulário" quando o cadastro do EVO veio
+# incompleto (ex.: cadastro antigo). Disco efêmero da Render não é problema: o
+# VPS puxa (GET /api/bookings/pending) e persiste do lado dele.
+BOOKINGS_FILE = os.getenv("FORM_BOOKINGS_FILE", "web_bookings.jsonl")
+
+# User-Agents de robos (previews de link, monitores, scripts) que NAO sao gente:
+# NAO inclui "instagram" de proposito — quem abre pelo navegador DENTRO do app do
+# Instagram tem "Instagram" no UA e e uma pessoa real (nosso publico principal).
+_BOT_UA = re.compile(
+    r"bot|crawl|spider|preview|facebookexternalhit|meta-externalagent|whatsapp|telegram|slack|"
+    r"discord|embedly|curl|wget|python-requests|okhttp|go-http|headless|phantom|puppeteer|"
+    r"playwright|lighthouse|monitor|uptime|pingdom|statuscake|http-client|axios|node-fetch|"
+    r"scrapy|semrush|ahrefs|bingpreview|skypeuripreview|vkshare|redditbot",
+    re.I)
+
+def _eh_bot(ua):
+    ua = (ua or "").strip()
+    if not ua:
+        return True  # sem User-Agent = quase sempre robo/script
+    return bool(_BOT_UA.search(ua))
 # token compartilhado com a Sofia (WhatsApp). Defina no Render em Environment.
 SOFIA_TOKEN = os.getenv("SOFIA_TOKEN", "")
 # mensagem quando a pessoa já tem aula experimental (1 por pessoa):
@@ -82,6 +108,95 @@ def _outbox_ack(keys):
 
 def _row_key(row):
     return f"{row.get('contactId')}|{row.get('when')}|{row.get('ts')}"
+
+
+# =================== indicadores (acessos / agendamentos) ====================
+# Buffer leve que o VPS puxa (GET /api/ind/pending) e confirma (POST /api/ind/ack).
+# Cada evento: {id, tipo: 'acesso'|'agendou', ts, origem}. Disco efemero da Render
+# nao e problema: o VPS puxa a cada ~2 min e persiste do lado dele.
+def _hora_de(when):
+    m = re.search(r"(\d{1,2}:\d{2})", str(when or ""))
+    return m.group(1) if m else ""
+
+
+def _ind_append(tipo, origem="", extra=None):
+    try:
+        ev = {
+            "id": uuid.uuid4().hex[:12],
+            "tipo": tipo,
+            "ts": datetime.now().isoformat(timespec="seconds"),
+            "origem": (origem or "")[:40],
+        }
+        if extra:
+            ev.update(extra)
+        with _lock:
+            with open(IND_FILE, "a", encoding="utf-8") as f:
+                f.write(json.dumps(ev, ensure_ascii=False) + "\n")
+    except Exception:
+        app.logger.exception("falha ao registrar indicador")
+
+
+def _ind_read_all():
+    if not os.path.exists(IND_FILE):
+        return []
+    with open(IND_FILE, encoding="utf-8") as f:
+        out = []
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    out.append(json.loads(line))
+                except ValueError:
+                    pass
+        return out
+
+
+def _ind_remove(ids):
+    ids = set(ids or [])
+    with _lock:
+        rows = [r for r in _ind_read_all() if r.get("id") not in ids]
+        with open(IND_FILE, "w", encoding="utf-8") as f:
+            for r in rows:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+
+# =================== log de agendamentos (auditoria) =========================
+# Uma linha por agendamento concluído pelo formulário, com os dados completos
+# que a pessoa digitou. O VPS puxa (GET /api/bookings/pending) e confirma
+# (POST /api/bookings/ack), guardando o histórico definitivo do lado dele.
+def _booking_append(row):
+    try:
+        row = {"id": uuid.uuid4().hex[:12],
+               "ts": datetime.now().isoformat(timespec="seconds"), **row}
+        with _lock:
+            with open(BOOKINGS_FILE, "a", encoding="utf-8") as f:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except Exception:
+        app.logger.exception("falha ao registrar o log de agendamento")
+
+
+def _booking_read_all():
+    if not os.path.exists(BOOKINGS_FILE):
+        return []
+    with open(BOOKINGS_FILE, encoding="utf-8") as f:
+        out = []
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    out.append(json.loads(line))
+                except ValueError:
+                    pass
+        return out
+
+
+def _booking_remove(ids):
+    ids = set(ids or [])
+    with _lock:
+        rows = [r for r in _booking_read_all() if r.get("id") not in ids]
+        with open(BOOKINGS_FILE, "w", encoding="utf-8") as f:
+            for r in rows:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
 def _ja_tem_experimental(evo, id_prospect):
@@ -150,7 +265,18 @@ def _valida(dados):
 # ================================= rotas =====================================
 @app.get("/")
 def index():
-    return send_from_directory(os.path.join(BASE, "templates"), "index.html")
+    resp = make_response(send_from_directory(os.path.join(BASE, "templates"), "index.html"))
+    if not _eh_bot(request.headers.get("User-Agent")):
+        # Cookie por visitante (pessoa) — persiste 1 ano. Assim "pessoas" < "acessos"
+        # (varios F5 da mesma pessoa contam como 1 pessoa).
+        vid = request.cookies.get("sfv")
+        novo = not vid
+        if novo:
+            vid = uuid.uuid4().hex
+        _ind_append("acesso", request.args.get("origem") or request.args.get("utm_source") or "", {"vid": vid})
+        if novo:
+            resp.set_cookie("sfv", vid, max_age=60 * 60 * 24 * 365, samesite="Lax")
+    return resp
 
 
 @app.get("/manual")
@@ -480,6 +606,27 @@ def api_book():
         app.logger.exception("Falha no agendamento")
         return jsonify({"ok": False, "erro": f"Não consegui concluir o agendamento: {e}"}), 500
 
+    # log de auditoria: guarda os dados COMPLETOS que a pessoa digitou + o que o
+    # EVO fez com o cadastro (criou novo, reaproveitou antigo, e se conseguiu
+    # atualizar os dados nesse reaproveitamento). É aqui que se confere o CPF/
+    # e-mail/telefone/nascimento quando o cadastro do EVO veio incompleto.
+    try:
+        _booking_append({
+            "nome": limpo["nome"], "cpf": limpo["cpf"],
+            "telefone": br_phone_with_9(limpo["telefone"]),
+            "email": limpo["email"], "nascimento": limpo["nascimento"],
+            "when": res.when, "activity": res.activity,
+            "origem": (dados.get("origem") or "")[:40],
+            "idProspect": res.id_prospect,
+            # cadastro_novo=True → o EVO criou um cadastro do zero.
+            # cadastro_novo=False → já existia (cadastro antigo); "atualizacao"
+            # diz se conseguimos completar os dados dele agora.
+            "cadastro_novo": res.prospect_created,
+            "atualizacao": res.prospect_updated,
+        })
+    except Exception:
+        app.logger.exception("Agendou mas falhou ao registrar o log de agendamento")
+
     # enfileira a confirmação p/ o PC enviar pelo WhatsApp do Studio
     try:
         msg = _confirm_message(limpo["nome"], res.when)
@@ -492,8 +639,46 @@ def api_book():
     except Exception:
         app.logger.exception("Agendou mas falhou ao enfileirar a confirmação")
 
+    try:
+        _ind_append("agendou", (request.get_json(silent=True) or {}).get("origem", ""),
+                    {"hora": _hora_de(res.when)})
+    except Exception:
+        pass
     return jsonify({"ok": True, "when": res.when, "idProspect": res.id_prospect,
                     "activity": res.activity})
+
+
+@app.get("/api/ind/pending")
+def api_ind_pending():
+    if not OUTBOX_TOKEN or request.args.get("token") != OUTBOX_TOKEN:
+        return jsonify({"ok": False, "erro": "nao autorizado"}), 401
+    return jsonify({"ok": True, "eventos": _ind_read_all()})
+
+
+@app.post("/api/ind/ack")
+def api_ind_ack():
+    if not OUTBOX_TOKEN or request.args.get("token") != OUTBOX_TOKEN:
+        return jsonify({"ok": False, "erro": "nao autorizado"}), 401
+    ids = (request.get_json(silent=True) or {}).get("ids", [])
+    _ind_remove(ids)
+    return jsonify({"ok": True, "removidos": len(ids)})
+
+
+@app.get("/api/bookings/pending")
+def api_bookings_pending():
+    """Log completo dos agendamentos do formulário (o VPS puxa e persiste)."""
+    if not OUTBOX_TOKEN or request.args.get("token") != OUTBOX_TOKEN:
+        return jsonify({"ok": False, "erro": "nao autorizado"}), 401
+    return jsonify({"ok": True, "rows": _booking_read_all()})
+
+
+@app.post("/api/bookings/ack")
+def api_bookings_ack():
+    if not OUTBOX_TOKEN or request.args.get("token") != OUTBOX_TOKEN:
+        return jsonify({"ok": False, "erro": "nao autorizado"}), 401
+    ids = (request.get_json(silent=True) or {}).get("ids", [])
+    _booking_remove(ids)
+    return jsonify({"ok": True, "removidos": len(ids)})
 
 
 @app.get("/api/outbox/pending")
@@ -553,6 +738,21 @@ def api_book_sofia():
     except Exception as e:
         app.logger.exception("Sofia: falha no agendamento")
         return jsonify({"ok": False, "erro": f"não consegui agendar: {e}"}), 500
+
+    # 3b) Log de auditoria (mesmo do formulário). No fluxo da Sofia não há
+    #     CPF/nascimento, mas registramos o que veio + o que o EVO fez com o
+    #     cadastro (novo/reaproveitado/atualizado).
+    try:
+        _booking_append({
+            "nome": nome, "cpf": "", "telefone": br_phone_with_9(telefone),
+            "email": email, "nascimento": "",
+            "when": res.when, "activity": res.activity, "origem": "sofia",
+            "idProspect": res.id_prospect,
+            "cadastro_novo": res.prospect_created,
+            "atualizacao": res.prospect_updated,
+        })
+    except Exception:
+        app.logger.exception("Sofia: agendou mas falhou ao registrar o log")
 
     # 4) Enfileira a confirmação na OUTBOX — o bot do Studio (8550-8065) vai ler
     #    essa fila e enviar a mensagem para a aluna, igual ao fluxo do formulário.
