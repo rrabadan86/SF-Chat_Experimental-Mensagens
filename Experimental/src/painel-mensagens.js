@@ -2227,6 +2227,8 @@ function paginaSofia(aviso, erro) {
 
     <form method="POST" action="/sofia/salvar">
 
+      <details class="acc-sec">
+        <summary class="sec-t" style="cursor:pointer;padding:4px 0">⚙️ Ajustes gerais <small style="font-weight:400;color:var(--cinza)">— pausa, sessão, agrupamento, verificação, limite</small></summary>
       <div class="card">
         <div class="cfg-grid">
           <div>
@@ -2252,7 +2254,10 @@ function paginaSofia(aviso, erro) {
         </div>
       </div>
 
-      <div class="sec-t">⌨️ Jeito de responder <small style="font-weight:600;color:var(--cinza)">(deixa a SoFIA mais humana — vale na hora, sem reiniciar)</small></div>
+      </details>
+
+      <details class="acc-sec">
+        <summary class="sec-t" style="cursor:pointer;padding:4px 0">⌨️ Jeito de responder <small style="font-weight:400;color:var(--cinza)">— quebra em várias mensagens, “digitando…”, velocidade</small></summary>
       <div class="card">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="ritHumano" value="1"${e.ritmo.humano ? ' checked' : ''} style="width:auto;margin:0">
@@ -2278,13 +2283,16 @@ function paginaSofia(aviso, erro) {
         </div>
       </div>
 
-      <div class="sec-t">🔁 Follow-up de leads <small style="font-weight:600;color:var(--cinza)">(a SoFIA retoma sozinha quem esfriou sem agendar)</small></div>
+      </details>
+
+      <details class="acc-sec">
+        <summary class="sec-t" style="cursor:pointer;padding:4px 0">🔁 Follow-up de leads <small style="font-weight:400;color:var(--cinza)">— a SoFIA retoma sozinha quem esfriou sem agendar</small></summary>
       <div class="card">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="followupOn" value="1"${e.followup.on ? ' checked' : ''} style="width:auto;margin:0">
           Ativar follow-up automático${infoI('Quando uma lead conversa e <b>para de responder sem agendar</b>, a SoFIA espera o tempo abaixo e manda <b>uma</b> mensagem de retomada, escrita pela IA com base nas últimas mensagens daquela conversa. Nunca incomoda quem <b>já agendou</b>, quem está <b>bloqueado</b> ou sob <b>controle humano</b>, e manda <b>só uma vez</b> por conversa (até a lead responder de novo).')}
         </label>
-        <p class="quando" style="margin:6px 0 14px">Desativado, a SoFIA não faz retomada nenhuma.</p>
+        <p class="quando" style="margin:6px 0 14px">Desativado, a SoFIA não faz retomada nenhuma. Ao <b>ligar</b>, vale <b>só daqui pra frente</b> — o acúmulo de conversas antigas não recebe (evita disparo em massa).</p>
         <div style="max-width:420px">
           <label>Esperar sem resposta</label>
           <div class="cfg-in"><input type="number" name="followupHoras" min="0.25" max="720" step="0.25" value="${e.followup.horas}"><span class="suf">horas (ex.: 24 = 1 dia)</span></div>
@@ -2295,6 +2303,8 @@ function paginaSofia(aviso, erro) {
           <p class="quando" style="margin:6px 0 0">A IA escreve a mensagem no tom da SoFIA, usando o contexto da conversa + essa orientação.</p>
         </div>
       </div>
+
+      </details>
 
       <div class="sec-t">💬 Conversa da SoFIA <small style="font-weight:600;color:var(--cinza)">(cada bloco é uma parte do atendimento — dá pra editar o título, remover ou adicionar)</small></div>
       <div id="secoes">${cardsSecoes}</div>
@@ -3298,6 +3308,7 @@ function processarFollowups() {
     let ultimoAluna = 0;
     for (const m of msgs) if (m.autor === 'aluna' && m.em > ultimoAluna) ultimoAluna = m.em;
     if (!ultimoAluna) continue;                              // a lead nunca falou → ignora
+    if (cfg.ligadoEm && ultimoAluna < cfg.ligadoEm) continue; // "só daqui pra frente": ignora o acúmulo de antes de ligar
     const idle = agora - (c.ultimaEm || ultimoAluna);
     if (idle < esperaMs || idle > CAP) continue;             // ainda quente, ou antiga demais
     if ((feito[chave] || 0) >= ultimoAluna) continue;        // já fez follow-up deste ciclo

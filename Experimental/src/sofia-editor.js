@@ -401,15 +401,25 @@ function lerFollowupCfg() {
   let o = {};
   try { o = JSON.parse(ler(F.followupCfg)) || {}; } catch (_) { o = {}; }
   const horas = parseFloat(o.horas);
+  const ligadoEm = parseInt(o.ligadoEm, 10);
   return {
     on: !!o.on,
     horas: (isFinite(horas) && horas > 0) ? horas : 24,
     instrucao: typeof o.instrucao === 'string' && o.instrucao.trim() ? o.instrucao : FOLLOWUP_INSTRUCAO_PADRAO,
+    // Instante em que foi LIGADO. O detector só considera leads cuja última
+    // mensagem veio DEPOIS disso ("só daqui pra frente" — ignora o acúmulo).
+    ligadoEm: isFinite(ligadoEm) && ligadoEm > 0 ? ligadoEm : 0,
   };
 }
 function gravarFollowupCfg({ on, horas, instrucao }) {
   const h = Math.max(0.25, Math.min(720, parseFloat(horas) || 24)); // 15 min a 30 dias
-  const cfg = { on: !!on, horas: h, instrucao: String(instrucao || '').trim() || FOLLOWUP_INSTRUCAO_PADRAO };
+  const atual = lerFollowupCfg();
+  // Marca o corte "daqui pra frente" só na TRANSIÇÃO desligado→ligado; se já
+  // estava ligado, mantém o corte original (salvar de novo não reabre o acúmulo).
+  let ligadoEm = atual.ligadoEm;
+  if (on && !atual.on) ligadoEm = Date.now();
+  if (!on) ligadoEm = 0;
+  const cfg = { on: !!on, horas: h, instrucao: String(instrucao || '').trim() || FOLLOWUP_INSTRUCAO_PADRAO, ligadoEm };
   gravarArquivo(F.followupCfg, JSON.stringify(cfg));
   return cfg;
 }
