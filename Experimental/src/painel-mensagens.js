@@ -2953,7 +2953,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && url === '/sofia/humano-foto') {
     const arq = new URLSearchParams(req.url.split('?')[1] || '').get('arq') || '';
     if (!/^[\w.-]+$/.test(arq) || arq.includes('..')) { res.writeHead(400); return res.end('nome inválido'); }
-    const caminho = p.join(sofia.DIR, 'humano-fotos', arq);
+    const caminho = path.join(sofia.DIR, 'humano-fotos', arq);
     if (!fs.existsSync(caminho)) { res.writeHead(404); return res.end('não encontrada'); }
     const ext = arq.split('.').pop().toLowerCase();
     const tipo = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
@@ -3251,8 +3251,8 @@ function publicarRegras() {
   } catch (_) {}
 }
 // Estado do follow-up (arquivos co-locados com os demais da Sofia, fora do Git).
-const FU_AGENDOU_FILE = p.join(sofia.DIR, 'sofia-agendaram.json');   // quem já agendou (não recebe follow-up)
-const FU_FEITO_FILE = p.join(sofia.DIR, 'sofia-followup-feito.json'); // { chave: ultimoInboundSeguido }
+const FU_AGENDOU_FILE = path.join(sofia.DIR, 'sofia-agendaram.json');   // quem já agendou (não recebe follow-up)
+const FU_FEITO_FILE = path.join(sofia.DIR, 'sofia-followup-feito.json'); // { chave: ultimoInboundSeguido }
 function fuLerJson(f, def) { try { return JSON.parse(fs.readFileSync(f, 'utf8')) || def; } catch (_) { return def; } }
 function fuSalvarJson(f, o) { try { fs.writeFileSync(f, JSON.stringify(o), 'utf8'); } catch (_) {} }
 function fuMarcarAgendou(tels) {
