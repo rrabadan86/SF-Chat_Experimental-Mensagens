@@ -35,6 +35,8 @@ const F = {
   respostas: path.join(DIR, 'sofia-respostas.jsonl'), // fila de respostas do painel → listener envia
   humano: path.join(DIR, 'sofia-humano.json'), // conversas sob controle humano (Sofia não responde) — lido pela Sofia
   bloqueios: path.join(DIR, 'sofia-bloqueios.json'), // números bloqueados (Sofia ignora) — painel escreve, listener lê
+  followupCfg: path.join(DIR, 'sofia-followup-cfg.json'), // config do follow-up (ligado/tempo/instrução) — painel
+  followup: path.join(DIR, 'sofia-followup.jsonl'), // fila de follow-ups a gerar+enviar — painel escreve, listener consome
   campanhas: path.join(DIR, 'campanhas.json'), // estado das campanhas — publicado pelo listener (painel só lê)
   campanhasInbox: path.join(DIR, 'campanhas-inbox.jsonl'), // pedidos do painel → listener (criar/controle/excluir)
 };
@@ -181,6 +183,7 @@ function estado() {
     sessaoHoras: lerSessaoHoras(),
     healthMin: lerHealthMin(),
     agruparSeg: lerAgruparSeg(),
+    followup: lerFollowupCfg(),
     secoes: parseSecoes(ler(F.prompt)),
     extracao: ler(F.extracao),
     midias: lerMidias(),
@@ -189,7 +192,7 @@ function estado() {
 }
 
 // Salva tudo (com backup e validação mínima). Lança Error em caso de recusa.
-function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg, midias, ritmo }) {
+function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg, followup, midias, ritmo }) {
   const promptMontado = montarPrompt(secoes || []);
   const ext = String(extracao || '').trim();
   if (promptMontado.trim().length < 50 || ext.length < 30) {
@@ -203,6 +206,7 @@ function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg
   if (sessaoHoras !== undefined) gravarSessaoHoras(sessaoHoras);
   if (healthMin !== undefined) gravarHealthMin(healthMin);
   if (agruparSeg !== undefined) gravarAgruparSeg(agruparSeg);
+  if (followup !== undefined) gravarFollowupCfg(followup || {});
   gravarMidias(midias || {});
   if (ritmo) gravarRitmo(ritmo);
 }
@@ -363,6 +367,32 @@ function setBloqueio(tel, ativo) {
   return !!ativo;
 }
 
+// ── Follow-up (retomada de leads que esfriaram sem agendar) ──────────────────
+const FOLLOWUP_INSTRUCAO_PADRAO = 'Pergunte de forma leve se ela ainda tem interesse em conhecer o Studio e que estamos de portas abertas para ela fazer a aula experimental gratuita. Seja calorosa e natural.';
+function lerFollowupCfg() {
+  let o = {};
+  try { o = JSON.parse(ler(F.followupCfg)) || {}; } catch (_) { o = {}; }
+  const horas = parseFloat(o.horas);
+  return {
+    on: !!o.on,
+    horas: (isFinite(horas) && horas > 0) ? horas : 24,
+    instrucao: typeof o.instrucao === 'string' && o.instrucao.trim() ? o.instrucao : FOLLOWUP_INSTRUCAO_PADRAO,
+  };
+}
+function gravarFollowupCfg({ on, horas, instrucao }) {
+  const h = Math.max(0.25, Math.min(720, parseFloat(horas) || 24)); // 15 min a 30 dias
+  const cfg = { on: !!on, horas: h, instrucao: String(instrucao || '').trim() || FOLLOWUP_INSTRUCAO_PADRAO };
+  fs.writeFileSync(F.followupCfg, JSON.stringify(cfg), 'utf8');
+  return cfg;
+}
+// O painel enfileira um follow-up para a Sofia gerar (com IA) e enviar.
+function enfileirarFollowup(tel, instrucao) {
+  const d = String(tel || '').replace(/\D/g, '');
+  if (!d) return false;
+  fs.appendFileSync(F.followup, JSON.stringify({ tel: d, instrucao: String(instrucao || ''), em: Date.now() }) + '\n', 'utf8');
+  return true;
+}
+
 function setControleHumano(chave, ativo) {
   const o = lerHumano();
   if (ativo) o[chave] = Date.now(); else delete o[chave];
@@ -373,6 +403,6 @@ function setControleHumano(chave, ativo) {
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, enviarComando,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, enviarComando,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

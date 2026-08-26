@@ -49,3 +49,8 @@ sofia-health-min.txt
 sofia-agrupar-seg.txt
 
 sofia-bloqueios.json
+sofia-followup-cfg.json
+sofia-followup.jsonl
+sofia-followup.*.proc
+sofia-agendaram.json
+sofia-followup-feito.json

@@ -22,7 +22,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
-import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, deveResponder, janelaSessaoMs, resumirConversa } from "./sofia";
+import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, deveResponder, janelaSessaoMs, resumirConversa, gerarFollowup } from "./sofia";
 
 const DIR = process.cwd();
 const STATUS_FILE = path.join(DIR, "sofia-wa-status.json");
@@ -709,6 +709,46 @@ async function processarAvisos() {
   processandoAvisos = false;
 }
 setInterval(() => { processarAvisos().catch(() => {}); }, 2000);
+
+// ── Follow-up: o painel decide QUEM precisa (esfriou sem agendar) e enfileira
+//    {tel, instrucao} em sofia-followup.jsonl; aqui a Sofia GERA a mensagem com IA
+//    (usando as últimas mensagens da conversa) e ENVIA. Uma por pedido.
+const FOLLOWUP_FILE = path.join(DIR, "sofia-followup.jsonl");
+let processandoFollowup = false;
+async function processarFollowups() {
+  if (processandoFollowup || !pronta) return;
+  let tam = 0; try { tam = fs.statSync(FOLLOWUP_FILE).size; } catch { return; }
+  if (!tam) return;
+  processandoFollowup = true;
+  const tmp = FOLLOWUP_FILE + "." + Date.now() + ".proc";
+  let linhas: string[] = [];
+  try { fs.renameSync(FOLLOWUP_FILE, tmp); linhas = fs.readFileSync(tmp, "utf8").split("\n").map((l) => l.trim()).filter(Boolean); fs.rmSync(tmp, { force: true }); }
+  catch { processandoFollowup = false; return; }
+  for (const l of linhas) {
+    let ent: any = null; try { ent = JSON.parse(l); } catch { continue; }
+    const tel = String(ent?.tel || "").trim();
+    if (!tel) continue;
+    // Trava de segurança: nunca faz follow-up de bloqueado nem de quem está sob
+    // controle humano (o painel já filtra, mas conferimos de novo aqui).
+    if (estaBloqueado(tel)) { log(`follow-up de bloqueado (${tel}) — ignorado.`); continue; }
+    enfileirar(async () => {
+      try {
+        // Contexto: as últimas mensagens dessa conversa no inbox.
+        const c = inbox.get(tel);
+        const linhasConv = c ? c.msgs.slice(-14).map((m) => ({ autor: m.autor, texto: m.texto })) : [];
+        const msg = (await gerarFollowup(linhasConv, String(ent?.instrucao || ""))).trim();
+        if (!msg) { log(`follow-up de ${tel}: IA não gerou mensagem — pulado.`); return; }
+        const alvo = await resolverIdEnvio(tel);
+        registrarNaMemoria(tel, "sofia", msg);
+        registrarInbox(tel, alvo, "", "sofia", msg);
+        await enviar(alvo, msg);
+        log(`follow-up enviado para ${tel}.`);
+      } catch (e: any) { log(`falha no follow-up de ${tel}: ${e?.message || e}`); }
+    });
+  }
+  processandoFollowup = false;
+}
+setInterval(() => { processarFollowups().catch(() => {}); }, 3000);
 
 // ── Ponte de comando painel → Sofia ─────────────────────────────────────────
 // O painel grava sofia-comando.json para pedir ações que só dá para fazer aqui.

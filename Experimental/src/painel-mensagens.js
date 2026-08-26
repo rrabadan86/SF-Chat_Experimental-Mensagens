@@ -2278,6 +2278,24 @@ function paginaSofia(aviso, erro) {
         </div>
       </div>
 
+      <div class="sec-t">🔁 Follow-up de leads <small style="font-weight:600;color:var(--cinza)">(a SoFIA retoma sozinha quem esfriou sem agendar)</small></div>
+      <div class="card">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" name="followupOn" value="1"${e.followup.on ? ' checked' : ''} style="width:auto;margin:0">
+          Ativar follow-up automático${infoI('Quando uma lead conversa e <b>para de responder sem agendar</b>, a SoFIA espera o tempo abaixo e manda <b>uma</b> mensagem de retomada, escrita pela IA com base nas últimas mensagens daquela conversa. Nunca incomoda quem <b>já agendou</b>, quem está <b>bloqueado</b> ou sob <b>controle humano</b>, e manda <b>só uma vez</b> por conversa (até a lead responder de novo).')}
+        </label>
+        <p class="quando" style="margin:6px 0 14px">Desativado, a SoFIA não faz retomada nenhuma.</p>
+        <div style="max-width:420px">
+          <label>Esperar sem resposta</label>
+          <div class="cfg-in"><input type="number" name="followupHoras" min="0.25" max="720" step="0.25" value="${e.followup.horas}"><span class="suf">horas (ex.: 24 = 1 dia)</span></div>
+        </div>
+        <div style="margin-top:14px">
+          <label>Instrução para a IA gerar a mensagem</label>
+          <textarea name="followupInstrucao" rows="3" maxlength="1000" placeholder="Ex.: Pergunte se ela ainda tem interesse e retome o convite para a aula experimental gratuita, de forma calorosa." style="width:100%;resize:vertical">${esc(e.followup.instrucao)}</textarea>
+          <p class="quando" style="margin:6px 0 0">A IA escreve a mensagem no tom da SoFIA, usando o contexto da conversa + essa orientação.</p>
+        </div>
+      </div>
+
       <div class="sec-t">💬 Conversa da SoFIA <small style="font-weight:600;color:var(--cinza)">(cada bloco é uma parte do atendimento — dá pra editar o título, remover ou adicionar)</small></div>
       <div id="secoes">${cardsSecoes}</div>
       <button type="button" class="reset" onclick="adicionarSecao()" style="margin:2px 0 10px">➕ Nova seção</button>
@@ -2964,6 +2982,7 @@ const server = http.createServer((req, res) => {
           sessaoHoras: p.get('sessaoHoras') || '12',
           healthMin: p.get('healthMin') != null ? p.get('healthMin') : '3',
           agruparSeg: p.get('agruparSeg') != null ? p.get('agruparSeg') : '7',
+          followup: { on: p.get('followupOn') === '1', horas: p.get('followupHoras') || '24', instrucao: p.get('followupInstrucao') || '' },
           midias: {
             grade_imagem: (p.get('grade_imagem') || '').trim(),
             grade_link: (p.get('grade_link') || '').trim(),
@@ -3231,11 +3250,24 @@ function publicarRegras() {
     sofia.gravarRegras(regras);
   } catch (_) {}
 }
+// Estado do follow-up (arquivos co-locados com os demais da Sofia, fora do Git).
+const FU_AGENDOU_FILE = p.join(sofia.DIR, 'sofia-agendaram.json');   // quem já agendou (não recebe follow-up)
+const FU_FEITO_FILE = p.join(sofia.DIR, 'sofia-followup-feito.json'); // { chave: ultimoInboundSeguido }
+function fuLerJson(f, def) { try { return JSON.parse(fs.readFileSync(f, 'utf8')) || def; } catch (_) { return def; } }
+function fuSalvarJson(f, o) { try { fs.writeFileSync(f, JSON.stringify(o), 'utf8'); } catch (_) {} }
+function fuMarcarAgendou(tels) {
+  const set = new Set((fuLerJson(FU_AGENDOU_FILE, []) || []).map(x => String(x).replace(/\D/g, '')));
+  let mudou = false;
+  for (const t of tels) { const d = String(t || '').replace(/\D/g, ''); if (d && !set.has(d)) { set.add(d); mudou = true; } }
+  if (mudou) fuSalvarJson(FU_AGENDOU_FILE, Array.from(set).slice(-20000));
+}
+
 // 1) Agendamentos concluídos (gatilho 'agendou') → aplica tags + avisa.
 function processarAgendamentos() {
   let evs = [];
   try { evs = sofia.consumirAgendamentos(); } catch (_) { return; }
   if (!evs.length) return;
+  try { fuMarcarAgendou(evs.map(ev => ev.telefone)); } catch (_) {} // registra p/ o follow-up NÃO incomodar quem agendou
   let autos = [];
   try { autos = contatos.tagsPorGatilho('agendou'); } catch (_) {}
   if (!autos.length) return;
@@ -3243,6 +3275,40 @@ function processarAgendamentos() {
     const nome = ev.nome || '';
     for (const a of autos) aplicarAutomacao({ telefone: ev.telefone, nome, tag: a.tag, avisarWpp: a.avisarWpp, motivo: 'agendou', extra: ev.when ? `📅 ${ev.when}` : '' });
   }
+}
+
+// 3) Follow-up: enfileira retomada para leads que esfriaram SEM agendar.
+//    A Sofia (listener) é quem GERA (IA) e ENVIA — aqui só decidimos QUEM.
+function processarFollowups() {
+  let cfg; try { cfg = sofia.lerFollowupCfg(); } catch (_) { return; }
+  if (!cfg || !cfg.on) return;
+  const esperaMs = Math.max(0.25, cfg.horas) * 3600 * 1000;
+  const CAP = Math.max(esperaMs * 3, 14 * 24 * 3600 * 1000); // não pinga conversas muito antigas
+  const agora = Date.now();
+  let inbox = {}; try { inbox = sofia.conversas() || {}; } catch (_) { return; }
+  let humano = {}; try { humano = sofia.lerHumano() || {}; } catch (_) {}
+  const agendaram = new Set((fuLerJson(FU_AGENDOU_FILE, []) || []).map(x => String(x).replace(/\D/g, '')));
+  let tagsAgendou = []; try { tagsAgendou = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {}
+  let contatosMap = {}; try { contatosMap = contatos.carregar() || {}; } catch (_) {}
+  const feito = fuLerJson(FU_FEITO_FILE, {}) || {};
+  let mudou = false;
+  for (const chave of Object.keys(inbox)) {
+    const c = inbox[chave] || {}; const msgs = c.msgs || [];
+    if (!msgs.length) continue;
+    let ultimoAluna = 0;
+    for (const m of msgs) if (m.autor === 'aluna' && m.em > ultimoAluna) ultimoAluna = m.em;
+    if (!ultimoAluna) continue;                              // a lead nunca falou → ignora
+    const idle = agora - (c.ultimaEm || ultimoAluna);
+    if (idle < esperaMs || idle > CAP) continue;             // ainda quente, ou antiga demais
+    if ((feito[chave] || 0) >= ultimoAluna) continue;        // já fez follow-up deste ciclo
+    const d = String(chave).replace(/\D/g, '');
+    if (sofia.estaBloqueado(chave)) continue;                // bloqueado
+    if (humano[chave]) continue;                             // sob controle humano
+    if (agendaram.has(d)) continue;                          // já agendou
+    try { const ct = contatosMap[contatos.normTel(chave)]; if (ct && (ct.tags || []).some(t => tagsAgendou.includes(t))) continue; } catch (_) {}
+    try { sofia.enfileirarFollowup(chave, cfg.instrucao); feito[chave] = ultimoAluna; mudou = true; } catch (_) {}
+  }
+  if (mudou) fuSalvarJson(FU_FEITO_FILE, feito);
 }
 // 2) Ações detectadas pelo listener (novo/palavra/campanha/encerrou).
 function processarEventos() {
@@ -3267,6 +3333,9 @@ function processarEventos() {
 publicarRegras();
 try {
   setInterval(() => { try { processarAgendamentos(); } catch (_) {} try { processarEventos(); } catch (_) {} try { publicarRegras(); } catch (_) {} }, 4000);
+  // Follow-up: cadência mais lenta (as leads esfriam em horas, não em segundos).
+  setInterval(() => { try { processarFollowups(); } catch (_) {} }, 120000);
+  setTimeout(() => { try { processarFollowups(); } catch (_) {} }, 30000);
 } catch (_) {}
 
 server.listen(PORT, HOST, () => {

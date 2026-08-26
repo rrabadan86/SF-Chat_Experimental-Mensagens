@@ -748,6 +748,42 @@ export async function resumirConversa(linhas: { autor: string; texto: string }[]
   }
 }
 
+// Gera UMA mensagem de follow-up (retomada) para uma lead que esfriou sem agendar,
+// com base nas últimas mensagens da conversa + uma instrução do Studio. Curta,
+// calorosa e no tom da SoFIA. Retorna "" se não conseguir (o chamador não envia).
+export async function gerarFollowup(
+  linhas: { autor: string; texto: string }[],
+  instrucao: string,
+): Promise<string> {
+  const texto = (linhas || [])
+    .map((l) => `${l.autor === "aluna" ? "Aluna" : l.autor === "humano" ? "Atendente" : "SoFIA"}: ${l.texto}`)
+    .join("\n")
+    .slice(0, 6000);
+  const instr = (instrucao || "").trim() ||
+    "Pergunte, de forma leve, se ela ainda tem interesse em conhecer o Studio e retome o convite para a aula experimental gratuita.";
+  try {
+    const resp = await comRetry(() =>
+      anthropic.messages.create({
+        model: MODELO_CONVERSA,
+        max_tokens: 320,
+        system:
+          "Você é a SoFIA, atendente virtual do SlimFit (Studio de treinamento para mulheres). " +
+          "Uma lead conversou com você e parou de responder SEM agendar a aula experimental. " +
+          "Escreva UMA única mensagem de WhatsApp para retomar a conversa, curta (1 a 3 frases), " +
+          "calorosa e natural — como uma atendente humana, não robótica. Use o contexto da conversa " +
+          "abaixo para ser específica quando fizer sentido. Não invente informações, não repita algo " +
+          "que você já disse igual, não seja insistente. Português do Brasil. Responda APENAS com o " +
+          "texto da mensagem, sem aspas, sem explicação.\n\nOrientação do Studio: " + instr,
+        messages: [{ role: "user", content: `Conversa até aqui:\n\n${texto || "(sem histórico registrado)"}\n\nEscreva a mensagem de retomada:` }],
+      }),
+    );
+    return resp.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.TextBlock).text).join("").trim();
+  } catch (e: any) {
+    console.log("⚠️  gerarFollowup falhou:", e?.message ?? e);
+    return "";
+  }
+}
+
 interface ResumoAgendamento { nome_completo: string; email: string; dia: string; hora: string; }
 
 async function extrairResumo(conversa: Conversa, nomeWhatsapp: string): Promise<ResumoAgendamento> {
