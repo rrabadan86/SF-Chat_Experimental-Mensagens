@@ -2110,6 +2110,10 @@ function paginaSofia(aviso, erro) {
             <div class="cfg-in"><input type="number" name="pausaMin" min="1" max="1440" value="${e.pausaMin}"><span class="suf">minutos</span></div>
           </div>
           <div>
+            <label>🧩 Agrupar mensagens da aluna${infoI('A aluna às vezes manda <b>várias mensagens seguidas</b>. A SoFIA espera esse tempo após a última e responde <b>uma vez só</b>, juntando tudo — evita respostas cruzadas/confusas. Padrão: 7 segundos. 0 = responder na hora. As mensagens aparecem no painel na hora.')}</label>
+            <div class="cfg-in"><input type="number" name="agruparSeg" min="0" max="120" step="1" value="${e.agruparSeg}"><span class="suf">segundos (0 = na hora)</span></div>
+          </div>
+          <div>
             <label>🧠 Tempo de sessão (memória)${infoI('Depois desse tempo <b>sem mensagens</b>, a próxima mensagem da aluna começa uma conversa <b>nova</b> — a SoFIA não lembra do que foi dito antes. Na aba Conversas aparece como <b>“Sessão encerrada”</b>. Padrão: 12 horas.')}</label>
             <div class="cfg-in"><input type="number" name="sessaoHoras" min="1" max="720" step="1" value="${e.sessaoHoras}"><span class="suf">horas</span></div>
           </div>
@@ -2808,6 +2812,7 @@ const server = http.createServer((req, res) => {
           pausaMin: p.get('pausaMin') || '30',
           sessaoHoras: p.get('sessaoHoras') || '12',
           healthMin: p.get('healthMin') != null ? p.get('healthMin') : '3',
+          agruparSeg: p.get('agruparSeg') != null ? p.get('agruparSeg') : '7',
           midias: {
             grade_imagem: (p.get('grade_imagem') || '').trim(),
             grade_link: (p.get('grade_link') || '').trim(),

@@ -861,6 +861,61 @@ function tratarSemTexto(msg: any) {
   });
 }
 
+// ── Agrupamento de mensagens (debounce) ─────────────────────────────────────
+//    A aluna às vezes manda VÁRIAS mensagens seguidas (ou responde a uma pergunta
+//    antiga enquanto a SoFIA ainda estava respondendo) — aí as respostas "se
+//    cruzam" e a conversa fica confusa. Para evitar, esperamos alguns segundos
+//    após a ÚLTIMA mensagem e respondemos UMA vez, juntando tudo. As mensagens já
+//    entram no inbox na hora (painel ao vivo). Tempo editável no painel
+//    (sofia-agrupar-seg.txt); 0 = responder na hora.
+const AGRUPAR_FILE = path.join(DIR, "sofia-agrupar-seg.txt");
+function agruparMs(): number {
+  try {
+    const n = parseFloat(fs.readFileSync(AGRUPAR_FILE, "utf8").trim().replace(",", "."));
+    if (Number.isFinite(n) && n >= 0) return Math.round(n * 1000);
+  } catch {}
+  const env = parseInt(process.env.SOFIA_AGRUPAR_MS || "", 10);
+  return Number.isFinite(env) ? env : 7000; // padrão 7s
+}
+type Pend = { jid: string; telefone: string; textos: string[]; timer: ReturnType<typeof setTimeout> | null };
+const pendencias = new Map<string, Pend>();
+function agendarResposta(chave: string, jid: string, telefone: string, texto: string) {
+  let p = pendencias.get(chave);
+  if (!p) { p = { jid, telefone, textos: [], timer: null }; pendencias.set(chave, p); }
+  p.jid = jid; p.telefone = telefone;
+  p.textos.push(texto);
+  const ms = agruparMs();
+  if (ms <= 0) { dispararResposta(chave); return; } // desligado → responde já
+  if (p.timer) clearTimeout(p.timer);
+  p.timer = setTimeout(() => dispararResposta(chave), ms); // reinicia a cada nova mensagem
+}
+function dispararResposta(chave: string) {
+  const p = pendencias.get(chave);
+  if (!p) return;
+  pendencias.delete(chave);
+  if (p.timer) clearTimeout(p.timer);
+  const jid = p.jid, telefone = p.telefone;
+  const textoJunto = p.textos.join("\n").trim();
+  if (!textoJunto) return;
+  enfileirar(async () => {
+    const reply = await responderComMemoria(chave, textoJunto, telefone); // trata on/off, handoff e memória
+    const urls = drenarMidias(); // imagens que a Sofia pediu nesta resposta
+    if ((reply && reply.trim()) || urls.length) {
+      if (reply && reply.trim()) await enviarHumano(jid, reply, chave); // registra cada parte (= WhatsApp)
+      for (const url of urls) {
+        try {
+          await mostrarDigitando(jid);
+          await sleep(900);
+          const media = await MessageMedia.fromUrl(url, { unsafeMime: true });
+          await enviar(jid, media);
+          registrarInbox(chave, jid, "", "sofia", "🖼️ (imagem enviada)"); // aparece no painel
+        } catch (e: any) { log("falha ao enviar imagem: " + (e?.message || e)); }
+      }
+      await pararDigitando(jid);
+    }
+  });
+}
+
 // Mensagem RECEBIDA da aluna (não é fromMe).
 client.on("message", (msg: any) => {
   try {
@@ -870,24 +925,9 @@ client.on("message", (msg: any) => {
     enfileirar(async () => {
       const { chave, telefone } = await resolverTel(msg); // chave estável p/ memória + telefone real p/ agendar
       const nomeAluna = (msg._data && msg._data.notifyName) || "";
-      registrarInbox(chave, msg.from, nomeAluna, "aluna", texto); // mostra no inbox mesmo se a Sofia estiver pausada
+      registrarInbox(chave, msg.from, nomeAluna, "aluna", texto); // mostra no inbox NA HORA (painel ao vivo)
       try { checarGatilhosAluna(chave, nomeAluna, texto); } catch (e: any) { log("gatilhos: " + (e?.message || e)); } // automações por tag (palavra/campanha)
-      const reply = await responderComMemoria(chave, texto, telefone); // já cuida de on/off, handoff e memória
-      const urls = drenarMidias(); // imagens que a Sofia pediu nesta resposta
-      if ((reply && reply.trim()) || urls.length) {
-        // registra CADA parte enviada (igual às bolhas do WhatsApp no modo humano)
-        if (reply && reply.trim()) await enviarHumano(msg.from, reply, chave);
-        for (const url of urls) {
-          try {
-            await mostrarDigitando(msg.from);
-            await sleep(900);
-            const media = await MessageMedia.fromUrl(url, { unsafeMime: true });
-            await enviar(msg.from, media);
-            registrarInbox(chave, msg.from, "", "sofia", "🖼️ (imagem enviada)"); // aparece no painel
-          } catch (e: any) { log("falha ao enviar imagem: " + (e?.message || e)); }
-        }
-        await pararDigitando(msg.from);
-      }
+      agendarResposta(chave, msg.from, telefone, texto); // espera as próximas e responde juntando (debounce)
     });
   } catch (e: any) { log("erro no on(message): " + (e?.message || e)); }
 });
