@@ -2250,6 +2250,23 @@ function paginaSofia(aviso, erro) {
       </details>
 
       <details class="acc-sec">
+        <summary class="sec-t" style="cursor:pointer;padding:4px 0">🧠 Modelo de IA <small style="font-weight:400;color:var(--cinza)">— qual Claude a SoFIA usa (vale após reiniciar)</small></summary>
+      <div class="card">
+        <div style="display:flex;gap:18px;flex-wrap:wrap">
+          <div style="flex:1;min-width:240px">
+            <label>Conversa ${infoI('Modelo que <b>conversa com as alunas</b> e gera o <b>follow-up</b>. É o mais importante para a qualidade do atendimento. Padrão: Sonnet 5.')}</label>
+            <select name="modeloConversa" style="width:100%;padding:9px">${e.modelosValidos.map(m => `<option value="${esc(m.id)}"${m.id === e.modelos.conversa ? ' selected' : ''}>${esc(m.rot)}</option>`).join('')}</select>
+          </div>
+          <div style="flex:1;min-width:240px">
+            <label>Extração e resumos ${infoI('Modelo que <b>extrai os dados</b> do agendamento (nome, e-mail, dia, hora) e gera os <b>resumos</b> das interações. Roda pouco — dá para usar um mais barato aqui. Padrão: Sonnet 5.')}</label>
+            <select name="modeloExtracao" style="width:100%;padding:9px">${e.modelosValidos.map(m => `<option value="${esc(m.id)}"${m.id === e.modelos.extracao ? ' selected' : ''}>${esc(m.rot)}</option>`).join('')}</select>
+          </div>
+        </div>
+        <p class="quando" style="margin:10px 0 0">Modelos maiores custam mais por conversa. A troca vale <b>após reiniciar a SoFIA</b> (<code>pm2 restart sofia-listener</code>).</p>
+      </div>
+      </details>
+
+      <details class="acc-sec">
         <summary class="sec-t" style="cursor:pointer;padding:4px 0">⌨️ Jeito de responder <small style="font-weight:400;color:var(--cinza)">— quebra em várias mensagens, “digitando…”, velocidade</small></summary>
       <div class="card">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -2986,6 +3003,7 @@ const server = http.createServer((req, res) => {
           healthMin: p.get('healthMin') != null ? p.get('healthMin') : '3',
           agruparSeg: p.get('agruparSeg') != null ? p.get('agruparSeg') : '7',
           followup: { on: p.get('followupOn') === '1', horas: p.get('followupHoras') || '24', instrucao: p.get('followupInstrucao') || '' },
+          modelos: { conversa: p.get('modeloConversa') || '', extracao: p.get('modeloExtracao') || '' },
           midias: {
             grade_imagem: (p.get('grade_imagem') || '').trim(),
             grade_link: (p.get('grade_link') || '').trim(),

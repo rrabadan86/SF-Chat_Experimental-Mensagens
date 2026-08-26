@@ -504,11 +504,22 @@ function carregarPrompt(): string {
 }
 
 
-// MODELO DA CONVERSA: Haiku 4.5 (rápido e barato) dá conta do roteiro da Sofia.
-// Se notar a Sofia escorregando em alguma regra, troque para "claude-sonnet-5".
-const MODELO_CONVERSA = "claude-sonnet-5";
-// MODELO DA EXTRAÇÃO: Sonnet, por precisão (roda 1x por agendamento, custo mínimo).
-const MODELO_EXTRACAO = "claude-sonnet-5";
+// MODELO DE IA — editável pelo painel (SoFIA → Configuração). Fica em
+// sofia-modelo.json; lido AQUI no boot (mudar → reiniciar o sofia-listener).
+// Lista fixa de válidos + padrão Sonnet 5 (se o arquivo faltar ou vier inválido).
+const MODELO_PADRAO = "claude-sonnet-5";
+const MODELOS_VALIDOS = ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5-20251001"];
+function lerModelo(qual: "conversa" | "extracao"): string {
+  try {
+    const o = JSON.parse(fs.readFileSync(path.join(BASE_DIR, "sofia-modelo.json"), "utf-8"));
+    const m = o && o[qual];
+    if (typeof m === "string" && MODELOS_VALIDOS.includes(m)) return m;
+  } catch { /* sem arquivo/ inválido → padrão */ }
+  return MODELO_PADRAO;
+}
+const MODELO_CONVERSA = lerModelo("conversa"); // conversa com as alunas + follow-up
+const MODELO_EXTRACAO = lerModelo("extracao"); // extração dos dados + resumos
+console.log(`🧠 modelos: conversa=${MODELO_CONVERSA} · extração=${MODELO_EXTRACAO}`);
 
 const options: ClaudeAgentOptions = {
   model: MODELO_CONVERSA,

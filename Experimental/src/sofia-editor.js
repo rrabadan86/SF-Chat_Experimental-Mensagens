@@ -35,6 +35,7 @@ const F = {
   respostas: path.join(DIR, 'sofia-respostas.jsonl'), // fila de respostas do painel → listener envia
   humano: path.join(DIR, 'sofia-humano.json'), // conversas sob controle humano (Sofia não responde) — lido pela Sofia
   bloqueios: path.join(DIR, 'sofia-bloqueios.json'), // números bloqueados (Sofia ignora) — painel escreve, listener lê
+  modelo: path.join(DIR, 'sofia-modelo.json'), // modelo de IA (conversa/extração) — painel escreve, sofia.ts lê no boot
   followupCfg: path.join(DIR, 'sofia-followup-cfg.json'), // config do follow-up (ligado/tempo/instrução) — painel
   followup: path.join(DIR, 'sofia-followup.jsonl'), // fila de follow-ups a gerar+enviar — painel escreve, listener consome
   campanhas: path.join(DIR, 'campanhas.json'), // estado das campanhas — publicado pelo listener (painel só lê)
@@ -212,6 +213,8 @@ function estado() {
     healthMin: lerHealthMin(),
     agruparSeg: lerAgruparSeg(),
     followup: lerFollowupCfg(),
+    modelos: lerModelos(),
+    modelosValidos: MODELOS_VALIDOS,
     secoes: parseSecoes(ler(F.prompt)),
     extracao: ler(F.extracao),
     midias: lerMidias(),
@@ -220,7 +223,7 @@ function estado() {
 }
 
 // Salva tudo (com backup e validação mínima). Lança Error em caso de recusa.
-function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg, followup, midias, ritmo }) {
+function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg, followup, modelos, midias, ritmo }) {
   const promptMontado = montarPrompt(secoes || []);
   const ext = String(extracao || '').trim();
   if (promptMontado.trim().length < 50 || ext.length < 30) {
@@ -235,6 +238,7 @@ function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg
   if (healthMin !== undefined) gravarHealthMin(healthMin);
   if (agruparSeg !== undefined) gravarAgruparSeg(agruparSeg);
   if (followup !== undefined) gravarFollowupCfg(followup || {});
+  if (modelos !== undefined) gravarModelos(modelos || {});
   gravarMidias(midias || {});
   if (ritmo) gravarRitmo(ritmo);
 }
@@ -395,6 +399,26 @@ function setBloqueio(tel, ativo) {
   return !!ativo;
 }
 
+// ── Modelo de IA (conversa e extração) — lido pelo sofia.ts no boot ──────────
+const MODELO_PADRAO = 'claude-sonnet-5';
+// Lista fixa de modelos válidos (rótulo amigável + id). Menu suspenso no painel.
+const MODELOS_VALIDOS = [
+  { id: 'claude-sonnet-5', rot: 'Sonnet 5 — padrão (equilíbrio)' },
+  { id: 'claude-opus-5', rot: 'Opus 5 — mais capaz (mais caro)' },
+  { id: 'claude-haiku-4-5-20251001', rot: 'Haiku 4.5 — mais rápido e barato' },
+];
+function _modeloValido(m) { return MODELOS_VALIDOS.some(x => x.id === m) ? m : MODELO_PADRAO; }
+function lerModelos() {
+  let o = {};
+  try { o = JSON.parse(ler(F.modelo)) || {}; } catch (_) { o = {}; }
+  return { conversa: _modeloValido(o.conversa), extracao: _modeloValido(o.extracao) };
+}
+function gravarModelos({ conversa, extracao }) {
+  const cfg = { conversa: _modeloValido(conversa), extracao: _modeloValido(extracao) };
+  gravarArquivo(F.modelo, JSON.stringify(cfg));
+  return cfg;
+}
+
 // ── Follow-up (retomada de leads que esfriaram sem agendar) ──────────────────
 const FOLLOWUP_INSTRUCAO_PADRAO = 'Pergunte de forma leve se ela ainda tem interesse em conhecer o Studio e que estamos de portas abertas para ela fazer a aula experimental gratuita. Seja calorosa e natural.';
 function lerFollowupCfg() {
@@ -441,6 +465,6 @@ function setControleHumano(chave, ativo) {
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, enviarComando,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, enviarComando,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };
