@@ -312,6 +312,37 @@ function armarWatchdogBoot() {
   }, BOOT_TIMEOUT_MS);
 }
 
+// ── Health-check (pega o "travamento silencioso") ───────────────────────────
+//    O watchdog acima só cobre "autenticou mas nunca ficou PRONTA". Mas às vezes
+//    o whatsapp-web.js FICA "pronta" na memória e, mesmo assim, PARA de receber/
+//    enviar (sessão zumbi) SEM disparar "disconnected" — a SoFIA fica muda e nada
+//    avisa. Aqui, de tempos em tempos, perguntamos o estado real (getState, com
+//    timeout). Se não estiver CONNECTED em 2 checagens seguidas, avisamos no
+//    celular (ntfy) e reiniciamos (pm2 sobe de novo). Desliga com SOFIA_HEALTH_MS=0.
+const HEALTH_MS = parseInt(process.env.SOFIA_HEALTH_MS || "180000", 10); // 3 min
+let healthFails = 0;
+async function checarSaude() {
+  if (!pronta) return; // só cobramos saúde quando a sessão deveria estar no ar
+  let estado: string | null = null;
+  try {
+    estado = await Promise.race([
+      client.getState(),
+      new Promise<string>((_, rej) => setTimeout(() => rej(new Error("timeout")), 20000)),
+    ]);
+  } catch (e: any) { estado = null; log("health: getState falhou (" + (e?.message || e) + ")"); }
+  if (estado === "CONNECTED") { healthFails = 0; return; }
+  healthFails++;
+  log(`health: sessão não-CONNECTED (estado=${estado}) — falha ${healthFails}/2.`);
+  if (healthFails >= 2) {
+    log("health: SoFIA parece TRAVADA (sessão zumbi) — avisando e reiniciando.");
+    try { await enviarNtfy("SoFIA travou - reiniciando", "A SoFIA parou de responder (sessao travada, sem cair o QR). Ela esta reiniciando sozinha. Se depois de alguns minutos ainda nao responder, reescaneie o QR pelo painel.", "warning", "high"); } catch {}
+    pronta = false;
+    setStatus("iniciando");
+    process.exit(1); // pm2 reinicia o processo
+  }
+}
+if (HEALTH_MS > 0) setInterval(() => { checarSaude().catch(() => {}); }, HEALTH_MS);
+
 // Serializa o processamento (uma mensagem por vez): mantém a fila de mídias
 // (drenarMidias) coerente e é mais gentil com a API da Claude.
 let fila: Promise<any> = Promise.resolve();
@@ -828,6 +859,7 @@ client.on("message", (msg: any) => {
             await sleep(900);
             const media = await MessageMedia.fromUrl(url, { unsafeMime: true });
             await enviar(msg.from, media);
+            registrarInbox(chave, msg.from, "", "sofia", "🖼️ (imagem enviada)"); // aparece no painel
           } catch (e: any) { log("falha ao enviar imagem: " + (e?.message || e)); }
         }
         await pararDigitando(msg.from);
