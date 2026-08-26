@@ -30,6 +30,18 @@ const sofia = require('./sofia-editor');
 const contatos = require('./contatos');
 const usuarios = require('./usuarios');
 
+// Limite de aulas experimentais por turma — editável na aba SoFIA → Configuração.
+// Gravado em data/sofia-exp-limite.txt; o cálculo da grade (Python) lê este arquivo.
+const EXP_LIM_FILE = path.join(__dirname, '..', 'data', 'sofia-exp-limite.txt');
+function lerExpLimite() { try { const n = parseInt(String(fs.readFileSync(EXP_LIM_FILE, 'utf8')).trim(), 10); return (Number.isFinite(n) && n >= 0) ? n : null; } catch (_) { return null; } }
+function gravarExpLimite(n) {
+  const v = parseInt(n, 10);
+  if (!Number.isFinite(v) || v < 0) return false;
+  try { fs.mkdirSync(path.dirname(EXP_LIM_FILE), { recursive: true }); } catch (_) {}
+  fs.writeFileSync(EXP_LIM_FILE, String(v), 'utf8');
+  return true;
+}
+
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
 // Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
 // (reverse_proxy localhost:8080) ou por um túnel SSH — nunca direto da internet.
@@ -2016,6 +2028,12 @@ function paginaSofia(aviso, erro) {
         <p class="quando" style="margin:6px 0 0">Depois desse tempo <b>sem mensagens</b>, a próxima mensagem da aluna começa uma conversa <b>nova</b> — a SoFIA não lembra do que foi dito antes. No painel (aba Conversas), a conversa aparece como <b>“Sessão encerrada”</b> quando passa desse tempo. Padrão: 12 horas.</p>
       </div>
 
+      <div class="card">
+        <label>🎟️ Máx. de aulas experimentais por turma</label>
+        <div><input type="number" name="expLimite" min="0" max="50" step="1" value="${lerExpLimite() == null ? 2 : lerExpLimite()}" style="width:130px"> por turma <small style="color:var(--cinza)">(0 = sem limite)</small></div>
+        <p class="quando" style="margin:6px 0 0">Quando uma turma já tem esse número de aulas experimentais marcadas, a SoFIA <b>para de oferecer</b> aquele horário (mesmo com vaga normal). Aumente para aceitar mais experimentais por turma. Padrão: 2. Vale na próxima atualização da grade (poucos minutos). <b>Atenção:</b> a checagem final do agendamento roda no formulário (Render) — se aumentar muito aqui, garanta que o <code>EVO_MAX_EXPERIMENTAIS</code> lá também acompanha.</p>
+      </div>
+
       <div class="sec-t">⌨️ Jeito de responder <small style="font-weight:600;color:var(--cinza)">(deixa a SoFIA mais humana — vale na hora, sem reiniciar)</small></div>
       <div class="card">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -2665,6 +2683,7 @@ const server = http.createServer((req, res) => {
             delayMax: p.get('ritDelayMax') || '4500',
           },
         });
+        try { const el = p.get('expLimite'); if (el != null && el !== '') gravarExpLimite(el); } catch (_) {}
         res.writeHead(303, { Location: '/sofia?ok=1' }); res.end();
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });

@@ -236,9 +236,10 @@ def book_experimental(
     #     experimentais ATIVAS já marcadas na turma; se atingiu o limite, trata
     #     como turma cheia — a oportunidade já ficou cadastrada, mas NÃO vende nem
     #     matricula, e o Studio é avisado para reagendar.
-    if check_capacity and config.EVO_MAX_EXPERIMENTAIS:
+    _lim_exp = config.max_experimentais()
+    if check_capacity and _lim_exp:
         n_exp = count_experimentais(evo, id_configuration, when, branch_id=branch_id)
-        if n_exp is not None and n_exp >= config.EVO_MAX_EXPERIMENTAIS:
+        if n_exp is not None and n_exp >= _lim_exp:
             raise TurmaLotadaError(
                 fmt_datetime_evo(when),
                 alternatives=list_alternatives(evo, when, activity, id_activity, branch_id),
@@ -372,11 +373,12 @@ def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_i
             n_exp = None
             # Só checa experimentais nas turmas que, de outra forma, estariam
             # disponíveis (evita uma chamada /detail por turma já cheia).
-            if (disponivel and config.EVO_MAX_EXPERIMENTAIS
+            _lim_exp = config.max_experimentais()
+            if (disponivel and _lim_exp
                     and (budget <= 0 or time.monotonic() - t0 < budget)):
                 n_exp = _exp_cached(evo, s.get("idConfiguration"), dt, branch_id)
-                if n_exp is not None and n_exp >= config.EVO_MAX_EXPERIMENTAIS:
-                    disponivel = False       # já tem 2 experimentais -> indisponível
+                if n_exp is not None and n_exp >= _lim_exp:
+                    disponivel = False       # atingiu o limite de experimentais -> indisponível
             itens.append({
                 "idConfiguration": s.get("idConfiguration"),
                 "activityDate": fmt_datetime_evo(dt),   # "yyyy-MM-dd HH:mm"

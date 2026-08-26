@@ -54,3 +54,5 @@ data/usuarios.json
 data/.sessao-segredo
 
 data/tags-config.json
+
+data/sofia-exp-limite.txt
