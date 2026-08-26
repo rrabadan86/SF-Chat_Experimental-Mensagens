@@ -1104,7 +1104,7 @@ function paginaSofiaConversas(aviso, erro) {
     </div>
   </div>
 <script>
-  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, tagFiltro='', tagEdAberto=false;
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, tagFiltro='', tagEdAberto=false, ncNome='', ncDirty=false;
   var TAGS_EXISTENTES = ${JSON.stringify(tagsLista)};
   var SESSAO_MS = ${Math.round(sessaoHoras * 3600 * 1000)};
   function encerrada(c){ return c && c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS); }
@@ -1132,14 +1132,19 @@ function paginaSofiaConversas(aviso, erro) {
     var opts='<option value="">＋ escolher tag…</option>'+TAGS_EXISTENTES.map(function(t){return '<option>'+escH(t)+'</option>';}).join('');
     var tagLinha='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:.82rem">'
       +'🏷️ '+(tagEdAberto?'':resumo)
-      +'<a href="javascript:void(0)" onclick="toggleTagEd()" class="quando" style="margin:0;text-decoration:underline">'+(tagEdAberto?'fechar':'editar')+'</a></div>';
+      +'<a href="javascript:void(0)" onclick="toggleTagEd()" class="quando" style="margin:0;text-decoration:underline">'+(tagEdAberto?'fechar':'editar')+'</a>'
+      +((!tagEdAberto && ncDirty)?'<span style="color:#9a6b00;font-weight:700">⚠️ não salvo</span>':'')+'</div>';
     var editor = tagEdAberto ? ('<div style="margin:0 0 12px;padding:10px 12px;background:#fafafa;border:1px solid #eee;border-radius:10px">'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
+      +'<span class="quando" style="margin:0">Nome</span>'
+      +'<input id="ncNome" value="'+escH(ncNome)+'" placeholder="nome do contato" oninput="ncNome=this.value;ncMarcaSujo()" style="flex:1;min-width:150px;font-size:.85rem">'
+      +'</div>'
       +'<div id="ncChips" style="margin-bottom:6px"></div>'
       +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
       +'<select id="ncTagSel" onchange="ncAddTag(this.value);this.selectedIndex=0" style="min-width:150px;font-size:.85rem">'+opts+'</select>'
       +'<input id="ncNovaTag" placeholder="nova tag" style="width:110px;font-size:.85rem" onkeydown="if(event.key===\\'Enter\\'){event.preventDefault();ncAddTag(this.value);this.value=\\'\\';}">'
-      +'<button type="button" class="save" style="padding:5px 10px" onclick="salvarContato(\\''+k+'\\')">💾 '+(c.salvo?'Salvar tags':'Salvar contato')+'</button>'
-      +'<span id="ncMsg" class="quando">'+(c.salvo?'✓ salvo':'')+'</span>'
+      +'<button type="button" id="ncSalvar" class="save" style="padding:5px 10px" onclick="salvarContato(\\''+k+'\\')">💾 '+(c.salvo?'Salvar tags':'Salvar contato')+'</button>'
+      +'<span id="ncMsg" class="quando" style="margin:0"></span>'
       +'</div></div>') : '';
     var composer='<div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end">'
       +'<textarea id="msgTxt" rows="2" '+(hum?'':'disabled')+' placeholder="'+(hum?'Escreva uma mensagem…  (Enter envia)':'🔒 Clique em “assumir” para responder')+'" oninput="if(selecionada)rascunhos[selecionada]=this.value" onkeydown="msgKey(event)" style="flex:1;resize:vertical;min-height:44px;font-size:.9rem'+(hum?'':';background:#f5f5f5;color:#aaa;cursor:not-allowed')+'"></textarea>'
@@ -1147,7 +1152,7 @@ function paginaSofiaConversas(aviso, erro) {
       +'</div>'
       +'<div id="msgStatus" class="quando" style="margin-top:4px;min-height:14px;font-size:.75rem"></div>';
     chat.innerHTML = header+tagLinha+editor+'<div id="bolhas" style="overflow:auto;max-height:360px;padding-right:4px">'+bolhas+fim+'</div>'+composer;
-    if(tagEdAberto) ncRenderChips();
+    if(tagEdAberto){ ncRenderChips(); ncAtualizaStatus(); }
     var ta=document.getElementById('msgTxt'); if(ta) ta.value=rascunhos[k]||'';
     var b=document.getElementById('bolhas'); if(b) b.scrollTop=b.scrollHeight;
   }
@@ -1178,13 +1183,19 @@ function paginaSofiaConversas(aviso, erro) {
     var el=document.getElementById('ncChips'); if(!el) return;
     el.innerHTML = ncSel.map(function(t,i){ return '<span style="display:inline-flex;align-items:center;gap:5px;background:#e6f6f7;color:#0e8e91;border:1px solid #b8e6e7;border-radius:999px;padding:2px 9px;font-size:.74rem;margin:2px 4px 2px 0">'+escH(t)+'<a href="javascript:void(0)" onclick="ncRmTag('+i+')" style="color:#0e8e91;font-weight:800;text-decoration:none">×</a></span>'; }).join('') || '<span class="quando">sem tags</span>';
   }
-  function ncAddTag(t){ t=(t||'').trim(); if(t && ncSel.indexOf(t)<0){ ncSel.push(t); ncRenderChips(); } }
-  function ncRmTag(i){ ncSel.splice(i,1); ncRenderChips(); }
+  function ncAddTag(t){ t=(t||'').trim(); if(t && ncSel.indexOf(t)<0){ ncSel.push(t); ncRenderChips(); ncMarcaSujo(); } }
+  function ncRmTag(i){ ncSel.splice(i,1); ncRenderChips(); ncMarcaSujo(); }
+  function ncMarcaSujo(){ ncDirty=true; ncAtualizaStatus(); }
+  function ncAtualizaStatus(){
+    var msg=document.getElementById('ncMsg'), btn=document.getElementById('ncSalvar'); if(!msg) return;
+    if(ncDirty){ msg.innerHTML='<span style="color:#9a6b00;font-weight:700">⚠️ não salvo — clique em Salvar</span>'; if(btn)btn.style.boxShadow='0 0 0 3px rgba(255,91,87,.30)'; }
+    else { var c=ultimoData[selecionada]||{}; msg.innerHTML=c.salvo?'<span style="color:#1c8f52">✓ salvo</span>':''; if(btn)btn.style.boxShadow='none'; }
+  }
   function salvarContato(k){
     var msg=document.getElementById('ncMsg'); if(msg)msg.textContent='Salvando…';
-    var nome=(ultimoData[k]&&ultimoData[k].nome)||'';
+    var nome=(ncNome||'').trim();
     fetch('/sofia/contatos/salvar-novo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:k,nome:nome,tags:ncSel})})
-      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k]){ultimoData[k].salvo=true; ultimoData[k].tagsContato=ncSel.slice();} if(msg)msg.textContent='✓ salvo'; } else if(msg){ msg.textContent='❌ '+(j.erro||'falha'); } })
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k]){ultimoData[k].salvo=true; ultimoData[k].tagsContato=ncSel.slice(); if(nome)ultimoData[k].nome=nome;} ncDirty=false; ncAtualizaStatus(); } else if(msg){ msg.textContent='❌ '+(j.erro||'falha'); } })
       .catch(function(){ if(msg)msg.textContent='❌ erro'; });
   }
   function filtrarTag(t){ tagFiltro=t||''; pagina=0; renderInbox(ultimoData); }
@@ -1221,7 +1232,7 @@ function paginaSofiaConversas(aviso, erro) {
     }
   }
   function mudarPag(d){ pagina+=d; renderInbox(ultimoData); }
-  function abrir(k){ selecionada=k; ncSel=(ultimoData[k]&&ultimoData[k].tagsContato?ultimoData[k].tagsContato.slice():[]); tagEdAberto=false; ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); }
+  function abrir(k){ selecionada=k; ncSel=(ultimoData[k]&&ultimoData[k].tagsContato?ultimoData[k].tagsContato.slice():[]); ncNome=(ultimoData[k]&&ultimoData[k].nome)||''; ncDirty=false; tagEdAberto=false; ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); }
   function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(renderInbox).catch(function(){}); }
   atualizaInbox(); setInterval(atualizaInbox, 4000);
 </script>`;
