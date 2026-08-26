@@ -357,20 +357,33 @@ def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_i
     vistos, itens = set(), []
     d = inicio
     while d < fim:                                # cobre as semanas do intervalo
+        sched = evo.list_schedule(d, show_full_week=True, branch_id=branch_id) or []
         # Turmas que o EVO considera ABERTAS para aula experimental nessa semana
-        # (respeita turma FECHADA/cadeado e sem vaga de experimental). É a verdade
-        # do EVO: uma turma fechada simplesmente não vem aqui. Se a chamada falhar,
-        # abertas=None e NÃO aplicamos o filtro (fallback: a marcação revalida).
-        abertas = set()
+        # (respeita turma FECHADA/cadeado). É a verdade do EVO: uma turma fechada
+        # não vem aqui. MAS só confiamos nesse filtro se ele CASAR com a grade —
+        # se vier vazio ou com chaves que não batem (diferença de formato entre os
+        # endpoints), ignoramos, para NÃO marcar tudo como indisponível por engano.
+        # Se a chamada falhar, também ignoramos (a marcação revalida no EVO).
+        abertas = None
         try:
+            ab = set()
             for es in (evo.list_experimental_schedule(d, show_full_week=True, branch_id=branch_id) or []):
                 edt = session_start_datetime(es)
                 if edt is not None:
-                    abertas.add((es.get("idConfiguration"), edt.isoformat()))
+                    ab.add((es.get("idConfiguration"), edt.isoformat()))
+            sched_keys = set()
+            for s in sched:
+                sdt = session_start_datetime(s)
+                if sdt is not None:
+                    sched_keys.add((s.get("idConfiguration"), sdt.isoformat()))
+            if ab and (ab & sched_keys):           # só aplica se realmente casa com a grade
+                abertas = ab
+            elif ab:
+                log.warning("list_experimental_schedule não casou com a grade (%d itens, 0 em comum) — ignorando o filtro de turma fechada nesta semana.", len(ab))
         except Exception as _e:                    # noqa: BLE001 — grade não pode quebrar por isso
             log.warning("list_experimental_schedule falhou (%s) — sigo sem o filtro de turma fechada.", _e)
             abertas = None
-        for s in (evo.list_schedule(d, show_full_week=True, branch_id=branch_id) or []):
+        for s in sched:
             if not _match_activity(s, activity, id_activity):
                 continue
             dt = session_start_datetime(s)
