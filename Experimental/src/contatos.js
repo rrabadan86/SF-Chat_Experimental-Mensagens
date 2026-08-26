@@ -190,7 +190,8 @@ function listar({ q = '', tag = '', pagina = 0, porPagina = 25 } = {}) {
     const sd = s.replace(/\D/g, '');
     arr = arr.filter(c => (c.nome || '').toLowerCase().includes(s) || (sd && (c.tel || '').includes(sd)));
   }
-  if (tag) arr = arr.filter(c => (c.tags || []).includes(tag));
+  if (tag === '__sem__') arr = arr.filter(c => !((c.tags || []).length));
+  else if (tag) arr = arr.filter(c => (c.tags || []).includes(tag));
   arr.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
   const total = arr.length;
   const paginas = Math.max(1, Math.ceil(total / porPagina));
