@@ -1694,7 +1694,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     <div class="sec-t">📇 Contatos <small style="font-weight:600;color:#5c5960">(${total} no total — importe por CSV, etiquete e filtre por tag)</small></div>
 
     <details class="card" style="padding:10px 15px">
-      <summary style="cursor:pointer;font-weight:700">⬆️ Importar CSV <small style="font-weight:400;color:#5c5960">(colunas: Nome, Telefone, Tags)</small></summary>
+      <summary style="cursor:pointer;font-weight:700">⬆️ Importar CSV <small style="font-weight:400;color:#5c5960">(colunas: Nome, Telefone, Instruções personalizadas, Tags)</small></summary>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">
         <input type="file" id="csvFile" accept=".csv,text/csv">
         <button type="button" class="save" onclick="importarCsv()" style="padding:8px 14px">Importar arquivo</button>
@@ -1709,7 +1709,7 @@ function paginaSofiaContatos(aviso, erro, params) {
       <div style="margin-top:10px">
         <a href="/sofia/contatos/exportar" download class="save" style="display:inline-block;padding:8px 16px;text-decoration:none">📥 Baixar contatos (${total})</a>
       </div>
-      <p class="quando" style="margin:8px 0 0">Gera um <b>CSV</b> com <b>Nome, Telefone, Tags e Instruções</b> de todos os contatos — abre no Excel/Google Planilhas e serve para <b>migrar de plataforma</b> ou guardar backup. O próprio arquivo pode ser reimportado aqui.</p>
+      <p class="quando" style="margin:8px 0 0">Gera um <b>CSV</b> com <b>Nome, Telefone, Instruções personalizadas e Tags</b> de todos os contatos — abre no Excel/Google Planilhas e serve para <b>migrar de plataforma</b> ou guardar backup. O próprio arquivo pode ser reimportado aqui.</p>
     </details>
 
     <form method="GET" action="/sofia" class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -2861,10 +2861,10 @@ const server = http.createServer((req, res) => {
   // Modelo de CSV para baixar (cabeçalho + exemplos) — ajuda a montar a planilha.
   if (req.method === 'GET' && url === '/sofia/contatos/modelo.csv') {
     const linhas = [
-      'Nome,Telefone,Tags',
-      'Maria Silva,+55 (62) 99999-0000,Aluna ou Ex Aluna',
-      'Joana Souza,+55 62 98888-1111,FX 4 - Feito;Equipe',
-      'Ana,55 61 97777-2222,',
+      'Nome,Telefone,Instruções personalizadas,Tags',
+      'Maria Silva,+55 (62) 99999-0000,Prefere treinar de manhã,Aluna ou Ex Aluna',
+      'Joana Souza,+55 62 98888-1111,,FX 4 - Feito;Equipe',
+      'Ana,55 61 97777-2222,,',
     ];
     const csv = '﻿' + linhas.join('\r\n') + '\r\n'; // BOM p/ Excel abrir com acento certo
     res.writeHead(200, {
@@ -2876,7 +2876,7 @@ const server = http.createServer((req, res) => {
   }
   // Exportar TODA a base de contatos em CSV (para migrar de plataforma / backup).
   if (req.method === 'GET' && url === '/sofia/contatos/exportar') {
-    let csv = '﻿Nome,Telefone,Tags,Instruções\r\n';
+    let csv = '﻿Nome,Telefone,Instruções personalizadas,Tags\r\n';
     try { csv = contatos.exportarCSV(); } catch (_) {}
     const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
     res.writeHead(200, {

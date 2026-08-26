@@ -120,9 +120,9 @@ function exportarCSV() {
     const s = String(v == null ? '' : v);
     return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
-  const linhas = ['Nome,Telefone,Tags,Instruções'];
+  const linhas = ['Nome,Telefone,Instruções personalizadas,Tags'];
   for (const c of arr) {
-    linhas.push([cel(c.nome), cel(c.tel), cel((c.tags || []).join(';')), cel(c.instrucoes || '')].join(','));
+    linhas.push([cel(c.nome), cel(c.tel), cel(c.instrucoes || ''), cel((c.tags || []).join(';'))].join(','));
   }
   return '﻿' + linhas.join('\r\n') + '\r\n';
 }
