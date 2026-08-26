@@ -1006,14 +1006,62 @@ function paginaIndicadores(dias) {
   const maxA = Math.max(1, ...r.horariosAula.map(a => a.n));
   const aulaHtml = r.horariosAula.slice(0, 12).map(a => barLinha(a.hora, a.n, maxA, true)).join('');
 
-  const origemBloco = r.temOrigem ? `
-    <div class="sec-t">🔗 Por origem</div>
-    <div class="card">
-      ${r.porOrigem.map(o => `<div class="jobrow"><div class="jn">${esc(o.origem)}</div><div class="jc">${o.acessos} acesso${o.acessos === 1 ? '' : 's'} · <span style="color:var(--coral-esc)">${o.agendamentos} agend.</span></div></div>`).join('')}
-    </div>` : `
-    <div class="card" style="border-style:dashed">
-      <p class="quando" style="margin:0">💡 <b>Quer saber de onde vêm os acessos</b> (WhatsApp, Instagram, anúncio)? É só usar links etiquetados — ex.: <code>…/?origem=instagram</code>. Peça que eu gero os links e a partir daí a origem aparece aqui.</p>
+  // Gerador de links por origem: um link etiquetado por canal + botão "Copiar".
+  const FORM_BASE = (process.env.FORM_CLOUD_URL || 'https://sf-formularioexperimental.onrender.com').replace(/\/+$/, '');
+  const CANAIS = [
+    { slug: 'instagram',  rot: '📸 Instagram',  desc: 'Coloque na bio, nos stories e nos posts.' },
+    { slug: 'whatsapp',   rot: '💬 WhatsApp',   desc: 'Envie nas conversas, status e grupos.' },
+    { slug: 'indicacao',  rot: '🤝 Indicação',  desc: 'Para quando uma aluna indica uma amiga.' },
+    { slug: 'propaganda', rot: '📣 Propaganda', desc: 'Anúncios pagos, panfletos e parcerias.' },
+  ];
+  // Casa os contadores já registrados (r.porOrigem) com cada canal, sem diferenciar maiúsculas.
+  const origMap = {};
+  (r.porOrigem || []).forEach(o => { origMap[String(o.origem || '').trim().toLowerCase()] = o; });
+  const usados = new Set(CANAIS.map(c => c.slug));
+  const semTag = origMap['(sem etiqueta)'] || null;
+  const outras = (r.porOrigem || []).filter(o => {
+    const k = String(o.origem || '').trim().toLowerCase();
+    return k && k !== '(sem etiqueta)' && !usados.has(k);
+  });
+
+  const cardCanal = c => {
+    const o = origMap[c.slug] || { acessos: 0, agendamentos: 0 };
+    const url = `${FORM_BASE}/?origem=${c.slug}`;
+    const cont = (o.acessos || o.agendamentos)
+      ? `<b style="color:var(--teal-esc)">${o.acessos}</b> acesso${o.acessos === 1 ? '' : 's'}${o.agendamentos ? ` · <span style="color:var(--coral-esc)">${o.agendamentos} agend.</span>` : ''}`
+      : `<span style="color:var(--cinza)">ainda sem acessos</span>`;
+    return `<div class="card" style="display:flex;flex-direction:column;gap:9px">
+      <div>
+        <div style="font-weight:700">${c.rot}</div>
+        <div class="quando" style="margin:2px 0 0">${c.desc}</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <code style="flex:1 1 220px;min-width:0;background:var(--bg);border:1px solid var(--linha);border-radius:8px;padding:8px 10px;font-size:var(--fs-sm);word-break:break-all">${esc(url)}</code>
+        <button type="button" class="save" style="flex:none" onclick="copiarLink(this,'${esc(url)}')">📋 Copiar</button>
+      </div>
+      <div class="quando" style="margin:0">${cont}</div>
     </div>`;
+  };
+
+  const outrasHtml = outras.length ? `
+    <div class="sec-t">🏷️ Outras etiquetas registradas</div>
+    <div class="card">
+      ${outras.map(o => `<div class="jobrow"><div class="jn">${esc(o.origem)}</div><div class="jc">${o.acessos} acesso${o.acessos === 1 ? '' : 's'} · <span style="color:var(--coral-esc)">${o.agendamentos} agend.</span></div></div>`).join('')}
+    </div>` : '';
+
+  const semTagHtml = (semTag && (semTag.acessos || semTag.agendamentos)) ? `
+    <div class="card" style="border-style:dashed">
+      <p class="quando" style="margin:0">Além desses, <b>${semTag.acessos} acesso${semTag.acessos === 1 ? '' : 's'}</b> chegaram por um endereço <b>sem etiqueta</b> — entram como “Direto ou app”. Trocar os links já divulgados pelos de cima faz esses acessos passarem a aparecer por canal.</p>
+    </div>` : '';
+
+  const origemBloco = `
+    <div class="sec-t">🔗 Gerador de links por origem</div>
+    <div class="card" style="border-style:dashed">
+      <p class="quando" style="margin:0">De onde vem cada pessoa? Use um <b>link diferente em cada lugar</b> — Instagram, WhatsApp, indicação, anúncio. Quem acessar por ele já entra etiquetado e a conversão de cada canal aparece aqui embaixo. Copie o link do canal e use no lugar do link comum.</p>
+    </div>
+    ${CANAIS.map(cardCanal).join('')}
+    ${semTagHtml}
+    ${outrasHtml}`;
 
   const corpo = `<div class="wrap">
     <div class="segs">${segs}</div>
@@ -1047,7 +1095,19 @@ function paginaIndicadores(dias) {
     </div>
     ${origemBloco}
     <p class="quando" style="text-align:center">Coletado do formulário a cada ~2 min. ${r.primeiroDia ? `Desde ${esc(fmtData(r.primeiroDia))}.` : 'Ainda começando a coletar.'}</p>
-  </div>`;
+  </div>
+  <script>
+  function copiarLink(btn, url){
+    var ok=function(){var t=btn.textContent;btn.textContent='✅ Copiado';btn.disabled=true;setTimeout(function(){btn.textContent=t;btn.disabled=false;},1500);};
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(ok).catch(function(){fallback();});
+    } else { fallback(); }
+    function fallback(){
+      try{var ta=document.createElement('textarea');ta.value=url;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');document.body.removeChild(ta);ok();}
+      catch(e){window.prompt('Copie o link:',url);}
+    }
+  }
+  </script>`;
   return chrome({ tab: 'Formulário', h1: '📈 Formulário', p: 'Acessos, agendamentos e taxa de conversão do formulário de agendamento.' }, 'ind', corpo);
 }
 
