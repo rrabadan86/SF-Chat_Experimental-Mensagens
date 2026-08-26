@@ -327,6 +327,10 @@ const ESTILO = `
   .ct-badge{display:inline-block;font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px}
   .ct-badge.ativa{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
   .ct-badge.enc{background:#eef0f1;color:#6b6b70;border:1px solid #dfe1e3}
+  .cp-sec{margin:0 0 14px}
+  .cp-h{font-family:"Montserrat";font-weight:700;font-size:var(--fs-sm);margin:0 0 4px}
+  .cp-list{max-height:200px;overflow-y:auto;border:1px solid var(--linha);border-radius:10px;padding:2px 12px}
+  .cp-list>div:last-child{border-bottom:0}
   .ct-tab col.c-nome{width:32%}.ct-tab col.c-tel{width:21%}.ct-tab col.c-tags{width:31%}.ct-tab col.c-act{width:16%}
   .ct-tab th{text-align:left;font-family:"Montserrat";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;letter-spacing:.03em;padding:11px 14px;border-bottom:1px solid var(--linha);white-space:nowrap;background:#fafbfb}
   .ct-tab td{padding:10px 14px;border-bottom:1px solid var(--linha);vertical-align:middle}
@@ -1694,7 +1698,7 @@ function campListHTML() {
     const btn = (acao, rot, cls) => `<form method="POST" action="/sofia/campanhas/${acao === 'excluir' ? 'excluir' : 'controle'}"${acao === 'cancelar' || acao === 'excluir' ? ` onsubmit="return confirm('${acao === 'excluir' ? 'Excluir esta campanha do painel?' : 'Cancelar o envio desta campanha?'}')"` : ''} style="display:inline"><input type="hidden" name="id" value="${esc(c.id)}">${acao !== 'excluir' ? `<input type="hidden" name="acao" value="${acao}">` : ''}<button type="submit" class="${cls}" style="padding:5px 12px;font-size:var(--fs-sm)">${rot}</button></form>`;
     return `<div class="card">
       <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
-        <span style="font-weight:700;font-size:var(--fs-h2)">${esc(c.nome)}</span>
+        <a href="javascript:void(0)" onclick="abrirCampDetalhe('${esc(c.id)}')" style="font-weight:700;font-size:var(--fs-h2);color:var(--teal-esc);text-decoration:none;cursor:pointer" title="Ver detalhes do envio">${esc(c.nome)}</a>
         <span class="pill" style="border-color:var(--linha)">🏷️ ${esc(c.tag)}</span>
         ${c.fotoArquivo ? '<span class="pill" style="border-color:var(--linha)">📷 com foto</span>' : ''}
         <span class="quando" style="margin:0">${rotStatus[c.status] || c.status}${(c.status === 'pausada' && (c.falhasSeguidas || 0) >= 3) ? ' <span style="color:var(--erro)">(pausada por falhas — verifique a conexão)</span>' : ''}</span>
@@ -1827,6 +1831,13 @@ function paginaSofiaCampanhas(aviso, erro) {
     <div class="sec-t">📋 Campanhas</div>
     <div id="campList">${campListHTML()}</div>
   </div>
+  <div id="cpModal" class="ct-ov" onclick="if(event.target===this)fecharCampDet()">
+    <div class="ct-dlg" style="max-width:640px">
+      <div class="ct-dh"><h2 id="cpTit">Detalhes do envio</h2><button type="button" class="ct-x" onclick="fecharCampDet()">×</button></div>
+      <div id="cpStats" class="quando" style="margin:0 0 10px"></div>
+      <div id="cpBody"><p class="quando">Carregando…</p></div>
+    </div>
+  </div>
   <script>
     (function(){
       var box=document.getElementById('campList'); if(!box) return;
@@ -1834,6 +1845,40 @@ function paginaSofiaCampanhas(aviso, erro) {
       function poll(){ fetch('/sofia/campanhas/lista',{cache:'no-store'}).then(function(r){return r.text();}).then(function(h){ if(h && h!==ultimo){ ultimo=h; box.innerHTML=h; } }).catch(function(){}); }
       var n=0, iv=setInterval(function(){ n++; poll(); if(n>=3){ clearInterval(iv); setInterval(poll,6000); } },1200);
     })();
+    var cpId=null, cpTimer=null;
+    function cpEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];}); }
+    function cpFmtTel(k){ var d=String(k||'').replace(/\\D/g,''); if(/^55\\d{10,11}$/.test(d)){ var ddd=d.slice(2,4), r=d.slice(4); return '+55 ('+ddd+') '+(r.length===9?r.slice(0,5)+'-'+r.slice(5):r.slice(0,4)+'-'+r.slice(4)); } return k||''; }
+    function cpFmtHora(ts){ if(!ts) return ''; try{ return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
+    function abrirCampDetalhe(id){
+      cpId=id;
+      document.getElementById('cpBody').innerHTML='<p class="quando">Carregando…</p>';
+      document.getElementById('cpStats').textContent='';
+      document.getElementById('cpModal').style.display='flex';
+      cpCarregar();
+      if(cpTimer) clearInterval(cpTimer);
+      cpTimer=setInterval(cpCarregar, 5000); // acompanha ao vivo enquanto aberto
+    }
+    function cpCarregar(){
+      if(!cpId) return;
+      fetch('/sofia/campanhas/detalhe?id='+encodeURIComponent(cpId),{cache:'no-store'})
+        .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok) cpRender(j); })
+        .catch(function(){});
+    }
+    function cpRender(j){
+      var tEnv=j.enviadosTotal!=null?j.enviadosTotal:j.enviados.length, tPen=j.pendentesTotal!=null?j.pendentesTotal:j.pendentes.length, tFal=j.falhasTotal!=null?j.falhasTotal:j.falhas.length;
+      document.getElementById('cpTit').textContent='Envio · '+(j.nome||'');
+      document.getElementById('cpStats').innerHTML='<b style="color:var(--ok)">'+tEnv+'</b> enviadas · <b>'+tPen+'</b> na fila · <b style="color:var(--erro)">'+tFal+'</b> falha(s) · hoje '+(j.enviadosHoje||0)+'/'+(j.limiteDia||0);
+      function linha(nome,tel,dir){ return '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--linha)"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>'+cpEsc(nome||'(sem nome)')+'</b> <span class="quando">'+cpEsc(cpFmtTel(tel))+'</span></span><span class="quando" style="white-space:nowrap;flex:none">'+dir+'</span></div>'; }
+      function maisN(mostrados,total){ return total>mostrados?('<div class="quando" style="padding:7px 0">…e mais '+(total-mostrados)+'</div>'):''; }
+      var env=j.enviados.slice().reverse().map(function(x){ return linha(x.nome,x.tel,'✅ '+cpFmtHora(x.em)); }).join('')+maisN(j.enviados.length,tEnv) || '<p class="quando">Ninguém ainda.</p>';
+      var fila=j.pendentes.map(function(x){ return linha(x.nome,x.tel,'⏳ na fila'); }).join('')+maisN(j.pendentes.length,tPen) || '<p class="quando">Fila vazia.</p>';
+      var fal=j.falhas.slice().reverse().map(function(x){ return linha(x.nome,x.tel,'<span style="color:var(--erro)">⚠️ '+cpEsc((x.erro||'').slice(0,40))+'</span>'); }).join('') || '<p class="quando">Nenhuma falha. 🎉</p>';
+      document.getElementById('cpBody').innerHTML=
+        '<div class="cp-sec"><div class="cp-h">✅ Enviadas ('+tEnv+')</div><div class="cp-list">'+env+'</div></div>'+
+        '<div class="cp-sec"><div class="cp-h">⏳ Na fila ('+tPen+')</div><div class="cp-list">'+fila+'</div></div>'+
+        (tFal?('<div class="cp-sec"><div class="cp-h">⚠️ Falhas ('+tFal+')</div><div class="cp-list">'+fal+'</div></div>'):'');
+    }
+    function fecharCampDet(){ document.getElementById('cpModal').style.display='none'; cpId=null; if(cpTimer){ clearInterval(cpTimer); cpTimer=null; } }
   </script>`;
   return chrome({ tab: 'Campanhas', h1: '🤖 SoFIA', p: 'Campanhas — envio em massa por tag, com variações e limites.' }, 'sofia', corpo);
 }
@@ -2607,6 +2652,24 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && url === '/sofia/campanhas/lista') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
     try { return res.end(campListHTML()); } catch (_) { return res.end(''); }
+  }
+  // Detalhe de UMA campanha: quem já recebeu, quem está na fila e as falhas.
+  if (req.method === 'GET' && url === '/sofia/campanhas/detalhe') {
+    const id = (new URLSearchParams(req.url.split('?')[1] || '')).get('id') || '';
+    let campanhas = []; try { campanhas = sofia.lerCampanhas(); } catch (_) {}
+    const c = campanhas.find(x => String(x.id) === String(id));
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    if (!c) return res.end(JSON.stringify({ ok: false }));
+    const CAP = 300;
+    const env = (c.enviados || []), pen = (c.pendentes || []), fal = (c.falhas || []);
+    return res.end(JSON.stringify({
+      ok: true, nome: c.nome, status: c.status,
+      enviadosHoje: c.enviadosHoje || 0, limiteDia: c.limiteDia || 0,
+      enviadosTotal: env.length, pendentesTotal: pen.length, falhasTotal: fal.length,
+      enviados: env.slice(-CAP).map(x => ({ tel: x.tel, nome: x.nome, em: x.em })),
+      pendentes: pen.slice(0, CAP).map(x => ({ tel: x.tel, nome: x.nome })),
+      falhas: fal.slice(-CAP).map(x => ({ tel: x.tel, nome: x.nome, erro: x.erro, em: x.em })),
+    }));
   }
   if (req.method === 'POST' && url === '/sofia/campanhas/controle') {
     return lerCorpo(req, 1e5, corpo => {
