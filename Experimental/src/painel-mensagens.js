@@ -319,17 +319,18 @@ const ESTILO = `
   footer{color:var(--cinza);font-size:var(--fs-xs);text-align:center;padding:18px}
   /* Contatos — tabela + modal */
   .ct-wrap{background:var(--card);border:1px solid var(--linha);border-radius:12px;overflow-x:auto;margin:10px 0}
-  .ct-tab{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
+  .ct-tab{width:100%;min-width:560px;border-collapse:collapse;font-size:var(--fs-sm);table-layout:fixed}
+  .ct-tab col.c-nome{width:38%}.ct-tab col.c-tel{width:23%}.ct-tab col.c-tags{width:27%}.ct-tab col.c-act{width:12%;min-width:104px}
   .ct-tab th{text-align:left;font-family:"Montserrat";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;letter-spacing:.03em;padding:11px 14px;border-bottom:1px solid var(--linha);white-space:nowrap;background:#fafbfb}
   .ct-tab td{padding:10px 14px;border-bottom:1px solid var(--linha);vertical-align:middle}
   .ct-tab tbody tr:last-child td{border-bottom:0}
   .ct-row{cursor:pointer;transition:background .12s}
   .ct-row:hover{background:#f6fbfb}
   .ct-av{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex:none;border-radius:50%;color:#fff;font-weight:700;font-size:.78rem;font-family:"Montserrat"}
-  .ct-nm{font-weight:700;color:var(--tinta);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px}
-  .ct-tel{color:var(--cinza);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .ct-nm{font-weight:700;color:var(--tinta);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .ct-tel{color:var(--cinza);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ct-acts{text-align:right;white-space:nowrap}
-  .ct-ic{background:#fff;border:1px solid var(--linha);border-radius:8px;padding:5px 8px;cursor:pointer;font-size:.9rem;line-height:1;margin-left:5px}
+  .ct-ic{background:#fff;border:1px solid var(--linha);border-radius:8px;padding:5px 7px;cursor:pointer;font-size:.85rem;line-height:1;margin-left:4px}
   .ct-ic:hover{border-color:var(--teal)}
   .ct-ic.ct-del:hover{border-color:var(--erro);background:var(--erro-bg)}
   .ct-fil{background:none;border:0;color:var(--cinza);cursor:pointer;font-size:.85rem;padding:0 2px}
@@ -1376,7 +1377,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     if (nm) { const p = nm.split(/\s+/); return ((p[0][0] || '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); }
     return '#';
   };
-  const chipTag = (t) => { const [bg, fg, bd] = corTag(t); return `<span style="display:inline-block;background:${bg};color:${fg};border:1px solid ${bd};border-radius:6px;padding:2px 8px;font-size:.74rem;font-weight:600;margin:2px 4px 2px 0;white-space:nowrap">${esc(t)}</span>`; };
+  const chipTag = (t) => { const [bg, fg, bd] = corTag(t); return `<span style="display:inline-block;background:${bg};color:${fg};border:1px solid ${bd};border-radius:6px;padding:2px 8px;font-size:.72rem;font-weight:600;margin:2px 4px 2px 0;line-height:1.35">${esc(t)}</span>`; };
   const podeConversa = podeSofiaSub(_navSess || { admin: true, telas: [] }, 'conversas');
 
   const linhas = r.itens.map(c => {
@@ -1423,15 +1424,15 @@ function paginaSofiaContatos(aviso, erro, params) {
     ${subnavSofia('contatos')}
     <div class="sec-t">📇 Contatos <small style="font-weight:600;color:#5c5960">(${total} no total — importe por CSV, etiquete e filtre por tag)</small></div>
 
-    <div class="card">
-      <label>⬆️ Importar CSV <small style="font-weight:400;color:#5c5960">(colunas: Nome, Telefone, Tags — várias tags por vírgula)</small></label>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
+    <details class="card" style="padding:10px 15px">
+      <summary style="cursor:pointer;font-weight:700">⬆️ Importar CSV <small style="font-weight:400;color:#5c5960">(colunas: Nome, Telefone, Tags)</small></summary>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">
         <input type="file" id="csvFile" accept=".csv,text/csv">
         <button type="button" class="save" onclick="importarCsv()" style="padding:8px 14px">Importar arquivo</button>
         <span id="impMsg" class="quando"></span>
       </div>
       <p class="quando" style="margin:8px 0 0">A importação <b>mescla</b> (não apaga): contatos existentes ganham as tags novas; telefones repetidos não duplicam.</p>
-    </div>
+    </details>
 
     <form method="GET" action="/sofia" class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <input type="hidden" name="view" value="contatos">
@@ -1445,6 +1446,7 @@ function paginaSofiaContatos(aviso, erro, params) {
 
     ${r.itens.length ? `<div class="ct-wrap">
       <table class="ct-tab">
+        <colgroup><col class="c-nome"><col class="c-tel"><col class="c-tags"><col class="c-act"></colgroup>
         <thead><tr>
           <th>Nome</th>
           <th>Telefone</th>
