@@ -237,9 +237,9 @@ const pendentesEco = new Map<string, number>();
 function incEco(jid: string) { pendentesEco.set(jid, (pendentesEco.get(jid) || 0) + 1); }
 function decEco(jid: string) { const n = (pendentesEco.get(jid) || 0) - 1; if (n > 0) pendentesEco.set(jid, n); else pendentesEco.delete(jid); }
 
-async function enviar(to: string, conteudo: any) {
+async function enviar(to: string, conteudo: any, opts?: any) {
   incEco(to);
-  try { return await client.sendMessage(to, conteudo); }
+  try { return await client.sendMessage(to, conteudo, opts); }
   catch (e) { decEco(to); throw e; } // envio falhou → não deixa o contador preso
 }
 
@@ -443,6 +443,7 @@ type Campanha = {
   id: string; nome: string; tag: string; textoBase: string; variacoes: string[];
   limiteDia: number; delayMinSeg: number; delayMaxSeg: number; janelaIni: string; janelaFim: string;
   dataInicio: string; // YYYY-MM-DD (não envia antes deste dia)
+  fotoArquivo?: string; // caminho da imagem a enviar junto (opcional)
   status: "gerando" | "pronta" | "enviando" | "pausada" | "concluida" | "cancelada";
   pendentes: CampDest[]; enviados: { tel: string; nome?: string; em: number }[]; falhas: { tel: string; erro: string; em: number }[];
   enviadosHoje: number; diaRef: string; proxEnvioEm: number; criadoEm: number; atualizadoEm: number;
@@ -492,6 +493,7 @@ async function processarCampInbox() {
           delayMaxSeg: Math.max(1, parseInt(p.delayMaxSeg, 10) || 60),
           janelaIni: String(p.janelaIni || "09:00"), janelaFim: String(p.janelaFim || "20:00"),
           dataInicio: String(p.dataInicio || hojeSP()),
+          fotoArquivo: p.fotoArquivo ? String(p.fotoArquivo) : "",
           status: "gerando", pendentes: dests, enviados: [], falhas: [],
           enviadosHoje: 0, diaRef: hojeSP(), proxEnvioEm: 0, criadoEm: Date.now(), atualizadoEm: Date.now(),
         };
@@ -537,11 +539,16 @@ async function tickCampanha() {
   campanhaEnviando = true;
   try {
     const alvo = await resolverIdEnvio(alvoDest.tel);
-    await enviar(alvo, variacao);
+    if (c.fotoArquivo && fs.existsSync(c.fotoArquivo)) {
+      const media = MessageMedia.fromFilePath(c.fotoArquivo); // foto com a variação como legenda
+      await enviar(alvo, media, { caption: variacao });
+    } else {
+      await enviar(alvo, variacao);
+    }
     c.pendentes.shift();
     c.enviados.push({ tel: alvoDest.tel, nome: alvoDest.nome, em: Date.now() });
     c.enviadosHoje++;
-    registrarInbox(alvoDest.tel, alvo, alvoDest.nome || "", "sofia", variacao); // aparece nas Conversas
+    registrarInbox(alvoDest.tel, alvo, alvoDest.nome || "", "sofia", (c.fotoArquivo ? "📷 " : "") + variacao); // aparece nas Conversas
     log(`campanha "${c.nome}": enviada ${c.enviados.length}/${c.enviados.length + c.pendentes.length} (${alvoDest.tel}).`);
   } catch (e: any) {
     c.pendentes.shift();

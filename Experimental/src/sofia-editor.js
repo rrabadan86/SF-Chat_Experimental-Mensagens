@@ -217,6 +217,19 @@ function opCampanha(obj) {
   const linha = JSON.stringify(Object.assign({ em: Date.now() }, obj)) + '\n';
   fs.appendFileSync(F.campanhasInbox, linha, 'utf8');
 }
+// Salva a foto de uma campanha (dataURL base64) em ChatBot/campanha-fotos/<id>.<ext>
+// e devolve o caminho absoluto (o listener, na mesma máquina, envia a partir dele).
+function salvarFotoCampanha(id, dataUrl) {
+  const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(String(dataUrl || '').replace(/\s/g, ''));
+  if (!m) throw new Error('Imagem inválida.');
+  let ext = (m[1].split('/')[1] || 'jpg').toLowerCase().replace('jpeg', 'jpg');
+  if (!/^[a-z0-9]+$/.test(ext)) ext = 'jpg';
+  const dir = path.join(DIR, 'campanha-fotos');
+  try { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
+  const arq = path.join(dir, String(id).replace(/[^\w.-]/g, '') + '.' + ext);
+  fs.writeFileSync(arq, Buffer.from(m[2], 'base64'));
+  return arq;
+}
 function setControleHumano(chave, ativo) {
   const o = lerHumano();
   if (ativo) o[chave] = Date.now(); else delete o[chave];
@@ -228,5 +241,5 @@ module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerRitmo, gravarRitmo, waStatus,
   conversas, enfileirarResposta, lerHumano, controleHumanoDe, setControleHumano, enviarComando,
-  lerCampanhas, opCampanha, DIR, ARQUIVOS: F,
+  lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

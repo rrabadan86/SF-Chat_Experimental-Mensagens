@@ -1366,6 +1366,7 @@ function campListHTML() {
       <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
         <span style="font-weight:700;font-size:var(--fs-h2)">${esc(c.nome)}</span>
         <span class="pill" style="border-color:var(--linha)">🏷️ ${esc(c.tag)}</span>
+        ${c.fotoArquivo ? '<span class="pill" style="border-color:var(--linha)">📷 com foto</span>' : ''}
         <span class="quando" style="margin:0">${rotStatus[c.status] || c.status}</span>
       </div>
       <div style="margin:8px 0">
@@ -1396,13 +1397,16 @@ function paginaSofiaCampanhas(aviso, erro) {
   const novo = `
     <div class="sec-t">📣 Nova campanha</div>
     <div class="card">
-      ${tags.length ? `<form method="POST" action="/sofia/campanhas/criar" onsubmit="return confirm('Criar a campanha e preparar o envio? Nada é enviado até você clicar em Iniciar.')">
+      ${tags.length ? `<form id="cpForm" onsubmit="return enviarCampanha(event)">
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <div style="flex:2;min-width:180px"><label>Nome da campanha</label><input type="text" name="nome" placeholder="ex.: Reativação outubro" required></div>
           <div style="flex:1;min-width:180px;max-width:100%"><label>Enviar para a tag</label><select name="tag" required style="text-overflow:ellipsis">${opcoesTag}</select></div>
         </div>
         <label style="margin-top:12px">Mensagem base <small style="font-weight:400;color:var(--cinza)">(a IA cria ~10 variações naturais a partir dela)</small></label>
         <textarea name="textoBase" rows="4" placeholder="Escreva a mensagem como você mandaria para uma aluna…" required></textarea>
+        <label style="margin-top:12px">📷 Foto (opcional) <small style="font-weight:400;color:var(--cinza)">— enviada junto, com a mensagem como legenda</small></label>
+        <input type="file" id="cpFoto" accept="image/*" onchange="prevFoto()" style="padding:8px">
+        <div id="cpFotoPrev" style="display:none;margin-top:8px"><img id="cpFotoImg" alt="prévia" style="max-width:180px;max-height:180px;border-radius:10px;border:1px solid var(--linha)"><br><a href="javascript:void(0)" onclick="limpaFoto()" class="quando" style="text-decoration:underline">remover foto</a></div>
         <div class="sec-t" style="margin:14px 0 6px">🛡️ Limites de envio</div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
           <div><label style="margin:0 0 4px">Começar em</label><input type="date" id="cpIni" name="dataInicio" value="${esc(hojeSP())}" min="${esc(hojeSP())}" style="width:160px" oninput="estCamp()"></div>
@@ -1448,6 +1452,20 @@ function paginaSofiaCampanhas(aviso, erro) {
           }
           document.addEventListener('DOMContentLoaded',estCamp);
           var _st=selTagEl(); if(_st) _st.addEventListener('change',estCamp);
+          function prevFoto(){ var f=document.getElementById('cpFoto').files[0]; var box=document.getElementById('cpFotoPrev'); if(!f){box.style.display='none';return;} var rd=new FileReader(); rd.onload=function(){ document.getElementById('cpFotoImg').src=rd.result; box.style.display='block'; }; rd.readAsDataURL(f); }
+          function limpaFoto(){ document.getElementById('cpFoto').value=''; document.getElementById('cpFotoPrev').style.display='none'; }
+          function enviarCampanha(ev){
+            ev.preventDefault();
+            var f=ev.target;
+            if(!confirm('Criar a campanha e preparar o envio? Nada é enviado até você clicar em Iniciar.')) return false;
+            var d={ nome:f.nome.value, tag:f.tag.value, textoBase:f.textoBase.value, limiteDia:f.limiteDia.value, delayMinSeg:f.delayMinSeg.value, delayMaxSeg:f.delayMaxSeg.value, janelaIni:f.janelaIni.value, janelaFim:f.janelaFim.value, dataInicio:f.dataInicio.value };
+            var btn=f.querySelector('button[type=submit]'); if(btn){btn.disabled=true;btn.textContent='Criando…';}
+            function post(){ fetch('/sofia/campanhas/criar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.href='/sofia?view=campanhas&okc=criada'; } else { alert(j.erro||'Erro ao criar campanha'); if(btn){btn.disabled=false;btn.textContent='Criar campanha';} } }).catch(function(){ alert('Erro de rede'); if(btn){btn.disabled=false;btn.textContent='Criar campanha';} }); }
+            var file=document.getElementById('cpFoto').files[0];
+            if(file){ if(file.size>10*1024*1024){ alert('Imagem muito grande (máx. 10MB).'); if(btn){btn.disabled=false;btn.textContent='Criar campanha';} return false; } var rd=new FileReader(); rd.onload=function(){ d.fotoBase64=rd.result; post(); }; rd.readAsDataURL(file); }
+            else post();
+            return false;
+          }
         </script>
       </form>`
       : `<p class="vazio">Você ainda não tem contatos com tags. Vá em <b>Contatos</b>, importe e etiquete primeiro — as campanhas são enviadas por tag.</p>`}
@@ -2169,31 +2187,37 @@ const server = http.createServer((req, res) => {
       res.writeHead(303, { Location: '/sofia?dcon=1' }); res.end();
     });
   }
-  // Criar campanha: resolve os contatos da tag e enfileira o pedido para o listener.
+  // Criar campanha (JSON, para levar a foto em base64): resolve os contatos da tag,
+  // salva a foto (se houver) e enfileira o pedido para o listener.
   if (req.method === 'POST' && url === '/sofia/campanhas/criar') {
-    return lerCorpo(req, 2e6, corpo => {
-      const p = new URLSearchParams(corpo);
-      const tag = (p.get('tag') || '').trim();
-      const textoBase = (p.get('textoBase') || '').trim();
-      const nome = (p.get('nome') || '').trim() || 'Campanha';
+    return lerCorpo(req, 14e6, corpo => {
+      let d = {};
+      try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      const tag = String(d.tag || '').trim();
+      const textoBase = String(d.textoBase || '').trim();
+      const nome = String(d.nome || '').trim() || 'Campanha';
       try {
         if (!tag || !textoBase) throw new Error('Preencha a tag e a mensagem.');
         const alvo = contatos.listar({ tag, pagina: 0, porPagina: 100000 });
-        const destinatarios = (alvo.itens || []).map(c => ({ tel: c.tel, nome: c.nome || '' })).filter(d => d.tel);
+        const destinatarios = (alvo.itens || []).map(c => ({ tel: c.tel, nome: c.nome || '' })).filter(x => x.tel);
         if (!destinatarios.length) throw new Error('Nenhum contato com essa tag.');
+        const id = 'c' + Date.now();
+        let fotoArquivo = '';
+        if (d.fotoBase64) { try { fotoArquivo = sofia.salvarFotoCampanha(id, d.fotoBase64); } catch (e) { throw new Error('Foto: ' + e.message); } }
         sofia.opCampanha({
           op: 'criar',
           campanha: {
-            id: 'c' + Date.now(), nome, tag, textoBase,
-            limiteDia: p.get('limiteDia') || '40', delayMinSeg: p.get('delayMinSeg') || '25', delayMaxSeg: p.get('delayMaxSeg') || '70',
-            janelaIni: p.get('janelaIni') || '09:00', janelaFim: p.get('janelaFim') || '20:00',
-            dataInicio: p.get('dataInicio') || hojeSP(),
-            destinatarios,
+            id, nome, tag, textoBase,
+            limiteDia: String(d.limiteDia || '40'), delayMinSeg: String(d.delayMinSeg || '25'), delayMaxSeg: String(d.delayMaxSeg || '70'),
+            janelaIni: String(d.janelaIni || '09:00'), janelaFim: String(d.janelaFim || '20:00'),
+            dataInicio: String(d.dataInicio || hojeSP()),
+            fotoArquivo, destinatarios,
           },
         });
-        res.writeHead(303, { Location: '/sofia?view=campanhas&okc=criada' }); res.end();
+        res.end(JSON.stringify({ ok: true }));
       } catch (e) {
-        res.writeHead(303, { Location: '/sofia?view=campanhas&errc=' + encodeURIComponent(e.message) }); res.end();
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
       }
     });
   }
