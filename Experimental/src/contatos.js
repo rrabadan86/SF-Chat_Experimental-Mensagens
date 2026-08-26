@@ -289,7 +289,7 @@ function tagsDistintas() {
   for (const ct of Object.values(map)) for (const t of (ct.tags || [])) c[t] = (c[t] || 0) + 1;
   // Inclui tags "conhecidas" (criadas ou com automação) mesmo sem contato ainda.
   try { const cfg = lerTagsConfig(); for (const t of Object.keys(cfg)) if (!(t in c)) c[t] = 0; } catch (_) {}
-  return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([tag, n]) => ({ tag, n }));
+  return Object.entries(c).sort((a, b) => a[0].localeCompare(b[0], 'pt-BR', { sensitivity: 'base', numeric: true })).map(([tag, n]) => ({ tag, n }));
 }
 
 function totalContatos() { return Object.keys(carregar()).length; }
