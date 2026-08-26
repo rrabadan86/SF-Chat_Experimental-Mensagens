@@ -108,7 +108,7 @@ function validarLogin(usuario, senha) {
 }
 // Qual aba uma URL pertence (para a checagem de acesso). O resto é a aba WhatsApp.
 function telaDaUrl(u) {
-  if (u === '/hoje') return 'hoje';
+  if (u === '/hoje') return 'msg'; // Hoje virou sub-aba do WhatsApp
   if (u === '/indicadores') return 'ind';
   if (u === '/instagram' || u.startsWith('/instagram/')) return 'ig';
   if (u === '/sofia' || u.startsWith('/sofia/')) return 'sofia';
@@ -137,23 +137,23 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar') return has('sofia_config');
   return false;
 }
-// WhatsApp também é dividido em duas sub-abas: Configuração e Agendamento.
+// WhatsApp é dividido em três sub-abas: Configuração, Agendamento e Hoje.
 function podeMsgSub(sess, sub) { return sess.admin || (sess.telas || []).includes('msg_' + sub); }
-function temMsg(sess) { return sess.admin || ['config', 'agendar'].some(s => podeMsgSub(sess, s)); }
-function msgHref(sess) { return podeMsgSub(sess, 'config') ? '/' : (podeMsgSub(sess, 'agendar') ? '/?view=agendar' : '/'); }
-// Rota da aba WhatsApp → sub-permissão. O agendamento é o /agendar* e o /?view=agendar;
-// o resto (mensagens, fotos, teste, horários, conexão) é Configuração.
+function temMsg(sess) { return sess.admin || ['config', 'agendar', 'hoje'].some(s => podeMsgSub(sess, s)); }
+function msgHref(sess) { return podeMsgSub(sess, 'config') ? '/' : (podeMsgSub(sess, 'agendar') ? '/?view=agendar' : (podeMsgSub(sess, 'hoje') ? '/hoje' : '/')); }
+// Rota da aba WhatsApp → sub-permissão. Agendamento = /agendar* e /?view=agendar;
+// Hoje = /hoje; o resto (mensagens, fotos, teste, horários, conexão) é Configuração.
 function msgRotaPermitida(sess, url, fullUrl) {
   const has = k => (sess.telas || []).includes(k);
+  if (url === '/hoje') return has('msg_hoje');
   if (url === '/agendar' || url.startsWith('/agendar/')) return has('msg_agendar');
   if (url === '/' && /(?:^|[?&])view=agendar/.test(fullUrl || '')) return has('msg_agendar');
   return has('msg_config'); // /, /salvar, /mensagem/*, /teste/*, /horarios*, /wa*
 }
 function primeiraTela(sess) {
   if (sess.admin) return '/hoje';
-  if (sess.telas.includes('hoje')) return '/hoje';
-  if (sess.telas.includes('ind')) return '/indicadores';
   if (temMsg(sess)) return msgHref(sess);
+  if (sess.telas.includes('ind')) return '/indicadores';
   if (sess.telas.includes('ig')) return '/instagram';
   if (temSofia(sess)) return sofiaHref(sess);
   return '';
@@ -325,7 +325,7 @@ function navTabs(ativo) {
   const pode = k => sess.admin || (sess.telas || []).includes(k);
   const cel = (href, on, ic, tx) => `<a href="${href}" class="${on ? 'on' : ''}"><span class="tic">${ic}</span><span class="ttx">${tx}</span></a>`;
   const item = (k, href, ic, tx) => pode(k) ? cel(href, ativo === k, ic, tx) : '';
-  let html = item('hoje', '/hoje', '📊', 'Hoje') + item('ind', '/indicadores', '📈', 'Formulário');
+  let html = item('ind', '/indicadores', '📈', 'Formulário');
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp');
   html += item('ig', '/instagram', '📸', 'Instagram');
   if (temSofia(sess)) html += cel(sofiaHref(sess), ativo === 'sofia', '🤖', 'SoFIA');
@@ -543,11 +543,13 @@ function subnavMensagens(view) {
   const base = 'display:inline-flex;align-items:center;justify-content:center;padding:6px 13px;border-radius:999px;font-weight:700;font-family:Montserrat,sans-serif;font-size:.8rem;text-decoration:none;border:1px solid #e8e8ea;white-space:nowrap';
   const on = 'background:#11abae;color:#fff;border-color:#11abae';
   const off = 'background:#fff;color:#5c5960';
-  const item = (v, rot) => `<a href="/${v === 'agendar' ? '?view=agendar' : ''}" style="${base};${view === v ? on : off}">${rot}</a>`;
+  const href = (v) => v === 'agendar' ? '/?view=agendar' : (v === 'hoje' ? '/hoje' : '/');
+  const item = (v, rot) => `<a href="${href(v)}" style="${base};${view === v ? on : off}">${rot}</a>`;
   const sess = _navSess || { admin: true, telas: [] };
   let its = '';
   if (podeMsgSub(sess, 'config')) its += item('config', '⚙️ Configuração');
   if (podeMsgSub(sess, 'agendar')) its += item('agendar', '📅 Agendamento');
+  if (podeMsgSub(sess, 'hoje')) its += item('hoje', '📊 Hoje');
   return `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px">${its}</div>`;
 }
 
@@ -843,6 +845,7 @@ function paginaHoje(dia) {
   }).join('');
 
   const corpo = `<div class="wrap">
+    ${subnavMensagens('hoje')}
     <div class="datesel">
       <form method="GET" action="/hoje" class="datesel" style="margin:0">
         <label style="margin:0">Dia:</label>
@@ -863,7 +866,7 @@ function paginaHoje(dia) {
     <div class="card">${lista || '<div class="vazio">Sem envios para mostrar.</div>'}</div>
     <p class="quando" style="text-align:center">Registrado automaticamente a cada envio do robô. ${ehHoje ? 'Atualiza ao recarregar.' : ''}</p>
   </div>${ehHoje ? '<script>setTimeout(function(){location.reload()},60000)</script>' : ''}`;
-  return chrome({ tab: 'Hoje', h1: '📊 O que o robô fez', p: ehHoje ? 'Todos os envios de <b>hoje</b>, em tempo quase real.' : `Envios do dia <b>${esc(fmtData(d))}</b>.` }, 'hoje', corpo);
+  return chrome({ tab: 'Hoje', h1: '📊 O que o robô fez', p: ehHoje ? 'Todos os envios de <b>hoje</b>, em tempo quase real.' : `Envios do dia <b>${esc(fmtData(d))}</b>.` }, 'msg', corpo);
 }
 
 // ── Página: Instagram (status + liga/desliga) ───────────────────────────────
@@ -1888,10 +1891,11 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horários salvos e robô reiniciado. Já valem.';
     else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. O robô vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     // Só a sub-aba permitida; se pediu uma sem acesso, cai na primeira permitida.
     let view = /(?:^|&)view=agendar/.test(q) ? 'agendar' : 'config';
-    if (!podeMsgSub(sess, view)) view = podeMsgSub(sess, 'config') ? 'config' : 'agendar';
+    if (!podeMsgSub(sess, view)) view = ['config', 'agendar', 'hoje'].find(s => podeMsgSub(sess, s)) || 'config';
+    if (view === 'hoje') { res.writeHead(303, { Location: '/hoje' }); return res.end(); } // só tem Hoje → vai pra lá
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     if (view === 'agendar') return res.end(paginaAgendar(aviso, erro)); // sub-aba Agendamento
     return res.end(paginaMensagens(aviso, erro));
   }

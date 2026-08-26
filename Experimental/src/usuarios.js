@@ -20,10 +20,10 @@ const ARQUIVO = path.join(DATA_DIR, 'usuarios.json');
 // Telas que dá para liberar por usuário. A Sofia é dividida em três (Conversas,
 // Configuração e Contatos) para dar acesso fino. "Perfis" é só do admin.
 const TELAS = [
-  { key: 'hoje', rot: '📊 Hoje' },
   { key: 'ind', rot: '📈 Formulário' },
   { key: 'msg_config', rot: '⚙️ Configuração', grupo: '💬 WhatsApp' },
   { key: 'msg_agendar', rot: '📅 Agendamento', grupo: '💬 WhatsApp' },
+  { key: 'msg_hoje', rot: '📊 Hoje', grupo: '💬 WhatsApp' },
   { key: 'ig', rot: '📸 Instagram' },
   { key: 'sofia_conversas', rot: '💬 Conversas', grupo: '🤖 Sofia' },
   { key: 'sofia_config', rot: '⚙️ Configuração', grupo: '🤖 Sofia' },
@@ -32,7 +32,7 @@ const TELAS = [
 ];
 const TELAS_KEYS = TELAS.map(t => t.key);
 // Chaves "legado" (abas inteiras) que expandem para as sub-telas ao salvar.
-const LEGADO = { sofia: ['sofia_conversas', 'sofia_config', 'sofia_contatos'], msg: ['msg_config', 'msg_agendar'] };
+const LEGADO = { sofia: ['sofia_conversas', 'sofia_config', 'sofia_contatos', 'sofia_campanhas'], msg: ['msg_config', 'msg_agendar', 'msg_hoje'], hoje: ['msg_hoje'] };
 
 function normU(u) { return String(u == null ? '' : u).trim().toLowerCase(); }
 function limparTelas(v) {
