@@ -312,6 +312,12 @@ function conversaAssumida(telefone: string): boolean {
   return true;
 }
 
+// A Sofia deve responder ESTA conversa agora? (ligada, sem controle humano e sem
+// handoff por tempo). Usado pelo listener p/ decidir o aviso de "só texto" no áudio.
+export function deveResponder(telefone: string): boolean {
+  return sofiaAtiva() && !controleHumanoAtivo(telefone) && !conversaAssumida(telefone);
+}
+
 // Registra uma mensagem na memória SEM a Sofia responder. Usado quando ela está
 // pausada (assumida por humano ou desligada): mesmo calada, ela "ouve e anota",
 // para não perder o contexto quando reassumir. O listener (VPS) chama isto para

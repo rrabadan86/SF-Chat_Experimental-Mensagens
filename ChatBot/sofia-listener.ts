@@ -22,7 +22,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
-import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes } from "./sofia";
+import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, deveResponder } from "./sofia";
 
 const DIR = process.cwd();
 const STATUS_FILE = path.join(DIR, "sofia-wa-status.json");
@@ -598,12 +598,33 @@ carregarCampanhas();
 setInterval(() => { processarCampInbox().catch(() => {}); }, 800); // aplica pedidos do painel rápido
 setInterval(() => { tickCampanha().catch(() => {}); }, 3000);
 
+// Aluna mandou ÁUDIO (ou mídia sem legenda): a Sofia ainda não "escuta" áudio,
+// então respondemos com educação pedindo por texto — em vez de ignorar e deixar
+// a lead no vácuo. Respeita liga/desliga, controle humano e handoff; com anti-spam.
+const ultimoAvisoAudio = new Map<string, number>();
+function tratarSemTexto(msg: any) {
+  const t = msg.type || "";
+  const ehAudio = t === "ptt" || t === "audio";
+  if (!ehAudio) return; // por ora só tratamos áudio (figurinha/imagem seguem ignoradas)
+  enfileirar(async () => {
+    const { chave } = await resolverTel(msg);
+    registrarInbox(chave, msg.from, (msg._data && msg._data.notifyName) || "", "aluna", "🎤 (áudio)"); // aparece nas Conversas
+    if (!deveResponder(chave)) return; // desligada / controle humano / handoff → não responde
+    const agora = Date.now();
+    if (agora - (ultimoAvisoAudio.get(chave) || 0) < 5 * 60 * 1000) return; // não repete o aviso a cada áudio
+    ultimoAvisoAudio.set(chave, agora);
+    const resp = "Recebi seu áudio! 😊 Por aqui eu consigo te ajudar melhor por *texto* — consegue me mandar escrito o que você precisa?";
+    registrarInbox(chave, msg.from, "", "sofia", resp);
+    try { await enviarHumano(msg.from, resp); } catch (e: any) { log("falha ao avisar sobre áudio: " + (e?.message || e)); }
+  });
+}
+
 // Mensagem RECEBIDA da aluna (não é fromMe).
 client.on("message", (msg: any) => {
   try {
     if (!msg.from || msg.from.endsWith("@g.us") || msg.from === "status@broadcast") return; // ignora grupos/status
     const texto = (msg.body || "").trim();
-    if (!texto) return; // por ora só texto (áudio/imagem da aluna não são tratados aqui)
+    if (!texto) { tratarSemTexto(msg); return; } // áudio/imagem sem legenda → aviso educado (a Sofia ainda não escuta áudio)
     enfileirar(async () => {
       const { chave, telefone } = await resolverTel(msg); // chave estável p/ memória + telefone real p/ agendar
       registrarInbox(chave, msg.from, (msg._data && msg._data.notifyName) || "", "aluna", texto); // mostra no inbox mesmo se a Sofia estiver pausada
