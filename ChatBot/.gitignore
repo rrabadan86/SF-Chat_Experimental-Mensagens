@@ -39,3 +39,6 @@ sofia-agendou.jsonl
 sofia-agendou.*.proc
 sofia-avisos.jsonl
 sofia-avisos.*.proc
+sofia-regras.json
+sofia-eventos.jsonl
+sofia-eventos.*.proc

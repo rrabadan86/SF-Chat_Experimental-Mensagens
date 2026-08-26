@@ -28,6 +28,8 @@ const F = {
   historico: path.join(DIR, 'sofia-historico.json'), // histórico de interações — publicado pelo listener
   agendou: path.join(DIR, 'sofia-agendou.jsonl'), // agendamentos concluídos — a SoFIA escreve, o painel consome
   avisos: path.join(DIR, 'sofia-avisos.jsonl'), // recados p/ um número — o painel escreve, o listener envia
+  regras: path.join(DIR, 'sofia-regras.json'), // regras de automação por gatilho — painel escreve, listener lê
+  eventos: path.join(DIR, 'sofia-eventos.jsonl'), // ações de automação — listener escreve, painel consome
   respostas: path.join(DIR, 'sofia-respostas.jsonl'), // fila de respostas do painel → listener envia
   humano: path.join(DIR, 'sofia-humano.json'), // conversas sob controle humano (Sofia não responde) — lido pela Sofia
   campanhas: path.join(DIR, 'campanhas.json'), // estado das campanhas — publicado pelo listener (painel só lê)
@@ -207,6 +209,33 @@ function consumirAgendamentos() {
   for (const l of linhas) { try { out.push(JSON.parse(l)); } catch (_) {} }
   return out;
 }
+// Publica as regras de automação por gatilho para o listener detectar eventos
+// (novo lead, palavra-chave, respondeu campanha, sessão encerrada). Só grava se
+// mudou, para não ficar tocando o mtime (o listener relê quando muda).
+let _regrasCache = null;
+function gravarRegras(obj) {
+  try {
+    const json = JSON.stringify(obj || {});
+    if (json === _regrasCache) return false;
+    fs.writeFileSync(F.regras, json, 'utf8');
+    _regrasCache = json;
+    return true;
+  } catch (_) { return false; }
+}
+// Consome (lê e apaga) as ações de automação que o listener detectou.
+// Cada item: { telefone, nome, tag, avisarWpp, motivo, em }.
+function consumirEventos() {
+  let tam = 0;
+  try { tam = fs.statSync(F.eventos).size; } catch (_) { return []; }
+  if (!tam) return [];
+  const tmp = F.eventos + '.' + Date.now() + '.proc';
+  let linhas = [];
+  try { fs.renameSync(F.eventos, tmp); linhas = fs.readFileSync(tmp, 'utf8').split('\n').map(l => l.trim()).filter(Boolean); fs.rmSync(tmp, { force: true }); }
+  catch (_) { return []; }
+  const out = [];
+  for (const l of linhas) { try { out.push(JSON.parse(l)); } catch (_) {} }
+  return out;
+}
 // Enfileira um recado para o listener enviar por WhatsApp a um número.
 function enfileirarAviso(numero, texto) {
   const n = String(numero || '').replace(/\D/g, '');
@@ -272,6 +301,6 @@ function setControleHumano(chave, ativo) {
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, enfileirarAviso, enfileirarResposta, lerHumano, controleHumanoDe, setControleHumano, enviarComando,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, lerHumano, controleHumanoDe, setControleHumano, enviarComando,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

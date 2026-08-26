@@ -384,6 +384,7 @@ function agendarSalvarHistorico() { if (histTimer) return; histTimer = setTimeou
 
 function registrarSessao(chave: string, nome: string, autor: string, texto: string, em: number) {
   const janela = janelaSessaoMs();
+  const eraNovo = !historico.has(chave); // primeira vez que vemos esse contato
   let h = historico.get(chave);
   const aberta = h && h.sessoes.length && h.sessoes[h.sessoes.length - 1].status === "ativa" ? h.sessoes[h.sessoes.length - 1] : null;
   const expirada = aberta && em - aberta.fimEm > janela;
@@ -405,6 +406,8 @@ function registrarSessao(chave: string, nome: string, autor: string, texto: stri
   h.sessoes.push(nova);
   if (h.sessoes.length > HIST_MAX_SESSOES) h.sessoes.splice(0, h.sessoes.length - HIST_MAX_SESSOES);
   agendarSalvarHistorico();
+  // Gatilho 'novo': primeira mensagem de um contato que nunca vimos.
+  if (eraNovo) { for (const r of (lerRegras().novo || [])) emitirAcao(chave, nome, r, "novo"); }
 }
 
 async function fecharSessao(chave: string, sess: Sessao) {
@@ -421,6 +424,10 @@ async function fecharSessao(chave: string, sess: Sessao) {
   sess.resumoPronto = true;
   delete sess._buf;
   agendarSalvarHistorico();
+  // Gatilho 'encerrou': sessão encerrada. O painel decide se aplica (não marca
+  // quem já agendou — ele tem a tag de agendou).
+  const regEnc = lerRegras().encerrou || [];
+  if (regEnc.length) { const nomeC = (historico.get(chave) || {} as any).nome || ""; for (const r of regEnc) emitirAcao(chave, nomeC, r, "encerrou"); }
 }
 
 // Fecha sessões paradas há mais que a janela (assim a interação encerra e ganha
@@ -431,6 +438,64 @@ function varrerSessoes() {
   for (const [chave, h] of historico) {
     const ult = h.sessoes[h.sessoes.length - 1];
     if (ult && ult.status === "ativa" && agora - ult.fimEm > janela) void fecharSessao(chave, ult);
+  }
+}
+
+// ── Automação por tag (gatilhos detectados aqui: novo/palavra/campanha/encerrou) ──
+//    O painel publica as regras em sofia-regras.json; nós detectamos os eventos
+//    e devolvemos as AÇÕES em sofia-eventos.jsonl (o painel aplica a tag + avisa).
+const REGRAS_FILE = path.join(DIR, "sofia-regras.json");
+const EVENTOS_FILE = path.join(DIR, "sofia-eventos.jsonl");
+type RegraTag = { tag: string; avisarWpp?: string; palavras?: string[] };
+let regras: Record<string, RegraTag[]> = {};
+let regrasMtime = -1;
+function lerRegras(): Record<string, RegraTag[]> {
+  try {
+    const st = fs.statSync(REGRAS_FILE);
+    if (st.mtimeMs !== regrasMtime) {
+      regras = JSON.parse(fs.readFileSync(REGRAS_FILE, "utf8")) || {};
+      regrasMtime = st.mtimeMs;
+    }
+  } catch { regras = {}; regrasMtime = -1; }
+  return regras;
+}
+function emitirAcao(telefone: string, nome: string, r: RegraTag, motivo: string, extra?: string) {
+  try {
+    fs.appendFileSync(EVENTOS_FILE, JSON.stringify({
+      telefone: String(telefone || "").replace(/\D/g, ""), nome: nome || "",
+      tag: r.tag, avisarWpp: r.avisarWpp || "", motivo, extra: extra || "", em: Date.now(),
+    }) + "\n", "utf8");
+  } catch {}
+}
+// Anti-repetição por (chave|motivo|tag): não dispara o mesmo gatilho de novo
+// dentro da janela de sessão (evita spam de palavra-chave/campanha).
+const gatilhoRecente = new Map<string, number>();
+function jaDisparou(chave: string, motivo: string, tag: string): boolean {
+  const k = chave + "|" + motivo + "|" + tag;
+  const agora = Date.now();
+  const ate = gatilhoRecente.get(k) || 0;
+  if (agora < ate) return true;
+  gatilhoRecente.set(k, agora + janelaSessaoMs());
+  return false;
+}
+function normTxt(s: string): string {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+// Chamado no fim do handler da aluna: checa palavra-chave e "respondeu campanha".
+function checarGatilhosAluna(chave: string, nome: string, texto: string) {
+  const rs = lerRegras();
+  // palavra-chave
+  const t = normTxt(texto);
+  for (const r of (rs.palavra || [])) {
+    const pals = (r.palavras || []).map(normTxt).filter(Boolean);
+    if (pals.some((p) => t.includes(p)) && !jaDisparou(chave, "palavra", r.tag)) emitirAcao(chave, nome, r, "palavra");
+  }
+  // respondeu campanha: a aluna está na lista de enviados de alguma campanha?
+  const camps = (rs.campanha || []);
+  if (camps.length) {
+    const alvo8 = soDigitos(chave).slice(-8);
+    const recebeu = alvo8.length === 8 && campanhas.some((c) => (c.enviados || []).some((e: any) => soDigitos(e.tel).slice(-8) === alvo8));
+    if (recebeu) for (const r of camps) if (!jaDisparou(chave, "campanha", r.tag)) emitirAcao(chave, nome, r, "campanha");
   }
 }
 
@@ -749,7 +814,9 @@ client.on("message", (msg: any) => {
     if (!texto) { tratarSemTexto(msg); return; } // áudio/imagem sem legenda → aviso educado (a Sofia ainda não escuta áudio)
     enfileirar(async () => {
       const { chave, telefone } = await resolverTel(msg); // chave estável p/ memória + telefone real p/ agendar
-      registrarInbox(chave, msg.from, (msg._data && msg._data.notifyName) || "", "aluna", texto); // mostra no inbox mesmo se a Sofia estiver pausada
+      const nomeAluna = (msg._data && msg._data.notifyName) || "";
+      registrarInbox(chave, msg.from, nomeAluna, "aluna", texto); // mostra no inbox mesmo se a Sofia estiver pausada
+      try { checarGatilhosAluna(chave, nomeAluna, texto); } catch (e: any) { log("gatilhos: " + (e?.message || e)); } // automações por tag (palavra/campanha)
       const reply = await responderComMemoria(chave, texto, telefone); // já cuida de on/off, handoff e memória
       if (reply && reply.trim()) registrarInbox(chave, msg.from, "", "sofia", reply);
       const urls = drenarMidias(); // imagens que a Sofia pediu nesta resposta

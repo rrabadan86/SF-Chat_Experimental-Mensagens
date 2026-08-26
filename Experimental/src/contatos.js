@@ -169,21 +169,53 @@ function salvarTagsConfig(map) {
   try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
   fs.writeFileSync(ARQUIVO_TAGCFG, JSON.stringify(map, null, 2), 'utf8');
 }
-function tagConfig(tag) { const c = lerTagsConfig()[String(tag || '').trim()]; return c || { autoAgendou: false, avisarWpp: '' }; }
+// Gatilhos possíveis: '' (nenhum) | 'agendou' | 'novo' | 'palavra' | 'humano' | 'encerrou' | 'campanha'.
+const GATILHOS = ['agendou', 'novo', 'palavra', 'humano', 'encerrou', 'campanha'];
+function normCfg(c) {
+  c = c || {};
+  // compat: config antiga só tinha autoAgendou.
+  const gatilho = String(c.gatilho || (c.autoAgendou ? 'agendou' : '') || '').trim();
+  let palavras = [];
+  if (Array.isArray(c.palavras)) palavras = c.palavras;
+  else if (c.palavras) palavras = String(c.palavras).split(/[;,]/);
+  palavras = palavras.map(s => String(s).trim().toLowerCase()).filter(Boolean);
+  let wpp = String(c.avisarWpp || '').replace(/\D/g, '');
+  if (wpp && wpp.length >= 10 && wpp.length <= 11) wpp = '55' + wpp; // garante o DDI (Brasil)
+  return {
+    gatilho: GATILHOS.includes(gatilho) ? gatilho : '',
+    palavras,
+    avisarWpp: wpp,
+    criada: !!c.criada,
+  };
+}
+function tagConfig(tag) { return normCfg(lerTagsConfig()[String(tag || '').trim()]); }
 function definirTagConfig(tag, cfg) {
   tag = String(tag || '').trim(); if (!tag) return false;
   const map = lerTagsConfig();
-  const autoAgendou = !!(cfg && cfg.autoAgendou);
-  const avisarWpp = String((cfg && cfg.avisarWpp) || '').replace(/\D/g, '');
-  if (!autoAgendou && !avisarWpp) delete map[tag]; // config vazia → não guarda
-  else map[tag] = { autoAgendou, avisarWpp };
+  const n = normCfg(cfg);
+  n.criada = !!(map[tag] && map[tag].criada) || !!(cfg && cfg.criada); // uma vez criada, permanece "conhecida"
+  // Config totalmente vazia e não-criada → não guarda (evita lixo).
+  if (!n.gatilho && !n.avisarWpp && !n.palavras.length && !n.criada) delete map[tag];
+  else map[tag] = n;
   salvarTagsConfig(map);
   return true;
 }
-// Tags com auto-etiquetagem ligada (para o consumidor de agendamentos).
-function tagsAutoAgendou() {
+// Cria uma tag "conhecida" (aparece nas listas mesmo sem contato).
+function criarTag(nome) {
+  nome = String(nome || '').trim();
+  if (!nome) throw new Error('Informe o nome da tag.');
+  if (nome.length > 60) throw new Error('Nome de tag muito longo.');
   const map = lerTagsConfig();
-  return Object.keys(map).filter(t => map[t] && map[t].autoAgendou).map(t => ({ tag: t, avisarWpp: (map[t].avisarWpp || '') }));
+  if (!map[nome]) { map[nome] = normCfg({ criada: true }); salvarTagsConfig(map); }
+  return nome;
+}
+// Tags configuradas com um gatilho específico (para as automações).
+function tagsPorGatilho(g) {
+  const map = lerTagsConfig();
+  return Object.keys(map)
+    .map(t => ({ tag: t, cfg: normCfg(map[t]) }))
+    .filter(x => x.cfg.gatilho === g)
+    .map(x => ({ tag: x.tag, avisarWpp: x.cfg.avisarWpp, palavras: x.cfg.palavras }));
 }
 
 // Adiciona UMA tag a um contato (cria o contato se não existir), sem mexer nas
@@ -255,6 +287,8 @@ function tagsDistintas() {
   const map = carregar();
   const c = {};
   for (const ct of Object.values(map)) for (const t of (ct.tags || [])) c[t] = (c[t] || 0) + 1;
+  // Inclui tags "conhecidas" (criadas ou com automação) mesmo sem contato ainda.
+  try { const cfg = lerTagsConfig(); for (const t of Object.keys(cfg)) if (!(t in c)) c[t] = 0; } catch (_) {}
   return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([tag, n]) => ({ tag, n }));
 }
 
@@ -275,5 +309,5 @@ function adicionar({ nome, telefone, tags, instrucoes }) {
 module.exports = {
   normTel, carregar, importarCSV, setTags, listar, tagsDistintas, totalContatos,
   remover, editarContato, renomearTag, excluirTag, existe, adicionar, ARQUIVO,
-  tagConfig, definirTagConfig, tagsAutoAgendou, adicionarTag, lerTagsConfig,
+  tagConfig, definirTagConfig, tagsPorGatilho, criarTag, adicionarTag, lerTagsConfig, GATILHOS,
 };
