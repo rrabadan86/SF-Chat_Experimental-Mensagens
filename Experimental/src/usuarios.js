@@ -23,7 +23,7 @@ const TELAS = [
   { key: 'ind', rot: '📈 Formulário' },
   { key: 'msg_config', rot: '⚙️ Configuração', grupo: '💬 WhatsApp' },
   { key: 'msg_agendar', rot: '📅 Agendamento', grupo: '💬 WhatsApp' },
-  { key: 'msg_hoje', rot: '📊 Hoje', grupo: '💬 WhatsApp' },
+  { key: 'msg_hoje', rot: '📊 Log', grupo: '💬 WhatsApp' },
   { key: 'ig', rot: '📸 Instagram' },
   { key: 'sofia_conversas', rot: '💬 Conversas', grupo: '🤖 Sofia' },
   { key: 'sofia_config', rot: '⚙️ Configuração', grupo: '🤖 Sofia' },

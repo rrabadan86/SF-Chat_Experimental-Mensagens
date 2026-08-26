@@ -549,7 +549,7 @@ function subnavMensagens(view) {
   let its = '';
   if (podeMsgSub(sess, 'config')) its += item('config', '⚙️ Configuração');
   if (podeMsgSub(sess, 'agendar')) its += item('agendar', '📅 Agendamento');
-  if (podeMsgSub(sess, 'hoje')) its += item('hoje', '📊 Hoje');
+  if (podeMsgSub(sess, 'hoje')) its += item('hoje', '📊 Log');
   return `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px">${its}</div>`;
 }
 
@@ -866,7 +866,7 @@ function paginaHoje(dia) {
     <div class="card">${lista || '<div class="vazio">Sem envios para mostrar.</div>'}</div>
     <p class="quando" style="text-align:center">Registrado automaticamente a cada envio do robô. ${ehHoje ? 'Atualiza ao recarregar.' : ''}</p>
   </div>${ehHoje ? '<script>setTimeout(function(){location.reload()},60000)</script>' : ''}`;
-  return chrome({ tab: 'Hoje', h1: '📊 O que o robô fez', p: ehHoje ? 'Todos os envios de <b>hoje</b>, em tempo quase real.' : `Envios do dia <b>${esc(fmtData(d))}</b>.` }, 'msg', corpo);
+  return chrome({ tab: 'Log', h1: '📊 Log — o que o robô fez', p: ehHoje ? 'Todos os envios de <b>hoje</b>, em tempo quase real.' : `Envios do dia <b>${esc(fmtData(d))}</b>.` }, 'msg', corpo);
 }
 
 // ── Página: Instagram (status + liga/desliga) ───────────────────────────────
