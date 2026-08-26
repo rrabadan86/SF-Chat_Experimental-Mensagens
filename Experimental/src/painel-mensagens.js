@@ -219,6 +219,7 @@ const ESTILO = `
   .var:hover{background:var(--teal);color:#fff;border-color:var(--teal)}
   label{display:block;font-weight:600;font-size:var(--fs-sm);margin:12px 0 4px}
   input[type=text],input[type=tel],input[type=date],textarea{width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
+  select{width:100%;max-width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:9px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
   textarea{line-height:1.5;resize:vertical}
   input:focus,textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(17,171,174,.15)}
   .acts{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}
@@ -539,7 +540,7 @@ function blocoWaRobo() {
 
 // Sub-navegação da aba WhatsApp Mensagens: Configuração (mensagens/horários) x Agendamento (envios pontuais).
 function subnavMensagens(view) {
-  const base = 'display:inline-block;padding:6px 13px;border-radius:999px;font-weight:700;font-family:Montserrat,sans-serif;font-size:.8rem;text-decoration:none;margin-right:8px;border:1px solid #e8e8ea';
+  const base = 'display:inline-flex;align-items:center;justify-content:center;padding:6px 13px;border-radius:999px;font-weight:700;font-family:Montserrat,sans-serif;font-size:.8rem;text-decoration:none;border:1px solid #e8e8ea;white-space:nowrap';
   const on = 'background:#11abae;color:#fff;border-color:#11abae';
   const off = 'background:#fff;color:#5c5960';
   const item = (v, rot) => `<a href="/${v === 'agendar' ? '?view=agendar' : ''}" style="${base};${view === v ? on : off}">${rot}</a>`;
@@ -547,7 +548,7 @@ function subnavMensagens(view) {
   let its = '';
   if (podeMsgSub(sess, 'config')) its += item('config', '⚙️ Configuração');
   if (podeMsgSub(sess, 'agendar')) its += item('agendar', '📅 Agendamento');
-  return `<div style="margin:0 0 18px">${its}</div>`;
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px">${its}</div>`;
 }
 
 function paginaMensagens(aviso, erro) {
@@ -1067,7 +1068,7 @@ function blocoSofiaWa() {
 
 // Sub-navegação da aba Sofia: Configuração (prompt/configs) x Conversas (inbox).
 function subnavSofia(view) {
-  const base = 'display:inline-block;padding:6px 13px;border-radius:999px;font-weight:700;font-family:Montserrat,sans-serif;font-size:.8rem;text-decoration:none;margin-right:8px;border:1px solid #e8e8ea';
+  const base = 'display:inline-flex;align-items:center;justify-content:center;padding:6px 13px;border-radius:999px;font-weight:700;font-family:Montserrat,sans-serif;font-size:.8rem;text-decoration:none;border:1px solid #e8e8ea;white-space:nowrap';
   const on = 'background:#11abae;color:#fff;border-color:#11abae';
   const off = 'background:#fff;color:#5c5960';
   const item = (v, rot) => `<a href="/sofia${v === 'config' ? '' : '?view=' + v}" style="${base};${view === v ? on : off}">${rot}</a>`;
@@ -1077,7 +1078,7 @@ function subnavSofia(view) {
   if (podeSofiaSub(sess, 'conversas')) its += item('conversas', '💬 Conversas');
   if (podeSofiaSub(sess, 'contatos')) its += item('contatos', '📇 Contatos');
   if (podeSofiaSub(sess, 'campanhas')) its += item('campanhas', '📣 Campanhas');
-  return `<div style="margin:0 0 18px">${its}</div>`;
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px">${its}</div>`;
 }
 
 // Aba Sofia → Conversas: inbox das conversas da Sofia (ler e, na Parte 2, responder).
@@ -1345,7 +1346,7 @@ function paginaSofiaCampanhas(aviso, erro) {
       ${tags.length ? `<form method="POST" action="/sofia/campanhas/criar" onsubmit="return confirm('Criar a campanha e preparar o envio? Nada é enviado até você clicar em Iniciar.')">
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <div style="flex:2;min-width:180px"><label>Nome da campanha</label><input type="text" name="nome" placeholder="ex.: Reativação outubro" required></div>
-          <div style="flex:1;min-width:150px"><label>Enviar para a tag</label><select name="tag" required>${opcoesTag}</select></div>
+          <div style="flex:1;min-width:180px;max-width:100%"><label>Enviar para a tag</label><select name="tag" required style="text-overflow:ellipsis">${opcoesTag}</select></div>
         </div>
         <label style="margin-top:12px">Mensagem base <small style="font-weight:400;color:var(--cinza)">(a IA cria ~10 variações naturais a partir dela)</small></label>
         <textarea name="textoBase" rows="4" placeholder="Escreva a mensagem como você mandaria para uma aluna…" required></textarea>
