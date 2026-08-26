@@ -132,7 +132,7 @@ function sofiaRotaPermitida(sess, url) {
   const has = k => (sess.telas || []).includes(k);
   if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano') return has('sofia_conversas');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
-  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/interacoes') return has('sofia_contatos');
+  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar') return has('sofia_config');
   return false;
@@ -1513,7 +1513,8 @@ function paginaSofiaContatos(aviso, erro, params) {
         <button type="button" class="save" onclick="importarCsv()" style="padding:8px 14px">Importar arquivo</button>
         <span id="impMsg" class="quando"></span>
       </div>
-      <p class="quando" style="margin:8px 0 0">A importação <b>mescla</b> (não apaga): contatos existentes ganham as tags novas; telefones repetidos não duplicam.</p>
+      <p class="quando" style="margin:8px 0 0">📄 <a href="/sofia/contatos/modelo.csv" download style="color:var(--teal-esc);font-weight:700">Baixar modelo de CSV</a> — preencha por cima e reimporte. Várias tags no mesmo contato: separe por <code>;</code>.</p>
+      <p class="quando" style="margin:4px 0 0">A importação <b>mescla</b> (não apaga): contatos existentes ganham as tags novas; telefones repetidos não duplicam.</p>
     </details>
 
     <form method="GET" action="/sofia" class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -2454,6 +2455,22 @@ const server = http.createServer((req, res) => {
     if (view === 'conversas') return res.end(paginaSofiaConversas(aviso, erro));
     if (view === 'campanhas') return res.end(paginaSofiaCampanhas(aviso, erro));
     return res.end(paginaSofia(aviso, erro));
+  }
+  // Modelo de CSV para baixar (cabeçalho + exemplos) — ajuda a montar a planilha.
+  if (req.method === 'GET' && url === '/sofia/contatos/modelo.csv') {
+    const linhas = [
+      'Nome,Telefone,Tags',
+      'Maria Silva,+55 (62) 99999-0000,Aluna ou Ex Aluna',
+      'Joana Souza,+55 62 98888-1111,FX 4 - Feito;Equipe',
+      'Ana,55 61 97777-2222,',
+    ];
+    const csv = '﻿' + linhas.join('\r\n') + '\r\n'; // BOM p/ Excel abrir com acento certo
+    res.writeHead(200, {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="modelo-contatos-slimfit.csv"',
+      'Cache-Control': 'no-store',
+    });
+    return res.end(csv);
   }
   // Importar contatos (CSV enviado pelo painel, lido no navegador e postado como JSON).
   if (req.method === 'POST' && url === '/sofia/contatos/importar') {
