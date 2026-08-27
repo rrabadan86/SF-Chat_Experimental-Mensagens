@@ -110,6 +110,27 @@ echo "📦 Instalando dependências (Experimental)…"
 echo "📦 Instalando dependências (ChatBot)…"
 ( cd "$CHATBOT_DIR" && npm install --no-audit --no-fund )
 
+# Dependências Python (agendamento no EVO / push_slots — precisa do 'requests').
+# Usa um venv isolado para não esbarrar no "externally-managed-environment" das
+# distros novas. O PYTHON_BIN do .env aponta para esse venv.
+PY_DIR="$EXP_DIR/src/agendamento_evo"
+PYBIN="python3"
+if command -v python3 >/dev/null 2>&1 && [ -f "$PY_DIR/requirements.txt" ]; then
+  echo "🐍 Instalando dependências Python (agendamento) num venv…"
+  if python3 -m venv "$PY_DIR/.venv" 2>/dev/null && [ -x "$PY_DIR/.venv/bin/pip" ]; then
+    "$PY_DIR/.venv/bin/pip" install -q --upgrade pip >/dev/null 2>&1 || true
+    if "$PY_DIR/.venv/bin/pip" install -q -r "$PY_DIR/requirements.txt"; then
+      PYBIN="$PY_DIR/.venv/bin/python"
+    else
+      echo "   ⚠️  falha ao instalar deps Python — rode à mão: $PY_DIR/.venv/bin/pip install -r $PY_DIR/requirements.txt"
+    fi
+  else
+    echo "   ⚠️  não consegui criar o venv (instale 'python3-venv'). O agendamento (push_slots) precisa do pacote 'requests'."
+  fi
+else
+  echo "   ⚠️  python3 não encontrado — o agendamento (push_slots) não vai rodar."
+fi
+
 # gera segredos uma vez só (reaproveitados nos dois .env quando fizer sentido)
 SEG_PAINEL="$(segredo)"
 TOK_FORM="$(segredo)"
@@ -160,8 +181,8 @@ WA_HEADLESS=true
 NTFY_TOPIC=slimfit-alertas-$SLUG-$(segredo | cut -c1-6)
 NTFY_URL=https://ntfy.sh
 
-# ===== Python =====
-PYTHON_BIN=python3
+# ===== Python (venv do agendamento) =====
+PYTHON_BIN=$PYBIN
 EOF
 fi
 
