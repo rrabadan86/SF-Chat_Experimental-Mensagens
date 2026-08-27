@@ -255,6 +255,26 @@ const ESTILO = `
   .subtabs a{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-family:"Inter",sans-serif;font-weight:500;font-size:.82rem;line-height:1;color:var(--cinza);background:transparent;border:1px solid var(--linha);border-radius:999px;padding:7px 15px;transition:.12s}
   .subtabs a:hover{background:var(--linha-soft);color:var(--tinta);border-color:var(--linha)}
   .subtabs a.on{background:var(--teal);color:#fff;border-color:var(--teal);font-weight:600}
+  /* "Mais/Menos filtros" (Conversas): rótulo alterna e campos alinhados. */
+  .filtros-det{margin-bottom:8px;border:1px solid var(--linha);border-radius:10px;background:var(--card);padding:0 10px}
+  .filtros-sum{cursor:pointer;list-style:none;font-size:.8rem;font-weight:600;color:var(--cinza);padding:8px 0;user-select:none;display:flex;align-items:center;gap:6px}
+  .filtros-sum::-webkit-details-marker{display:none}
+  .filtros-sum::after{content:"▸";margin-left:auto;color:var(--faint);transition:transform .15s}
+  .filtros-det[open] .filtros-sum::after{transform:rotate(90deg)}
+  .filtros-det .s-menos{display:none}
+  .filtros-det[open] .s-mais{display:none}
+  .filtros-det[open] .s-menos{display:inline}
+  .filtros-corpo{padding:2px 0 12px;display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--linha-soft);margin-top:0}
+  .filtros-det[open] .filtros-corpo{margin-top:2px;padding-top:12px}
+  .filtro-check{display:flex;align-items:center;gap:8px;font-size:.8rem;cursor:pointer;color:var(--tinta)}
+  .filtro-check input{width:15px;height:15px;margin:0;flex:none}
+  .filtro-check small{color:var(--faint)}
+  .filtro-periodo{display:flex;flex-direction:column;gap:6px}
+  .filtro-lbl{font-size:.72rem;font-weight:600;color:var(--cinza)}
+  .filtro-datas{display:flex;gap:7px;align-items:center}
+  .filtro-datas input[type=date]{flex:1 1 0;min-width:0;font-size:.78rem;padding:7px 9px;border:1px solid var(--linha);border-radius:8px;background:#fff;color:var(--tinta)}
+  .filtro-datas .ate{font-size:.75rem;color:var(--cinza);flex:none}
+  .filtro-limpar{flex:none;padding:6px 10px;font-size:.9rem;line-height:1}
   .aviso{background:var(--avi-bg);border:1px solid var(--avi-bd);color:var(--avi-tx);border-radius:10px;padding:10px 14px;margin:14px 0;font-size:var(--fs-sm)}
   .aviso.err{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
   .card{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:15px 17px;margin:12px 0;box-shadow:0 1px 2px rgba(16,24,40,.04)}
@@ -1531,16 +1551,18 @@ function paginaSofiaConversas(aviso, erro) {
           <input type="search" id="convBusca" oninput="filtrarBusca(this.value)" placeholder="🔎 Buscar nome, telefone ou palavra" style="flex:1 1 auto;min-width:0;font-size:.82rem;padding:8px 10px;border:1px solid var(--linha);border-radius:9px">
           <select id="convFiltroTag" onchange="filtrarTag(this.value)" title="Filtrar por tag" style="flex:0 0 42px;width:42px;font-size:.82rem;padding:8px 2px"><option value="">🏷️</option><option value="__sem__">🏷️ Sem tag</option>${tagsLista.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select>
         </div>
-        <details id="convFiltrosDet" style="margin-bottom:8px" ontoggle="try{localStorage.setItem('convFiltrosOpen', this.open?'1':'0')}catch(e){}">
-          <summary style="cursor:pointer;font-size:.8rem;font-weight:700;color:#5c5960;list-style:none;padding:2px 0;user-select:none">⚙️ Mais filtros</summary>
-          <div style="padding:8px 0 0;display:flex;flex-direction:column;gap:8px">
-            <label style="display:flex;align-items:center;gap:8px;font-size:.78rem;cursor:pointer;color:#5c5960"><input type="checkbox" id="convQuieto" onchange="filtrarQuieto(this)" style="width:15px;height:15px;margin:0;flex:none">😴 Sem resposta há <b>${esc(String(quietoCfg.horas))}h+</b> <small style="color:#9a9a9a">(${esc(String(quietoCfg.dias))}d)</small></label>
-            <div style="display:flex;gap:6px;align-items:center;font-size:.76rem;color:#5c5960">
-              <span title="Conversaram no período">📅</span>
-              <input type="date" id="convDataIni" onchange="filtrarData()" title="De (dia inicial)" style="flex:1 1 0;min-width:0;font-size:.74rem;padding:5px 6px;border:1px solid var(--linha);border-radius:7px">
-              <span>até</span>
-              <input type="date" id="convDataFim" onchange="filtrarData()" title="Até (dia final)" style="flex:1 1 0;min-width:0;font-size:.74rem;padding:5px 6px;border:1px solid var(--linha);border-radius:7px">
-              <button type="button" onclick="limparData()" title="Limpar datas" class="reset" style="padding:4px 8px;font-size:.82rem">🧹</button>
+        <details id="convFiltrosDet" class="filtros-det" ontoggle="try{localStorage.setItem('convFiltrosOpen', this.open?'1':'0')}catch(e){}">
+          <summary class="filtros-sum"><span class="s-mais">⚙️ Mais filtros</span><span class="s-menos">⚙️ Menos filtros</span></summary>
+          <div class="filtros-corpo">
+            <label class="filtro-check"><input type="checkbox" id="convQuieto" onchange="filtrarQuieto(this)">😴 Sem resposta há <b>${esc(String(quietoCfg.horas))}h+</b> <small>(${esc(String(quietoCfg.dias))}d)</small></label>
+            <div class="filtro-periodo">
+              <span class="filtro-lbl">📅 Conversaram no período</span>
+              <div class="filtro-datas">
+                <input type="date" id="convDataIni" onchange="filtrarData()" title="De (dia inicial)">
+                <span class="ate">até</span>
+                <input type="date" id="convDataFim" onchange="filtrarData()" title="Até (dia final)">
+                <button type="button" onclick="limparData()" title="Limpar datas" class="reset filtro-limpar">🧹</button>
+              </div>
             </div>
           </div>
         </details>
