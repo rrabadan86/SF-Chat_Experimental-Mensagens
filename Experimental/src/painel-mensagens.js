@@ -129,6 +129,7 @@ function telaDaUrl(u) {
   if (u === '/instagram' || u.startsWith('/instagram/')) return 'ig';
   if (u === '/sofia' || u.startsWith('/sofia/')) return 'sofia';
   if (u === '/perfis' || u.startsWith('/perfis/')) return 'perfis';
+  if (u === '/saude') return 'perfis'; // admin-only, como Perfis (a página é renderizada em rota própria)
   return 'msg';
 }
 // Sofia é dividida em três sub-abas com permissão própria.
@@ -241,6 +242,7 @@ const ESTILO = `
     .tabs .nav-ig{order:3}
     .tabs .nav-ind{order:4}
     .tabs .nav-perfis{order:5}
+    .tabs .nav-saude{order:6}
   }
   /* Mobile: logo + login na 1ª linha; o menu ocupa a linha inteira logo abaixo.
      A barra inteira continua fixa ao rolar. */
@@ -294,6 +296,18 @@ const ESTILO = `
     .hm-full{display:none}
     .hm-compact{display:block}
   }
+  /* Página de Saúde */
+  .sd-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+  .sd-card{margin:0}
+  .sd-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .sd-top h3{margin:0;font-size:1rem;font-weight:700}
+  .sd-pill{font-size:.74rem;font-weight:700;padding:3px 11px;border-radius:999px;white-space:nowrap;border:1px solid transparent}
+  .sd-pill.sd-ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-bd)}
+  .sd-pill.sd-warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-bd)}
+  .sd-pill.sd-erro{background:var(--erro-bg);color:var(--erro);border-color:var(--erro-bd)}
+  .sd-line{font-size:.85rem;color:var(--tinta);padding:4px 0;border-top:1px solid var(--linha-soft)}
+  .sd-line:first-of-type{border-top:0}
+  .sd-muted{color:var(--cinza)}
   .aviso{background:var(--avi-bg);border:1px solid var(--avi-bd);color:var(--avi-tx);border-radius:10px;padding:10px 14px;margin:14px 0;font-size:var(--fs-sm)}
   .aviso.err{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
   .card{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:15px 17px;margin:12px 0;box-shadow:0 1px 2px rgba(16,24,40,.04)}
@@ -525,6 +539,7 @@ function navTabs(ativo) {
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp', 'msg');
   html += item('ig', '/instagram', '📸', 'Instagram');
   if (sess.admin) html += cel('/perfis', ativo === 'perfis', '👤', 'Perfis', 'perfis');
+  if (sess.admin) html += cel('/saude', ativo === 'saude', '🩺', 'Saúde', 'saude');
   if (temSofia(sess)) html += cel(sofiaHref(sess), ativo === 'sofia', '🤖', 'SoFIA', 'sofia');
   return html;
 }
@@ -3201,6 +3216,95 @@ function negarAcesso(res, sess) {
   res.end(chrome({ tab: 'Sem acesso', h1: 'SlimFit', p: 'Painel do Studio.' }, '', corpo));
 }
 
+// ── Página: Saúde do sistema (admin) ────────────────────────────────────────
+// Reúne num só lugar o estado de cada serviço: robô, SoFIA, painel, Instagram e
+// formulário — cada um com um selo (OK / atenção / problema) e quando foi visto.
+function fmtIdadeSaude(ts) {
+  if (!ts) return { txt: 'sem registro', min: Infinity };
+  const ms = Date.now() - new Date(ts).getTime();
+  if (!isFinite(ms) || ms < 0) return { txt: 'agora mesmo', min: 0 };
+  const min = Math.round(ms / 60000);
+  if (min < 1) return { txt: 'agora mesmo', min: 0 };
+  if (min < 60) return { txt: 'há ' + min + ' min', min };
+  if (min < 1440) return { txt: 'há ' + Math.round(min / 60) + 'h', min };
+  return { txt: 'há ' + Math.round(min / 1440) + ' dia' + (min < 2880 ? '' : 's'), min };
+}
+function paginaSaude(list) {
+  const proc = (n) => {
+    if (!Array.isArray(list)) return null;
+    const p = list.find(x => x && x.name === n);
+    if (!p) return { existe: false };
+    const e = p.pm2_env || {};
+    return { existe: true, online: e.status === 'online', status: e.status || '?', restarts: e.restart_time || 0, uptime: e.pm_uptime ? Date.now() - e.pm_uptime : 0 };
+  };
+  const upTxt = (ms) => { if (!ms || ms < 0) return '—'; const h = ms / 3600000; return h < 1 ? Math.round(ms / 60000) + ' min' : (h < 48 ? h.toFixed(1) + 'h' : Math.round(h / 24) + ' dias'); };
+  const procLinha = (pr) => !pr ? '<span class="sd-muted">não consegui consultar o PM2 (pm2 jlist)</span>'
+    : !pr.existe ? '<span class="sd-muted">não aparece no PM2 — rode <code>pm2 resurrect</code></span>'
+      : `processo <b>${pr.online ? 'online' : pr.status}</b> · no ar há ${upTxt(pr.uptime)} · ${pr.restarts} reinício${pr.restarts === 1 ? '' : 's'}`;
+  const procCor = (pr) => (!pr || !pr.existe || !pr.online) ? 'erro' : 'ok';
+
+  const card = (nome, cor, pill, linhas) => `<div class="card sd-card">
+      <div class="sd-top"><h3>${esc(nome)}</h3><span class="sd-pill sd-${cor}">${pill}</span></div>
+      ${linhas.filter(Boolean).map(l => `<div class="sd-line">${l}</div>`).join('')}
+    </div>`;
+  const pior = (a, b) => (a === 'erro' || b === 'erro') ? 'erro' : ((a === 'warn' || b === 'warn') ? 'warn' : 'ok');
+  const pillTxt = { ok: '🟢 OK', warn: '🟡 Atenção', erro: '🔴 Problema' };
+
+  // Robô de mensagens (slimfit-exp) + WhatsApp do robô.
+  const pExp = proc('slimfit-exp');
+  const waR = (() => { try { return waStatus.get() || {}; } catch (_) { return {}; } })();
+  const waRid = fmtIdadeSaude(waR.atualizadoEm);
+  const waRcor = waR.estado === 'conectado' ? 'ok' : (waR.estado === 'qr' || waR.estado === 'desconectado') ? 'erro' : 'warn';
+  const corExp = pior(procCor(pExp), procCor(pExp) === 'ok' ? waRcor : 'ok');
+  const cardExp = card('Robô de mensagens', corExp, pillTxt[corExp], [
+    procLinha(pExp),
+    `WhatsApp do robô: <b>${esc(waR.estado || 'sem informação')}</b> <span class="sd-muted">(atualizado ${waRid.txt})</span>`,
+  ]);
+
+  // SoFIA (sofia-listener) + WhatsApp da SoFIA.
+  const pSof = proc('sofia-listener');
+  const waS = (() => { try { return sofia.waStatus() || {}; } catch (_) { return {}; } })();
+  const waSid = fmtIdadeSaude(waS.atualizadoEm);
+  const waScor = waS.estado === 'conectado' ? 'ok' : (waS.estado === 'qr' || waS.estado === 'desconectado') ? 'erro' : 'warn';
+  const corSof = pior(procCor(pSof), procCor(pSof) === 'ok' ? waScor : 'ok');
+  const cardSof = card('SoFIA (chatbot)', corSof, pillTxt[corSof], [
+    procLinha(pSof),
+    `WhatsApp da SoFIA: <b>${esc(waS.estado || 'sem informação')}</b> <span class="sd-muted">(atualizado ${waSid.txt})</span>`,
+  ]);
+
+  // Painel (slimfit-painel) — se está respondendo, está online.
+  const pPain = proc('slimfit-painel');
+  const cardPain = card('Painel', procCor(pPain), pillTxt[procCor(pPain)], [procLinha(pPain)]);
+
+  // Instagram — ligado/pausado + saúde da sessão na última execução.
+  let igLig = false; try { igLig = igcfg.ligado(); } catch (_) {}
+  const sessIg = lerJsonData('instagram-sessao.json');
+  const igId = fmtIdadeSaude(sessIg && sessIg.em);
+  const corIg = !igLig ? 'warn' : (sessIg ? (sessIg.ok ? 'ok' : 'erro') : 'warn');
+  const cardIg = card('Instagram', corIg, !igLig ? '🟡 Pausado' : pillTxt[corIg], [
+    igLig ? 'Envio de boas-vindas <b>ligado</b>.' : 'Envio de boas-vindas <b>pausado</b>.',
+    sessIg ? `Sessão ${sessIg.ok ? '<b>ativa</b>' : '<b>caiu</b> (reimporte os cookies)'} <span class="sd-muted">(verificada ${igId.txt})</span>` : '<span class="sd-muted">sessão ainda não verificada por uma execução</span>',
+  ]);
+
+  // Formulário (Render) — não dá para medir o Render daqui; usamos o último
+  // acesso registrado como sinal de vida do fluxo.
+  let ultAcesso = null; try { const rr = indicadores.resumo(0); ultAcesso = rr.ultimoAcesso || null; } catch (_) {}
+  const fId = fmtIdadeSaude(ultAcesso);
+  const cardForm = card('Formulário de agendamento', 'ok', '🟢 Publicado', [
+    'Hospedado no Render (deploy automático pelo GitHub).',
+    ultAcesso ? `Último acesso registrado <b>${fId.txt}</b>.` : '<span class="sd-muted">ainda sem acessos registrados no período.</span>',
+    '<span class="sd-muted">Obs.: o status do servidor do Render é consultado no painel do Render, não aqui.</span>',
+  ]);
+
+  const corpo = `<div class="wrap">
+    <div class="sec-t">Saúde do sistema</div>
+    <p class="quando" style="margin:0 0 14px">Estado de cada parte da automação num lugar só. Atualiza a cada visita a esta página.</p>
+    <div class="sd-grid">${cardExp}${cardSof}${cardPain}${cardIg}${cardForm}</div>
+    <p class="quando" style="text-align:center;margin-top:14px"><a href="/saude" style="color:var(--teal-esc);font-weight:600;text-decoration:none">↻ Atualizar</a></p>
+  </div>`;
+  return chrome({ tab: 'Saúde', h1: 'Saúde', p: 'Estado de robô, SoFIA, painel, Instagram e formulário.' }, 'saude', corpo);
+}
+
 function lerCorpo(req, limite, cb) {
   let corpo = '';
   req.on('data', c => { corpo += c; if (corpo.length > limite) req.destroy(); });
@@ -3473,6 +3577,14 @@ const server = http.createServer((req, res) => {
     const d = sp2.get('dias');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(paginaIndicadores(d == null ? 7 : parseInt(d, 10), sp2.get('erro') || ''));
+  }
+  // Saúde do sistema (admin) — consulta o PM2 (assíncrono) e renderiza os selos.
+  if (req.method === 'GET' && url === '/saude') {
+    return exec('pm2 jlist', { timeout: 15000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) => {
+      let list = null; try { list = JSON.parse(stdout); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(paginaSaude(list));
+    });
   }
   // Criar / excluir canal de origem (gerador de links).
   if (req.method === 'POST' && url === '/origens/criar') {

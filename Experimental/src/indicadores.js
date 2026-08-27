@@ -120,6 +120,15 @@ function resumo(dias) {
   for (const e of acessosEvs) { const d = new Date(e.dia + 'T12:00:00'); if (!isNaN(d)) diaSem[d.getDay()]++; }
   const picoDias = DIAS.map((nome, i) => ({ dia: nome, n: diaSem[i] }));
 
+  // Último acesso registrado (sinal de vida do fluxo do formulário).
+  let ultimoAcesso = null;
+  for (const e of acessosEvs) {
+    if (!e.dia) continue;
+    const q = (e.quando && /^\d\d:\d\d/.test(e.quando)) ? (e.quando.length === 5 ? e.quando + ':00' : e.quando.slice(0, 8)) : '00:00:00';
+    const iso = e.dia + 'T' + q;
+    if (!ultimoAcesso || iso > ultimoAcesso) ultimoAcesso = iso;
+  }
+
   // Mapa de calor: acessos por dia-da-semana (0=Dom..6=Sáb) × hora (0..23).
   // Cruza as duas dimensões num único gráfico (heatmap) — mostra o "quando"
   // real (ex.: terça às 19h), não só o pico de hora e o de dia separados.
@@ -147,7 +156,7 @@ function resumo(dias) {
     porDia,
     porOrigem, temOrigem,
     picoHoras, picoDias, horariosAula,
-    mapaCalor, mapaMax,
+    mapaCalor, mapaMax, ultimoAcesso,
     primeiroDia: arr.length ? arr[0].dia : null,
     total: arr.length,
   };
