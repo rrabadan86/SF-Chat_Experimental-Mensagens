@@ -470,20 +470,29 @@ function lerEncerradas() {
   try { const o = JSON.parse(ler(F.encerradas)); return (o && typeof o === 'object') ? o : {}; }
   catch (_) { return {}; }
 }
+// Valor em sofia-encerradas.json: número (legado, só o instante) OU objeto
+// { em, por } — "por" = nome do perfil que encerrou à mão pelo painel.
+function _encEm(v) { return (v && typeof v === 'object') ? Number(v.em || 0) : Number(v || 0); }
+function _encPor(v) { return (v && typeof v === 'object') ? String(v.por || '') : ''; }
 // Está encerrada à mão AGORA? (fechada e sem mensagem nova desde o fechamento)
 function estaEncerrada(chave, ultimaEm) {
-  const em = Number(lerEncerradas()[chave] || 0);
+  const em = _encEm(lerEncerradas()[chave]);
   return em > 0 && em >= (Number(ultimaEm) || 0);
 }
-// Marca (ou desmarca) o encerramento manual de UMA conversa. Poda registros com
-// mais de 45 dias para o arquivo não crescer à toa.
-function setEncerrada(chave, ativo) {
+// { em, por } do encerramento manual (por='' quando desconhecido/legado).
+function encerradaInfo(chave) {
+  const v = lerEncerradas()[chave];
+  return { em: _encEm(v), por: _encPor(v) };
+}
+// Marca (ou desmarca) o encerramento manual de UMA conversa, guardando quem
+// encerrou. Poda registros com mais de 45 dias para o arquivo não crescer à toa.
+function setEncerrada(chave, ativo, por) {
   chave = String(chave || '').trim();
   if (!chave) return false;
   const o = lerEncerradas();
   const corte = Date.now() - 45 * 24 * 3600 * 1000;
-  for (const k of Object.keys(o)) if (!(Number(o[k]) > corte)) delete o[k];
-  if (ativo) o[chave] = Date.now(); else delete o[chave];
+  for (const k of Object.keys(o)) if (!(_encEm(o[k]) > corte)) delete o[k];
+  if (ativo) o[chave] = { em: Date.now(), por: String(por || '').trim() }; else delete o[chave];
   gravarArquivo(F.encerradas, JSON.stringify(o));
   return !!ativo;
 }
@@ -608,6 +617,6 @@ module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerCusto, lerCustoLimite, gravarCustoLimite,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

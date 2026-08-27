@@ -219,10 +219,11 @@ const ESTILO = `
   *{box-sizing:border-box}
   body{margin:0;font-family:"Inter",-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--tinta);line-height:1.5;font-size:var(--fs-body);letter-spacing:-.011em;-webkit-font-smoothing:antialiased}
   h1,h2,h3,button,.tabs a{font-family:"Inter",-apple-system,Segoe UI,Arial,sans-serif;letter-spacing:-.02em}
-  .wrap{max-width:900px;margin:0 auto;padding:14px 16px}
+  .wrap{max-width:900px;margin:0 auto;padding:16px 24px}
+  @media(max-width:560px){.wrap{padding:14px 16px}}
   /* Barra superior ÚNICA e FIXA: logo + menu + login (sem a faixa branca separada). */
   .topbar{position:sticky;top:0;z-index:60;background:var(--card);border-bottom:1px solid var(--linha)}
-  .topbar .in{max-width:900px;margin:0 auto;padding:4px 16px;display:flex;align-items:center;gap:16px}
+  .topbar .in{max-width:900px;margin:0 auto;padding:4px 24px;display:flex;align-items:center;gap:16px}
   .tb-logo{height:50px;width:auto;flex:none;display:block}
   .hdr-user{display:flex;align-items:center;gap:12px;font-size:.82rem;white-space:nowrap;flex:none;margin-left:auto}
   .hdr-user span{color:var(--cinza)}
@@ -1727,14 +1728,16 @@ function paginaSofiaConversas(aviso, erro) {
     // Divisória de SESSÃO: fica PERMANENTE no histórico entre uma conversa e a
     // seguinte. Aparece quando o intervalo entre duas mensagens passa do Tempo de
     // sessão (memória) OU quando houve encerramento manual (cadeado) entre elas.
-    var divisor='<div style="display:flex;align-items:center;gap:10px;margin:16px 2px 8px;color:#a15a5a"><span style="flex:1;height:1px;background:#e6cfcf"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap">🔒 Sessão encerrada · nova conversa</span><span style="flex:1;height:1px;background:#e6cfcf"></span></div>';
+    function divisorHtml(txt){ return '<div style="display:flex;align-items:center;gap:10px;margin:16px 2px 8px;color:#a15a5a"><span style="flex:1;height:1px;background:#e6cfcf"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap">'+txt+'</span><span style="flex:1;height:1px;background:#e6cfcf"></span></div>'; }
+    var encPorTxt=(c.encPor && String(c.encPor).trim())?escH(c.encPor):'';
     var bolhas = msgs.map(function(m,i){
       var sep='';
       if(i>0){
         var ant=msgs[i-1];
         var gap=(m.em||0)-(ant.em||0);
         var manual=(c.encEm && (ant.em||0) < c.encEm && c.encEm <= (m.em||0));
-        if(gap>SESSAO_MS || manual) sep=divisor;
+        if(manual) sep=divisorHtml('🔒 Encerrada '+(encPorTxt?'por '+encPorTxt:'manualmente')+' · nova conversa');
+        else if(gap>SESSAO_MS) sep=divisorHtml('⏱️ Sessão encerrada automaticamente · nova conversa');
       }
       var mine = (m.autor!=='aluna');
       var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e4efee');
@@ -1742,7 +1745,7 @@ function paginaSofiaConversas(aviso, erro) {
       var corpoMsg = (m.texto?'<div style="white-space:pre-wrap">'+escH(m.texto)+'</div>':'') + img;
       return sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna))+' · '+fmtHora(m.em)+'</div>'+corpoMsg+'</div></div>';
     }).join('');
-    var fim = encerrada(c) ? '<div style="text-align:center;margin:10px 0 2px"><span style="display:inline-block;background:#f3eaea;color:#a15a5a;border:1px solid #e6cfcf;border-radius:999px;padding:3px 12px;font-size:.72rem;font-weight:700">🔒 Sessão encerrada · a SoFIA recomeça do zero se a aluna voltar</span></div>' : '';
+    var fim = encerrada(c) ? '<div style="text-align:center;margin:10px 0 2px"><span style="display:inline-block;background:#f3eaea;color:#a15a5a;border:1px solid #e6cfcf;border-radius:999px;padding:3px 12px;font-size:.72rem;font-weight:700">🔒 Encerrada '+(encPorTxt?'por '+encPorTxt:'manualmente')+' · a SoFIA recomeça do zero se a aluna voltar</span></div>' : '';
     var hum = !!c.humano;
     // Cabeçalho enxuto: nome + telefone à esquerda, botão de controle (compacto) à direita.
     var pill='<button type="button" onclick="toggleHumano()" class="'+(hum?'save':'reset')+'" title="'+(hum?'Devolver à SoFIA (ela volta a responder)':'Assumir a conversa (você atende)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">'+(hum?'🤖':'🧑')+'</button>';
@@ -3858,7 +3861,7 @@ const server = http.createServer((req, res) => {
     try { const hum = sofia.lerHumano(); for (const k in obj) obj[k].humano = !!hum[k]; } catch (_) {} // controle humano por conversa
     try { for (const k in obj) obj[k].bloq = sofia.estaBloqueado(k); } catch (_) {} // contato bloqueado?
     try { for (const k in obj) obj[k].enc = sofia.estaEncerrada(k, obj[k].ultimaEm); } catch (_) {} // encerrada à mão (cadeado)?
-    try { const em = sofia.lerEncerradas() || {}; for (const k in obj) obj[k].encEm = Number(em[k] || 0) || 0; } catch (_) {} // instante do encerramento manual (p/ a divisória)
+    try { const em = sofia.lerEncerradas() || {}; for (const k in obj) { const v = em[k]; const isObj = v && typeof v === 'object'; obj[k].encEm = isObj ? (Number(v.em) || 0) : (Number(v) || 0); obj[k].encPor = isObj ? String(v.por || '') : ''; } } catch (_) {} // instante + autor do encerramento manual (p/ a divisória)
     try { for (const k in obj) obj[k].fuEspera = fuEsperando[k] || ''; } catch (_) {} // follow-up pronto, segurando pelo horário?
     let wa = ''; try { wa = (sofia.waStatus() || {}).estado || ''; } catch (_) {} // online/off-line do WhatsApp da SoFIA
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -3887,7 +3890,8 @@ const server = http.createServer((req, res) => {
       const chave = String(d.chave || '').trim();
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
-      try { sofia.setEncerrada(chave, true); return res.end(JSON.stringify({ ok: true })); }
+      const quem = (_navSess && _navSess.usuario) ? _navSess.usuario : '';
+      try { sofia.setEncerrada(chave, true, quem); return res.end(JSON.stringify({ ok: true })); }
       catch (e) { return res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
   }
