@@ -1845,7 +1845,7 @@ function paginaSofiaConversas(aviso, erro) {
       var el=document.getElementById('convImportSt'), b=document.getElementById('convImportBtn');
       var s=j&&j.status; if(!el) return;
       if(s&&s.rodando){ el.textContent='⏳ Importando… '+(s.feitos||0)+(s.total?('/'+s.total):'')+' conversas'; if(b)b.disabled=true; setTimeout(pollImport,3000); }
-      else if(s&&s.erro){ el.textContent='⚠️ '+s.erro; if(b)b.disabled=false; }
+      else if(s&&s.erro){ el.textContent='⚠️ '+s.erro; el.title=s.erro; el.style.whiteSpace='normal'; el.style.overflowWrap='anywhere'; el.style.color='#a15a5a'; if(b)b.disabled=false; }
       else if(s&&s.terminadoEm){ el.textContent='✅ '+(s.novos||0)+' conversas importadas.'; if(b)b.disabled=false; atualizaInbox(); }
       else { el.textContent=''; if(b)b.disabled=false; }
     }).catch(function(){});
