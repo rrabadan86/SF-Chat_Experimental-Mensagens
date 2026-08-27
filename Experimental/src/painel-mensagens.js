@@ -1949,6 +1949,8 @@ function paginaSofiaContatos(aviso, erro, params) {
 
     ${loteBar}
 
+    ${r.itens.length ? pag : ''}
+
     ${r.itens.length ? `<div class="ct-wrap">
       <table class="ct-tab">
         <colgroup><col class="c-nome"><col class="c-tel"><col class="c-tags"><col class="c-act"></colgroup>
