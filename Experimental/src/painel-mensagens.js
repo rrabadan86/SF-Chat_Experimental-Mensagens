@@ -146,7 +146,8 @@ function sofiaHref(sess) {
 // (marcar tags/salvar contato a partir de uma conversa) vale para Conversas OU Contatos.
 function sofiaRotaPermitida(sess, url) {
   const has = k => (sess.telas || []).includes(k);
-  if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto' || url === '/sofia/conversas/encerrar' || url === '/sofia/importar' || url === '/sofia/importar/status') return has('sofia_conversas');
+  if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto' || url === '/sofia/conversas/encerrar') return has('sofia_conversas');
+  if (url === '/sofia/importar' || url === '/sofia/importar/status') return has('sofia_conversas') || has('sofia_config');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
   if (url === '/sofia/contatos/bloquear') return has('sofia_conversas') || has('sofia_contatos'); // bloquear vem tb do chat (Conversas)
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
@@ -1516,7 +1517,7 @@ function paginaSofiaConversas(aviso, erro) {
           <select id="convFiltroTag" onchange="filtrarTag(this.value)" title="Filtrar por tag" style="flex:0 0 42px;width:42px;font-size:.82rem;padding:8px 2px"><option value="">🏷️</option><option value="__sem__">🏷️ Sem tag</option>${tagsLista.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select>
         </div>
         <details id="convFiltrosDet" style="margin-bottom:8px" ontoggle="try{localStorage.setItem('convFiltrosOpen', this.open?'1':'0')}catch(e){}">
-          <summary style="cursor:pointer;font-size:.76rem;color:#5c5960;list-style:none;padding:2px 0;user-select:none">⚙️ Mais filtros e histórico</summary>
+          <summary style="cursor:pointer;font-size:.8rem;font-weight:700;color:#5c5960;list-style:none;padding:2px 0;user-select:none">⚙️ Mais filtros</summary>
           <div style="padding:8px 0 0;display:flex;flex-direction:column;gap:8px">
             <label style="display:flex;align-items:center;gap:8px;font-size:.78rem;cursor:pointer;color:#5c5960"><input type="checkbox" id="convQuieto" onchange="filtrarQuieto(this)" style="width:15px;height:15px;margin:0;flex:none">😴 Sem resposta há <b>${esc(String(quietoCfg.horas))}h+</b> <small style="color:#9a9a9a">(${esc(String(quietoCfg.dias))}d)</small></label>
             <div style="display:flex;gap:6px;align-items:center;font-size:.76rem;color:#5c5960">
@@ -1525,10 +1526,6 @@ function paginaSofiaConversas(aviso, erro) {
               <span>até</span>
               <input type="date" id="convDataFim" onchange="filtrarData()" title="Até (dia final)" style="flex:1 1 0;min-width:0;font-size:.74rem;padding:5px 6px;border:1px solid var(--linha);border-radius:7px">
               <button type="button" onclick="limparData()" title="Limpar datas" class="reset" style="padding:4px 8px;font-size:.82rem">🧹</button>
-            </div>
-            <div>
-              <button type="button" id="convImportBtn" onclick="importarHistorico()" class="reset" style="width:100%;font-size:.74rem;padding:6px" title="Tenta trazer para o painel as conversas que o WhatsApp já sincronizou">📥 Importar histórico do WhatsApp</button>
-              <div id="convImportSt" class="quando" style="margin:4px 0 0;font-size:.7rem"></div>
             </div>
           </div>
         </details>
@@ -1843,24 +1840,6 @@ function paginaSofiaConversas(aviso, erro) {
   function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){ j=j||{}; atualizaWa(j.wa); renderInbox(j.conv||{}); }).catch(function(){}); }
   atualizaInbox(); setInterval(atualizaInbox, 4000);
   try { if(localStorage.getItem('convFiltrosOpen')==='1'){ var _d=document.getElementById('convFiltrosDet'); if(_d)_d.open=true; } } catch(e){}
-  function importarHistorico(){
-    if(!confirm('Tentar importar para o painel as conversas que o WhatsApp já sincronizou?\\n\\nLê o histórico existente e mostra aqui (não responde ninguém). Pode levar alguns minutos.\\n\\nObs.: o WhatsApp normalmente sincroniza só uma janela recente — pode não trazer tudo.')) return;
-    var b=document.getElementById('convImportBtn'); if(b){ b.disabled=true; }
-    fetch('/sofia/importar',{method:'POST'}).then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ setTimeout(function(){pollImport(true);},1500); } else { alert('❌ '+((j&&j.erro)||'falha')); if(b)b.disabled=false; } }).catch(function(){ alert('❌ erro de rede'); if(b)b.disabled=false; });
-  }
-  // mostrarFim: só exibe erro/conclusão quando VOCÊ acabou de clicar (não fica
-  // preso a cada refresh mostrando status velho). No load, só mostra se estiver rodando.
-  function pollImport(mostrarFim){
-    fetch('/sofia/importar/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
-      var el=document.getElementById('convImportSt'), b=document.getElementById('convImportBtn');
-      var s=j&&j.status; if(!el) return;
-      if(s&&s.rodando){ el.style.color=''; el.textContent='⏳ Importando… '+(s.feitos||0)+(s.total?('/'+s.total):'')+' conversas'; if(b)b.disabled=true; setTimeout(function(){pollImport(true);},3000); }
-      else if(mostrarFim && s && s.erro){ el.textContent='⚠️ '+s.erro; el.title=s.erro; el.style.whiteSpace='normal'; el.style.overflowWrap='anywhere'; el.style.color='#a15a5a'; if(b)b.disabled=false; }
-      else if(mostrarFim && s && s.terminadoEm){ el.style.color=''; el.textContent='✅ '+(s.novos||0)+' conversas trazidas.'; if(b)b.disabled=false; atualizaInbox(); }
-      else { el.textContent=''; el.title=''; if(b)b.disabled=false; }
-    }).catch(function(){});
-  }
-  pollImport(false);
 </script>`;
   return chrome({ tab: 'SoFIA', h1: '🤖 SoFIA', p: 'Conversas da SoFIA — leia o histórico de cada atendimento.' }, 'sofia', corpo);
 }
@@ -1932,9 +1911,9 @@ function paginaSofiaContatos(aviso, erro, params) {
   const optRm = ['<option value="">— não remover —</option>']
     .concat(tags.map(t => `<option value="${esc(t.tag)}"${t.tag === tagReal ? ' selected' : ''}>${esc(t.tag)} (${t.n})</option>`)).join('');
   const loteBar = (r.total && tags.length) ? `
-    <div class="card" style="padding:10px 15px">
-      <div style="font-weight:700;margin-bottom:8px">🏷️ Alterar tags em lote <small style="font-weight:400;color:#5c5960">— marque contatos na lista, ou aplique a todos do filtro</small></div>
-      <form method="POST" action="/sofia/contatos/lote" data-total="${r.total}" onsubmit="return confirmarLote(this)" style="display:flex;flex-direction:column;gap:10px">
+    <details class="card" style="padding:10px 15px">
+      <summary style="cursor:pointer;font-weight:700;user-select:none">🏷️ Alterar tags em lote <small style="font-weight:400;color:#5c5960">— marque contatos na lista, ou aplique a todos do filtro</small></summary>
+      <form method="POST" action="/sofia/contatos/lote" data-total="${r.total}" onsubmit="return confirmarLote(this)" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
         <input type="hidden" name="q" value="${esc(q)}"><input type="hidden" name="tag_filtro" value="${esc(tagSel)}"><input type="hidden" name="bloq" value="${esc(bloqSel)}">
         <input type="hidden" name="tels" id="loteTels" value="">
         <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1944,7 +1923,7 @@ function paginaSofiaContatos(aviso, erro, params) {
         <button type="submit" class="save" style="padding:8px 14px;align-self:flex-start"><span id="loteBtnTxt">Aplicar ao filtro (${r.total})</span></button>
       </form>
       <p class="quando" id="loteHint" style="margin:8px 0 0">Nenhum marcado — vai aplicar aos <b>${r.total} contato(s) do filtro atual</b>. Marque as caixinhas na lista para agir só nos escolhidos. Ao <b>adicionar</b>, as regras de transição de funil da tag também valem.</p>
-    </div>` : '';
+    </details>` : '';
 
   // Paginação com NÚMEROS (janela em torno da atual + 1ª/última + reticências),
   // para saltar direto em vez de ir de 1 em 1. Ex.: ‹  1 … 4 [5] 6 … 11  ›
@@ -2746,6 +2725,15 @@ function paginaSofia(aviso, erro) {
       <form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="margin:0;display:inline"><button type="submit" class="reset" style="padding:6px 14px">🔌 Desconectar</button></form>
     </div>
 
+    <div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px">
+      <div style="flex:1 1 220px;min-width:0">
+        <div style="font-weight:700;font-size:.9rem">📥 Importar histórico do WhatsApp</div>
+        <div class="quando" style="margin:2px 0 0">Traz para o painel as conversas que o WhatsApp já sincronizou (não responde ninguém). O WhatsApp sincroniza só uma janela recente — pode não trazer tudo.</div>
+        <div id="impSt" class="quando" style="margin:4px 0 0;font-size:.75rem"></div>
+      </div>
+      <button type="button" id="impBtn" onclick="importarHistorico()" class="save" style="padding:8px 16px;flex:none">Importar agora</button>
+    </div>
+
     <form id="formSalvar" method="POST" action="/sofia/salvar">
 
       <details class="acc-sec">
@@ -2913,6 +2901,22 @@ function paginaSofia(aviso, erro) {
     </form>
   </div>
 <script>
+  function importarHistorico(){
+    if(!confirm('Tentar importar para o painel as conversas que o WhatsApp já sincronizou?\\n\\nLê o histórico existente e mostra na aba Conversas (não responde ninguém). Pode levar alguns minutos.\\n\\nObs.: o WhatsApp normalmente sincroniza só uma janela recente — pode não trazer tudo.')) return;
+    var b=document.getElementById('impBtn'); if(b){ b.disabled=true; }
+    fetch('/sofia/importar',{method:'POST'}).then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ setTimeout(function(){pollImport(true);},1500); } else { alert('❌ '+((j&&j.erro)||'falha')); if(b)b.disabled=false; } }).catch(function(){ alert('❌ erro de rede'); if(b)b.disabled=false; });
+  }
+  function pollImport(mostrarFim){
+    fetch('/sofia/importar/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
+      var el=document.getElementById('impSt'), b=document.getElementById('impBtn');
+      var s=j&&j.status; if(!el) return;
+      if(s&&s.rodando){ el.style.color=''; el.textContent='⏳ Importando… '+(s.feitos||0)+(s.total?('/'+s.total):'')+' conversas'; if(b)b.disabled=true; setTimeout(function(){pollImport(true);},3000); }
+      else if(mostrarFim && s && s.erro){ el.textContent='⚠️ '+s.erro; el.title=s.erro; el.style.whiteSpace='normal'; el.style.overflowWrap='anywhere'; el.style.color='#a15a5a'; if(b)b.disabled=false; }
+      else if(mostrarFim && s && s.terminadoEm){ el.style.color='#1c8f52'; el.textContent='✅ '+(s.novos||0)+' conversas trazidas — veja na aba Conversas.'; if(b)b.disabled=false; }
+      else { el.textContent=''; el.title=''; if(b)b.disabled=false; }
+    }).catch(function(){});
+  }
+  pollImport(false);
   function renderSofiaWa(st){
     var e = st && st.estado;
     if(e==='conectado') return '<div class="wa-card ok"><div class="wa-ic">🤖</div><h2>WhatsApp da SoFIA conectado</h2><p>A SoFIA está no ar e responde as alunas neste número.</p></div>';
