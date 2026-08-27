@@ -284,29 +284,36 @@ function removerTag(telefone, tag) {
   return false;
 }
 
-// Ação em LOTE: adiciona ('add') ou remove ('rm') a tag `alvo` em TODOS os
-// contatos que casam com o filtro atual (busca + tag + bloqueio). Grava uma vez
-// só. Retorna quantos contatos foram efetivamente alterados. Ao adicionar,
-// respeita as regras de transição de funil (tagsAposRegras).
-function aplicarTagLote({ q = '', tag = '', bloq = '', bloqueados = [], acao = 'add', alvo = '' } = {}) {
-  alvo = String(alvo || '').trim();
-  if (!alvo) throw new Error('Escolha a tag a aplicar/remover.');
-  if (acao !== 'add' && acao !== 'rm') throw new Error('Ação inválida.');
+// Ação em LOTE: adiciona a tag `add` e/ou remove a tag `rm` num conjunto de
+// contatos, numa passada só. O conjunto é:
+//   • a lista `tels` (telefones), quando informada — seleção por linha no painel;
+//   • senão, todos os contatos que casam com o filtro atual (busca+tag+bloqueio).
+// Ao adicionar, respeita as regras de transição de funil (tagsAposRegras).
+// Retorna quantos contatos foram efetivamente alterados. Grava uma vez só.
+function aplicarTagLote({ q = '', tag = '', bloq = '', bloqueados = [], tels = null, add = '', rm = '' } = {}) {
+  add = String(add || '').trim();
+  rm = String(rm || '').trim();
+  if (!add && !rm) throw new Error('Escolha ao menos uma tag para adicionar ou remover.');
   const map = carregar();
-  const alvos = filtrarContatos(Object.values(map), { q, tag, bloq, bloqueados });
+  let alvos;
+  if (Array.isArray(tels) && tels.length) {
+    const set = new Set(tels.map(t => normTel(t)).filter(Boolean));
+    alvos = Object.values(map).filter(c => set.has(normTel(c.tel)));
+  } else {
+    alvos = filtrarContatos(Object.values(map), { q, tag, bloq, bloqueados });
+  }
   const agora = Date.now();
   let n = 0;
   for (const c of alvos) {
     const antes = (c.tags || []).slice();
-    if (acao === 'rm') {
-      c.tags = antes.filter(t => t !== alvo);
-    } else {
-      const set = new Set(antes);
-      set.add(alvo);
-      c.tags = tagsAposRegras([...set]); // aplica transições (ex.: sai de "Contato inicial")
-    }
-    // "mudou" = conjunto de tags diferente do anterior.
-    if (c.tags.length !== antes.length || c.tags.some(t => !antes.includes(t))) { c.atualizadoEm = agora; n++; }
+    const set = new Set(antes);
+    if (rm) set.delete(rm);
+    if (add) set.add(add);
+    // Regras de funil só quando ADICIONA (senão remover poderia tirar outras tags).
+    let novo = add ? tagsAposRegras([...set]) : [...set];
+    const mudou = novo.length !== antes.length || novo.some(t => !antes.includes(t));
+    c.tags = novo;
+    if (mudou) { c.atualizadoEm = agora; n++; }
   }
   if (n) salvar(map);
   return n;

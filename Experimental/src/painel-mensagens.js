@@ -1840,6 +1840,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     return `<tr class="ct-row" data-nome="${esc((nm || '').toLowerCase())}" data-tel="${esc(c.tel)}" data-bloq="${bloq ? '1' : '0'}" onclick='abrirModal(${jc})'>
       <td>
         <div style="display:flex;align-items:center;gap:10px;min-width:0">
+          <input type="checkbox" class="ct-chk" value="${esc(c.tel)}" onclick="event.stopPropagation();atualizarSel()" title="Selecionar" style="flex:none;width:16px;height:16px;margin:0;cursor:pointer">
           <span class="ct-av" style="background:${corAv(nm || c.tel)}">${esc(iniciais(nm, c.tel))}</span>
           <span class="ct-nm">${esc(nm || '(sem nome)')}</span>
           ${bloq ? '<span title="Contato bloqueado" style="flex:none;color:#c0392b;font-size:.9rem">🚫</span>' : ''}
@@ -1859,20 +1860,25 @@ function paginaSofiaContatos(aviso, erro, params) {
   const opcoes = ['<option value="">Todas as tags</option>', `<option value="__sem__"${tagSel === '__sem__' ? ' selected' : ''}>Sem tag</option>`]
     .concat(tags.map(t => `<option value="${esc(t.tag)}"${t.tag === tagSel ? ' selected' : ''}>${esc(t.tag)} (${t.n})</option>`)).join('');
 
-  // Ação em lote: aplica/remove uma tag em TODOS os contatos do filtro atual
-  // (não só os visíveis). Card recolhível — não mexe no layout da tabela.
-  const optAlvo = tags.map(t => `<option value="${esc(t.tag)}">${esc(t.tag)} (${t.n})</option>`).join('');
+  // Ação em lote: marque contatos na lista (checkbox) e adicione/remova uma tag
+  // nos SELECIONADOS; se nada estiver marcado, age em todos os do filtro atual.
+  const tagReal = tags.some(t => t.tag === tagSel) ? tagSel : '';
+  const optAdd = ['<option value="">— não adicionar —</option>']
+    .concat(tags.map(t => `<option value="${esc(t.tag)}">${esc(t.tag)} (${t.n})</option>`)).join('');
+  const optRm = ['<option value="">— não remover —</option>']
+    .concat(tags.map(t => `<option value="${esc(t.tag)}"${t.tag === tagReal ? ' selected' : ''}>${esc(t.tag)} (${t.n})</option>`)).join('');
   const loteBar = (r.total && tags.length) ? `
-    <details class="card" style="padding:10px 15px">
-      <summary style="cursor:pointer;font-weight:700">🏷️ Alterar tags em lote <small style="font-weight:400;color:#5c5960">(aplica aos ${r.total} contato(s) do filtro atual)</small></summary>
-      <form method="POST" action="/sofia/contatos/lote" data-n="${r.total}" onsubmit="return confirmarLote(this)" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+    <div class="card" style="padding:10px 15px">
+      <div style="font-weight:700;margin-bottom:8px">🏷️ Alterar tags em lote <small style="font-weight:400;color:#5c5960">— marque contatos na lista, ou aplique a todos do filtro</small></div>
+      <form method="POST" action="/sofia/contatos/lote" data-total="${r.total}" onsubmit="return confirmarLote(this)" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input type="hidden" name="q" value="${esc(q)}"><input type="hidden" name="tag_filtro" value="${esc(tagSel)}"><input type="hidden" name="bloq" value="${esc(bloqSel)}">
-        <select name="acao" style="flex:0 0 160px"><option value="add">➕ Adicionar tag</option><option value="rm">➖ Remover tag</option></select>
-        <select name="alvo" style="flex:1 1 200px;min-width:0" required>${optAlvo}</select>
-        <button type="submit" class="save" style="padding:8px 14px">Aplicar aos ${r.total}</button>
+        <input type="hidden" name="tels" id="loteTels" value="">
+        <label style="margin:0;font-size:.82rem">➕ Adicionar <select name="add" style="min-width:150px">${optAdd}</select></label>
+        <label style="margin:0;font-size:.82rem">➖ Remover <select name="rm" style="min-width:150px">${optRm}</select></label>
+        <button type="submit" class="save" style="padding:8px 14px"><span id="loteBtnTxt">Aplicar ao filtro (${r.total})</span></button>
       </form>
-      <p class="quando" style="margin:8px 0 0">Age em <b>todos os ${r.total} contato(s)</b> que casam com a busca/filtro atual — não só os desta página. Ao <b>adicionar</b>, as regras de transição de funil da tag também valem.</p>
-    </details>` : '';
+      <p class="quando" id="loteHint" style="margin:8px 0 0">Nenhum marcado — vai aplicar aos <b>${r.total} contato(s) do filtro atual</b>. Marque as caixinhas na lista para agir só nos escolhidos. Ao <b>adicionar</b>, as regras de transição de funil da tag também valem.</p>
+    </div>` : '';
 
   const pag = r.paginas > 1 ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
       <a class="reset" style="padding:6px 12px;${pagina <= 0 ? 'pointer-events:none;opacity:.4' : ''}" href="${qs(Math.max(0, pagina - 1))}">‹ Anterior</a>
@@ -1925,7 +1931,7 @@ function paginaSofiaContatos(aviso, erro, params) {
       <table class="ct-tab">
         <colgroup><col class="c-nome"><col class="c-tel"><col class="c-tags"><col class="c-act"></colgroup>
         <thead><tr>
-          <th><button type="button" class="ct-sort" title="Ordenar por nome" onclick="ordenarContatos()">Nome <span id="ctSortArr" style="opacity:.4">↕</span></button></th>
+          <th><span style="display:inline-flex;align-items:center;gap:8px"><input type="checkbox" id="ctChkAll" onclick="marcarTodos(this)" title="Selecionar todos desta página" style="width:16px;height:16px;margin:0;cursor:pointer"><button type="button" class="ct-sort" title="Ordenar por nome" onclick="ordenarContatos()">Nome <span id="ctSortArr" style="opacity:.4">↕</span></button></span></th>
           <th>Telefone</th>
           <th>Tags <button type="button" class="ct-fil" title="Filtrar por tag" onclick="abrirFiltroTag()">▾</button></th>
           <th style="text-align:right">Ações</th>
@@ -2069,11 +2075,32 @@ function paginaSofiaContatos(aviso, erro, params) {
   function corTagJs(t){return PAL_TAG[_hash(t)%PAL_TAG.length];}
   var ctSel=null, ctTags=[];
   function abrirFiltroTag(){var s=document.getElementById('ctTagSel');if(s){s.focus();if(s.showPicker)try{s.showPicker();}catch(e){}}}
+  function contatosMarcados(){ return Array.prototype.slice.call(document.querySelectorAll('.ct-chk:checked')).map(function(c){return c.value;}); }
+  function loteForm(){ return document.querySelector('form[action="/sofia/contatos/lote"]'); }
+  function atualizarSel(){
+    var sel=contatosMarcados().length;
+    var f=loteForm(); var total=f?(f.getAttribute('data-total')||'0'):'0';
+    var txt=document.getElementById('loteBtnTxt'), hint=document.getElementById('loteHint');
+    if(sel>0){
+      if(txt)txt.textContent='Aplicar aos '+sel+' selecionado(s)';
+      if(hint)hint.innerHTML='<b>'+sel+' contato(s) selecionado(s)</b> — a ação vale só para eles.';
+    } else {
+      if(txt)txt.textContent='Aplicar ao filtro ('+total+')';
+      if(hint)hint.innerHTML='Nenhum marcado — vai aplicar aos <b>'+total+' contato(s) do filtro atual</b>. Marque as caixinhas na lista para agir só nos escolhidos.';
+    }
+    var all=document.getElementById('ctChkAll');
+    if(all){ var boxes=document.querySelectorAll('.ct-chk'); all.checked=boxes.length>0 && sel===boxes.length; all.indeterminate=sel>0 && sel<boxes.length; }
+  }
+  function marcarTodos(cb){ Array.prototype.slice.call(document.querySelectorAll('.ct-chk')).forEach(function(c){c.checked=cb.checked;}); atualizarSel(); }
   function confirmarLote(f){
-    var tag=f.alvo.value; if(!tag){ alert('Escolha a tag.'); return false; }
-    var n=f.getAttribute('data-n')||'0';
-    var msg=(f.acao.value==='rm')?('Remover a tag "'+tag+'" DE '+n+' contato(s) do filtro atual?'):('Adicionar a tag "'+tag+'" A '+n+' contato(s) do filtro atual?');
-    return confirm(msg);
+    var add=f.add.value, rm=f.rm.value;
+    if(!add && !rm){ alert('Escolha uma tag para adicionar e/ou remover.'); return false; }
+    if(add && add===rm){ alert('Adicionar e remover a mesma tag não faz sentido.'); return false; }
+    var sel=contatosMarcados();
+    f.tels.value=sel.join(',');
+    var alvo = sel.length>0 ? (sel.length+' contato(s) selecionado(s)') : ('TODOS os '+(f.getAttribute('data-total')||'0')+' contato(s) do filtro atual');
+    var acoes=[]; if(add)acoes.push('adicionar a tag "'+add+'"'); if(rm)acoes.push('remover a tag "'+rm+'"');
+    return confirm('Confirmar: '+acoes.join(' e ')+' em '+alvo+'?');
   }
   var ctSoBloq=false;
   function filtrarBloqueados(){
@@ -3364,9 +3391,10 @@ const server = http.createServer((req, res) => {
       if (p.get('bloq')) back.set('bloq', p.get('bloq'));
       try {
         let bloqueados = []; try { bloqueados = sofia.lerBloqueios(); } catch (_) {}
+        const tels = String(p.get('tels') || '').split(',').map(s => s.trim()).filter(Boolean);
         const n = contatos.aplicarTagLote({
           q: p.get('q') || '', tag: p.get('tag_filtro') || '', bloq: p.get('bloq') || '', bloqueados,
-          acao: p.get('acao') === 'rm' ? 'rm' : 'add', alvo: p.get('alvo') || '',
+          tels: tels.length ? tels : null, add: p.get('add') || '', rm: p.get('rm') || '',
         });
         back.set('lote', String(n));
       } catch (e) {
