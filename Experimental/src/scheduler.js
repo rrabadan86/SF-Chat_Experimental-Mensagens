@@ -523,10 +523,8 @@ function iniciarTesteInstagramWatcher() {
 
 // ─── Main ──────────────────────────────────────────────────
 async function main() {
-  console.log('╔═══════════════════════════════════════════════════════╗');
-  console.log('║  🏋️  Slimfit Setor Bueno - Confirmação Experimental  ║');
-  console.log('║  Automação de confirmação via WhatsApp               ║');
-  console.log('╚═══════════════════════════════════════════════════════╝\n');
+  console.log(`\n🏋️  ${config.STUDIO_NOME} — Confirmação de Aula Experimental`);
+  console.log('   Automação de confirmação via WhatsApp\n');
 
   log('Scheduler iniciando...');
 

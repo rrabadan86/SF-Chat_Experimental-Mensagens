@@ -565,9 +565,7 @@ async function runFollowup(periodoFiltro, dataOverride = null) {
     ? 'Tarde (ontem após 12h)'
     : 'Todos';
 
-  console.log('\n╔════════════════════════════════════════════════════╗');
-  console.log('║  🎯 Follow-up Experimentais — SlimFit Setor Bueno ║');
-  console.log('╚════════════════════════════════════════════════════╝');
+  console.log(`\n🎯 Follow-up Experimentais — ${config.STUDIO_NOME}`);
   console.log(`   Período: ${periodoLabel}\n`);
 
   // 1. Busca aulas de ontem com Presença

@@ -587,9 +587,7 @@ async function enviarWhatsApp(clientes) {
 async function main(modoEnvioParam) {
   const modoEnvio = (modoEnvioParam === undefined) ? MODO_ENVIO : modoEnvioParam;
 
-  console.log('\n╔═══════════════════════════════════════════════════╗');
-  console.log('║     RENOVAÇÃO DE CONTRATOS — SlimFit Setor Bueno ║');
-  console.log('╚═══════════════════════════════════════════════════╝');
+  console.log(`\n📄 Renovação de Contratos — ${config.STUDIO_NOME}`);
   console.log(modoEnvio ? '🚀 MODO ENVIO ATIVO\n' : '🧪 MODO SIMULAÇÃO (use --enviar para enviar)\n');
 
   const clientesBrutos = await buscarContratosVencendoEm7Dias();

@@ -109,4 +109,8 @@ try {
   }
 } catch (_) { /* sem overrides → usa os padrões */ }
 
+// Nome do Studio (para banners/logs). Vem do .env (STUDIO_NOME); cada unidade
+// define o seu, então os logs mostram o nome certo — nada de "Bueno" fixo.
+config.STUDIO_NOME = STUDIO_NOME;
+
 module.exports = config;
