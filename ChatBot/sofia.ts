@@ -35,6 +35,31 @@ const BASE_DIR = process.env.SOFIA_DIR || process.cwd();
 // Custo da IA: cada turno de conversa (e as extrações) grava uma linha em
 // sofia-custo.jsonl. O painel soma por dia e mostra o gasto/tokens + alerta.
 // Best-effort: nunca pode quebrar o atendimento.
+// "Precisa de humano": quando a aluna pede um atendente/demonstra irritação, a
+// SoFIA avisa um número do Studio (uma vez por conversa). Config editável no
+// painel (SoFIA → Configuração): sofia-avisohumano.json = { on, numero }.
+const AVISOHUMANO_FILE = path.join(BASE_DIR, "sofia-avisohumano.json");
+const AVISOS_OUT_FILE = path.join(BASE_DIR, "sofia-avisos.jsonl"); // mesmo arquivo que o listener envia
+function lerAvisoHumano(): { on: boolean; numero: string } {
+  try { const o = JSON.parse(fs.readFileSync(AVISOHUMANO_FILE, "utf8")); return { on: !!o.on, numero: String(o.numero || "").replace(/\D/g, "") }; }
+  catch { return { on: false, numero: "" }; }
+}
+// Sinais de que a aluna quer uma pessoa de verdade / está insatisfeita.
+const RE_PRECISA_HUMANO = /(atendente|falar com (uma |um )?(pessoa|humano|algu[ée]m|respons[áa]vel|gerente|dono|dona)|quero (falar|conversar) com|me lig|liga pra mim|isso n[aã]o (me )?ajud|n[aã]o entend[io] nada|p[ée]ssimo atendimento|que raiva|to (muito )?irritad|estou irritad|voc[eê] (é|e) um rob[ôo]|s[óo] rob[ôo]|para de me mandar)/i;
+function precisaHumano(texto: string): boolean { return RE_PRECISA_HUMANO.test(String(texto || "")); }
+function avisarPrecisaHumano(telefone: string, conversa: Conversa, texto: string) {
+  try {
+    if (conversa.avisouHumano) return;
+    const cfg = lerAvisoHumano();
+    if (!cfg.on || !cfg.numero) return;
+    const tel = String(telefone || "").replace(/\D/g, "");
+    const aviso = `🙋 *Possível pedido de atendimento humano*\n\nContato: ${tel}\nÚltima mensagem: "${String(texto || "").slice(0, 180)}"\n\nAbra o painel (SoFIA → Conversas) e clique em "assumir" para atender.`;
+    fs.appendFileSync(AVISOS_OUT_FILE, JSON.stringify({ numero: cfg.numero, texto: aviso, em: Date.now() }) + "\n");
+    conversa.avisouHumano = true;
+    console.log(`🙋 aviso "precisa de humano" enfileirado para ${cfg.numero} (contato ${tel}).`);
+  } catch { /* best-effort */ }
+}
+
 const CUSTO_FILE = path.join(BASE_DIR, "sofia-custo.jsonl");
 function registrarCusto(rec: { tipo: string; model?: string; inTok?: number; outTok?: number; usd?: number }) {
   try {
@@ -560,6 +585,7 @@ interface Conversa {
   transcricao: { autor: "aluna" | "sofia"; texto: string }[];
   resumoEnviado: boolean;
   solicitou?: boolean; // a ferramenta solicitar_agendamento já cuidou (êxito ou não)
+  avisouHumano?: boolean; // já avisamos o Studio que esta conversa pode precisar de humano
 }
 const conversas = new Map<string, Conversa>();
 
@@ -641,7 +667,7 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
   if (!conversa || inativa || fechadaManual) {
     if (fechadaManual) console.log(`🔒 ${telefone}: conversa encerrada no painel — iniciando conversa nova.`);
     else if (inativa) console.log(`⏰ ${telefone}: +${(janelaMs / 3_600_000).toFixed(1)}h de inatividade — iniciando conversa nova.`);
-    conversa = { sessionId: undefined, ultimaMensagemEm: agora, transcricao: [], resumoEnviado: false };
+    conversa = { sessionId: undefined, ultimaMensagemEm: agora, transcricao: [], resumoEnviado: false, avisouHumano: false };
     conversas.set(telefone, conversa);
   }
 
@@ -649,6 +675,10 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
   // agendamento (que roda durante a geração da resposta).
   _telefoneDaVez = (telefoneReal !== undefined ? telefoneReal : telefone); // real p/ o EVO (pode ser "")
   _conversaDaVez = conversa;
+
+  // "Precisa de humano": se a aluna pediu um atendente/demonstrou irritação,
+  // avisa o Studio (uma vez por conversa). A Sofia segue respondendo normalmente.
+  if (precisaHumano(mensagem)) avisarPrecisaHumano(telefone, conversa, mensagem);
 
   // Conversa NOVA → injeta o prompt lido do arquivo agora (pega edições recentes).
   // Conversa retomada → mantém a sessão (o prompt já está embutido nela).

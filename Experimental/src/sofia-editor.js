@@ -46,6 +46,7 @@ const F = {
   campanhasInbox: path.join(DIR, 'campanhas-inbox.jsonl'), // pedidos do painel → listener (criar/controle/excluir)
   custo: path.join(DIR, 'sofia-custo.jsonl'), // custo/tokens por turno — sofia.ts escreve, painel soma
   custoLimite: path.join(DIR, 'sofia-custo-limite.txt'), // alerta de gasto diário (US$; 0 = sem alerta) — painel
+  avisoHumano: path.join(DIR, 'sofia-avisohumano.json'), // avisar nº quando a aluna pedir humano — painel escreve, sofia.ts lê
 };
 
 // Padrões do "jeito humano" (mesmos do listener). O painel edita e o listener lê
@@ -613,9 +614,20 @@ function lerCusto(dias) {
   return { hoje, porDia, total, limite: lerCustoLimite(), temDado: porDia.length > 0 };
 }
 
+// ── "Precisa de humano" (avisar um número) ──────────────────────────────────
+function lerAvisoHumano() {
+  try { const o = JSON.parse(ler(F.avisoHumano)); return { on: !!o.on, numero: String(o.numero || '').replace(/\D/g, '') }; }
+  catch (_) { return { on: false, numero: '' }; }
+}
+function gravarAvisoHumano(on, numero) {
+  const o = { on: !!on, numero: String(numero || '').replace(/\D/g, '') };
+  gravarArquivo(F.avisoHumano, JSON.stringify(o));
+  return o;
+}
+
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
-  lerCusto, lerCustoLimite, gravarCustoLimite,
+  lerCusto, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
   conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,

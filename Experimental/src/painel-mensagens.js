@@ -153,7 +153,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/contatos/bloquear') return has('sofia_conversas') || has('sofia_contatos'); // bloquear vem tb do chat (Conversas)
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/custo-limite') return has('sofia_config');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano') return has('sofia_config');
   return false;
 }
 // WhatsApp é dividido em três sub-abas: Configuração, Agendamento e Hoje.
@@ -2842,6 +2842,7 @@ function paginaSofia(aviso, erro) {
   }
 
   const e = sofia.estado();
+  let avh = { on: false, numero: '' }; try { avh = sofia.lerAvisoHumano(); } catch (_) {}
   // Cada seção é um card recolhível (começa MINIMIZADA — só o título aparece) e
   // reordenável (↑ ↓). A ordem no DOM = ordem salva no prompt. O textarea, mesmo
   // recolhido (display:none), continua sendo enviado no POST.
@@ -2876,6 +2877,19 @@ function paginaSofia(aviso, erro) {
         <form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="margin:0;display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔌 Desconectar</button></form>
       </div>
     </div>
+
+    <details class="acc-sec">
+      <summary class="sec-t" style="cursor:pointer;padding:4px 0">Avisar quando precisar de humano <small style="font-weight:400;color:var(--cinza)">— manda um WhatsApp quando a aluna pede um atendente</small></summary>
+      <div class="card">
+        <p class="quando" style="margin:0 0 12px">Se a aluna pedir para <b>falar com uma pessoa</b> (ou demonstrar irritação), a SoFIA manda <b>uma</b> mensagem de aviso para o número abaixo — assim a recepção entra na conversa rápido. A SoFIA continua respondendo normalmente.</p>
+        <form method="POST" action="/sofia/aviso-humano" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+          <label class="chk" style="margin:0"><input type="checkbox" name="on" value="1"${avh.on ? ' checked' : ''}> Ligado</label>
+          <div style="flex:1;min-width:200px"><label style="margin:0 0 4px">Número que recebe o aviso (com DDD)</label>
+          <input type="tel" name="numero" value="${esc(avh.numero)}" placeholder="Ex.: 62998887777" style="max-width:220px"></div>
+          <button type="submit" class="save">Salvar</button>
+        </form>
+      </div>
+    </details>
 
     <form id="formSalvar" method="POST" action="/sofia/salvar">
 
@@ -3763,6 +3777,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)lote=/.test(q)) aviso = `🏷️ ${(q.match(/lote=(\d+)/) || [])[1] || '0'} contato(s) atualizado(s) em lote.`;
     else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. A SoFIA vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
     else if (/(?:^|&)okc=criada/.test(q)) aviso = '📣 Campanha criada! A IA está gerando as variações. Quando ficar “pronta”, clique em ▶️ Iniciar para começar o envio.';
+    else if (/(?:^|&)okah=1/.test(q)) aviso = 'Aviso "precisa de humano" salvo.';
     else if (/(?:^|&)okc=ok/.test(q)) aviso = '✔️ Feito.';
     else if (/(?:^|&)errc=/.test(q)) { aviso = decodeURIComponent((q.match(/errc=([^&]*)/) || [])[1] || 'Erro na campanha.'); erro = true; }
     const sp = new URLSearchParams(q);
@@ -4106,6 +4121,14 @@ const server = http.createServer((req, res) => {
       let novo = true;
       try { novo = !sofia.estadoAtivo(); sofia.gravarEstado(novo); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?' + (novo ? 'on=1' : 'off=1') }); res.end();
+    });
+  }
+  // Salvar config do aviso "precisa de humano".
+  if (req.method === 'POST' && url === '/sofia/aviso-humano') {
+    return lerCorpo(req, 1e4, corpo => {
+      const p = new URLSearchParams(corpo);
+      try { sofia.gravarAvisoHumano(p.get('on') === '1', p.get('numero') || ''); } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?okah=1' }); res.end();
     });
   }
   // Salvar o limite de alerta de gasto diário (Custo IA).
