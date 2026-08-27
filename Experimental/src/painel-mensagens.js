@@ -2282,14 +2282,20 @@ function paginaSofia(aviso, erro) {
   }
 
   const e = sofia.estado();
+  // Cada seção é um card recolhível (começa MINIMIZADA — só o título aparece) e
+  // reordenável (↑ ↓). A ordem no DOM = ordem salva no prompt. O textarea, mesmo
+  // recolhido (display:none), continua sendo enviado no POST.
   const cardSecao = (titulo, corpo) => {
     const rows = Math.min(16, Math.max(4, String(corpo || '').split('\n').length + 1));
     return `<div class="card sec-card">
-      <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
-        <input type="text" name="titulo[]" value="${esc(titulo)}" placeholder="TÍTULO DA SEÇÃO" style="flex:1;font-weight:700;font-family:Montserrat,sans-serif;font-size:.92rem">
-        <button type="button" class="reset" onclick="removerSecao(this)" title="Remover esta seção" style="padding:6px 12px">🗑️</button>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+        <button type="button" class="reset secTog" onclick="toggleSecao(this)" title="Expandir/recolher" style="padding:6px 9px;flex:none">▸</button>
+        <input type="text" name="titulo[]" value="${esc(titulo)}" placeholder="TÍTULO DA SEÇÃO" style="flex:1;min-width:0;font-weight:700;font-family:Montserrat,sans-serif;font-size:.9rem">
+        <button type="button" class="reset" onclick="moverSecao(this,-1)" title="Subir" style="padding:6px 9px;flex:none">↑</button>
+        <button type="button" class="reset" onclick="moverSecao(this,1)" title="Descer" style="padding:6px 9px;flex:none">↓</button>
+        <button type="button" class="reset" onclick="removerSecao(this)" title="Remover esta seção" style="padding:6px 10px;flex:none">🗑️</button>
       </div>
-      <textarea name="corpo[]" rows="${rows}" spellcheck="false">${esc(corpo)}</textarea>
+      <textarea name="corpo[]" rows="${rows}" spellcheck="false" style="display:none">${esc(corpo)}</textarea>
     </div>`;
   };
   const cardsSecoes = e.secoes.map(s => cardSecao(s.titulo, s.corpo)).join('');
@@ -2415,7 +2421,11 @@ function paginaSofia(aviso, erro) {
 
       </details>
 
-      <div class="sec-t">💬 Conversa da SoFIA <small style="font-weight:600;color:var(--cinza)">(cada bloco é uma parte do atendimento — dá pra editar o título, remover ou adicionar)</small></div>
+      <div class="sec-t">💬 Conversa da SoFIA <small style="font-weight:600;color:var(--cinza)">(cada bloco é uma parte do atendimento — clique no título p/ abrir; ↑↓ reordenam)</small></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px">
+        <button type="button" class="reset" onclick="expandirTodas(true)" style="padding:6px 12px">▾ Expandir todas</button>
+        <button type="button" class="reset" onclick="expandirTodas(false)" style="padding:6px 12px">▸ Recolher todas</button>
+      </div>
       <div id="secoes">${cardsSecoes}</div>
       <button type="button" class="reset" onclick="adicionarSecao()" style="margin:2px 0 10px">➕ Nova seção</button>
 
@@ -2458,7 +2468,29 @@ function paginaSofia(aviso, erro) {
   }
   atualizaSofiaWa(); setInterval(atualizaSofiaWa, 5000);
 
-  // Editar seções do prompt: remover uma inteira ou adicionar uma nova.
+  // Editar seções do prompt: recolher/expandir, reordenar (↑↓), remover, adicionar.
+  function toggleSecao(btn){
+    var card = btn.closest('.sec-card'); if(!card) return;
+    var ta = card.querySelector('textarea'); if(!ta) return;
+    var aberto = ta.style.display !== 'none';
+    ta.style.display = aberto ? 'none' : 'block';
+    btn.textContent = aberto ? '▸' : '▾';
+  }
+  function moverSecao(btn, dir){
+    var card = btn.closest('.sec-card'); if(!card || !card.parentNode) return;
+    var wrap = card.parentNode;
+    if(dir < 0){ var prev = card.previousElementSibling; if(prev) wrap.insertBefore(card, prev); }
+    else { var next = card.nextElementSibling; if(next) wrap.insertBefore(next, card); }
+    card.scrollIntoView({block:'nearest'});
+  }
+  function expandirTodas(abrir){
+    var cards = document.querySelectorAll('#secoes .sec-card');
+    for(var i=0;i<cards.length;i++){
+      var ta = cards[i].querySelector('textarea'), tog = cards[i].querySelector('.secTog');
+      if(ta){ ta.style.display = abrir ? 'block' : 'none'; }
+      if(tog){ tog.textContent = abrir ? '▾' : '▸'; }
+    }
+  }
   function removerSecao(btn){
     if(!confirm('Remover esta seção inteira? (título e conteúdo)')) return;
     var card = btn.closest('.sec-card'); if(card && card.parentNode) card.parentNode.removeChild(card);
@@ -2467,10 +2499,14 @@ function paginaSofia(aviso, erro) {
     var wrap = document.getElementById('secoes'); if(!wrap) return;
     var div = document.createElement('div');
     div.className = 'card sec-card';
-    div.innerHTML = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">'
-      + '<input type="text" name="titulo[]" value="" placeholder="TÍTULO DA SEÇÃO" style="flex:1;font-weight:700;font-family:Montserrat,sans-serif;font-size:.92rem">'
-      + '<button type="button" class="reset" onclick="removerSecao(this)" title="Remover esta seção" style="padding:6px 12px">🗑️</button>'
-      + '</div><textarea name="corpo[]" rows="6" spellcheck="false"></textarea>';
+    // Nova seção já ENTRA ABERTA (o textarea visível) para você digitar de cara.
+    div.innerHTML = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">'
+      + '<button type="button" class="reset secTog" onclick="toggleSecao(this)" title="Expandir/recolher" style="padding:6px 9px;flex:none">▾</button>'
+      + '<input type="text" name="titulo[]" value="" placeholder="TÍTULO DA SEÇÃO" style="flex:1;min-width:0;font-weight:700;font-family:Montserrat,sans-serif;font-size:.9rem">'
+      + '<button type="button" class="reset" onclick="moverSecao(this,-1)" title="Subir" style="padding:6px 9px;flex:none">↑</button>'
+      + '<button type="button" class="reset" onclick="moverSecao(this,1)" title="Descer" style="padding:6px 9px;flex:none">↓</button>'
+      + '<button type="button" class="reset" onclick="removerSecao(this)" title="Remover esta seção" style="padding:6px 10px;flex:none">🗑️</button>'
+      + '</div><textarea name="corpo[]" rows="6" spellcheck="false" style="display:block"></textarea>';
     wrap.appendChild(div);
     var inp = div.querySelector('input'); if(inp) inp.focus();
   }
