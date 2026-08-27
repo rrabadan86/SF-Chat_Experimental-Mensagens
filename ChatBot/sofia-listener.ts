@@ -433,6 +433,93 @@ function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMs
   registrarSessao(chave, nome || c.nome, autor, t || "📷 (foto)", em);
 }
 
+// ── Importar histórico existente do WhatsApp para a inbox (uma vez) ──────────
+// getChats() do whatsapp-web.js falha nesta versão (erro interno "r"): a
+// serialização completa dos chats quebra. Alternativa: ler o Store DIRETO na
+// página (pupPage.evaluate), pegando só o essencial (id, nome, última atividade
+// e as mensagens já carregadas em memória) — evita a serialização pesada. É
+// read-only e só roda na importação manual (não mexe no fluxo ao vivo).
+const IMPORT_STATUS_FILE = path.join(DIR, "sofia-import-status.json");
+let importando = false;
+function gravarImportStatus(o: any) { try { fs.writeFileSync(IMPORT_STATUS_FILE, JSON.stringify(o), "utf8"); } catch {} }
+type RawChat = { id: string; name: string; t: number; msgs: Array<{ fromMe: boolean; body: string; t: number }> };
+async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
+  const page: any = (client as any).pupPage;
+  if (!page) throw new Error("página do WhatsApp indisponível (pupPage).");
+  const r = await page.evaluate((LIM: number) => {
+    const S: any = (window as any).Store;
+    if (!S || !S.Chat || !S.Chat.getModelsArray) return { erro: "Store.Chat indisponível nesta versão do WhatsApp Web." };
+    const out: any[] = [];
+    for (const c of S.Chat.getModelsArray()) {
+      try {
+        const idObj = c && c.id;
+        const id = idObj ? (idObj._serialized || (idObj.user ? idObj.user + "@" + (idObj.server || "c.us") : "")) : "";
+        if (!id) continue;
+        const name = (c && (c.formattedTitle || c.name || (c.contact && (c.contact.pushname || c.contact.name || c.contact.formattedName)))) || "";
+        const t = (c && (c.t || 0)) || 0;
+        let models: any[] = [];
+        try { models = (c.msgs && (c.msgs.getModelsArray ? c.msgs.getModelsArray() : c.msgs._models)) || []; } catch (e) { models = []; }
+        const msgs = models.slice(-LIM).map((m: any) => ({ fromMe: !!(m && m.id && m.id.fromMe), body: (m && (m.body || m.caption || "")) || "", t: (m && m.t) || 0 }));
+        out.push({ id, name, t, msgs });
+      } catch (e) { /* pula esse chat */ }
+    }
+    return { chats: out };
+  }, limMsg);
+  if (r && r.erro) throw new Error(r.erro);
+  return (r && r.chats) || [];
+}
+async function importarHistorico(porChat: number) {
+  if (importando) return;
+  importando = true;
+  const lim = Math.max(1, Math.min(porChat || INBOX_MAX_MSGS, 500));
+  try {
+    if (!pronta) { gravarImportStatus({ rodando: false, erro: "O WhatsApp da SoFIA não está conectado.", em: Date.now() }); return; }
+    gravarImportStatus({ rodando: true, feitos: 0, total: 0, novos: 0, em: Date.now() });
+    const chats = await lerChatsRaw(lim);
+    const alvos = chats.filter((c) => c.id && c.id.endsWith("@c.us"));
+    let feitos = 0, novos = 0;
+    for (const chat of alvos) {
+      try {
+        const tel = jidParaTel(chat.id);
+        if (tel) {
+          const ex = inbox.get(tel);
+          const acc: InboxMsg[] = ex ? ex.msgs.slice() : [];
+          const seen = new Set(acc.map((m) => m.em + "|" + m.autor));
+          for (const m of chat.msgs) {
+            const em = m.t ? m.t * 1000 : 0;
+            const texto = String(m.body || "").trim();
+            if (!em || !texto) continue;
+            const autor: InboxMsg["autor"] = m.fromMe ? "humano" : "aluna";
+            const k = em + "|" + autor;
+            if (seen.has(k)) continue;
+            seen.add(k);
+            acc.push({ autor, texto, em });
+          }
+          acc.sort((a, b) => a.em - b.em);
+          const trimmed = acc.slice(-INBOX_MAX_MSGS);
+          // Mesmo sem texto de mensagem, guarda a última atividade (chat.t): a
+          // recepção já vê "esse contato falou antes, última vez em tal data".
+          const ultima = trimmed.length ? trimmed[trimmed.length - 1].em : (chat.t ? chat.t * 1000 : 0);
+          if (ultima) {
+            const nomeChat = (chat.name && !/^\+?[\d ()-]+$/.test(String(chat.name))) ? String(chat.name) : "";
+            inbox.set(tel, { jid: chat.id, nome: (ex && ex.nome) || nomeChat, ultimaEm: Math.max(ultima, (ex && ex.ultimaEm) || 0), msgs: trimmed });
+            novos++;
+          }
+        }
+      } catch (e: any) { log("import chat falhou: " + (e?.message || e)); }
+      feitos++;
+      if (feitos % 50 === 0) { gravarImportStatus({ rodando: true, feitos, total: alvos.length, novos, em: Date.now() }); salvarInbox(); }
+    }
+    salvarInbox();
+    gravarImportStatus({ rodando: false, feitos, total: alvos.length, novos, terminadoEm: Date.now() });
+    log(`✅ histórico importado: ${feitos} conversas lidas, ${novos} com dados.`);
+  } catch (e: any) {
+    const det = (e?.name ? e.name + ": " : "") + (e?.message || String(e));
+    gravarImportStatus({ rodando: false, erro: det, em: Date.now() });
+    log("import histórico falhou: " + det + (e?.stack ? "\n" + e.stack : ""));
+  } finally { importando = false; }
+}
+
 // ── Histórico de INTERAÇÕES (aba Contatos → Interações do painel) ────────────
 //    Permanente e separado do inbox (que guarda um período configurável). Uma "interação" é
 //    uma sessão: começa numa mensagem da aluna e vai se estendendo enquanto as
@@ -829,6 +916,11 @@ setInterval(async () => {
   let cmd: any = null;
   try { cmd = JSON.parse(fs.readFileSync(COMANDO_FILE, "utf8")); } catch { return; } // sem comando
   try { fs.unlinkSync(COMANDO_FILE); } catch {} // consome uma vez só
+  if (cmd && cmd.cmd === "importar-historico") {
+    log("📥 comando do painel: importar histórico do WhatsApp…");
+    importarHistorico(parseInt(cmd.porChat, 10) || INBOX_MAX_MSGS); // async, não bloqueia
+    return;
+  }
   if (!cmd || cmd.cmd !== "logout") return;
   log("🔌 comando do painel: DESCONECTAR (logout). Encerrando a sessão da Sofia…");
   setStatus("desconectado");

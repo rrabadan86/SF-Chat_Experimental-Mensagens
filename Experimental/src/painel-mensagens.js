@@ -146,7 +146,7 @@ function sofiaHref(sess) {
 // (marcar tags/salvar contato a partir de uma conversa) vale para Conversas OU Contatos.
 function sofiaRotaPermitida(sess, url) {
   const has = k => (sess.telas || []).includes(k);
-  if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto' || url === '/sofia/conversas/encerrar') return has('sofia_conversas');
+  if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto' || url === '/sofia/conversas/encerrar' || url === '/sofia/importar' || url === '/sofia/importar/status') return has('sofia_conversas');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
   if (url === '/sofia/contatos/bloquear') return has('sofia_conversas') || has('sofia_contatos'); // bloquear vem tb do chat (Conversas)
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
@@ -1521,6 +1521,10 @@ function paginaSofiaConversas(aviso, erro) {
           <input type="date" id="convDataFim" onchange="filtrarData()" title="Até (dia final)" style="flex:1 1 0;min-width:0;font-size:.76rem;padding:5px 6px;border:1px solid var(--linha);border-radius:7px">
           <button type="button" onclick="limparData()" title="Limpar datas" class="reset" style="padding:4px 8px;font-size:.82rem">🧹</button>
         </div>
+        <div style="margin-bottom:8px">
+          <button type="button" id="convImportBtn" onclick="importarHistorico()" class="reset" style="width:100%;font-size:.75rem;padding:6px" title="Tenta trazer para o painel as conversas que o WhatsApp já sincronizou">📥 Importar histórico do WhatsApp</button>
+          <div id="convImportSt" class="quando" style="margin:4px 0 0;font-size:.7rem"></div>
+        </div>
         <div id="convLista"></div>
         <div id="convPag" style="display:flex;flex-direction:column;align-items:stretch;gap:6px;margin-top:8px"></div>
       </div>
@@ -1831,6 +1835,24 @@ function paginaSofiaConversas(aviso, erro) {
   }
   function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){ j=j||{}; atualizaWa(j.wa); renderInbox(j.conv||{}); }).catch(function(){}); }
   atualizaInbox(); setInterval(atualizaInbox, 4000);
+  function importarHistorico(){
+    if(!confirm('Tentar importar para o painel as conversas que o WhatsApp já sincronizou?\\n\\nLê o histórico existente e mostra aqui (não responde ninguém). Pode levar alguns minutos.\\n\\nObs.: o WhatsApp normalmente sincroniza só uma janela recente — pode não trazer tudo.')) return;
+    var b=document.getElementById('convImportBtn'); if(b){ b.disabled=true; }
+    fetch('/sofia/importar',{method:'POST'}).then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ setTimeout(function(){pollImport(true);},1500); } else { alert('❌ '+((j&&j.erro)||'falha')); if(b)b.disabled=false; } }).catch(function(){ alert('❌ erro de rede'); if(b)b.disabled=false; });
+  }
+  // mostrarFim: só exibe erro/conclusão quando VOCÊ acabou de clicar (não fica
+  // preso a cada refresh mostrando status velho). No load, só mostra se estiver rodando.
+  function pollImport(mostrarFim){
+    fetch('/sofia/importar/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
+      var el=document.getElementById('convImportSt'), b=document.getElementById('convImportBtn');
+      var s=j&&j.status; if(!el) return;
+      if(s&&s.rodando){ el.style.color=''; el.textContent='⏳ Importando… '+(s.feitos||0)+(s.total?('/'+s.total):'')+' conversas'; if(b)b.disabled=true; setTimeout(function(){pollImport(true);},3000); }
+      else if(mostrarFim && s && s.erro){ el.textContent='⚠️ '+s.erro; el.title=s.erro; el.style.whiteSpace='normal'; el.style.overflowWrap='anywhere'; el.style.color='#a15a5a'; if(b)b.disabled=false; }
+      else if(mostrarFim && s && s.terminadoEm){ el.style.color=''; el.textContent='✅ '+(s.novos||0)+' conversas trazidas.'; if(b)b.disabled=false; atualizaInbox(); }
+      else { el.textContent=''; el.title=''; if(b)b.disabled=false; }
+    }).catch(function(){});
+  }
+  pollImport(false);
 </script>`;
   return chrome({ tab: 'SoFIA', h1: '🤖 SoFIA', p: 'Conversas da SoFIA — leia o histórico de cada atendimento.' }, 'sofia', corpo);
 }
@@ -3556,6 +3578,19 @@ const server = http.createServer((req, res) => {
       try { sofia.setEncerrada(chave, true); return res.end(JSON.stringify({ ok: true })); }
       catch (e) { return res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
+  }
+  // Importar histórico existente do WhatsApp para a inbox (comando → listener).
+  if (req.method === 'POST' && url === '/sofia/importar') {
+    return lerCorpo(req, 1e5, () => {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      try { sofia.enviarComando('importar-historico', { porChat: 60 }); return res.end(JSON.stringify({ ok: true })); }
+      catch (e) { return res.end(JSON.stringify({ ok: false, erro: e.message })); }
+    });
+  }
+  if (req.method === 'GET' && url === '/sofia/importar/status') {
+    let st = null; try { st = sofia.lerImportStatus(); } catch (_) {}
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify({ status: st }));
   }
   // Liga/desliga o controle humano de UMA conversa (a Sofia para de responder só ela).
   if (req.method === 'POST' && url === '/sofia/humano') {
