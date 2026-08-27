@@ -272,6 +272,16 @@ const ESTILO = `
   .st-enviado{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-bd)}
   .st-falha{background:var(--erro-bg);color:var(--erro);border-color:var(--erro-bd)}
   .sec-t{font-family:"Montserrat";font-weight:700;font-size:var(--fs-sec);margin:15px 0 4px}
+  /* Seções recolhíveis (<details class="acc-sec">): o cabeçalho vira um cartão
+     destacado e clicável, com chevron à direita e realce quando aberto — para
+     não passar despercebido como uma linha de texto. */
+  .acc-sec{margin:12px 0}
+  .acc-sec>summary{list-style:none;cursor:pointer;position:relative;padding:14px 42px 14px 15px!important;margin:0!important;background:var(--card);border:1px solid var(--linha);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .acc-sec>summary::-webkit-details-marker{display:none}
+  .acc-sec>summary::after{content:"▸";position:absolute;right:15px;top:50%;transform:translateY(-50%);color:var(--teal);font-weight:900;font-size:1rem}
+  .acc-sec[open]>summary::after{content:"▾"}
+  .acc-sec>summary:hover{border-color:var(--teal)}
+  .acc-sec[open]>summary{border-color:var(--teal);background:var(--avi-bg);border-radius:12px 12px 0 0}
   .vazio{color:var(--cinza);font-size:var(--fs-sm)}
   .wabar{border-radius:12px;padding:10px 14px;margin:14px 0 0;font-weight:600;font-size:var(--fs-sm);display:flex;align-items:center;gap:8px}
   .wabar.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
