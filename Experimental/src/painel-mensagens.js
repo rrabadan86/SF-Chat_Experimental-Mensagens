@@ -1888,8 +1888,10 @@ function paginaSofiaContatos(aviso, erro, params) {
 
     <form method="GET" action="/sofia" class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <input type="hidden" name="view" value="contatos">
-      <input type="text" name="q" value="${esc(q)}" placeholder="Buscar por nome ou telefone" style="flex:1;min-width:180px">
-      <select id="ctTagSel" name="tag" style="min-width:200px" onchange="this.form.submit()">${opcoes}</select>
+      <div style="display:flex;gap:8px;flex:1 1 320px;min-width:0">
+        <input type="text" name="q" value="${esc(q)}" placeholder="Buscar por nome ou telefone" style="flex:1 1 auto;min-width:0">
+        <select id="ctTagSel" name="tag" style="flex:0 0 200px;max-width:50%" onchange="this.form.submit()">${opcoes}</select>
+      </div>
       <button type="submit" class="save" style="padding:8px 14px">Filtrar</button>
       ${(q || tagSel) ? `<a href="/sofia?view=contatos" class="reset" style="padding:8px 14px">Limpar</a>` : ''}
       <button type="button" id="ctBloqFil" class="reset" onclick="filtrarBloqueados()" style="padding:8px 14px" title="Mostrar só os contatos bloqueados">🚫 Bloqueados</button>
