@@ -1182,13 +1182,11 @@ function paginaInstagram(aviso, erro) {
 
   const statusCard = on
     ? `<div class="wa-card ok"><div class="wa-ic">📸</div><h2>Instagram LIGADO</h2>
-        <p>O robô envia boas-vindas às novas seguidoras às <b>07:00</b>, no máximo <b>${limite}/dia</b>.</p>
-        <form method="POST" action="/instagram/toggle" style="margin-top:14px"><input type="hidden" name="alvo" value="off">
-          <button class="rm" type="submit" onclick="return confirm('Pausar o envio de boas-vindas no Instagram?')">⏸️ Pausar Instagram</button></form></div>`
+        <p>O robô envia boas-vindas às novas seguidoras às <b>07:00</b>, no máximo <b>${limite}/dia</b>.</p></div>
+      <div style="text-align:right;margin:-4px 0 0"><form method="POST" action="/instagram/toggle" style="display:inline"><input type="hidden" name="alvo" value="off"><button class="reset" type="submit" style="padding:4px 11px;font-size:var(--fs-xs)" onclick="return confirm('Pausar o envio de boas-vindas no Instagram?')">⏸️ Pausar Instagram</button></form></div>`
     : `<div class="wa-card warn"><div class="wa-ic">📸</div><h2>Instagram pausado</h2>
-        <p>As boas-vindas automáticas estão <b>desligadas</b>. Ligue só com o proxy e os cookies configurados (senão a conta pode ser bloqueada).</p>
-        <form method="POST" action="/instagram/toggle" style="margin-top:14px"><input type="hidden" name="alvo" value="on">
-          <button class="save" type="submit" onclick="return confirm('Ligar o envio de boas-vindas no Instagram?')">▶️ Ligar Instagram</button></form></div>`;
+        <p>As boas-vindas automáticas estão <b>desligadas</b>. Ligue só com o proxy e os cookies configurados (senão a conta pode ser bloqueada).</p></div>
+      <div style="text-align:right;margin:-4px 0 0"><form method="POST" action="/instagram/toggle" style="display:inline"><input type="hidden" name="alvo" value="on"><button class="save" type="submit" style="padding:4px 13px;font-size:var(--fs-xs)" onclick="return confirm('Ligar o envio de boas-vindas no Instagram?')">▶️ Ligar Instagram</button></form></div>`;
 
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
@@ -2779,11 +2777,11 @@ function paginaSofia(aviso, erro) {
     <div class="sec-t">Conexão do WhatsApp da SoFIA <small style="font-weight:600;color:var(--cinza)">(número próprio, diferente do robô)</small></div>
     <div id="sofiaWa">${blocoSofiaWa()}</div>
     <div style="margin:8px 0 6px">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <button type="button" id="impBtn" onclick="importarHistorico()" class="reset" style="padding:6px 14px" title="Traz para o painel as conversas que o WhatsApp já sincronizou (não responde ninguém). O WhatsApp sincroniza só uma janela recente — pode não trazer tudo.">📥 Importar Histórico WPP</button>
-        <form method="POST" action="/sofia/toggle" style="margin:0;display:inline"><button type="submit" class="${e.ativa ? 'reset' : 'save'}" style="padding:6px 14px">${e.ativa ? '⏸️ Pausar SoFIA' : '▶️ Ativar SoFIA'}</button></form>
-        <form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="margin:0;display:inline"><button type="submit" class="reset" style="padding:6px 14px">🔌 Desconectar</button></form>
-        <span id="impSt" class="quando" style="margin:0;font-size:.75rem"></span>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+        <span id="impSt" class="quando" style="margin:0 auto 0 0;font-size:.75rem"></span>
+        <button type="button" id="impBtn" onclick="importarHistorico()" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)" title="Traz para o painel as conversas que o WhatsApp já sincronizou (não responde ninguém). O WhatsApp sincroniza só uma janela recente — pode não trazer tudo.">📥 Importar Histórico WPP</button>
+        <form method="POST" action="/sofia/toggle" style="margin:0;display:inline"><button type="submit" class="${e.ativa ? 'reset' : 'save'}" style="padding:4px 11px;font-size:var(--fs-xs)">${e.ativa ? '⏸️ Pausar SoFIA' : '▶️ Ativar SoFIA'}</button></form>
+        <form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="margin:0;display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔌 Desconectar</button></form>
       </div>
     </div>
 
