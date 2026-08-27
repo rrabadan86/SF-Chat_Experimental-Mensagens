@@ -1576,11 +1576,15 @@ function paginaSofiaConversas(aviso, erro) {
   function encerrada(c){ return !!(c && (c.enc || (c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS)))); }
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function fmtHora(ts){ try{return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
-  function autorRot(a){ return a==='aluna'?'Aluna':(a==='humano'?'Você':'SoFIA'); }
+  // Rótulo de quem enviou. Para a aluna, usa o PRIMEIRO NOME do contato quando
+  // conhecido (cai em "Aluna" se o contato não tiver nome cadastrado).
+  function primeiroNome(nome){ var n=String(nome||'').trim(); if(!n) return ''; return n.split(/\\s+/)[0]; }
+  function autorRot(a, nomeAluna){ return a==='aluna'?(nomeAluna||'Aluna'):(a==='humano'?'Você':'SoFIA'); }
   function fmtTel(k){ var d=String(k||'').replace(/\\D/g,''); if(/^55\\d{10,11}$/.test(d)){ var ddd=d.slice(2,4), r=d.slice(4); return '+55 ('+ddd+') '+(r.length===9?r.slice(0,5)+'-'+r.slice(5):r.slice(0,4)+'-'+r.slice(4)); } return k; }
   function renderChat(c,k){
     var chat=document.getElementById('convChat'); if(!chat) return;
     var msgs=c.msgs||[];
+    var nomeAluna=primeiroNome(c.nome); // rótulo das mensagens da aluna (primeiro nome do contato)
     // Divisória de SESSÃO: fica PERMANENTE no histórico entre uma conversa e a
     // seguinte. Aparece quando o intervalo entre duas mensagens passa do Tempo de
     // sessão (memória) OU quando houve encerramento manual (cadeado) entre elas.
@@ -1597,7 +1601,7 @@ function paginaSofiaConversas(aviso, erro) {
       var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e6f6f7');
       var img = m.foto ? '<img src="/sofia/humano-foto?arq='+encodeURIComponent(m.foto)+'" alt="foto enviada" style="display:block;max-width:100%;max-height:220px;border-radius:9px;margin:'+(m.texto?'6px 0 0':'2px 0 0')+';cursor:pointer" onclick="window.open(this.src,\\'_blank\\')">' : '';
       var corpoMsg = (m.texto?'<div style="white-space:pre-wrap">'+escH(m.texto)+'</div>':'') + img;
-      return sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+autorRot(m.autor)+' · '+fmtHora(m.em)+'</div>'+corpoMsg+'</div></div>';
+      return sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna))+' · '+fmtHora(m.em)+'</div>'+corpoMsg+'</div></div>';
     }).join('');
     var fim = encerrada(c) ? '<div style="text-align:center;margin:10px 0 2px"><span style="display:inline-block;background:#f3eaea;color:#a15a5a;border:1px solid #e6cfcf;border-radius:999px;padding:3px 12px;font-size:.72rem;font-weight:700">🔒 Sessão encerrada · a SoFIA recomeça do zero se a aluna voltar</span></div>' : '';
     var hum = !!c.humano;
