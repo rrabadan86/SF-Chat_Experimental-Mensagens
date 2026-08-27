@@ -440,8 +440,10 @@ function navTabs(ativo) {
   let html = item('ind', '/indicadores', '📈', 'Formulário');
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp');
   html += item('ig', '/instagram', '📸', 'Instagram');
-  if (temSofia(sess)) html += cel(sofiaHref(sess), ativo === 'sofia', '🤖', 'SoFIA');
+  // Perfis antes; SoFIA por último para ficar em destaque (no mobile ela cai
+  // sozinha na 2ª linha, ocupando a largura toda) — a SoFIA é a principal.
   if (sess.admin) html += cel('/perfis', ativo === 'perfis', '👤', 'Perfis');
+  if (temSofia(sess)) html += cel(sofiaHref(sess), ativo === 'sofia', '🤖', 'SoFIA');
   return html;
 }
 
