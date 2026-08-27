@@ -448,7 +448,9 @@ async function importarHistorico(porChat: number) {
   try {
     if (!pronta) { gravarImportStatus({ rodando: false, erro: "O WhatsApp da SoFIA não está conectado.", em: Date.now() }); return; }
     gravarImportStatus({ rodando: true, feitos: 0, total: 0, novos: 0, em: Date.now() });
-    const chats: any[] = await client.getChats();
+    let chats: any[];
+    try { chats = await client.getChats(); }
+    catch (e: any) { throw new Error("Não consegui ler a lista de conversas do WhatsApp (getChats). Isso costuma ser incompatibilidade da versão do WhatsApp Web. Detalhe: " + (e?.name ? e.name + " " : "") + (e?.message || String(e))); }
     const alvos = chats.filter((c) => c && !c.isGroup && c.id && c.id._serialized && String(c.id._serialized).endsWith("@c.us"));
     let feitos = 0, novos = 0;
     for (const chat of alvos) {
@@ -487,8 +489,9 @@ async function importarHistorico(porChat: number) {
     gravarImportStatus({ rodando: false, feitos, total: alvos.length, novos, terminadoEm: Date.now() });
     log(`✅ histórico importado: ${feitos} conversas lidas, ${novos} com mensagens.`);
   } catch (e: any) {
-    gravarImportStatus({ rodando: false, erro: e?.message || String(e), em: Date.now() });
-    log("import histórico falhou: " + (e?.message || e));
+    const det = (e?.name ? e.name + ": " : "") + (e?.message || String(e));
+    gravarImportStatus({ rodando: false, erro: det, em: Date.now() });
+    log("import histórico falhou: " + det + (e?.stack ? "\n" + e.stack : ""));
   } finally { importando = false; }
 }
 

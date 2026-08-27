@@ -1838,19 +1838,22 @@ function paginaSofiaConversas(aviso, erro) {
   function importarHistorico(){
     if(!confirm('Importar para o painel as conversas antigas que o WhatsApp já sincronizou?\\n\\nLê o histórico existente e mostra aqui (não responde ninguém). Pode levar alguns minutos.\\n\\nObs.: o WhatsApp normalmente sincroniza só os últimos meses — pode não trazer anos inteiros.')) return;
     var b=document.getElementById('convImportBtn'); if(b){ b.disabled=true; }
-    fetch('/sofia/importar',{method:'POST'}).then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ setTimeout(pollImport,1500); } else { alert('❌ '+((j&&j.erro)||'falha')); if(b)b.disabled=false; } }).catch(function(){ alert('❌ erro de rede'); if(b)b.disabled=false; });
+    fetch('/sofia/importar',{method:'POST'}).then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ setTimeout(function(){pollImport(true);},1500); } else { alert('❌ '+((j&&j.erro)||'falha')); if(b)b.disabled=false; } }).catch(function(){ alert('❌ erro de rede'); if(b)b.disabled=false; });
   }
-  function pollImport(){
+  // mostrarFim: só exibe erro/conclusão quando VOCÊ acabou de clicar (não fica
+  // preso a cada refresh mostrando um status velho). Ao recarregar a página, só
+  // mostra se ainda estiver importando.
+  function pollImport(mostrarFim){
     fetch('/sofia/importar/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
       var el=document.getElementById('convImportSt'), b=document.getElementById('convImportBtn');
       var s=j&&j.status; if(!el) return;
-      if(s&&s.rodando){ el.textContent='⏳ Importando… '+(s.feitos||0)+(s.total?('/'+s.total):'')+' conversas'; if(b)b.disabled=true; setTimeout(pollImport,3000); }
-      else if(s&&s.erro){ el.textContent='⚠️ '+s.erro; el.title=s.erro; el.style.whiteSpace='normal'; el.style.overflowWrap='anywhere'; el.style.color='#a15a5a'; if(b)b.disabled=false; }
-      else if(s&&s.terminadoEm){ el.textContent='✅ '+(s.novos||0)+' conversas importadas.'; if(b)b.disabled=false; atualizaInbox(); }
-      else { el.textContent=''; if(b)b.disabled=false; }
+      if(s&&s.rodando){ el.style.color=''; el.textContent='⏳ Importando… '+(s.feitos||0)+(s.total?('/'+s.total):'')+' conversas'; if(b)b.disabled=true; setTimeout(function(){pollImport(true);},3000); }
+      else if(mostrarFim && s && s.erro){ el.textContent='⚠️ '+s.erro; el.title=s.erro; el.style.whiteSpace='normal'; el.style.overflowWrap='anywhere'; el.style.color='#a15a5a'; if(b)b.disabled=false; }
+      else if(mostrarFim && s && s.terminadoEm){ el.style.color=''; el.textContent='✅ '+(s.novos||0)+' conversas importadas.'; if(b)b.disabled=false; atualizaInbox(); }
+      else { el.textContent=''; el.title=''; if(b)b.disabled=false; }
     }).catch(function(){});
   }
-  pollImport();
+  pollImport(false);
 </script>`;
   return chrome({ tab: 'SoFIA', h1: '🤖 SoFIA', p: 'Conversas da SoFIA — leia o histórico de cada atendimento.' }, 'sofia', corpo);
 }
