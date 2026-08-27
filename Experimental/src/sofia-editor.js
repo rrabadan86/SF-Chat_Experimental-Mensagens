@@ -23,6 +23,7 @@ const F = {
   sessao: path.join(DIR, 'sofia-sessao-horas.txt'), // janela de memória da conversa (horas) — lida pela Sofia
   healthMin: path.join(DIR, 'sofia-health-min.txt'), // intervalo do health-check (min) — lido pelo listener
   agruparSeg: path.join(DIR, 'sofia-agrupar-seg.txt'), // debounce de mensagens (seg) — lido pelo listener
+  quieto: path.join(DIR, 'sofia-quieto.json'), // janela do filtro "sem resposta do contato" (painel)
   midias: path.join(DIR, 'sofia-midias.txt'),
   ritmo: path.join(DIR, 'sofia-ritmo.json'), // "jeito humano" (velocidade/pausas) — lido pelo listener
   waStatus: path.join(DIR, 'sofia-wa-status.json'), // publicado pelo listener da Sofia
@@ -109,6 +110,32 @@ function gravarSessaoHoras(h) {
   const n = parseFloat(String(h).replace(',', '.'));
   const val = Number.isFinite(n) && n > 0 ? Math.min(n, 720) : SESSAO_HORAS_PADRAO;
   gravarArquivo(F.sessao, String(val));
+}
+
+// ── filtro "sem resposta do contato" (só painel/Conversas) ──────────────────
+// Duas janelas: `horas` = tempo mínimo de silêncio do contato (padrão 24h);
+// `dias` = idade máxima da última mensagem dele (padrão 4 dias). Não afeta o
+// robô — é só o filtro da inbox. Guardado como JSON.
+const QUIETO_HORAS_PADRAO = 24, QUIETO_DIAS_PADRAO = 4;
+function lerQuietoCfg() {
+  let o = {}; try { o = JSON.parse(ler(F.quieto)) || {}; } catch (_) { o = {}; }
+  const h = parseFloat(String(o.horas).replace(',', '.'));
+  const d = parseFloat(String(o.dias).replace(',', '.'));
+  return {
+    horas: Number.isFinite(h) && h > 0 ? Math.min(h, 720) : QUIETO_HORAS_PADRAO,
+    dias: Number.isFinite(d) && d > 0 ? Math.min(d, 60) : QUIETO_DIAS_PADRAO,
+  };
+}
+function gravarQuietoCfg({ horas, dias } = {}) {
+  const atual = lerQuietoCfg();
+  const h = parseFloat(String(horas).replace(',', '.'));
+  const d = parseFloat(String(dias).replace(',', '.'));
+  const cfg = {
+    horas: Number.isFinite(h) && h > 0 ? Math.min(h, 720) : atual.horas,
+    dias: Number.isFinite(d) && d > 0 ? Math.min(d, 60) : atual.dias,
+  };
+  gravarArquivo(F.quieto, JSON.stringify(cfg));
+  return cfg;
 }
 
 // ── verificação de conexão (health-check), em MINUTOS ───────────────────────
@@ -214,6 +241,7 @@ function estado() {
     sessaoHoras: lerSessaoHoras(),
     healthMin: lerHealthMin(),
     agruparSeg: lerAgruparSeg(),
+    quieto: lerQuietoCfg(),
     followup: lerFollowupCfg(),
     modelos: lerModelos(),
     modelosValidos: MODELOS_VALIDOS,
@@ -226,7 +254,7 @@ function estado() {
 }
 
 // Salva tudo (com backup e validação mínima). Lança Error em caso de recusa.
-function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg, followup, modelos, transcricaoOn, midias, ritmo }) {
+function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg, quieto, followup, modelos, transcricaoOn, midias, ritmo }) {
   const promptMontado = montarPrompt(secoes || []);
   const ext = String(extracao || '').trim();
   if (promptMontado.trim().length < 50 || ext.length < 30) {
@@ -240,6 +268,7 @@ function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg
   if (sessaoHoras !== undefined) gravarSessaoHoras(sessaoHoras);
   if (healthMin !== undefined) gravarHealthMin(healthMin);
   if (agruparSeg !== undefined) gravarAgruparSeg(agruparSeg);
+  if (quieto !== undefined) gravarQuietoCfg(quieto || {});
   if (followup !== undefined) gravarFollowupCfg(followup || {});
   if (modelos !== undefined) gravarModelos(modelos || {});
   if (transcricaoOn !== undefined) gravarTranscricaoOn(!!transcricaoOn);
@@ -511,7 +540,7 @@ function setControleHumano(chave, ativo) {
 
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
-  lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerRitmo, gravarRitmo, waStatus,
+  lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerRitmo, gravarRitmo, waStatus,
   conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

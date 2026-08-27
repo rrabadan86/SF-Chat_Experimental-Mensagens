@@ -1494,6 +1494,7 @@ function subnavSofia(view) {
 function paginaSofiaConversas(aviso, erro) {
   const tagsLista = contatos.tagsDistintas().map(t => t.tag);
   let sessaoHoras = 12; try { sessaoHoras = sofia.lerSessaoHoras(); } catch (_) {}
+  let quietoCfg = { horas: 24, dias: 4 }; try { quietoCfg = sofia.lerQuietoCfg(); } catch (_) {}
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('conversas')}
@@ -1512,7 +1513,7 @@ function paginaSofiaConversas(aviso, erro) {
       <div>
         <div style="margin-bottom:8px"><input type="search" id="convBusca" oninput="filtrarBusca(this.value)" placeholder="🔎 Buscar por nome, telefone ou palavra na conversa" style="width:100%;font-size:.85rem;padding:9px 12px;border:1px solid var(--linha);border-radius:9px"></div>
         <div style="margin-bottom:8px"><select id="convFiltroTag" onchange="filtrarTag(this.value)" style="width:100%;font-size:.85rem"><option value="">🏷️ Todas as tags</option><option value="__sem__">🏷️ Sem tag</option>${tagsLista.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>
-        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:.8rem;cursor:pointer;color:#5c5960"><input type="checkbox" id="convQuieto" onchange="filtrarQuieto(this)" style="width:15px;height:15px;margin:0;flex:none">😴 Sem resposta do contato há <b>24h+</b> <small style="color:#9a9a9a">(últimos 4 dias)</small></label>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:.8rem;cursor:pointer;color:#5c5960"><input type="checkbox" id="convQuieto" onchange="filtrarQuieto(this)" style="width:15px;height:15px;margin:0;flex:none">😴 Sem resposta do contato há <b>${esc(String(quietoCfg.horas))}h+</b> <small style="color:#9a9a9a">(últimos ${esc(String(quietoCfg.dias))} dias)</small></label>
         <div id="convLista"></div>
         <div id="convPag" style="display:flex;flex-direction:column;align-items:stretch;gap:6px;margin-top:8px"></div>
       </div>
@@ -1575,6 +1576,7 @@ function paginaSofiaConversas(aviso, erro) {
   function fecharResumo(){ document.getElementById('ctResModal').style.display='none'; }
   var TAGS_EXISTENTES = ${JSON.stringify(tagsLista)};
   var SESSAO_MS = ${Math.round(sessaoHoras * 3600 * 1000)};
+  var QUIETO_MS = ${Math.round(quietoCfg.horas * 3600 * 1000)}, QUIETO_MAX_MS = ${Math.round(quietoCfg.dias * 24 * 3600 * 1000)};
   function encerrada(c){ return !!(c && (c.enc || (c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS)))); }
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function fmtHora(ts){ try{return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
@@ -1742,7 +1744,7 @@ function paginaSofiaConversas(aviso, erro) {
   // Usa só os horários já guardados (nenhuma chamada de IA). Follow-up/mensagens da
   // SoFIA não contam — olhamos só o que a própria pessoa mandou.
   function ultimaDoContato(c){ var m=(c&&c.msgs)||[]; for(var i=m.length-1;i>=0;i--){ if(m[i].autor==='aluna') return m[i].em||0; } return 0; }
-  function quieto(c){ var t=ultimaDoContato(c); if(!t) return false; var dt=Date.now()-t, DIA=864e5; return dt>=DIA && dt<=4*DIA; }
+  function quieto(c){ var t=ultimaDoContato(c); if(!t) return false; var dt=Date.now()-t; return dt>=QUIETO_MS && dt<=QUIETO_MAX_MS; }
   // Casa a busca com nome, telefone (só dígitos) OU o texto de qualquer mensagem.
   function casaBusca(k, c){
     if(!buscaTexto) return true;
@@ -2772,6 +2774,14 @@ function paginaSofia(aviso, erro) {
             <label>🎟️ Máx. experimentais por turma${infoI('Quando uma turma já tem esse número de experimentais marcadas, a SoFIA <b>para de oferecer</b> aquele horário (mesmo com vaga normal). Aumente para aceitar mais. Padrão: 2. Vale na próxima atualização da grade. <b>Atenção:</b> a checagem final roda no formulário (Render) — se aumentar muito aqui, ajuste o EVO_MAX_EXPERIMENTAIS lá também.')}</label>
             <div class="cfg-in"><input type="number" name="expLimite" min="0" max="50" step="1" value="${lerExpLimite() == null ? 2 : lerExpLimite()}"><span class="suf">por turma (0 = sem limite)</span></div>
           </div>
+          <div>
+            <label>😴 "Sem resposta" — silêncio mínimo${infoI('Na aba <b>Conversas</b> existe um filtro que mostra só os contatos que <b>pararam de responder</b>. Aqui você define o <b>silêncio mínimo</b>: só entra quem não manda mensagem há pelo menos esse tempo. Só afeta a listagem do painel — não o robô nem o follow-up. Padrão: 24 horas.')}</label>
+            <div class="cfg-in"><input type="number" name="quietoHoras" min="1" max="720" step="1" value="${e.quieto.horas}"><span class="suf">horas</span></div>
+          </div>
+          <div>
+            <label>😴 "Sem resposta" — janela${infoI('Idade <b>máxima</b> da última mensagem do contato para ele aparecer no filtro. Ex.: 4 dias mostra só quem sumiu nos últimos 4 dias (não desenterra conversas antigas). Padrão: 4 dias.')}</label>
+            <div class="cfg-in">últimos <input type="number" name="quietoDias" min="1" max="60" step="1" value="${e.quieto.dias}"><span class="suf">dias</span></div>
+          </div>
         </div>
       </div>
 
@@ -3601,6 +3611,7 @@ const server = http.createServer((req, res) => {
           sessaoHoras: p.get('sessaoHoras') || '12',
           healthMin: p.get('healthMin') != null ? p.get('healthMin') : '3',
           agruparSeg: p.get('agruparSeg') != null ? p.get('agruparSeg') : '7',
+          quieto: { horas: p.get('quietoHoras') || '24', dias: p.get('quietoDias') || '4' },
           followup: { on: p.get('followupOn') === '1', horas: p.get('followupHoras') || '24', instrucao: p.get('followupInstrucao') || '', janelaIni: p.get('followupJanIni') || '08:00', janelaFim: p.get('followupJanFim') || '19:00' },
           modelos: { conversa: p.get('modeloConversa') || '', extracao: p.get('modeloExtracao') || '' },
           transcricaoOn: p.get('transcricaoOn') === '1',
