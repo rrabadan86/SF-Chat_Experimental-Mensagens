@@ -750,9 +750,8 @@ function paginaMensagens(aviso, erro) {
   const hmap = {};
   horarios.listar().forEach(j => { hmap[j.chave] = j; });
 
-  // A mensagem do Instagram é editada na aba "📸 Instagram" (fica tudo do IG lá).
-  const itens = mensagens.listar().filter(m => m.chave !== 'instagram').map(m => {
-    // Bloco de horário embutido no card (inputs pertencem ao form #fh).
+  // Monta o card de UMA mensagem (texto + bloco de horário embutido no form #fh).
+  const cardDe = (m) => {
     const mapa = HORARIOS_DA_MSG[m.chave];
     let hbloco = '';
     if (mapa === 'compartilha:followup') {
@@ -765,7 +764,14 @@ function paginaMensagens(aviso, erro) {
       hbloco = `<div class="hsec"><div class="hsec-t">🕒 Horário deste envio ${badgeH}</div>${linhas}</div>`;
     }
     return `<div class="card">${cardMensagem(m)}${hbloco}</div>`;
-  }).join('\n');
+  };
+
+  // Mensagens que vão para GRUPOS do WhatsApp (o resto é individual, 1 para 1).
+  // A do Instagram é editada na aba "📸 Instagram" (fica tudo do IG lá).
+  const MSGS_GRUPO = new Set(['ausentes', 'aniversario', 'circuito_convocacao', 'circuito_lembrete']);
+  const listaMsgs = mensagens.listar().filter(m => m.chave !== 'instagram');
+  const itensIndividuais = listaMsgs.filter(m => !MSGS_GRUPO.has(m.chave)).map(cardDe).join('\n');
+  const itensGrupo = listaMsgs.filter(m => MSGS_GRUPO.has(m.chave)).map(cardDe).join('\n');
 
   // Seção final: jobs sem texto editável (só horário).
   const outros = OUTROS_JOBS.map(chave => hmap[chave]).filter(Boolean).map(j => {
@@ -780,10 +786,13 @@ function paginaMensagens(aviso, erro) {
     <div style="text-align:right;margin:-4px 0 0"><form method="POST" action="/wa/desconectar" onsubmit="return confirm('Desconectar o WhatsApp do robô?\\n\\nO robô para de enviar e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔌 Desconectar</button></form></div>
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
-    ${cardGrupos()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
-    ${itens}
-    <div class="sec-t">Outros envios automáticos <small style="font-weight:600;color:var(--cinza)">(sem texto editável)</small></div>
+    <div class="sec-t">📩 Mensagens individuais <small style="font-weight:600;color:var(--cinza)">(enviadas 1 para 1, direto para a aluna)</small></div>
+    ${itensIndividuais}
+    <div class="sec-t">👥 Mensagens em grupo <small style="font-weight:600;color:var(--cinza)">(enviadas nos grupos do WhatsApp)</small></div>
+    ${cardGrupos()}
+    ${itensGrupo}
+    <div class="sec-t">🔁 Outros envios em grupo <small style="font-weight:600;color:var(--cinza)">(automáticos, sem texto editável)</small></div>
     ${outros}
     <div class="hbar">
       <div class="acts"><button type="submit" form="fh" id="btnH" class="save">🕒 Salvar horários e reiniciar o robô</button></div>
