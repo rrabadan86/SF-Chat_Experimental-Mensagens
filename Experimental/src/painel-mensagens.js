@@ -1885,17 +1885,21 @@ function paginaSofiaContatos(aviso, erro, params) {
   let pag = '';
   if (r.paginas > 1) {
     const cur = r.pagina, last = r.paginas - 1;
-    const nums = new Set([0, last, cur - 1, cur, cur + 1]);
-    if (cur <= 2) { nums.add(1); nums.add(2); nums.add(3); }             // início: mostra 1..4
-    if (cur >= last - 2) { nums.add(last - 1); nums.add(last - 2); nums.add(last - 3); } // fim
+    // Janela ±2 em torno da atual + 1ª/última; nas pontas, mostra até ~5 seguidas.
+    const nums = new Set([0, last, cur - 2, cur - 1, cur, cur + 1, cur + 2]);
+    if (cur <= 3) [1, 2, 3, 4].forEach(x => nums.add(x));
+    if (cur >= last - 3) [last - 1, last - 2, last - 3, last - 4].forEach(x => nums.add(x));
     const paginasVis = [...nums].filter(p => p >= 0 && p <= last).sort((a, b) => a - b);
+    const cel = (p) => p === cur
+      ? `<span class="save" style="padding:6px 11px;border-radius:8px;pointer-events:none">${p + 1}</span>`
+      : `<a class="reset" style="padding:6px 11px" href="${qs(p)}">${p + 1}</a>`;
     const numHtml = [];
     let ant = -1;
     for (const p of paginasVis) {
-      if (p - ant > 1) numHtml.push('<span class="quando" style="padding:0 2px">…</span>');
-      numHtml.push(p === cur
-        ? `<span class="save" style="padding:6px 11px;border-radius:8px;pointer-events:none">${p + 1}</span>`
-        : `<a class="reset" style="padding:6px 11px" href="${qs(p)}">${p + 1}</a>`);
+      // Se o "buraco" esconde só UMA página, mostra o número dela em vez de "…".
+      if (p - ant === 2) numHtml.push(cel(ant + 1));
+      else if (p - ant > 1) numHtml.push('<span class="quando" style="padding:0 2px">…</span>');
+      numHtml.push(cel(p));
       ant = p;
     }
     pag = `<div style="display:flex;flex-direction:column;gap:8px;align-items:center;margin-top:12px">
