@@ -2317,63 +2317,40 @@ function paginaSofia(aviso, erro) {
     <form id="formSalvar" method="POST" action="/sofia/salvar">
 
       <details class="acc-sec">
-        <summary class="sec-t" style="cursor:pointer;padding:4px 0">⚙️ Ajustes gerais <small style="font-weight:400;color:var(--cinza)">— pausa, sessão, agrupamento, verificação, limite</small></summary>
-      <div class="card">
-        <div class="cfg-grid">
-          <div>
-            <label>⏳ Pausa ao responder pelo celular${infoI('Se você responder uma aluna <b>direto pelo WhatsApp</b> (no celular da SoFIA), ela se cala nessa conversa por esse tempo, pra não falar por cima de você. É <b>diferente</b> do botão “assumir” do painel, que deixa a SoFIA fora <b>até você devolver</b>.')}</label>
-            <div class="cfg-in"><input type="number" name="pausaMin" min="1" max="1440" value="${e.pausaMin}"><span class="suf">minutos</span></div>
-          </div>
-          <div>
-            <label>🧩 Agrupar mensagens da aluna${infoI('A aluna às vezes manda <b>várias mensagens seguidas</b>. A SoFIA espera esse tempo após a última e responde <b>uma vez só</b>, juntando tudo — evita respostas cruzadas/confusas. Padrão: 7 segundos. 0 = responder na hora. As mensagens aparecem no painel na hora.')}</label>
-            <div class="cfg-in"><input type="number" name="agruparSeg" min="0" max="120" step="1" value="${e.agruparSeg}"><span class="suf">segundos (0 = na hora)</span></div>
-          </div>
-          <div>
-            <label>🧠 Tempo de sessão (memória)${infoI('Depois desse tempo <b>sem mensagens</b>, a próxima mensagem da aluna começa uma conversa <b>nova</b> — a SoFIA não lembra do que foi dito antes. Na aba Conversas aparece como <b>“Sessão encerrada”</b>. Padrão: 12 horas.')}</label>
-            <div class="cfg-in"><input type="number" name="sessaoHoras" min="1" max="720" step="1" value="${e.sessaoHoras}"><span class="suf">horas</span></div>
-          </div>
-          <div>
-            <label>🩺 Verificação de conexão${infoI('De tempos em tempos a SoFIA confere se o WhatsApp dela ainda está <b>de verdade</b> conectado. Se travar (parar de responder sem cair o QR), ela <b>te avisa no celular</b> e <b>reinicia sozinha</b>. Padrão: 3 minutos. Vale na hora, sem reiniciar.')}</label>
-            <div class="cfg-in">checar a cada <input type="number" name="healthMin" min="0" max="120" step="1" value="${e.healthMin}"><span class="suf">min (0 = off)</span></div>
-          </div>
-          <div>
-            <label>🎟️ Máx. experimentais por turma${infoI('Quando uma turma já tem esse número de experimentais marcadas, a SoFIA <b>para de oferecer</b> aquele horário (mesmo com vaga normal). Aumente para aceitar mais. Padrão: 2. Vale na próxima atualização da grade. <b>Atenção:</b> a checagem final roda no formulário (Render) — se aumentar muito aqui, ajuste o EVO_MAX_EXPERIMENTAIS lá também.')}</label>
-            <div class="cfg-in"><input type="number" name="expLimite" min="0" max="50" step="1" value="${lerExpLimite() == null ? 2 : lerExpLimite()}"><span class="suf">por turma (0 = sem limite)</span></div>
-          </div>
-        </div>
-      </div>
+        <summary class="sec-t" style="cursor:pointer;padding:4px 0">⌨️ Jeito de responder <small style="font-weight:400;color:var(--cinza)">— IA, ritmo da conversa, memória e operação</small></summary>
 
-      </details>
-
-      <details class="acc-sec">
-        <summary class="sec-t" style="cursor:pointer;padding:4px 0">⌨️ Jeito de responder <small style="font-weight:400;color:var(--cinza)">— modelo de IA, mensagens, “digitando…”, velocidade</small></summary>
+      <!-- Grupo 1 · Inteligência (modelo de IA + transcrição) -->
       <div class="card">
-        <div style="font-family:Montserrat,sans-serif;font-weight:700;font-size:.92rem;margin:0 0 10px">🧠 Modelo de IA <small style="font-weight:400;color:var(--cinza)">— qual Claude a SoFIA usa (vale após reiniciar)</small></div>
+        <div style="font-family:Montserrat,sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">🧠 Inteligência</div>
+        <p class="quando" style="margin:0 0 12px">Qual Claude a SoFIA usa e se ela entende áudios.</p>
         <div style="display:flex;gap:18px;flex-wrap:wrap">
           <div style="flex:1;min-width:240px">
-            <label>Conversa ${infoI('Modelo que <b>conversa com as alunas</b> e gera o <b>follow-up</b>. É o mais importante para a qualidade do atendimento. Padrão: Sonnet 5.')}</label>
+            <label>Modelo da conversa ${infoI('Modelo que <b>conversa com as alunas</b> e gera o <b>follow-up</b>. É o mais importante para a qualidade do atendimento. Padrão: Sonnet 5.')}</label>
             <select name="modeloConversa" style="width:100%;padding:9px">${e.modelosValidos.map(m => `<option value="${esc(m.id)}"${m.id === e.modelos.conversa ? ' selected' : ''}>${esc(m.rot)}</option>`).join('')}</select>
           </div>
           <div style="flex:1;min-width:240px">
-            <label>Extração e resumos ${infoI('Modelo que <b>extrai os dados</b> do agendamento (nome, e-mail, dia, hora) e gera os <b>resumos</b> das interações. Roda pouco — dá para usar um mais barato aqui. Padrão: Sonnet 5.')}</label>
+            <label>Modelo de extração/resumos ${infoI('Modelo que <b>extrai os dados</b> do agendamento (nome, e-mail, dia, hora) e gera os <b>resumos</b> das interações. Roda pouco — dá para usar um mais barato aqui. Padrão: Sonnet 5.')}</label>
             <select name="modeloExtracao" style="width:100%;padding:9px">${e.modelosValidos.map(m => `<option value="${esc(m.id)}"${m.id === e.modelos.extracao ? ' selected' : ''}>${esc(m.rot)}</option>`).join('')}</select>
           </div>
         </div>
-        <p class="quando" style="margin:10px 0 0">Modelos maiores custam mais por conversa. A troca vale <b>após reiniciar a SoFIA</b> (<code>pm2 restart sofia-listener</code>).</p>
-      </div>
-      <div class="card">
+        <p class="quando" style="margin:8px 0 0">Modelos maiores custam mais por conversa. A troca vale <b>após reiniciar a SoFIA</b> (<code>pm2 restart sofia-listener</code>).</p>
+        <hr style="border:0;border-top:1px solid var(--linha);margin:14px 0 12px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="transcricaoOn" value="1"${e.transcricaoOn ? ' checked' : ''} style="width:auto;margin:0">
           🎤 Transcrever áudios das alunas${infoI('Quando a aluna manda <b>áudio</b>, a SoFIA transcreve (fala→texto) e responde ao conteúdo — aparece como “🎤 …” no painel. Precisa de uma <b>chave de transcrição</b> no arquivo <code>.env</code> (<code>TRANSCRICAO_API_KEY</code>, OpenAI ou Groq). Desligado, a SoFIA pede para a aluna mandar por texto.')}
         </label>
         <p class="quando" style="margin:6px 0 0">Precisa da chave no <code>ChatBot/.env</code>. Sem chave, fica sem efeito. Vale <b>após reiniciar</b> a SoFIA.</p>
       </div>
+
+      <!-- Grupo 2 · Ritmo da conversa (humano/velocidade + agrupar + pausa celular) -->
       <div class="card">
+        <div style="font-family:Montserrat,sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">💬 Ritmo da conversa</div>
+        <p class="quando" style="margin:0 0 12px">Como ela fala e o tempo até responder.</p>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="ritHumano" value="1"${e.ritmo.humano ? ' checked' : ''} style="width:auto;margin:0">
           Modo humano — quebra respostas longas em várias mensagens e mostra “digitando…”
         </label>
-        <p class="quando" style="margin:6px 0 14px">Desmarcado, a SoFIA manda tudo de uma vez, sem simular digitação.</p>
+        <p class="quando" style="margin:6px 0 12px">Desmarcado, a SoFIA manda tudo de uma vez, sem simular digitação.</p>
         <div style="display:flex;gap:18px;flex-wrap:wrap">
           <div>
             <label>Velocidade da digitação</label>
@@ -2389,6 +2366,37 @@ function paginaSofia(aviso, erro) {
             <label>Pausa máxima</label>
             <div><input type="number" name="ritDelayMax" min="0" max="60000" value="${e.ritmo.delayMax}" style="width:110px"> ms</div>
             <p class="quando" style="margin:4px 0 0">Teto, mesmo em mensagens longas.</p>
+          </div>
+        </div>
+        <hr style="border:0;border-top:1px solid var(--linha);margin:14px 0 12px">
+        <div class="cfg-grid">
+          <div>
+            <label>🧩 Agrupar mensagens da aluna${infoI('A aluna às vezes manda <b>várias mensagens seguidas</b>. A SoFIA espera esse tempo após a última e responde <b>uma vez só</b>, juntando tudo — evita respostas cruzadas/confusas. Padrão: 7 segundos. 0 = responder na hora. As mensagens aparecem no painel na hora.')}</label>
+            <div class="cfg-in"><input type="number" name="agruparSeg" min="0" max="120" step="1" value="${e.agruparSeg}"><span class="suf">segundos (0 = na hora)</span></div>
+          </div>
+          <div>
+            <label>⏳ Pausa ao responder pelo celular${infoI('Se você responder uma aluna <b>direto pelo WhatsApp</b> (no celular da SoFIA), ela se cala nessa conversa por esse tempo, pra não falar por cima de você. É <b>diferente</b> do botão “assumir” do painel, que deixa a SoFIA fora <b>até você devolver</b>.')}</label>
+            <div class="cfg-in"><input type="number" name="pausaMin" min="1" max="1440" value="${e.pausaMin}"><span class="suf">minutos</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grupo 3 · Memória e operação (sessão + verificação + limite) -->
+      <div class="card">
+        <div style="font-family:Montserrat,sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">⚙️ Memória e operação</div>
+        <p class="quando" style="margin:0 0 12px">Duração da memória, saúde da conexão e limite de vagas por turma.</p>
+        <div class="cfg-grid">
+          <div>
+            <label>🧠 Tempo de sessão (memória)${infoI('Depois desse tempo <b>sem mensagens</b>, a próxima mensagem da aluna começa uma conversa <b>nova</b> — a SoFIA não lembra do que foi dito antes. Na aba Conversas aparece como <b>“Sessão encerrada”</b>. Padrão: 12 horas.')}</label>
+            <div class="cfg-in"><input type="number" name="sessaoHoras" min="1" max="720" step="1" value="${e.sessaoHoras}"><span class="suf">horas</span></div>
+          </div>
+          <div>
+            <label>🩺 Verificação de conexão${infoI('De tempos em tempos a SoFIA confere se o WhatsApp dela ainda está <b>de verdade</b> conectado. Se travar (parar de responder sem cair o QR), ela <b>te avisa no celular</b> e <b>reinicia sozinha</b>. Padrão: 3 minutos. Vale na hora, sem reiniciar.')}</label>
+            <div class="cfg-in">checar a cada <input type="number" name="healthMin" min="0" max="120" step="1" value="${e.healthMin}"><span class="suf">min (0 = off)</span></div>
+          </div>
+          <div>
+            <label>🎟️ Máx. experimentais por turma${infoI('Quando uma turma já tem esse número de experimentais marcadas, a SoFIA <b>para de oferecer</b> aquele horário (mesmo com vaga normal). Aumente para aceitar mais. Padrão: 2. Vale na próxima atualização da grade. <b>Atenção:</b> a checagem final roda no formulário (Render) — se aumentar muito aqui, ajuste o EVO_MAX_EXPERIMENTAIS lá também.')}</label>
+            <div class="cfg-in"><input type="number" name="expLimite" min="0" max="50" step="1" value="${lerExpLimite() == null ? 2 : lerExpLimite()}"><span class="suf">por turma (0 = sem limite)</span></div>
           </div>
         </div>
       </div>
