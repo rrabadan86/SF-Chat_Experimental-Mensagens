@@ -1609,6 +1609,7 @@ function subnavSofia(view) {
   if (podeSofiaSub(sess, 'contatos')) its += item('contatos', 'Contatos');
   if (podeSofiaSub(sess, 'contatos')) its += item('tags', 'Tags');
   if (podeSofiaSub(sess, 'campanhas')) its += item('campanhas', 'Campanhas');
+  if (podeSofiaSub(sess, 'conversas')) its += item('funil', 'Funil');
   if (podeSofiaSub(sess, 'config')) its += item('custo', 'Custo IA');
   return `<div class="subtabs">${its}</div>`;
 }
@@ -1643,7 +1644,7 @@ function paginaSofiaConversas(aviso, erro) {
           <div class="filtros-corpo">
             <label class="filtro-check"><input type="checkbox" id="convQuieto" onchange="filtrarQuieto(this)">😴 Sem resposta há <b>${esc(String(quietoCfg.horas))}h+</b> <small>(${esc(String(quietoCfg.dias))}d)</small></label>
             <div class="filtro-periodo">
-              <span class="filtro-lbl">📅 Conversaram no período</span>
+              <span class="filtro-lbl">Conversaram no período</span>
               <div class="filtro-datas">
                 <input type="date" id="convDataIni" onchange="filtrarData()" title="De (dia inicial)">
                 <span class="ate">até</span>
@@ -3224,6 +3225,72 @@ function negarAcesso(res, sess) {
   res.end(chrome({ tab: 'Sem acesso', h1: 'SlimFit', p: 'Painel do Studio.' }, '', corpo));
 }
 
+// ── Página: SoFIA → Funil ───────────────────────────────────────────────────
+// Conversas → Agendaram → Não agendaram, por período. "Agendou" = telefone na
+// lista de quem agendou pela SoFIA (sofia-agendaram.json) OU contato com uma tag
+// de gatilho 'agendou'. A data da conversa é a última atividade dela na inbox.
+function paginaSofiaFunil(params) {
+  params = params || {};
+  const janelas = [['hoje', 'Hoje'], ['7', '7 dias'], ['30', '30 dias'], ['0', 'Tudo']];
+  const custom = !!(params.de || params.ate);
+  const per = custom ? '' : (['hoje', '7', '30', '0'].includes(params.per) ? params.per : '7');
+  const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const menosDias = (base, n) => { const d = new Date(base + 'T12:00:00'); d.setDate(d.getDate() - n); return d.toLocaleDateString('en-CA'); };
+  let iniD = '', fimD = hojeStr, rotulo = '';
+  if (custom) { iniD = params.de || ''; fimD = params.ate || hojeStr; rotulo = `${params.de || 'início'} até ${fimD}`; }
+  else if (per === 'hoje') { iniD = hojeStr; rotulo = 'hoje'; }
+  else if (per === '7') { iniD = menosDias(hojeStr, 6); rotulo = 'últimos 7 dias'; }
+  else if (per === '30') { iniD = menosDias(hojeStr, 29); rotulo = 'últimos 30 dias'; }
+  else { iniD = ''; rotulo = 'todo o período'; }
+  const diaDe = (ms) => { try { return new Date(Number(ms)).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); } catch (_) { return ''; } };
+  const dentro = (dia) => dia && (!iniD || dia >= iniD) && (!fimD || dia <= fimD);
+  let inbox = {}; try { inbox = sofia.conversas() || {}; } catch (_) {}
+  const agSet = new Set(); try { (fuLerJson(FU_AGENDOU_FILE, []) || []).forEach(x => { const d = String(x).replace(/\D/g, ''); if (d) agSet.add(d.slice(-8)); }); } catch (_) {}
+  let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {}
+  let contatosMap = {}; try { contatosMap = contatos.carregar() || {}; } catch (_) {}
+  const last8 = (k) => String(k).replace(/\D/g, '').slice(-8);
+  const temAgTag = (k) => { try { const c = contatosMap[contatos.normTel(k)]; if (!c) return false; const ts = c.tags || []; return agTags.some(t => ts.includes(t)); } catch (_) { return false; } };
+  let convs = 0, agend = 0;
+  for (const k in inbox) {
+    const c = inbox[k] || {};
+    const ult = c.ultimaEm || (c.msgs && c.msgs.length ? c.msgs[c.msgs.length - 1].em : 0);
+    if (!dentro(diaDe(ult))) continue;
+    convs++;
+    if (agSet.has(last8(k)) || temAgTag(k)) agend++;
+  }
+  const naoAg = Math.max(0, convs - agend);
+  const conv = convs ? Math.round((agend / convs) * 1000) / 10 : 0;
+  const barra = (rot, n, max, cor) => `<div style="display:flex;align-items:center;gap:10px;margin:9px 0"><span style="width:150px;flex:none;color:var(--tinta);font-weight:600;font-size:.86rem">${rot}</span><span style="flex:1;height:26px;background:var(--linha-soft);border-radius:8px;overflow:hidden"><span style="display:block;height:100%;width:${max ? Math.max(3, Math.round(n / max * 100)) : 0}%;background:${cor}"></span></span><span style="width:44px;flex:none;text-align:right;font-weight:700;color:var(--tinta)">${n}</span></div>`;
+  const segs = janelas.map(([v, l]) => `<a href="/sofia?view=funil&per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
+  const corpo = `<div class="wrap">
+    ${subnavSofia('funil')}
+    <div class="sec-t">Funil da SoFIA <small style="font-weight:600;color:var(--cinza)">(conversas que viraram agendamento)</small></div>
+    <div class="segs">${segs}</div>
+    <form method="GET" action="/sofia" class="filtro-datas" style="margin:0 0 14px;flex-wrap:wrap">
+      <input type="hidden" name="view" value="funil">
+      <span class="filtro-lbl" style="align-self:center">Período personalizado</span>
+      <input type="date" name="de" value="${esc(params.de || '')}">
+      <span class="ate">até</span>
+      <input type="date" name="ate" value="${esc(params.ate || '')}">
+      <button class="save" type="submit" style="padding:8px 18px;font-size:.82rem">Aplicar</button>
+      ${custom ? `<a href="/sofia?view=funil&per=7" class="reset filtro-limpar" style="text-decoration:none">🧹</a>` : ''}
+    </form>
+    <div class="stats">
+      <div class="stat tot"><div class="n">${convs}</div><div class="l">conversas · ${esc(rotulo)}</div></div>
+      <div class="stat ok"><div class="n">${agend}</div><div class="l">agendaram</div></div>
+      <div class="stat"><div class="n" style="color:var(--cinza)">${naoAg}</div><div class="l">não agendaram</div></div>
+      <div class="stat"><div class="n" style="color:var(--coral-esc)">${conv}%</div><div class="l">conversão</div></div>
+    </div>
+    <div class="sec-t">Funil</div>
+    <div class="card">
+      ${convs ? barra('Conversaram', convs, convs, 'var(--teal)') + barra('Agendaram', agend, convs, 'var(--ok)') + barra('Não agendaram', naoAg, convs, 'var(--cinza)')
+      : '<div class="vazio">Sem conversas no período.</div>'}
+    </div>
+    <p class="quando" style="text-align:center">"Agendaram" = contatos que agendaram pela SoFIA (ou com tag de agendamento). O <b>comparecimento</b> à aula depende de cruzar com a presença no EVO — fica como próximo passo.</p>
+  </div>`;
+  return chrome({ tab: 'Funil', h1: 'SoFIA', p: 'Funil — conversas que viraram agendamento.' }, 'sofia', corpo);
+}
+
 // ── Página: SoFIA → Custo IA ────────────────────────────────────────────────
 function paginaSofiaCusto(aviso, erro, params) {
   params = params || {};
@@ -3260,11 +3327,11 @@ function paginaSofiaCusto(aviso, erro, params) {
     <div class="segs">${segs}</div>
     <form method="GET" action="/sofia" class="filtro-datas" style="margin:0 0 14px;flex-wrap:wrap">
       <input type="hidden" name="view" value="custo">
-      <span class="filtro-lbl" style="align-self:center">📅 Período personalizado</span>
+      <span class="filtro-lbl" style="align-self:center">Período personalizado</span>
       <input type="date" name="de" value="${esc(params.de || '')}">
       <span class="ate">até</span>
       <input type="date" name="ate" value="${esc(params.ate || '')}">
-      <button class="save" type="submit" style="padding:6px 13px;font-size:.8rem">Aplicar</button>
+      <button class="save" type="submit" style="padding:8px 18px;font-size:.82rem">Aplicar</button>
       ${custom ? `<a href="/sofia?view=custo&per=7" class="reset filtro-limpar" style="text-decoration:none">🧹</a>` : ''}
     </form>
     <div class="stats">
@@ -3703,13 +3770,14 @@ const server = http.createServer((req, res) => {
     // cai na primeira permitida (config → conversas → contatos).
     let view = sp.get('view') || 'config';
     // 'tags' e 'custo' são sub-abas ligadas a Contatos/Configuração (mesma permissão).
-    const podeVerSub = (v) => (v === 'tags' ? podeSofiaSub(sess, 'contatos') : v === 'custo' ? podeSofiaSub(sess, 'config') : podeSofiaSub(sess, v));
+    const podeVerSub = (v) => (v === 'tags' ? podeSofiaSub(sess, 'contatos') : v === 'custo' ? podeSofiaSub(sess, 'config') : v === 'funil' ? podeSofiaSub(sess, 'conversas') : podeSofiaSub(sess, v));
     if (!podeVerSub(view)) view = SOFIA_SUBS.find(s => podeSofiaSub(sess, s)) || 'config';
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     if (view === 'contatos') return res.end(paginaSofiaContatos(aviso, erro, { q: sp.get('q') || '', tag: sp.get('tag') || '', bloq: sp.get('bloq') || '', pagina: sp.get('pagina') || 0 }));
     if (view === 'tags') return res.end(paginaSofiaTags(aviso, erro));
     if (view === 'conversas') return res.end(paginaSofiaConversas(aviso, erro));
     if (view === 'campanhas') return res.end(paginaSofiaCampanhas(aviso, erro));
+    if (view === 'funil') return res.end(paginaSofiaFunil({ per: sp.get('per') || '7', de: sp.get('de') || '', ate: sp.get('ate') || '' }));
     if (view === 'custo') return res.end(paginaSofiaCusto(aviso, erro, { per: sp.get('per') || '7', de: sp.get('de') || '', ate: sp.get('ate') || '' }));
     return res.end(paginaSofia(aviso, erro));
   }
