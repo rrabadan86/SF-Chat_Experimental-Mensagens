@@ -57,9 +57,8 @@ function montarMensagem(alunasDoMes, mes) {
     .slice()
     .sort((a, b) => parseInt(a.aniversario.split('/')[0]) - parseInt(b.aniversario.split('/')[0]))
     .map(a => `📅 ${a.aniversario.split('/')[0]}/${String(mes).padStart(2, '0')} — ${a.nome}`);
-  return `🎂 *Aniversariantes de ${nomeMes}* 🎉\n\n` +
-    linhas.join('\n') +
-    `\n\nVamos celebrar cada uma delas! 💪❤️`;
+  // Texto (intro + posição da {lista} + rodapé) é editável no painel: 'aniversariantes_mes'.
+  return require('./mensagens').render('aniversariantes_mes', { mes: nomeMes, lista: linhas.join('\n') });
 }
 
 // ─── Conecta no Edge dedicado (mesmo perfil das confirmações) ───
