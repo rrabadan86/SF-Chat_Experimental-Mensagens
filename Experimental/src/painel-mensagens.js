@@ -1792,7 +1792,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     </tr>`;
   }).join('');
 
-  const gerenciarTags = `<details style="margin:0 0 12px"${tags.length ? '' : ' open'}><summary style="cursor:pointer;font-weight:700;padding:6px 0">🏷️ Gerenciar tags <small style="font-weight:400;color:#5c5960">(criar, renomear, excluir ou automatizar)</small></summary>
+  const gerenciarTags = `<details class="card" style="padding:10px 15px;margin:0 0 12px"${tags.length ? '' : ' open'}><summary style="cursor:pointer;font-weight:700">🏷️ Gerenciar tags <small style="font-weight:400;color:#5c5960">(criar, renomear, excluir ou automatizar)</small></summary>
     <div class="card">
       <div style="margin-bottom:12px"><button type="button" class="save" onclick="criarTagNova()" style="padding:8px 16px">＋ Criar tag</button></div>
       ${tags.length ? tags.map((t, i) => { const cfg = contatos.tagConfig(t.tag); return `<div class="tagrow">
