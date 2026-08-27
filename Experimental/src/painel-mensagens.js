@@ -1511,20 +1511,27 @@ function paginaSofiaConversas(aviso, erro) {
     </style>
     <div class="inbox-grid">
       <div>
-        <div style="margin-bottom:8px"><input type="search" id="convBusca" oninput="filtrarBusca(this.value)" placeholder="🔎 Buscar por nome, telefone ou palavra na conversa" style="width:100%;font-size:.85rem;padding:9px 12px;border:1px solid var(--linha);border-radius:9px"></div>
-        <div style="margin-bottom:8px"><select id="convFiltroTag" onchange="filtrarTag(this.value)" style="width:100%;font-size:.85rem"><option value="">🏷️ Todas as tags</option><option value="__sem__">🏷️ Sem tag</option>${tagsLista.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>
-        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:.8rem;cursor:pointer;color:#5c5960"><input type="checkbox" id="convQuieto" onchange="filtrarQuieto(this)" style="width:15px;height:15px;margin:0;flex:none">😴 Sem resposta do contato há <b>${esc(String(quietoCfg.horas))}h+</b> <small style="color:#9a9a9a">(últimos ${esc(String(quietoCfg.dias))} dias)</small></label>
-        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;font-size:.78rem;color:#5c5960">
-          <span title="Conversaram no período">📅</span>
-          <input type="date" id="convDataIni" onchange="filtrarData()" title="De (dia inicial)" style="flex:1 1 0;min-width:0;font-size:.76rem;padding:5px 6px;border:1px solid var(--linha);border-radius:7px">
-          <span>até</span>
-          <input type="date" id="convDataFim" onchange="filtrarData()" title="Até (dia final)" style="flex:1 1 0;min-width:0;font-size:.76rem;padding:5px 6px;border:1px solid var(--linha);border-radius:7px">
-          <button type="button" onclick="limparData()" title="Limpar datas" class="reset" style="padding:4px 8px;font-size:.82rem">🧹</button>
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <input type="search" id="convBusca" oninput="filtrarBusca(this.value)" placeholder="🔎 Buscar nome, telefone ou palavra" style="flex:1 1 auto;min-width:0;font-size:.82rem;padding:8px 10px;border:1px solid var(--linha);border-radius:9px">
+          <select id="convFiltroTag" onchange="filtrarTag(this.value)" title="Filtrar por tag" style="flex:0 0 42px;width:42px;font-size:.82rem;padding:8px 2px"><option value="">🏷️</option><option value="__sem__">🏷️ Sem tag</option>${tagsLista.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select>
         </div>
-        <div style="margin-bottom:8px">
-          <button type="button" id="convImportBtn" onclick="importarHistorico()" class="reset" style="width:100%;font-size:.75rem;padding:6px" title="Tenta trazer para o painel as conversas que o WhatsApp já sincronizou">📥 Importar histórico do WhatsApp</button>
-          <div id="convImportSt" class="quando" style="margin:4px 0 0;font-size:.7rem"></div>
-        </div>
+        <details id="convFiltrosDet" style="margin-bottom:8px" ontoggle="try{localStorage.setItem('convFiltrosOpen', this.open?'1':'0')}catch(e){}">
+          <summary style="cursor:pointer;font-size:.76rem;color:#5c5960;list-style:none;padding:2px 0;user-select:none">⚙️ Mais filtros e histórico</summary>
+          <div style="padding:8px 0 0;display:flex;flex-direction:column;gap:8px">
+            <label style="display:flex;align-items:center;gap:8px;font-size:.78rem;cursor:pointer;color:#5c5960"><input type="checkbox" id="convQuieto" onchange="filtrarQuieto(this)" style="width:15px;height:15px;margin:0;flex:none">😴 Sem resposta há <b>${esc(String(quietoCfg.horas))}h+</b> <small style="color:#9a9a9a">(${esc(String(quietoCfg.dias))}d)</small></label>
+            <div style="display:flex;gap:6px;align-items:center;font-size:.76rem;color:#5c5960">
+              <span title="Conversaram no período">📅</span>
+              <input type="date" id="convDataIni" onchange="filtrarData()" title="De (dia inicial)" style="flex:1 1 0;min-width:0;font-size:.74rem;padding:5px 6px;border:1px solid var(--linha);border-radius:7px">
+              <span>até</span>
+              <input type="date" id="convDataFim" onchange="filtrarData()" title="Até (dia final)" style="flex:1 1 0;min-width:0;font-size:.74rem;padding:5px 6px;border:1px solid var(--linha);border-radius:7px">
+              <button type="button" onclick="limparData()" title="Limpar datas" class="reset" style="padding:4px 8px;font-size:.82rem">🧹</button>
+            </div>
+            <div>
+              <button type="button" id="convImportBtn" onclick="importarHistorico()" class="reset" style="width:100%;font-size:.74rem;padding:6px" title="Tenta trazer para o painel as conversas que o WhatsApp já sincronizou">📥 Importar histórico do WhatsApp</button>
+              <div id="convImportSt" class="quando" style="margin:4px 0 0;font-size:.7rem"></div>
+            </div>
+          </div>
+        </details>
         <div id="convLista"></div>
         <div id="convPag" style="display:flex;flex-direction:column;align-items:stretch;gap:6px;margin-top:8px"></div>
       </div>
@@ -1810,9 +1817,9 @@ function paginaSofiaConversas(aviso, erro) {
       var enc=encerrada(c)?'<span style="display:inline-block;background:#f3eaea;color:#a15a5a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🔒 encerrada</span>':'';
       var hb=c.humano?'<span style="display:inline-block;background:#e6f6ec;color:#1f8f52;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 você</span>':'';
       var fu=c.fuEspera?'<span title="Follow-up pronto, aguardando o horário permitido" style="display:inline-block;background:#fdf2e0;color:#b8770a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">⏳ follow-up '+escH(c.fuEspera)+'</span>':'';
-      var nome='<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:'+(pendente?'800':'700')+';font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escH(c.nome||fmtTel(k))+'</span>'+dot+'</div>';
+      var nome='<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:'+(pendente?'700':'600')+';font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escH(c.nome||fmtTel(k))+'</span>'+dot+'</div>';
       var meta='<div class="quando" style="font-size:.72rem;margin:0;display:flex;align-items:center;flex-wrap:wrap;row-gap:3px">'+fmtHora(c.ultimaEm)+tgs+hb+enc+fu+'</div>';
-      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:9px 12px;border-radius:10px;margin-bottom:6px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':(encerrada(c)?'#fbf7f7':'#fff'))+'">'+nome+'<div class="quando" style="margin:1px 0 3px">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
+      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:7px 10px;border-radius:9px;margin-bottom:5px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':(encerrada(c)?'#fbf7f7':'#fff'))+'">'+nome+'<div class="quando" style="margin:0;font-size:.7rem">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
     }).join('');
     if(pag){
       if(paginas>1){ pag.innerHTML='<div style="display:flex;justify-content:space-between;gap:8px"><button type="button" class="reset" onclick="mudarPag(-1)" '+(pagina===0?'disabled':'')+' style="padding:6px 12px">‹ Anterior</button><button type="button" class="reset" onclick="mudarPag(1)" '+(pagina>=paginas-1?'disabled':'')+' style="padding:6px 12px">Próxima ›</button></div><span class="quando" style="text-align:center;margin:0">Página '+(pagina+1)+' de '+paginas+' · '+total+' conversas</span>'; }
@@ -1835,6 +1842,7 @@ function paginaSofiaConversas(aviso, erro) {
   }
   function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){ j=j||{}; atualizaWa(j.wa); renderInbox(j.conv||{}); }).catch(function(){}); }
   atualizaInbox(); setInterval(atualizaInbox, 4000);
+  try { if(localStorage.getItem('convFiltrosOpen')==='1'){ var _d=document.getElementById('convFiltrosDet'); if(_d)_d.open=true; } } catch(e){}
   function importarHistorico(){
     if(!confirm('Tentar importar para o painel as conversas que o WhatsApp já sincronizou?\\n\\nLê o histórico existente e mostra aqui (não responde ninguém). Pode levar alguns minutos.\\n\\nObs.: o WhatsApp normalmente sincroniza só uma janela recente — pode não trazer tudo.')) return;
     var b=document.getElementById('convImportBtn'); if(b){ b.disabled=true; }
@@ -1926,12 +1934,14 @@ function paginaSofiaContatos(aviso, erro, params) {
   const loteBar = (r.total && tags.length) ? `
     <div class="card" style="padding:10px 15px">
       <div style="font-weight:700;margin-bottom:8px">🏷️ Alterar tags em lote <small style="font-weight:400;color:#5c5960">— marque contatos na lista, ou aplique a todos do filtro</small></div>
-      <form method="POST" action="/sofia/contatos/lote" data-total="${r.total}" onsubmit="return confirmarLote(this)" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <form method="POST" action="/sofia/contatos/lote" data-total="${r.total}" onsubmit="return confirmarLote(this)" style="display:flex;flex-direction:column;gap:10px">
         <input type="hidden" name="q" value="${esc(q)}"><input type="hidden" name="tag_filtro" value="${esc(tagSel)}"><input type="hidden" name="bloq" value="${esc(bloqSel)}">
         <input type="hidden" name="tels" id="loteTels" value="">
-        <label style="margin:0;font-size:.82rem">➕ Adicionar <select name="add" style="min-width:150px">${optAdd}</select></label>
-        <label style="margin:0;font-size:.82rem">➖ Remover <select name="rm" style="min-width:150px">${optRm}</select></label>
-        <button type="submit" class="save" style="padding:8px 14px"><span id="loteBtnTxt">Aplicar ao filtro (${r.total})</span></button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <label style="flex:1 1 200px;min-width:0;margin:0;font-size:.82rem;display:flex;flex-direction:column;gap:3px"><span>➕ Adicionar tag</span><select name="add" style="width:100%">${optAdd}</select></label>
+          <label style="flex:1 1 200px;min-width:0;margin:0;font-size:.82rem;display:flex;flex-direction:column;gap:3px"><span>➖ Remover tag</span><select name="rm" style="width:100%">${optRm}</select></label>
+        </div>
+        <button type="submit" class="save" style="padding:8px 14px;align-self:flex-start"><span id="loteBtnTxt">Aplicar ao filtro (${r.total})</span></button>
       </form>
       <p class="quando" id="loteHint" style="margin:8px 0 0">Nenhum marcado — vai aplicar aos <b>${r.total} contato(s) do filtro atual</b>. Marque as caixinhas na lista para agir só nos escolhidos. Ao <b>adicionar</b>, as regras de transição de funil da tag também valem.</p>
     </div>` : '';
