@@ -25,7 +25,8 @@ const config = require('./config');
 //  mesma sessão do WhatsApp (cliente persistente).
 // ═══════════════════════════════════════════════════════════════════════════
 
-const GRUPO = process.env.GRUPO_EQUIPE || 'SlimFit Equipe 💪';
+// Nome do grupo da equipe: editável no painel (data/grupos.json) > .env > padrão.
+const GRUPO = require('./grupos').equipe();
 const DRY = process.argv.includes('--dry');
 const argData = (process.argv.find(a => a.startsWith('--data=')) || '').split('=')[1];
 

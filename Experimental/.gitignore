@@ -63,3 +63,6 @@ data/tags-config.json
 data/sofia-exp-limite.txt
 
 data/origens.json
+
+# Nomes dos grupos do WhatsApp editados no painel (ponte painel<->robo) — por VPS
+data/grupos.json

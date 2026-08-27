@@ -31,6 +31,7 @@ const bookings = require('./bookings');
 const origens = require('./origens');
 const sofia = require('./sofia-editor');
 const contatos = require('./contatos');
+const grupos = require('./grupos');
 const usuarios = require('./usuarios');
 
 // Limite de aulas experimentais por turma — editável na aba SoFIA → Configuração.
@@ -718,6 +719,32 @@ function subnavMensagens(view) {
   return `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px">${its}</div>`;
 }
 
+// Card "Grupos do WhatsApp": nomes dos grupos (equipe/circuito) editáveis no
+// painel. O robô usa exatamente o texto salvo aqui para achar o grupo — precisa
+// bater com o nome real do grupo no WhatsApp.
+function cardGrupos() {
+  const g = grupos.ler();
+  const eqp = grupos.equipe();
+  const circ = grupos.circuito();
+  return `
+  <details class="acc-sec" data-nosec="1">
+    <summary>👥 Grupos do WhatsApp</summary>
+    <div class="card">
+      <p class="quando" style="margin:0 0 10px">Nome <b>exato</b> de cada grupo no WhatsApp (com emojis, se tiver). O robô procura o grupo por esse nome — se não bater certinho, ele não encontra o grupo e a mensagem não é enviada.</p>
+      <form method="POST" action="/grupos/salvar" onsubmit="var b=this.querySelector('button[type=submit]');if(b){b.disabled=true;b.textContent='Salvando…';}">
+        <label style="margin:0 0 4px">Grupo da equipe (professoras)</label>
+        <input type="text" name="equipe" value="${esc(eqp)}" placeholder="SlimFit Equipe 💪" autocomplete="off" style="width:100%">
+        <small class="quando" style="display:block;margin:4px 0 0">Usado em: <b>Ausentes/faltantes</b>, <b>Aniversariantes do mês</b>, <b>Resumo do dia</b> e resumo da semana.</small>
+        <label style="margin:14px 0 4px">Grupo do Circuito (alunas)</label>
+        <input type="text" name="circuito" value="${esc(circ)}" placeholder="Circuito Slim" autocomplete="off" style="width:100%">
+        <small class="quando" style="display:block;margin:4px 0 0">Usado em: <b>Circuito — convocatória</b> e <b>Circuito — lembrete</b>.</small>
+        <div class="acts" style="margin-top:14px"><button type="submit" class="save">💾 Salvar nomes dos grupos</button></div>
+        <p class="quando" style="margin:8px 0 0">Vale na hora, sem reiniciar o robô. ${g && (g.equipe || g.circuito) ? '' : '<i>Enquanto não salvar, vale o valor padrão / do .env.</i>'}</p>
+      </form>
+    </div>
+  </details>`;
+}
+
 function paginaMensagens(aviso, erro) {
   // Índice dos horários por chave de job, para embutir em cada mensagem.
   const hmap = {};
@@ -753,6 +780,7 @@ function paginaMensagens(aviso, erro) {
     <div style="text-align:right;margin:-4px 0 0"><form method="POST" action="/wa/desconectar" onsubmit="return confirm('Desconectar o WhatsApp do robô?\\n\\nO robô para de enviar e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔌 Desconectar</button></form></div>
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
+    ${cardGrupos()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
     ${itens}
     <div class="sec-t">Outros envios automáticos <small style="font-weight:600;color:var(--cinza)">(sem texto editável)</small></div>
@@ -2884,6 +2912,20 @@ const server = http.createServer((req, res) => {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         const msg = 'Erro ao salvar: ' + e.message;
         res.end(voltar === '/instagram' ? paginaInstagram(msg, true) : paginaMensagens(msg, true));
+      }
+    });
+  }
+
+  // Nomes dos grupos do WhatsApp (equipe / circuito), editáveis no painel.
+  if (req.method === 'POST' && url === '/grupos/salvar') {
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      try {
+        grupos.salvar({ equipe: p.get('equipe') || '', circuito: p.get('circuito') || '' });
+        res.writeHead(303, { Location: '/?ok=1' }); res.end();
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(paginaMensagens('Erro ao salvar grupos: ' + e.message, true));
       }
     });
   }

@@ -18,7 +18,8 @@ const { buscarAlunasAniversario } = require('./planilha-aniversarios');
 //    node src/aniversariantes-mes-grupo.js --mes=8    → força um mês específico (1-12)
 // ═══════════════════════════════════════════════════════════
 
-const GRUPO = process.env.GRUPO_EQUIPE || 'SlimFit Equipe 💪';
+// Nome do grupo da equipe: editável no painel (data/grupos.json) > .env > padrão.
+const GRUPO = require('./grupos').equipe();
 const CDP_URL = 'http://127.0.0.1:9226';
 const IS_LINUX = process.platform === 'linux';
 const EDGE_PROFILE = 'Default';

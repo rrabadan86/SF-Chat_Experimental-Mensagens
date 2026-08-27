@@ -28,7 +28,9 @@ puppeteer.use(StealthPlugin());
 //  mesma sessão do WhatsApp (cliente persistente).
 // ═══════════════════════════════════════════════════════════════════════════
 
-const GRUPO = process.env.GRUPO_EQUIPE || 'SlimFit Equipe 💪';
+// Nome do grupo da equipe: editável no painel (data/grupos.json) > .env > padrão.
+// Job roda como processo separado a cada disparo → lê o valor atual no início.
+const GRUPO = require('./grupos').equipe();
 // Rota do CRM > Faltantes (legado "evo3", normalmente dentro de um iframe).
 const FALTANTES_HASH = process.env.EVO_FALTANTES_HASH
   || '#/app/slimfit/15/evo3/-CRM-Faltantes-Faltantes';
@@ -469,15 +471,13 @@ async function coletarAusentes() {
   }
 }
 
-/** Monta o texto para o grupo (formato pedido pela dona). */
+/** Monta o texto para o grupo (intro editável no painel + lista gerada). */
 function montarMensagem(ausentes, trancadas = []) {
-  const intro = 'Professoras, segue abaixo a listagem de alunas faltantes a mais de '
-    + `${DIAS_MIN} dias, com a data da última presença dela. Por favor, entrem em contato no privado `
-    + 'para entender o que está acontecendo e incentivar a retomada às aulas:';
   const linhas = ausentes.length
     ? ausentes.map(a => `* ${a.nome} - ${a.ultima}`).join('\n')
     : '_nenhuma ausente (fora as trancadas abaixo)_';
-  let msg = `${intro}\n${linhas}`;
+  // O texto (intro + posição da {lista}) é editável no painel: mensagens → 'ausentes'.
+  let msg = require('./mensagens').render('ausentes', { dias: DIAS_MIN, lista: linhas });
 
   // Seção informativa: alunas que estão/estavam TRANCADAS no período — não cobrar.
   if (trancadas && trancadas.length) {

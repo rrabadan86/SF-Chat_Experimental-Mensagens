@@ -74,6 +74,13 @@ const CATALOGO = [
     padrao: 'Oi, {nome}! Tudo bem? 😊\nQue alegria ter você no SlimFit! 🥳\nEstou enviando essa mensagem para avisar que o seu plano vence no dia {data}. A gente ia adorar continuar com você firme nos treinos! ❤️\nPodemos dar andamento na renovação? Prefere manter o mesmo plano ou aumentar a frequência? 💪\nQualquer dúvida, é só me chamar! 😉',
   },
   {
+    chave: 'ausentes',
+    titulo: 'Ausentes / faltantes (grupo da equipe)',
+    quando: 'Enviada seg 06:10 no grupo da equipe: alunas ATIVAS sem presença há N+ dias. A lista (nome — última presença) é montada automaticamente e entra em {lista}.',
+    vars: [['dias', 'nº de dias do corte (ex.: 10)'], ['lista', 'a lista das faltantes, gerada automaticamente — mantenha o {lista} no texto']],
+    padrao: 'Professoras, segue abaixo a listagem de alunas faltantes a mais de {dias} dias, com a data da última presença dela. Por favor, entrem em contato no privado para entender o que está acontecendo e incentivar a retomada às aulas:\n\n{lista}',
+  },
+  {
     chave: 'aniversario',
     foto: true,
     titulo: 'Aniversário (nos grupos)',
@@ -232,9 +239,11 @@ function removerFoto(chave) {
     try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
   }
 }
-// Todas as mensagens de WhatsApp aceitam foto (flyer). Exceção: 'instagram' é DM
-// do Instagram (canal diferente, tratado na aba Instagram), então não entra aqui.
-function aceitaFoto(chave) { const m = CATALOGO.find(x => x.chave === chave); return !!(m && m.chave !== 'instagram'); }
+// Todas as mensagens de WhatsApp aceitam foto (flyer), MENOS as text-only:
+//  • 'instagram' — DM do Instagram (canal diferente, tratado na aba Instagram);
+//  • 'ausentes'  — listagem de texto no grupo da equipe (enviada sem mídia).
+const SEM_FOTO = new Set(['instagram', 'ausentes']);
+function aceitaFoto(chave) { const m = CATALOGO.find(x => x.chave === chave); return !!(m && !SEM_FOTO.has(m.chave)); }
 function salvarFoto(chave, dataUrl) {
   if (!aceitaFoto(chave)) throw new Error('Esta mensagem não aceita foto.');
   const m = /^data:(image\/(png|jpe?g|webp));base64,(.+)$/i.exec(dataUrl || '');

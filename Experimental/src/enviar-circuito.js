@@ -19,7 +19,8 @@ const EvoScraper = require('./evo-scraper');
 const config = require('./config');
 const notif = require('./notificar');
 
-const GRUPO = process.env.CIRCUITO_GRUPO || 'Circuito Slim';
+// Nome do grupo do Circuito: editável no painel (data/grupos.json) > .env > padrão.
+const GRUPO = require('./grupos').circuito();
 const CHAVE = (process.env.CIRCUITO_ATIVIDADE || 'circuito').toLowerCase(); // atividade a procurar
 const HORA_PADRAO = process.env.CIRCUITO_HORA || '09:45';                   // reserva se não achar
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
