@@ -3542,7 +3542,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && url === '/sofia/conversas') {
     let obj = {};
     try { obj = sofia.conversas() || {}; } catch (_) {}
-    try { const cmap = contatos.carregar(); for (const k in obj) { const c = cmap[contatos.normTel(k)]; obj[k].salvo = !!c; obj[k].tagsContato = c ? (c.tags || []) : []; } } catch (_) {} // salvo? + tags do contato
+    try { const cmap = contatos.carregar(); for (const k in obj) { const c = cmap[contatos.normTel(k)]; obj[k].salvo = !!c; obj[k].tagsContato = c ? (c.tags || []) : []; if (c && c.nome) obj[k].nome = c.nome; } } catch (_) {} // salvo? + tags + nome salvo do contato (prefere o editado ao do WhatsApp)
     try { const hum = sofia.lerHumano(); for (const k in obj) obj[k].humano = !!hum[k]; } catch (_) {} // controle humano por conversa
     try { for (const k in obj) obj[k].bloq = sofia.estaBloqueado(k); } catch (_) {} // contato bloqueado?
     try { for (const k in obj) obj[k].enc = sofia.estaEncerrada(k, obj[k].ultimaEm); } catch (_) {} // encerrada à mão (cadeado)?
