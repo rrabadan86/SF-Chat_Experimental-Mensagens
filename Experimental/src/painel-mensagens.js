@@ -863,7 +863,7 @@ function paginaMensagens(aviso, erro) {
   const corpo = `<div class="wrap">
     ${subnavMensagens('config')}
     <div id="waBanner">${blocoWaRobo()}</div>
-    <div style="text-align:right;margin:-4px 0 0"><form method="POST" action="/wa/desconectar" onsubmit="return confirm('Desconectar o WhatsApp do robô?\\n\\nO robô para de enviar e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔌 Desconectar</button></form></div>
+    <div style="text-align:right;margin:-4px 0 0"><form method="POST" action="/wa/desconectar" onsubmit="return confirm('Desconectar o WhatsApp do robô?\\n\\nO robô para de enviar e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">Desconectar</button></form></div>
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
@@ -1246,7 +1246,7 @@ function paginaInstagram(aviso, erro) {
       <form method="POST" action="/instagram/cookies">
         <label style="margin:0 0 4px">Cole o JSON dos cookies (Cookie-Editor → instagram.com logada → Export)</label>
         <textarea name="cookies" rows="4" spellcheck="false" placeholder='[{"name":"sessionid","value":"..."}, ... ]' style="font-family:ui-monospace,monospace;font-size:.85rem"></textarea>
-        <div class="acts"><button type="submit" class="save" onclick="return confirm('Importar estes cookies do Instagram?')">🍪 Importar cookies</button></div>
+        <div class="acts"><button type="submit" class="save" onclick="return confirm('Importar estes cookies do Instagram?')">Importar cookies</button></div>
       </form>
       <p class="quando" style="margin:10px 0 0">🔒 Fica só no servidor (nunca é mostrado de volta) e vale já na próxima execução — sem reiniciar. Instale a extensão <b>Cookie-Editor</b>, abra o <b>instagram.com logada na conta do Studio</b>, clique em <b>Export</b> (JSON) e cole aqui.</p>
     </div>
@@ -2710,7 +2710,7 @@ function paginaSofiaCampanhas(aviso, erro) {
             <span id="cpTesteMsg" class="quando" style="margin:0"></span>
           </div>
           <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:18px">
-            <button type="submit" class="save" style="padding:11px 24px">📣 Criar campanha</button>
+            <button type="submit" class="save" style="padding:11px 24px">Criar campanha</button>
             <span class="quando" style="margin:0;flex:1;min-width:220px">⚠️ Só envia depois de você clicar em <b>Iniciar</b>. Comece com poucos por dia e delays altos — envio em massa pode bloquear o número.</span>
           </div>
           </div>
@@ -2872,9 +2872,9 @@ function paginaSofia(aviso, erro) {
     <div style="margin:8px 0 6px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
         <span id="impSt" class="quando" style="margin:0 auto 0 0;font-size:.75rem"></span>
-        <button type="button" id="impBtn" onclick="importarHistorico()" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)" title="Traz para o painel as conversas que o WhatsApp já sincronizou (não responde ninguém). O WhatsApp sincroniza só uma janela recente — pode não trazer tudo.">📥 Importar Histórico WPP</button>
+        <button type="button" id="impBtn" onclick="importarHistorico()" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)" title="Traz para o painel as conversas que o WhatsApp já sincronizou (não responde ninguém). O WhatsApp sincroniza só uma janela recente — pode não trazer tudo.">Importar Histórico WPP</button>
         <form method="POST" action="/sofia/toggle" style="margin:0;display:inline"><button type="submit" class="${e.ativa ? 'reset' : 'save'}" style="padding:4px 11px;font-size:var(--fs-xs)">${e.ativa ? '⏸️ Pausar SoFIA' : '▶️ Ativar SoFIA'}</button></form>
-        <form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="margin:0;display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔌 Desconectar</button></form>
+        <form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="margin:0;display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">Desconectar</button></form>
       </div>
     </div>
 
