@@ -40,18 +40,36 @@ const BASE_DIR = process.env.SOFIA_DIR || process.cwd();
 // painel (SoFIA → Configuração): sofia-avisohumano.json = { on, numero }.
 const AVISOHUMANO_FILE = path.join(BASE_DIR, "sofia-avisohumano.json");
 const AVISOS_OUT_FILE = path.join(BASE_DIR, "sofia-avisos.jsonl"); // mesmo arquivo que o listener envia
-function lerAvisoHumano(): { on: boolean; numero: string } {
-  try { const o = JSON.parse(fs.readFileSync(AVISOHUMANO_FILE, "utf8")); return { on: !!o.on, numero: String(o.numero || "").replace(/\D/g, "") }; }
-  catch { return { on: false, numero: "" }; }
+// Expressões-padrão que disparam o aviso (editáveis no painel — uma por linha).
+const PALAVRAS_HUMANO_PADRAO = [
+  "atendente", "falar com uma pessoa", "falar com um humano", "falar com alguém",
+  "falar com o responsável", "falar com o gerente", "quero falar com", "quero conversar com",
+  "me liga", "liga pra mim", "isso não ajuda", "não entendi nada", "péssimo atendimento",
+  "que raiva", "tô irritada", "estou irritada", "você é um robô", "só robô", "para de me mandar",
+];
+function lerAvisoHumano(): { on: boolean; numero: string; palavras: string[] } {
+  try {
+    const o = JSON.parse(fs.readFileSync(AVISOHUMANO_FILE, "utf8"));
+    let palavras: string[] = [];
+    if (Array.isArray(o.palavras)) palavras = o.palavras;
+    else if (typeof o.palavras === "string") palavras = o.palavras.split("\n");
+    palavras = palavras.map((s: any) => String(s || "").trim()).filter(Boolean);
+    return { on: !!o.on, numero: String(o.numero || "").replace(/\D/g, ""), palavras };
+  } catch { return { on: false, numero: "", palavras: [] }; }
 }
-// Sinais de que a aluna quer uma pessoa de verdade / está insatisfeita.
-const RE_PRECISA_HUMANO = /(atendente|falar com (uma |um )?(pessoa|humano|algu[ée]m|respons[áa]vel|gerente|dono|dona)|quero (falar|conversar) com|me lig|liga pra mim|isso n[aã]o (me )?ajud|n[aã]o entend[io] nada|p[ée]ssimo atendimento|que raiva|to (muito )?irritad|estou irritad|voc[eê] (é|e) um rob[ôo]|s[óo] rob[ôo]|para de me mandar)/i;
-function precisaHumano(texto: string): boolean { return RE_PRECISA_HUMANO.test(String(texto || "")); }
+// Normaliza para comparar sem depender de acento/caixa.
+const semAcento = (s: string) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+function precisaHumano(texto: string, palavras: string[]): boolean {
+  const lista = (palavras && palavras.length ? palavras : PALAVRAS_HUMANO_PADRAO).map(semAcento).filter(Boolean);
+  const alvo = semAcento(texto);
+  return lista.some((p) => alvo.includes(p));
+}
 function avisarPrecisaHumano(telefone: string, conversa: Conversa, texto: string) {
   try {
     if (conversa.avisouHumano) return;
     const cfg = lerAvisoHumano();
     if (!cfg.on || !cfg.numero) return;
+    if (!precisaHumano(texto, cfg.palavras)) return;
     const tel = String(telefone || "").replace(/\D/g, "");
     const aviso = `🙋 *Possível pedido de atendimento humano*\n\nContato: ${tel}\nÚltima mensagem: "${String(texto || "").slice(0, 180)}"\n\nAbra o painel (SoFIA → Conversas) e clique em "assumir" para atender.`;
     fs.appendFileSync(AVISOS_OUT_FILE, JSON.stringify({ numero: cfg.numero, texto: aviso, em: Date.now() }) + "\n");
@@ -678,7 +696,7 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
 
   // "Precisa de humano": se a aluna pediu um atendente/demonstrou irritação,
   // avisa o Studio (uma vez por conversa). A Sofia segue respondendo normalmente.
-  if (precisaHumano(mensagem)) avisarPrecisaHumano(telefone, conversa, mensagem);
+  avisarPrecisaHumano(telefone, conversa, mensagem);
 
   // Conversa NOVA → injeta o prompt lido do arquivo agora (pega edições recentes).
   // Conversa retomada → mantém a sessão (o prompt já está embutido nela).

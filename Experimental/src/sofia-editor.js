@@ -615,19 +615,36 @@ function lerCusto(dias) {
 }
 
 // ── "Precisa de humano" (avisar um número) ──────────────────────────────────
+// Expressões-padrão (iguais às do sofia.ts) — servem para semear a caixa no painel.
+const PALAVRAS_HUMANO_PADRAO = [
+  'atendente', 'falar com uma pessoa', 'falar com um humano', 'falar com alguém',
+  'falar com o responsável', 'falar com o gerente', 'quero falar com', 'quero conversar com',
+  'me liga', 'liga pra mim', 'isso não ajuda', 'não entendi nada', 'péssimo atendimento',
+  'que raiva', 'tô irritada', 'estou irritada', 'você é um robô', 'só robô', 'para de me mandar',
+];
 function lerAvisoHumano() {
-  try { const o = JSON.parse(ler(F.avisoHumano)); return { on: !!o.on, numero: String(o.numero || '').replace(/\D/g, '') }; }
-  catch (_) { return { on: false, numero: '' }; }
+  try {
+    const o = JSON.parse(ler(F.avisoHumano));
+    let palavras = [];
+    if (Array.isArray(o.palavras)) palavras = o.palavras;
+    else if (typeof o.palavras === 'string') palavras = o.palavras.split('\n');
+    palavras = palavras.map(s => String(s || '').trim()).filter(Boolean);
+    return { on: !!o.on, numero: String(o.numero || '').replace(/\D/g, ''), palavras };
+  } catch (_) { return { on: false, numero: '', palavras: [] }; }
 }
-function gravarAvisoHumano(on, numero) {
-  const o = { on: !!on, numero: String(numero || '').replace(/\D/g, '') };
+function gravarAvisoHumano(on, numero, palavras) {
+  let arr = [];
+  if (Array.isArray(palavras)) arr = palavras;
+  else if (typeof palavras === 'string') arr = palavras.split('\n');
+  arr = arr.map(s => String(s || '').trim()).filter(Boolean);
+  const o = { on: !!on, numero: String(numero || '').replace(/\D/g, ''), palavras: arr };
   gravarArquivo(F.avisoHumano, JSON.stringify(o));
   return o;
 }
 
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
-  lerCusto, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano,
+  lerCusto, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
   conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,

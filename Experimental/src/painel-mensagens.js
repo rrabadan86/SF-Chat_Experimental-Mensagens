@@ -2882,11 +2882,15 @@ function paginaSofia(aviso, erro) {
       <summary class="sec-t" style="cursor:pointer;padding:4px 0">Avisar quando precisar de humano <small style="font-weight:400;color:var(--cinza)">— manda um WhatsApp quando a aluna pede um atendente</small></summary>
       <div class="card">
         <p class="quando" style="margin:0 0 12px">Se a aluna pedir para <b>falar com uma pessoa</b> (ou demonstrar irritação), a SoFIA manda <b>uma</b> mensagem de aviso para o número abaixo — assim a recepção entra na conversa rápido. A SoFIA continua respondendo normalmente.</p>
-        <form method="POST" action="/sofia/aviso-humano" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-          <label class="chk" style="margin:0"><input type="checkbox" name="on" value="1"${avh.on ? ' checked' : ''}> Ligado</label>
-          <div style="flex:1;min-width:200px"><label style="margin:0 0 4px">Número que recebe o aviso (com DDD)</label>
-          <input type="tel" name="numero" value="${esc(avh.numero)}" placeholder="Ex.: 62998887777" style="max-width:220px"></div>
-          <button type="submit" class="save">Salvar</button>
+        <form method="POST" action="/sofia/aviso-humano">
+          <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
+            <label class="chk" style="margin:0"><input type="checkbox" name="on" value="1"${avh.on ? ' checked' : ''}> Ligado</label>
+            <div style="flex:1;min-width:200px"><label style="margin:0 0 4px">Número que recebe o aviso (com DDD)</label>
+            <input type="tel" name="numero" value="${esc(avh.numero)}" placeholder="Ex.: 62998887777" style="max-width:220px"></div>
+          </div>
+          <label style="margin:14px 0 4px">Palavras/expressões que disparam o aviso <small style="font-weight:400;color:var(--cinza)">(uma por linha; ignora acento e maiúsculas)</small></label>
+          <textarea name="palavras" rows="6" spellcheck="false" style="font-size:.86rem">${esc((avh.palavras && avh.palavras.length ? avh.palavras : (sofia.PALAVRAS_HUMANO_PADRAO || [])).join('\n'))}</textarea>
+          <div class="acts" style="margin-top:12px"><button type="submit" class="save">Salvar</button></div>
         </form>
       </div>
     </details>
@@ -4125,9 +4129,9 @@ const server = http.createServer((req, res) => {
   }
   // Salvar config do aviso "precisa de humano".
   if (req.method === 'POST' && url === '/sofia/aviso-humano') {
-    return lerCorpo(req, 1e4, corpo => {
+    return lerCorpo(req, 1e5, corpo => {
       const p = new URLSearchParams(corpo);
-      try { sofia.gravarAvisoHumano(p.get('on') === '1', p.get('numero') || ''); } catch (_) {}
+      try { sofia.gravarAvisoHumano(p.get('on') === '1', p.get('numero') || '', p.get('palavras') || ''); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?okah=1' }); res.end();
     });
   }
