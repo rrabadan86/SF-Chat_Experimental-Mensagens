@@ -1840,6 +1840,8 @@ function paginaSofiaContatos(aviso, erro, params) {
       <p class="quando" style="margin:8px 0 0">Gera um <b>CSV</b> com <b>Nome, Telefone, Instruções personalizadas e Tags</b> de todos os contatos — abre no Excel/Google Planilhas e serve para <b>migrar de plataforma</b> ou guardar backup. O próprio arquivo pode ser reimportado aqui.</p>
     </details>
 
+    ${gerenciarTags}
+
     <form method="GET" action="/sofia" class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <input type="hidden" name="view" value="contatos">
       <input type="text" name="q" value="${esc(q)}" placeholder="Buscar por nome ou telefone" style="flex:1;min-width:180px">
@@ -1848,8 +1850,6 @@ function paginaSofiaContatos(aviso, erro, params) {
       ${(q || tagSel) ? `<a href="/sofia?view=contatos" class="reset" style="padding:8px 14px">Limpar</a>` : ''}
       <button type="button" id="ctBloqFil" class="reset" onclick="filtrarBloqueados()" style="padding:8px 14px" title="Mostrar só os contatos bloqueados">🚫 Bloqueados</button>
     </form>
-
-    ${gerenciarTags}
 
     ${r.itens.length ? `<div class="ct-wrap">
       <table class="ct-tab">
