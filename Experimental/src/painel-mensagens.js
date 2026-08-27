@@ -552,7 +552,10 @@ ${corpo}
     heads.forEach(function(h){
       if((cnt.get(h.parentNode)||0)<2) return;   // seção única no bloco → não recolhe
       var sibs=[], el=h.nextElementSibling;
-      while(el && !(el.classList && el.classList.contains('sec-t'))){ sibs.push(el); el=el.nextElementSibling; }
+      // Para no próximo cabeçalho .sec-t OU num bloco que já é uma seção recolhível
+      // própria (.acc-sec) — assim uma seção não "engole" a seguinte (ex.: o
+      // "Gerador de links" deixa de virar parte de "Horários de aula").
+      while(el && !(el.classList && (el.classList.contains('sec-t') || el.classList.contains('acc-sec')))){ sibs.push(el); el=el.nextElementSibling; }
       if(!sibs.length) return;
       var det=document.createElement('details'); det.className='acc-sec';
       var sum=document.createElement('summary'); sum.className='sec-t'; sum.innerHTML=h.innerHTML;
