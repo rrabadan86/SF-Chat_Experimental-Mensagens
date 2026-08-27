@@ -44,6 +44,8 @@ const F = {
   encerradas: path.join(DIR, 'sofia-encerradas.json'), // conversas encerradas à mão (cadeado) — painel escreve; sofia.ts/listener leem
   campanhas: path.join(DIR, 'campanhas.json'), // estado das campanhas — publicado pelo listener (painel só lê)
   campanhasInbox: path.join(DIR, 'campanhas-inbox.jsonl'), // pedidos do painel → listener (criar/controle/excluir)
+  custo: path.join(DIR, 'sofia-custo.jsonl'), // custo/tokens por turno — sofia.ts escreve, painel soma
+  custoLimite: path.join(DIR, 'sofia-custo-limite.txt'), // alerta de gasto diário (US$; 0 = sem alerta) — painel
 };
 
 // Padrões do "jeito humano" (mesmos do listener). O painel edita e o listener lê
@@ -564,8 +566,47 @@ function setControleHumano(chave, ativo) {
   return !!ativo;
 }
 
+// ── Custo da IA ─────────────────────────────────────────────────────────────
+function lerCustoLimite() {
+  try { const n = parseFloat(String(fs.readFileSync(F.custoLimite, 'utf8')).trim().replace(',', '.')); return (isFinite(n) && n >= 0) ? n : 0; } catch (_) { return 0; }
+}
+function gravarCustoLimite(v) {
+  const n = Math.max(0, parseFloat(String(v).replace(',', '.')) || 0);
+  fs.writeFileSync(F.custoLimite, String(n));
+  return n;
+}
+function _diaLocal(iso) {
+  try { return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); } catch (_) { return String(iso).slice(0, 10); }
+}
+// Soma custo/tokens por dia (fuso de São Paulo) a partir de sofia-custo.jsonl.
+function lerCusto(dias) {
+  dias = dias || 30;
+  const vazio = { hoje: { usd: 0, inTok: 0, outTok: 0, convs: 0 }, porDia: [], total: { usd: 0, convs: 0 }, limite: lerCustoLimite(), temDado: false };
+  let linhas = [];
+  try { linhas = fs.readFileSync(F.custo, 'utf8').split('\n'); } catch (_) { return vazio; }
+  if (linhas.length > 8000) linhas = linhas.slice(-8000); // performance: só o recente
+  const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const mapa = {};
+  for (const l of linhas) {
+    const s = l.trim(); if (!s) continue;
+    let o; try { o = JSON.parse(s); } catch (_) { continue; }
+    const dia = _diaLocal(o.em);
+    if (!mapa[dia]) mapa[dia] = { usd: 0, inTok: 0, outTok: 0, convs: 0 };
+    mapa[dia].usd += o.usd || 0;
+    mapa[dia].inTok += o.inTok || 0;
+    mapa[dia].outTok += o.outTok || 0;
+    if (o.tipo === 'conversa') mapa[dia].convs += 1;
+  }
+  const diasOrd = Object.keys(mapa).sort().reverse().slice(0, dias);
+  const porDia = diasOrd.map(d => ({ dia: d, usd: mapa[d].usd, inTok: mapa[d].inTok, outTok: mapa[d].outTok, convs: mapa[d].convs }));
+  const total = porDia.reduce((a, d) => ({ usd: a.usd + d.usd, convs: a.convs + d.convs }), { usd: 0, convs: 0 });
+  const hoje = mapa[hojeStr] || { usd: 0, inTok: 0, outTok: 0, convs: 0 };
+  return { hoje, porDia, total, limite: lerCustoLimite(), temDado: porDia.length > 0 };
+}
+
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
+  lerCusto, lerCustoLimite, gravarCustoLimite,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
   conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,

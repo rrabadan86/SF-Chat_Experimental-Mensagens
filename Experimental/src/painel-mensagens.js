@@ -153,7 +153,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/contatos/bloquear') return has('sofia_conversas') || has('sofia_contatos'); // bloquear vem tb do chat (Conversas)
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar') return has('sofia_config');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/custo-limite') return has('sofia_config');
   return false;
 }
 // WhatsApp é dividido em três sub-abas: Configuração, Agendamento e Hoje.
@@ -1605,6 +1605,7 @@ function subnavSofia(view) {
   if (podeSofiaSub(sess, 'contatos')) its += item('contatos', 'Contatos');
   if (podeSofiaSub(sess, 'contatos')) its += item('tags', 'Tags');
   if (podeSofiaSub(sess, 'campanhas')) its += item('campanhas', 'Campanhas');
+  if (podeSofiaSub(sess, 'config')) its += item('custo', 'Custo IA');
   return `<div class="subtabs">${its}</div>`;
 }
 
@@ -3216,6 +3217,71 @@ function negarAcesso(res, sess) {
   res.end(chrome({ tab: 'Sem acesso', h1: 'SlimFit', p: 'Painel do Studio.' }, '', corpo));
 }
 
+// ── Página: SoFIA → Custo IA ────────────────────────────────────────────────
+function paginaSofiaCusto(aviso, erro, params) {
+  params = params || {};
+  const c = sofia.lerCusto(100000); // todos os dias agregados; filtramos abaixo
+  const janelas = [['hoje', 'Hoje'], ['7', '7 dias'], ['30', '30 dias'], ['0', 'Tudo']];
+  const custom = !!(params.de || params.ate);
+  const per = custom ? '' : (['hoje', '7', '30', '0'].includes(params.per) ? params.per : '7');
+  const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const menosDias = (base, n) => { const d = new Date(base + 'T12:00:00'); d.setDate(d.getDate() - n); return d.toLocaleDateString('en-CA'); };
+  let ini = '', fim = hojeStr, rotulo = '';
+  if (custom) { ini = params.de || ''; fim = params.ate || hojeStr; rotulo = `${params.de || 'início'} até ${fim}`; }
+  else if (per === 'hoje') { ini = hojeStr; fim = hojeStr; rotulo = 'hoje'; }
+  else if (per === '7') { ini = menosDias(hojeStr, 6); rotulo = 'últimos 7 dias'; }
+  else if (per === '30') { ini = menosDias(hojeStr, 29); rotulo = 'últimos 30 dias'; }
+  else { ini = ''; rotulo = 'todo o período'; }
+  const dentro = (dia) => (!ini || dia >= ini) && (!fim || dia <= fim);
+  const dias = c.porDia.filter(d => dentro(d.dia)).sort((a, b) => a.dia < b.dia ? -1 : 1);
+  const tot = dias.reduce((a, d) => ({ usd: a.usd + d.usd, convs: a.convs + d.convs, inTok: a.inTok + d.inTok, outTok: a.outTok + d.outTok }), { usd: 0, convs: 0, inTok: 0, outTok: 0 });
+  const usd = (v) => 'US$ ' + (v || 0).toFixed(2);
+  const ktok = (v) => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(v || 0);
+  const fmtDiaC = (s) => { const p = String(s).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : s; };
+  const maxU = Math.max(0.0001, ...dias.map(d => d.usd));
+  const barras = dias.length
+    ? dias.slice().reverse().map(d => `<div class="bar"><span class="bd">${fmtDiaC(d.dia)}</span><span class="btrack"><span class="bfill" style="width:${Math.round((d.usd / maxU) * 100)}%"></span></span><span class="bn">${usd(d.usd)} <small>· ${d.convs} conv.</small></span></div>`).join('')
+    : '<div class="vazio">Sem gasto registrado no período.</div>';
+  const segs = janelas.map(([v, l]) => `<a href="/sofia?view=custo&per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
+  const limite = c.limite;
+  const alerta = (limite > 0 && c.hoje.usd >= limite) ? `<div class="aviso err">⚠️ O gasto de <b>hoje</b> (${usd(c.hoje.usd)}) atingiu o limite de ${usd(limite)}.</div>` : '';
+  const corpo = `<div class="wrap">
+    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    ${subnavSofia('custo')}
+    <div class="sec-t">Custo da IA <small style="font-weight:600;color:var(--cinza)">(gasto das conversas da SoFIA)</small></div>
+    ${alerta}
+    <div class="segs">${segs}</div>
+    <form method="GET" action="/sofia" class="filtro-datas" style="margin:0 0 14px;flex-wrap:wrap">
+      <input type="hidden" name="view" value="custo">
+      <span class="filtro-lbl" style="align-self:center">📅 Período personalizado</span>
+      <input type="date" name="de" value="${esc(params.de || '')}">
+      <span class="ate">até</span>
+      <input type="date" name="ate" value="${esc(params.ate || '')}">
+      <button class="save" type="submit" style="padding:6px 13px;font-size:.8rem">Aplicar</button>
+      ${custom ? `<a href="/sofia?view=custo&per=7" class="reset filtro-limpar" style="text-decoration:none">🧹</a>` : ''}
+    </form>
+    <div class="stats">
+      <div class="stat tot"><div class="n">${usd(tot.usd)}</div><div class="l">gasto · ${esc(rotulo)}</div></div>
+      <div class="stat"><div class="n" style="color:var(--cinza)">${tot.convs}</div><div class="l">conversas</div></div>
+      <div class="stat"><div class="n" style="color:var(--cinza)">${ktok(tot.inTok + tot.outTok)}</div><div class="l">tokens</div></div>
+      <div class="stat ok"><div class="n">${tot.convs ? usd(tot.usd / tot.convs) : usd(0)}</div><div class="l">média/conversa</div></div>
+    </div>
+    <div class="sec-t">Gasto por dia</div>
+    <div class="card">${barras}</div>
+    <div class="sec-t">Alerta de gasto diário</div>
+    <div class="card">
+      <form method="POST" action="/sofia/custo-limite" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Avisar quando o gasto de um dia passar de (US$)</label>
+        <input type="number" step="0.5" min="0" name="limite" value="${limite || ''}" placeholder="0 = sem alerta" style="max-width:200px"></div>
+        <button class="save" type="submit">Salvar</button>
+      </form>
+      <p class="quando" style="margin:10px 0 0">Mostra um aviso nesta tela quando o gasto do dia atingir o valor. Deixe <b>0</b> para não alertar.</p>
+    </div>
+    <p class="quando" style="text-align:center">Valores calculados pela própria SDK da IA (custo real de cada conversa). As extrações internas (resumos) são pequenas e não entram nesta conta.</p>
+  </div>`;
+  return chrome({ tab: 'Custo IA', h1: 'SoFIA', p: 'Custo da IA — gasto das conversas por período.' }, 'sofia', corpo);
+}
+
 // ── Página: Saúde do sistema (admin) ────────────────────────────────────────
 // Reúne num só lugar o estado de cada serviço: robô, SoFIA, painel, Instagram e
 // formulário — cada um com um selo (OK / atenção / problema) e quando foi visto.
@@ -3272,9 +3338,8 @@ function paginaSaude(list) {
     `WhatsApp da SoFIA: <b>${esc(waS.estado || 'sem informação')}</b> <span class="sd-muted">(atualizado ${waSid.txt})</span>`,
   ]);
 
-  // Painel (slimfit-painel) — se está respondendo, está online.
-  const pPain = proc('slimfit-painel');
-  const cardPain = card('Painel', procCor(pPain), pillTxt[procCor(pPain)], [procLinha(pPain)]);
+  // (O próprio painel não entra aqui: se estivesse fora do ar, esta página nem
+  // carregaria — então mostrá-lo seria redundante.)
 
   // Instagram — ligado/pausado + saúde da sessão na última execução.
   let igLig = false; try { igLig = igcfg.ligado(); } catch (_) {}
@@ -3299,7 +3364,7 @@ function paginaSaude(list) {
   const corpo = `<div class="wrap">
     <div class="sec-t">Saúde do sistema</div>
     <p class="quando" style="margin:0 0 14px">Estado de cada parte da automação num lugar só. Atualiza a cada visita a esta página.</p>
-    <div class="sd-grid">${cardExp}${cardSof}${cardPain}${cardIg}${cardForm}</div>
+    <div class="sd-grid">${cardExp}${cardSof}${cardIg}${cardForm}</div>
     <p class="quando" style="text-align:center;margin-top:14px"><a href="/saude" style="color:var(--teal-esc);font-weight:600;text-decoration:none">↻ Atualizar</a></p>
   </div>`;
   return chrome({ tab: 'Saúde', h1: 'Saúde', p: 'Estado de robô, SoFIA, painel, Instagram e formulário.' }, 'saude', corpo);
@@ -3630,14 +3695,15 @@ const server = http.createServer((req, res) => {
     // Só renderiza a sub-aba que o usuário pode ver; se pediu uma sem acesso,
     // cai na primeira permitida (config → conversas → contatos).
     let view = sp.get('view') || 'config';
-    // 'tags' é uma sub-aba de Contatos (mesma permissão sofia_contatos).
-    const podeVerSub = (v) => (v === 'tags' ? podeSofiaSub(sess, 'contatos') : podeSofiaSub(sess, v));
+    // 'tags' e 'custo' são sub-abas ligadas a Contatos/Configuração (mesma permissão).
+    const podeVerSub = (v) => (v === 'tags' ? podeSofiaSub(sess, 'contatos') : v === 'custo' ? podeSofiaSub(sess, 'config') : podeSofiaSub(sess, v));
     if (!podeVerSub(view)) view = SOFIA_SUBS.find(s => podeSofiaSub(sess, s)) || 'config';
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     if (view === 'contatos') return res.end(paginaSofiaContatos(aviso, erro, { q: sp.get('q') || '', tag: sp.get('tag') || '', bloq: sp.get('bloq') || '', pagina: sp.get('pagina') || 0 }));
     if (view === 'tags') return res.end(paginaSofiaTags(aviso, erro));
     if (view === 'conversas') return res.end(paginaSofiaConversas(aviso, erro));
     if (view === 'campanhas') return res.end(paginaSofiaCampanhas(aviso, erro));
+    if (view === 'custo') return res.end(paginaSofiaCusto(aviso, erro, { per: sp.get('per') || '7', de: sp.get('de') || '', ate: sp.get('ate') || '' }));
     return res.end(paginaSofia(aviso, erro));
   }
   // Modelo de CSV para baixar (cabeçalho + exemplos) — ajuda a montar a planilha.
@@ -3964,6 +4030,13 @@ const server = http.createServer((req, res) => {
       let novo = true;
       try { novo = !sofia.estadoAtivo(); sofia.gravarEstado(novo); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?' + (novo ? 'on=1' : 'off=1') }); res.end();
+    });
+  }
+  // Salvar o limite de alerta de gasto diário (Custo IA).
+  if (req.method === 'POST' && url === '/sofia/custo-limite') {
+    return lerCorpo(req, 1e4, corpo => {
+      try { sofia.gravarCustoLimite(new URLSearchParams(corpo).get('limite') || '0'); } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?view=custo' }); res.end();
     });
   }
   // Desconectar o WhatsApp da Sofia (envia comando ao listener → logout + reinicia → QR novo).

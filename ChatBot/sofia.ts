@@ -32,6 +32,23 @@ const anthropic = new Anthropic(); // usado só na extração do resumo
 // dá para guardar os editáveis FORA do repositório (o git pull nunca os toca).
 const BASE_DIR = process.env.SOFIA_DIR || process.cwd();
 
+// Custo da IA: cada turno de conversa (e as extrações) grava uma linha em
+// sofia-custo.jsonl. O painel soma por dia e mostra o gasto/tokens + alerta.
+// Best-effort: nunca pode quebrar o atendimento.
+const CUSTO_FILE = path.join(BASE_DIR, "sofia-custo.jsonl");
+function registrarCusto(rec: { tipo: string; model?: string; inTok?: number; outTok?: number; usd?: number }) {
+  try {
+    fs.appendFileSync(CUSTO_FILE, JSON.stringify({
+      em: new Date().toISOString(),
+      tipo: rec.tipo,
+      model: rec.model || "",
+      inTok: rec.inTok || 0,
+      outTok: rec.outTok || 0,
+      usd: (typeof rec.usd === "number" && isFinite(rec.usd)) ? rec.usd : 0,
+    }) + "\n");
+  } catch { /* best-effort */ }
+}
+
 // Semeadura: prompt/extração/mídias são editáveis pelo painel e ficam FORA do Git
 // (sofia-*.txt no .gitignore). O conteúdo base mora nos sofia-*.default.txt
 // (versionados). Se o arquivo "vivo" não existir (clone novo, ou o git pull que
@@ -651,6 +668,17 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
         if (msg.type === "system" && msg.subtype === "init") sessionId = msg.session_id;
         if (msg.type === "result") {
           sessionId = msg.session_id ?? sessionId;
+          // Custo do turno (a SDK do agente já calcula total_cost_usd e usage).
+          try {
+            const u: any = (msg as any).usage || {};
+            registrarCusto({
+              tipo: "conversa",
+              model: MODELO_CONVERSA,
+              inTok: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0),
+              outTok: u.output_tokens || 0,
+              usd: (msg as any).total_cost_usd || 0,
+            });
+          } catch { /* best-effort */ }
           if (msg.subtype === "success") resposta = msg.result;
           // Se o próprio SDK sinalizar erro no result, deixa o retry tratar.
           if (msg.subtype !== "success") throw Object.assign(new Error("Agent SDK result de erro"), { status: 529 });
