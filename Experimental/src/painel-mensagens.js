@@ -245,9 +245,11 @@ const ESTILO = `
   @media(max-width:760px){
     .tabs{position:sticky;top:0;z-index:50;margin-top:0;padding:8px 12px 10px;background:var(--bg);box-shadow:0 4px 12px -6px rgba(0,0,0,.22)}
   }
-  .subnav{display:flex;flex-wrap:wrap;gap:22px;margin:2px 0 18px;border-bottom:1px solid var(--linha);padding:0 2px}
-  .subnav a:hover{color:var(--tinta)}
-  @media(max-width:520px){.subnav{gap:16px}}
+  /* Sub-menu: mesmas pílulas do menu principal, em escala menor (secundário). */
+  .subtabs{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 18px}
+  .subtabs a{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-family:"Inter",sans-serif;font-weight:500;font-size:.82rem;line-height:1;color:var(--cinza);background:transparent;border:1px solid var(--linha);border-radius:999px;padding:7px 15px;transition:.12s}
+  .subtabs a:hover{background:var(--linha-soft);color:var(--tinta);border-color:var(--linha)}
+  .subtabs a.on{background:var(--teal);color:#fff;border-color:var(--teal);font-weight:600}
   .aviso{background:var(--avi-bg);border:1px solid var(--avi-bd);color:var(--avi-tx);border-radius:10px;padding:10px 14px;margin:14px 0;font-size:var(--fs-sm)}
   .aviso.err{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
   .card{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:13px 15px;margin:10px 0}
@@ -725,17 +727,13 @@ function blocoWaRobo() {
 // Sub-navegação da aba WhatsApp Mensagens: Configuração (mensagens/horários) x Agendamento (envios pontuais).
 function subnavMensagens(view) {
   const href = (v) => v === 'agendar' ? '/?view=agendar' : (v === 'hoje' ? '/hoje' : '/');
-  const item = (v, rot) => {
-    const on = view === v;
-    const st = 'display:inline-flex;align-items:center;padding:9px 2px;font-weight:'+(on?'600':'500')+';font-family:"Inter",sans-serif;font-size:.86rem;text-decoration:none;border-bottom:2px solid '+(on?'var(--teal)':'transparent')+';color:'+(on?'var(--teal-esc)':'var(--cinza)')+';white-space:nowrap;transition:.12s';
-    return `<a href="${href(v)}" style="${st}">${rot}</a>`;
-  };
+  const item = (v, rot) => `<a href="${href(v)}"${view === v ? ' class="on"' : ''}>${rot}</a>`;
   const sess = _navSess || { admin: true, telas: [] };
   let its = '';
   if (podeMsgSub(sess, 'config')) its += item('config', 'Configuração');
   if (podeMsgSub(sess, 'agendar')) its += item('agendar', 'Agendamento');
   if (podeMsgSub(sess, 'hoje')) its += item('hoje', 'Log');
-  return `<div class="subnav">${its}</div>`;
+  return `<div class="subtabs">${its}</div>`;
 }
 
 // Card "Grupos do WhatsApp": nomes dos grupos (equipe/circuito) editáveis no
@@ -1495,11 +1493,7 @@ function blocoSofiaWa() {
 
 // Sub-navegação da aba Sofia: Configuração (prompt/configs) x Conversas (inbox).
 function subnavSofia(view) {
-  const item = (v, rot) => {
-    const on = view === v;
-    const st = 'display:inline-flex;align-items:center;padding:9px 2px;font-weight:'+(on?'600':'500')+';font-family:"Inter",sans-serif;font-size:.86rem;text-decoration:none;border-bottom:2px solid '+(on?'var(--teal)':'transparent')+';color:'+(on?'var(--teal-esc)':'var(--cinza)')+';white-space:nowrap;transition:.12s';
-    return `<a href="/sofia${v === 'config' ? '' : '?view=' + v}" style="${st}">${rot}</a>`;
-  };
+  const item = (v, rot) => `<a href="/sofia${v === 'config' ? '' : '?view=' + v}"${view === v ? ' class="on"' : ''}>${rot}</a>`;
   const sess = _navSess || { admin: true, telas: [] };
   let its = '';
   if (podeSofiaSub(sess, 'config')) its += item('config', 'Configuração');
@@ -1507,7 +1501,7 @@ function subnavSofia(view) {
   if (podeSofiaSub(sess, 'contatos')) its += item('contatos', 'Contatos');
   if (podeSofiaSub(sess, 'contatos')) its += item('tags', 'Tags');
   if (podeSofiaSub(sess, 'campanhas')) its += item('campanhas', 'Campanhas');
-  return `<div class="subnav">${its}</div>`;
+  return `<div class="subtabs">${its}</div>`;
 }
 
 // Aba Sofia → Conversas: inbox das conversas da Sofia (ler e, na Parte 2, responder).
