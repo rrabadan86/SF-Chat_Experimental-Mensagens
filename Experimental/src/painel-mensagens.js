@@ -279,9 +279,15 @@ const ESTILO = `
   .acc-sec>summary{list-style:none;cursor:pointer;position:relative;padding:14px 42px 14px 15px!important;margin:0!important;background:var(--card);border:1px solid var(--linha);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
   .acc-sec>summary::-webkit-details-marker{display:none}
   .acc-sec>summary::after{content:"▸";position:absolute;right:15px;top:50%;transform:translateY(-50%);color:var(--teal);font-weight:900;font-size:1rem}
-  .acc-sec[open]>summary::after{content:"▾"}
   .acc-sec>summary:hover{border-color:var(--teal)}
-  .acc-sec[open]>summary{border-color:var(--teal);background:var(--avi-bg);border-radius:12px 12px 0 0}
+  /* Aberta: a seção INTEIRA vira um contêiner com contorno teal; o cabeçalho
+     fica no topo e o conteúdo DENTRO, em sub-cartões com fundo próprio — assim
+     não se mistura com o resto da página. */
+  .acc-sec[open]{border:1px solid var(--teal);border-radius:12px;background:var(--card);box-shadow:0 4px 16px -7px rgba(12,127,130,.30)}
+  .acc-sec[open]>summary{border:0!important;border-bottom:1px solid var(--avi-bd)!important;border-radius:11px 11px 0 0;background:var(--avi-bg);box-shadow:none}
+  .acc-sec[open]>summary::after{content:"▾"}
+  .acc-sec[open]>*:not(summary){margin:12px}
+  .acc-sec[open]>.card{background:var(--bg);box-shadow:none}
   .vazio{color:var(--cinza);font-size:var(--fs-sm)}
   .wabar{border-radius:12px;padding:10px 14px;margin:14px 0 0;font-weight:600;font-size:var(--fs-sm);display:flex;align-items:center;gap:8px}
   .wabar.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
@@ -2481,27 +2487,35 @@ function paginaSofia(aviso, erro) {
 
       </details>
 
-      <div class="sec-t">💬 Conversa da SoFIA <small style="font-weight:600;color:var(--cinza)">(cada bloco é uma parte do atendimento — clique no título p/ abrir; ↑↓ reordenam)</small></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px">
-        <button type="button" class="reset" onclick="expandirTodas(true)" style="padding:6px 12px">▾ Expandir todas</button>
-        <button type="button" class="reset" onclick="expandirTodas(false)" style="padding:6px 12px">▸ Recolher todas</button>
-      </div>
-      <div id="secoes">${cardsSecoes}</div>
-      <button type="button" class="reset" onclick="adicionarSecao()" style="margin:2px 0 10px">➕ Nova seção</button>
+      <details class="acc-sec" open>
+        <summary class="sec-t">💬 Prompt da SoFIA <small style="font-weight:400;color:var(--cinza)">— o roteiro (cada bloco é uma parte do atendimento; clique no título p/ abrir, ↑↓ reordenam)</small></summary>
+        <div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px">
+            <button type="button" class="reset" onclick="expandirTodas(true)" style="padding:6px 12px">▾ Expandir todas</button>
+            <button type="button" class="reset" onclick="expandirTodas(false)" style="padding:6px 12px">▸ Recolher todas</button>
+          </div>
+          <div id="secoes">${cardsSecoes}</div>
+          <button type="button" class="reset" onclick="adicionarSecao()" style="margin:2px 0 0">➕ Nova seção</button>
+        </div>
+      </details>
 
-      <div class="sec-t">🔗 Script de integração <small style="font-weight:600;color:var(--cinza)">(dados enviados ao EVO)</small></div>
+      <details class="acc-sec">
+        <summary class="sec-t">🔗 Script de integração <small style="font-weight:400;color:var(--cinza)">— dados enviados ao EVO</small></summary>
       <div class="card">
         <label>Extração do resumo (nome, e-mail, dia, hora)</label>
         <textarea name="extracao" rows="12" spellcheck="false">${esc(e.extracao)}</textarea>
       </div>
+      </details>
 
-      <div class="sec-t">📷 Imagens <small style="font-weight:600;color:var(--cinza)">(troque as URLs quando atualizar a grade/preços)</small></div>
+      <details class="acc-sec">
+        <summary class="sec-t">📷 Imagens <small style="font-weight:400;color:var(--cinza)">— troque as URLs quando atualizar a grade/preços</small></summary>
       <div class="card">
         ${inpMidia('precos_imagem', e.midias.precos_imagem, 'Imagem da TABELA DE PREÇOS (URL)')}
         ${inpMidia('precos_link', e.midias.precos_link, 'Link (Google Drive) da tabela de preços')}
         ${inpMidia('grade_imagem', e.midias.grade_imagem, 'Imagem da GRADE DE HORÁRIOS (URL)')}
         ${inpMidia('grade_link', e.midias.grade_link, 'Link (Google Drive) da grade')}
       </div>
+      </details>
 
       <div class="hbar">
         <div class="acts">
