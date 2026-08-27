@@ -451,47 +451,44 @@ async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
   // injeta um helper "__name" nas funções nomeadas que NÃO existe no navegador
   // (ReferenceError: __name is not defined ao rodar via page.evaluate). Em string,
   // o esbuild não transforma nada, então o código roda intacto na página.
-  // Nesta versão o WhatsApp NÃO expõe window.Store, mas expõe window.WWebJS
-  // (com getChats/getChat/getContacts). O getChats() de uma vez estoura ("r")
-  // quando UMA conversa não serializa. Então: tentamos getChats(); se falhar,
-  // caímos para buscar conversa por conversa (getContacts → getChat) com
-  // try/catch — assim uma ruim não derruba as outras. Código em STRING para o
-  // esbuild não injetar o helper __name (que não existe no navegador).
-  const code = "(async function(LIM){\n"
-    + "  var W = window, WJ = W.WWebJS;\n"
-    + "  if(!WJ) return { erro:'WWebJS indisponivel nesta versao.' };\n"
-    + "  function norm(x){ return (x && (x._serialized || x)) || ''; }\n"
-    + "  var chats = null, via='getChats', cts;\n"
-    + "  try { if (WJ.getChats) chats = await WJ.getChats(); } catch(e){ chats = null; }\n"
-    + "  if(!(chats && chats.length)){\n"
-    + "    via='perContato'; chats=[]; cts=[];\n"
-    + "    try { if (WJ.getContacts) cts = await WJ.getContacts(); } catch(e){ cts=[]; }\n"
-    + "    var t0=Date.now();\n"
-    + "    for (var i=0;i<cts.length;i++){\n"
-    + "      if (Date.now()-t0 > 120000) { via='perContato(parcial)'; break; }\n"
-    + "      try {\n"
-    + "        var idc = String(norm(cts[i] && cts[i].id));\n"
-    + "        if (idc.indexOf('@c.us') < 0) continue;\n"
-    + "        var ch=null; try { ch = await WJ.getChat(idc); } catch(e){ ch=null; }\n"
-    + "        if (ch) chats.push(ch);\n"
-    + "      } catch(e){}\n"
-    + "    }\n"
+  // Nesta versão não há window.Store, mas o WhatsApp Web expõe os módulos via
+  // window.require. Lemos a COLEÇÃO de conversas crua (WAWebCollections.Chat),
+  // sem serialização (rápido) e sem varrer contato por contato (lento/inútil).
+  // Código em STRING para o esbuild não injetar o helper __name (inexistente no
+  // navegador).
+  const code = "(function(LIM){\n"
+    + "  var W = window;\n"
+    + "  function req(n){ try { return W.require ? W.require(n) : null; } catch(e){ return null; } }\n"
+    + "  function getChatColl(){\n"
+    + "    try { if (W.Store && W.Store.Chat && W.Store.Chat.getModelsArray) return W.Store.Chat; } catch(e){}\n"
+    + "    var m = req('WAWebCollections');\n"
+    + "    if (m){ if (m.Chat && m.Chat.getModelsArray) return m.Chat; if (m.default && m.default.Chat && m.default.Chat.getModelsArray) return m.default.Chat; }\n"
+    + "    var d = req('WAWebChatCollection');\n"
+    + "    if (d){ if (d.ChatCollection && d.ChatCollection.getModelsArray) return d.ChatCollection; if (d.getModelsArray) return d; if (d.default && d.default.getModelsArray) return d.default; }\n"
+    + "    return null;\n"
     + "  }\n"
+    + "  var Chat = getChatColl();\n"
+    + "  if(!Chat){\n"
+    + "    var diag={ hasStore:!!W.Store, hasRequire: (typeof W.require==='function') };\n"
+    + "    try { var t1=req('WAWebCollections'); diag.collectionsKeys = t1 ? Object.keys(t1).slice(0,50) : null; } catch(e){ diag.collectionsKeys='erro'; }\n"
+    + "    return { erro:'Nao achei a colecao de conversas (Chat).', diag: diag };\n"
+    + "  }\n"
+    + "  var arr = Chat.getModelsArray();\n"
     + "  var out=[];\n"
-    + "  for (var j=0;j<chats.length;j++){\n"
+    + "  for (var j=0;j<arr.length;j++){\n"
     + "    try {\n"
-    + "      var c=chats[j]; var id=String(norm(c && c.id));\n"
+    + "      var c=arr[j]; var idObj=c&&c.id;\n"
+    + "      var id = idObj ? (idObj._serialized || (idObj.user ? idObj.user+'@'+(idObj.server||'c.us') : '')) : '';\n"
     + "      if(!id || id.indexOf('@c.us')<0) continue;\n"
-    + "      var name = (c && (c.name || c.formattedTitle || (c.contact && (c.contact.pushname||c.contact.name||c.contact.formattedName)))) || '';\n"
-    + "      var t = (c && (c.timestamp || c.t)) || 0;\n"
-    + "      var msgs=[];\n"
-    + "      var lm = c && c.lastMessage;\n"
-    + "      if (lm && (lm.body || lm.t || lm.timestamp)) { msgs.push({ fromMe: !!((lm.id && lm.id.fromMe) || lm.fromMe), body: (lm.body||lm.caption||'')||'', t: (lm.t||lm.timestamp||t)||0 }); }\n"
+    + "      var name = (c && (c.formattedTitle || c.name || (c.contact && (c.contact.pushname||c.contact.name||c.contact.formattedName)))) || '';\n"
+    + "      var t = (c && (c.t||c.timestamp||0)) || 0;\n"
+    + "      var models=[]; try { models = (c.msgs && c.msgs.getModelsArray) ? c.msgs.getModelsArray() : ((c.msgs&&c.msgs._models)||[]); } catch(e){ models=[]; }\n"
+    + "      var msgs = models.slice(-LIM).map(function(m){ return { fromMe: !!(m&&m.id&&m.id.fromMe), body: (m&&(m.body||m.caption||''))||'', t: (m&&(m.t||m.timestamp))||0 }; });\n"
     + "      out.push({ id: id, name: name, t: t, msgs: msgs });\n"
     + "    } catch(e){}\n"
     + "  }\n"
-    + "  if(!out.length){ return { erro:'Nao consegui montar a lista (0 conversas).', diag:{ via:via, wjGetChats:!!WJ.getChats, wjGetContacts:!!WJ.getContacts, wjGetChat:!!WJ.getChat, contatos:(typeof cts!=='undefined'?cts.length:-1) } }; }\n"
-    + "  return { chats: out, via: via };\n"
+    + "  if(!out.length){ return { erro:'Colecao encontrada, mas 0 conversas (@c.us).', diag:{ total: arr.length } }; }\n"
+    + "  return { chats: out, via:'store-raw' };\n"
     + "})(" + LIM + ")";
   const r: any = await page.evaluate(code);
   if (r && r.via) log(`import: leitura via ${r.via} (${(r.chats && r.chats.length) || 0} conversas).`);
