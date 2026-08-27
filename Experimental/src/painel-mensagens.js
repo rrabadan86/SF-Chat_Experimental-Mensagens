@@ -1485,6 +1485,7 @@ function subnavSofia(view) {
   if (podeSofiaSub(sess, 'config')) its += item('config', '⚙️ Configuração');
   if (podeSofiaSub(sess, 'conversas')) its += item('conversas', '💬 Conversas');
   if (podeSofiaSub(sess, 'contatos')) its += item('contatos', '📇 Contatos');
+  if (podeSofiaSub(sess, 'contatos')) its += item('tags', '🏷️ Tags');
   if (podeSofiaSub(sess, 'campanhas')) its += item('campanhas', '📣 Campanhas');
   return `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px">${its}</div>`;
 }
@@ -1852,21 +1853,6 @@ function paginaSofiaContatos(aviso, erro, params) {
     </tr>`;
   }).join('');
 
-  const gerenciarTags = `<details class="card" style="padding:10px 15px;margin:0 0 12px"${tags.length ? '' : ' open'}><summary style="cursor:pointer;font-weight:700">🏷️ Gerenciar tags <small style="font-weight:400;color:#5c5960">(criar, renomear, excluir ou automatizar)</small></summary>
-    <div class="card">
-      <div style="margin-bottom:12px"><button type="button" class="save" onclick="criarTagNova()" style="padding:8px 16px">＋ Criar tag</button></div>
-      ${tags.length ? tags.map((t, i) => { const cfg = contatos.tagConfig(t.tag); return `<div class="tagrow">
-      <form method="POST" action="/sofia/contatos/tag">
-        <input type="hidden" name="de" value="${esc(t.tag)}">${hidden}
-        <input type="text" name="para" value="${esc(t.tag)}">
-        <span class="tagn">${t.n}</span>
-        <button type="submit" class="tagbtn ren" name="acao" value="renomear">Renomear</button>
-        <button type="submit" class="tagbtn rm" name="acao" value="excluir" onclick="return confirm('Excluir a tag em TODOS os contatos?')">Excluir</button>
-      </form>
-      <button type="button" class="tagbtn aut${(cfg.gatilho || cfg.remove.length) ? ' on' : ''}" onclick="abrirTagCfg(${i})" title="Automação desta tag">⚙️ Automação${(cfg.gatilho || cfg.remove.length) ? ' ⚡' : ''}</button>
-    </div>`; }).join('') : '<p class="quando" style="margin:0">Nenhuma tag ainda. Crie uma acima ou etiquete um contato.</p>'}
-    </div></details>`;
-
   const opcoes = ['<option value="">Todas as tags</option>', `<option value="__sem__"${tagSel === '__sem__' ? ' selected' : ''}>Sem tag</option>`]
     .concat(tags.map(t => `<option value="${esc(t.tag)}"${t.tag === tagSel ? ' selected' : ''}>${esc(t.tag)} (${t.n})</option>`)).join('');
 
@@ -1899,8 +1885,6 @@ function paginaSofiaContatos(aviso, erro, params) {
       </div>
       <p class="quando" style="margin:8px 0 0">Gera um <b>CSV</b> com <b>Nome, Telefone, Instruções personalizadas e Tags</b> de todos os contatos — abre no Excel/Google Planilhas e serve para <b>migrar de plataforma</b> ou guardar backup. O próprio arquivo pode ser reimportado aqui.</p>
     </details>
-
-    ${gerenciarTags}
 
     <form method="GET" action="/sofia" class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <input type="hidden" name="view" value="contatos">
@@ -2264,6 +2248,131 @@ function campListHTML() {
       <div class="vars-${esc(c.id)}" style="display:none;margin-top:8px">${variacoes}</div>
     </div>`;
   }).join('');
+}
+
+// Aba SoFIA → Tags: criar, renomear, excluir e automatizar tags (antes ficava
+// como card dentro de Contatos; virou sub-aba própria entre Contatos e Campanhas).
+function paginaSofiaTags(aviso, erro) {
+  const tags = contatos.tagsDistintas();
+  const lista = tags.length
+    ? tags.map((t, i) => { const cfg = contatos.tagConfig(t.tag); const on = (cfg.gatilho || cfg.remove.length); return `<div class="tagrow">
+      <form method="POST" action="/sofia/contatos/tag">
+        <input type="hidden" name="de" value="${esc(t.tag)}"><input type="hidden" name="voltar" value="tags">
+        <input type="text" name="para" value="${esc(t.tag)}">
+        <span class="tagn">${t.n}</span>
+        <button type="submit" class="tagbtn ren" name="acao" value="renomear">Renomear</button>
+        <button type="submit" class="tagbtn rm" name="acao" value="excluir" onclick="return confirm('Excluir a tag em TODOS os contatos?')">Excluir</button>
+      </form>
+      <button type="button" class="tagbtn aut${on ? ' on' : ''}" onclick="abrirTagCfg(${i})" title="Automação desta tag">⚙️ Automação${on ? ' ⚡' : ''}</button>
+    </div>`; }).join('')
+    : '<p class="quando" style="margin:0">Nenhuma tag ainda. Crie uma acima ou etiquete um contato na aba Contatos.</p>';
+
+  const corpo = `<div class="wrap">
+    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    ${subnavSofia('tags')}
+    <div class="sec-t">🏷️ Gerenciar tags <small style="font-weight:600;color:#5c5960">(criar, renomear, excluir ou automatizar)</small></div>
+    <div class="card">
+      <div style="margin-bottom:12px"><button type="button" class="save" onclick="criarTagNova()" style="padding:8px 16px">＋ Criar tag</button></div>
+      ${lista}
+    </div>
+  </div>
+
+  <div id="tgModal" class="ct-ov" onclick="if(event.target===this)fecharTagCfg()">
+    <div class="ct-dlg" style="max-width:520px">
+      <div class="ct-dh"><h2>Automação da tag</h2><button type="button" class="ct-x" onclick="fecharTagCfg()">×</button></div>
+      <p class="quando" style="margin:0 0 14px">Tag: <b id="tgNome" style="color:var(--teal-esc)"></b></p>
+      <label>Aplicar esta tag automaticamente quando…</label>
+      <select id="tgGatilho" onchange="tgSync()">
+        <option value="">— não automatizar (só uso manual) —</option>
+        <option value="novo">🆕 a aluna mandar a 1ª mensagem (lead novo)</option>
+        <option value="palavra">🔑 a aluna escrever uma palavra-chave</option>
+        <option value="ia">🧠 a SoFIA entender uma intenção (você descreve)</option>
+        <option value="agendou">📅 a SoFIA agendar uma aula experimental</option>
+        <option value="humano">🙋 você assumir a conversa (controle humano)</option>
+        <option value="encerrou">🔒 a conversa encerrar sem agendamento</option>
+        <option value="campanha">💬 a aluna responder a uma campanha</option>
+      </select>
+      <div id="tgPalBox" style="margin-top:14px;display:none">
+        <label>Palavras-chave <span class="sub" style="font-weight:400;color:var(--cinza)">— separadas por vírgula (ex.: cancelar, valor, reclamação, endereço)</span></label>
+        <input type="text" id="tgPalavras" placeholder="cancelar, valor, endereço">
+        <p class="quando" style="margin:6px 0 0">Dispara quando a mensagem da aluna <b>contém</b> qualquer uma delas (não diferencia maiúsculas/acentos simples).</p>
+      </div>
+      <div id="tgIaBox" style="margin-top:14px;display:none">
+        <label>Instrução <span class="sub" style="font-weight:400;color:var(--cinza)">— descreva a intenção, em português (ex.: quando a aluna perguntar sobre preço, valores ou planos)</span></label>
+        <textarea id="tgInstrucao" rows="3" maxlength="300" placeholder="Ex.: quando a aluna perguntar sobre preço, valores, mensalidade ou planos." style="width:100%;resize:vertical"></textarea>
+        <p class="quando" style="margin:6px 0 0">A SoFIA <b>lê a conversa</b> e aplica a tag quando entende essa intenção — mesmo sem a palavra exata. Dispara <b>uma vez por conversa</b>. Usa a IA (custo pequeno por mensagem).</p>
+      </div>
+      <div id="tgWppBox" style="margin-top:16px;display:none">
+        <label>Avisar no WhatsApp <span class="sub" style="font-weight:400;color:var(--cinza)">— número que recebe o recado (nome + telefone)</span></label>
+        <input type="tel" id="tgWpp" placeholder="(62) 99999-9999" inputmode="tel">
+        <p class="quando" style="margin:6px 0 0">Deixe em branco para só etiquetar, sem avisar ninguém.</p>
+      </div>
+      <div style="margin-top:16px">
+        <label>Ao aplicar esta tag, remover <span class="sub" style="font-weight:400;color:var(--cinza)">— transição de funil (ex.: entrar em "Agendou" tira "Contato inicial")</span></label>
+        <div id="tgRemove" class="ct-tglist" style="max-height:150px;overflow:auto"></div>
+      </div>
+      <div class="ct-foot">
+        <button type="button" class="reset" onclick="fecharTagCfg()" style="padding:9px 16px">Cancelar</button>
+        <button type="button" class="save" id="tgSalvar" onclick="salvarTagCfg()" style="padding:9px 18px">Salvar</button>
+      </div>
+    </div>
+  </div>
+<script>
+  function esc(s){return String(s).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];});}
+  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, wpp: c.avisarWpp, remove: c.remove }; }))};
+  var TODAS_TAGS_LISTA = ${JSON.stringify(tags.map(t => t.tag))};
+  var tgRemove = [];
+  var tgSel=null;
+  function abrirTagCfg(i){
+    var c=TAGS_CFG[i]; if(!c) return; tgSel=c;
+    document.getElementById('tgNome').textContent=c.tag;
+    document.getElementById('tgGatilho').value=c.gatilho||'';
+    document.getElementById('tgPalavras').value=(c.palavras||[]).join(', ');
+    document.getElementById('tgInstrucao').value=c.instrucao||'';
+    document.getElementById('tgWpp').value=c.wpp||'';
+    tgRemove=(c.remove||[]).slice();
+    tgRenderRemove();
+    tgSync();
+    document.getElementById('tgModal').style.display='flex';
+  }
+  function tgRenderRemove(){
+    var box=document.getElementById('tgRemove');
+    var outras=TODAS_TAGS_LISTA.filter(function(t){return !tgSel||t!==tgSel.tag;});
+    if(!outras.length){ box.innerHTML='<span class="quando">Nenhuma outra tag ainda.</span>'; return; }
+    box.innerHTML=outras.map(function(t){
+      var on=tgRemove.indexOf(t)>=0;
+      return '<button type="button" class="ct-tg'+(on?' on':'')+'" style="'+(on?'background:#fdecea;color:#c0392b;border-color:#f5c6cb':'background:#fff;color:#5c5960;border-color:#e8e8ea')+'" onclick="tgToggleRemove(this,\\''+t.replace(/'/g,"\\\\'")+'\\')">'+(on?'✕ ':'')+esc(t)+'</button>';
+    }).join('');
+  }
+  function tgToggleRemove(btn,t){ var i=tgRemove.indexOf(t); if(i>=0)tgRemove.splice(i,1); else tgRemove.push(t); tgRenderRemove(); }
+  function tgSync(){
+    var g=document.getElementById('tgGatilho').value;
+    document.getElementById('tgPalBox').style.display=(g==='palavra')?'block':'none';
+    document.getElementById('tgIaBox').style.display=(g==='ia')?'block':'none';
+    document.getElementById('tgWppBox').style.display=g?'block':'none';
+  }
+  function fecharTagCfg(){ document.getElementById('tgModal').style.display='none'; tgSel=null; }
+  function salvarTagCfg(){
+    if(!tgSel) return;
+    var g=document.getElementById('tgGatilho').value;
+    if(g==='palavra' && !document.getElementById('tgPalavras').value.trim()){ alert('Informe ao menos uma palavra-chave.'); return; }
+    if(g==='ia' && !document.getElementById('tgInstrucao').value.trim()){ alert('Descreva a intenção na instrução (ex.: quando a aluna perguntar sobre preço).'); return; }
+    var b=document.getElementById('tgSalvar'); b.disabled=true; b.textContent='Salvando…';
+    var pals=document.getElementById('tgPalavras').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, instrucao:document.getElementById('tgInstrucao').value, avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove };
+    fetch('/sofia/contatos/tagcfg',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.reload(); } else { b.disabled=false; b.textContent='Salvar'; alert('❌ '+(j.erro||'falha ao salvar')); } })
+      .catch(function(){ b.disabled=false; b.textContent='Salvar'; alert('❌ erro de rede'); });
+  }
+  function criarTagNova(){
+    var nome=prompt('Nome da nova tag:'); if(nome==null) return;
+    nome=nome.trim(); if(!nome) return;
+    fetch('/sofia/contatos/criar-tag',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome:nome})})
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.reload(); } else { alert('❌ '+(j.erro||'falha ao criar')); } })
+      .catch(function(){ alert('❌ erro de rede'); });
+  }
+</script>`;
+  return chrome({ tab: 'Tags', h1: '🤖 SoFIA', p: 'Tags — crie, renomeie, exclua e automatize as etiquetas dos contatos.' }, 'sofia', corpo);
 }
 
 // Aba SoFIA → Campanhas: envio em massa por tag (com variações da IA e limites).
@@ -3119,9 +3228,12 @@ const server = http.createServer((req, res) => {
     // Só renderiza a sub-aba que o usuário pode ver; se pediu uma sem acesso,
     // cai na primeira permitida (config → conversas → contatos).
     let view = sp.get('view') || 'config';
-    if (!podeSofiaSub(sess, view)) view = SOFIA_SUBS.find(s => podeSofiaSub(sess, s)) || 'config';
+    // 'tags' é uma sub-aba de Contatos (mesma permissão sofia_contatos).
+    const podeVerSub = (v) => (v === 'tags' ? podeSofiaSub(sess, 'contatos') : podeSofiaSub(sess, v));
+    if (!podeVerSub(view)) view = SOFIA_SUBS.find(s => podeSofiaSub(sess, s)) || 'config';
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     if (view === 'contatos') return res.end(paginaSofiaContatos(aviso, erro, { q: sp.get('q') || '', tag: sp.get('tag') || '', pagina: sp.get('pagina') || 0 }));
+    if (view === 'tags') return res.end(paginaSofiaTags(aviso, erro));
     if (view === 'conversas') return res.end(paginaSofiaConversas(aviso, erro));
     if (view === 'campanhas') return res.end(paginaSofiaCampanhas(aviso, erro));
     return res.end(paginaSofia(aviso, erro));
@@ -3168,6 +3280,8 @@ const server = http.createServer((req, res) => {
   }
   // Volta para a lista de contatos preservando busca/filtro/página.
   const voltarContatos = (p, res) => {
+    // Renomear/excluir tag vem da sub-aba Tags → volta para lá; o resto, para Contatos.
+    if (p.get('voltar') === 'tags') { res.writeHead(303, { Location: '/sofia?view=tags&ctok=1' }); res.end(); return; }
     const back = new URLSearchParams(); back.set('view', 'contatos');
     if (p.get('q')) back.set('q', p.get('q')); if (p.get('tag')) back.set('tag', p.get('tag'));
     back.set('pagina', p.get('pagina') || 0); back.set('ctok', '1');
