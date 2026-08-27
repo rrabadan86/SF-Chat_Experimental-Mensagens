@@ -446,51 +446,48 @@ type RawChat = { id: string; name: string; t: number; msgs: Array<{ fromMe: bool
 async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
   const page: any = (client as any).pupPage;
   if (!page) throw new Error("página do WhatsApp indisponível (pupPage).");
-  const r = await page.evaluate((LIM: number) => {
-    const W: any = window as any;
-    // Tenta achar a coleção de Chats por vários caminhos (a versão do WA muda isso).
-    function acharChatStore(): any {
-      const tentativas = [
-        () => W.Store && W.Store.Chat,
-        () => W.WWebJS && W.WWebJS.Store && W.WWebJS.Store.Chat,
-        () => W.Store && W.Store.default && W.Store.default.Chat,
-      ];
-      for (const f of tentativas) { try { const v = f(); if (v && (v.getModelsArray || v.models)) return v; } catch (e) {} }
-      // moduleRaid: procura um módulo com uma coleção de Chat.
-      try {
-        const mr = W.mR || W.moduleRaid;
-        if (mr && mr.findModule) {
-          const mods = mr.findModule((m: any) => m && m.Chat && (m.Chat.getModelsArray || m.Chat.models));
-          if (mods && mods[0] && mods[0].Chat) return mods[0].Chat;
-        }
-      } catch (e) {}
-      return null;
-    }
-    const ChatStore: any = acharChatStore();
-    if (!ChatStore) {
-      // Diagnóstico: diz o que EXISTE na página, para eu mirar certo.
-      const diag: any = { hasStore: !!W.Store, hasWWebJS: !!W.WWebJS, hasMR: !!(W.mR || W.moduleRaid) };
-      try { diag.storeKeys = W.Store ? Object.keys(W.Store).slice(0, 60) : []; } catch (e) { diag.storeKeys = "?"; }
-      try { diag.wwebjsKeys = W.WWebJS ? Object.keys(W.WWebJS).slice(0, 60) : []; } catch (e) { diag.wwebjsKeys = "?"; }
-      return { erro: "Não achei a lista de conversas (Store.Chat).", diag };
-    }
-    const arr: any[] = ChatStore.getModelsArray ? ChatStore.getModelsArray() : (ChatStore.models || []);
-    const out: any[] = [];
-    for (const c of arr) {
-      try {
-        const idObj = c && c.id;
-        const id = idObj ? (idObj._serialized || (idObj.user ? idObj.user + "@" + (idObj.server || "c.us") : "")) : "";
-        if (!id) continue;
-        const name = (c && (c.formattedTitle || c.name || (c.contact && (c.contact.pushname || c.contact.name || c.contact.formattedName)))) || "";
-        const t = (c && (c.t || 0)) || 0;
-        let models: any[] = [];
-        try { models = (c.msgs && (c.msgs.getModelsArray ? c.msgs.getModelsArray() : c.msgs._models)) || []; } catch (e) { models = []; }
-        const msgs = models.slice(-LIM).map((m: any) => ({ fromMe: !!(m && m.id && m.id.fromMe), body: (m && (m.body || m.caption || "")) || "", t: (m && m.t) || 0 }));
-        out.push({ id, name, t, msgs });
-      } catch (e) { /* pula esse chat */ }
-    }
-    return { chats: out };
-  }, limMsg);
+  const LIM = Math.max(1, Math.min(limMsg || INBOX_MAX_MSGS, 500));
+  // IMPORTANTE: passamos o código como STRING (não como função). O tsx/esbuild
+  // injeta um helper "__name" nas funções nomeadas que NÃO existe no navegador
+  // (ReferenceError: __name is not defined ao rodar via page.evaluate). Em string,
+  // o esbuild não transforma nada, então o código roda intacto na página.
+  const code = "(function(LIM){\n"
+    + "  var W = window;\n"
+    + "  function acharChatStore(){\n"
+    + "    var tent = [\n"
+    + "      function(){ return W.Store && W.Store.Chat; },\n"
+    + "      function(){ return W.WWebJS && W.WWebJS.Store && W.WWebJS.Store.Chat; },\n"
+    + "      function(){ return W.Store && W.Store.default && W.Store.default.Chat; }\n"
+    + "    ];\n"
+    + "    for (var i=0;i<tent.length;i++){ try { var v=tent[i](); if (v && (v.getModelsArray||v.models)) return v; } catch(e){} }\n"
+    + "    try { var mr=W.mR||W.moduleRaid; if(mr&&mr.findModule){ var mods=mr.findModule(function(m){return m&&m.Chat&&(m.Chat.getModelsArray||m.Chat.models);}); if(mods&&mods[0]&&mods[0].Chat) return mods[0].Chat; } } catch(e){}\n"
+    + "    return null;\n"
+    + "  }\n"
+    + "  var ChatStore = acharChatStore();\n"
+    + "  if(!ChatStore){\n"
+    + "    var diag={ hasStore: !!W.Store, hasWWebJS: !!W.WWebJS, hasMR: !!(W.mR||W.moduleRaid) };\n"
+    + "    try { diag.storeKeys = W.Store ? Object.keys(W.Store).slice(0,60) : []; } catch(e){ diag.storeKeys='?'; }\n"
+    + "    try { diag.wwebjsKeys = W.WWebJS ? Object.keys(W.WWebJS).slice(0,60) : []; } catch(e){ diag.wwebjsKeys='?'; }\n"
+    + "    try { diag.winKeys = Object.keys(W).filter(function(k){return /store|wweb|moduleraid|^mr$/i.test(k);}).slice(0,60); } catch(e){}\n"
+    + "    return { erro: 'Nao achei a lista de conversas (Store.Chat).', diag: diag };\n"
+    + "  }\n"
+    + "  var arr = ChatStore.getModelsArray ? ChatStore.getModelsArray() : (ChatStore.models||[]);\n"
+    + "  var out=[];\n"
+    + "  for (var j=0;j<arr.length;j++){\n"
+    + "    try {\n"
+    + "      var c=arr[j]; var idObj=c&&c.id;\n"
+    + "      var id = idObj ? (idObj._serialized || (idObj.user ? idObj.user+'@'+(idObj.server||'c.us') : '')) : '';\n"
+    + "      if(!id) continue;\n"
+    + "      var name = (c && (c.formattedTitle || c.name || (c.contact && (c.contact.pushname||c.contact.name||c.contact.formattedName)))) || '';\n"
+    + "      var t = (c && (c.t||0)) || 0;\n"
+    + "      var models=[]; try { models = (c.msgs && (c.msgs.getModelsArray ? c.msgs.getModelsArray() : c.msgs._models)) || []; } catch(e){ models=[]; }\n"
+    + "      var msgs = models.slice(-LIM).map(function(m){ return { fromMe: !!(m&&m.id&&m.id.fromMe), body: (m&&(m.body||m.caption||''))||'', t: (m&&m.t)||0 }; });\n"
+    + "      out.push({ id: id, name: name, t: t, msgs: msgs });\n"
+    + "    } catch(e){}\n"
+    + "  }\n"
+    + "  return { chats: out };\n"
+    + "})(" + LIM + ")";
+  const r: any = await page.evaluate(code);
   if (r && r.erro) throw new Error(r.erro + (r.diag ? " Diag: " + JSON.stringify(r.diag) : ""));
   return (r && r.chats) || [];
 }
