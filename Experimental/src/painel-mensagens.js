@@ -1519,7 +1519,7 @@ function paginaSofiaConversas(aviso, erro) {
           <input type="date" id="convDataIni" onchange="filtrarData()" title="De (dia inicial)" style="flex:1 1 0;min-width:0;font-size:.76rem;padding:5px 6px;border:1px solid var(--linha);border-radius:7px">
           <span>até</span>
           <input type="date" id="convDataFim" onchange="filtrarData()" title="Até (dia final)" style="flex:1 1 0;min-width:0;font-size:.76rem;padding:5px 6px;border:1px solid var(--linha);border-radius:7px">
-          <button type="button" onclick="limparData()" title="Limpar datas" class="reset" style="padding:4px 8px;font-size:.72rem">✕</button>
+          <button type="button" onclick="limparData()" title="Limpar datas" class="reset" style="padding:4px 8px;font-size:.82rem">🧹</button>
         </div>
         <div id="convLista"></div>
         <div id="convPag" style="display:flex;flex-direction:column;align-items:stretch;gap:6px;margin-top:8px"></div>
