@@ -487,11 +487,11 @@ async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
     + "      out.push({ id: id, name: name, t: t, msgs: msgs });\n"
     + "    } catch(e){}\n"
     + "  }\n"
-    + "  if(!out.length){ return { erro:'Colecao encontrada, mas 0 conversas (@c.us).', diag:{ total: arr.length } }; }\n"
-    + "  return { chats: out, via:'store-raw' };\n"
+    + "  var tipos={}; for (var q=0;q<arr.length;q++){ try { var s=(arr[q]&&arr[q].id&&arr[q].id.server)||'?'; tipos[s]=(tipos[s]||0)+1; } catch(e){} }\n"
+    + "  return { chats: out, via:'store-raw', total: arr.length, tipos: tipos };\n"
     + "})(" + LIM + ")";
   const r: any = await page.evaluate(code);
-  if (r && r.via) log(`import: leitura via ${r.via} (${(r.chats && r.chats.length) || 0} conversas).`);
+  if (r && r.via) log(`import: leitura via ${r.via} — ${(r.chats && r.chats.length) || 0} conversas (@c.us) de ${r.total || 0} no store total. tipos=${JSON.stringify(r.tipos || {})}`);
   if (r && r.erro) throw new Error(r.erro + (r.diag ? " Diag: " + JSON.stringify(r.diag) : ""));
   return (r && r.chats) || [];
 }
