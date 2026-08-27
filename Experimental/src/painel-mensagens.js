@@ -221,8 +221,8 @@ const ESTILO = `
   .wrap{max-width:900px;margin:0 auto;padding:14px 16px}
   /* Barra superior ÚNICA e FIXA: logo + menu + login (sem a faixa branca separada). */
   .topbar{position:sticky;top:0;z-index:60;background:var(--card);border-bottom:1px solid var(--linha)}
-  .topbar .in{max-width:900px;margin:0 auto;padding:8px 16px;display:flex;align-items:center;gap:16px}
-  .tb-logo{height:38px;width:auto;flex:none;display:block}
+  .topbar .in{max-width:900px;margin:0 auto;padding:4px 16px;display:flex;align-items:center;gap:16px}
+  .tb-logo{height:50px;width:auto;flex:none;display:block}
   .hdr-user{display:flex;align-items:center;gap:12px;font-size:.82rem;white-space:nowrap;flex:none;margin-left:auto}
   .hdr-user span{color:var(--cinza)}
   .hdr-user a{color:var(--teal-esc);font-weight:600;text-decoration:none}
@@ -245,8 +245,8 @@ const ESTILO = `
   /* Mobile: logo + login na 1ª linha; o menu ocupa a linha inteira logo abaixo.
      A barra inteira continua fixa ao rolar. */
   @media(max-width:760px){
-    .topbar .in{flex-wrap:wrap;gap:8px 12px;padding:8px 12px}
-    .tb-logo{height:30px}
+    .topbar .in{flex-wrap:wrap;gap:6px 12px;padding:5px 12px}
+    .tb-logo{height:40px}
     .tabs{flex-basis:100%;order:3}
     .tabs a{flex:1 1 84px;padding:9px 8px}
   }
