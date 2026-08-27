@@ -204,29 +204,32 @@ function turnoLabel(turno) { return (turno === 'manha' ? '☀️ Manhã · ' : '
 // ── Chrome comum (cabeçalho + abas + estilo) ────────────────────────────────
 const ESTILO = `
   :root{
-    --teal:#11abae;--teal-esc:#0c7f82;--coral:#ff5b57;--coral-esc:#ef5a53;
-    --tinta:#2d2a2f;--cinza:#7a7a7d;--bg:#f6f7f8;--card:#fff;--linha:#e8e8ea;
-    --ok:#1c8f52;--ok-bg:#eef9f2;--ok-bd:#cbe8d5;
-    --erro:#b3261e;--erro-bg:#fcecec;--erro-bd:#f2cccc;
-    --warn:#9a6b00;--warn-bg:#fff7e6;--warn-bd:#f2ddb0;
-    --avi-bg:#e9f6f6;--avi-bd:#c3e6e6;--avi-tx:#0c7f82;
+    /* Acento: teal do SlimFit em versão profunda e sóbria (era #11abae, vivo). */
+    --teal:#0e6e6b;--teal-esc:#0a5250;--teal-soft:#e4efee;
+    --coral:#c0453f;--coral-esc:#a53a35;
+    --tinta:#1d1d1f;--cinza:#6e6e73;--faint:#9a9aa0;--bg:#f5f5f7;--card:#fff;--linha:#e4e4e7;--linha-soft:#eeeef0;
+    --ok:#1c8f52;--ok-bg:#eaf5ee;--ok-bd:#cfe7d7;
+    --erro:#b23b30;--erro-bg:#f8ece9;--erro-bd:#eccfc9;
+    --warn:#8a6300;--warn-bg:#f7efdc;--warn-bd:#e9d8ac;
+    --avi-bg:#e6f1f0;--avi-bd:#c9e2e0;--avi-tx:#0a5250;
     /* escala de tipografia — poucos tamanhos, reaproveitados em todo o painel */
-    --fs-h1:1.15rem;--fs-h2:1rem;--fs-sec:.95rem;--fs-body:.92rem;--fs-sm:.8rem;--fs-xs:.72rem;
+    --fs-h1:1.22rem;--fs-h2:1rem;--fs-sec:.95rem;--fs-body:.9rem;--fs-sm:.8rem;--fs-xs:.72rem;
   }
   *{box-sizing:border-box}
-  body{margin:0;font-family:"Open Sans",-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--tinta);line-height:1.5;font-size:var(--fs-body)}
-  h1,h2,h3,button,.tabs a{font-family:"Montserrat","Open Sans",Arial,sans-serif}
-  header{background:var(--teal);color:#fff;padding:15px 16px}
-  .wrap{max-width:820px;margin:0 auto;padding:14px 16px}
+  body{margin:0;font-family:"Inter",-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--tinta);line-height:1.5;font-size:var(--fs-body);letter-spacing:-.011em;-webkit-font-smoothing:antialiased}
+  h1,h2,h3,button,.tabs a{font-family:"Inter",-apple-system,Segoe UI,Arial,sans-serif;letter-spacing:-.02em}
+  header{background:var(--card);color:var(--tinta);padding:11px 16px;border-bottom:1px solid var(--linha)}
+  .wrap{max-width:900px;margin:0 auto;padding:14px 16px}
   header .wrap{padding:0 16px;display:flex;align-items:center;gap:14px}
-  header .logo-box{background:#fff;border-radius:11px;padding:6px 10px;flex:none;box-shadow:0 2px 8px rgba(0,0,0,.12)}
-  header .logo-box img{height:26px;width:auto;display:block}
-  header h1{margin:0;font-size:var(--fs-h1);font-weight:700}
-  header p{margin:3px 0 0;opacity:.9;font-size:var(--fs-sm)}
-  .tabs{display:flex;flex-wrap:wrap;gap:8px;max-width:820px;margin:12px auto 0;padding:0 16px}
-  .tabs a{flex:1 1 84px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;line-height:1.1;text-decoration:none;font-weight:700;color:var(--cinza);background:#fff;border:1px solid var(--linha);border-radius:12px;padding:9px 6px}
-  .tabs a .tic{font-size:1.2rem;line-height:1}
-  .tabs a .ttx{font-size:.78rem}
+  header .logo-box{background:var(--teal);border-radius:10px;padding:5px 9px;flex:none;box-shadow:none}
+  header .logo-box img{height:22px;width:auto;display:block}
+  header h1{margin:0;font-size:var(--fs-h1);font-weight:600;color:var(--tinta)}
+  header p{margin:2px 0 0;color:var(--cinza);opacity:1;font-size:var(--fs-sm)}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;max-width:900px;margin:10px auto 0;padding:0 16px}
+  .tabs a{flex:1 1 84px;display:flex;align-items:center;justify-content:center;line-height:1.1;text-decoration:none;font-weight:500;color:var(--cinza);background:transparent;border:1px solid transparent;border-radius:10px;padding:9px 8px}
+  .tabs a .tic{display:none}
+  .tabs a .ttx{font-size:.86rem}
+  .tabs a:hover{color:var(--tinta);background:var(--linha-soft)}
   .tabs a.on{background:var(--teal);color:#fff;border-color:var(--teal)}
   /* Desktop: exibe na ordem SoFIA → WhatsApp → Instagram → Formulário → Perfis
      (no HTML a SoFIA fica por último para o destaque no mobile). */
@@ -257,16 +260,17 @@ const ESTILO = `
   input[type=text],input[type=tel],input[type=date],input[type=time],input[type=number],textarea{width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
   select{width:100%;max-width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:9px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
   textarea{line-height:1.5;resize:vertical}
-  input:focus,textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(17,171,174,.15)}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(14,110,107,.16)}
   .acts{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}
   button{border:none;border-radius:999px;padding:9px 18px;font-size:var(--fs-body);font-weight:700;cursor:pointer;font-family:inherit}
-  .save{background:var(--coral);color:#fff}
+  .save{background:var(--teal);color:#fff}
+  .save:hover{background:var(--teal-esc)}
   .reset,.rm{background:#fff;color:var(--cinza);border:1px solid #dcdcdc}
   .turnos{display:flex;gap:10px;margin-top:6px}
   .turnos label{flex:1;margin:0;display:block}
   .turnos input{position:absolute;opacity:0;pointer-events:none}
   .turnos span{display:block;text-align:center;border:1.5px solid #dcdcdc;border-radius:12px;padding:11px;font-weight:700;cursor:pointer;color:var(--tinta)}
-  .turnos input:checked + span{border-color:var(--teal);background:var(--teal-soft,#e6f6f7);color:#0c6f70}
+  .turnos input:checked + span{border-color:var(--teal);background:var(--teal-soft,#e4efee);color:#0c6f70}
   .fotorow{margin-top:12px}
   .chk{display:flex;align-items:center;gap:9px;font-weight:600;font-size:.9rem;cursor:pointer}
   .chk input{width:18px;height:18px}
@@ -282,7 +286,7 @@ const ESTILO = `
   .st-pendente{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-bd)}
   .st-enviado{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-bd)}
   .st-falha{background:var(--erro-bg);color:var(--erro);border-color:var(--erro-bd)}
-  .sec-t{font-family:"Montserrat";font-weight:700;font-size:var(--fs-sec);margin:15px 0 4px}
+  .sec-t{font-family:"Inter";font-weight:700;font-size:var(--fs-sec);margin:15px 0 4px}
   /* Seções recolhíveis (<details class="acc-sec">): o cabeçalho vira um cartão
      destacado e clicável, com chevron à direita e realce quando aberto — para
      não passar despercebido como uma linha de texto. */
@@ -314,7 +318,7 @@ const ESTILO = `
   .wa-hint{font-size:var(--fs-sm)}
   .wa-upd{text-align:center;color:var(--cinza);font-size:var(--fs-xs);margin-top:10px}
   .hsec{margin-top:14px;padding-top:14px;border-top:1px dashed var(--linha)}
-  .hsec-t{font-family:"Montserrat";font-weight:700;font-size:var(--fs-sm);color:var(--teal-esc);margin:0 0 10px}
+  .hsec-t{font-family:"Inter";font-weight:700;font-size:var(--fs-sm);color:var(--teal-esc);margin:0 0 10px}
   .hjob{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:14px 16px;margin:12px 0}
   .hjob h3{font-size:var(--fs-h2);margin:0 0 8px}
   .hrow{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end}
@@ -325,12 +329,12 @@ const ESTILO = `
   .dias label{margin:0}
   .dias input{position:absolute;opacity:0;pointer-events:none}
   .dias span{display:inline-block;min-width:40px;text-align:center;border:1.5px solid #dcdcdc;border-radius:9px;padding:7px 4px;font-size:.8rem;font-weight:700;cursor:pointer;color:var(--tinta)}
-  .dias input:checked + span{border-color:var(--teal);background:#e6f6f7;color:#0c6f70}
+  .dias input:checked + span{border-color:var(--teal);background:#e4efee;color:#0c6f70}
   .hbar{position:sticky;bottom:0;background:linear-gradient(180deg,transparent,var(--bg) 40%);padding:14px 0 6px;margin-top:6px}
   .badge-ed{background:var(--erro-bg);color:var(--erro);border:1px solid var(--erro-bd);border-radius:999px;font-size:var(--fs-xs);font-weight:700;padding:2px 8px;margin-left:6px}
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:14px 0}
   .stat{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:14px;text-align:center}
-  .stat .n{font-family:"Montserrat";font-weight:800;font-size:1.8rem;line-height:1}
+  .stat .n{font-family:"Inter";font-weight:800;font-size:1.8rem;line-height:1}
   .stat .l{font-size:var(--fs-xs);color:var(--cinza);margin-top:4px;font-weight:600}
   .stat.ok .n{color:var(--ok)}.stat.err .n{color:var(--erro)}.stat.tot .n{color:var(--teal)}
   .jobrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--linha)}
@@ -373,7 +377,7 @@ const ESTILO = `
   .ct-wrap{background:var(--card);border:1px solid var(--linha);border-radius:12px;overflow-x:auto;margin:10px 0}
   .ct-tab{width:100%;border-collapse:collapse;font-size:var(--fs-sm);table-layout:fixed}
   .ct-int-tab{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
-  .ct-int-tab th{text-align:left;font-family:"Montserrat";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;padding:9px 8px;border-bottom:1px solid var(--linha)}
+  .ct-int-tab th{text-align:left;font-family:"Inter";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;padding:9px 8px;border-bottom:1px solid var(--linha)}
   .ct-int-tab td{padding:10px 8px;border-bottom:1px solid var(--linha);vertical-align:middle}
   .ct-int-tab tr:last-child td{border-bottom:0}
   .ct-badge{display:inline-block;font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px}
@@ -381,7 +385,7 @@ const ESTILO = `
   .ct-badge.enc{background:#eef0f1;color:#6b6b70;border:1px solid #dfe1e3}
   .cpf-sec{border-top:1px solid var(--linha);margin-top:20px;padding-top:18px}
   .cpf-sec.first{border-top:0;margin-top:0;padding-top:0}
-  .cpf-h{font-family:"Montserrat";font-weight:700;font-size:var(--fs-sec);margin:0 0 14px;display:flex;align-items:center;gap:8px}
+  .cpf-h{font-family:"Inter";font-weight:700;font-size:var(--fs-sec);margin:0 0 14px;display:flex;align-items:center;gap:8px}
   .cpf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}
   .cpf-field label{display:block;font-weight:700;font-size:.8rem;margin:0 0 5px}
   .cpf-field .sub{font-weight:400;color:var(--cinza)}
@@ -402,7 +406,7 @@ const ESTILO = `
   .cfg-in input[type=number]{width:92px;flex:none}
   .cfg-in .suf{color:var(--cinza);font-size:var(--fs-sm)}
   .cpf-acc{border-top:1px solid var(--linha);margin-top:6px}
-  .cpf-sum{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:"Montserrat";font-weight:700;font-size:var(--fs-sec);padding:16px 0}
+  .cpf-sum{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:"Inter";font-weight:700;font-size:var(--fs-sec);padding:16px 0}
   .cpf-sum::-webkit-details-marker{display:none}
   .cpf-sum .sub{font-weight:400;font-size:.8rem}
   .cpf-sum::after{content:"▾";margin-left:auto;font-size:.9rem;color:var(--cinza);transition:transform .2s}
@@ -423,16 +427,16 @@ const ESTILO = `
   .tagbtn.on{border-color:var(--teal);color:var(--teal-esc);background:#eef7f7}
   @media(max-width:640px){ .tagrow form{flex-wrap:wrap} .tagrow input[type=text]{min-width:100%} }
   .cp-sec{margin:0 0 14px}
-  .cp-h{font-family:"Montserrat";font-weight:700;font-size:var(--fs-sm);margin:0 0 4px}
+  .cp-h{font-family:"Inter";font-weight:700;font-size:var(--fs-sm);margin:0 0 4px}
   .cp-list{max-height:200px;overflow-y:auto;border:1px solid var(--linha);border-radius:10px;padding:2px 12px}
   .cp-list>div:last-child{border-bottom:0}
   .ct-tab col.c-nome{width:32%}.ct-tab col.c-tel{width:21%}.ct-tab col.c-tags{width:31%}.ct-tab col.c-act{width:16%}
-  .ct-tab th{text-align:left;font-family:"Montserrat";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;letter-spacing:.03em;padding:11px 14px;border-bottom:1px solid var(--linha);white-space:nowrap;background:#fafbfb}
+  .ct-tab th{text-align:left;font-family:"Inter";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;letter-spacing:.03em;padding:11px 14px;border-bottom:1px solid var(--linha);white-space:nowrap;background:#fafbfb}
   .ct-tab td{padding:10px 14px;border-bottom:1px solid var(--linha);vertical-align:middle}
   .ct-tab tbody tr:last-child td{border-bottom:0}
   .ct-row{cursor:pointer;transition:background .12s}
   .ct-row:hover{background:#f6fbfb}
-  .ct-av{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex:none;border-radius:50%;color:#fff;font-weight:700;font-size:.78rem;font-family:"Montserrat"}
+  .ct-av{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex:none;border-radius:50%;color:#fff;font-weight:700;font-size:.78rem;font-family:"Inter"}
   .ct-nm{font-weight:700;color:var(--tinta);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
   .ct-tel{color:var(--cinza);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ct-acts{text-align:right;white-space:normal}
@@ -449,7 +453,7 @@ const ESTILO = `
   .ct-x{background:none;border:0;font-size:1.5rem;line-height:1;color:var(--cinza);cursor:pointer;padding:0 4px}
   .ct-hero{text-align:center;margin:0 0 16px}
   .ct-av-lg{width:76px;height:76px;font-size:1.5rem;margin:0 auto 8px}
-  .ct-hnome{font-family:"Montserrat";font-weight:700;font-size:1.05rem}
+  .ct-hnome{font-family:"Inter";font-weight:700;font-size:1.05rem}
   .ct-htel{color:var(--cinza);font-size:var(--fs-sm);font-variant-numeric:tabular-nums}
   .ct-dlg label{display:block;font-weight:700;font-size:var(--fs-sm);margin:0 0 5px}
   .ct-tglist{display:flex;flex-wrap:wrap;gap:7px}
@@ -482,12 +486,12 @@ function chrome(titSubtitulo, ativo, corpo) {
 <title>${esc(titSubtitulo.tab)} · SlimFit</title>
 <link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <style>${ESTILO}</style></head><body>
 <header><div class="wrap">
   <div class="logo-box"><img alt="SlimFit Studio" src="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/logo-com-contraste.svg"></div>
   <div style="flex:1"><h1>${esc(titSubtitulo.h1)}</h1><p>${titSubtitulo.p}</p></div>
-  ${_navSess ? `<div style="text-align:right;font-size:.82rem;white-space:nowrap"><div style="opacity:.92">👤 ${esc(_navSess.usuario)}</div><a href="/logout" style="color:#fff;font-weight:700;text-decoration:underline">Sair</a></div>` : ''}
+  ${_navSess ? `<div style="text-align:right;font-size:.82rem;white-space:nowrap"><div style="color:var(--cinza)">👤 ${esc(_navSess.usuario)}</div><a href="/logout" style="color:var(--teal-esc);font-weight:600;text-decoration:none">Sair</a></div>` : ''}
 </div></header>
 <nav class="tabs">
   ${navTabs(ativo)}
@@ -717,8 +721,8 @@ function blocoWaRobo() {
 
 // Sub-navegação da aba WhatsApp Mensagens: Configuração (mensagens/horários) x Agendamento (envios pontuais).
 function subnavMensagens(view) {
-  const base = 'display:inline-flex;align-items:center;justify-content:center;padding:6px 13px;border-radius:999px;font-weight:700;font-family:Montserrat,sans-serif;font-size:.8rem;text-decoration:none;border:1px solid #e8e8ea;white-space:nowrap';
-  const on = 'background:#11abae;color:#fff;border-color:#11abae';
+  const base = 'display:inline-flex;align-items:center;justify-content:center;padding:6px 13px;border-radius:999px;font-weight:700;font-family:"Inter",sans-serif;font-size:.8rem;text-decoration:none;border:1px solid #e8e8ea;white-space:nowrap';
+  const on = 'background:#0e6e6b;color:#fff;border-color:#0e6e6b';
   const off = 'background:#fff;color:#5c5960';
   const href = (v) => v === 'agendar' ? '/?view=agendar' : (v === 'hoje' ? '/hoje' : '/');
   const item = (v, rot) => `<a href="${href(v)}" style="${base};${view === v ? on : off}">${rot}</a>`;
@@ -1487,8 +1491,8 @@ function blocoSofiaWa() {
 
 // Sub-navegação da aba Sofia: Configuração (prompt/configs) x Conversas (inbox).
 function subnavSofia(view) {
-  const base = 'display:inline-flex;align-items:center;justify-content:center;padding:6px 13px;border-radius:999px;font-weight:700;font-family:Montserrat,sans-serif;font-size:.8rem;text-decoration:none;border:1px solid #e8e8ea;white-space:nowrap';
-  const on = 'background:#11abae;color:#fff;border-color:#11abae';
+  const base = 'display:inline-flex;align-items:center;justify-content:center;padding:6px 13px;border-radius:999px;font-weight:700;font-family:"Inter",sans-serif;font-size:.8rem;text-decoration:none;border:1px solid #e8e8ea;white-space:nowrap';
+  const on = 'background:#0e6e6b;color:#fff;border-color:#0e6e6b';
   const off = 'background:#fff;color:#5c5960';
   const item = (v, rot) => `<a href="/sofia${v === 'config' ? '' : '?view=' + v}" style="${base};${view === v ? on : off}">${rot}</a>`;
   const sess = _navSess || { admin: true, telas: [] };
@@ -1627,7 +1631,7 @@ function paginaSofiaConversas(aviso, erro) {
         if(gap>SESSAO_MS || manual) sep=divisor;
       }
       var mine = (m.autor!=='aluna');
-      var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e6f6f7');
+      var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e4efee');
       var img = m.foto ? '<img src="/sofia/humano-foto?arq='+encodeURIComponent(m.foto)+'" alt="foto enviada" style="display:block;max-width:100%;max-height:220px;border-radius:9px;margin:'+(m.texto?'6px 0 0':'2px 0 0')+';cursor:pointer" onclick="window.open(this.src,\\'_blank\\')">' : '';
       var corpoMsg = (m.texto?'<div style="white-space:pre-wrap">'+escH(m.texto)+'</div>':'') + img;
       return sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna))+' · '+fmtHora(m.em)+'</div>'+corpoMsg+'</div></div>';
@@ -1819,14 +1823,14 @@ function paginaSofiaConversas(aviso, erro) {
       var c=ultimoData[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
       var on=(k===selecionada);
       var pendente = !!(ult && ult.autor==='aluna'); // última foi da aluna → esperando resposta
-      var dot = pendente ? '<span title="aguardando resposta" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#11abae;flex:none"></span>' : '';
+      var dot = pendente ? '<span title="aguardando resposta" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#0e6e6b;flex:none"></span>' : '';
       var tgs=(c.tagsContato||[]).map(function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:0 7px;font-size:.64rem;margin-left:5px">'+escH(t)+'</span>';}).join('');
       var enc=encerrada(c)?'<span style="display:inline-block;background:#f3eaea;color:#a15a5a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🔒 encerrada</span>':'';
       var hb=c.humano?'<span style="display:inline-block;background:#e6f6ec;color:#1f8f52;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 você</span>':'';
       var fu=c.fuEspera?'<span title="Follow-up pronto, aguardando o horário permitido" style="display:inline-block;background:#fdf2e0;color:#b8770a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">⏳ follow-up '+escH(c.fuEspera)+'</span>':'';
       var nome='<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:'+(pendente?'700':'600')+';font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escH(c.nome||fmtTel(k))+'</span>'+dot+'</div>';
       var meta='<div class="quando" style="font-size:.72rem;margin:0;display:flex;align-items:center;flex-wrap:wrap;row-gap:3px">'+fmtHora(c.ultimaEm)+tgs+hb+enc+fu+'</div>';
-      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:7px 10px;border-radius:9px;margin-bottom:5px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':(encerrada(c)?'#fbf7f7':'#fff'))+'">'+nome+'<div class="quando" style="margin:0;font-size:.7rem">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
+      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:7px 10px;border-radius:9px;margin-bottom:5px;border:1px solid '+(on?'#0e6e6b':'#eee')+';background:'+(on?'#e4efee':(encerrada(c)?'#fbf7f7':'#fff'))+'">'+nome+'<div class="quando" style="margin:0;font-size:.7rem">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
     }).join('');
     if(pag){
       if(paginas>1){ pag.innerHTML='<div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center;align-items:center">'+setaPag('‹',pagina-1,pagina<=0)+pagNumsHtml(pagina,paginas)+setaPag('›',pagina+1,pagina>=paginas-1)+'</div><span class="quando" style="text-align:center;margin:0">Página '+(pagina+1)+' de '+paginas+' · '+total+' conversas</span>'; }
@@ -1891,7 +1895,7 @@ function paginaSofiaContatos(aviso, erro, params) {
 
   // Cores estáveis por texto (mesma tag/nome → mesma cor, no servidor e no navegador).
   const _hash = (s) => { let h = 0; s = String(s || ''); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
-  const PAL_TAG = [['#e6f6f7', '#0e8e91', '#b8e6e7'], ['#fdecea', '#c0392b', '#f5c6cb'], ['#eef9f2', '#1c8f52', '#cbe8d5'], ['#fff4e5', '#b26a00', '#ffe0b2'], ['#eef1fb', '#3b4fb0', '#d3dcf7'], ['#f3e9fb', '#7a3fb0', '#e2cff5'], ['#fce8f1', '#b0367a', '#f7cfe0']];
+  const PAL_TAG = [['#e4efee', '#0e8e91', '#b8e6e7'], ['#fdecea', '#c0392b', '#f5c6cb'], ['#eef9f2', '#1c8f52', '#cbe8d5'], ['#fff4e5', '#b26a00', '#ffe0b2'], ['#eef1fb', '#3b4fb0', '#d3dcf7'], ['#f3e9fb', '#7a3fb0', '#e2cff5'], ['#fce8f1', '#b0367a', '#f7cfe0']];
   const PAL_AV = ['#f39c12', '#3498db', '#9b59b6', '#1abc9c', '#e67e22', '#2ecc71', '#e74c3c', '#5567c9'];
   const corTag = (t) => PAL_TAG[_hash(t) % PAL_TAG.length];
   const corAv = (s) => PAL_AV[_hash(s) % PAL_AV.length];
@@ -2729,7 +2733,7 @@ function paginaSofia(aviso, erro) {
     return `<div class="card sec-card">
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
         <button type="button" class="reset secTog" onclick="toggleSecao(this)" title="Expandir/recolher" style="padding:6px 9px;flex:none">▸</button>
-        <input type="text" name="titulo[]" value="${esc(titulo)}" placeholder="TÍTULO DA SEÇÃO" style="flex:1;min-width:0;font-weight:700;font-family:Montserrat,sans-serif;font-size:.9rem">
+        <input type="text" name="titulo[]" value="${esc(titulo)}" placeholder="TÍTULO DA SEÇÃO" style="flex:1;min-width:0;font-weight:700;font-family:"Inter",sans-serif;font-size:.9rem">
         <button type="button" class="reset" onclick="moverSecao(this,-1)" title="Subir" style="padding:6px 9px;flex:none">↑</button>
         <button type="button" class="reset" onclick="moverSecao(this,1)" title="Descer" style="padding:6px 9px;flex:none">↓</button>
         <button type="button" class="reset" onclick="removerSecao(this)" title="Remover esta seção" style="padding:6px 10px;flex:none">🗑️</button>
@@ -2763,7 +2767,7 @@ function paginaSofia(aviso, erro) {
 
       <!-- Grupo 1 · Inteligência (modelo de IA + transcrição) -->
       <div class="card">
-        <div style="font-family:Montserrat,sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">🧠 Inteligência</div>
+        <div style="font-family:"Inter",sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">🧠 Inteligência</div>
         <p class="quando" style="margin:0 0 12px">Qual Claude a SoFIA usa e se ela entende áudios.</p>
         <div style="display:flex;gap:18px;flex-wrap:wrap">
           <div style="flex:1;min-width:240px">
@@ -2786,7 +2790,7 @@ function paginaSofia(aviso, erro) {
 
       <!-- Grupo 2 · Ritmo da conversa (humano/velocidade + agrupar + pausa celular) -->
       <div class="card">
-        <div style="font-family:Montserrat,sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">💬 Ritmo da conversa</div>
+        <div style="font-family:"Inter",sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">💬 Ritmo da conversa</div>
         <p class="quando" style="margin:0 0 12px">Como ela fala e o tempo até responder.</p>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="ritHumano" value="1"${e.ritmo.humano ? ' checked' : ''} style="width:auto;margin:0">
@@ -2825,7 +2829,7 @@ function paginaSofia(aviso, erro) {
 
       <!-- Grupo 3 · Memória e operação (sessão + verificação + limite) -->
       <div class="card">
-        <div style="font-family:Montserrat,sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">⚙️ Memória e operação</div>
+        <div style="font-family:"Inter",sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">⚙️ Memória e operação</div>
         <p class="quando" style="margin:0 0 12px">Duração da memória, saúde da conexão e limite de vagas por turma.</p>
         <div class="cfg-grid">
           <div>
@@ -2988,7 +2992,7 @@ function paginaSofia(aviso, erro) {
     // Nova seção já ENTRA ABERTA (o textarea visível) para você digitar de cara.
     div.innerHTML = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">'
       + '<button type="button" class="reset secTog" onclick="toggleSecao(this)" title="Expandir/recolher" style="padding:6px 9px;flex:none">▾</button>'
-      + '<input type="text" name="titulo[]" value="" placeholder="TÍTULO DA SEÇÃO" style="flex:1;min-width:0;font-weight:700;font-family:Montserrat,sans-serif;font-size:.9rem">'
+      + '<input type="text" name="titulo[]" value="" placeholder="TÍTULO DA SEÇÃO" style="flex:1;min-width:0;font-weight:700;font-family:"Inter",sans-serif;font-size:.9rem">'
       + '<button type="button" class="reset" onclick="moverSecao(this,-1)" title="Subir" style="padding:6px 9px;flex:none">↑</button>'
       + '<button type="button" class="reset" onclick="moverSecao(this,1)" title="Descer" style="padding:6px 9px;flex:none">↓</button>'
       + '<button type="button" class="reset" onclick="removerSecao(this)" title="Remover esta seção" style="padding:6px 10px;flex:none">🗑️</button>'
@@ -3007,13 +3011,13 @@ function paginaLogin(erro) {
 <title>Entrar · SlimFit</title>
 <link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <style>${ESTILO}
   .loginwrap{max-width:380px;margin:8vh auto;padding:16px}
   .loginwrap .logo-box{background:var(--teal);border-radius:14px;padding:14px 16px;text-align:center;margin-bottom:18px}
   .loginwrap .logo-box img{height:34px}
   .loginwrap .card{padding:22px}
-  .loginwrap h1{font-family:Montserrat;font-size:1.2rem;margin:0 0 4px;text-align:center}
+  .loginwrap h1{font-family:"Inter";font-weight:600;font-size:1.2rem;margin:0 0 4px;text-align:center;letter-spacing:-.02em}
   .loginwrap p.sub{color:var(--cinza);font-size:.86rem;text-align:center;margin:0 0 12px}
   .loginwrap button{width:100%;margin-top:16px}
 </style></head><body>
