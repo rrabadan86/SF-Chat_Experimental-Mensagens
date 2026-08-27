@@ -1540,12 +1540,23 @@ function paginaSofiaConversas(aviso, erro) {
   function renderChat(c,k){
     var chat=document.getElementById('convChat'); if(!chat) return;
     var msgs=c.msgs||[];
-    var bolhas = msgs.map(function(m){
+    // Divisória de SESSÃO: fica PERMANENTE no histórico entre uma conversa e a
+    // seguinte. Aparece quando o intervalo entre duas mensagens passa do Tempo de
+    // sessão (memória) OU quando houve encerramento manual (cadeado) entre elas.
+    var divisor='<div style="display:flex;align-items:center;gap:10px;margin:16px 2px 8px;color:#a15a5a"><span style="flex:1;height:1px;background:#e6cfcf"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap">🔒 Sessão encerrada · nova conversa</span><span style="flex:1;height:1px;background:#e6cfcf"></span></div>';
+    var bolhas = msgs.map(function(m,i){
+      var sep='';
+      if(i>0){
+        var ant=msgs[i-1];
+        var gap=(m.em||0)-(ant.em||0);
+        var manual=(c.encEm && (ant.em||0) < c.encEm && c.encEm <= (m.em||0));
+        if(gap>SESSAO_MS || manual) sep=divisor;
+      }
       var mine = (m.autor!=='aluna');
       var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e6f6f7');
       var img = m.foto ? '<img src="/sofia/humano-foto?arq='+encodeURIComponent(m.foto)+'" alt="foto enviada" style="display:block;max-width:100%;max-height:220px;border-radius:9px;margin:'+(m.texto?'6px 0 0':'2px 0 0')+';cursor:pointer" onclick="window.open(this.src,\\'_blank\\')">' : '';
       var corpoMsg = (m.texto?'<div style="white-space:pre-wrap">'+escH(m.texto)+'</div>':'') + img;
-      return '<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+autorRot(m.autor)+' · '+fmtHora(m.em)+'</div>'+corpoMsg+'</div></div>';
+      return sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+autorRot(m.autor)+' · '+fmtHora(m.em)+'</div>'+corpoMsg+'</div></div>';
     }).join('');
     var fim = encerrada(c) ? '<div style="text-align:center;margin:10px 0 2px"><span style="display:inline-block;background:#f3eaea;color:#a15a5a;border:1px solid #e6cfcf;border-radius:999px;padding:3px 12px;font-size:.72rem;font-weight:700">🔒 Sessão encerrada · a SoFIA recomeça do zero se a aluna voltar</span></div>' : '';
     var hum = !!c.humano;
@@ -3174,6 +3185,7 @@ const server = http.createServer((req, res) => {
     try { const hum = sofia.lerHumano(); for (const k in obj) obj[k].humano = !!hum[k]; } catch (_) {} // controle humano por conversa
     try { for (const k in obj) obj[k].bloq = sofia.estaBloqueado(k); } catch (_) {} // contato bloqueado?
     try { for (const k in obj) obj[k].enc = sofia.estaEncerrada(k, obj[k].ultimaEm); } catch (_) {} // encerrada à mão (cadeado)?
+    try { const em = sofia.lerEncerradas() || {}; for (const k in obj) obj[k].encEm = Number(em[k] || 0) || 0; } catch (_) {} // instante do encerramento manual (p/ a divisória)
     try { for (const k in obj) obj[k].fuEspera = fuEsperando[k] || ''; } catch (_) {} // follow-up pronto, segurando pelo horário?
     let wa = ''; try { wa = (sofia.waStatus() || {}).estado || ''; } catch (_) {} // online/off-line do WhatsApp da SoFIA
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
