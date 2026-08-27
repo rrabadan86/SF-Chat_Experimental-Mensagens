@@ -516,12 +516,14 @@ async function importarHistorico(porChat: number) {
     if (!pronta) { gravarImportStatus({ rodando: false, erro: "O WhatsApp da SoFIA não está conectado.", em: Date.now() }); return; }
     gravarImportStatus({ rodando: true, feitos: 0, total: 0, novos: 0, em: Date.now() });
     const chats = await lerChatsRaw(lim);
-    const alvos = chats.filter((c) => c.id && c.id.endsWith("@c.us"));
+    // lerChatsRaw já devolve o telefone/LID como `id` (só dígitos, sem @sufixo)
+    // e já filtrou para conversas de pessoa (sem grupos). Usamos direto.
+    const alvos = chats.filter((c) => c.id);
     let feitos = 0, novos = 0;
     for (const chat of alvos) {
       try {
-        const tel = jidParaTel(chat.id);
-        if (tel) {
+        const tel = String(chat.id).replace(/\D/g, "");
+        if (tel && tel.length >= 8) {
           const ex = inbox.get(tel);
           const acc: InboxMsg[] = ex ? ex.msgs.slice() : [];
           const seen = new Set(acc.map((m) => m.em + "|" + m.autor));
