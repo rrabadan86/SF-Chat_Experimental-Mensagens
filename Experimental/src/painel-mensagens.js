@@ -1880,11 +1880,33 @@ function paginaSofiaContatos(aviso, erro, params) {
       <p class="quando" id="loteHint" style="margin:8px 0 0">Nenhum marcado — vai aplicar aos <b>${r.total} contato(s) do filtro atual</b>. Marque as caixinhas na lista para agir só nos escolhidos. Ao <b>adicionar</b>, as regras de transição de funil da tag também valem.</p>
     </div>` : '';
 
-  const pag = r.paginas > 1 ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
-      <a class="reset" style="padding:6px 12px;${pagina <= 0 ? 'pointer-events:none;opacity:.4' : ''}" href="${qs(Math.max(0, pagina - 1))}">‹ Anterior</a>
-      <span class="quando">Página ${r.pagina + 1} de ${r.paginas} · ${r.total} contato(s)</span>
-      <a class="reset" style="padding:6px 12px;${pagina >= r.paginas - 1 ? 'pointer-events:none;opacity:.4' : ''}" href="${qs(Math.min(r.paginas - 1, pagina + 1))}">Próxima ›</a>
-    </div>` : '';
+  // Paginação com NÚMEROS (janela em torno da atual + 1ª/última + reticências),
+  // para saltar direto em vez de ir de 1 em 1. Ex.: ‹  1 … 4 [5] 6 … 11  ›
+  let pag = '';
+  if (r.paginas > 1) {
+    const cur = r.pagina, last = r.paginas - 1;
+    const nums = new Set([0, last, cur - 1, cur, cur + 1]);
+    if (cur <= 2) { nums.add(1); nums.add(2); nums.add(3); }             // início: mostra 1..4
+    if (cur >= last - 2) { nums.add(last - 1); nums.add(last - 2); nums.add(last - 3); } // fim
+    const paginasVis = [...nums].filter(p => p >= 0 && p <= last).sort((a, b) => a - b);
+    const numHtml = [];
+    let ant = -1;
+    for (const p of paginasVis) {
+      if (p - ant > 1) numHtml.push('<span class="quando" style="padding:0 2px">…</span>');
+      numHtml.push(p === cur
+        ? `<span class="save" style="padding:6px 11px;border-radius:8px;pointer-events:none">${p + 1}</span>`
+        : `<a class="reset" style="padding:6px 11px" href="${qs(p)}">${p + 1}</a>`);
+      ant = p;
+    }
+    pag = `<div style="display:flex;flex-direction:column;gap:8px;align-items:center;margin-top:12px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center">
+        <a class="reset" style="padding:6px 12px;${pagina <= 0 ? 'pointer-events:none;opacity:.4' : ''}" href="${qs(Math.max(0, pagina - 1))}">‹ Anterior</a>
+        ${numHtml.join('')}
+        <a class="reset" style="padding:6px 12px;${pagina >= last ? 'pointer-events:none;opacity:.4' : ''}" href="${qs(Math.min(last, pagina + 1))}">Próxima ›</a>
+      </div>
+      <span class="quando" style="margin:0">Página ${r.pagina + 1} de ${r.paginas} · ${r.total} contato(s)</span>
+    </div>`;
+  }
 
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
