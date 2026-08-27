@@ -521,6 +521,32 @@ function iniciarTesteInstagramWatcher() {
   log('🧪 Watcher de "DM de teste" do Instagram ativo (a cada 5s).');
 }
 
+// Ponte de "forçar boas-vindas do IG agora" (painel). Roda o job completo na
+// hora, respeitando jobRunning (não roda junto com outro job).
+function iniciarForcarIgWatcher() {
+  const igf = require('./ig-forcar');
+  let ocupado = false;
+  const t = setInterval(async () => {
+    if (ocupado || jobRunning) return;
+    const st = igf.estado();
+    if (!st || st.status !== 'pendente') return;
+    ocupado = true; jobRunning = true;
+    igf.marcar('executando');
+    log('▶️  Boas-vindas do IG FORÇADAS pelo painel — iniciando…');
+    const limite = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo esgotado (o navegador do Instagram demorou demais)')), 900000));
+    try {
+      await Promise.race([require('./instagram-boasvindas').runBoasVindas(), limite]);
+      igf.marcar('concluido');
+      log('▶️  Boas-vindas do IG (forçadas) concluídas.');
+    } catch (e) {
+      igf.marcar('falha', { erro: (e && e.message) || String(e) });
+      log(`▶️  Boas-vindas do IG (forçadas) falharam: ${e && e.message}`);
+    } finally { ocupado = false; jobRunning = false; }
+  }, 4000);
+  if (t.unref) t.unref();
+  log('▶️  Watcher de "forçar boas-vindas IG" ativo (a cada 4s).');
+}
+
 // ─── Main ──────────────────────────────────────────────────
 async function main() {
   console.log(`\n🏋️  ${config.STUDIO_NOME} — Confirmação de Aula Experimental`);
@@ -558,6 +584,8 @@ async function main() {
   iniciarTesteWatcher(wa);
   // Ponte de "DM de teste" do Instagram (lê data/teste-instagram.json).
   iniciarTesteInstagramWatcher();
+  // Ponte de "forçar boas-vindas do IG agora" (lê data/ig-forcar.json).
+  iniciarForcarIgWatcher();
 
   // ─── Verifica jobs perdidos antes de agendar ─────────────
   // (lê o registro ANTES de marcar que estamos vivos agora)

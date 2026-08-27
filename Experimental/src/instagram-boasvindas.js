@@ -73,6 +73,16 @@ function salvarEnviados(set) {
 // tentativas e, ao atingir IG_MAX_TENTATIVAS_INDISP (padrão 2), paramos de
 // tentar — assim elas não desperdiçam as vagas do dia.
 const INDISP_FILE = path.join(DATA_DIR, 'instagram-indisponiveis.json');
+// Saúde REAL da sessão, aferida na execução: se coletou seguidores, a sessão
+// está viva; se coletou 0 (parede de login), caiu. O painel lê isto para mostrar
+// o estado de verdade — não só "ligado/desligado".
+const SESSAO_FILE = path.join(DATA_DIR, 'instagram-sessao.json');
+function marcarSessao(ok, motivo) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(SESSAO_FILE, JSON.stringify({ ok: !!ok, motivo: motivo || '', em: new Date().toISOString() }), 'utf8');
+  } catch (_) { /* best-effort */ }
+}
 const MAX_TENT_INDISP = parseInt(process.env.IG_MAX_TENTATIVAS_INDISP || '2', 10);
 function carregarIndisp() {
   try { if (fs.existsSync(INDISP_FILE)) return JSON.parse(fs.readFileSync(INDISP_FILE, 'utf8')) || {}; } catch (_) {}
@@ -427,10 +437,12 @@ async function main() {
     console.log(`\n✅ Seguidores coletados: ${atuais.length}`);
 
     if (atuais.length === 0) {
+      marcarSessao(false, 'coletou 0 seguidores (provável parede de login — sessão caiu)');
       console.log('\n⚠️  Coletou 0 seguidores — algo deu errado (login? perfil? rede?).');
       console.log('   NÃO vou salvar base vazia nem enviar nada.\n');
       return;
     }
+    marcarSessao(true, ''); // coletou seguidores → sessão viva
 
     // 2. Descobre os novos
     const conhecidos = carregarConhecidos();

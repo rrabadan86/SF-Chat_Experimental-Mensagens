@@ -47,6 +47,9 @@ data/indicadores.json
 data/bookings.json
 # DM de teste do Instagram (ponte painel<->robo) — por VPS
 data/teste-instagram.json
+# Forçar boas-vindas do IG agora (ponte painel<->robo) + saúde da sessão — por VPS
+data/ig-forcar.json
+data/instagram-sessao.json
 # Fotos (flyers) das mensagens (Circuito/Aniversario) — por VPS
 data/mensagens-fotos/
 # Contatos (CRM) — dado pessoal, por VPS, NÃO versionar

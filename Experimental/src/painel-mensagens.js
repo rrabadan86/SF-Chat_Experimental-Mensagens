@@ -24,6 +24,7 @@ const atividade = require('./atividade');
 const teste = require('./teste-envio');
 const igcfg = require('./instagram-config');
 const igcookies = require('./instagram-cookies');
+const igforcar = require('./ig-forcar');
 const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
 const bookings = require('./bookings');
@@ -1025,6 +1026,16 @@ function paginaInstagram(aviso, erro) {
     : ck.existe
       ? '⚠️ Há cookies salvos, mas <b>sem o sessionid</b> — reimporte estando logada.'
       : '⚠️ Nenhum cookie salvo — a sessão do Instagram depende deles. Cole abaixo para (re)conectar.';
+  // Saúde REAL da sessão (aferida na última execução do robô): coletou seguidoras
+  // = viva; coletou 0 = caiu (parede de login). É diferente de "ligado".
+  const sessIg = lerJsonData('instagram-sessao.json');
+  const sessQuando = (sessIg && sessIg.em) ? new Date(sessIg.em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '';
+  const sessTxt = sessIg
+    ? (sessIg.ok
+        ? `✅ Sessão verificada e <b>ativa</b> na última execução (${esc(sessQuando)}).`
+        : `⚠️ <b>A sessão do Instagram caiu</b> na última execução (${esc(sessQuando)}) — coletou 0 seguidoras (parede de login). <b>Reimporte os cookies</b> abaixo.`)
+    : 'ℹ️ Sessão ainda não verificada por uma execução — use “Enviar agora” abaixo para testar.';
+  const sessCor = sessIg ? (sessIg.ok ? 'var(--ok)' : 'var(--erro)') : 'var(--cinza)';
   const rel = lerJsonData('instagram-envios.json');
   const indisp = lerJsonData('instagram-indisponiveis.json') || {};
   const enviados = lerJsonData('instagram-enviados.json');
@@ -1056,6 +1067,13 @@ function paginaInstagram(aviso, erro) {
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${statusCard}
+
+    <div class="card" style="border-left:4px solid ${sessCor}">
+      <p class="quando" style="margin:0 0 12px;font-size:.9rem">${sessTxt}</p>
+      <button type="button" class="save" onclick="forcarIg()" id="btnForcarIg" style="padding:9px 16px">▶️ Enviar boas-vindas agora</button>
+      <p class="quando" style="margin:8px 0 0">Dispara o envio <b>na hora</b> (não espera as 07:00) e <b>testa a sessão</b>: se ela tiver caído, a execução coleta 0 seguidoras e avisa aqui.</p>
+      <p id="forcarIgMsg" class="quando" style="margin:10px 0 0;font-weight:700"></p>
+    </div>
 
     <div class="sec-t">🍪 Sessão do Instagram (cookies)</div>
     <div class="card">
@@ -1110,7 +1128,31 @@ function paginaInstagram(aviso, erro) {
 
     <p class="quando" style="text-align:center">Fonte do liga/desliga: <b>${fonte === 'painel' ? 'painel' : '.env (IG_ENABLED)'}</b>. Mudar aqui vale no próximo disparo — sem reiniciar.</p>
   </div>
-  ${scriptPreviewTeste()}`;
+  ${scriptPreviewTeste()}
+  <script>
+  function forcarIg(){
+    var b=document.getElementById('btnForcarIg'), m=document.getElementById('forcarIgMsg');
+    if(!confirm('Disparar as boas-vindas do Instagram AGORA?')) return;
+    if(b) b.disabled=true; if(m) m.textContent='⏳ Enviando o pedido ao robô…';
+    fetch('/instagram/forcar',{method:'POST'}).then(function(r){return r.json();}).then(function(j){
+      if(!j||!j.ok){ if(m) m.textContent='❌ '+((j&&j.erro)||'não consegui pedir'); if(b) b.disabled=false; return; }
+      pollForcarIg();
+    }).catch(function(){ if(m) m.textContent='❌ erro de rede'; if(b) b.disabled=false; });
+  }
+  function pollForcarIg(){
+    var b=document.getElementById('btnForcarIg'), m=document.getElementById('forcarIgMsg');
+    fetch('/instagram/forcar/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(st){
+      st=st||{};
+      if(st.status==='pendente'){ if(b)b.disabled=true; if(m) m.textContent='⏳ Na fila do robô…'; setTimeout(pollForcarIg,3000); }
+      else if(st.status==='executando'){ if(b)b.disabled=true; if(m) m.textContent='🚀 Enviando… o navegador do Instagram está rodando (pode levar alguns minutos).'; setTimeout(pollForcarIg,4000); }
+      else if(st.status==='concluido'){ if(b)b.disabled=false; if(m) m.innerHTML='✅ Concluído! Veja o resultado em <b>Última execução</b> abaixo — atualize a página.'; }
+      else if(st.status==='falha'){ if(b)b.disabled=false; if(m) m.textContent='❌ Falhou: '+(st.erro||'erro')+'. Se for login/sessão, reimporte os cookies abaixo.'; }
+      else { if(b)b.disabled=false; if(m) m.textContent=''; }
+    }).catch(function(){ setTimeout(pollForcarIg,4000); });
+  }
+  // Se já houver um envio em andamento (recarregou a página), retoma o acompanhamento.
+  (function(){ fetch('/instagram/forcar/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(st){ if(st&&(st.status==='pendente'||st.status==='executando')) pollForcarIg(); }).catch(function(){}); })();
+  </script>`;
   return chrome({ tab: 'Instagram', h1: '📸 Instagram', p: 'Status, liga/desliga, limite, mensagem e horário — tudo do Instagram aqui.' }, 'ig', corpo);
 }
 
@@ -3364,6 +3406,16 @@ const server = http.createServer((req, res) => {
     const p = testeIg.ler(id);
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     return res.end(JSON.stringify(p ? { status: p.status, erro: p.erro } : { status: 'desconhecido' }));
+  }
+  // Forçar as boas-vindas do IG agora (o robô, que tem o navegador, executa).
+  if (req.method === 'POST' && url === '/instagram/forcar') {
+    try { const st = igforcar.pedir(); res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: true, status: st.status })); }
+    catch (e) { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: false, erro: e.message })); }
+  }
+  if (req.method === 'GET' && url === '/instagram/forcar/status') {
+    const st = igforcar.estado() || {};
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ status: st.status || 'nenhum', erro: st.erro || '' }));
   }
   if (req.method === 'POST' && url === '/instagram/cookies') {
     return lerCorpo(req, 4e6, corpo => { // cookies podem somar alguns KB
