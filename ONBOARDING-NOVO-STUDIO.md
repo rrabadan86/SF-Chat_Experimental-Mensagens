@@ -25,40 +25,43 @@ Tempo estimado por studio: **~30–40 min** (fora a espera de propagação de DN
 
 ## Passo a passo
 
-### 1) Preparar o VPS
-```bash
-# Node + ferramentas (exemplo Ubuntu)
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs git chromium-browser
-sudo npm i -g pm2 tsx
-```
-
-### 2) Clonar o repositório
+### 1) Clonar o repositório
+Num VPS Debian/Ubuntu novo (o script instala o resto):
 ```bash
 git clone https://github.com/rrabadan86/SF-Chat_Experimental-Mensagens.git
 cd SF-Chat_Experimental-Mensagens/Experimental
 ```
 
-### 3) Rodar o setup (instala + monta os `.env` com segredos)
+### 2) Preparar tudo (instala sistema + deps + monta os `.env`)
 ```bash
-bash setup-novo-studio.sh --slug lagosul --studio "Studio SlimFit Lago Sul"
+bash setup-novo-studio.sh --slug lagosul --studio "Studio SlimFit Lago Sul" --install-deps
 ```
-Ele instala as dependências, cria a pasta de dados (`SOFIA_DIR`, fora do repo) e
-gera **`Experimental/.env`** e **`ChatBot/.env`** já com segredos aleatórios
-(sessão do painel, tokens do formulário). Anote a **senha do painel** que ele
-imprime.
+O `--install-deps` instala **Node 20, git, Chromium, python3-venv, pm2 e tsx**;
+depois o script instala as dependências do projeto (Node + Python num venv), cria
+a pasta de dados (`SOFIA_DIR`, fora do repo) e gera **`Experimental/.env`** e
+**`ChatBot/.env`** já com **segredos aleatórios**. Anote a **senha do painel**
+que ele imprime.
 
-> O script **nunca sobrescreve** um `.env` que já exista.
+> Sem `--install-deps`, o script assume que Node/pm2/tsx/Chromium já existem.
+> Ele **nunca sobrescreve** um `.env` que já exista.
 
-### 4) Preencher os campos `[POR STUDIO]`
+### 3) Preencher os campos `[POR STUDIO]`
 Edite os dois `.env` (o script diz exatamente quais campos):
 
-- **`Experimental/.env`** → `EVO_DNS`, `EVO_TOKEN`, `EVO_ACTIVITY`/`EVO_SERVICE`
-  (ou os `_ID`), `FORM_CLOUD_URL`, `ZEE_STUDIO_PHONE`.
+- **`Experimental/.env`** → `EVO_DNS`, `EVO_TOKEN`, `FORM_CLOUD_URL`, `ZEE_STUDIO_PHONE`.
 - **`ChatBot/.env`** → `ANTHROPIC_API_KEY`, `SOFIA_BOOK_URL` (o form do studio).
 - **Confira que `SOFIA_DIR` é IGUAL nos dois arquivos.**
 
 Modelos completos e comentados: `Experimental/.env.example` e `ChatBot/.env.example`.
+
+### 4) Descobrir os ids da aula no EVO (opcional)
+Com o EVO já preenchido no `.env`:
+```bash
+bash setup-novo-studio.sh --slug lagosul --evo-ids
+```
+Mostra os serviços/atividades de aula experimental com seus **ids** — copie para
+`EVO_SERVICE_ID` / `EVO_ACTIVITY_ID` no `.env` (ou use os nomes em `EVO_SERVICE` /
+`EVO_ACTIVITY`).
 
 ### 5) Formulário (Render)
 Faça um novo deploy do repositório do formulário para este studio e configure,
@@ -68,13 +71,16 @@ no ambiente da Render, **os mesmos tokens** que estão nos `.env` do VPS:
 - `SOFIA_TOKEN` = igual ao do `ChatBot/.env` (agendamento pela SoFIA).
 - O EVO do formulário aponta para o EVO **do novo studio**.
 
-### 6) Subir os processos
+### 6) Subir tudo — com HTTPS automático
 ```bash
-bash setup-novo-studio.sh --slug lagosul --start
+bash setup-novo-studio.sh --slug lagosul --start --domain painel-lagosul.seu-dominio
 pm2 startup    # rode a linha que ele imprimir (sobe sozinho após reboot)
 ```
-Sobem três processos: **`lagosul-painel`**, **`lagosul-exp`** (agendador) e
-**`lagosul-sofia`** (chatbot).
+Sobem três processos (**`lagosul-painel`**, **`lagosul-exp`**, **`lagosul-sofia`**)
+e o `--domain` gera o bloco do Caddy, liga no `/etc/caddy/Caddyfile` e recarrega
+(HTTPS automático). **Aponte o DNS** desse subdomínio para o IP do VPS — o Caddy
+emite o certificado sozinho. (Sem `--domain`, o painel fica em `localhost:8080`
+e você liga o HTTPS depois.)
 
 ### 7) Ler os QRs dos 2 WhatsApp
 ```bash
@@ -84,16 +90,7 @@ pm2 logs lagosul-sofia   # QR do WhatsApp da SoFIA (atendimento)
 Escaneie cada QR com o celular do número correspondente. As sessões ficam
 salvas (não precisa repetir).
 
-### 8) HTTPS do painel
-Aponte um subdomínio para o VPS e configure o Caddy como reverse-proxy para a
-porta do painel (`PAINEL_PORT`, padrão 8080). Ex.:
-```
-painel-lagosul.seu-dominio: {
-    reverse_proxy 127.0.0.1:8080
-}
-```
-
-### 9) Ajustes finos no painel
+### 8) Ajustes finos no painel
 Entre no painel (usuário `admin` + a senha gerada) e ajuste, sem tocar em código:
 o **roteiro da SoFIA**, **preços/grade** (imagens), **mensagens** de confirmação
 e follow-up, **limite de experimentais por turma**, e crie os **usuários** do
