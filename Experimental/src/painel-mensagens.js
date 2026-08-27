@@ -218,19 +218,17 @@ const ESTILO = `
   *{box-sizing:border-box}
   body{margin:0;font-family:"Inter",-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--tinta);line-height:1.5;font-size:var(--fs-body);letter-spacing:-.011em;-webkit-font-smoothing:antialiased}
   h1,h2,h3,button,.tabs a{font-family:"Inter",-apple-system,Segoe UI,Arial,sans-serif;letter-spacing:-.02em}
-  header{background:var(--card);color:var(--tinta);padding:11px 16px;border-bottom:1px solid var(--linha)}
   .wrap{max-width:900px;margin:0 auto;padding:14px 16px}
-  header .wrap{padding:0 16px;display:flex;align-items:center;gap:14px}
-  header .logo-box{background:transparent;border-radius:0;padding:0;flex:none;box-shadow:none}
-  header .logo-box img{height:52px;width:auto;display:block}
-  /* Cabeçalho enxuto: só logo + login. Usuário e "Sair" empurrados à direita. */
+  /* Barra superior ÚNICA e FIXA: logo + menu + login (sem a faixa branca separada). */
+  .topbar{position:sticky;top:0;z-index:60;background:var(--card);border-bottom:1px solid var(--linha)}
+  .topbar .in{max-width:900px;margin:0 auto;padding:8px 16px;display:flex;align-items:center;gap:16px}
+  .tb-logo{height:38px;width:auto;flex:none;display:block}
   .hdr-user{display:flex;align-items:center;gap:12px;font-size:.82rem;white-space:nowrap;flex:none;margin-left:auto}
   .hdr-user span{color:var(--cinza)}
   .hdr-user a{color:var(--teal-esc);font-weight:600;text-decoration:none}
   .hdr-user a:hover{text-decoration:underline}
-  @media(max-width:560px){.hdr-tit p{flex-basis:100%}}
-  .tabs{display:flex;flex-wrap:wrap;gap:6px;max-width:900px;margin:10px auto 0;padding:0 16px}
-  .tabs a{flex:1 1 84px;display:flex;align-items:center;justify-content:center;line-height:1.1;text-decoration:none;font-weight:500;color:var(--cinza);background:transparent;border:1px solid transparent;border-radius:10px;padding:9px 8px}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;flex:1 1 auto;justify-content:center;margin:0;padding:0}
+  .tabs a{flex:0 1 auto;display:flex;align-items:center;justify-content:center;line-height:1.1;text-decoration:none;font-weight:500;color:var(--cinza);background:transparent;border:1px solid transparent;border-radius:10px;padding:9px 14px}
   .tabs a .tic{display:none}
   .tabs a .ttx{font-size:.86rem}
   .tabs a:hover{color:var(--tinta);background:var(--linha-soft)}
@@ -244,10 +242,13 @@ const ESTILO = `
     .tabs .nav-ind{order:4}
     .tabs .nav-perfis{order:5}
   }
-  /* No mobile: a barra de abas fica GRUDADA no topo ao rolar (o cabeçalho da
-     logo pode sair da tela). Só as abas ficam fixas. */
+  /* Mobile: logo + login na 1ª linha; o menu ocupa a linha inteira logo abaixo.
+     A barra inteira continua fixa ao rolar. */
   @media(max-width:760px){
-    .tabs{position:sticky;top:0;z-index:50;margin-top:0;padding:8px 12px 10px;background:var(--bg);box-shadow:0 4px 12px -6px rgba(0,0,0,.22)}
+    .topbar .in{flex-wrap:wrap;gap:8px 12px;padding:8px 12px}
+    .tb-logo{height:30px}
+    .tabs{flex-basis:100%;order:3}
+    .tabs a{flex:1 1 84px;padding:9px 8px}
   }
   /* Sub-menu: mesmas pílulas do menu principal, em escala menor (secundário). */
   .subtabs{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 18px}
@@ -497,13 +498,11 @@ function chrome(titSubtitulo, ativo, corpo) {
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <style>${ESTILO}</style></head><body>
-<header><div class="wrap">
-  <div class="logo-box"><img alt="SlimFit Studio" src="https://drive.google.com/thumbnail?id=1pl1mh709FGcitG9uHo0J6nzMUKFYqg-w&sz=w400"></div>
+<nav class="topbar"><div class="in">
+  <img class="tb-logo" alt="SlimFit Studio" src="https://drive.google.com/thumbnail?id=1pl1mh709FGcitG9uHo0J6nzMUKFYqg-w&sz=w400">
+  <div class="tabs">${navTabs(ativo)}</div>
   ${_navSess ? `<div class="hdr-user"><span>👤 ${esc(_navSess.usuario)}</span><a href="/logout">Sair</a></div>` : ''}
-</div></header>
-<nav class="tabs">
-  ${navTabs(ativo)}
-</nav>
+</div></nav>
 ${corpo}
 <footer>SlimFit · painel do Studio</footer>
 <script>
