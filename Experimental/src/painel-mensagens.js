@@ -3280,7 +3280,7 @@ function paginaSofiaFunil(params) {
     ${subnavSofia('funil')}
     <div class="sec-t">Funil da SoFIA <small style="font-weight:600;color:var(--cinza)">(conversas que viraram agendamento)</small></div>
     <div class="segs">${segs}</div>
-    <form method="GET" action="/sofia" class="filtro-datas" style="margin:0 0 14px;flex-wrap:wrap">
+    <form method="GET" action="/sofia" class="filtro-datas" style="flex-wrap:wrap">
       <input type="hidden" name="view" value="funil">
       <span class="filtro-lbl" style="align-self:center">Período personalizado</span>
       <input type="date" name="de" value="${esc(params.de || '')}">
@@ -3339,7 +3339,7 @@ function paginaSofiaCusto(aviso, erro, params) {
     <div class="sec-t">Custo da IA <small style="font-weight:600;color:var(--cinza)">(gasto das conversas da SoFIA)</small></div>
     ${alerta}
     <div class="segs">${segs}</div>
-    <form method="GET" action="/sofia" class="filtro-datas" style="margin:0 0 14px;flex-wrap:wrap">
+    <form method="GET" action="/sofia" class="filtro-datas" style="flex-wrap:wrap">
       <input type="hidden" name="view" value="custo">
       <span class="filtro-lbl" style="align-self:center">Período personalizado</span>
       <input type="date" name="de" value="${esc(params.de || '')}">
