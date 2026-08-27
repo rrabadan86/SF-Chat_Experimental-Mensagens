@@ -451,43 +451,50 @@ async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
   // injeta um helper "__name" nas funções nomeadas que NÃO existe no navegador
   // (ReferenceError: __name is not defined ao rodar via page.evaluate). Em string,
   // o esbuild não transforma nada, então o código roda intacto na página.
-  const code = "(function(LIM){\n"
-    + "  var W = window;\n"
-    + "  function acharChatStore(){\n"
-    + "    var tent = [\n"
-    + "      function(){ return W.Store && W.Store.Chat; },\n"
-    + "      function(){ return W.WWebJS && W.WWebJS.Store && W.WWebJS.Store.Chat; },\n"
-    + "      function(){ return W.Store && W.Store.default && W.Store.default.Chat; }\n"
-    + "    ];\n"
-    + "    for (var i=0;i<tent.length;i++){ try { var v=tent[i](); if (v && (v.getModelsArray||v.models)) return v; } catch(e){} }\n"
-    + "    try { var mr=W.mR||W.moduleRaid; if(mr&&mr.findModule){ var mods=mr.findModule(function(m){return m&&m.Chat&&(m.Chat.getModelsArray||m.Chat.models);}); if(mods&&mods[0]&&mods[0].Chat) return mods[0].Chat; } } catch(e){}\n"
-    + "    return null;\n"
+  // Nesta versão o WhatsApp NÃO expõe window.Store, mas expõe window.WWebJS
+  // (com getChats/getChat/getContacts). O getChats() de uma vez estoura ("r")
+  // quando UMA conversa não serializa. Então: tentamos getChats(); se falhar,
+  // caímos para buscar conversa por conversa (getContacts → getChat) com
+  // try/catch — assim uma ruim não derruba as outras. Código em STRING para o
+  // esbuild não injetar o helper __name (que não existe no navegador).
+  const code = "(async function(LIM){\n"
+    + "  var W = window, WJ = W.WWebJS;\n"
+    + "  if(!WJ) return { erro:'WWebJS indisponivel nesta versao.' };\n"
+    + "  function norm(x){ return (x && (x._serialized || x)) || ''; }\n"
+    + "  var chats = null, via='getChats', cts;\n"
+    + "  try { if (WJ.getChats) chats = await WJ.getChats(); } catch(e){ chats = null; }\n"
+    + "  if(!(chats && chats.length)){\n"
+    + "    via='perContato'; chats=[]; cts=[];\n"
+    + "    try { if (WJ.getContacts) cts = await WJ.getContacts(); } catch(e){ cts=[]; }\n"
+    + "    var t0=Date.now();\n"
+    + "    for (var i=0;i<cts.length;i++){\n"
+    + "      if (Date.now()-t0 > 120000) { via='perContato(parcial)'; break; }\n"
+    + "      try {\n"
+    + "        var idc = String(norm(cts[i] && cts[i].id));\n"
+    + "        if (idc.indexOf('@c.us') < 0) continue;\n"
+    + "        var ch=null; try { ch = await WJ.getChat(idc); } catch(e){ ch=null; }\n"
+    + "        if (ch) chats.push(ch);\n"
+    + "      } catch(e){}\n"
+    + "    }\n"
     + "  }\n"
-    + "  var ChatStore = acharChatStore();\n"
-    + "  if(!ChatStore){\n"
-    + "    var diag={ hasStore: !!W.Store, hasWWebJS: !!W.WWebJS, hasMR: !!(W.mR||W.moduleRaid) };\n"
-    + "    try { diag.storeKeys = W.Store ? Object.keys(W.Store).slice(0,60) : []; } catch(e){ diag.storeKeys='?'; }\n"
-    + "    try { diag.wwebjsKeys = W.WWebJS ? Object.keys(W.WWebJS).slice(0,60) : []; } catch(e){ diag.wwebjsKeys='?'; }\n"
-    + "    try { diag.winKeys = Object.keys(W).filter(function(k){return /store|wweb|moduleraid|^mr$/i.test(k);}).slice(0,60); } catch(e){}\n"
-    + "    return { erro: 'Nao achei a lista de conversas (Store.Chat).', diag: diag };\n"
-    + "  }\n"
-    + "  var arr = ChatStore.getModelsArray ? ChatStore.getModelsArray() : (ChatStore.models||[]);\n"
     + "  var out=[];\n"
-    + "  for (var j=0;j<arr.length;j++){\n"
+    + "  for (var j=0;j<chats.length;j++){\n"
     + "    try {\n"
-    + "      var c=arr[j]; var idObj=c&&c.id;\n"
-    + "      var id = idObj ? (idObj._serialized || (idObj.user ? idObj.user+'@'+(idObj.server||'c.us') : '')) : '';\n"
-    + "      if(!id) continue;\n"
-    + "      var name = (c && (c.formattedTitle || c.name || (c.contact && (c.contact.pushname||c.contact.name||c.contact.formattedName)))) || '';\n"
-    + "      var t = (c && (c.t||0)) || 0;\n"
-    + "      var models=[]; try { models = (c.msgs && (c.msgs.getModelsArray ? c.msgs.getModelsArray() : c.msgs._models)) || []; } catch(e){ models=[]; }\n"
-    + "      var msgs = models.slice(-LIM).map(function(m){ return { fromMe: !!(m&&m.id&&m.id.fromMe), body: (m&&(m.body||m.caption||''))||'', t: (m&&m.t)||0 }; });\n"
+    + "      var c=chats[j]; var id=String(norm(c && c.id));\n"
+    + "      if(!id || id.indexOf('@c.us')<0) continue;\n"
+    + "      var name = (c && (c.name || c.formattedTitle || (c.contact && (c.contact.pushname||c.contact.name||c.contact.formattedName)))) || '';\n"
+    + "      var t = (c && (c.timestamp || c.t)) || 0;\n"
+    + "      var msgs=[];\n"
+    + "      var lm = c && c.lastMessage;\n"
+    + "      if (lm && (lm.body || lm.t || lm.timestamp)) { msgs.push({ fromMe: !!((lm.id && lm.id.fromMe) || lm.fromMe), body: (lm.body||lm.caption||'')||'', t: (lm.t||lm.timestamp||t)||0 }); }\n"
     + "      out.push({ id: id, name: name, t: t, msgs: msgs });\n"
     + "    } catch(e){}\n"
     + "  }\n"
-    + "  return { chats: out };\n"
+    + "  if(!out.length){ return { erro:'Nao consegui montar a lista (0 conversas).', diag:{ via:via, wjGetChats:!!WJ.getChats, wjGetContacts:!!WJ.getContacts, wjGetChat:!!WJ.getChat, contatos:(typeof cts!=='undefined'?cts.length:-1) } }; }\n"
+    + "  return { chats: out, via: via };\n"
     + "})(" + LIM + ")";
   const r: any = await page.evaluate(code);
+  if (r && r.via) log(`import: leitura via ${r.via} (${(r.chats && r.chats.length) || 0} conversas).`);
   if (r && r.erro) throw new Error(r.erro + (r.diag ? " Diag: " + JSON.stringify(r.diag) : ""));
   return (r && r.chats) || [];
 }
