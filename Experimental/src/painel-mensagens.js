@@ -275,6 +275,17 @@ const ESTILO = `
   .filtro-datas input[type=date]{flex:1 1 0;min-width:0;font-size:.78rem;padding:7px 9px;border:1px solid var(--linha);border-radius:8px;background:#fff;color:var(--tinta)}
   .filtro-datas .ate{font-size:.75rem;color:var(--cinza);flex:none}
   .filtro-limpar{flex:none;padding:6px 10px;font-size:.9rem;line-height:1}
+  /* Heatmap dos Indicadores: acessos por dia × hora. */
+  .hm-scroll{overflow-x:auto;padding-bottom:4px}
+  .hm-grid{display:grid;grid-template-columns:34px repeat(24,minmax(22px,1fr));gap:2px;min-width:560px}
+  .hm-hlbl{font-size:.56rem;color:var(--faint);text-align:center;padding-bottom:2px;font-variant-numeric:tabular-nums}
+  .hm-daylbl{font-size:.7rem;color:var(--cinza);font-weight:600;display:flex;align-items:center;justify-content:flex-end;padding-right:7px}
+  .hm-cell{aspect-ratio:1;min-height:22px;border-radius:4px;display:grid;place-items:center;font-size:.6rem;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+  .hm-zero{background:var(--linha-soft)}
+  .hm-leg{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:.72rem;color:var(--cinza);flex-wrap:wrap}
+  .hm-leg-bar{width:90px;height:8px;border-radius:999px;background:linear-gradient(90deg,rgba(14,110,107,.16),rgba(14,110,107,1))}
+  .hm-leg-hint{color:var(--faint)}
+  @media(max-width:560px){.hm-leg-hint{display:none}}
   .aviso{background:var(--avi-bg);border:1px solid var(--avi-bd);color:var(--avi-tx);border-radius:10px;padding:10px 14px;margin:14px 0;font-size:var(--fs-sm)}
   .aviso.err{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
   .card{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:15px 17px;margin:12px 0;box-shadow:0 1px 2px rgba(16,24,40,.04)}
@@ -1301,12 +1312,33 @@ function paginaIndicadores(dias, aviso) {
   }).join('');
 
   const barLinha = (label, n, max, coral) => `<div class="bar"><span class="bd">${esc(label)}</span><span class="btrack"><span class="bfill${coral ? ' ag' : ''}" style="width:${Math.round((n / max) * 100)}%"></span></span><span class="bn">${n}</span></div>`;
-  const maxH = Math.max(1, ...r.picoHoras.map(h => h.n));
-  const picoHorasHtml = r.picoHoras.slice(0, 8).map(h => barLinha(h.hora, h.n, maxH)).join('');
-  const maxD = Math.max(1, ...r.picoDias.map(d => d.n));
-  const picoDiasHtml = r.picoDias.map(d => barLinha(d.dia, d.n, maxD)).join('');
   const maxA = Math.max(1, ...r.horariosAula.map(a => a.n));
   const aulaHtml = r.horariosAula.slice(0, 12).map(a => barLinha(a.hora, a.n, maxA, true)).join('');
+
+  // Heatmap (gráfico único): acessos por dia da semana × hora. Cor teal cresce
+  // com o nº de acessos; célula vazia fica cinza-clara. Tooltip no hover.
+  const DIAS_HM = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const hmMax = Math.max(1, r.mapaMax || 0);
+  const temMapa = (r.mapaCalor || []).some(row => row.some(v => v > 0));
+  let hmHead = '<div class="hm-corner"></div>';
+  for (let h = 0; h < 24; h++) hmHead += `<div class="hm-hlbl">${h}</div>`;
+  let hmRows = '';
+  for (let wd = 0; wd < 7; wd++) {
+    let cells = '';
+    for (let h = 0; h < 24; h++) {
+      const n = (r.mapaCalor[wd] || [])[h] || 0;
+      if (!n) { cells += '<div class="hm-cell hm-zero"></div>'; continue; }
+      const ratio = n / hmMax;
+      const alpha = (0.16 + 0.84 * ratio).toFixed(3);
+      const cor = ratio > 0.5 ? '#fff' : 'var(--teal-esc)';
+      cells += `<div class="hm-cell" style="background:rgba(14,110,107,${alpha});color:${cor}" title="${DIAS_HM[wd]} ${h}h · ${n} acesso${n === 1 ? '' : 's'}">${n}</div>`;
+    }
+    hmRows += `<div class="hm-daylbl">${DIAS_HM[wd]}</div>${cells}`;
+  }
+  const heatHtml = temMapa
+    ? `<div class="hm-scroll"><div class="hm-grid">${hmHead}${hmRows}</div></div>
+       <div class="hm-leg"><span>menos</span><span class="hm-leg-bar"></span><span>mais</span><span class="hm-leg-hint">— passe o mouse numa célula para ver o dia, a hora e o total</span></div>`
+    : '<div class="vazio">Sem acessos no período.</div>';
 
   // Gerador de links por origem: um link etiquetado por canal + botão "Copiar".
   const FORM_BASE = (process.env.FORM_CLOUD_URL || 'https://sf-formularioexperimental.onrender.com').replace(/\/+$/, '');
@@ -1456,12 +1488,10 @@ function paginaIndicadores(dias, aviso) {
     <div class="sec-t">Por dia (pessoas ▮ · agendamentos)</div>
     <div class="card">${barras || '<div class="vazio">Sem dados ainda neste período. Os números aparecem conforme as pessoas acessam o formulário.</div>'}</div>
 
-    <div class="sec-t">Horários de pico &nbsp;·&nbsp; Dias da semana</div>
+    <div class="sec-t">Quando acessam &nbsp;·&nbsp; dia da semana × hora</div>
     <div class="card">
-      <p class="quando" style="margin:0 0 8px">Quando as pessoas mais <b>acessam</b> o formulário.</p>
-      <div style="display:grid;grid-template-columns:1fr;gap:2px">${picoHorasHtml || '<div class="vazio">Sem acessos no período.</div>'}</div>
-      <div style="height:12px"></div>
-      <div style="display:grid;grid-template-columns:1fr;gap:2px">${picoDiasHtml}</div>
+      <p class="quando" style="margin:0 0 12px">Cada quadradinho é um <b>dia + hora</b>. Quanto mais escuro, <b>mais acessos</b> — assim dá pra ver o pico real (ex.: <b>terça às 19h</b>), não só o melhor dia e a melhor hora separados.</p>
+      ${heatHtml}
     </div>
 
     <div class="sec-t">Horários de aula mais escolhidos</div>

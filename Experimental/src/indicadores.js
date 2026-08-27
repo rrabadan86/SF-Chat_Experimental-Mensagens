@@ -120,6 +120,21 @@ function resumo(dias) {
   for (const e of acessosEvs) { const d = new Date(e.dia + 'T12:00:00'); if (!isNaN(d)) diaSem[d.getDay()]++; }
   const picoDias = DIAS.map((nome, i) => ({ dia: nome, n: diaSem[i] }));
 
+  // Mapa de calor: acessos por dia-da-semana (0=Dom..6=Sáb) × hora (0..23).
+  // Cruza as duas dimensões num único gráfico (heatmap) — mostra o "quando"
+  // real (ex.: terça às 19h), não só o pico de hora e o de dia separados.
+  const mapaCalor = Array.from({ length: 7 }, () => new Array(24).fill(0));
+  let mapaMax = 0;
+  for (const e of acessosEvs) {
+    const h = parseInt(String(e.quando || '').slice(0, 2), 10);
+    const d = new Date(e.dia + 'T12:00:00');
+    if (Number.isInteger(h) && h >= 0 && h < 24 && !isNaN(d)) {
+      const wd = d.getDay();
+      mapaCalor[wd][h]++;
+      if (mapaCalor[wd][h] > mapaMax) mapaMax = mapaCalor[wd][h];
+    }
+  }
+
   // Horários de AULA mais escolhidos (entre os agendamentos que carimbaram a hora).
   const aulaMap = {};
   for (const e of evs) { if (e.tipo === 'agendou' && e.hora) aulaMap[e.hora] = (aulaMap[e.hora] || 0) + 1; }
@@ -132,6 +147,7 @@ function resumo(dias) {
     porDia,
     porOrigem, temOrigem,
     picoHoras, picoDias, horariosAula,
+    mapaCalor, mapaMax,
     primeiroDia: arr.length ? arr[0].dia : null,
     total: arr.length,
   };
