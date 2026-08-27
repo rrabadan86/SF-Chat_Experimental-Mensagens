@@ -482,6 +482,36 @@ function chrome(titSubtitulo, ativo, corpo) {
 </nav>
 ${corpo}
 <footer>SlimFit · painel do Studio</footer>
+<script>
+/* Seções recolhíveis em TODAS as telas: transforma cada cabeçalho .sec-t (que
+   não seja de uma seção já recolhível) num <details class="acc-sec">. Só recolhe
+   onde a tela é realmente segmentada (>=2 seções no mesmo bloco), abre por padrão
+   (nada some) e lembra o estado por seção (localStorage). Não move formulários de
+   lugar — só os envolve, então tudo continua salvando igual. */
+(function(){
+  try{
+    var heads=[].slice.call(document.querySelectorAll('.wrap .sec-t')).filter(function(h){
+      return h.tagName!=='SUMMARY' && !h.closest('details') && !h.hasAttribute('data-nosec');
+    });
+    var cnt=new Map();
+    heads.forEach(function(h){ cnt.set(h.parentNode,(cnt.get(h.parentNode)||0)+1); });
+    heads.forEach(function(h){
+      if((cnt.get(h.parentNode)||0)<2) return;   // seção única no bloco → não recolhe
+      var sibs=[], el=h.nextElementSibling;
+      while(el && !(el.classList && el.classList.contains('sec-t'))){ sibs.push(el); el=el.nextElementSibling; }
+      if(!sibs.length) return;
+      var det=document.createElement('details'); det.className='acc-sec';
+      var sum=document.createElement('summary'); sum.className='sec-t'; sum.innerHTML=h.innerHTML;
+      det.appendChild(sum); sibs.forEach(function(s){ det.appendChild(s); });
+      var key='sec:'+location.pathname+':'+(sum.textContent||'').replace(/\\s+/g,' ').trim().slice(0,60);
+      var aberto=true; try{ if(localStorage.getItem(key)==='0') aberto=false; }catch(e){}
+      det.open=aberto;
+      det.addEventListener('toggle',function(){ try{ localStorage.setItem(key, det.open?'1':'0'); }catch(e){} });
+      h.parentNode.replaceChild(det,h);
+    });
+  }catch(e){}
+})();
+</script>
 </body></html>`;
 }
 
@@ -1425,7 +1455,7 @@ function paginaSofiaConversas(aviso, erro) {
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('conversas')}
-    <div class="sec-t">💬 Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span><small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
+    <div class="sec-t" data-nosec="1">💬 Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span><small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
     <style>
       .inbox-grid{display:grid;grid-template-columns:236px minmax(0,1fr);gap:14px;align-items:stretch}
       .inbox-grid>div{min-width:0}
