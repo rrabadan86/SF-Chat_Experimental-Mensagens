@@ -1434,6 +1434,7 @@ function paginaSofiaConversas(aviso, erro) {
     </style>
     <div class="inbox-grid">
       <div>
+        <div style="margin-bottom:8px"><input type="search" id="convBusca" oninput="filtrarBusca(this.value)" placeholder="🔎 Buscar por nome, telefone ou palavra na conversa" style="width:100%;font-size:.85rem;padding:9px 12px;border:1px solid var(--linha);border-radius:9px"></div>
         <div style="margin-bottom:8px"><select id="convFiltroTag" onchange="filtrarTag(this.value)" style="width:100%;font-size:.85rem"><option value="">🏷️ Todas as tags</option><option value="__sem__">🏷️ Sem tag</option>${tagsLista.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>
         <div id="convLista" style="min-height:120px"></div>
         <div id="convPag" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px"></div>
@@ -1456,7 +1457,7 @@ function paginaSofiaConversas(aviso, erro) {
     </div>
   </div>
 <script>
-  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', tagEdAberto=false, ncNome='', ncDirty=false, ncTodas=[];
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', buscaTexto='', tagEdAberto=false, ncNome='', ncDirty=false, ncTodas=[];
   // Atalho vindo de Contatos: ?chat=<telefone> abre a conversa correspondente.
   var alvoChat=(new URLSearchParams(location.search).get('chat')||'').replace(/\\D/g,''), alvoAplicado=false;
   function mesmoTel(a,b){ a=String(a||'').replace(/\\D/g,''); b=String(b||'').replace(/\\D/g,''); if(!a||!b) return false; if(a===b) return true; var la=a.slice(-8), lb=b.slice(-8); return la.length===8 && la===lb; }
@@ -1643,6 +1644,17 @@ function paginaSofiaConversas(aviso, erro) {
       .catch(function(){ if(msg)msg.textContent='❌ erro'; });
   }
   function filtrarTag(t){ tagFiltro=t||''; pagina=0; renderInbox(ultimoData); }
+  function filtrarBusca(v){ buscaTexto=String(v||'').trim().toLowerCase(); pagina=0; renderInbox(ultimoData); }
+  // Casa a busca com nome, telefone (só dígitos) OU o texto de qualquer mensagem.
+  function casaBusca(k, c){
+    if(!buscaTexto) return true;
+    var q=buscaTexto, qd=q.replace(/\\D/g,'');
+    if((c.nome||'').toLowerCase().indexOf(q)>=0) return true;
+    if(qd && String(k||'').replace(/\\D/g,'').indexOf(qd)>=0) return true;
+    var ms=c.msgs||[];
+    for(var i=0;i<ms.length;i++){ if((ms[i].texto||'').toLowerCase().indexOf(q)>=0) return true; }
+    return false;
+  }
   function renderInbox(data){
     ultimoData = data||{};
     // Atalho de Contatos: assim que os dados chegam, seleciona a conversa alvo (uma vez).
@@ -1654,10 +1666,11 @@ function paginaSofiaConversas(aviso, erro) {
     var chaves = Object.keys(ultimoData).sort(function(a,b){return (ultimoData[b].ultimaEm||0)-(ultimoData[a].ultimaEm||0);});
     if(tagFiltro==='__sem__') chaves = chaves.filter(function(k){ return !((ultimoData[k].tagsContato||[]).length); });
     else if(tagFiltro) chaves = chaves.filter(function(k){ return (ultimoData[k].tagsContato||[]).indexOf(tagFiltro)>=0; });
+    if(buscaTexto) chaves = chaves.filter(function(k){ return casaBusca(k, ultimoData[k]||{}); });
     var total=chaves.length, paginas=Math.max(1,Math.ceil(total/POR_PAGINA));
     if(pagina>=paginas) pagina=paginas-1; if(pagina<0) pagina=0;
     var lista=document.getElementById('convLista'), pag=document.getElementById('convPag');
-    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+(tagFiltro==='__sem__'?'Nenhuma conversa sem tag.':(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a SoFIA receber mensagens, elas aparecem aqui.'))+'</p>'; if(pag)pag.innerHTML=''; return; }
+    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+(buscaTexto?'Nada encontrado para “'+escH(buscaTexto)+'” (nome, telefone ou palavra na conversa).':(tagFiltro==='__sem__'?'Nenhuma conversa sem tag.':(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a SoFIA receber mensagens, elas aparecem aqui.')))+'</p>'; if(pag)pag.innerHTML=''; return; }
     var ini=pagina*POR_PAGINA, fatia=chaves.slice(ini,ini+POR_PAGINA);
     lista.innerHTML = fatia.map(function(k){
       var c=ultimoData[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
