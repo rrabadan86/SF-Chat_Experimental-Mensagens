@@ -408,11 +408,6 @@ function enviarComando(cmd, extra) {
   const obj = Object.assign({ cmd: String(cmd || '') }, extra && typeof extra === 'object' ? extra : {}, { em: Date.now() });
   fs.writeFileSync(arq, JSON.stringify(obj), 'utf8');
 }
-// Status da importação de histórico (o listener escreve; o painel só lê).
-function lerImportStatus() {
-  try { const o = JSON.parse(fs.readFileSync(path.join(DIR, 'sofia-import-status.json'), 'utf8')); return (o && typeof o === 'object') ? o : null; }
-  catch (_) { return null; }
-}
 
 // ── campanhas (envio em massa por tag, pela SoFIA) ──────────────────────────
 // O painel cria a campanha e controla (iniciar/pausar/cancelar/excluir) gravando
@@ -567,6 +562,6 @@ function setControleHumano(chave, ativo) {
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

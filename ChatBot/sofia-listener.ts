@@ -433,70 +433,8 @@ function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMs
   registrarSessao(chave, nome || c.nome, autor, t || "📷 (foto)", em);
 }
 
-// ── Importar histórico EXISTENTE do WhatsApp para a inbox (uma vez) ──────────
-// Lê os chats já sincronizados pelo WhatsApp Web e enche a inbox com o histórico
-// (horários reais). Serve para a recepção ver se um lead já falou antes. Não
-// responde ninguém. Obs.: o WhatsApp Web só sincroniza uma janela recente, então
-// pode não trazer anos inteiros. Progresso vai para sofia-import-status.json.
-const IMPORT_STATUS_FILE = path.join(DIR, "sofia-import-status.json");
-let importando = false;
-function gravarImportStatus(o: any) { try { fs.writeFileSync(IMPORT_STATUS_FILE, JSON.stringify(o), "utf8"); } catch {} }
-async function importarHistorico(porChat: number) {
-  if (importando) return;
-  importando = true;
-  const lim = Math.max(1, Math.min(porChat || INBOX_MAX_MSGS, 500));
-  try {
-    if (!pronta) { gravarImportStatus({ rodando: false, erro: "O WhatsApp da SoFIA não está conectado.", em: Date.now() }); return; }
-    gravarImportStatus({ rodando: true, feitos: 0, total: 0, novos: 0, em: Date.now() });
-    let chats: any[];
-    try { chats = await client.getChats(); }
-    catch (e: any) { throw new Error("Não consegui ler a lista de conversas do WhatsApp (getChats). Isso costuma ser incompatibilidade da versão do WhatsApp Web. Detalhe: " + (e?.name ? e.name + " " : "") + (e?.message || String(e))); }
-    const alvos = chats.filter((c) => c && !c.isGroup && c.id && c.id._serialized && String(c.id._serialized).endsWith("@c.us"));
-    let feitos = 0, novos = 0;
-    for (const chat of alvos) {
-      try {
-        const jid: string = chat.id._serialized;
-        const tel = jidParaTel(jid);
-        if (tel) {
-          const msgs: any[] = await chat.fetchMessages({ limit: lim });
-          const nomeChat = (chat.name && !/^\+?[\d ()-]+$/.test(String(chat.name))) ? String(chat.name) : "";
-          const ex = inbox.get(tel);
-          const acc: InboxMsg[] = ex ? ex.msgs.slice() : [];
-          const seen = new Set(acc.map((m) => m.em + "|" + m.autor));
-          for (const m of msgs) {
-            const em = m.timestamp ? m.timestamp * 1000 : 0;
-            if (!em) continue;
-            const texto = String(m.body || "").trim() || (m.hasMedia ? "📎 (mídia)" : "");
-            if (!texto) continue;
-            const autor: InboxMsg["autor"] = m.fromMe ? "humano" : "aluna";
-            const k = em + "|" + autor;
-            if (seen.has(k)) continue;
-            seen.add(k);
-            acc.push({ autor, texto, em });
-          }
-          acc.sort((a, b) => a.em - b.em);
-          const trimmed = acc.slice(-INBOX_MAX_MSGS);
-          if (trimmed.length) {
-            inbox.set(tel, { jid, nome: (ex && ex.nome) || nomeChat, ultimaEm: Math.max(trimmed[trimmed.length - 1].em, (ex && ex.ultimaEm) || 0), msgs: trimmed });
-            novos++;
-          }
-        }
-      } catch (e: any) { log("import chat falhou: " + (e?.message || e)); }
-      feitos++;
-      if (feitos % 25 === 0) { gravarImportStatus({ rodando: true, feitos, total: alvos.length, novos, em: Date.now() }); salvarInbox(); }
-    }
-    salvarInbox();
-    gravarImportStatus({ rodando: false, feitos, total: alvos.length, novos, terminadoEm: Date.now() });
-    log(`✅ histórico importado: ${feitos} conversas lidas, ${novos} com mensagens.`);
-  } catch (e: any) {
-    const det = (e?.name ? e.name + ": " : "") + (e?.message || String(e));
-    gravarImportStatus({ rodando: false, erro: det, em: Date.now() });
-    log("import histórico falhou: " + det + (e?.stack ? "\n" + e.stack : ""));
-  } finally { importando = false; }
-}
-
 // ── Histórico de INTERAÇÕES (aba Contatos → Interações do painel) ────────────
-//    Permanente e separado do inbox (que só guarda 7 dias). Uma "interação" é
+//    Permanente e separado do inbox (que guarda um período configurável). Uma "interação" é
 //    uma sessão: começa numa mensagem da aluna e vai se estendendo enquanto as
 //    respostas chegam dentro da janela de sessão (a mesma da memória da Sofia).
 //    Quando passa a janela sem novidade, a sessão ENCERRA e ganha um resumo
@@ -891,11 +829,6 @@ setInterval(async () => {
   let cmd: any = null;
   try { cmd = JSON.parse(fs.readFileSync(COMANDO_FILE, "utf8")); } catch { return; } // sem comando
   try { fs.unlinkSync(COMANDO_FILE); } catch {} // consome uma vez só
-  if (cmd && cmd.cmd === "importar-historico") {
-    log("📥 comando do painel: importar histórico do WhatsApp…");
-    importarHistorico(parseInt(cmd.porChat, 10) || INBOX_MAX_MSGS); // async, não bloqueia
-    return;
-  }
   if (!cmd || cmd.cmd !== "logout") return;
   log("🔌 comando do painel: DESCONECTAR (logout). Encerrando a sessão da Sofia…");
   setStatus("desconectado");
