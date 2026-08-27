@@ -1514,6 +1514,13 @@ function paginaSofiaConversas(aviso, erro) {
         <div style="margin-bottom:8px"><input type="search" id="convBusca" oninput="filtrarBusca(this.value)" placeholder="🔎 Buscar por nome, telefone ou palavra na conversa" style="width:100%;font-size:.85rem;padding:9px 12px;border:1px solid var(--linha);border-radius:9px"></div>
         <div style="margin-bottom:8px"><select id="convFiltroTag" onchange="filtrarTag(this.value)" style="width:100%;font-size:.85rem"><option value="">🏷️ Todas as tags</option><option value="__sem__">🏷️ Sem tag</option>${tagsLista.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>
         <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:.8rem;cursor:pointer;color:#5c5960"><input type="checkbox" id="convQuieto" onchange="filtrarQuieto(this)" style="width:15px;height:15px;margin:0;flex:none">😴 Sem resposta do contato há <b>${esc(String(quietoCfg.horas))}h+</b> <small style="color:#9a9a9a">(últimos ${esc(String(quietoCfg.dias))} dias)</small></label>
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;font-size:.78rem;color:#5c5960">
+          <span title="Conversaram no período">📅</span>
+          <input type="date" id="convDataIni" onchange="filtrarData()" title="De (dia inicial)" style="flex:1 1 0;min-width:0;font-size:.76rem;padding:5px 6px;border:1px solid var(--linha);border-radius:7px">
+          <span>até</span>
+          <input type="date" id="convDataFim" onchange="filtrarData()" title="Até (dia final)" style="flex:1 1 0;min-width:0;font-size:.76rem;padding:5px 6px;border:1px solid var(--linha);border-radius:7px">
+          <button type="button" onclick="limparData()" title="Limpar datas" class="reset" style="padding:4px 8px;font-size:.72rem">✕</button>
+        </div>
         <div id="convLista"></div>
         <div id="convPag" style="display:flex;flex-direction:column;align-items:stretch;gap:6px;margin-top:8px"></div>
       </div>
@@ -1740,6 +1747,22 @@ function paginaSofiaConversas(aviso, erro) {
   function filtrarTag(t){ tagFiltro=t||''; pagina=0; renderInbox(ultimoData); }
   function filtrarBusca(v){ buscaTexto=String(v||'').trim().toLowerCase(); pagina=0; renderInbox(ultimoData); }
   function filtrarQuieto(cb){ quietoFiltro=!!cb.checked; pagina=0; renderInbox(ultimoData); }
+  // Filtro por PERÍODO: conversas com alguma mensagem entre os dias De e Até
+  // (inclusive). Só olha os horários já guardados — nenhuma chamada de IA.
+  var dataIniMs=0, dataFimMs=0;
+  function filtrarData(){
+    var vi=document.getElementById('convDataIni').value, vf=document.getElementById('convDataFim').value;
+    var a=vi?new Date(vi+'T00:00:00').getTime():0, b=vf?new Date(vf+'T23:59:59.999').getTime():0;
+    if(a && b && a>b){ a=new Date(vf+'T00:00:00').getTime(); b=new Date(vi+'T23:59:59.999').getTime(); } // inverteu → arruma
+    dataIniMs=a; dataFimMs=b; pagina=0; renderInbox(ultimoData);
+  }
+  function limparData(){ var i=document.getElementById('convDataIni'), f=document.getElementById('convDataFim'); if(i)i.value=''; if(f)f.value=''; dataIniMs=0; dataFimMs=0; pagina=0; renderInbox(ultimoData); }
+  function naData(c){
+    if(!dataIniMs && !dataFimMs) return true;
+    var lo=dataIniMs||0, hi=dataFimMs||8.64e15, m=(c&&c.msgs)||[];
+    for(var i=m.length-1;i>=0;i--){ var e=m[i].em||0; if(e>=lo && e<=hi) return true; }
+    var u=(c&&c.ultimaEm)||0; return u>=lo && u<=hi;
+  }
   // "Quieto": a ÚLTIMA mensagem DO CONTATO (aluna) foi há 24h+ e há no máx. 4 dias.
   // Usa só os horários já guardados (nenhuma chamada de IA). Follow-up/mensagens da
   // SoFIA não contam — olhamos só o que a própria pessoa mandou.
@@ -1768,10 +1791,11 @@ function paginaSofiaConversas(aviso, erro) {
     else if(tagFiltro) chaves = chaves.filter(function(k){ return (ultimoData[k].tagsContato||[]).indexOf(tagFiltro)>=0; });
     if(buscaTexto) chaves = chaves.filter(function(k){ return casaBusca(k, ultimoData[k]||{}); });
     if(quietoFiltro) chaves = chaves.filter(function(k){ return quieto(ultimoData[k]||{}); });
+    if(dataIniMs || dataFimMs) chaves = chaves.filter(function(k){ return naData(ultimoData[k]||{}); });
     var total=chaves.length, paginas=Math.max(1,Math.ceil(total/POR_PAGINA));
     if(pagina>=paginas) pagina=paginas-1; if(pagina<0) pagina=0;
     var lista=document.getElementById('convLista'), pag=document.getElementById('convPag');
-    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+(quietoFiltro?'Nenhum contato quieto há 24h+ (dentro dos últimos 4 dias). 🎉':(buscaTexto?'Nada encontrado para “'+escH(buscaTexto)+'” (nome, telefone ou palavra na conversa).':(tagFiltro==='__sem__'?'Nenhuma conversa sem tag.':(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a SoFIA receber mensagens, elas aparecem aqui.'))))+'</p>'; if(pag)pag.innerHTML=''; return; }
+    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+((dataIniMs||dataFimMs)?'Nenhuma conversa no período escolhido.':(quietoFiltro?'Nenhum contato quieto há 24h+ (dentro dos últimos 4 dias). 🎉':(buscaTexto?'Nada encontrado para “'+escH(buscaTexto)+'” (nome, telefone ou palavra na conversa).':(tagFiltro==='__sem__'?'Nenhuma conversa sem tag.':(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a SoFIA receber mensagens, elas aparecem aqui.')))))+'</p>'; if(pag)pag.innerHTML=''; return; }
     var ini=pagina*POR_PAGINA, fatia=chaves.slice(ini,ini+POR_PAGINA);
     lista.innerHTML = fatia.map(function(k){
       var c=ultimoData[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
