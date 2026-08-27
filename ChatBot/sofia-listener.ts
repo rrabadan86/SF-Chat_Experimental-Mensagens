@@ -23,7 +23,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
-import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, deveResponder, janelaSessaoMs, resumirConversa, gerarFollowup } from "./sofia";
+import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, deveResponder, janelaSessaoMs, resumirConversa, gerarFollowup, classificarIntencaoTags } from "./sofia";
 
 // Pasta dos arquivos da Sofia. Por padrão, a pasta de trabalho (comportamento
 // atual). Se SOFIA_DIR estiver definida, usa ela — permite guardar prompt/estado
@@ -531,7 +531,7 @@ function varrerSessoes() {
 //    e devolvemos as AÇÕES em sofia-eventos.jsonl (o painel aplica a tag + avisa).
 const REGRAS_FILE = path.join(DIR, "sofia-regras.json");
 const EVENTOS_FILE = path.join(DIR, "sofia-eventos.jsonl");
-type RegraTag = { tag: string; avisarWpp?: string; palavras?: string[] };
+type RegraTag = { tag: string; avisarWpp?: string; palavras?: string[]; instrucao?: string };
 let regras: Record<string, RegraTag[]> = {};
 let regrasMtime = -1;
 function lerRegras(): Record<string, RegraTag[]> {
@@ -586,6 +586,11 @@ function jaDisparou(chave: string, motivo: string, tag: string): boolean {
   gatilhoRecente.set(k, agora + janelaSessaoMs());
   return false;
 }
+// Só CONSULTA (não marca) — usado para não pagar a chamada de IA quando a tag já
+// disparou nesta sessão. O jaDisparou "de verdade" roda na hora de emitir a ação.
+function jaDisparouReadOnly(chave: string, motivo: string, tag: string): boolean {
+  return Date.now() < (gatilhoRecente.get(chave + "|" + motivo + "|" + tag) || 0);
+}
 function normTxt(s: string): string {
   return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
@@ -597,6 +602,21 @@ function checarGatilhosAluna(chave: string, nome: string, texto: string) {
   for (const r of (rs.palavra || [])) {
     const pals = (r.palavras || []).map(normTxt).filter(Boolean);
     if (pals.some((p) => t.includes(p)) && !jaDisparou(chave, "palavra", r.tag)) emitirAcao(chave, nome, r, "palavra");
+  }
+  // intenção por IA: a SoFIA lê a conversa e decide pela intenção descrita.
+  // Só as regras ainda não disparadas nesta sessão entram (economiza chamada).
+  const iaRegras = (rs.ia || []).filter((r) => r.instrucao && !jaDisparouReadOnly(chave, "ia", r.tag));
+  if (iaRegras.length) {
+    const c = inbox.get(chave);
+    const linhas = c ? c.msgs.slice(-14).map((m) => ({ autor: m.autor, texto: m.texto })) : [{ autor: "aluna", texto }];
+    // Assíncrono (fire-and-forget): não segura a resposta da SoFIA.
+    classificarIntencaoTags(linhas, iaRegras.map((r) => ({ tag: r.tag, instrucao: r.instrucao! })))
+      .then((tags) => {
+        for (const r of iaRegras) {
+          if (tags.includes(r.tag) && !jaDisparou(chave, "ia", r.tag)) emitirAcao(chave, nome, r, "ia");
+        }
+      })
+      .catch((e: any) => log("ia-tag: " + (e?.message || e)));
   }
   // respondeu campanha: a aluna está na lista de enviados de alguma campanha?
   const camps = (rs.campanha || []);

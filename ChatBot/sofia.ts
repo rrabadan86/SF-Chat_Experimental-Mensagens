@@ -788,6 +788,58 @@ export async function resumirConversa(linhas: { autor: string; texto: string }[]
   }
 }
 
+// Classifica a conversa contra uma lista de regras de tag por INTENÇÃO (gatilho
+// 'ia'). Cada regra tem { tag, instrucao }. A SoFIA lê a conversa e devolve os
+// NOMES das tags cuja intenção se aplica AGORA (com base na última mensagem da
+// aluna + contexto). Uma única chamada cobre todas as regras. Best-effort:
+// qualquer falha devolve [] (nenhuma tag é aplicada). Usa o modelo de extração
+// (mais barato/rápido) e só é chamada quando existe ao menos uma regra 'ia'.
+export async function classificarIntencaoTags(
+  linhas: { autor: string; texto: string }[],
+  regras: { tag: string; instrucao: string }[],
+): Promise<string[]> {
+  const regrasValidas = (regras || []).filter((r) => r && r.tag && r.instrucao);
+  if (!regrasValidas.length) return [];
+  const texto = (linhas || [])
+    .map((l) => `${l.autor === "aluna" ? "Aluna" : l.autor === "humano" ? "Atendente" : "SoFIA"}: ${l.texto}`)
+    .join("\n")
+    .slice(0, 6000);
+  if (!texto.trim()) return [];
+  const catalogo = regrasValidas.map((r, i) => `${i + 1}. "${r.tag}" — ${r.instrucao}`).join("\n");
+  try {
+    const resp = await comRetry(() =>
+      anthropic.messages.create({
+        model: MODELO_EXTRACAO,
+        max_tokens: 120,
+        system:
+          "Você classifica conversas de atendimento de um Studio de treinamento para mulheres (SlimFit). " +
+          "Dada a conversa entre a aluna e a SoFIA e uma lista de tags (cada uma com uma descrição de quando aplicar), " +
+          "decida QUAIS tags se aplicam AGORA, com base principalmente na ÚLTIMA mensagem da aluna e no contexto. " +
+          "Seja conservador: só marque uma tag quando a intenção descrita realmente aparece. " +
+          "Responda SOMENTE com um array JSON dos nomes EXATOS das tags que se aplicam (ex.: [\"Preço\"]). " +
+          "Se nenhuma se aplica, responda [].",
+        messages: [{ role: "user", content: `CONVERSA:\n${texto}\n\nTAGS:\n${catalogo}\n\nResponda apenas com o array JSON:` }],
+      }),
+    );
+    const bruto = resp.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b as Anthropic.TextBlock).text)
+      .join("")
+      .replace(/```json|```/g, "")
+      .trim();
+    const m = bruto.match(/\[[\s\S]*\]/);
+    if (!m) return [];
+    const arr = JSON.parse(m[0]);
+    if (!Array.isArray(arr)) return [];
+    const nomes = arr.map((x) => String(x || "").trim());
+    // Só devolve nomes que realmente existem nas regras (evita tag inventada).
+    return regrasValidas.filter((r) => nomes.includes(r.tag)).map((r) => r.tag);
+  } catch (e: any) {
+    console.log("⚠️  classificarIntencaoTags falhou:", e?.message ?? e);
+    return [];
+  }
+}
+
 // Gera UMA mensagem de follow-up (retomada) para uma lead que esfriou sem agendar,
 // com base nas últimas mensagens da conversa + uma instrução do Studio. Curta,
 // calorosa e no tom da SoFIA. Retorna "" se não conseguir (o chamador não envia).

@@ -187,8 +187,10 @@ function salvarTagsConfig(map) {
   try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
   fs.writeFileSync(ARQUIVO_TAGCFG, JSON.stringify(map, null, 2), 'utf8');
 }
-// Gatilhos possíveis: '' (nenhum) | 'agendou' | 'novo' | 'palavra' | 'humano' | 'encerrou' | 'campanha'.
-const GATILHOS = ['agendou', 'novo', 'palavra', 'humano', 'encerrou', 'campanha'];
+// Gatilhos possíveis: '' (nenhum) | 'agendou' | 'novo' | 'palavra' | 'ia' | 'humano' | 'encerrou' | 'campanha'.
+//  • 'palavra' → casa por palavra-chave (contém), detectado no listener sem IA.
+//  • 'ia'      → a SoFIA lê a conversa e decide pela INTENÇÃO descrita em `instrucao`.
+const GATILHOS = ['agendou', 'novo', 'palavra', 'ia', 'humano', 'encerrou', 'campanha'];
 function normCfg(c) {
   c = c || {};
   // compat: config antiga só tinha autoAgendou.
@@ -201,9 +203,13 @@ function normCfg(c) {
   if (wpp && wpp.length >= 10 && wpp.length <= 11) wpp = '55' + wpp; // garante o DDI (Brasil)
   let remove = Array.isArray(c.remove) ? c.remove : (c.remove ? String(c.remove).split(/[;\n]/) : []);
   remove = remove.map(s => String(s).trim()).filter(Boolean);
+  // Instrução em linguagem natural para o gatilho 'ia' (ex.: "quando a aluna
+  // perguntar sobre preço, valores ou planos"). Limitada para não inflar o prompt.
+  const instrucao = String(c.instrucao || '').replace(/\s+/g, ' ').trim().slice(0, 300);
   return {
     gatilho: GATILHOS.includes(gatilho) ? gatilho : '',
     palavras,
+    instrucao,
     avisarWpp: wpp,
     remove,       // tags a remover do contato quando ESTA tag for aplicada
     criada: !!c.criada,
@@ -216,7 +222,7 @@ function definirTagConfig(tag, cfg) {
   const n = normCfg(cfg);
   n.criada = !!(map[tag] && map[tag].criada) || !!(cfg && cfg.criada); // uma vez criada, permanece "conhecida"
   // Config totalmente vazia e não-criada → não guarda (evita lixo).
-  if (!n.gatilho && !n.avisarWpp && !n.palavras.length && !n.remove.length && !n.criada) delete map[tag];
+  if (!n.gatilho && !n.avisarWpp && !n.palavras.length && !n.instrucao && !n.remove.length && !n.criada) delete map[tag];
   else map[tag] = n;
   salvarTagsConfig(map);
   return true;
@@ -245,7 +251,7 @@ function tagsPorGatilho(g) {
   return Object.keys(map)
     .map(t => ({ tag: t, cfg: normCfg(map[t]) }))
     .filter(x => x.cfg.gatilho === g)
-    .map(x => ({ tag: x.tag, avisarWpp: x.cfg.avisarWpp, palavras: x.cfg.palavras }));
+    .map(x => ({ tag: x.tag, avisarWpp: x.cfg.avisarWpp, palavras: x.cfg.palavras, instrucao: x.cfg.instrucao }));
 }
 
 // Adiciona UMA tag a um contato (cria o contato se não existir), sem mexer nas

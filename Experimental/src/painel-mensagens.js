@@ -1950,6 +1950,7 @@ function paginaSofiaContatos(aviso, erro, params) {
         <option value="">— não automatizar (só uso manual) —</option>
         <option value="novo">🆕 a aluna mandar a 1ª mensagem (lead novo)</option>
         <option value="palavra">🔑 a aluna escrever uma palavra-chave</option>
+        <option value="ia">🧠 a SoFIA entender uma intenção (você descreve)</option>
         <option value="agendou">📅 a SoFIA agendar uma aula experimental</option>
         <option value="humano">🙋 você assumir a conversa (controle humano)</option>
         <option value="encerrou">🔒 a conversa encerrar sem agendamento</option>
@@ -1959,6 +1960,11 @@ function paginaSofiaContatos(aviso, erro, params) {
         <label>Palavras-chave <span class="sub" style="font-weight:400;color:var(--cinza)">— separadas por vírgula (ex.: cancelar, valor, reclamação, endereço)</span></label>
         <input type="text" id="tgPalavras" placeholder="cancelar, valor, endereço">
         <p class="quando" style="margin:6px 0 0">Dispara quando a mensagem da aluna <b>contém</b> qualquer uma delas (não diferencia maiúsculas/acentos simples).</p>
+      </div>
+      <div id="tgIaBox" style="margin-top:14px;display:none">
+        <label>Instrução <span class="sub" style="font-weight:400;color:var(--cinza)">— descreva a intenção, em português (ex.: quando a aluna perguntar sobre preço, valores ou planos)</span></label>
+        <textarea id="tgInstrucao" rows="3" maxlength="300" placeholder="Ex.: quando a aluna perguntar sobre preço, valores, mensalidade ou planos." style="width:100%;resize:vertical"></textarea>
+        <p class="quando" style="margin:6px 0 0">A SoFIA <b>lê a conversa</b> e aplica a tag quando entende essa intenção — mesmo sem a palavra exata. Dispara <b>uma vez por conversa</b>. Usa a IA (custo pequeno por mensagem).</p>
       </div>
       <div id="tgWppBox" style="margin-top:16px;display:none">
         <label>Avisar no WhatsApp <span class="sub" style="font-weight:400;color:var(--cinza)">— número que recebe o recado (nome + telefone)</span></label>
@@ -1995,7 +2001,7 @@ function paginaSofiaContatos(aviso, erro, params) {
   </div>
 <script>
   var CONTATOS = ${JSON.stringify(r.itens.map(c => ({ tel: c.tel, telFmt: fmtTelP(c.tel), nome: c.nome || '', tags: c.tags || [], ini: iniciais(c.nome, c.tel), cor: corAv(c.nome || c.tel), bloq: sofia.estaBloqueado(c.tel) })))};
-  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, wpp: c.avisarWpp, remove: c.remove }; }))};
+  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, wpp: c.avisarWpp, remove: c.remove }; }))};
   var TODAS_TAGS_LISTA = ${JSON.stringify(tags.map(t => t.tag))};
   var tgRemove = [];
   var tgSel=null;
@@ -2004,6 +2010,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     document.getElementById('tgNome').textContent=c.tag;
     document.getElementById('tgGatilho').value=c.gatilho||'';
     document.getElementById('tgPalavras').value=(c.palavras||[]).join(', ');
+    document.getElementById('tgInstrucao').value=c.instrucao||'';
     document.getElementById('tgWpp').value=c.wpp||'';
     tgRemove=(c.remove||[]).slice();
     tgRenderRemove();
@@ -2023,6 +2030,7 @@ function paginaSofiaContatos(aviso, erro, params) {
   function tgSync(){
     var g=document.getElementById('tgGatilho').value;
     document.getElementById('tgPalBox').style.display=(g==='palavra')?'block':'none';
+    document.getElementById('tgIaBox').style.display=(g==='ia')?'block':'none';
     document.getElementById('tgWppBox').style.display=g?'block':'none';
   }
   function fecharTagCfg(){ document.getElementById('tgModal').style.display='none'; tgSel=null; }
@@ -2030,9 +2038,10 @@ function paginaSofiaContatos(aviso, erro, params) {
     if(!tgSel) return;
     var g=document.getElementById('tgGatilho').value;
     if(g==='palavra' && !document.getElementById('tgPalavras').value.trim()){ alert('Informe ao menos uma palavra-chave.'); return; }
+    if(g==='ia' && !document.getElementById('tgInstrucao').value.trim()){ alert('Descreva a intenção na instrução (ex.: quando a aluna perguntar sobre preço).'); return; }
     var b=document.getElementById('tgSalvar'); b.disabled=true; b.textContent='Salvando…';
     var pals=document.getElementById('tgPalavras').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
-    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove };
+    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, instrucao:document.getElementById('tgInstrucao').value, avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove };
     fetch('/sofia/contatos/tagcfg',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
       .then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.reload(); } else { b.disabled=false; b.textContent='Salvar'; alert('❌ '+(j.erro||'falha ao salvar')); } })
       .catch(function(){ b.disabled=false; b.textContent='Salvar'; alert('❌ erro de rede'); });
@@ -3202,7 +3211,7 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e5, corpo => {
       try {
         const d = JSON.parse(corpo || '{}');
-        contatos.definirTagConfig(d.tag, { gatilho: d.gatilho || '', palavras: d.palavras || [], avisarWpp: d.avisarWpp || '', remove: d.remove || [] });
+        contatos.definirTagConfig(d.tag, { gatilho: d.gatilho || '', palavras: d.palavras || [], instrucao: d.instrucao || '', avisarWpp: d.avisarWpp || '', remove: d.remove || [] });
         try { publicarRegras(); } catch (_) {} // atualiza o listener na hora
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true }));
       } catch (e) {
@@ -3612,6 +3621,7 @@ const AUTO_ROTULO = {
   agendou: '🎉 Nova aula experimental agendada!',
   novo: '🆕 Nova aluna falou com a SoFIA',
   palavra: '🔑 Palavra-chave detectada — pode precisar de atendimento',
+  ia: '🧠 Intenção detectada pela SoFIA',
   humano: '🙋 Conversa assumida por atendente',
   encerrou: '🔒 Atendimento encerrado sem agendamento',
   campanha: '💬 Aluna respondeu a uma campanha',
@@ -3630,10 +3640,12 @@ function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra }) {
 // Publica as regras que o LISTENER precisa (só os gatilhos dele).
 function publicarRegras() {
   try {
-    const regras = { novo: [], palavra: [], campanha: [], encerrou: [] };
+    const regras = { novo: [], palavra: [], ia: [], campanha: [], encerrou: [] };
     for (const g of Object.keys(regras)) {
       for (const r of contatos.tagsPorGatilho(g)) {
-        regras[g].push(g === 'palavra' ? { tag: r.tag, avisarWpp: r.avisarWpp, palavras: r.palavras } : { tag: r.tag, avisarWpp: r.avisarWpp });
+        if (g === 'palavra') regras[g].push({ tag: r.tag, avisarWpp: r.avisarWpp, palavras: r.palavras });
+        else if (g === 'ia') regras[g].push({ tag: r.tag, avisarWpp: r.avisarWpp, instrucao: r.instrucao });
+        else regras[g].push({ tag: r.tag, avisarWpp: r.avisarWpp });
       }
     }
     sofia.gravarRegras(regras);
