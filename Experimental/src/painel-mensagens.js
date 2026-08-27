@@ -1819,7 +1819,7 @@ function paginaSofiaConversas(aviso, erro) {
       return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:7px 10px;border-radius:9px;margin-bottom:5px;border:1px solid '+(on?'#11abae':'#eee')+';background:'+(on?'#e6f6f7':(encerrada(c)?'#fbf7f7':'#fff'))+'">'+nome+'<div class="quando" style="margin:0;font-size:.7rem">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
     }).join('');
     if(pag){
-      if(paginas>1){ pag.innerHTML='<div style="display:flex;justify-content:space-between;gap:8px"><button type="button" class="reset" onclick="mudarPag(-1)" '+(pagina===0?'disabled':'')+' style="padding:6px 12px">‹ Anterior</button><button type="button" class="reset" onclick="mudarPag(1)" '+(pagina>=paginas-1?'disabled':'')+' style="padding:6px 12px">Próxima ›</button></div><span class="quando" style="text-align:center;margin:0">Página '+(pagina+1)+' de '+paginas+' · '+total+' conversas</span>'; }
+      if(paginas>1){ pag.innerHTML='<div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center;align-items:center">'+setaPag('‹',pagina-1,pagina<=0)+pagNumsHtml(pagina,paginas)+setaPag('›',pagina+1,pagina>=paginas-1)+'</div><span class="quando" style="text-align:center;margin:0">Página '+(pagina+1)+' de '+paginas+' · '+total+' conversas</span>'; }
       else { pag.innerHTML='<span class="quando" style="text-align:center;margin:0">'+total+' conversa'+(total>1?'s':'')+'</span>'; }
     }
     if(selecionada && ultimoData[selecionada]){
@@ -1830,6 +1830,24 @@ function paginaSofiaConversas(aviso, erro) {
     }
   }
   function mudarPag(d){ pagina+=d; renderInbox(ultimoData); }
+  function irPag(n){ pagina=Math.max(0,n); renderInbox(ultimoData); }
+  function celPag(p, cur){ return p===cur ? '<span class="save" style="padding:4px 9px;border-radius:7px;font-size:.72rem;pointer-events:none">'+(p+1)+'</span>' : '<a class="reset" style="padding:4px 9px;font-size:.72rem;cursor:pointer" onclick="irPag('+p+')">'+(p+1)+'</a>'; }
+  function setaPag(txt, dest, off){ return off ? '<span class="reset" style="padding:4px 9px;font-size:.72rem;opacity:.35">'+txt+'</span>' : '<a class="reset" style="padding:4px 9px;font-size:.72rem;cursor:pointer" onclick="irPag('+dest+')">'+txt+'</a>'; }
+  // Números com janela (±2) + 1ª/última + reticências; buraco de 1 vira o número.
+  function pagNumsHtml(cur, paginas){
+    var last=paginas-1, nums={};
+    [0,last,cur-2,cur-1,cur,cur+1,cur+2].forEach(function(x){ if(x>=0&&x<=last)nums[x]=1; });
+    if(cur<=3)[1,2,3,4].forEach(function(x){ if(x<=last)nums[x]=1; });
+    if(cur>=last-3)[last-1,last-2,last-3,last-4].forEach(function(x){ if(x>=0)nums[x]=1; });
+    var arr=Object.keys(nums).map(Number).sort(function(a,b){return a-b;});
+    var out=[], ant=-1;
+    arr.forEach(function(p){
+      if(p-ant===2) out.push(celPag(ant+1,cur));
+      else if(p-ant>1) out.push('<span class="quando" style="padding:0 1px">…</span>');
+      out.push(celPag(p,cur)); ant=p;
+    });
+    return out.join('');
+  }
   function abrir(k){ selecionada=k; ncSel=(ultimoData[k]&&ultimoData[k].tagsContato?ultimoData[k].tagsContato.slice():[]); ncNome=(ultimoData[k]&&ultimoData[k].nome)||''; ncDirty=false; tagEdAberto=false; ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); }
   function atualizaWa(e){
     var b=document.getElementById('waTag'); if(!b) return;
