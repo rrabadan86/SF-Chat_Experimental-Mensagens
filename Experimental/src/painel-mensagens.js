@@ -252,7 +252,7 @@ const ESTILO = `
   .subtabs a.on{background:var(--teal);color:#fff;border-color:var(--teal);font-weight:600}
   .aviso{background:var(--avi-bg);border:1px solid var(--avi-bd);color:var(--avi-tx);border-radius:10px;padding:10px 14px;margin:14px 0;font-size:var(--fs-sm)}
   .aviso.err{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
-  .card{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:13px 15px;margin:10px 0}
+  .card{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:15px 17px;margin:12px 0;box-shadow:0 1px 2px rgba(16,24,40,.04)}
   .chead{display:flex;align-items:center;gap:10px}
   h2{font-size:var(--fs-h2);font-weight:700;margin:0}
   h3{font-size:var(--fs-sec);font-weight:700}
@@ -539,7 +539,7 @@ ${corpo}
 // Barra "número para testes" (compartilhada por Mensagens e Instagram).
 function barraTeste() {
   return `<div class="card testbar">
-    <label>🧪 Número para testes</label>
+    <label>Número para testes</label>
     <input id="telTeste" type="tel" inputmode="numeric" placeholder="(62) 99999-9999" maxlength="16">
     <p class="quando" style="margin:6px 0 0">Usado pelos botões <b>Enviar teste</b>. Fica salvo só neste navegador. A prévia usa valores de exemplo (ex.: nome → <i>Maria</i>).</p>
   </div>`;
@@ -772,13 +772,13 @@ function paginaMensagens(aviso, erro) {
     const mapa = HORARIOS_DA_MSG[m.chave];
     let hbloco = '';
     if (mapa === 'compartilha:followup') {
-      hbloco = `<div class="hsec"><div class="hsec-t">🕒 Horário</div>
+      hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
         <p class="quando" style="margin:0">Segue o <b>mesmo horário do Follow-up pós-aula (ainda não fechou)</b>, logo acima — é o mesmo disparo, muda só o texto conforme a lead.</p></div>`;
     } else if (Array.isArray(mapa)) {
       const linhas = mapa.map(([chave, sub]) => hmap[chave] ? blocoHorario(hmap[chave], sub) : '').join('');
       const editouHora = mapa.some(([chave]) => hmap[chave] && hmap[chave].editado);
       const badgeH = editouHora ? '<span class="badge-ed">alterado</span>' : '';
-      hbloco = `<div class="hsec"><div class="hsec-t">🕒 Horário deste envio ${badgeH}</div>${linhas}</div>`;
+      hbloco = `<div class="hsec"><div class="hsec-t">Horário deste envio ${badgeH}</div>${linhas}</div>`;
     }
     return `<div class="card">${cardMensagem(m)}${hbloco}</div>`;
   };
@@ -804,12 +804,12 @@ function paginaMensagens(aviso, erro) {
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
-    <div class="sec-t">📩 Mensagens individuais <small style="font-weight:600;color:var(--cinza)">(enviadas 1 para 1, direto para a aluna)</small></div>
+    <div class="sec-t">Mensagens individuais <small style="font-weight:600;color:var(--cinza)">(enviadas 1 para 1, direto para a aluna)</small></div>
     ${itensIndividuais}
-    <div class="sec-t">👥 Mensagens em grupo <small style="font-weight:600;color:var(--cinza)">(enviadas nos grupos do WhatsApp)</small></div>
+    <div class="sec-t">Mensagens em grupo <small style="font-weight:600;color:var(--cinza)">(enviadas nos grupos do WhatsApp)</small></div>
     ${cardGrupos()}
     ${itensGrupo}
-    <div class="sec-t">🔁 Outros envios em grupo <small style="font-weight:600;color:var(--cinza)">(automáticos, sem texto editável)</small></div>
+    <div class="sec-t">Outros envios em grupo <small style="font-weight:600;color:var(--cinza)">(automáticos, sem texto editável)</small></div>
     ${outros}
     <div class="hbar">
       <div class="acts"><button type="submit" form="fh" id="btnH" class="save">🕒 Salvar horários e reiniciar o robô</button></div>
@@ -833,7 +833,7 @@ ${scriptPreviewTeste()}
   }
   atualizaWa(); setInterval(atualizaWa, 7000);
 </script>`;
-  return chrome({ tab: 'WhatsApp Mensagens', h1: '💬 WhatsApp — mensagens do robô', p: 'Conexão, texto e horário de cada envio no mesmo lugar.' }, 'msg', corpo);
+  return chrome({ tab: 'WhatsApp Mensagens', h1: 'WhatsApp — mensagens do robô', p: 'Conexão, texto e horário de cada envio no mesmo lugar.' }, 'msg', corpo);
 }
 
 // ── Página 2: agendar envios ────────────────────────────────────────────────
@@ -864,7 +864,7 @@ function cardHorariosAgendados() {
   const editou = ['agendadosManha', 'agendadosTarde'].some(c => hmap[c] && hmap[c].editado);
   const badge = editou ? '<span class="badge-ed">alterado</span>' : '';
   return `
-  <div class="sec-t">🕒 Horários de disparo</div>
+  <div class="sec-t">Horários de disparo</div>
   <div class="card">
     <form id="fhAg" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnHAg');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"><input type="hidden" name="voltar" value="/agendar"></form>
     <p class="quando" style="margin:0 0 6px">Quando os envios agendados de cada turno são disparados ${badge}. Vale para <b>todos</b> os agendamentos.</p>
@@ -913,12 +913,12 @@ function paginaAgendar(aviso, erro) {
   </form>
 
   <details class="acc-sec"${pend.length ? ' open' : ''}>
-    <summary class="sec-t" style="cursor:pointer;padding:4px 0">⏳ Pendentes (${pend.length})<small style="font-weight:400;color:var(--cinza)"> — clique para ${pend.length ? 'recolher' : 'abrir'}</small></summary>
+    <summary class="sec-t" style="cursor:pointer;padding:4px 0">Pendentes (${pend.length})<small style="font-weight:400;color:var(--cinza)"> — clique para ${pend.length ? 'recolher' : 'abrir'}</small></summary>
     ${pend.length ? pend.map(itemHtml).join('') : '<div class="vazio">Nenhum envio pendente.</div>'}
   </details>
 
   <details class="acc-sec">
-    <summary class="sec-t" style="cursor:pointer;padding:4px 0">📜 Histórico <small style="font-weight:400;color:var(--cinza)">(${hist.length} envio${hist.length === 1 ? '' : 's'} — clique para abrir)</small></summary>
+    <summary class="sec-t" style="cursor:pointer;padding:4px 0">Histórico <small style="font-weight:400;color:var(--cinza)">(${hist.length} envio${hist.length === 1 ? '' : 's'} — clique para abrir)</small></summary>
     ${hist.length ? hist.map(itemHtml).join('') : '<div class="vazio">Sem envios recentes.</div>'}
   </details>
   ${cardHorariosAgendados()}
@@ -1000,7 +1000,7 @@ function paginaAgendar(aviso, erro) {
     finally{ btn.disabled=false; btn.textContent=rotuloBtn(); }
   });
 </script>`;
-  return chrome({ tab: 'Agendamento', h1: '📅 Agendamento de envios', p: `Mensagens são enviadas <b>${esc(horaAg('manha'))}</b> (manhã) e <b>${esc(horaAg('tarde'))}</b> (tarde) do dia agendado.` }, 'msg', corpo);
+  return chrome({ tab: 'Agendamento', h1: 'Agendamento de envios', p: `Mensagens são enviadas <b>${esc(horaAg('manha'))}</b> (manhã) e <b>${esc(horaAg('tarde'))}</b> (tarde) do dia agendado.` }, 'msg', corpo);
 }
 
 // ── Página 3: conexão do WhatsApp (QR quando cai) ───────────────────────────
@@ -1024,7 +1024,7 @@ function paginaWa() {
   }
   const reload = st.estado === 'conectado' ? '' : '<script>setTimeout(function(){location.reload()},6000)</script>';
   const corpo = `<div class="wrap">${bloco}<p class="wa-upd">Última atualização do robô: ${esc(quando)}</p></div>${reload}`;
-  return chrome({ tab: 'WhatsApp', h1: '📱 Conexão do WhatsApp', p: 'Veja se a sessão está ativa — e escaneie o QR aqui se ela cair.' }, 'wa', corpo);
+  return chrome({ tab: 'WhatsApp', h1: 'Conexão do WhatsApp', p: 'Veja se a sessão está ativa — e escaneie o QR aqui se ela cair.' }, 'wa', corpo);
 }
 
 // ── Horários por mensagem (embutidos nos cards da aba Mensagens) ────────────
@@ -1103,11 +1103,11 @@ function paginaHoje(dia) {
       <div class="chead"><h2>Por tipo de envio</h2></div>
       ${jobs || '<div class="vazio">Nenhum envio registrado ' + (ehHoje ? 'hoje' : 'neste dia') + ' ainda.</div>'}
     </div>
-    <div class="sec-t">📜 Envios ${ehHoje ? 'de hoje' : 'do dia'} (${evs.length})</div>
+    <div class="sec-t">Envios ${ehHoje ? 'de hoje' : 'do dia'} (${evs.length})</div>
     <div class="card">${lista || '<div class="vazio">Sem envios para mostrar.</div>'}</div>
     <p class="quando" style="text-align:center">Registrado automaticamente a cada envio do robô. ${ehHoje ? 'Atualiza ao recarregar.' : ''}</p>
   </div>${ehHoje ? '<script>setTimeout(function(){location.reload()},60000)</script>' : ''}`;
-  return chrome({ tab: 'Log', h1: '📊 Log — o que o robô fez', p: ehHoje ? 'Todos os envios de <b>hoje</b>, em tempo quase real.' : `Envios do dia <b>${esc(fmtData(d))}</b>.` }, 'msg', corpo);
+  return chrome({ tab: 'Log', h1: 'Log — o que o robô fez', p: ehHoje ? 'Todos os envios de <b>hoje</b>, em tempo quase real.' : `Envios do dia <b>${esc(fmtData(d))}</b>.` }, 'msg', corpo);
 }
 
 // ── Página: Instagram (status + liga/desliga) ───────────────────────────────
@@ -1179,7 +1179,7 @@ function paginaInstagram(aviso, erro) {
       <p id="forcarIgMsg" class="quando" style="margin:10px 0 0;font-weight:700"></p>
     </div>
 
-    <div class="sec-t">🍪 Sessão do Instagram (cookies)</div>
+    <div class="sec-t">Sessão do Instagram (cookies)</div>
     <div class="card">
       <p class="quando" style="margin:0 0 10px">${ckTexto}</p>
       <form method="POST" action="/instagram/cookies">
@@ -1204,13 +1204,13 @@ function paginaInstagram(aviso, erro) {
            <div class="jobrow"><div class="jn">⚠️ Falhas</div><div class="jc">${err}</div></div>`
         : '<div class="vazio">Ainda não há registro de execução do Instagram.</div>'}
     </div>
-    <div class="sec-t">⛔ Contas puladas (${puladasArr.length})</div>
+    <div class="sec-t">Contas puladas (${puladasArr.length})</div>
     <div class="card">
       ${puladas || '<div class="vazio">Nenhuma conta na lista de indisponíveis.</div>'}
       ${puladasArr.length ? `<p class="quando" style="margin:10px 0 0">Contas privadas/restritas que deram "Mensagem Indisponível". Após ${maxTent} tentativas o robô para de tentar (não gastam as vagas do dia). Se uma delas abrir o perfil depois, recebe normalmente.</p>` : ''}
     </div>
 
-    <div class="sec-t">🎯 Limite de envios por dia</div>
+    <div class="sec-t">Limite de envios por dia</div>
     <div class="card">
       <form method="POST" action="/instagram/limite" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
         <div><label style="margin:0 0 4px">Máximo de DMs por dia</label><input type="number" name="max" min="1" max="100" value="${limite}" style="width:120px" required></div>
@@ -1219,10 +1219,10 @@ function paginaInstagram(aviso, erro) {
       <p class="quando" style="margin:8px 0 0">Fonte: <b>${fonteMax === 'painel' ? 'painel' : '.env (IG_MAX_DIA)'}</b>. Recomendado começar baixo (4–5) e subir aos poucos. Vale já no próximo disparo — sem reiniciar.</p>
     </div>
 
-    <div class="sec-t">✍️ Mensagem de boas-vindas</div>
+    <div class="sec-t">Mensagem de boas-vindas</div>
     ${msgIg ? `<div class="card">${cardMensagem(msgIg, '/instagram', { ig: true })}</div>` : ''}
 
-    <div class="sec-t">🕒 Horário do envio</div>
+    <div class="sec-t">Horário do envio</div>
     <div class="card">
       <form id="fhIg" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnHIg');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"><input type="hidden" name="voltar" value="/instagram"></form>
       ${jobIg ? blocoHorario(jobIg, '', 'fhIg') : '<div class="vazio">Sem horário configurável.</div>'}
@@ -1257,7 +1257,7 @@ function paginaInstagram(aviso, erro) {
   // Se já houver um envio em andamento (recarregou a página), retoma o acompanhamento.
   (function(){ fetch('/instagram/forcar/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(st){ if(st&&(st.status==='pendente'||st.status==='executando')) pollForcarIg(); }).catch(function(){}); })();
   </script>`;
-  return chrome({ tab: 'Instagram', h1: '📸 Instagram', p: 'Status, liga/desliga, limite, mensagem e horário — tudo do Instagram aqui.' }, 'ig', corpo);
+  return chrome({ tab: 'Instagram', h1: 'Instagram', p: 'Status, liga/desliga, limite, mensagem e horário — tudo do Instagram aqui.' }, 'ig', corpo);
 }
 
 // ── Página: Indicadores do formulário ───────────────────────────────────────
@@ -1327,7 +1327,7 @@ function paginaIndicadores(dias, aviso) {
   };
 
   const outrasHtml = outras.length ? `
-    <div class="sec-t">🏷️ Outras etiquetas registradas</div>
+    <div class="sec-t">Outras etiquetas registradas</div>
     <div class="card">
       ${outras.map(o => `<div class="jobrow"><div class="jn">${esc(o.origem)}</div><div class="jc">${o.acessos} acesso${o.acessos === 1 ? '' : 's'} · <span style="color:var(--coral-esc)">${o.agendamentos} agend.</span></div></div>`).join('')}
     </div>` : '';
@@ -1339,7 +1339,7 @@ function paginaIndicadores(dias, aviso) {
 
   const origemBloco = `
     <details class="acc-sec">
-      <summary class="sec-t" style="cursor:pointer;padding:4px 0">🔗 Gerador de links por origem <small style="font-weight:400;color:var(--cinza)">(${CANAIS.length} cana${CANAIS.length === 1 ? 'l' : 'is'} — clique para abrir)</small></summary>
+      <summary class="sec-t" style="cursor:pointer;padding:4px 0">Gerador de links por origem <small style="font-weight:400;color:var(--cinza)">(${CANAIS.length} cana${CANAIS.length === 1 ? 'l' : 'is'} — clique para abrir)</small></summary>
     <div class="card" style="border-style:dashed">
       <p class="quando" style="margin:0">De onde vem cada pessoa? Use um <b>link diferente em cada lugar</b> — Instagram, WhatsApp, indicação, anúncio. Quem acessar por ele já entra etiquetado e a conversão de cada canal aparece aqui embaixo. Copie o link do canal e use no lugar do link comum.</p>
     </div>
@@ -1380,7 +1380,7 @@ function paginaIndicadores(dias, aviso) {
       <td>${cadCelula(b)}</td>
     </tr>`).join('');
   const logBloco = `
-    <div class="sec-t">🗒️ Agendamentos pelo formulário (dados completos)</div>
+    <div class="sec-t">Agendamentos pelo formulário (dados completos)</div>
     <details class="card"${LOG.length ? '' : ' open'}>
       <summary style="cursor:pointer;font-weight:700">${LOG.length ? `Ver os ${LOG.length} agendamento${LOG.length === 1 ? '' : 's'} registrado${LOG.length === 1 ? '' : 's'}` : 'Nenhum agendamento registrado ainda'}</summary>
       <p class="quando" style="margin:10px 0">Tudo o que a aluna digitou no formulário (nome, CPF, telefone, e-mail e nascimento), o horário da aula e o que o EVO fez com o cadastro. Serve para conferir os dados quando o cadastro do EVO veio incompleto (ex.: cadastro antigo). Atualiza a cada ~2 min.</p>
@@ -1433,10 +1433,10 @@ function paginaIndicadores(dias, aviso) {
       ${funilAgendOrig}
       <div class="jobrow"><div class="jn">↩️ Visitaram e não agendaram</div><div class="jc">${r.naoAgendaram}</div></div>
     </div>
-    <div class="sec-t">📅 Por dia (pessoas ▮ · agendamentos)</div>
+    <div class="sec-t">Por dia (pessoas ▮ · agendamentos)</div>
     <div class="card">${barras || '<div class="vazio">Sem dados ainda neste período. Os números aparecem conforme as pessoas acessam o formulário.</div>'}</div>
 
-    <div class="sec-t">⏰ Horários de pico &nbsp;·&nbsp; 📆 Dias da semana</div>
+    <div class="sec-t">Horários de pico &nbsp;·&nbsp; Dias da semana</div>
     <div class="card">
       <p class="quando" style="margin:0 0 8px">Quando as pessoas mais <b>acessam</b> o formulário.</p>
       <div style="display:grid;grid-template-columns:1fr;gap:2px">${picoHorasHtml || '<div class="vazio">Sem acessos no período.</div>'}</div>
@@ -1444,7 +1444,7 @@ function paginaIndicadores(dias, aviso) {
       <div style="display:grid;grid-template-columns:1fr;gap:2px">${picoDiasHtml}</div>
     </div>
 
-    <div class="sec-t">🎯 Horários de aula mais escolhidos</div>
+    <div class="sec-t">Horários de aula mais escolhidos</div>
     <div class="card">
       ${aulaHtml || '<div class="vazio">Ainda sem agendamentos com horário registrado neste período — passa a contar a partir dos próximos agendamentos.</div>'}
     </div>
@@ -1470,7 +1470,7 @@ function paginaIndicadores(dias, aviso) {
     }
   }
   </script>`;
-  return chrome({ tab: 'Formulário', h1: '📈 Formulário', p: 'Acessos, agendamentos e taxa de conversão do formulário de agendamento.' }, 'ind', corpo);
+  return chrome({ tab: 'Formulário', h1: 'Formulário', p: 'Acessos, agendamentos e taxa de conversão do formulário de agendamento.' }, 'ind', corpo);
 }
 
 // ── Página: Sofia (chatbot) — prompt, configs e conexão do WhatsApp dela ─────
@@ -1512,7 +1512,7 @@ function paginaSofiaConversas(aviso, erro) {
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('conversas')}
-    <div class="sec-t" data-nosec="1">💬 Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span><small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
+    <div class="sec-t" data-nosec="1">Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span><small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
     <style>
       .inbox-grid{display:grid;grid-template-columns:236px minmax(0,1fr);gap:14px;align-items:start}
       .inbox-grid>div{min-width:0}
@@ -1872,7 +1872,7 @@ function paginaSofiaConversas(aviso, erro) {
   atualizaInbox(); setInterval(atualizaInbox, 4000);
   try { if(localStorage.getItem('convFiltrosOpen')==='1'){ var _d=document.getElementById('convFiltrosDet'); if(_d)_d.open=true; } } catch(e){}
 </script>`;
-  return chrome({ tab: 'SoFIA', h1: '🤖 SoFIA', p: 'Conversas da SoFIA — leia o histórico de cada atendimento.' }, 'sofia', corpo);
+  return chrome({ tab: 'SoFIA', h1: 'SoFIA', p: 'Conversas da SoFIA — leia o histórico de cada atendimento.' }, 'sofia', corpo);
 }
 
 // Aba Sofia → Contatos: CRM leve (importar CSV, etiquetar, filtrar por tag).
@@ -1894,8 +1894,12 @@ function paginaSofiaContatos(aviso, erro, params) {
 
   // Cores estáveis por texto (mesma tag/nome → mesma cor, no servidor e no navegador).
   const _hash = (s) => { let h = 0; s = String(s || ''); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
-  const PAL_TAG = [['#e4efee', '#0e8e91', '#b8e6e7'], ['#fdecea', '#c0392b', '#f5c6cb'], ['#eef9f2', '#1c8f52', '#cbe8d5'], ['#fff4e5', '#b26a00', '#ffe0b2'], ['#eef1fb', '#3b4fb0', '#d3dcf7'], ['#f3e9fb', '#7a3fb0', '#e2cff5'], ['#fce8f1', '#b0367a', '#f7cfe0']];
-  const PAL_AV = ['#f39c12', '#3498db', '#9b59b6', '#1abc9c', '#e67e22', '#2ecc71', '#e74c3c', '#5567c9'];
+  // Tags: fundo claro + texto/hue mais discretos (menos neon), mantendo a
+  // distinção de cor entre categorias.
+  const PAL_TAG = [['#e7f0ef', '#0e6e6b', '#cbe3e2'], ['#f6eae8', '#a5473f', '#e6cec9'], ['#eaf3ec', '#3c8258', '#d0e4d6'], ['#f6efe1', '#8a6a2e', '#e6d8bd'], ['#eceff7', '#495a95', '#d5dcee'], ['#efe9f3', '#6f4e8f', '#ddcfe6'], ['#f4e9ef', '#95517a', '#e6cfdc']];
+  // Avatares: paleta sóbria e dessaturada (família teal/pedra), harmônica com o
+  // acento do painel — mantém variação para leitura rápida sem "gritar".
+  const PAL_AV = ['#5f8a87', '#6b7f9e', '#8a7f9c', '#9a8778', '#7a9b86', '#7d8b96', '#9c7f86', '#88836f'];
   const corTag = (t) => PAL_TAG[_hash(t) % PAL_TAG.length];
   const corAv = (s) => PAL_AV[_hash(s) % PAL_AV.length];
   const iniciais = (nome, tel) => {
@@ -1991,7 +1995,7 @@ function paginaSofiaContatos(aviso, erro, params) {
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('contatos')}
-    <div class="sec-t">📇 Contatos <small style="font-weight:600;color:#5c5960">(${total} no total — importe por CSV, etiquete e filtre por tag)</small></div>
+    <div class="sec-t">Contatos <small style="font-weight:600;color:#5c5960">(${total} no total — importe por CSV, etiquete e filtre por tag)</small></div>
 
     <details class="card" style="padding:10px 15px">
       <summary style="cursor:pointer;font-weight:700">⬆️ Importar CSV <small style="font-weight:400;color:#5c5960">(colunas: Nome, Telefone, Instruções personalizadas, Tags)</small></summary>
@@ -2353,7 +2357,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     rd.readAsText(f.files[0],'utf-8');
   }
 </script>`;
-  return chrome({ tab: 'Contatos', h1: '🤖 SoFIA', p: 'Contatos — importe, etiquete e filtre por tag.' }, 'sofia', corpo);
+  return chrome({ tab: 'Contatos', h1: 'SoFIA', p: 'Contatos — importe, etiquete e filtre por tag.' }, 'sofia', corpo);
 }
 
 // Estimativa de término de uma campanha, a partir do que falta e das configs.
@@ -2433,7 +2437,7 @@ function paginaSofiaTags(aviso, erro) {
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('tags')}
-    <div class="sec-t">🏷️ Gerenciar tags <small style="font-weight:600;color:#5c5960">(criar, renomear, excluir ou automatizar)</small></div>
+    <div class="sec-t">Gerenciar tags <small style="font-weight:600;color:#5c5960">(criar, renomear, excluir ou automatizar)</small></div>
     <div class="card">
       <div style="margin-bottom:12px"><button type="button" class="save" onclick="criarTagNova()" style="padding:8px 16px">＋ Criar tag</button></div>
       ${lista}
@@ -2535,7 +2539,7 @@ function paginaSofiaTags(aviso, erro) {
       .catch(function(){ alert('❌ erro de rede'); });
   }
 </script>`;
-  return chrome({ tab: 'Tags', h1: '🤖 SoFIA', p: 'Tags — crie, renomeie, exclua e automatize as etiquetas dos contatos.' }, 'sofia', corpo);
+  return chrome({ tab: 'Tags', h1: 'SoFIA', p: 'Tags — crie, renomeie, exclua e automatize as etiquetas dos contatos.' }, 'sofia', corpo);
 }
 
 // Aba SoFIA → Campanhas: envio em massa por tag (com variações da IA e limites).
@@ -2547,11 +2551,11 @@ function paginaSofiaCampanhas(aviso, erro) {
     : '';
 
   const novo = `
-    <div class="sec-t">📣 Nova campanha</div>
+    <div class="sec-t">Nova campanha</div>
     <div class="card">
       ${tags.length ? `<form id="cpForm" onsubmit="return enviarCampanha(event)">
         <div class="cpf-sec first">
-          <div class="cpf-h">✍️ Mensagem</div>
+          <div class="cpf-h">Mensagem</div>
           <div class="cpf-grid">
             <div class="cpf-field"><label>Nome da campanha</label><input type="text" name="nome" placeholder="ex.: Reativação outubro" required></div>
             <div class="cpf-field"><label>Enviar para a tag</label><select name="tag" required style="text-overflow:ellipsis">${opcoesTag}</select></div>
@@ -2569,7 +2573,7 @@ function paginaSofiaCampanhas(aviso, erro) {
         </div>
 
         <details class="cpf-acc">
-          <summary class="cpf-sum">🛡️ Ritmo e limites <span class="sub quando" style="margin:0">— já vem com um ritmo seguro; abra para ajustar</span></summary>
+          <summary class="cpf-sum">Ritmo e limites <span class="sub quando" style="margin:0">— já vem com um ritmo seguro; abra para ajustar</span></summary>
           <div class="cpf-body">
           <div class="cpf-grid-lim">
             <div class="cpf-field"><label>Começar em</label><input type="date" id="cpIni" name="dataInicio" value="${esc(hojeSP())}" min="${esc(hojeSP())}" oninput="estCamp()"></div>
@@ -2583,7 +2587,7 @@ function paginaSofiaCampanhas(aviso, erro) {
         <div id="cpEst" class="aviso" style="margin:14px 0 0;display:none"></div>
 
         <details class="cpf-acc">
-          <summary class="cpf-sum">🚀 Testar e criar</summary>
+          <summary class="cpf-sum">Testar e criar</summary>
           <div class="cpf-body">
           <p class="quando" style="margin:0 0 10px">Mande a mensagem (e a foto) para um número seu antes, pra conferir como chega.</p>
           <div class="cpf-range" style="flex-wrap:wrap">
@@ -2657,7 +2661,7 @@ function paginaSofiaCampanhas(aviso, erro) {
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('campanhas')}
     ${novo}
-    <div class="sec-t">📋 Campanhas</div>
+    <div class="sec-t">Campanhas</div>
     <div id="campList">${campListHTML()}</div>
   </div>
   <div id="cpModal" class="ct-ov" onclick="if(event.target===this)fecharCampDet()">
@@ -2704,13 +2708,13 @@ function paginaSofiaCampanhas(aviso, erro) {
       var fila=j.pendentes.map(function(x){ return linha(x.nome,x.tel,'⏳ na fila'); }).join('')+maisN(j.pendentes.length,tPen) || '<p class="quando">Fila vazia.</p>';
       var fal=j.falhas.slice().reverse().map(function(x){ return linha(x.nome,x.tel,'<span style="color:var(--erro)">⚠️ '+cpEsc((x.erro||'').slice(0,40))+'</span>'); }).join('') || '<p class="quando">Nenhuma falha. 🎉</p>';
       document.getElementById('cpBody').innerHTML=
-        '<div class="cp-sec"><div class="cp-h">✅ Enviadas ('+tEnv+')</div><div class="cp-list">'+env+'</div></div>'+
-        '<div class="cp-sec"><div class="cp-h">⏳ Na fila ('+tPen+')</div><div class="cp-list">'+fila+'</div></div>'+
-        (tFal?('<div class="cp-sec"><div class="cp-h">⚠️ Falhas ('+tFal+')</div><div class="cp-list">'+fal+'</div></div>'):'');
+        '<div class="cp-sec"><div class="cp-h">Enviadas ('+tEnv+')</div><div class="cp-list">'+env+'</div></div>'+
+        '<div class="cp-sec"><div class="cp-h">Na fila ('+tPen+')</div><div class="cp-list">'+fila+'</div></div>'+
+        (tFal?('<div class="cp-sec"><div class="cp-h">Falhas ('+tFal+')</div><div class="cp-list">'+fal+'</div></div>'):'');
     }
     function fecharCampDet(){ document.getElementById('cpModal').style.display='none'; cpId=null; if(cpTimer){ clearInterval(cpTimer); cpTimer=null; } }
   </script>`;
-  return chrome({ tab: 'Campanhas', h1: '🤖 SoFIA', p: 'Campanhas — envio em massa por tag, com variações e limites.' }, 'sofia', corpo);
+  return chrome({ tab: 'Campanhas', h1: 'SoFIA', p: 'Campanhas — envio em massa por tag, com variações e limites.' }, 'sofia', corpo);
 }
 
 function paginaSofia(aviso, erro) {
@@ -2720,7 +2724,7 @@ function paginaSofia(aviso, erro) {
       <div class="card"><div class="chead"><h2>SoFIA não encontrada nesta máquina</h2></div>
         <p class="quando">Não achei a pasta da SoFIA (<code>${esc(sofia.DIR)}</code>) ou o arquivo do prompt. Se a SoFIA roda em outra pasta/servidor, aponte com a variável <code>SOFIA_DIR</code> no <code>.env</code> do painel e reinicie: <code>pm2 restart slimfit-painel --update-env</code>.</p>
       </div></div>`;
-    return chrome({ tab: 'SoFIA', h1: '🤖 SoFIA', p: 'Prompt, configurações e conexão do chatbot.' }, 'sofia', corpo);
+    return chrome({ tab: 'SoFIA', h1: 'SoFIA', p: 'Prompt, configurações e conexão do chatbot.' }, 'sofia', corpo);
   }
 
   const e = sofia.estado();
@@ -2748,7 +2752,7 @@ function paginaSofia(aviso, erro) {
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('config')}
 
-    <div class="sec-t">📱 Conexão do WhatsApp da SoFIA <small style="font-weight:600;color:var(--cinza)">(número próprio, diferente do robô)</small></div>
+    <div class="sec-t">Conexão do WhatsApp da SoFIA <small style="font-weight:600;color:var(--cinza)">(número próprio, diferente do robô)</small></div>
     <div id="sofiaWa">${blocoSofiaWa()}</div>
     <div style="margin:8px 0 6px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -2762,11 +2766,11 @@ function paginaSofia(aviso, erro) {
     <form id="formSalvar" method="POST" action="/sofia/salvar">
 
       <details class="acc-sec">
-        <summary class="sec-t" style="cursor:pointer;padding:4px 0">⌨️ Jeito de responder <small style="font-weight:400;color:var(--cinza)">— IA, ritmo da conversa, memória e operação</small></summary>
+        <summary class="sec-t" style="cursor:pointer;padding:4px 0">Jeito de responder <small style="font-weight:400;color:var(--cinza)">— IA, ritmo da conversa, memória e operação</small></summary>
 
       <!-- Grupo 1 · Inteligência (modelo de IA + transcrição) -->
       <div class="card">
-        <div style="font-family:"Inter",sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">🧠 Inteligência</div>
+        <div style="font-family:"Inter",sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">Inteligência</div>
         <p class="quando" style="margin:0 0 12px">Qual Claude a SoFIA usa e se ela entende áudios.</p>
         <div style="display:flex;gap:18px;flex-wrap:wrap">
           <div style="flex:1;min-width:240px">
@@ -2789,7 +2793,7 @@ function paginaSofia(aviso, erro) {
 
       <!-- Grupo 2 · Ritmo da conversa (humano/velocidade + agrupar + pausa celular) -->
       <div class="card">
-        <div style="font-family:"Inter",sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">💬 Ritmo da conversa</div>
+        <div style="font-family:"Inter",sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">Ritmo da conversa</div>
         <p class="quando" style="margin:0 0 12px">Como ela fala e o tempo até responder.</p>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="ritHumano" value="1"${e.ritmo.humano ? ' checked' : ''} style="width:auto;margin:0">
@@ -2816,11 +2820,11 @@ function paginaSofia(aviso, erro) {
         <hr style="border:0;border-top:1px solid var(--linha);margin:14px 0 12px">
         <div class="cfg-grid">
           <div>
-            <label>🧩 Agrupar mensagens da aluna${infoI('A aluna às vezes manda <b>várias mensagens seguidas</b>. A SoFIA espera esse tempo após a última e responde <b>uma vez só</b>, juntando tudo — evita respostas cruzadas/confusas. Padrão: 7 segundos. 0 = responder na hora. As mensagens aparecem no painel na hora.')}</label>
+            <label>Agrupar mensagens da aluna${infoI('A aluna às vezes manda <b>várias mensagens seguidas</b>. A SoFIA espera esse tempo após a última e responde <b>uma vez só</b>, juntando tudo — evita respostas cruzadas/confusas. Padrão: 7 segundos. 0 = responder na hora. As mensagens aparecem no painel na hora.')}</label>
             <div class="cfg-in"><input type="number" name="agruparSeg" min="0" max="120" step="1" value="${e.agruparSeg}"><span class="suf">segundos (0 = na hora)</span></div>
           </div>
           <div>
-            <label>⏳ Pausa ao responder pelo celular${infoI('Se você responder uma aluna <b>direto pelo WhatsApp</b> (no celular da SoFIA), ela se cala nessa conversa por esse tempo, pra não falar por cima de você. É <b>diferente</b> do botão “assumir” do painel, que deixa a SoFIA fora <b>até você devolver</b>.')}</label>
+            <label>Pausa ao responder pelo celular${infoI('Se você responder uma aluna <b>direto pelo WhatsApp</b> (no celular da SoFIA), ela se cala nessa conversa por esse tempo, pra não falar por cima de você. É <b>diferente</b> do botão “assumir” do painel, que deixa a SoFIA fora <b>até você devolver</b>.')}</label>
             <div class="cfg-in"><input type="number" name="pausaMin" min="1" max="1440" value="${e.pausaMin}"><span class="suf">minutos</span></div>
           </div>
         </div>
@@ -2828,31 +2832,31 @@ function paginaSofia(aviso, erro) {
 
       <!-- Grupo 3 · Memória e operação (sessão + verificação + limite) -->
       <div class="card">
-        <div style="font-family:"Inter",sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">⚙️ Memória e operação</div>
+        <div style="font-family:"Inter",sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">Memória e operação</div>
         <p class="quando" style="margin:0 0 12px">Duração da memória, saúde da conexão e limite de vagas por turma.</p>
         <div class="cfg-grid">
           <div>
-            <label>🧠 Tempo de sessão (memória)${infoI('Depois desse tempo <b>sem mensagens</b>, a próxima mensagem da aluna começa uma conversa <b>nova</b> — a SoFIA não lembra do que foi dito antes. Na aba Conversas aparece como <b>“Sessão encerrada”</b>. Padrão: 12 horas.')}</label>
+            <label>Tempo de sessão (memória)${infoI('Depois desse tempo <b>sem mensagens</b>, a próxima mensagem da aluna começa uma conversa <b>nova</b> — a SoFIA não lembra do que foi dito antes. Na aba Conversas aparece como <b>“Sessão encerrada”</b>. Padrão: 12 horas.')}</label>
             <div class="cfg-in"><input type="number" name="sessaoHoras" min="1" max="720" step="1" value="${e.sessaoHoras}"><span class="suf">horas</span></div>
           </div>
           <div>
-            <label>🩺 Verificação de conexão${infoI('De tempos em tempos a SoFIA confere se o WhatsApp dela ainda está <b>de verdade</b> conectado. Se travar (parar de responder sem cair o QR), ela <b>te avisa no celular</b> e <b>reinicia sozinha</b>. Padrão: 3 minutos. Vale na hora, sem reiniciar.')}</label>
+            <label>Verificação de conexão${infoI('De tempos em tempos a SoFIA confere se o WhatsApp dela ainda está <b>de verdade</b> conectado. Se travar (parar de responder sem cair o QR), ela <b>te avisa no celular</b> e <b>reinicia sozinha</b>. Padrão: 3 minutos. Vale na hora, sem reiniciar.')}</label>
             <div class="cfg-in">checar a cada <input type="number" name="healthMin" min="0" max="120" step="1" value="${e.healthMin}"><span class="suf">min (0 = off)</span></div>
           </div>
           <div>
-            <label>🎟️ Máx. experimentais por turma${infoI('Quando uma turma já tem esse número de experimentais marcadas, a SoFIA <b>para de oferecer</b> aquele horário (mesmo com vaga normal). Aumente para aceitar mais. Padrão: 2. Vale na próxima atualização da grade. <b>Atenção:</b> a checagem final roda no formulário (Render) — se aumentar muito aqui, ajuste o EVO_MAX_EXPERIMENTAIS lá também.')}</label>
+            <label>Máx. experimentais por turma${infoI('Quando uma turma já tem esse número de experimentais marcadas, a SoFIA <b>para de oferecer</b> aquele horário (mesmo com vaga normal). Aumente para aceitar mais. Padrão: 2. Vale na próxima atualização da grade. <b>Atenção:</b> a checagem final roda no formulário (Render) — se aumentar muito aqui, ajuste o EVO_MAX_EXPERIMENTAIS lá também.')}</label>
             <div class="cfg-in"><input type="number" name="expLimite" min="0" max="50" step="1" value="${lerExpLimite() == null ? 2 : lerExpLimite()}"><span class="suf">por turma (0 = sem limite)</span></div>
           </div>
           <div>
-            <label>😴 "Sem resposta" — silêncio mínimo${infoI('Na aba <b>Conversas</b> existe um filtro que mostra só os contatos que <b>pararam de responder</b>. Aqui você define o <b>silêncio mínimo</b>: só entra quem não manda mensagem há pelo menos esse tempo. Só afeta a listagem do painel — não o robô nem o follow-up. Padrão: 24 horas.')}</label>
+            <label>"Sem resposta" — silêncio mínimo${infoI('Na aba <b>Conversas</b> existe um filtro que mostra só os contatos que <b>pararam de responder</b>. Aqui você define o <b>silêncio mínimo</b>: só entra quem não manda mensagem há pelo menos esse tempo. Só afeta a listagem do painel — não o robô nem o follow-up. Padrão: 24 horas.')}</label>
             <div class="cfg-in"><input type="number" name="quietoHoras" min="1" max="720" step="1" value="${e.quieto.horas}"><span class="suf">horas</span></div>
           </div>
           <div>
-            <label>😴 "Sem resposta" — janela${infoI('Idade <b>máxima</b> da última mensagem do contato para ele aparecer no filtro. Ex.: 4 dias mostra só quem sumiu nos últimos 4 dias (não desenterra conversas antigas). Padrão: 4 dias.')}</label>
+            <label>"Sem resposta" — janela${infoI('Idade <b>máxima</b> da última mensagem do contato para ele aparecer no filtro. Ex.: 4 dias mostra só quem sumiu nos últimos 4 dias (não desenterra conversas antigas). Padrão: 4 dias.')}</label>
             <div class="cfg-in">últimos <input type="number" name="quietoDias" min="1" max="60" step="1" value="${e.quieto.dias}"><span class="suf">dias</span></div>
           </div>
           <div>
-            <label>🗂️ Guardar histórico das conversas${infoI('Por quanto tempo o painel guarda o histórico das conversas na aba Conversas. Depois disso, as conversas paradas somem da lista (o WhatsApp da aluna não é afetado). <b>0 = nunca apagar</b> (guarda tudo). Padrão: 365 dias. Vale para a SoFIA na próxima limpeza — não precisa reiniciar.')}</label>
+            <label>Guardar histórico das conversas${infoI('Por quanto tempo o painel guarda o histórico das conversas na aba Conversas. Depois disso, as conversas paradas somem da lista (o WhatsApp da aluna não é afetado). <b>0 = nunca apagar</b> (guarda tudo). Padrão: 365 dias. Vale para a SoFIA na próxima limpeza — não precisa reiniciar.')}</label>
             <div class="cfg-in"><input type="number" name="inboxDias" min="0" max="36500" step="1" value="${e.inboxDias}"><span class="suf">dias (0 = sempre)</span></div>
           </div>
         </div>
@@ -2861,7 +2865,7 @@ function paginaSofia(aviso, erro) {
       </details>
 
       <details class="acc-sec">
-        <summary class="sec-t" style="cursor:pointer;padding:4px 0">🔁 Follow-up de leads <small style="font-weight:400;color:var(--cinza)">— a SoFIA retoma sozinha quem esfriou sem agendar</small></summary>
+        <summary class="sec-t" style="cursor:pointer;padding:4px 0">Follow-up de leads <small style="font-weight:400;color:var(--cinza)">— a SoFIA retoma sozinha quem esfriou sem agendar</small></summary>
       <div class="card">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="followupOn" value="1"${e.followup.on ? ' checked' : ''} style="width:auto;margin:0">
@@ -2887,7 +2891,7 @@ function paginaSofia(aviso, erro) {
       </details>
 
       <details class="acc-sec" open>
-        <summary class="sec-t">💬 Prompt da SoFIA <small style="font-weight:400;color:var(--cinza)">— o roteiro (cada bloco é uma parte do atendimento; clique no título p/ abrir, ↑↓ reordenam)</small></summary>
+        <summary class="sec-t">Prompt da SoFIA <small style="font-weight:400;color:var(--cinza)">— o roteiro (cada bloco é uma parte do atendimento; clique no título p/ abrir, ↑↓ reordenam)</small></summary>
         <div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px">
             <button type="button" class="reset" onclick="expandirTodas(true)" style="padding:6px 12px">▾ Expandir todas</button>
@@ -2899,7 +2903,7 @@ function paginaSofia(aviso, erro) {
       </details>
 
       <details class="acc-sec">
-        <summary class="sec-t">🔗 Script de integração <small style="font-weight:400;color:var(--cinza)">— dados enviados ao EVO</small></summary>
+        <summary class="sec-t">Script de integração <small style="font-weight:400;color:var(--cinza)">— dados enviados ao EVO</small></summary>
       <div class="card">
         <label>Extração do resumo (nome, e-mail, dia, hora)</label>
         <textarea name="extracao" rows="12" spellcheck="false">${esc(e.extracao)}</textarea>
@@ -2907,7 +2911,7 @@ function paginaSofia(aviso, erro) {
       </details>
 
       <details class="acc-sec">
-        <summary class="sec-t">📷 Imagens <small style="font-weight:400;color:var(--cinza)">— troque as URLs quando atualizar a grade/preços</small></summary>
+        <summary class="sec-t">Imagens <small style="font-weight:400;color:var(--cinza)">— troque as URLs quando atualizar a grade/preços</small></summary>
       <div class="card">
         ${inpMidia('precos_imagem', e.midias.precos_imagem, 'Imagem da TABELA DE PREÇOS (URL)')}
         ${inpMidia('precos_link', e.midias.precos_link, 'Link (Google Drive) da tabela de preços')}
@@ -3000,7 +3004,7 @@ function paginaSofia(aviso, erro) {
     var inp = div.querySelector('input'); if(inp) inp.focus();
   }
 </script>`;
-  return chrome({ tab: 'SoFIA', h1: '🤖 SoFIA', p: 'Edite o prompt, as configurações e conecte o WhatsApp da SoFIA.' }, 'sofia', corpo);
+  return chrome({ tab: 'SoFIA', h1: 'SoFIA', p: 'Edite o prompt, as configurações e conecte o WhatsApp da SoFIA.' }, 'sofia', corpo);
 }
 
 // Página de login (sem menu). Simples: usuário + senha.
@@ -3072,7 +3076,7 @@ function paginaPerfis(aviso, erro) {
 
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
-    <div class="sec-t">➕ Novo usuário</div>
+    <div class="sec-t">Novo usuário</div>
     <div class="card">
       <form method="POST" action="/perfis/criar">
         <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -3086,11 +3090,11 @@ function paginaPerfis(aviso, erro) {
       </form>
     </div>
 
-    <div class="sec-t">👥 Usuários</div>
+    <div class="sec-t">Usuários</div>
     <div class="card" style="background:#f3fbfb;border-color:#bfe8e7"><p class="quando" style="margin:0">🔑 <b>Admin</b> (do sistema): <b>${esc(USER)}</b> — vê todas as telas e gerencia os Perfis. Para trocar a senha do admin, altere <code>PAINEL_SENHA</code> no <code>.env</code>.</p></div>
     ${cardsUsuarios}
   </div>`;
-  return chrome({ tab: 'Perfis', h1: '👤 Perfis', p: 'Crie usuários e escolha quais telas cada um pode acessar.' }, 'perfis', corpo);
+  return chrome({ tab: 'Perfis', h1: 'Perfis', p: 'Crie usuários e escolha quais telas cada um pode acessar.' }, 'perfis', corpo);
 }
 
 // Página "sem acesso" (usuário logado tentando uma tela não liberada).
