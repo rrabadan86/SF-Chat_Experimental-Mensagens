@@ -285,7 +285,15 @@ const ESTILO = `
   .hm-leg{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:.72rem;color:var(--cinza);flex-wrap:wrap}
   .hm-leg-bar{width:90px;height:8px;border-radius:999px;background:linear-gradient(90deg,rgba(14,110,107,.16),rgba(14,110,107,1))}
   .hm-leg-hint{color:var(--faint)}
-  @media(max-width:560px){.hm-leg-hint{display:none}}
+  .hm-insight{background:var(--avi-bg);border:1px solid var(--avi-bd);color:var(--avi-tx);border-radius:10px;padding:9px 13px;margin:0 0 14px;font-size:.82rem;line-height:1.45}
+  .hm-compact{display:none}
+  .hm-grid-cmp{display:grid;grid-template-columns:40px repeat(4,1fr);gap:3px}
+  .hm-flbl{font-size:.62rem;color:var(--faint);text-align:center;padding-bottom:2px;align-self:end}
+  @media(max-width:560px){
+    .hm-leg-hint{display:none}
+    .hm-full{display:none}
+    .hm-compact{display:block}
+  }
   .aviso{background:var(--avi-bg);border:1px solid var(--avi-bd);color:var(--avi-tx);border-radius:10px;padding:10px 14px;margin:14px 0;font-size:var(--fs-sm)}
   .aviso.err{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
   .card{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:15px 17px;margin:12px 0;box-shadow:0 1px 2px rgba(16,24,40,.04)}
@@ -1321,8 +1329,22 @@ function paginaIndicadores(dias, aviso) {
   // Heatmap (gráfico único): acessos por dia da semana × hora. Cor teal cresce
   // com o nº de acessos; célula vazia fica cinza-clara. Tooltip no hover.
   const DIAS_HM = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const DIAS_LONG = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
   const hmMax = Math.max(1, r.mapaMax || 0);
   const temMapa = (r.mapaCalor || []).some(row => row.some(v => v > 0));
+  const celCor = (n, max) => {
+    const ratio = n / max;
+    const alpha = (0.16 + 0.84 * ratio).toFixed(3);
+    const cor = ratio > 0.5 ? '#fff' : 'var(--teal-esc)';
+    return `background:rgba(14,110,107,${alpha});color:${cor}`;
+  };
+  // Insight: célula de pico (dia + hora) — transforma o gráfico em ação.
+  let pkWd = -1, pkH = -1, pkN = 0;
+  for (let wd = 0; wd < 7; wd++) for (let h = 0; h < 24; h++) { const n = (r.mapaCalor[wd] || [])[h] || 0; if (n > pkN) { pkN = n; pkWd = wd; pkH = h; } }
+  const insight = pkN > 0
+    ? `<div class="hm-insight">💡 Pico de acessos: <b>${DIAS_LONG[pkWd]} às ${pkH}h</b> (${pkN} acesso${pkN === 1 ? '' : 's'}). Bom horário para postar e disparar campanhas.</div>`
+    : '';
+  // Grade completa (desktop): 7 × 24.
   let hmHead = '<div class="hm-corner"></div>';
   for (let h = 0; h < 24; h++) hmHead += `<div class="hm-hlbl">${h}</div>`;
   let hmRows = '';
@@ -1331,15 +1353,29 @@ function paginaIndicadores(dias, aviso) {
     for (let h = 0; h < 24; h++) {
       const n = (r.mapaCalor[wd] || [])[h] || 0;
       if (!n) { cells += '<div class="hm-cell hm-zero"></div>'; continue; }
-      const ratio = n / hmMax;
-      const alpha = (0.16 + 0.84 * ratio).toFixed(3);
-      const cor = ratio > 0.5 ? '#fff' : 'var(--teal-esc)';
-      cells += `<div class="hm-cell" style="background:rgba(14,110,107,${alpha});color:${cor}" title="${DIAS_HM[wd]} ${h}h · ${n} acesso${n === 1 ? '' : 's'}">${n}</div>`;
+      cells += `<div class="hm-cell" style="${celCor(n, hmMax)}" title="${DIAS_HM[wd]} ${h}h · ${n} acesso${n === 1 ? '' : 's'}">${n}</div>`;
     }
     hmRows += `<div class="hm-daylbl">${DIAS_HM[wd]}</div>${cells}`;
   }
+  // Grade compacta (mobile): 7 × 4 faixas do dia (madrugada/manhã/tarde/noite).
+  const FAIXAS = [['Madrugada', 0, 6], ['Manhã', 6, 12], ['Tarde', 12, 18], ['Noite', 18, 24]];
+  const mapaFaixa = r.mapaCalor.map(row => FAIXAS.map(([, ini, fim]) => { let s = 0; for (let h = ini; h < fim; h++) s += row[h] || 0; return s; }));
+  const faixaMax = Math.max(1, ...mapaFaixa.map(row => Math.max(...row)));
+  let cmpHead = '<div class="hm-corner"></div>' + FAIXAS.map(([rot]) => `<div class="hm-flbl">${rot}</div>`).join('');
+  let cmpRows = '';
+  for (let wd = 0; wd < 7; wd++) {
+    let cells = '';
+    for (let fi = 0; fi < 4; fi++) {
+      const n = mapaFaixa[wd][fi];
+      if (!n) { cells += '<div class="hm-cell hm-zero"></div>'; continue; }
+      cells += `<div class="hm-cell" style="${celCor(n, faixaMax)}" title="${DIAS_HM[wd]} · ${FAIXAS[fi][0]} · ${n} acesso${n === 1 ? '' : 's'}">${n}</div>`;
+    }
+    cmpRows += `<div class="hm-daylbl">${DIAS_HM[wd]}</div>${cells}`;
+  }
   const heatHtml = temMapa
-    ? `<div class="hm-scroll"><div class="hm-grid">${hmHead}${hmRows}</div></div>
+    ? `${insight}
+       <div class="hm-scroll hm-full"><div class="hm-grid">${hmHead}${hmRows}</div></div>
+       <div class="hm-compact"><div class="hm-grid-cmp">${cmpHead}${cmpRows}</div></div>
        <div class="hm-leg"><span>menos</span><span class="hm-leg-bar"></span><span>mais</span><span class="hm-leg-hint">— passe o mouse numa célula para ver o dia, a hora e o total</span></div>`
     : '<div class="vazio">Sem acessos no período.</div>';
 
