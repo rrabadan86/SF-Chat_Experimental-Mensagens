@@ -3445,7 +3445,13 @@ const FU_FEITO_FILE = path.join(sofia.DIR, 'sofia-followup-feito.json'); // { ch
 // a cada varredura; o feed das Conversas expõe p/ o painel mostrar o selo ⏳.
 let fuEsperando = {};
 function fuLerJson(f, def) { try { return JSON.parse(fs.readFileSync(f, 'utf8')) || def; } catch (_) { return def; } }
-function fuSalvarJson(f, o) { try { fs.writeFileSync(f, JSON.stringify(o), 'utf8'); } catch (_) {} }
+// Grava de forma ATÔMICA (temp + rename) e devolve true/false. O follow-up usa o
+// retorno para só ENVIAR depois de gravar "já enviei" — assim uma falha de disco
+// nunca vira follow-up repetido.
+function fuSalvarJson(f, o) {
+  try { fs.writeFileSync(f + '.tmp', JSON.stringify(o), 'utf8'); fs.renameSync(f + '.tmp', f); return true; }
+  catch (_) { try { fs.writeFileSync(f, JSON.stringify(o), 'utf8'); return true; } catch (_) { return false; } }
+}
 function fuMarcarAgendou(tels) {
   const set = new Set((fuLerJson(FU_AGENDOU_FILE, []) || []).map(x => String(x).replace(/\D/g, '')));
   let mudou = false;
@@ -3496,7 +3502,6 @@ function processarFollowups() {
   let tagsAgendou = []; try { tagsAgendou = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {}
   let contatosMap = {}; try { contatosMap = contatos.carregar() || {}; } catch (_) {}
   const feito = fuLerJson(FU_FEITO_FILE, {}) || {};
-  let mudou = false;
   const espera = {}; // leads prontos, mas segurados pelo horário (recalculado agora)
   for (const chave of Object.keys(inbox)) {
     const c = inbox[chave] || {}; const msgs = c.msgs || [];
@@ -3516,10 +3521,18 @@ function processarFollowups() {
     try { const ct = contatosMap[contatos.normTel(chave)]; if (ct && (ct.tags || []).some(t => tagsAgendou.includes(t))) continue; } catch (_) {}
     // Chegou aqui = está no ponto de receber a retomada. Só falta o horário:
     if (!dentroDaJanela) { espera[chave] = cfg.janelaIni; continue; } // segura p/ o próximo horário permitido
-    try { sofia.enfileirarFollowup(chave, cfg.instrucao); feito[chave] = ultimoAluna; mudou = true; } catch (_) {}
+    // REGISTRA "já enviei" ANTES de enfileirar e só envia se o registro GRAVOU.
+    // Assim, se a aluna não responder, o gate (feito >= ultimoAluna) barra novos
+    // envios — 1 follow-up por conversa, até ela responder de novo. E como grava
+    // antes, uma falha de disco nunca produz follow-up repetido.
+    feito[chave] = ultimoAluna;
+    if (fuSalvarJson(FU_FEITO_FILE, feito)) {
+      try { sofia.enfileirarFollowup(chave, cfg.instrucao); } catch (_) {}
+    } else {
+      delete feito[chave]; // não gravou → não marca; tenta no próximo ciclo
+    }
   }
   fuEsperando = espera; // publica p/ o painel mostrar o selo "⏳ aguardando horário"
-  if (mudou) fuSalvarJson(FU_FEITO_FILE, feito);
 }
 // 2) Ações detectadas pelo listener (novo/palavra/campanha/encerrou).
 function processarEventos() {
