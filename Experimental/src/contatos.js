@@ -314,7 +314,12 @@ function excluirTag(tag) {
 }
 
 // Lista com busca (nome/telefone), filtro por tag e paginação.
-function listar({ q = '', tag = '', pagina = 0, porPagina = 25 } = {}) {
+// bloq: '' (todos) | 'sim' (só bloqueados) | 'nao' (só não bloqueados).
+// bloqueados: lista de telefones (dígitos) bloqueados — vem do módulo da SoFIA,
+// porque o estado de bloqueio mora lá (sofia.lerBloqueios). Filtramos AQUI, antes
+// de paginar, para o total/paginação ficarem certos (o botão antigo só escondia
+// as linhas da página atual — por isso "Bloqueados" parecia vazio sem filtrar).
+function listar({ q = '', tag = '', pagina = 0, porPagina = 25, bloq = '', bloqueados = [] } = {}) {
   const map = carregar();
   let arr = Object.values(map);
   if (q) {
@@ -324,6 +329,11 @@ function listar({ q = '', tag = '', pagina = 0, porPagina = 25 } = {}) {
   }
   if (tag === '__sem__') arr = arr.filter(c => !((c.tags || []).length));
   else if (tag) arr = arr.filter(c => (c.tags || []).includes(tag));
+  if (bloq === 'sim' || bloq === 'nao') {
+    const set = new Set((bloqueados || []).map(x => String(x).replace(/\D/g, '')).filter(Boolean));
+    const estaBloq = c => set.has(String(c.tel || '').replace(/\D/g, ''));
+    arr = arr.filter(c => bloq === 'sim' ? estaBloq(c) : !estaBloq(c));
+  }
   arr.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
   const total = arr.length;
   const paginas = Math.max(1, Math.ceil(total / porPagina));

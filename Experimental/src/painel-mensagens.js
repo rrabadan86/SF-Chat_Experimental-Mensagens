@@ -1806,14 +1806,17 @@ function paginaSofiaContatos(aviso, erro, params) {
   params = params || {};
   const q = params.q || '';
   const tagSel = params.tag || '';
+  const bloqSel = ['sim', 'nao'].includes(params.bloq) ? params.bloq : '';
   const pagina = parseInt(params.pagina, 10) || 0;
-  const r = contatos.listar({ q, tag: tagSel, pagina, porPagina: 25 });
+  let bloqueados = []; try { bloqueados = sofia.lerBloqueios(); } catch (_) {}
+  const r = contatos.listar({ q, tag: tagSel, pagina, porPagina: 25, bloq: bloqSel, bloqueados });
   const tags = contatos.tagsDistintas();
   const total = contatos.totalContatos();
 
   const fmtTelP = (t) => { const d = String(t || '').replace(/\D/g, ''); if (/^55\d{10,11}$/.test(d)) { const ddd = d.slice(2, 4), x = d.slice(4); return '+55 (' + ddd + ') ' + (x.length === 9 ? x.slice(0, 5) + '-' + x.slice(5) : x.slice(0, 4) + '-' + x.slice(4)); } return t || ''; };
-  const qs = (pg) => { const p = new URLSearchParams(); p.set('view', 'contatos'); if (q) p.set('q', q); if (tagSel) p.set('tag', tagSel); p.set('pagina', pg); return '/sofia?' + p.toString(); };
-  const hidden = `<input type="hidden" name="q" value="${esc(q)}"><input type="hidden" name="tag" value="${esc(tagSel)}"><input type="hidden" name="pagina" value="${pagina}">`;
+  const qs = (pg) => { const p = new URLSearchParams(); p.set('view', 'contatos'); if (q) p.set('q', q); if (tagSel) p.set('tag', tagSel); if (bloqSel) p.set('bloq', bloqSel); p.set('pagina', pg); return '/sofia?' + p.toString(); };
+  const hidden = `<input type="hidden" name="q" value="${esc(q)}"><input type="hidden" name="tag" value="${esc(tagSel)}"><input type="hidden" name="bloq" value="${esc(bloqSel)}"><input type="hidden" name="pagina" value="${pagina}">`;
+  const optBloq = (v, rot) => `<option value="${v}"${bloqSel === v ? ' selected' : ''}>${rot}</option>`;
 
   // Cores estáveis por texto (mesma tag/nome → mesma cor, no servidor e no navegador).
   const _hash = (s) => { let h = 0; s = String(s || ''); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
@@ -1890,11 +1893,15 @@ function paginaSofiaContatos(aviso, erro, params) {
       <input type="hidden" name="view" value="contatos">
       <div style="display:flex;gap:8px;flex:1 1 320px;min-width:0">
         <input type="text" name="q" value="${esc(q)}" placeholder="Buscar por nome ou telefone" style="flex:1 1 auto;min-width:0">
-        <select id="ctTagSel" name="tag" style="flex:0 0 200px;max-width:50%" onchange="this.form.submit()">${opcoes}</select>
+        <select id="ctTagSel" name="tag" style="flex:0 0 190px;max-width:50%" onchange="this.form.submit()">${opcoes}</select>
       </div>
+      <select id="ctBloqSel" name="bloq" style="flex:0 0 210px" onchange="this.form.submit()" title="Filtrar por bloqueio">
+        ${optBloq('', '👥 Todos os contatos')}
+        ${optBloq('nao', '✅ Não bloqueados')}
+        ${optBloq('sim', '🚫 Bloqueados')}
+      </select>
       <button type="submit" class="save" style="padding:8px 14px">Filtrar</button>
-      ${(q || tagSel) ? `<a href="/sofia?view=contatos" class="reset" style="padding:8px 14px">Limpar</a>` : ''}
-      <button type="button" id="ctBloqFil" class="reset" onclick="filtrarBloqueados()" style="padding:8px 14px" title="Mostrar só os contatos bloqueados">🚫 Bloqueados</button>
+      ${(q || tagSel || bloqSel) ? `<a href="/sofia?view=contatos" class="reset" style="padding:8px 14px">Limpar</a>` : ''}
     </form>
 
     ${r.itens.length ? `<div class="ct-wrap">
@@ -3234,7 +3241,7 @@ const server = http.createServer((req, res) => {
     const podeVerSub = (v) => (v === 'tags' ? podeSofiaSub(sess, 'contatos') : podeSofiaSub(sess, v));
     if (!podeVerSub(view)) view = SOFIA_SUBS.find(s => podeSofiaSub(sess, s)) || 'config';
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    if (view === 'contatos') return res.end(paginaSofiaContatos(aviso, erro, { q: sp.get('q') || '', tag: sp.get('tag') || '', pagina: sp.get('pagina') || 0 }));
+    if (view === 'contatos') return res.end(paginaSofiaContatos(aviso, erro, { q: sp.get('q') || '', tag: sp.get('tag') || '', bloq: sp.get('bloq') || '', pagina: sp.get('pagina') || 0 }));
     if (view === 'tags') return res.end(paginaSofiaTags(aviso, erro));
     if (view === 'conversas') return res.end(paginaSofiaConversas(aviso, erro));
     if (view === 'campanhas') return res.end(paginaSofiaCampanhas(aviso, erro));
@@ -3286,6 +3293,7 @@ const server = http.createServer((req, res) => {
     if (p.get('voltar') === 'tags') { res.writeHead(303, { Location: '/sofia?view=tags&ctok=1' }); res.end(); return; }
     const back = new URLSearchParams(); back.set('view', 'contatos');
     if (p.get('q')) back.set('q', p.get('q')); if (p.get('tag')) back.set('tag', p.get('tag'));
+    if (p.get('bloq')) back.set('bloq', p.get('bloq'));
     back.set('pagina', p.get('pagina') || 0); back.set('ctok', '1');
     res.writeHead(303, { Location: '/sofia?' + back.toString() }); res.end();
   };
