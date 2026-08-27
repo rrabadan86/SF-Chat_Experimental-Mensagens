@@ -24,6 +24,7 @@ const F = {
   healthMin: path.join(DIR, 'sofia-health-min.txt'), // intervalo do health-check (min) — lido pelo listener
   agruparSeg: path.join(DIR, 'sofia-agrupar-seg.txt'), // debounce de mensagens (seg) — lido pelo listener
   quieto: path.join(DIR, 'sofia-quieto.json'), // janela do filtro "sem resposta do contato" (painel)
+  inboxDias: path.join(DIR, 'sofia-inbox-dias.txt'), // retenção da inbox (dias; 0 = sempre) — lida pelo listener
   midias: path.join(DIR, 'sofia-midias.txt'),
   ritmo: path.join(DIR, 'sofia-ritmo.json'), // "jeito humano" (velocidade/pausas) — lido pelo listener
   waStatus: path.join(DIR, 'sofia-wa-status.json'), // publicado pelo listener da Sofia
@@ -138,6 +139,23 @@ function gravarQuietoCfg({ horas, dias } = {}) {
   return cfg;
 }
 
+// ── retenção da inbox das Conversas, em DIAS (0 = nunca apagar) ──────────────
+// Quanto tempo o painel guarda o histórico das conversas. Padrão 365 dias. O
+// LISTENER lê este arquivo (sofia-inbox-dias.txt) e aplica na limpeza da inbox.
+const INBOX_DIAS_PADRAO = 365;
+function lerInboxDias() {
+  const s = ler(F.inboxDias).trim();
+  if (s === '') return INBOX_DIAS_PADRAO;
+  const n = parseInt(s.replace(',', '.'), 10);
+  return Number.isFinite(n) && n >= 0 ? Math.min(n, 36500) : INBOX_DIAS_PADRAO;
+}
+function gravarInboxDias(d) {
+  const n = parseInt(String(d).replace(',', '.'), 10);
+  const val = Number.isFinite(n) && n >= 0 ? Math.min(n, 36500) : INBOX_DIAS_PADRAO;
+  gravarArquivo(F.inboxDias, String(val));
+  return val;
+}
+
 // ── verificação de conexão (health-check), em MINUTOS ───────────────────────
 // Padrão 3 min. 0 = desligado. Lido pelo listener a cada ciclo (muda sem reiniciar).
 const HEALTH_MIN_PADRAO = 3;
@@ -242,6 +260,7 @@ function estado() {
     healthMin: lerHealthMin(),
     agruparSeg: lerAgruparSeg(),
     quieto: lerQuietoCfg(),
+    inboxDias: lerInboxDias(),
     followup: lerFollowupCfg(),
     modelos: lerModelos(),
     modelosValidos: MODELOS_VALIDOS,
@@ -254,7 +273,7 @@ function estado() {
 }
 
 // Salva tudo (com backup e validação mínima). Lança Error em caso de recusa.
-function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg, quieto, followup, modelos, transcricaoOn, midias, ritmo }) {
+function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg, quieto, inboxDias, followup, modelos, transcricaoOn, midias, ritmo }) {
   const promptMontado = montarPrompt(secoes || []);
   const ext = String(extracao || '').trim();
   if (promptMontado.trim().length < 50 || ext.length < 30) {
@@ -269,6 +288,7 @@ function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg
   if (healthMin !== undefined) gravarHealthMin(healthMin);
   if (agruparSeg !== undefined) gravarAgruparSeg(agruparSeg);
   if (quieto !== undefined) gravarQuietoCfg(quieto || {});
+  if (inboxDias !== undefined) gravarInboxDias(inboxDias);
   if (followup !== undefined) gravarFollowupCfg(followup || {});
   if (modelos !== undefined) gravarModelos(modelos || {});
   if (transcricaoOn !== undefined) gravarTranscricaoOn(!!transcricaoOn);
@@ -546,7 +566,7 @@ function setControleHumano(chave, ativo) {
 
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
-  lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerRitmo, gravarRitmo, waStatus,
+  lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
   conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

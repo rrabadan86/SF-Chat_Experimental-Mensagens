@@ -381,11 +381,27 @@ function enfileirar(fn: () => Promise<void>) { fila = fila.then(fn).catch((e: an
 //    N mensagens por conversa e só os últimos X dias.
 const CONVERSAS_FILE = path.join(DIR, "sofia-conversas.json");
 const INBOX_MAX_MSGS = parseInt(process.env.SOFIA_INBOX_MSGS || "60", 10);
-// Retenção da inbox (dias). Antes eram 7 dias — curto demais para a recepção
-// ver se um lead já falou antes. Agora o padrão é 365 dias e SOFIA_INBOX_DIAS=0
-// significa NUNCA apagar (guarda todo o histórico).
-const INBOX_RETENCAO_DIAS = parseInt(process.env.SOFIA_INBOX_DIAS || "365", 10);
-const INBOX_RETENCAO_MS = INBOX_RETENCAO_DIAS > 0 ? INBOX_RETENCAO_DIAS * 24 * 3600 * 1000 : Number.POSITIVE_INFINITY;
+// Retenção da inbox (dias): quanto tempo o painel guarda o histórico das
+// conversas. Antes eram 7 dias fixos (curto demais). Agora é CONFIGURÁVEL no
+// painel (SoFIA → Configuração), gravado em sofia-inbox-dias.txt e lido aqui a
+// cada limpeza (muda sem reiniciar). 0 = nunca apagar. Sem arquivo → SOFIA_INBOX_DIAS
+// do .env, ou 365. Lê com cache por mtime.
+const INBOX_DIAS_FILE = path.join(DIR, "sofia-inbox-dias.txt");
+let _retDias = -1, _retMtime = -2;
+function retencaoMs(): number {
+  try {
+    const st = fs.statSync(INBOX_DIAS_FILE);
+    if (st.mtimeMs !== _retMtime) {
+      const n = parseInt(fs.readFileSync(INBOX_DIAS_FILE, "utf8").trim(), 10);
+      _retDias = Number.isFinite(n) && n >= 0 ? n : parseInt(process.env.SOFIA_INBOX_DIAS || "365", 10);
+      _retMtime = st.mtimeMs;
+    }
+  } catch {
+    if (_retDias < 0) { _retDias = parseInt(process.env.SOFIA_INBOX_DIAS || "365", 10); _retMtime = -2; }
+  }
+  const d = Number.isFinite(_retDias) && _retDias >= 0 ? _retDias : 365;
+  return d > 0 ? d * 24 * 3600 * 1000 : Number.POSITIVE_INFINITY;
+}
 type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string };
 type InboxConversa = { jid: string; nome: string; ultimaEm: number; msgs: InboxMsg[] };
 const inbox = new Map<string, InboxConversa>();
@@ -394,7 +410,7 @@ function carregarInbox() {
   try { const o = JSON.parse(fs.readFileSync(CONVERSAS_FILE, "utf8")); if (o && typeof o === "object") for (const k of Object.keys(o)) inbox.set(k, o[k]); } catch {}
 }
 function salvarInbox() {
-  const corte = Date.now() - INBOX_RETENCAO_MS;
+  const corte = Date.now() - retencaoMs();
   const obj: Record<string, InboxConversa> = {};
   for (const [k, c] of inbox) { if (c.ultimaEm >= corte) obj[k] = c; else inbox.delete(k); }
   try { fs.writeFileSync(CONVERSAS_FILE, JSON.stringify(obj), "utf8"); } catch {}
@@ -783,7 +799,7 @@ const HUMANO_FOTOS_DIR = path.join(DIR, "humano-fotos");
 function limparFotosAntigas() {
   try {
     if (!fs.existsSync(HUMANO_FOTOS_DIR)) return;
-    const corte = Date.now() - INBOX_RETENCAO_MS - 24 * 3600 * 1000; // 1 dia de folga
+    const corte = Date.now() - retencaoMs() - 24 * 3600 * 1000; // 1 dia de folga
     for (const nome of fs.readdirSync(HUMANO_FOTOS_DIR)) {
       const p = path.join(HUMANO_FOTOS_DIR, nome);
       try { if (fs.statSync(p).mtimeMs < corte) fs.rmSync(p, { force: true }); } catch {}

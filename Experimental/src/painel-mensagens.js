@@ -2826,6 +2826,10 @@ function paginaSofia(aviso, erro) {
             <label>😴 "Sem resposta" — janela${infoI('Idade <b>máxima</b> da última mensagem do contato para ele aparecer no filtro. Ex.: 4 dias mostra só quem sumiu nos últimos 4 dias (não desenterra conversas antigas). Padrão: 4 dias.')}</label>
             <div class="cfg-in">últimos <input type="number" name="quietoDias" min="1" max="60" step="1" value="${e.quieto.dias}"><span class="suf">dias</span></div>
           </div>
+          <div>
+            <label>🗂️ Guardar histórico das conversas${infoI('Por quanto tempo o painel guarda o histórico das conversas na aba Conversas. Depois disso, as conversas paradas somem da lista (o WhatsApp da aluna não é afetado). <b>0 = nunca apagar</b> (guarda tudo). Padrão: 365 dias. Vale para a SoFIA na próxima limpeza — não precisa reiniciar.')}</label>
+            <div class="cfg-in"><input type="number" name="inboxDias" min="0" max="36500" step="1" value="${e.inboxDias}"><span class="suf">dias (0 = sempre)</span></div>
+          </div>
         </div>
       </div>
 
@@ -3669,6 +3673,7 @@ const server = http.createServer((req, res) => {
           healthMin: p.get('healthMin') != null ? p.get('healthMin') : '3',
           agruparSeg: p.get('agruparSeg') != null ? p.get('agruparSeg') : '7',
           quieto: { horas: p.get('quietoHoras') || '24', dias: p.get('quietoDias') || '4' },
+          inboxDias: p.get('inboxDias') != null ? p.get('inboxDias') : '365',
           followup: { on: p.get('followupOn') === '1', horas: p.get('followupHoras') || '24', instrucao: p.get('followupInstrucao') || '', janelaIni: p.get('followupJanIni') || '08:00', janelaFim: p.get('followupJanFim') || '19:00' },
           modelos: { conversa: p.get('modeloConversa') || '', extracao: p.get('modeloExtracao') || '' },
           transcricaoOn: p.get('transcricaoOn') === '1',
