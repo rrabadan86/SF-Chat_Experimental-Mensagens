@@ -456,7 +456,7 @@ function lerTranscricaoOn() { return ler(F.transcricao).trim().toLowerCase() !==
 function gravarTranscricaoOn(on) { gravarArquivo(F.transcricao, on ? 'on' : 'off'); return !!on; }
 
 // ── Follow-up (retomada de leads que esfriaram sem agendar) ──────────────────
-const FOLLOWUP_INSTRUCAO_PADRAO = 'Pergunte de forma leve se ela ainda tem interesse em conhecer o Studio e que estamos de portas abertas para ela fazer a aula experimental gratuita. Seja calorosa e natural.';
+const FOLLOWUP_INSTRUCAO_PADRAO = 'Escreva de forma elegante e madura — nosso público são mulheres exigentes e de alto padrão. NADA de gírias, diminutivos (ex.: "vaguinha") ou tom infantil. Retome o ponto onde a conversa parou: se já havia um dia/horário sendo tratado, proponha com naturalidade dar andamento ao agendamento naquele horário (ex.: "Podemos dar andamento ao seu agendamento para sexta às 14h?"); se não havia horário definido, faça um convite cordial para a aula experimental gratuita. Feche se colocando à disposição para qualquer dúvida. Uma ou duas frases, direta e acolhedora.';
 // Valida um horário "HH:MM" (24h); devolve normalizado ("8:00" -> "08:00") ou o padrão.
 function _hhmm(v, def) {
   const s = String(v == null ? '' : v).trim();
