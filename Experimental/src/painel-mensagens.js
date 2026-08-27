@@ -222,7 +222,7 @@ const ESTILO = `
   .wrap{max-width:900px;margin:0 auto;padding:14px 16px}
   header .wrap{padding:0 16px;display:flex;align-items:center;gap:14px}
   header .logo-box{background:transparent;border-radius:0;padding:0;flex:none;box-shadow:none}
-  header .logo-box img{height:30px;width:auto;display:block}
+  header .logo-box img{height:42px;width:auto;display:block}
   /* Título + subtítulo na MESMA linha (cabeçalho enxuto); no mobile o subtítulo desce. */
   .hdr-tit{flex:1;min-width:0;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
   header h1{margin:0;font-size:var(--fs-h1);font-weight:600;color:var(--tinta)}
@@ -502,7 +502,7 @@ function chrome(titSubtitulo, ativo, corpo) {
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <style>${ESTILO}</style></head><body>
 <header><div class="wrap">
-  <div class="logo-box"><img alt="SlimFit Studio" src="https://drive.google.com/thumbnail?id=1pl1mh709FGcitG9uHo0J6nzMUKFYqg-w&sz=w240"></div>
+  <div class="logo-box"><img alt="SlimFit Studio" src="https://drive.google.com/thumbnail?id=1pl1mh709FGcitG9uHo0J6nzMUKFYqg-w&sz=w400"></div>
   <div class="hdr-tit"><h1>${esc(titSubtitulo.h1)}</h1><p>${titSubtitulo.p}</p></div>
   ${_navSess ? `<div class="hdr-user"><span>👤 ${esc(_navSess.usuario)}</span><a href="/logout">Sair</a></div>` : ''}
 </div></header>
