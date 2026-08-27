@@ -560,8 +560,12 @@ function scriptPreviewTeste() {
     if(tel.length<10){ alert('Preencha o "Número para testes" no topo da página.'); if(_tt) _tt.focus(); return; }
     b.style.display='block'; b.innerHTML = '<div class="prev-b">⏳ Enviando teste para '+escHtml(tel)+'…</div>';
     btn.disabled=true;
+    // Se "Enviar com foto" está marcado, manda a chave da mensagem p/ o robô anexar o flyer salvo.
+    var chaveInp = card.querySelector('input[name="chave"]');
+    var comFoto = !!(card.querySelector('.mfChk') && card.querySelector('.mfChk').checked);
+    var chaveFoto = (comFoto && chaveInp) ? chaveInp.value : '';
     try{
-      var r = await fetch('/teste/enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:tel, texto:ta.value})});
+      var r = await fetch('/teste/enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:tel, texto:ta.value, chave:chaveFoto})});
       var d = await r.json();
       if(!d.ok){ b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(d.erro||'Não foi possível enviar.')+'</div>'; btn.disabled=false; return; }
       var tries=0;
@@ -2918,7 +2922,7 @@ const server = http.createServer((req, res) => {
       try {
         const d = JSON.parse(corpo || '{}');
         const textoFinal = mensagens.renderTexto(d.texto || '', mensagens.EXEMPLOS);
-        const id = teste.solicitar({ telefone: d.telefone, texto: textoFinal });
+        const id = teste.solicitar({ telefone: d.telefone, texto: textoFinal, chaveFoto: d.chave || '' });
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, id }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
