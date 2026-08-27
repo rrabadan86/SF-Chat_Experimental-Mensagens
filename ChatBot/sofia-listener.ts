@@ -475,23 +475,36 @@ async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
     + "  }\n"
     + "  var arr = Chat.getModelsArray();\n"
     + "  var out=[];\n"
+    + "  function digits(x){ return String(x||'').replace(/\\D/g,''); }\n"
+    + "  function telDe(c, id){\n"
+    + "    if (id.indexOf('@c.us')>=0) return id.split('@')[0];\n"
+    + "    try { var ci=c.contact && c.contact.id; var cis = ci && (ci._serialized || (ci.user?ci.user+'@'+(ci.server||''):'')); if (cis && cis.indexOf('@c.us')>=0) return cis.split('@')[0]; } catch(e){}\n"
+    + "    try { var pn = c.contact && (c.contact.phoneNumber || c.contact.userid || c.contact.verifiedNumber); if(pn){ var d=digits(pn); if(d.length>=10 && d.length<=15) return d; } } catch(e){}\n"
+    + "    return id.split('@')[0];\n" // fallback: dígitos do LID (chave estável)
+    + "  }\n"
+    + "  var comTel=0, soLid=0;\n"
     + "  for (var j=0;j<arr.length;j++){\n"
     + "    try {\n"
     + "      var c=arr[j]; var idObj=c&&c.id;\n"
-    + "      var id = idObj ? (idObj._serialized || (idObj.user ? idObj.user+'@'+(idObj.server||'c.us') : '')) : '';\n"
-    + "      if(!id || id.indexOf('@c.us')<0) continue;\n"
-    + "      var name = (c && (c.formattedTitle || c.name || (c.contact && (c.contact.pushname||c.contact.name||c.contact.formattedName)))) || '';\n"
+    + "      var id = idObj ? (idObj._serialized || (idObj.user ? idObj.user+'@'+(idObj.server||'') : '')) : '';\n"
+    + "      if(!id) continue;\n"
+    + "      var isUser = (id.indexOf('@c.us')>=0) || (id.indexOf('@lid')>=0);\n"
+    + "      if(!isUser) continue;\n" // pula grupos (@g.us), status, etc.
+    + "      var tel = telDe(c, id);\n"
+    + "      if(!tel || tel.length<8) continue;\n"
+    + "      if (id.indexOf('@c.us')>=0 || (tel !== id.split('@')[0])) comTel++; else soLid++;\n"
+    + "      var name = (c && (c.formattedTitle || c.name || (c.contact && (c.contact.pushname||c.contact.name||c.contact.formattedName||c.contact.verifiedName)))) || '';\n"
     + "      var t = (c && (c.t||c.timestamp||0)) || 0;\n"
     + "      var models=[]; try { models = (c.msgs && c.msgs.getModelsArray) ? c.msgs.getModelsArray() : ((c.msgs&&c.msgs._models)||[]); } catch(e){ models=[]; }\n"
     + "      var msgs = models.slice(-LIM).map(function(m){ return { fromMe: !!(m&&m.id&&m.id.fromMe), body: (m&&(m.body||m.caption||''))||'', t: (m&&(m.t||m.timestamp))||0 }; });\n"
-    + "      out.push({ id: id, name: name, t: t, msgs: msgs });\n"
+    + "      out.push({ id: tel, name: name, t: t, msgs: msgs });\n"
     + "    } catch(e){}\n"
     + "  }\n"
     + "  var tipos={}; for (var q=0;q<arr.length;q++){ try { var s=(arr[q]&&arr[q].id&&arr[q].id.server)||'?'; tipos[s]=(tipos[s]||0)+1; } catch(e){} }\n"
-    + "  return { chats: out, via:'store-raw', total: arr.length, tipos: tipos };\n"
+    + "  return { chats: out, via:'store-raw', total: arr.length, tipos: tipos, comTel: comTel, soLid: soLid };\n"
     + "})(" + LIM + ")";
   const r: any = await page.evaluate(code);
-  if (r && r.via) log(`import: leitura via ${r.via} — ${(r.chats && r.chats.length) || 0} conversas (@c.us) de ${r.total || 0} no store total. tipos=${JSON.stringify(r.tipos || {})}`);
+  if (r && r.via) log(`import: leitura via ${r.via} — ${(r.chats && r.chats.length) || 0} conversas de ${r.total || 0} no store (com telefone: ${r.comTel || 0}, só LID: ${r.soLid || 0}). tipos=${JSON.stringify(r.tipos || {})}`);
   if (r && r.erro) throw new Error(r.erro + (r.diag ? " Diag: " + JSON.stringify(r.diag) : ""));
   return (r && r.chats) || [];
 }
