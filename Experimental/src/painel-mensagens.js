@@ -228,6 +228,15 @@ const ESTILO = `
   .tabs a .tic{font-size:1.2rem;line-height:1}
   .tabs a .ttx{font-size:.78rem}
   .tabs a.on{background:var(--teal);color:#fff;border-color:var(--teal)}
+  /* Desktop: exibe na ordem SoFIA → WhatsApp → Instagram → Formulário → Perfis
+     (no HTML a SoFIA fica por último para o destaque no mobile). */
+  @media(min-width:761px){
+    .tabs .nav-sofia{order:1}
+    .tabs .nav-msg{order:2}
+    .tabs .nav-ig{order:3}
+    .tabs .nav-ind{order:4}
+    .tabs .nav-perfis{order:5}
+  }
   /* No mobile: a barra de abas fica GRUDADA no topo ao rolar (o cabeçalho da
      logo pode sair da tela). Só as abas ficam fixas. */
   @media(max-width:760px){
@@ -454,15 +463,16 @@ const ESTILO = `
 function navTabs(ativo) {
   const sess = _navSess || { admin: true, telas: usuarios.TELAS_KEYS };
   const pode = k => sess.admin || (sess.telas || []).includes(k);
-  const cel = (href, on, ic, tx) => `<a href="${href}" class="${on ? 'on' : ''}"><span class="tic">${ic}</span><span class="ttx">${tx}</span></a>`;
-  const item = (k, href, ic, tx) => pode(k) ? cel(href, ativo === k, ic, tx) : '';
+  const cel = (href, on, ic, tx, cls) => `<a href="${href}" class="nav-${cls}${on ? ' on' : ''}"><span class="tic">${ic}</span><span class="ttx">${tx}</span></a>`;
+  const item = (k, href, ic, tx) => pode(k) ? cel(href, ativo === k, ic, tx, k) : '';
+  // Ordem no HTML mantém a SoFIA por ÚLTIMO: no mobile ela cai sozinha na 2ª
+  // linha ocupando a largura toda (destaque). No DESKTOP, o CSS (order) exibe na
+  // ordem pedida: SoFIA → WhatsApp → Instagram → Formulário → Perfis.
   let html = item('ind', '/indicadores', '📈', 'Formulário');
-  if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp');
+  if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp', 'msg');
   html += item('ig', '/instagram', '📸', 'Instagram');
-  // Perfis antes; SoFIA por último para ficar em destaque (no mobile ela cai
-  // sozinha na 2ª linha, ocupando a largura toda) — a SoFIA é a principal.
-  if (sess.admin) html += cel('/perfis', ativo === 'perfis', '👤', 'Perfis');
-  if (temSofia(sess)) html += cel(sofiaHref(sess), ativo === 'sofia', '🤖', 'SoFIA');
+  if (sess.admin) html += cel('/perfis', ativo === 'perfis', '👤', 'Perfis', 'perfis');
+  if (temSofia(sess)) html += cel(sofiaHref(sess), ativo === 'sofia', '🤖', 'SoFIA', 'sofia');
   return html;
 }
 
