@@ -1457,16 +1457,20 @@ function paginaSofiaConversas(aviso, erro) {
     ${subnavSofia('conversas')}
     <div class="sec-t" data-nosec="1">💬 Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span><small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
     <style>
-      .inbox-grid{display:grid;grid-template-columns:236px minmax(0,1fr);gap:14px;align-items:stretch}
+      .inbox-grid{display:grid;grid-template-columns:236px minmax(0,1fr);gap:14px;align-items:start}
       .inbox-grid>div{min-width:0}
+      /* Coluna da esquerda: mesma altura do chat; a LISTA rola por dentro (não
+         empurra a página nem desalinha as duas colunas no desktop). */
+      .inbox-grid>div:first-child{display:flex;flex-direction:column;max-height:calc(100vh - 190px)}
+      #convLista{flex:1 1 auto;overflow-y:auto;min-height:0}
       #convChat{display:flex;flex-direction:column;min-height:360px;max-height:calc(100vh - 190px)}
-      @media(max-width:760px){ .inbox-grid{grid-template-columns:minmax(0,1fr);align-items:start} #convLista{max-height:260px;overflow:auto} #convChat{min-height:60vh;max-height:80vh;max-height:80dvh} }
+      @media(max-width:760px){ .inbox-grid{grid-template-columns:minmax(0,1fr);align-items:start} .inbox-grid>div:first-child{max-height:none} #convLista{flex:none;max-height:260px;overflow:auto} #convChat{min-height:60vh;max-height:80vh;max-height:80dvh} }
     </style>
     <div class="inbox-grid">
       <div>
         <div style="margin-bottom:8px"><input type="search" id="convBusca" oninput="filtrarBusca(this.value)" placeholder="🔎 Buscar por nome, telefone ou palavra na conversa" style="width:100%;font-size:.85rem;padding:9px 12px;border:1px solid var(--linha);border-radius:9px"></div>
         <div style="margin-bottom:8px"><select id="convFiltroTag" onchange="filtrarTag(this.value)" style="width:100%;font-size:.85rem"><option value="">🏷️ Todas as tags</option><option value="__sem__">🏷️ Sem tag</option>${tagsLista.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>
-        <div id="convLista" style="min-height:120px"></div>
+        <div id="convLista"></div>
         <div id="convPag" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px"></div>
       </div>
       <div id="convChat" class="card" style="min-width:0">Selecione uma conversa à esquerda.</div>
