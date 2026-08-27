@@ -258,6 +258,9 @@ const ESTILO = `
   .subtabs a{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-family:"Inter",sans-serif;font-weight:500;font-size:.82rem;line-height:1;color:var(--cinza);background:transparent;border:1px solid var(--linha);border-radius:999px;padding:7px 15px;transition:.12s}
   .subtabs a:hover{background:var(--linha-soft);color:var(--tinta);border-color:var(--linha)}
   .subtabs a.on{background:var(--teal);color:#fff;border-color:var(--teal);font-weight:600}
+  .card>summary::-webkit-details-marker{display:none}
+  .u-caret{transition:transform .15s}
+  details[open]>summary .u-caret{transform:rotate(90deg)}
   /* "Mais/Menos filtros" (Conversas): rótulo alterna e campos alinhados. */
   .filtros-det{margin-bottom:8px;border:1px solid var(--linha);border-radius:10px;background:var(--card);padding:0 10px}
   .filtros-sum{cursor:pointer;list-style:none;font-size:.8rem;font-weight:600;color:var(--cinza);padding:8px 0;user-select:none;display:flex;align-items:center;gap:6px}
@@ -3166,12 +3169,13 @@ function paginaPerfis(aviso, erro) {
   };
 
   const cardsUsuarios = lista.length ? lista.map(u => `
-    <div class="card" style="margin-bottom:8px">
-      <form method="POST" action="/perfis/telas">
-        <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-          <span style="font-weight:700;font-size:var(--fs-h2)">${esc(u.usuario)}</span>
-          <span class="quando" style="margin:0">${(u.telas || []).length} tela(s)</span>
-        </div>
+    <details class="card" style="margin-bottom:8px">
+      <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:2px 0;user-select:none">
+        <span style="font-weight:700;font-size:var(--fs-h2)">${esc(u.usuario)}</span>
+        <span class="quando" style="margin:0">${(u.telas || []).length} tela(s)</span>
+        <span class="u-caret" style="margin-left:auto;color:var(--faint);font-size:.9rem">▸</span>
+      </summary>
+      <form method="POST" action="/perfis/telas" style="margin-top:12px">
         <input type="hidden" name="usuario" value="${esc(u.usuario)}">
         <div style="margin:0 0 10px">${chkTelas(u.telas, 'telas')}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding-top:10px;border-top:1px dashed var(--linha)">
@@ -3182,7 +3186,7 @@ function paginaPerfis(aviso, erro) {
         </div>
       </form>
       <form method="POST" action="/perfis/senha" id="sn-${esc(u.usuario)}" style="display:none"><input type="hidden" name="usuario" value="${esc(u.usuario)}"></form>
-    </div>`).join('') : '<p class="vazio">Nenhum usuário criado ainda. Crie o primeiro abaixo.</p>';
+    </details>`).join('') : '<p class="vazio">Nenhum usuário criado ainda. Crie o primeiro abaixo.</p>';
 
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
