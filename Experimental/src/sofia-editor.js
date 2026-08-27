@@ -383,9 +383,15 @@ function controleHumanoDe(chave) { return !!lerHumano()[chave]; }
 
 // Comando painel → listener (ex.: desconectar o WhatsApp da Sofia). O listener lê,
 // executa e apaga o arquivo. Gravado em sofia-comando.json (fora do Git).
-function enviarComando(cmd) {
+function enviarComando(cmd, extra) {
   const arq = path.join(DIR, 'sofia-comando.json');
-  fs.writeFileSync(arq, JSON.stringify({ cmd: String(cmd || ''), em: Date.now() }), 'utf8');
+  const obj = Object.assign({ cmd: String(cmd || '') }, extra && typeof extra === 'object' ? extra : {}, { em: Date.now() });
+  fs.writeFileSync(arq, JSON.stringify(obj), 'utf8');
+}
+// Status da importação de histórico (o listener escreve; o painel só lê).
+function lerImportStatus() {
+  try { const o = JSON.parse(fs.readFileSync(path.join(DIR, 'sofia-import-status.json'), 'utf8')); return (o && typeof o === 'object') ? o : null; }
+  catch (_) { return null; }
 }
 
 // ── campanhas (envio em massa por tag, pela SoFIA) ──────────────────────────
@@ -541,6 +547,6 @@ function setControleHumano(chave, ativo) {
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

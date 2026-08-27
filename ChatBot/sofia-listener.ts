@@ -381,7 +381,11 @@ function enfileirar(fn: () => Promise<void>) { fila = fila.then(fn).catch((e: an
 //    N mensagens por conversa e só os últimos X dias.
 const CONVERSAS_FILE = path.join(DIR, "sofia-conversas.json");
 const INBOX_MAX_MSGS = parseInt(process.env.SOFIA_INBOX_MSGS || "60", 10);
-const INBOX_RETENCAO_MS = parseInt(process.env.SOFIA_INBOX_DIAS || "7", 10) * 24 * 3600 * 1000;
+// Retenção da inbox (dias). Antes eram 7 dias — curto demais para a recepção
+// ver se um lead já falou antes. Agora o padrão é 365 dias e SOFIA_INBOX_DIAS=0
+// significa NUNCA apagar (guarda todo o histórico).
+const INBOX_RETENCAO_DIAS = parseInt(process.env.SOFIA_INBOX_DIAS || "365", 10);
+const INBOX_RETENCAO_MS = INBOX_RETENCAO_DIAS > 0 ? INBOX_RETENCAO_DIAS * 24 * 3600 * 1000 : Number.POSITIVE_INFINITY;
 type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string };
 type InboxConversa = { jid: string; nome: string; ultimaEm: number; msgs: InboxMsg[] };
 const inbox = new Map<string, InboxConversa>();
@@ -411,6 +415,65 @@ function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMs
   c.ultimaEm = em;
   agendarSalvarInbox();
   registrarSessao(chave, nome || c.nome, autor, t || "📷 (foto)", em);
+}
+
+// ── Importar histórico EXISTENTE do WhatsApp para a inbox (uma vez) ──────────
+// Lê os chats já sincronizados pelo WhatsApp Web e enche a inbox com o histórico
+// (horários reais). Serve para a recepção ver se um lead já falou antes. Não
+// responde ninguém. Obs.: o WhatsApp Web só sincroniza uma janela recente, então
+// pode não trazer anos inteiros. Progresso vai para sofia-import-status.json.
+const IMPORT_STATUS_FILE = path.join(DIR, "sofia-import-status.json");
+let importando = false;
+function gravarImportStatus(o: any) { try { fs.writeFileSync(IMPORT_STATUS_FILE, JSON.stringify(o), "utf8"); } catch {} }
+async function importarHistorico(porChat: number) {
+  if (importando) return;
+  importando = true;
+  const lim = Math.max(1, Math.min(porChat || INBOX_MAX_MSGS, 500));
+  try {
+    if (!pronta) { gravarImportStatus({ rodando: false, erro: "O WhatsApp da SoFIA não está conectado.", em: Date.now() }); return; }
+    gravarImportStatus({ rodando: true, feitos: 0, total: 0, novos: 0, em: Date.now() });
+    const chats: any[] = await client.getChats();
+    const alvos = chats.filter((c) => c && !c.isGroup && c.id && c.id._serialized && String(c.id._serialized).endsWith("@c.us"));
+    let feitos = 0, novos = 0;
+    for (const chat of alvos) {
+      try {
+        const jid: string = chat.id._serialized;
+        const tel = jidParaTel(jid);
+        if (tel) {
+          const msgs: any[] = await chat.fetchMessages({ limit: lim });
+          const nomeChat = (chat.name && !/^\+?[\d ()-]+$/.test(String(chat.name))) ? String(chat.name) : "";
+          const ex = inbox.get(tel);
+          const acc: InboxMsg[] = ex ? ex.msgs.slice() : [];
+          const seen = new Set(acc.map((m) => m.em + "|" + m.autor));
+          for (const m of msgs) {
+            const em = m.timestamp ? m.timestamp * 1000 : 0;
+            if (!em) continue;
+            const texto = String(m.body || "").trim() || (m.hasMedia ? "📎 (mídia)" : "");
+            if (!texto) continue;
+            const autor: InboxMsg["autor"] = m.fromMe ? "humano" : "aluna";
+            const k = em + "|" + autor;
+            if (seen.has(k)) continue;
+            seen.add(k);
+            acc.push({ autor, texto, em });
+          }
+          acc.sort((a, b) => a.em - b.em);
+          const trimmed = acc.slice(-INBOX_MAX_MSGS);
+          if (trimmed.length) {
+            inbox.set(tel, { jid, nome: (ex && ex.nome) || nomeChat, ultimaEm: Math.max(trimmed[trimmed.length - 1].em, (ex && ex.ultimaEm) || 0), msgs: trimmed });
+            novos++;
+          }
+        }
+      } catch (e: any) { log("import chat falhou: " + (e?.message || e)); }
+      feitos++;
+      if (feitos % 25 === 0) { gravarImportStatus({ rodando: true, feitos, total: alvos.length, novos, em: Date.now() }); salvarInbox(); }
+    }
+    salvarInbox();
+    gravarImportStatus({ rodando: false, feitos, total: alvos.length, novos, terminadoEm: Date.now() });
+    log(`✅ histórico importado: ${feitos} conversas lidas, ${novos} com mensagens.`);
+  } catch (e: any) {
+    gravarImportStatus({ rodando: false, erro: e?.message || String(e), em: Date.now() });
+    log("import histórico falhou: " + (e?.message || e));
+  } finally { importando = false; }
 }
 
 // ── Histórico de INTERAÇÕES (aba Contatos → Interações do painel) ────────────
@@ -809,6 +872,11 @@ setInterval(async () => {
   let cmd: any = null;
   try { cmd = JSON.parse(fs.readFileSync(COMANDO_FILE, "utf8")); } catch { return; } // sem comando
   try { fs.unlinkSync(COMANDO_FILE); } catch {} // consome uma vez só
+  if (cmd && cmd.cmd === "importar-historico") {
+    log("📥 comando do painel: importar histórico do WhatsApp…");
+    importarHistorico(parseInt(cmd.porChat, 10) || INBOX_MAX_MSGS); // async, não bloqueia
+    return;
+  }
   if (!cmd || cmd.cmd !== "logout") return;
   log("🔌 comando do painel: DESCONECTAR (logout). Encerrando a sessão da Sofia…");
   setStatus("desconectado");
