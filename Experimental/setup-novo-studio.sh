@@ -6,11 +6,18 @@
 #  modelos (gerando segredos aleatórios) e — na fase --start — sobe o PM2.
 #
 #  USO (rode DE DENTRO da pasta Experimental/, após o git clone):
-#    1) Fase de preparação (instala + monta os .env com segredos):
-#         bash setup-novo-studio.sh --slug lagosul --studio "Studio SlimFit Lago Sul"
-#    2) Edite os .env que ele apontar (EVO, ANTHROPIC_API_KEY, formulário…).
-#    3) Fase de subida (liga os processos no PM2):
-#         bash setup-novo-studio.sh --slug lagosul --start
+#    1) Preparação — instala tudo (sistema + deps) e monta os .env com segredos:
+#         bash setup-novo-studio.sh --slug lagosul --studio "Studio SlimFit Lago Sul" --install-deps
+#       (sem --install-deps, ele só instala as deps do projeto e assume que
+#        Node/pm2/tsx/Chromium já existem.)
+#    2) Edite os .env que ele apontar (EVO_DNS/EVO_TOKEN, ANTHROPIC_API_KEY, formulário…).
+#    3) (opcional) Descubra os ids da aula no EVO — precisa do EVO já no .env:
+#         bash setup-novo-studio.sh --slug lagosul --evo-ids
+#    4) Subida — liga os processos e (com --domain) já configura o HTTPS via Caddy:
+#         bash setup-novo-studio.sh --slug lagosul --start --domain painel-lagosul.exemplo.com
+#
+#  FLAGS: --slug (obrigatório) · --studio "Nome" · --install-deps · --evo-ids
+#         --domain <subdominio> · --start
 #
 #  Segurança: os .env NUNCA vão para o Git (estão no .gitignore). Este script
 #  só ESCREVE .env se ele ainda não existir — nunca sobrescreve o seu.
@@ -21,11 +28,17 @@ set -euo pipefail
 SLUG=""            # identificador curto do studio (nomes dos processos PM2)
 STUDIO_NOME=""     # nome como aparece para a aluna
 START=0            # --start liga os processos no PM2
+INSTALL_DEPS=0     # --install-deps instala Node/pm2/tsx/chromium/python (apt)
+EVO_IDS=0          # --evo-ids descobre os ids da aula no EVO (precisa do .env)
+DOMAIN=""          # --domain <subdominio> gera + liga o Caddy (HTTPS) no --start
 while [ $# -gt 0 ]; do
   case "$1" in
-    --slug)   SLUG="${2:-}"; shift 2 ;;
-    --studio) STUDIO_NOME="${2:-}"; shift 2 ;;
-    --start)  START=1; shift ;;
+    --slug)         SLUG="${2:-}"; shift 2 ;;
+    --studio)       STUDIO_NOME="${2:-}"; shift 2 ;;
+    --start)        START=1; shift ;;
+    --install-deps) INSTALL_DEPS=1; shift ;;
+    --evo-ids)      EVO_IDS=1; shift ;;
+    --domain)       DOMAIN="${2:-}"; shift 2 ;;
     -h|--help)
       grep -E '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Argumento desconhecido: $1"; exit 1 ;;
@@ -59,6 +72,99 @@ segredo() {
   else node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"; fi
 }
 
+# roda um comando como root (sudo se não for root já)
+_sudo() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi; }
+
+# ---- --install-deps: instala os pré-requisitos do sistema (apt/Debian/Ubuntu) --
+install_system_deps() {
+  echo "🧰 Instalando pré-requisitos do sistema (Node, pm2, tsx, Chromium, Python)…"
+  command -v apt-get >/dev/null 2>&1 || {
+    echo "   ❌ apt-get não encontrado — este instalador cobre Debian/Ubuntu."
+    echo "      Instale à mão: Node 20+, git, chromium, python3-venv, e 'npm i -g pm2 tsx'."
+    return 1
+  }
+  _sudo apt-get update -y
+  # Node 20 via NodeSource se faltar node ou for < 18
+  local nodemaj=0
+  command -v node >/dev/null 2>&1 && nodemaj="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+  if [ "${nodemaj:-0}" -lt 18 ]; then
+    echo "   ⬇️  instalando Node 20 (NodeSource)…"
+    if [ "$(id -u)" -eq 0 ]; then
+      curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || echo "   ⚠️  NodeSource falhou; tentando o node do apt"
+    else
+      curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - || echo "   ⚠️  NodeSource falhou; tentando o node do apt"
+    fi
+    _sudo apt-get install -y nodejs || true
+  fi
+  _sudo apt-get install -y git python3 python3-venv python3-pip || true
+  # Chromium: nome do pacote varia entre distros
+  _sudo apt-get install -y chromium-browser 2>/dev/null || _sudo apt-get install -y chromium || \
+    echo "   ⚠️  não instalei o Chromium automaticamente — ajuste CHROMIUM_PATH no .env depois."
+  # ferramentas globais do Node
+  command -v pm2 >/dev/null 2>&1 || _sudo npm i -g pm2 || npm i -g pm2 || true
+  command -v tsx >/dev/null 2>&1 || _sudo npm i -g tsx || npm i -g tsx || true
+  echo "   ✔ pré-requisitos prontos (o que faltou aparece com ⚠️ acima)."
+}
+
+# ---- --domain: gera o bloco do Caddy e (best-effort) liga o HTTPS ------------
+wire_caddy() {
+  local dom="$1"
+  local porta; porta="$(grep -E '^PAINEL_PORT=' "$EXP_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+  [ -n "$porta" ] || porta=8080
+  local snippet="$EXP_DIR/caddy-$SLUG.caddy"
+  printf '%s {\n    reverse_proxy 127.0.0.1:%s\n}\n' "$dom" "$porta" > "$snippet"
+  echo "📝 Bloco do Caddy gerado em: $snippet"
+  # instala o Caddy se pedimos --install-deps e ele não existe
+  if [ "$INSTALL_DEPS" = "1" ] && ! command -v caddy >/dev/null 2>&1; then
+    echo "   ⬇️  instalando Caddy…"
+    _sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl || true
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | _sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null || true
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | _sudo tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null 2>&1 || true
+    _sudo apt-get update -y || true; _sudo apt-get install -y caddy || true
+  fi
+  # tenta ligar automaticamente no /etc/caddy/Caddyfile (best-effort)
+  if [ -f /etc/caddy/Caddyfile ]; then
+    if _sudo grep -qF "$dom" /etc/caddy/Caddyfile 2>/dev/null; then
+      echo "   ✔ o domínio já está no /etc/caddy/Caddyfile — nada a fazer."
+    else
+      { echo ""; echo "# --- $SLUG (SlimFit) ---"; cat "$snippet"; } | _sudo tee -a /etc/caddy/Caddyfile >/dev/null \
+        && echo "   ✔ bloco acrescentado ao /etc/caddy/Caddyfile"
+      _sudo systemctl reload caddy 2>/dev/null || _sudo systemctl restart caddy 2>/dev/null \
+        || echo "   ⚠️  recarregue o Caddy à mão: sudo systemctl reload caddy"
+    fi
+  else
+    echo "   ℹ️  Caddy não configurado ainda. Para ligar o HTTPS, coloque o bloco de"
+    echo "      $snippet no seu Caddyfile e recarregue (sudo systemctl reload caddy)."
+  fi
+  echo "   🌐 Aponte o DNS de $dom para o IP deste VPS (o Caddy emite o certificado sozinho)."
+}
+
+# ---- --evo-ids: descobre os ids da aula experimental no EVO ------------------
+run_evo_ids() {
+  local pydir="$EXP_DIR/src/agendamento_evo"
+  [ -f "$EXP_DIR/.env" ] || { echo "❌ $EXP_DIR/.env não existe — rode a preparação e preencha o EVO antes."; exit 1; }
+  local pybin; pybin="$(grep -E '^PYTHON_BIN=' "$EXP_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+  [ -n "$pybin" ] && [ -x "$pybin" ] || pybin="$pydir/.venv/bin/python"
+  [ -x "$pybin" ] || pybin="python3"
+  echo "🔎 Consultando o EVO (serviços de aula experimental)…"
+  echo "   (usa EVO_DNS/EVO_TOKEN do .env — preencha antes de rodar isto)"
+  echo "──────────────────────────────────────────────────────────"
+  ( cd "$pydir" && "$pybin" run_agendamento.py services ) || {
+    echo "──────────────────────────────────────────────────────────"
+    echo "❌ Falhou. Confira EVO_DNS/EVO_TOKEN no $EXP_DIR/.env e tente de novo."
+    exit 1
+  }
+  echo "──────────────────────────────────────────────────────────"
+  echo "👉 Copie o id do serviço/atividade para EVO_SERVICE_ID / EVO_ACTIVITY_ID no .env"
+  echo "   (ou use os nomes em EVO_SERVICE / EVO_ACTIVITY). Depois: --start"
+}
+
+# ---- --install-deps: instala os pré-requisitos ANTES de qualquer fase --------
+if [ "$INSTALL_DEPS" = "1" ]; then install_system_deps || true; fi
+
+# ---- --evo-ids: fase isolada de descoberta dos ids do EVO --------------------
+if [ "$EVO_IDS" = "1" ]; then run_evo_ids; exit 0; fi
+
 # ==========================================================================
 #  FASE --start: só liga os processos (assume .env já preenchidos)
 # ==========================================================================
@@ -79,10 +185,14 @@ if [ "$START" = "1" ]; then
   ( cd "$CHATBOT_DIR" && pm2 start "npx tsx sofia-listener.ts" --name "$P_SOFIA" --time )
 
   pm2 save
+
+  # HTTPS automático (best-effort) quando passaram --domain
+  if [ -n "$DOMAIN" ]; then wire_caddy "$DOMAIN"; fi
+
   echo
   echo "✅ Processos no ar. Próximos passos:"
   echo "   • Leia os QRs dos 2 WhatsApp:  pm2 logs $P_EXP   e   pm2 logs $P_SOFIA"
-  echo "   • Configure o HTTPS (Caddy/reverse-proxy) para o painel na porta do .env."
+  [ -n "$DOMAIN" ] || echo "   • Configure o HTTPS: rode com --domain <subdominio> (gera + liga o Caddy)."
   echo "   • pm2 startup   (para subir sozinho após reboot do VPS)"
   exit 0
 fi
@@ -218,5 +328,8 @@ echo
 echo "   Segredos gerados (guarde a senha do painel):"
 echo "     PAINEL_SENHA (sugerida) = $SENHA_SUGERIDA"
 echo
-echo "   Depois, para subir tudo:"
-echo "     bash setup-novo-studio.sh --slug $SLUG --start"
+echo "   Depois de preencher o EVO no .env, descubra os ids da aula (opcional):"
+echo "     bash setup-novo-studio.sh --slug $SLUG --evo-ids"
+echo
+echo "   E para subir tudo (com HTTPS automático):"
+echo "     bash setup-novo-studio.sh --slug $SLUG --start --domain painel-$SLUG.SEU-DOMINIO"
