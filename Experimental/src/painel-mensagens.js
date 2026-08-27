@@ -149,7 +149,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto' || url === '/sofia/conversas/encerrar') return has('sofia_conversas');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
   if (url === '/sofia/contatos/bloquear') return has('sofia_conversas') || has('sofia_contatos'); // bloquear vem tb do chat (Conversas)
-  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
+  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar') return has('sofia_config');
   return false;
@@ -1859,6 +1859,21 @@ function paginaSofiaContatos(aviso, erro, params) {
   const opcoes = ['<option value="">Todas as tags</option>', `<option value="__sem__"${tagSel === '__sem__' ? ' selected' : ''}>Sem tag</option>`]
     .concat(tags.map(t => `<option value="${esc(t.tag)}"${t.tag === tagSel ? ' selected' : ''}>${esc(t.tag)} (${t.n})</option>`)).join('');
 
+  // Ação em lote: aplica/remove uma tag em TODOS os contatos do filtro atual
+  // (não só os visíveis). Card recolhível — não mexe no layout da tabela.
+  const optAlvo = tags.map(t => `<option value="${esc(t.tag)}">${esc(t.tag)} (${t.n})</option>`).join('');
+  const loteBar = (r.total && tags.length) ? `
+    <details class="card" style="padding:10px 15px">
+      <summary style="cursor:pointer;font-weight:700">🏷️ Alterar tags em lote <small style="font-weight:400;color:#5c5960">(aplica aos ${r.total} contato(s) do filtro atual)</small></summary>
+      <form method="POST" action="/sofia/contatos/lote" data-n="${r.total}" onsubmit="return confirmarLote(this)" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+        <input type="hidden" name="q" value="${esc(q)}"><input type="hidden" name="tag_filtro" value="${esc(tagSel)}"><input type="hidden" name="bloq" value="${esc(bloqSel)}">
+        <select name="acao" style="flex:0 0 160px"><option value="add">➕ Adicionar tag</option><option value="rm">➖ Remover tag</option></select>
+        <select name="alvo" style="flex:1 1 200px;min-width:0" required>${optAlvo}</select>
+        <button type="submit" class="save" style="padding:8px 14px">Aplicar aos ${r.total}</button>
+      </form>
+      <p class="quando" style="margin:8px 0 0">Age em <b>todos os ${r.total} contato(s)</b> que casam com a busca/filtro atual — não só os desta página. Ao <b>adicionar</b>, as regras de transição de funil da tag também valem.</p>
+    </details>` : '';
+
   const pag = r.paginas > 1 ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
       <a class="reset" style="padding:6px 12px;${pagina <= 0 ? 'pointer-events:none;opacity:.4' : ''}" href="${qs(Math.max(0, pagina - 1))}">‹ Anterior</a>
       <span class="quando">Página ${r.pagina + 1} de ${r.paginas} · ${r.total} contato(s)</span>
@@ -1903,6 +1918,8 @@ function paginaSofiaContatos(aviso, erro, params) {
       <button type="submit" class="save" style="padding:8px 14px">Filtrar</button>
       ${(q || tagSel || bloqSel) ? `<a href="/sofia?view=contatos" class="reset" style="padding:8px 14px">Limpar</a>` : ''}
     </form>
+
+    ${loteBar}
 
     ${r.itens.length ? `<div class="ct-wrap">
       <table class="ct-tab">
@@ -2052,6 +2069,12 @@ function paginaSofiaContatos(aviso, erro, params) {
   function corTagJs(t){return PAL_TAG[_hash(t)%PAL_TAG.length];}
   var ctSel=null, ctTags=[];
   function abrirFiltroTag(){var s=document.getElementById('ctTagSel');if(s){s.focus();if(s.showPicker)try{s.showPicker();}catch(e){}}}
+  function confirmarLote(f){
+    var tag=f.alvo.value; if(!tag){ alert('Escolha a tag.'); return false; }
+    var n=f.getAttribute('data-n')||'0';
+    var msg=(f.acao.value==='rm')?('Remover a tag "'+tag+'" DE '+n+' contato(s) do filtro atual?'):('Adicionar a tag "'+tag+'" A '+n+' contato(s) do filtro atual?');
+    return confirm(msg);
+  }
   var ctSoBloq=false;
   function filtrarBloqueados(){
     ctSoBloq=!ctSoBloq;
@@ -3229,6 +3252,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)rest=1/.test(q)) aviso = 'Restaurado para a versão anterior.';
     else if (/(?:^|&)rest=0/.test(q)) { aviso = 'Não havia versão anterior para restaurar.'; erro = true; }
     else if (/(?:^|&)ctok=1/.test(q)) aviso = 'Tags salvas.';
+    else if (/(?:^|&)lote=/.test(q)) aviso = `🏷️ ${(q.match(/lote=(\d+)/) || [])[1] || '0'} contato(s) atualizado(s) em lote.`;
     else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. A SoFIA vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
     else if (/(?:^|&)okc=criada/.test(q)) aviso = '📣 Campanha criada! A IA está gerando as variações. Quando ficar “pronta”, clique em ▶️ Iniciar para começar o envio.';
     else if (/(?:^|&)okc=ok/.test(q)) aviso = '✔️ Feito.';
@@ -3328,6 +3352,27 @@ const server = http.createServer((req, res) => {
         else contatos.renomearTag(p.get('de'), p.get('para'));
       } catch (_) {}
       voltarContatos(p, res);
+    });
+  }
+  // Alterar tags EM LOTE: adiciona/remove uma tag em todos os contatos do filtro.
+  if (req.method === 'POST' && url === '/sofia/contatos/lote') {
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      const back = new URLSearchParams(); back.set('view', 'contatos');
+      if (p.get('q')) back.set('q', p.get('q'));
+      if (p.get('tag_filtro')) back.set('tag', p.get('tag_filtro'));
+      if (p.get('bloq')) back.set('bloq', p.get('bloq'));
+      try {
+        let bloqueados = []; try { bloqueados = sofia.lerBloqueios(); } catch (_) {}
+        const n = contatos.aplicarTagLote({
+          q: p.get('q') || '', tag: p.get('tag_filtro') || '', bloq: p.get('bloq') || '', bloqueados,
+          acao: p.get('acao') === 'rm' ? 'rm' : 'add', alvo: p.get('alvo') || '',
+        });
+        back.set('lote', String(n));
+      } catch (e) {
+        back.set('errc', e.message || 'Erro no lote.');
+      }
+      res.writeHead(303, { Location: '/sofia?' + back.toString() }); res.end();
     });
   }
   // Salvar a automação de uma tag (gatilho + palavras + avisar no WhatsApp).

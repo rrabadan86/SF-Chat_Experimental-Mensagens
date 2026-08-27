@@ -284,6 +284,39 @@ function removerTag(telefone, tag) {
   return false;
 }
 
+// Ação em LOTE: adiciona ('add') ou remove ('rm') a tag `alvo` em TODOS os
+// contatos que casam com o filtro atual (busca + tag + bloqueio). Grava uma vez
+// só. Retorna quantos contatos foram efetivamente alterados. Ao adicionar,
+// respeita as regras de transição de funil (tagsAposRegras).
+function aplicarTagLote({ q = '', tag = '', bloq = '', bloqueados = [], acao = 'add', alvo = '' } = {}) {
+  alvo = String(alvo || '').trim();
+  if (!alvo) throw new Error('Escolha a tag a aplicar/remover.');
+  if (acao !== 'add' && acao !== 'rm') throw new Error('Ação inválida.');
+  const map = carregar();
+  const alvos = filtrarContatos(Object.values(map), { q, tag, bloq, bloqueados });
+  const agora = Date.now();
+  let n = 0;
+  for (const c of alvos) {
+    const antes = (c.tags || []).slice();
+    if (acao === 'rm') {
+      c.tags = antes.filter(t => t !== alvo);
+    } else {
+      const set = new Set(antes);
+      set.add(alvo);
+      c.tags = tagsAposRegras([...set]); // aplica transições (ex.: sai de "Contato inicial")
+    }
+    // "mudou" = conjunto de tags diferente do anterior.
+    if (c.tags.length !== antes.length || c.tags.some(t => !antes.includes(t))) { c.atualizadoEm = agora; n++; }
+  }
+  if (n) salvar(map);
+  return n;
+}
+// Quantos contatos casam com o filtro atual (para o painel mostrar o total no
+// botão de "aplicar a N contatos", sem paginar).
+function contarFiltrados({ q = '', tag = '', bloq = '', bloqueados = [] } = {}) {
+  return filtrarContatos(Object.values(carregar()), { q, tag, bloq, bloqueados }).length;
+}
+
 // Renomeia uma tag em TODOS os contatos. Devolve quantos foram afetados.
 function renomearTag(de, para) {
   de = String(de || '').trim(); para = String(para || '').trim();
@@ -319,9 +352,10 @@ function excluirTag(tag) {
 // porque o estado de bloqueio mora lá (sofia.lerBloqueios). Filtramos AQUI, antes
 // de paginar, para o total/paginação ficarem certos (o botão antigo só escondia
 // as linhas da página atual — por isso "Bloqueados" parecia vazio sem filtrar).
-function listar({ q = '', tag = '', pagina = 0, porPagina = 25, bloq = '', bloqueados = [] } = {}) {
-  const map = carregar();
-  let arr = Object.values(map);
+// Aplica os mesmos filtros da tela de Contatos (busca + tag + bloqueio) a um
+// array de contatos. Compartilhado por listar() e pela ação em lote, para que
+// "o filtro atual" signifique exatamente o mesmo conjunto nos dois.
+function filtrarContatos(arr, { q = '', tag = '', bloq = '', bloqueados = [] } = {}) {
   if (q) {
     const s = String(q).toLowerCase();
     const sd = s.replace(/\D/g, '');
@@ -334,6 +368,12 @@ function listar({ q = '', tag = '', pagina = 0, porPagina = 25, bloq = '', bloqu
     const estaBloq = c => set.has(String(c.tel || '').replace(/\D/g, ''));
     arr = arr.filter(c => bloq === 'sim' ? estaBloq(c) : !estaBloq(c));
   }
+  return arr;
+}
+
+function listar({ q = '', tag = '', pagina = 0, porPagina = 25, bloq = '', bloqueados = [] } = {}) {
+  const map = carregar();
+  let arr = filtrarContatos(Object.values(map), { q, tag, bloq, bloqueados });
   arr.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
   const total = arr.length;
   const paginas = Math.max(1, Math.ceil(total / porPagina));
@@ -370,4 +410,5 @@ module.exports = {
   normTel, carregar, importarCSV, exportarCSV, setTags, listar, tagsDistintas, totalContatos,
   remover, editarContato, renomearTag, excluirTag, existe, adicionar, ARQUIVO,
   tagConfig, definirTagConfig, tagsPorGatilho, criarTag, adicionarTag, removerTag, lerTagsConfig, GATILHOS,
+  aplicarTagLote, contarFiltrados,
 };
