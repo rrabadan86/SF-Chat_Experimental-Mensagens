@@ -2740,16 +2740,9 @@ function paginaSofia(aviso, erro) {
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 6px">
       <span style="margin-right:auto;font-weight:700;font-size:.95rem">${e.ativa ? '🟢 IA ativa' : '⏸️ IA pausada'}<small style="font-weight:400;color:var(--cinza)"> — ${e.ativa ? 'respondendo as alunas' : 'não responde (atenda manual)'}</small></span>
       <form method="POST" action="/sofia/toggle" style="margin:0;display:inline"><button type="submit" class="${e.ativa ? 'reset' : 'save'}" style="padding:6px 14px">${e.ativa ? '⏸️ Pausar SoFIA' : '▶️ Ativar SoFIA'}</button></form>
+      <button type="button" id="impBtn" onclick="importarHistorico()" class="reset" style="padding:6px 14px" title="Traz para o painel as conversas que o WhatsApp já sincronizou (não responde ninguém). O WhatsApp sincroniza só uma janela recente — pode não trazer tudo.">📥 Importar Histórico WPP</button>
       <form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="margin:0;display:inline"><button type="submit" class="reset" style="padding:6px 14px">🔌 Desconectar</button></form>
-    </div>
-
-    <div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px">
-      <div style="flex:1 1 220px;min-width:0">
-        <div style="font-weight:700;font-size:.9rem">📥 Importar histórico do WhatsApp</div>
-        <div class="quando" style="margin:2px 0 0">Traz para o painel as conversas que o WhatsApp já sincronizou (não responde ninguém). O WhatsApp sincroniza só uma janela recente — pode não trazer tudo.</div>
-        <div id="impSt" class="quando" style="margin:4px 0 0;font-size:.75rem"></div>
-      </div>
-      <button type="button" id="impBtn" onclick="importarHistorico()" class="save" style="padding:8px 16px;flex:none">Importar agora</button>
+      <div id="impSt" class="quando" style="width:100%;text-align:right;margin:0;font-size:.75rem"></div>
     </div>
 
     <form id="formSalvar" method="POST" action="/sofia/salvar">
