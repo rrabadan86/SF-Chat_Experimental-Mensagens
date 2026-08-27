@@ -447,10 +447,36 @@ async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
   const page: any = (client as any).pupPage;
   if (!page) throw new Error("página do WhatsApp indisponível (pupPage).");
   const r = await page.evaluate((LIM: number) => {
-    const S: any = (window as any).Store;
-    if (!S || !S.Chat || !S.Chat.getModelsArray) return { erro: "Store.Chat indisponível nesta versão do WhatsApp Web." };
+    const W: any = window as any;
+    // Tenta achar a coleção de Chats por vários caminhos (a versão do WA muda isso).
+    function acharChatStore(): any {
+      const tentativas = [
+        () => W.Store && W.Store.Chat,
+        () => W.WWebJS && W.WWebJS.Store && W.WWebJS.Store.Chat,
+        () => W.Store && W.Store.default && W.Store.default.Chat,
+      ];
+      for (const f of tentativas) { try { const v = f(); if (v && (v.getModelsArray || v.models)) return v; } catch (e) {} }
+      // moduleRaid: procura um módulo com uma coleção de Chat.
+      try {
+        const mr = W.mR || W.moduleRaid;
+        if (mr && mr.findModule) {
+          const mods = mr.findModule((m: any) => m && m.Chat && (m.Chat.getModelsArray || m.Chat.models));
+          if (mods && mods[0] && mods[0].Chat) return mods[0].Chat;
+        }
+      } catch (e) {}
+      return null;
+    }
+    const ChatStore: any = acharChatStore();
+    if (!ChatStore) {
+      // Diagnóstico: diz o que EXISTE na página, para eu mirar certo.
+      const diag: any = { hasStore: !!W.Store, hasWWebJS: !!W.WWebJS, hasMR: !!(W.mR || W.moduleRaid) };
+      try { diag.storeKeys = W.Store ? Object.keys(W.Store).slice(0, 60) : []; } catch (e) { diag.storeKeys = "?"; }
+      try { diag.wwebjsKeys = W.WWebJS ? Object.keys(W.WWebJS).slice(0, 60) : []; } catch (e) { diag.wwebjsKeys = "?"; }
+      return { erro: "Não achei a lista de conversas (Store.Chat).", diag };
+    }
+    const arr: any[] = ChatStore.getModelsArray ? ChatStore.getModelsArray() : (ChatStore.models || []);
     const out: any[] = [];
-    for (const c of S.Chat.getModelsArray()) {
+    for (const c of arr) {
       try {
         const idObj = c && c.id;
         const id = idObj ? (idObj._serialized || (idObj.user ? idObj.user + "@" + (idObj.server || "c.us") : "")) : "";
@@ -465,7 +491,7 @@ async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
     }
     return { chats: out };
   }, limMsg);
-  if (r && r.erro) throw new Error(r.erro);
+  if (r && r.erro) throw new Error(r.erro + (r.diag ? " Diag: " + JSON.stringify(r.diag) : ""));
   return (r && r.chats) || [];
 }
 async function importarHistorico(porChat: number) {
