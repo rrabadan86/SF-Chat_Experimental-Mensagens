@@ -1767,7 +1767,7 @@ function paginaSofiaConversas(aviso, erro) {
     var bloq=!!c.bloq;
     var btnBloq='<button type="button" onclick="bloquearConversa()" class="reset" title="'+(bloq?'Desbloquear contato':'Bloquear contato (a SoFIA ignora)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(bloq?';color:#1c8f52':'')+'">'+(bloq?'✅':'🚫')+'</button>';
     var selo=bloq?'<span title="Contato bloqueado" style="background:#fdeaea;color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700;margin-left:6px">🚫 bloqueado</span>':'';
-    var agSelo=c.agendou?'<span title="Aula experimental agendada" style="display:inline-flex;align-items:center;justify-content:center;color:#1c8f52;font-size:1.05rem;margin-right:2px">✔️</span>':'';
+    var agSelo=c.agendou?'<span title="Aula experimental agendada" style="display:inline-flex;align-items:center;justify-content:center;font-size:1.05rem;margin-right:2px">📅</span>':'';
     var header='<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">'
       +'<div style="flex:1;min-width:0"><div style="font-weight:800">'+escH(c.nome||'(sem nome)')+selo+'</div><div class="quando" style="margin:0">'+escH(fmtTel(k))+'</div></div>'
       +'<div style="display:flex;gap:6px;align-items:center;flex:none">'+agSelo+btnInt+btnEnc+btnBloq+pill+'</div></div>';
@@ -1953,7 +1953,7 @@ function paginaSofiaConversas(aviso, erro) {
       var hb=c.humano?'<span style="display:inline-block;background:#e6f6ec;color:#1f8f52;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 você</span>':'';
       var fu=c.fuEspera?'<span title="Follow-up pronto, aguardando o horário permitido" style="display:inline-block;background:#fdf2e0;color:#b8770a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">⏳ follow-up '+escH(c.fuEspera)+'</span>':'';
       var at=c.atencao?'<span title="A aluna pediu atendimento humano" style="display:inline-block;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 pediu humano</span>':'';
-      var agMini=c.agendou?'<span title="Aula experimental agendada" style="color:#1c8f52;font-size:.8rem;flex:none">✔️</span>':'';
+      var agMini=c.agendou?'<span title="Aula experimental agendada" style="font-size:.8rem;flex:none">📅</span>':'';
       var nome='<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:'+(pendente?'700':'600')+';font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escH(c.nome||fmtTel(k))+'</span>'+agMini+dot+'</div>';
       var meta='<div class="quando" style="font-size:.72rem;margin:0;display:flex;align-items:center;flex-wrap:wrap;row-gap:3px">'+fmtHora(c.ultimaEm)+at+tgs+hb+enc+fu+'</div>';
       var bg = on?'#e4efee':(c.atencao?'#fdecea':(encerrada(c)?'#fbf7f7':'#fff'));
