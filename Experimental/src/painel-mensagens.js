@@ -1822,14 +1822,18 @@ function paginaSofiaConversas(aviso, erro) {
     // sessão (memória) OU quando houve encerramento manual (cadeado) entre elas.
     function divisorHtml(txt){ return '<div style="display:flex;align-items:center;gap:10px;margin:16px 2px 8px;color:#a15a5a"><span style="flex:1;height:1px;background:#e6cfcf"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap">'+txt+'</span><span style="flex:1;height:1px;background:#e6cfcf"></span></div>'; }
     var encPorTxt=(c.encPor && String(c.encPor).trim())?escH(c.encPor):'';
+    // A "nova conversa" após um encerramento começa na PRÓXIMA mensagem da aluna
+    // depois do fechamento — não na resposta que a SoFIA ainda mandou de despedida.
+    // Achamos esse índice para pôr a divisória no lugar certo (depois da despedida).
+    var idxNova=-1;
+    if(c.encEm){ for(var _j=0;_j<msgs.length;_j++){ if(msgs[_j].autor==='aluna' && (msgs[_j].em||0)>c.encEm){ idxNova=_j; break; } } }
     var bolhas = msgs.map(function(m,i){
       var sep='';
-      if(i>0){
+      if(i===idxNova) sep=divisorHtml('🔒 Encerrada '+(encPorTxt?'por '+encPorTxt:'manualmente')+' · nova conversa');
+      else if(i>0){
         var ant=msgs[i-1];
         var gap=(m.em||0)-(ant.em||0);
-        var manual=(c.encEm && (ant.em||0) < c.encEm && c.encEm <= (m.em||0));
-        if(manual) sep=divisorHtml('🔒 Encerrada '+(encPorTxt?'por '+encPorTxt:'manualmente')+' · nova conversa');
-        else if(gap>SESSAO_MS) sep=divisorHtml('⏱️ Sessão encerrada automaticamente · nova conversa');
+        if(gap>SESSAO_MS) sep=divisorHtml('⏱️ Sessão encerrada automaticamente · nova conversa');
       }
       var mine = (m.autor!=='aluna');
       var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e4efee');
@@ -1842,8 +1846,9 @@ function paginaSofiaConversas(aviso, erro) {
     // Cabeçalho enxuto: nome + telefone à esquerda, botão de controle (compacto) à direita.
     var pill='<button type="button" onclick="toggleHumano()" class="'+(hum?'save':'reset')+'" title="'+(hum?'Devolver à SoFIA (ela volta a responder)':'Assumir a conversa (você atende)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">'+(hum?'🤖':'🧑')+'</button>';
     var btnInt='<button type="button" onclick="abrirInteracoes(selecionada)" class="reset" title="Interações" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">📊</button>';
-    var encM=!!c.enc; // encerrada MANUALMENTE (cadeado à mão)
-    var btnEnc='<button type="button" onclick="encerrarConversa()" class="reset" title="'+(encM?'Conversa já encerrada':'Encerrar conversa agora (cadeado — a SoFIA recomeça do zero)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(encM?';color:#a15a5a':'')+'"'+(encM?' disabled':'')+'>🔒</button>';
+    var encM=!!c.enc; // encerrada AGORA (cadeado à mão / automático por tag)
+    // Cadeado FECHADO 🔒 = fechar; cadeado ABERTO 🔓 = reabrir. O botão alterna.
+    var btnEnc='<button type="button" onclick="encerrarConversa()" class="reset" title="'+(encM?'Reabrir conversa (a SoFIA volta a responder normalmente)':'Encerrar conversa agora (cadeado — a SoFIA recomeça do zero)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(encM?';color:#1c8f52':'')+'">'+(encM?'🔓':'🔒')+'</button>';
     var bloq=!!c.bloq;
     var btnBloq='<button type="button" onclick="bloquearConversa()" class="reset" title="'+(bloq?'Desbloquear contato':'Bloquear contato (a SoFIA ignora)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(bloq?';color:#1c8f52':'')+'">'+(bloq?'✅':'🚫')+'</button>';
     var selo=bloq?'<span title="Contato bloqueado" style="background:#fdeaea;color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700;margin-left:6px">🚫 bloqueado</span>':'';
@@ -1907,10 +1912,11 @@ function paginaSofiaConversas(aviso, erro) {
   }
   function encerrarConversa(){
     var k=selecionada; if(!k) return;
-    var c=ultimoData[k]||{}; if(c.enc) return;
-    if(!confirm('Encerrar esta conversa agora?\\n\\nAparece o cadeado 🔒, a SoFIA recomeça do zero se a aluna voltar a escrever e o follow-up deixa de incomodar este contato.')) return;
-    fetch('/sofia/conversas/encerrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k})})
-      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].enc=true; ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); } else { alert(j.erro||'Não consegui encerrar a conversa.'); } })
+    var c=ultimoData[k]||{}; var reabrir=!!c.enc;
+    if(reabrir){ if(!confirm('Reabrir esta conversa? 🔓\\n\\nO cadeado sai e a SoFIA volta a responder normalmente este contato.')) return; }
+    else { if(!confirm('Encerrar esta conversa agora?\\n\\nAparece o cadeado 🔒, a SoFIA recomeça do zero se a aluna voltar a escrever e o follow-up deixa de incomodar este contato.')) return; }
+    fetch('/sofia/conversas/encerrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,ativo:!reabrir})})
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].enc=!reabrir; ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); } else { alert(j.erro||'Não consegui atualizar a conversa.'); } })
       .catch(function(){ alert('Erro de rede.'); });
   }
   function msgKey(ev){ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); enviarMsg(); } }
@@ -4420,7 +4426,7 @@ const server = http.createServer((req, res) => {
     try { const cmap = contatos.carregar(); for (const k in obj) { const c = cmap[contatos.normTel(k)]; obj[k].salvo = !!c; obj[k].tagsContato = c ? (c.tags || []) : []; if (c && c.nome) obj[k].nome = c.nome; } } catch (_) {} // salvo? + tags + nome salvo do contato (prefere o editado ao do WhatsApp)
     try { const hum = sofia.lerHumano(); for (const k in obj) obj[k].humano = !!hum[k]; } catch (_) {} // controle humano por conversa
     try { for (const k in obj) obj[k].bloq = sofia.estaBloqueado(k); } catch (_) {} // contato bloqueado?
-    try { for (const k in obj) obj[k].enc = sofia.estaEncerrada(k, obj[k].ultimaEm); } catch (_) {} // encerrada à mão (cadeado)?
+    try { for (const k in obj) obj[k].enc = sofia.estaEncerrada(k, sofia.ultimaAlunaEm(obj[k])); } catch (_) {} // encerrada à mão (cadeado)? — mede pela última msg DA ALUNA, para a despedida da SoFIA depois do fechamento não reabrir
     try { const em = sofia.lerEncerradas() || {}; for (const k in obj) { const v = em[k]; const isObj = v && typeof v === 'object'; obj[k].encEm = isObj ? (Number(v.em) || 0) : (Number(v) || 0); obj[k].encPor = isObj ? String(v.por || '') : ''; } } catch (_) {} // instante + autor do encerramento manual (p/ a divisória)
     try { for (const k in obj) obj[k].fuEspera = fuEsperando[k] || ''; } catch (_) {} // follow-up pronto, segurando pelo horário?
     try { const at = sofia.lerAtencao() || {}; const a8 = {}; for (const kk in at) a8[String(kk).replace(/\D/g, '').slice(-8)] = 1; for (const k in obj) obj[k].atencao = !!(at[k] || a8[String(k).replace(/\D/g, '').slice(-8)]); } catch (_) {} // pediu atendimento humano?
@@ -4451,10 +4457,11 @@ const server = http.createServer((req, res) => {
       let d = {};
       try { d = JSON.parse(corpo || '{}'); } catch (_) {}
       const chave = String(d.chave || '').trim();
+      const ativo = (typeof d.ativo === 'undefined') ? true : !!d.ativo; // true = encerrar (padrão) · false = reabrir
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
-      try { sofia.setAtencao(chave, false); } catch (_) {} // encerrou → tira o vermelho
-      try { sofia.setEncerrada(chave, true, quem); return res.end(JSON.stringify({ ok: true })); }
+      if (ativo) { try { sofia.setAtencao(chave, false); } catch (_) {} } // encerrou → tira o vermelho
+      try { sofia.setEncerrada(chave, ativo, quem); return res.end(JSON.stringify({ ok: true })); }
       catch (e) { return res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
   }
@@ -5024,7 +5031,7 @@ function processarFollowups() {
     const d = String(chave).replace(/\D/g, '');
     if (sofia.estaBloqueado(chave)) continue;                // bloqueado
     if (humano[chave]) continue;                             // sob controle humano
-    try { if (sofia.estaEncerrada(chave, c.ultimaEm)) continue; } catch (_) {} // encerrada à mão → não incomoda
+    try { if (sofia.estaEncerrada(chave, ultimoAluna)) continue; } catch (_) {} // encerrada à mão → não incomoda (mede pela última msg da aluna: despedida da SoFIA não reabre)
     if (agendaram.has(d)) continue;                          // já agendou
     try { const ct = contatosMap[contatos.normTel(chave)]; if (ct && (ct.tags || []).some(t => tagsAgendou.includes(t))) continue; } catch (_) {}
     // Chegou aqui = está no ponto de receber a retomada. Só falta o horário:

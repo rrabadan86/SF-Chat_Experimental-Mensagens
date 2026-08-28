@@ -526,6 +526,19 @@ function estaEncerrada(chave, ultimaEm) {
   const em = _encEm(lerEncerradas()[chave]);
   return em > 0 && em >= (Number(ultimaEm) || 0);
 }
+// Instante da última mensagem DA ALUNA (autor 'aluna') numa conversa. É este o
+// marco que "reabre" um encerramento — a resposta que a própria SoFIA manda
+// DEPOIS de encerrar (ex.: uma despedida) NÃO deve reabrir a conversa recém-
+// fechada. Por isso o painel compara o encerramento com este instante, e não
+// com o ultimaEm (que inclui a resposta da SoFIA). Cai no ultimaEm se não houver
+// nenhuma mensagem da aluna no histórico publicado.
+function ultimaAlunaEm(conv) {
+  const msgs = (conv && Array.isArray(conv.msgs)) ? conv.msgs : [];
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i] && msgs[i].autor === 'aluna') return Number(msgs[i].em) || 0;
+  }
+  return Number(conv && conv.ultimaEm) || 0;
+}
 // { em, por } do encerramento manual (por='' quando desconhecido/legado).
 function encerradaInfo(chave) {
   const v = lerEncerradas()[chave];
@@ -734,6 +747,6 @@ module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, lerRascunhoCampanha, lerLidStats, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };
