@@ -947,7 +947,10 @@ function paginaMensagens(aviso, erro) {
   const corpo = `<div class="wrap">
     ${subnavMensagens('config')}
     <div id="waBanner">${blocoWaRobo()}</div>
-    <div style="text-align:right;margin:-4px 0 0"><form method="POST" action="/wa/desconectar" onsubmit="return confirm('Desconectar o WhatsApp do robô?\\n\\nO robô para de enviar e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">Desconectar</button></form></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin:-4px 0 0">
+      <form method="POST" action="/wa/reiniciar" onsubmit="return confirm('Reiniciar o robô agora?\\n\\nEle fica cerca de 1 minuto fora do ar enquanto reconecta o WhatsApp. Evite reiniciar bem em cima de um horário de disparo.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔄 Reiniciar robô</button></form>
+      <form method="POST" action="/wa/desconectar" onsubmit="return confirm('Desconectar o WhatsApp do robô?\\n\\nO robô para de enviar e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">Desconectar</button></form>
+    </div>
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
@@ -4012,6 +4015,8 @@ const server = http.createServer((req, res) => {
     if (/(?:^|&)ok=1/.test(q)) aviso = 'Mensagem salva! Já vale no próximo envio.';
     else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horários salvos e robô reiniciado. Já valem.';
     else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. O robô vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
+    else if (/(?:^|&)oksof=1/.test(q)) aviso = '🔄 Robô reiniciando… ele volta ao ar em ~1 minuto (o selo do WhatsApp acima mostra quando reconectar).';
+    else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar o robô pelo painel. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     // Só a sub-aba permitida; se pediu uma sem acesso, cai na primeira permitida.
     let view = /(?:^|&)view=agendar/.test(q) ? 'agendar' : 'config';
@@ -4852,6 +4857,14 @@ const server = http.createServer((req, res) => {
         fs.writeFileSync(arq, JSON.stringify({ cmd: 'logout', em: Date.now() }), 'utf8');
       } catch (_) {}
       res.writeHead(303, { Location: '/?dcon=1' }); res.end();
+    });
+  }
+  // Reiniciar o robô (pm2 restart slimfit-exp) direto do painel, sem SSH.
+  if (req.method === 'POST' && url === '/wa/reiniciar') {
+    return lerCorpo(req, 1e5, () => {
+      exec('pm2 restart slimfit-exp --update-env', { timeout: 25000 }, (err) => {
+        res.writeHead(303, { Location: '/?' + (err ? 'errsof=1' : 'oksof=1') }); res.end();
+      });
     });
   }
   // A conexão do WhatsApp agora vive no topo da aba Mensagens — redireciona link antigo.
