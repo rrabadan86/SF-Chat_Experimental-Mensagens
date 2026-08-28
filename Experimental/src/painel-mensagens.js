@@ -2683,7 +2683,7 @@ function paginaSofiaCampanhas(aviso, erro) {
   const tags = contatos.tagsDistintas();
 
   const opcoesTag = tags.length
-    ? tags.map(t => `<option value="${esc(t.tag)}">${esc(t.tag)} (${t.n})</option>`).join('')
+    ? '<option value="" disabled selected>— escolha uma tag —</option>' + tags.map(t => `<option value="${esc(t.tag)}">${esc(t.tag)} (${t.n})</option>`).join('')
     : '';
 
   const novo = `
@@ -2885,6 +2885,7 @@ function paginaSofiaCampanhas(aviso, erro) {
           function enviarCampanha(ev){
             ev.preventDefault();
             var f=ev.target;
+            if(!f.tag.value){ alert('Escolha a tag para quem a campanha vai ser enviada.'); f.tag.focus(); return false; }
             var dias=Array.prototype.map.call(document.querySelectorAll('.cpDia:checked'),function(e){return +e.value;});
             if(!dias.length){ alert('Escolha ao menos um dia da semana para o envio.'); return false; }
             var variacoes=Array.prototype.map.call(document.querySelectorAll('#cpVars .cpVarTa'),function(e){return e.value.trim();}).filter(Boolean);
