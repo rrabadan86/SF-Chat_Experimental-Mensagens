@@ -35,6 +35,8 @@ const TELAS_KEYS = TELAS.map(t => t.key);
 const LEGADO = { sofia: ['sofia_conversas', 'sofia_config', 'sofia_contatos', 'sofia_campanhas'], msg: ['msg_config', 'msg_agendar', 'msg_hoje'], hoje: ['msg_hoje'] };
 
 function normU(u) { return String(u == null ? '' : u).trim().toLowerCase(); }
+function normEmail(e) { return String(e == null ? '' : e).trim().toLowerCase(); }
+function emailValido(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normEmail(e)); }
 function limparTelas(v) {
   const arr = Array.isArray(v) ? v : String(v == null ? '' : v).split(',');
   const out = [];
@@ -72,7 +74,7 @@ function conferirSenha(senha, armazenado) {
 }
 
 // ── API pública (só o essencial; sem devolver o hash) ───────────────────────
-function semSenha(c) { return { usuario: c.usuario, telas: c.telas || [], criadoEm: c.criadoEm, atualizadoEm: c.atualizadoEm }; }
+function semSenha(c) { return { usuario: c.usuario, email: c.email || '', telas: c.telas || [], criadoEm: c.criadoEm, atualizadoEm: c.atualizadoEm }; }
 
 function listar() {
   return Object.values(carregar()).map(semSenha).sort((a, b) => a.usuario.localeCompare(b.usuario, 'pt-BR'));
@@ -80,16 +82,42 @@ function listar() {
 function existe(usuario) { return !!carregar()[normU(usuario)]; }
 function obter(usuario) { const c = carregar()[normU(usuario)]; return c ? semSenha(c) : null; }
 
-function criar({ usuario, senha, telas }) {
+// Garante que um e-mail não está em uso por OUTRO usuário (ignora o próprio).
+function emailEmUso(map, email, exceto) {
+  const e = normEmail(email); if (!e) return false;
+  for (const k in map) { if (k === normU(exceto)) continue; if (normEmail(map[k].email) === e) return true; }
+  return false;
+}
+function criar({ usuario, senha, telas, email }) {
   const u = normU(usuario);
   if (!u || u.length < 3) throw new Error('Usuário precisa de pelo menos 3 caracteres.');
   if (!/^[a-z0-9._-]+$/.test(u)) throw new Error('Use só letras, números, ponto, hífen ou sublinhado no usuário.');
   if (!senha || String(senha).length < 4) throw new Error('A senha precisa de pelo menos 4 caracteres.');
+  const em = normEmail(email);
+  if (em && !emailValido(em)) throw new Error('E-mail inválido.');
   const map = carregar();
   if (map[u]) throw new Error('Já existe um usuário com esse nome.');
-  map[u] = { usuario: u, senha: hashSenha(senha), telas: limparTelas(telas), criadoEm: Date.now(), atualizadoEm: Date.now() };
+  if (em && emailEmUso(map, em)) throw new Error('Esse e-mail já está em outro usuário.');
+  map[u] = { usuario: u, email: em, senha: hashSenha(senha), telas: limparTelas(telas), criadoEm: Date.now(), atualizadoEm: Date.now() };
   salvar(map);
   return semSenha(map[u]);
+}
+// Define/limpa o e-mail de um usuário (para login com Google). Vazio = remove.
+function definirEmail(usuario, email) {
+  const map = carregar(); const u = normU(usuario);
+  if (!map[u]) return false;
+  const em = normEmail(email);
+  if (em && !emailValido(em)) throw new Error('E-mail inválido.');
+  if (em && emailEmUso(map, em, u)) throw new Error('Esse e-mail já está em outro usuário.');
+  map[u].email = em; map[u].atualizadoEm = Date.now();
+  salvar(map); return true;
+}
+// Acha o usuário dono de um e-mail (case-insensitive). Devolve sem o hash, ou null.
+function porEmail(email) {
+  const e = normEmail(email); if (!e) return null;
+  const map = carregar();
+  for (const k in map) if (normEmail(map[k].email) === e) return semSenha(map[k]);
+  return null;
 }
 function definirTelas(usuario, telas) {
   const map = carregar(); const u = normU(usuario);
@@ -117,6 +145,6 @@ function verificar(usuario, senha) {
 }
 
 module.exports = {
-  TELAS, TELAS_KEYS, normU, listar, existe, obter, criar,
-  definirTelas, definirSenha, remover, verificar, ARQUIVO,
+  TELAS, TELAS_KEYS, normU, normEmail, emailValido, listar, existe, obter, criar,
+  definirTelas, definirSenha, definirEmail, porEmail, remover, verificar, ARQUIVO,
 };

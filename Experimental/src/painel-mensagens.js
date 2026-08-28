@@ -157,6 +157,48 @@ function usuarioDaReq(req) {
   if (!u) return null; // usuário apagado depois de logar
   return { usuario: u.usuario, admin: false, telas: u.telas || [] };
 }
+// ── Login com Google (OAuth 2.0 / OpenID) — opcional, ligado pelo .env ───────
+// Só entra quem tem o e-mail cadastrado num Perfil (ou o e-mail do admin em
+// PAINEL_ADMIN_EMAIL). Fica DESLIGADO enquanto não houver GOOGLE_CLIENT_ID e
+// GOOGLE_CLIENT_SECRET no .env — aí o botão aparece na tela de login. Reaproveita
+// a mesma sessão (cookie HMAC) do login por senha; usuário/senha continua valendo.
+const GOOGLE_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+const ADMIN_EMAIL = usuarios.normEmail(process.env.PAINEL_ADMIN_EMAIL || '');
+function googleAtivo() { return !!(GOOGLE_ID && GOOGLE_SECRET); }
+function baseUrl(req) { return (ehHttps(req) ? 'https' : 'http') + '://' + (req.headers.host || ''); }
+function redirectUri(req) { return baseUrl(req) + '/auth/google/callback'; }
+// Resolve o e-mail do Google → {usuario, admin} apenas se estiver AUTORIZADO.
+function loginPorEmail(email) {
+  const e = usuarios.normEmail(email);
+  if (!e) return null;
+  if (ADMIN_EMAIL && e === ADMIN_EMAIL) return { usuario: USER, admin: true };
+  const u = usuarios.porEmail(e);
+  return u ? { usuario: u.usuario, admin: false } : null;
+}
+// Cookie curto (10 min) com o "state" anti-CSRF do fluxo OAuth.
+function setStateCookie(req, res, valor) {
+  const partes = [`g_state=${encodeURIComponent(valor)}`, 'Path=/', 'HttpOnly', 'SameSite=Lax', `Max-Age=${valor ? 600 : 0}`];
+  if (ehHttps(req)) partes.push('Secure');
+  res.setHeader('Set-Cookie', partes.join('; '));
+}
+// POST x-www-form-urlencoded → JSON (troca do "code" por tokens no Google).
+function postForm(host, caminho, params) {
+  return new Promise((resolve, reject) => {
+    const body = new URLSearchParams(params).toString();
+    const opt = { host, path: caminho, method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } };
+    const r = https.request(opt, (resp) => { let d = ''; resp.on('data', c => d += c); resp.on('end', () => { try { resolve(JSON.parse(d)); } catch (_) { reject(new Error('resposta inválida do Google')); } }); });
+    r.on('error', reject); r.setTimeout(8000, () => r.destroy(new Error('timeout')));
+    r.write(body); r.end();
+  });
+}
+// Lê os claims de um id_token (JWT). Não precisa validar assinatura: ele vem
+// direto do endpoint do Google, por TLS (fluxo server-to-server).
+function decodificarJwt(jwt) {
+  try { const p = String(jwt).split('.')[1]; return JSON.parse(Buffer.from(p.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')); }
+  catch (_) { return null; }
+}
+
 // Confere usuário+senha no login. Devolve {usuario, admin} ou null.
 function validarLogin(usuario, senha) {
   const u = String(usuario || '').trim();
@@ -3388,6 +3430,12 @@ function paginaLogin(erro) {
       <input type="password" name="senha" autocomplete="current-password" style="width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:11px 12px;font-size:1rem;font-family:inherit;background:#fff">
       <button type="submit" class="save">Entrar</button>
     </form>
+    ${googleAtivo() ? `
+    <div style="display:flex;align-items:center;gap:10px;margin:18px 0 14px;color:var(--faint);font-size:.8rem"><span style="flex:1;height:1px;background:var(--linha)"></span>ou<span style="flex:1;height:1px;background:var(--linha)"></span></div>
+    <a href="/auth/google" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:11px 12px;font-weight:600;font-size:.95rem;color:#3c4043;background:#fff;text-decoration:none">
+      <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Entrar com Google
+    </a>` : ''}
   </div>
   <footer>SlimFit · painel do Studio</footer>
 </div></body></html>`;
@@ -3410,9 +3458,16 @@ function paginaPerfis(aviso, erro) {
     <details class="card" style="margin-bottom:8px">
       <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:2px 0;user-select:none">
         <span style="font-weight:700;font-size:var(--fs-h2)">${esc(u.usuario)}</span>
-        <span class="quando" style="margin:0">${(u.telas || []).length} tela(s)</span>
+        ${u.email ? `<span class="quando" style="margin:0">📧 ${esc(u.email)}</span>` : '<span class="quando" style="margin:0;color:var(--faint)">sem e-mail</span>'}
+        <span class="quando" style="margin:0">· ${(u.telas || []).length} tela(s)</span>
         <span class="u-caret" style="margin-left:auto;color:var(--faint);font-size:.9rem">▸</span>
       </summary>
+      <div style="display:flex;gap:8px;align-items:flex-end;margin:12px 0 0">
+        <div style="flex:1;min-width:180px"><label style="margin:0 0 4px">E-mail (login com Google)</label>
+          <input type="email" name="email" value="${esc(u.email || '')}" autocapitalize="none" spellcheck="false" placeholder="email@gmail.com" form="em-${esc(u.usuario)}"></div>
+        <button type="submit" class="reset" form="em-${esc(u.usuario)}" style="padding:6px 13px">Salvar e-mail</button>
+      </div>
+      <form method="POST" action="/perfis/email" id="em-${esc(u.usuario)}" style="display:none"><input type="hidden" name="usuario" value="${esc(u.usuario)}"></form>
       <form method="POST" action="/perfis/telas" style="margin-top:12px">
         <input type="hidden" name="usuario" value="${esc(u.usuario)}">
         <div style="margin:0 0 10px">${chkTelas(u.telas, 'telas')}</div>
@@ -3435,6 +3490,8 @@ function paginaPerfis(aviso, erro) {
           <div style="flex:1;min-width:160px"><label>Usuário</label><input type="text" name="usuario" autocapitalize="none" spellcheck="false" placeholder="ex.: recepcao"></div>
           <div style="flex:1;min-width:160px"><label>Senha</label><input type="text" name="senha" placeholder="senha inicial"></div>
         </div>
+        <label style="margin-top:12px">E-mail <small style="font-weight:400;color:var(--cinza)">— opcional, para o login com Google (só quem tem e-mail aqui entra pelo Google)</small></label>
+        <input type="email" name="email" autocapitalize="none" spellcheck="false" placeholder="email@gmail.com">
         <label style="margin-top:12px">Telas que este usuário pode acessar</label>
         <div style="margin:4px 0 2px">${chkTelas([], 'telas')}</div>
         <div class="acts"><button type="submit" class="save">Criar usuário</button></div>
@@ -3443,7 +3500,7 @@ function paginaPerfis(aviso, erro) {
     </div>
 
     <div class="sec-t">Usuários</div>
-    <div class="card" style="background:#f3fbfb;border-color:#bfe8e7"><p class="quando" style="margin:0">🔑 <b>Admin</b> (do sistema): <b>${esc(USER)}</b> — vê todas as telas e gerencia os Perfis. Para trocar a senha do admin, altere <code>PAINEL_SENHA</code> no <code>.env</code>.</p></div>
+    <div class="card" style="background:#f3fbfb;border-color:#bfe8e7"><p class="quando" style="margin:0">🔑 <b>Admin</b> (do sistema): <b>${esc(USER)}</b>${ADMIN_EMAIL ? ` · 📧 ${esc(ADMIN_EMAIL)}` : ''} — vê todas as telas e gerencia os Perfis. A senha do admin fica em <code>PAINEL_SENHA</code> e o e-mail do login com Google em <code>PAINEL_ADMIN_EMAIL</code>, no <code>.env</code>.</p></div>
     ${cardsUsuarios}
   </div>`;
   return chrome({ tab: 'Perfis', h1: 'Perfis', p: 'Crie usuários e escolha quais telas cada um pode acessar.' }, 'perfis', corpo);
@@ -3741,7 +3798,11 @@ const server = http.createServer((req, res) => {
     if (req.method === 'GET') {
       const jaLogado = usuarioDaReq(req);
       if (jaLogado) { res.writeHead(303, { Location: primeiraTela(jaLogado) || '/hoje' }); return res.end(); }
-      const e = /(?:^|&)e=1/.test(req.url.split('?')[1] || '') ? 'Usuário ou senha incorretos.' : '';
+      const q = req.url.split('?')[1] || '';
+      let e = '';
+      if (/(?:^|&)e=1/.test(q)) e = 'Usuário ou senha incorretos.';
+      else if (/(?:^|&)g=naoaut/.test(q)) e = 'Este e-mail do Google não tem acesso. Peça para cadastrarem em Perfis.';
+      else if (/(?:^|&)g=erro/.test(q)) e = 'Não consegui entrar com o Google. Tente de novo.';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return res.end(paginaLogin(e));
     }
@@ -3759,6 +3820,37 @@ const server = http.createServer((req, res) => {
   if (url === '/logout') {
     setCookieSessao(req, res, '', 0);
     res.writeHead(303, { Location: '/login' }); return res.end();
+  }
+  // Login com Google — só ativo com GOOGLE_CLIENT_ID/SECRET no .env.
+  if (url === '/auth/google') {
+    if (!googleAtivo()) { res.writeHead(303, { Location: '/login' }); return res.end(); }
+    const state = crypto.randomBytes(16).toString('hex');
+    setStateCookie(req, res, state);
+    const qs = new URLSearchParams({
+      client_id: GOOGLE_ID, redirect_uri: redirectUri(req), response_type: 'code',
+      scope: 'openid email', state, access_type: 'online', prompt: 'select_account',
+    }).toString();
+    res.writeHead(303, { Location: 'https://accounts.google.com/o/oauth2/v2/auth?' + qs }); return res.end();
+  }
+  if (url === '/auth/google/callback') {
+    const sp = new URLSearchParams(req.url.split('?')[1] || '');
+    const code = sp.get('code'), state = sp.get('state'), stCookie = lerCookie(req, 'g_state');
+    setStateCookie(req, res, ''); // state é de uso único
+    if (!googleAtivo()) { res.writeHead(303, { Location: '/login' }); return res.end(); }
+    if (!code || !state || !stCookie || state !== stCookie) { res.writeHead(303, { Location: '/login?g=erro' }); return res.end(); }
+    postForm('oauth2.googleapis.com', '/token', {
+      code, client_id: GOOGLE_ID, client_secret: GOOGLE_SECRET, redirect_uri: redirectUri(req), grant_type: 'authorization_code',
+    }).then((tok) => {
+      const claims = tok && tok.id_token ? decodificarJwt(tok.id_token) : null;
+      const emailOk = claims && (claims.email_verified === true || claims.email_verified === 'true');
+      if (!claims || claims.aud !== GOOGLE_ID || !emailOk) { res.writeHead(303, { Location: '/login?g=erro' }); return res.end(); }
+      const ok = loginPorEmail(claims.email);
+      if (!ok) { res.writeHead(303, { Location: '/login?g=naoaut' }); return res.end(); }
+      setCookieSessao(req, res, criarToken(ok.usuario), SESSAO_DIAS * 86400);
+      const sess = { admin: ok.admin, telas: ok.admin ? TODAS_TELAS : (usuarios.obter(ok.usuario) || { telas: [] }).telas };
+      res.writeHead(303, { Location: primeiraTela(sess) || '/hoje' }); res.end();
+    }).catch(() => { res.writeHead(303, { Location: '/login?g=erro' }); res.end(); });
+    return;
   }
 
   // ── Exige login ──────────────────────────────────────────────────────────
@@ -3794,6 +3886,7 @@ const server = http.createServer((req, res) => {
       if (/(?:^|&)ok=criado/.test(q)) aviso = 'Usuário criado! Já pode entrar.';
       else if (/(?:^|&)ok=telas/.test(q)) aviso = 'Telas atualizadas.';
       else if (/(?:^|&)ok=senha/.test(q)) aviso = 'Senha redefinida.';
+      else if (/(?:^|&)ok=email/.test(q)) aviso = 'E-mail salvo. Já pode entrar com o Google.';
       else if (/(?:^|&)ok=excluido/.test(q)) aviso = 'Usuário excluído.';
       else if (/(?:^|&)err=/.test(q)) { aviso = decodeURIComponent((q.match(/err=([^&]*)/) || [])[1] || 'Erro.'); erro = true; }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -3802,7 +3895,14 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && url === '/perfis/criar') {
       return lerCorpo(req, 1e5, corpo => {
         const p = new URLSearchParams(corpo);
-        try { usuarios.criar({ usuario: p.get('usuario'), senha: p.get('senha') || '', telas: p.getAll('telas') }); res.writeHead(303, { Location: '/perfis?ok=criado' }); res.end(); }
+        try { usuarios.criar({ usuario: p.get('usuario'), senha: p.get('senha') || '', telas: p.getAll('telas'), email: p.get('email') || '' }); res.writeHead(303, { Location: '/perfis?ok=criado' }); res.end(); }
+        catch (e) { res.writeHead(303, { Location: '/perfis?err=' + encodeURIComponent(e.message) }); res.end(); }
+      });
+    }
+    if (req.method === 'POST' && url === '/perfis/email') {
+      return lerCorpo(req, 1e5, corpo => {
+        const p = new URLSearchParams(corpo);
+        try { usuarios.definirEmail(p.get('usuario'), p.get('email') || ''); res.writeHead(303, { Location: '/perfis?ok=email' }); res.end(); }
         catch (e) { res.writeHead(303, { Location: '/perfis?err=' + encodeURIComponent(e.message) }); res.end(); }
       });
     }
