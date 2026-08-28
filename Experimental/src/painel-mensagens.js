@@ -2880,8 +2880,6 @@ function paginaSofia(aviso, erro) {
     <div id="sofiaWa">${blocoSofiaWa()}</div>
     <div style="margin:8px 0 6px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
-        <span id="impSt" class="quando" style="margin:0 auto 0 0;font-size:.75rem"></span>
-        <button type="button" id="impBtn" onclick="importarHistorico()" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)" title="Traz para o painel as conversas que o WhatsApp já sincronizou (não responde ninguém). O WhatsApp sincroniza só uma janela recente — pode não trazer tudo.">Importar Histórico WPP</button>
         <form method="POST" action="/sofia/toggle" style="margin:0;display:inline"><button type="submit" class="${e.ativa ? 'reset' : 'save'}" style="padding:4px 11px;font-size:var(--fs-xs)">${e.ativa ? '⏸️ Pausar SoFIA' : '▶️ Ativar SoFIA'}</button></form>
         <form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="margin:0;display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">Desconectar</button></form>
       </div>
@@ -3071,22 +3069,6 @@ function paginaSofia(aviso, erro) {
     </form>
   </div>
 <script>
-  function importarHistorico(){
-    if(!confirm('Tentar importar para o painel as conversas que o WhatsApp já sincronizou?\\n\\nLê o histórico existente e mostra na aba Conversas (não responde ninguém). Pode levar alguns minutos.\\n\\nObs.: o WhatsApp normalmente sincroniza só uma janela recente — pode não trazer tudo.')) return;
-    var b=document.getElementById('impBtn'); if(b){ b.disabled=true; }
-    fetch('/sofia/importar',{method:'POST'}).then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ setTimeout(function(){pollImport(true);},1500); } else { alert('❌ '+((j&&j.erro)||'falha')); if(b)b.disabled=false; } }).catch(function(){ alert('❌ erro de rede'); if(b)b.disabled=false; });
-  }
-  function pollImport(mostrarFim){
-    fetch('/sofia/importar/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
-      var el=document.getElementById('impSt'), b=document.getElementById('impBtn');
-      var s=j&&j.status; if(!el) return;
-      if(s&&s.rodando){ el.style.color=''; el.textContent='⏳ Importando… '+(s.feitos||0)+(s.total?('/'+s.total):'')+' conversas'; if(b)b.disabled=true; setTimeout(function(){pollImport(true);},3000); }
-      else if(mostrarFim && s && s.erro){ el.textContent='⚠️ '+s.erro; el.title=s.erro; el.style.whiteSpace='normal'; el.style.overflowWrap='anywhere'; el.style.color='#a15a5a'; if(b)b.disabled=false; }
-      else if(mostrarFim && s && s.terminadoEm){ el.style.color='#1c8f52'; el.textContent='✅ '+(s.novos||0)+' conversas trazidas — veja na aba Conversas.'; if(b)b.disabled=false; }
-      else { el.textContent=''; el.title=''; if(b)b.disabled=false; }
-    }).catch(function(){});
-  }
-  pollImport(false);
   function renderSofiaWa(st){
     var e = st && st.estado;
     if(e==='conectado') return '<div class="wa-card ok"><div class="wa-ic">🤖</div><h2>WhatsApp da SoFIA conectado</h2><p>A SoFIA está no ar e responde as alunas neste número.</p></div>';
