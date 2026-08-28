@@ -3985,13 +3985,13 @@ const server = http.createServer((req, res) => {
   // agora): marca o cadeado, a SoFIA recomeça do zero quando a aluna voltar
   // (sofia.ts lê sofia-encerradas.json) e o follow-up deixa de incomodar.
   if (req.method === 'POST' && url === '/sofia/conversas/encerrar') {
+    const quem = (sess && sess.usuario) ? sess.usuario : ''; // captura o usuário AGORA (não no callback assíncrono)
     return lerCorpo(req, 1e6, corpo => {
       let d = {};
       try { d = JSON.parse(corpo || '{}'); } catch (_) {}
       const chave = String(d.chave || '').trim();
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
-      const quem = (_navSess && _navSess.usuario) ? _navSess.usuario : '';
       try { sofia.setAtencao(chave, false); } catch (_) {} // encerrou → tira o vermelho
       try { sofia.setEncerrada(chave, true, quem); return res.end(JSON.stringify({ ok: true })); }
       catch (e) { return res.end(JSON.stringify({ ok: false, erro: e.message })); }
