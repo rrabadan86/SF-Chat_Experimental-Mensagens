@@ -237,7 +237,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/contatos/bloquear') return has('sofia_conversas') || has('sofia_contatos'); // bloquear vem tb do chat (Conversas)
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/comparecimento') return has('sofia_config');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/comparecimento') return has('sofia_config');
   return false;
 }
 // WhatsApp é dividido em três sub-abas: Configuração, Agendamento e Hoje.
@@ -3130,6 +3130,7 @@ function paginaSofia(aviso, erro) {
     <div style="margin:8px 0 6px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
         <form method="POST" action="/sofia/toggle" style="margin:0;display:inline"><button type="submit" class="${e.ativa ? 'reset' : 'save'}" style="padding:4px 11px;font-size:var(--fs-xs)">${e.ativa ? '⏸️ Pausar SoFIA' : '▶️ Ativar SoFIA'}</button></form>
+        <form method="POST" action="/sofia/reiniciar" onsubmit="return confirm('Reiniciar a SoFIA agora?\\n\\nEla fica cerca de 1 minuto fora do ar enquanto reconecta o WhatsApp — sem perder as conversas. Passa a valer o que precisa de reinício (modelo de IA, transcrição).')" style="margin:0;display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔄 Reiniciar SoFIA</button></form>
         <form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="margin:0;display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">Desconectar</button></form>
       </div>
     </div>
@@ -4219,6 +4220,8 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)ctok=1/.test(q)) aviso = 'Tags salvas.';
     else if (/(?:^|&)lote=/.test(q)) aviso = `🏷️ ${(q.match(/lote=(\d+)/) || [])[1] || '0'} contato(s) atualizado(s) em lote.`;
     else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. A SoFIA vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
+    else if (/(?:^|&)oksof=1/.test(q)) aviso = '🔄 SoFIA reiniciando… ela volta ao ar em ~1 minuto (o selo do WhatsApp acima mostra quando reconectar). Modelo e transcrição já valem.';
+    else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar a SoFIA pelo painel. Rode no servidor: pm2 restart sofia-listener'; erro = true; }
     else if (/(?:^|&)okc=criada/.test(q)) aviso = '📣 Campanha criada! A IA está gerando as variações. Quando ficar “pronta”, clique em ▶️ Iniciar para começar o envio.';
     else if (/(?:^|&)okah=1/.test(q)) aviso = 'Aviso "precisa de humano" salvo.';
     else if (/(?:^|&)okcmp=1/.test(q) && /(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Config salva, mas não consegui reiniciar o robô p/ aplicar o novo horário. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
@@ -4612,6 +4615,15 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e5, () => {
       try { sofia.enviarComando('logout'); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?dcon=1' }); res.end();
+    });
+  }
+  // Reiniciar a SoFIA (pm2 restart sofia-listener) — aplica modelo/transcrição e
+  // qualquer ajuste que precise de reinício, sem SSH. Sai do ar ~1 min ao reconectar.
+  if (req.method === 'POST' && url === '/sofia/reiniciar') {
+    return lerCorpo(req, 1e5, () => {
+      exec('pm2 restart sofia-listener --update-env', { timeout: 25000 }, (err) => {
+        res.writeHead(303, { Location: '/sofia?' + (err ? 'errsof=1' : 'oksof=1') }); res.end();
+      });
     });
   }
   // Criar campanha (JSON, para levar a foto em base64): resolve os contatos da tag,
