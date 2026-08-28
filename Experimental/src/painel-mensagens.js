@@ -2779,7 +2779,7 @@ function paginaSofiaCampanhas(aviso, erro) {
     : '';
   // Modelos de IA (mesma lista da Configuração) para escolher no "Gerar frase".
   let modelosIA = []; try { modelosIA = sofia.MODELOS_VALIDOS || []; } catch (_) {}
-  let modeloPadraoFrase = ''; try { modeloPadraoFrase = (sofia.lerModelos() || {}).conversa || ''; } catch (_) {}
+  let modeloPadraoFrase = ''; try { const h = (modelosIA.find(m => /haiku/i.test(m.id)) || {}).id; modeloPadraoFrase = h || (sofia.lerModelos() || {}).extracao || ''; } catch (_) {}
   const optModelosFrase = modelosIA.map(m => `<option value="${esc(m.id)}"${m.id === modeloPadraoFrase ? ' selected' : ''}>${esc(m.rot)}</option>`).join('');
 
   const novo = `
@@ -2796,13 +2796,10 @@ function paginaSofiaCampanhas(aviso, erro) {
             <summary class="cpf-sum">✨ Deixe a SoFIA escrever <span class="sub quando" style="margin:0">— diga o que você quer e ela cria a frase para você revisar</span></summary>
             <div class="cpf-body">
               <textarea id="cpInstr" rows="2" placeholder="Ex.: quero uma campanha promocional enfatizando o nosso treino — uma excelente oportunidade para vivenciar o SlimFit!"></textarea>
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px">
-                <label style="margin:0;font-size:.82rem;color:var(--cinza);flex:none">Modelo da IA:</label>
-                <select id="cpFraseModelo" style="flex:1;min-width:200px;padding:7px 9px">${optModelosFrase}</select>
-              </div>
-              <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px">
                 <button type="button" id="cpGerarBtn" class="reset" onclick="gerarFraseCampanha()" style="padding:9px 16px;flex:none">✨ Gerar frase</button>
-                <span id="cpGerarMsg" class="quando" style="margin:0"></span>
+                <select id="cpFraseModelo" title="Modelo da IA usado para gerar a frase" style="flex:1;min-width:170px;padding:7px 9px">${optModelosFrase}</select>
+                <span id="cpGerarMsg" class="quando" style="margin:0;flex-basis:100%"></span>
               </div>
               <p class="quando" style="margin:8px 0 0">A frase gerada cai no campo <b>Mensagem base</b> para você <b>ajustar antes de criar</b>. Depois, a IA ainda cria ~10 variações naturais dela no envio.</p>
             </div>
