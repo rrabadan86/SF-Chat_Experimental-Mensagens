@@ -238,16 +238,14 @@ const ESTILO = `
   .tabs a .ttx{font-size:.86rem}
   .tabs a:hover{color:var(--tinta);background:var(--linha-soft)}
   .tabs a.on{background:var(--teal);color:#fff;border-color:var(--teal)}
-  /* Desktop: exibe na ordem SoFIA → WhatsApp → Instagram → Formulário → Perfis
-     (no HTML a SoFIA fica por último para o destaque no mobile). */
-  @media(min-width:761px){
-    .tabs .nav-sofia{order:1}
-    .tabs .nav-msg{order:2}
-    .tabs .nav-ig{order:3}
-    .tabs .nav-ind{order:4}
-    .tabs .nav-perfis{order:5}
-    .tabs .nav-saude{order:6}
-  }
+  /* Mesma ordem no desktop E no mobile: SoFIA → WhatsApp → Instagram →
+     Formulário → Perfis → Saúde (no HTML a SoFIA fica por último; o order reordena). */
+  .tabs .nav-sofia{order:1}
+  .tabs .nav-msg{order:2}
+  .tabs .nav-ig{order:3}
+  .tabs .nav-ind{order:4}
+  .tabs .nav-perfis{order:5}
+  .tabs .nav-saude{order:6}
   /* Mobile: logo + login na 1ª linha; o menu ocupa a linha inteira logo abaixo.
      A barra inteira continua fixa ao rolar. */
   @media(max-width:760px){
