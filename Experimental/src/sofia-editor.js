@@ -615,6 +615,34 @@ function lerCusto(dias) {
   return { hoje, porDia, total, limite: lerCustoLimite(), temDado: porDia.length > 0 };
 }
 
+// Gasto agrupado por CONVERSA (telefone) dentro de um intervalo de dias locais.
+// ini/fim = 'YYYY-MM-DD' (fuso SP); ini vazio = sem limite inferior; fim vazio = hoje.
+// Só contam as linhas de 'conversa' que já trazem o telefone (registradas após a
+// ativação desse recurso). Retorna { linhas:[{tel,usd,inTok,outTok,turnos,ultimo}], semTel }.
+function lerCustoPorConversa(ini, fim) {
+  let linhas = [];
+  try { linhas = fs.readFileSync(F.custo, 'utf8').split('\n'); } catch (_) { return { linhas: [], semTel: 0 }; }
+  if (linhas.length > 20000) linhas = linhas.slice(-20000);
+  const dentro = (dia) => (!ini || dia >= ini) && (!fim || dia <= fim);
+  const mapa = {};
+  let semTel = 0, comTel = 0;
+  for (const l of linhas) {
+    const s = l.trim(); if (!s) continue;
+    let o; try { o = JSON.parse(s); } catch (_) { continue; }
+    if (o.tipo && o.tipo !== 'conversa') continue;
+    if (!dentro(_diaLocal(o.em))) continue;
+    const tel = String(o.tel || '').replace(/\D/g, '');
+    if (!tel) { if (o.usd) semTel += o.usd; continue; }
+    comTel += 1;
+    if (!mapa[tel]) mapa[tel] = { tel, usd: 0, inTok: 0, outTok: 0, turnos: 0, ultimo: '' };
+    const m = mapa[tel];
+    m.usd += o.usd || 0; m.inTok += o.inTok || 0; m.outTok += o.outTok || 0; m.turnos += 1;
+    if (!m.ultimo || o.em > m.ultimo) m.ultimo = o.em;
+  }
+  const out = Object.values(mapa).sort((a, b) => b.usd - a.usd);
+  return { linhas: out, semTel, comTel };
+}
+
 // ── "Precisa de humano" (avisar um número) ──────────────────────────────────
 // Expressões-padrão (iguais às do sofia.ts) — servem para semear a caixa no painel.
 const PALAVRAS_HUMANO_PADRAO = [
@@ -659,7 +687,7 @@ function gravarAvisoHumano(on, numero, palavras) {
 
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
-  lerCusto, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
+  lerCusto, lerCustoPorConversa, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
   conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,

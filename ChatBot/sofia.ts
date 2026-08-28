@@ -89,12 +89,13 @@ function avisarPrecisaHumano(telefone: string, conversa: Conversa, texto: string
 }
 
 const CUSTO_FILE = path.join(BASE_DIR, "sofia-custo.jsonl");
-function registrarCusto(rec: { tipo: string; model?: string; inTok?: number; outTok?: number; usd?: number }) {
+function registrarCusto(rec: { tipo: string; model?: string; inTok?: number; outTok?: number; usd?: number; tel?: string }) {
   try {
     fs.appendFileSync(CUSTO_FILE, JSON.stringify({
       em: new Date().toISOString(),
       tipo: rec.tipo,
       model: rec.model || "",
+      tel: String(rec.tel || "").replace(/\D/g, ""), // telefone da conversa → painel soma o gasto por aluna
       inTok: rec.inTok || 0,
       outTok: rec.outTok || 0,
       usd: (typeof rec.usd === "number" && isFinite(rec.usd)) ? rec.usd : 0,
@@ -732,6 +733,7 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
             registrarCusto({
               tipo: "conversa",
               model: MODELO_CONVERSA,
+              tel: telefone,
               inTok: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0),
               outTok: u.output_tokens || 0,
               usd: (msg as any).total_cost_usd || 0,

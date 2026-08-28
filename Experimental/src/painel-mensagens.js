@@ -3354,6 +3354,29 @@ function paginaSofiaCusto(aviso, erro, params) {
   const barras = dias.length
     ? dias.slice().reverse().map(d => `<div class="bar"><span class="bd">${fmtDiaC(d.dia)}</span><span class="btrack"><span class="bfill" style="width:${Math.round((d.usd / maxU) * 100)}%"></span></span><span class="bn">${usd(d.usd)} <small>· ${d.convs} conv.</small></span></div>`).join('')
     : '<div class="vazio">Sem gasto registrado no período.</div>';
+  // Gasto por conversa (telefone) no mesmo período. Só entram os turnos que já
+  // trazem o telefone (registrados após ativar este detalhamento).
+  let porConv = { linhas: [], semTel: 0 };
+  try { porConv = sofia.lerCustoPorConversa(ini, fim || hojeStr); } catch (_) {}
+  let cmap = {}; try { cmap = contatos.carregar() || {}; } catch (_) {}
+  const nomeDe = (tel) => { try { const ct = cmap[contatos.normTel(tel)]; return ct && ct.nome ? ct.nome : ''; } catch (_) { return ''; } };
+  const fmtTel = (t) => { const d = String(t || '').replace(/\D/g, ''); return d.replace(/^(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3') || d; };
+  const convRows = porConv.linhas.slice(0, 60).map(x => {
+    const nm = nomeDe(x.tel);
+    const quem = nm ? `<b>${esc(nm)}</b> <small style="color:var(--faint)">${fmtTel(x.tel)}</small>` : `<b>${fmtTel(x.tel) || '(sem telefone)'}</b>`;
+    return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--linha)">
+      <div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${quem}</div>
+      <div style="display:flex;gap:14px;align-items:baseline;white-space:nowrap;font-variant-numeric:tabular-nums">
+        <span style="color:var(--cinza);font-size:.8rem">${x.turnos} msg</span>
+        <span style="color:var(--faint);font-size:.8rem">${ktok(x.inTok + x.outTok)} tok</span>
+        <b>${usd(x.usd)}</b></div></div>`;
+  }).join('');
+  const convNota = [];
+  if (porConv.linhas.length > 60) convNota.push(`Mostrando as 60 conversas de maior gasto (de ${porConv.linhas.length}).`);
+  if (porConv.semTel > 0.005) convNota.push(`Conversas anteriores à ativação deste detalhamento somam ${usd(porConv.semTel)} sem separar por aluna.`);
+  const convBloco = convRows
+    ? convRows + (convNota.length ? `<p class="quando" style="margin:12px 0 0">${convNota.join(' ')}</p>` : '')
+    : `<div class="vazio">Nenhuma conversa com gasto por aluna neste período ainda.${porConv.semTel > 0.005 ? ` (Há ${usd(porConv.semTel)} de conversas anteriores à ativação, sem separar por aluna.)` : ''}</div>`;
   const segs = janelas.map(([v, l]) => `<a href="/sofia?view=custo&per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
   const limite = c.limite;
   const alerta = (limite > 0 && c.hoje.usd >= limite) ? `<div class="aviso err">⚠️ O gasto de <b>hoje</b> (${usd(c.hoje.usd)}) atingiu o limite de ${usd(limite)}.</div>` : '';
@@ -3380,6 +3403,8 @@ function paginaSofiaCusto(aviso, erro, params) {
     </div>
     <div class="sec-t">Gasto por dia</div>
     <div class="card">${barras}</div>
+    <div class="sec-t">Gasto por conversa <small style="font-weight:600;color:var(--cinza)">(quanto a IA custou com cada aluna no período)</small></div>
+    <div class="card">${convBloco}</div>
     <div class="sec-t">Alerta de gasto diário</div>
     <div class="card">
       <form method="POST" action="/sofia/custo-limite" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
