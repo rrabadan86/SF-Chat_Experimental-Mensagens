@@ -33,6 +33,7 @@ const sofia = require('./sofia-editor');
 const contatos = require('./contatos');
 const grupos = require('./grupos');
 const usuarios = require('./usuarios');
+const config = require('./config'); // STUDIO_NOME etc.
 
 // Limite de aulas experimentais por turma — editável na aba SoFIA → Configuração.
 // Gravado em data/sofia-exp-limite.txt; o cálculo da grade (Python) lê este arquivo.
@@ -225,10 +226,12 @@ const ESTILO = `
   .topbar{position:sticky;top:0;z-index:60;background:var(--card);border-bottom:1px solid var(--linha)}
   .topbar .in{max-width:900px;margin:0 auto;padding:4px 24px;display:flex;align-items:center;gap:16px}
   .tb-logo{height:50px;width:auto;flex:none;display:block}
-  .hdr-user{display:flex;align-items:center;gap:12px;font-size:.82rem;white-space:nowrap;flex:none;margin-left:auto}
+  .hdr-user{display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-size:.82rem;white-space:nowrap;flex:none;margin-left:auto}
+  .hdr-user-row{display:flex;align-items:center;gap:12px}
   .hdr-user span{color:var(--cinza)}
   .hdr-user a{color:var(--teal-esc);font-weight:600;text-decoration:none}
   .hdr-user a:hover{text-decoration:underline}
+  .hdr-studio{font-size:.72rem;color:var(--faint);font-weight:500}
   .tabs{display:flex;flex-wrap:wrap;gap:6px;flex:1 1 auto;justify-content:center;margin:0;padding:0}
   .tabs a{flex:0 1 auto;display:flex;align-items:center;justify-content:center;line-height:1.1;text-decoration:none;font-weight:500;color:var(--cinza);background:transparent;border:1px solid transparent;border-radius:10px;padding:9px 14px}
   .tabs a .tic{display:none}
@@ -559,7 +562,7 @@ function chrome(titSubtitulo, ativo, corpo) {
 <nav class="topbar"><div class="in">
   <img class="tb-logo" alt="SlimFit Studio" src="https://drive.google.com/thumbnail?id=1pl1mh709FGcitG9uHo0J6nzMUKFYqg-w&sz=w400">
   <div class="tabs">${navTabs(ativo)}</div>
-  ${_navSess ? `<div class="hdr-user"><span>👤 ${esc(_navSess.usuario)}</span><a href="/logout">Sair</a></div>` : ''}
+  ${_navSess ? `<div class="hdr-user"><div class="hdr-user-row"><span>👤 ${esc(_navSess.usuario)}</span><a href="/logout">Sair</a></div><div class="hdr-studio">${esc(config.STUDIO_NOME || '')}</div></div>` : ''}
 </div></nav>
 ${corpo}
 <footer>SlimFit · painel do Studio</footer>
