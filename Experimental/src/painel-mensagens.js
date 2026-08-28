@@ -3441,6 +3441,78 @@ function paginaLogin(erro) {
 </div></body></html>`;
 }
 
+// ── Páginas legais (públicas): Política de Privacidade e Termos de Serviço ───
+// Precisam ser acessíveis SEM login (o Google lê ao publicar o app OAuth).
+function docLegal(titulo, atualizacao, corpo) {
+  const studio = esc(config.STUDIO_NOME || 'o Studio');
+  const contato = ADMIN_EMAIL ? esc(ADMIN_EMAIL) : 'o administrador do Studio';
+  return `<!doctype html><html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(titulo)} · ${studio}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>${ESTILO}
+  .legal{max-width:720px;margin:6vh auto;padding:0 22px 60px}
+  .legal .card{padding:30px 28px}
+  .legal h1{font-family:"Inter";font-weight:700;font-size:1.5rem;margin:0 0 4px;letter-spacing:-.02em}
+  .legal .quando{margin:0 0 18px}
+  .legal h2{font-family:"Inter";font-weight:700;font-size:1.02rem;color:var(--teal-esc);margin:22px 0 6px}
+  .legal p{margin:0 0 10px;color:var(--tinta);font-size:.95rem;line-height:1.65}
+  .legal ul{margin:0 0 10px;padding-left:20px;color:var(--tinta);font-size:.95rem;line-height:1.6}
+  .legal a{color:var(--teal)}
+  .legal .back{display:inline-block;margin-bottom:16px;color:var(--cinza);text-decoration:none;font-size:.9rem}
+</style></head><body>
+<div class="legal">
+  <a class="back" href="/login">← Voltar ao login</a>
+  <div class="card">
+    <h1>${esc(titulo)}</h1>
+    <p class="quando">Última atualização: ${esc(atualizacao)} · ${studio}</p>
+    ${corpo(studio, contato)}
+  </div>
+</div></body></html>`;
+}
+function paginaPrivacidade() {
+  return docLegal('Política de Privacidade', '28/08/2026', (studio, contato) => `
+    <p>Este painel (“Painel do Studio”) é uma ferramenta <b>interna de gestão</b> usada por ${studio} para operar o atendimento e a comunicação com alunas e leads. Esta política explica quais dados tratamos e como.</p>
+    <h2>1. Quem opera</h2>
+    <p>O painel é operado por ${studio}. Contato: ${contato}.</p>
+    <h2>2. Quem acessa</h2>
+    <p>O acesso é <b>restrito a usuários autorizados</b> (a equipe do Studio). Não é um serviço aberto ao público.</p>
+    <h2>3. Dados que tratamos</h2>
+    <ul>
+      <li><b>Login com Google:</b> recebemos seu <b>e-mail</b> e o <b>nome do perfil</b>, usados apenas para identificar você e liberar as telas autorizadas. <b>Não</b> acessamos sua caixa de e-mail, arquivos ou contatos do Google.</li>
+      <li><b>Dados operacionais do Studio:</b> contatos (nome, telefone, etiquetas), mensagens trocadas com alunas/leads e configurações — inseridos e gerenciados pela própria equipe para operar o atendimento.</li>
+    </ul>
+    <h2>4. Para que usamos</h2>
+    <p>Autenticação e controle de acesso; e para operar as funções do painel (atendimento, agendamento, campanhas e indicadores).</p>
+    <h2>5. Com quem compartilhamos</h2>
+    <p>Não vendemos dados. Compartilhamos apenas com os serviços necessários ao funcionamento: o <b>Google</b> (login), o <b>WhatsApp</b> (envio das mensagens) e o <b>provedor de IA</b> (respostas automáticas). Cada um trata os dados conforme as próprias políticas.</p>
+    <h2>6. Segurança</h2>
+    <p>Acesso por <b>HTTPS</b>; senhas guardadas com <b>hash</b> (nunca em texto); sessão por <b>cookie assinado</b>. O acesso é limitado aos usuários cadastrados.</p>
+    <h2>7. Retenção</h2>
+    <p>Os dados ficam enquanto forem necessários à operação do Studio. O histórico de conversas tem um período de retenção configurável no painel.</p>
+    <h2>8. Seus direitos</h2>
+    <p>Você pode solicitar acesso, correção ou remoção dos seus dados pelo contato acima.</p>
+    <h2>9. Alterações</h2>
+    <p>Podemos atualizar esta política; a data no topo indica a última versão.</p>`);
+}
+function paginaTermos() {
+  return docLegal('Termos de Serviço', '28/08/2026', (studio, contato) => `
+    <p>Ao acessar o “Painel do Studio”, você concorda com estes termos.</p>
+    <h2>1. Objeto</h2>
+    <p>O painel é uma ferramenta <b>interna de gestão</b> de ${studio}, de uso restrito à equipe autorizada.</p>
+    <h2>2. Acesso</h2>
+    <p>O acesso é concedido pelo <b>administrador</b> do Studio e pode ser <b>revogado a qualquer momento</b>. Cada usuário é responsável por manter suas credenciais em sigilo.</p>
+    <h2>3. Uso aceitável</h2>
+    <p>O painel deve ser usado apenas para as atividades legítimas do Studio. É proibido tentar acessar dados sem autorização, burlar o controle de acesso ou usar o sistema para fins ilícitos.</p>
+    <h2>4. Dados</h2>
+    <p>O tratamento de dados segue a <a href="/privacidade">Política de Privacidade</a>.</p>
+    <h2>5. Disponibilidade</h2>
+    <p>O serviço é fornecido “no estado em que se encontra”. Buscamos manter o painel disponível, mas não garantimos funcionamento ininterrupto.</p>
+    <h2>6. Contato</h2>
+    <p>${contato}.</p>`);
+}
+
 // Aba "Perfis" (só admin): cria usuários, define telas, senha e exclui.
 function paginaPerfis(aviso, erro) {
   const lista = usuarios.listar();
@@ -3821,6 +3893,9 @@ const server = http.createServer((req, res) => {
     setCookieSessao(req, res, '', 0);
     res.writeHead(303, { Location: '/login' }); return res.end();
   }
+  // Páginas legais públicas (o Google lê ao publicar o app OAuth).
+  if (url === '/privacidade') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(paginaPrivacidade()); }
+  if (url === '/termos') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(paginaTermos()); }
   // Login com Google — só ativo com GOOGLE_CLIENT_ID/SECRET no .env.
   if (url === '/auth/google') {
     if (!googleAtivo()) { res.writeHead(303, { Location: '/login' }); return res.end(); }
