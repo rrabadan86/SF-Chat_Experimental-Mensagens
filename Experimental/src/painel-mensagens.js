@@ -3573,7 +3573,7 @@ function paginaSofiaCusto(aviso, erro, params) {
       <div style="display:flex;gap:14px;align-items:baseline;white-space:nowrap;font-variant-numeric:tabular-nums">
         <span style="color:var(--cinza);font-size:.8rem">${x.turnos} msg</span>
         <span style="color:var(--faint);font-size:.8rem">${ktok(x.inTok + x.outTok)} tok</span>
-        <span style="text-align:right"><b>${brl(x.usd)}</b><br><small style="color:var(--faint);font-size:.72rem">${usd(x.usd)}</small></span></div></div>`;
+        <span style="white-space:nowrap"><b>${brl(x.usd)}</b> <small style="color:var(--faint);font-size:.72rem">${usd(x.usd)}</small></span></div></div>`;
   }).join('');
   const convNota = [];
   if (porConv.linhas.length > 60) convNota.push(`Mostrando as 60 conversas de maior gasto (de ${porConv.linhas.length}).`);
