@@ -5119,9 +5119,29 @@ function processarEventos() {
     aplicarAutomacao({ telefone: tel, nome: ev.nome, tag: ev.tag, avisarWpp: ev.avisarWpp, motivo: ev.motivo, extra: ev.extra || '' });
   }
 }
+// Reconcilia a tag de "Atendimento humano" (gatilho 'humano') com o estado real
+// do controle humano. A tag entra ao ASSUMIR e deve sair ao voltar para a SoFIA —
+// seja pelo botão "devolver" (que já remove na hora) OU quando a trava de 1h
+// EXPIRA sozinha (a SoFIA reassume automaticamente). Sem isto, a tag ficava presa
+// quando ninguém clicava em devolver e a conversa voltava pela expiração.
+function reconciliarTagHumano() {
+  let autos = [];
+  try { autos = contatos.tagsPorGatilho('humano'); } catch (_) { return; }
+  if (!autos.length) return;
+  const tags = autos.map(a => a.tag);
+  let conv = {}; try { conv = sofia.conversas() || {}; } catch (_) { return; }
+  let cmap = {}; try { cmap = contatos.carregar() || {}; } catch (_) { return; }
+  for (const k in conv) {
+    let ativo = false; try { ativo = sofia.controleHumanoDe(k); } catch (_) {}
+    if (ativo) continue;                                   // ainda sob controle humano → mantém a tag
+    const c = cmap[contatos.normTel(k)];
+    if (!c || !(c.tags || []).some(t => tags.includes(t))) continue; // não tem a tag → nada a fazer
+    for (const t of tags) { try { contatos.removerTag(k, t); } catch (_) {} } // voltou p/ SoFIA → remove
+  }
+}
 publicarRegras();
 try {
-  setInterval(() => { try { processarAgendamentos(); } catch (_) {} try { processarEventos(); } catch (_) {} try { publicarRegras(); } catch (_) {} }, 4000);
+  setInterval(() => { try { processarAgendamentos(); } catch (_) {} try { processarEventos(); } catch (_) {} try { reconciliarTagHumano(); } catch (_) {} try { publicarRegras(); } catch (_) {} }, 4000);
   // Follow-up: cadência mais lenta (as leads esfriam em horas, não em segundos).
   setInterval(() => { try { processarFollowups(); } catch (_) {} }, 120000);
   setTimeout(() => { try { processarFollowups(); } catch (_) {} }, 30000);
