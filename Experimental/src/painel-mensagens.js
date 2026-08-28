@@ -34,6 +34,7 @@ const contatos = require('./contatos');
 const grupos = require('./grupos');
 const usuarios = require('./usuarios');
 const acessos = require('./acessos');
+const auditoria = require('./auditoria');
 const config = require('./config'); // STUDIO_NOME etc.
 const https = require('https');
 
@@ -3566,6 +3567,7 @@ function paginaPerfis(aviso, erro) {
   const lista = usuarios.listar();
   let ults = {}; try { ults = acessos.ultimosAcessos(); } catch (_) {}          // { usuario: ts }
   let logins = []; try { logins = acessos.historicoLogins(30); } catch (_) {}   // últimos logins (recente→antigo)
+  let logsAud = []; try { logsAud = auditoria.ler(150); } catch (_) {}          // registro de atividades (recente→antigo)
   const fmtAcesso = (ts) => { if (!ts) return ''; try { return new Date(Number(ts)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return '—'; } };
   const seloAcesso = (usuario) => { const ts = ults[usuario]; return `<span class="quando" style="margin:0">· ${ts ? '🕘 ' + fmtAcesso(ts) : 'nunca acessou'}</span>`; };
   const umChk = (t, marcadas, prefixo) => `<label style="display:inline-flex;align-items:center;gap:6px;margin:0;font-weight:600;font-size:var(--fs-sm);cursor:pointer;white-space:nowrap"><input type="checkbox" name="${prefixo}" value="${t.key}"${(marcadas || []).includes(t.key) ? ' checked' : ''} style="width:15px;height:15px;margin:0"> ${t.rot}</label>`;
@@ -3606,6 +3608,26 @@ function paginaPerfis(aviso, erro) {
       <form method="POST" action="/perfis/senha" id="sn-${esc(u.usuario)}" style="display:none"><input type="hidden" name="usuario" value="${esc(u.usuario)}"></form>
     </details>`).join('') : '<p class="vazio">Nenhum usuário criado ainda. Crie o primeiro abaixo.</p>';
 
+  // Rótulos amigáveis das ações auditadas (código estável → texto com ícone).
+  const rotAcao = {
+    'campanha.criar': '📣 Criou campanha', 'campanha.iniciar': '▶️ Iniciou campanha', 'campanha.retomar': '▶️ Retomou campanha',
+    'campanha.pausar': '⏸️ Pausou campanha', 'campanha.cancelar': '🚫 Cancelou campanha', 'campanha.excluir': '🗑️ Excluiu campanha',
+    'conversa.assumir': '🧑 Assumiu conversa', 'conversa.devolver': '🤖 Devolveu à SoFIA', 'conversa.encerrar': '🔒 Encerrou conversa',
+    'contato.bloquear': '🚫 Bloqueou contato', 'contato.desbloquear': '✅ Desbloqueou contato',
+    'sofia.ligar': '▶️ Ligou a SoFIA', 'sofia.pausar': '⏸️ Pausou a SoFIA', 'sofia.reiniciar': '🔄 Reiniciou a SoFIA',
+    'sofia.desconectar': '📴 Desconectou WhatsApp da SoFIA', 'sofia.config': '⚙️ Salvou configuração/prompt',
+    'robo.reiniciar': '🔄 Reiniciou o robô', 'robo.desconectar': '📴 Desconectou WhatsApp do robô',
+    'perfil.criar': '👤 Criou usuário', 'perfil.excluir': '🗑️ Excluiu usuário', 'perfil.telas': '🔑 Mudou telas de acesso',
+    'perfil.senha': '🔑 Redefiniu senha', 'perfil.email': '📧 Alterou e-mail',
+  };
+  const fmtAlvo = (acao, alvo) => { const d = String(alvo || '').replace(/\D/g, ''); return (/^conversa\.|^contato\./.test(acao) && d.length >= 10) ? fmtTel(alvo) : alvo; };
+  const auditoriaLinhas = logsAud.map(l => `<tr style="border-bottom:1px solid var(--linha)">
+    <td style="padding:7px 10px;white-space:nowrap;font-variant-numeric:tabular-nums">${fmtAcesso(l.em)}</td>
+    <td style="padding:7px 10px;font-weight:600;white-space:nowrap">${esc(l.usuario)}</td>
+    <td style="padding:7px 10px">${esc(rotAcao[l.acao] || l.acao)}</td>
+    <td style="padding:7px 10px;color:var(--cinza)">${esc(fmtAlvo(l.acao, l.alvo))}${l.detalhe ? ` <span style="color:var(--faint)">· ${esc(l.detalhe)}</span>` : ''}</td>
+  </tr>`).join('');
+
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     <div class="sec-t">Novo usuário</div>
@@ -3643,6 +3665,20 @@ function paginaPerfis(aviso, erro) {
           <td style="padding:7px 10px">${l.metodo === 'google' ? '🟢 Google' : '🔑 Senha'}</td>
         </tr>`).join('')}</tbody>
       </table></div>` : '<p class="vazio" style="margin:0">Nenhum login registrado ainda. Assim que alguém entrar (senha ou Google), aparece aqui.</p>'}
+    </div>
+
+    <div class="sec-t">📜 Auditoria <small style="font-weight:600;color:var(--cinza)">— quem fez o quê</small></div>
+    <div class="card">
+      <p class="quando" style="margin:0 0 12px">Registro das ações de <b>impacto e segurança</b>: campanhas (criar/iniciar/pausar/cancelar/excluir), configuração/prompt da SoFIA, gestão de usuários, bloqueio/encerramento de conversa e reiniciar/desconectar. Mostra os 150 mais recentes.</p>
+      ${logsAud.length ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:var(--fs-sm)">
+        <thead><tr style="text-align:left;border-bottom:1px solid var(--linha)">
+          <th style="padding:7px 10px;font-weight:700">Quando</th>
+          <th style="padding:7px 10px;font-weight:700">Usuário</th>
+          <th style="padding:7px 10px;font-weight:700">Ação</th>
+          <th style="padding:7px 10px;font-weight:700">Sobre</th>
+        </tr></thead>
+        <tbody>${auditoriaLinhas}</tbody>
+      </table></div>` : '<p class="vazio" style="margin:0">Nenhuma atividade registrada ainda. Assim que alguém criar/iniciar/pausar uma campanha, mudar o prompt, etc., aparece aqui.</p>'}
     </div>
   </div>`;
   return chrome({ tab: 'Perfis', h1: 'Perfis', p: 'Crie usuários e escolha quais telas cada um pode acessar.' }, 'perfis', corpo);
@@ -4057,14 +4093,14 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && url === '/perfis/criar') {
       return lerCorpo(req, 1e5, corpo => {
         const p = new URLSearchParams(corpo);
-        try { usuarios.criar({ usuario: p.get('usuario'), senha: p.get('senha') || '', telas: p.getAll('telas'), email: p.get('email') || '' }); res.writeHead(303, { Location: '/perfis?ok=criado' }); res.end(); }
+        try { usuarios.criar({ usuario: p.get('usuario'), senha: p.get('senha') || '', telas: p.getAll('telas'), email: p.get('email') || '' }); try { auditoria.registrar(sess.usuario, 'perfil.criar', p.get('usuario') || '', ''); } catch (_) {} res.writeHead(303, { Location: '/perfis?ok=criado' }); res.end(); }
         catch (e) { res.writeHead(303, { Location: '/perfis?err=' + encodeURIComponent(e.message) }); res.end(); }
       });
     }
     if (req.method === 'POST' && url === '/perfis/email') {
       return lerCorpo(req, 1e5, corpo => {
         const p = new URLSearchParams(corpo);
-        try { usuarios.definirEmail(p.get('usuario'), p.get('email') || ''); res.writeHead(303, { Location: '/perfis?ok=email' }); res.end(); }
+        try { usuarios.definirEmail(p.get('usuario'), p.get('email') || ''); try { auditoria.registrar(sess.usuario, 'perfil.email', p.get('usuario') || '', ''); } catch (_) {} res.writeHead(303, { Location: '/perfis?ok=email' }); res.end(); }
         catch (e) { res.writeHead(303, { Location: '/perfis?err=' + encodeURIComponent(e.message) }); res.end(); }
       });
     }
@@ -4072,13 +4108,14 @@ const server = http.createServer((req, res) => {
       return lerCorpo(req, 1e5, corpo => {
         const p = new URLSearchParams(corpo);
         usuarios.definirTelas(p.get('usuario'), p.getAll('telas'));
+        try { auditoria.registrar(sess.usuario, 'perfil.telas', p.get('usuario') || '', (p.getAll('telas') || []).join(', ')); } catch (_) {}
         res.writeHead(303, { Location: '/perfis?ok=telas' }); res.end();
       });
     }
     if (req.method === 'POST' && url === '/perfis/senha') {
       return lerCorpo(req, 1e5, corpo => {
         const p = new URLSearchParams(corpo);
-        try { usuarios.definirSenha(p.get('usuario'), p.get('senha') || ''); res.writeHead(303, { Location: '/perfis?ok=senha' }); res.end(); }
+        try { usuarios.definirSenha(p.get('usuario'), p.get('senha') || ''); try { auditoria.registrar(sess.usuario, 'perfil.senha', p.get('usuario') || '', 'redefiniu a senha'); } catch (_) {} res.writeHead(303, { Location: '/perfis?ok=senha' }); res.end(); }
         catch (e) { res.writeHead(303, { Location: '/perfis?err=' + encodeURIComponent(e.message) }); res.end(); }
       });
     }
@@ -4086,6 +4123,7 @@ const server = http.createServer((req, res) => {
       return lerCorpo(req, 1e5, corpo => {
         const p = new URLSearchParams(corpo);
         usuarios.remover(p.get('usuario'));
+        try { auditoria.registrar(sess.usuario, 'perfil.excluir', p.get('usuario') || '', ''); } catch (_) {}
         res.writeHead(303, { Location: '/perfis?ok=excluido' }); res.end();
       });
     }
@@ -4400,7 +4438,7 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       const tel = String(d.tel || '').trim();
       if (!tel) return res.end(JSON.stringify({ ok: false, erro: 'faltou o telefone' }));
-      try { const bl = sofia.setBloqueio(tel, !!d.ativo); res.end(JSON.stringify({ ok: true, bloqueado: bl })); }
+      try { const bl = sofia.setBloqueio(tel, !!d.ativo); try { auditoria.registrar(sess.usuario, bl ? 'contato.bloquear' : 'contato.desbloquear', tel, ''); } catch (_) {} res.end(JSON.stringify({ ok: true, bloqueado: bl })); }
       catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
   }
@@ -4523,7 +4561,7 @@ const server = http.createServer((req, res) => {
         try { sofia.setControleHumano(chave, false); } catch (_) {}          // encerrou → devolve à SoFIA (não fica "sob atendimento humano")
         try { const autos = contatos.tagsPorGatilho('humano'); for (const a of autos) { try { contatos.removerTag(chave, a.tag); } catch (_) {} } } catch (_) {} // e tira a tag de atendimento humano
       }
-      try { sofia.setEncerrada(chave, ativo, quem); return res.end(JSON.stringify({ ok: true })); }
+      try { sofia.setEncerrada(chave, ativo, quem); try { if (ativo) auditoria.registrar(quem, 'conversa.encerrar', chave, ''); } catch (_) {} return res.end(JSON.stringify({ ok: true })); }
       catch (e) { return res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
   }
@@ -4558,6 +4596,7 @@ const server = http.createServer((req, res) => {
           return res.end(JSON.stringify({ ok: false, erro: '🔒 Conversa assumida por ' + dono.por + '. Fica livre em ~' + restaMin + ' min (ou peça pra ela devolver à SoFIA).' }));
         }
         const ativo = sofia.setControleHumano(chave, !!d.ativo, quem);
+        try { auditoria.registrar(quem, ativo ? 'conversa.assumir' : 'conversa.devolver', chave, ''); } catch (_) {}
         if (ativo) { try { sofia.setAtencao(chave, false); } catch (_) {} } // recepção assumiu → tira o vermelho
         // Gatilho 'humano' (estado): ao ASSUMIR aplica a tag + avisa; ao DEVOLVER
         // à SoFIA, remove a tag (é um marcador de "sob controle humano agora").
@@ -4660,6 +4699,7 @@ const server = http.createServer((req, res) => {
         });
         try { const el = p.get('expLimite'); if (el != null && el !== '') gravarExpLimite(el); } catch (_) {}
         try { const lm = p.get('humanoLockMin'); if (lm != null && lm !== '') sofia.gravarHumanoLockMin(lm); } catch (_) {}
+        try { auditoria.registrar(sess.usuario, 'sofia.config', 'Configuração/prompt da SoFIA', 'modelo: ' + (p.get('modeloConversa') || '—')); } catch (_) {}
         res.writeHead(303, { Location: '/sofia?ok=1' }); res.end();
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -4684,6 +4724,7 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e5, () => {
       let novo = true;
       try { novo = !sofia.estadoAtivo(); sofia.gravarEstado(novo); } catch (_) {}
+      try { auditoria.registrar(sess.usuario, novo ? 'sofia.ligar' : 'sofia.pausar', 'SoFIA', ''); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?' + (novo ? 'on=1' : 'off=1') }); res.end();
     });
   }
@@ -4726,6 +4767,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url === '/sofia/desconectar') {
     return lerCorpo(req, 1e5, () => {
       try { sofia.enviarComando('logout'); } catch (_) {}
+      try { auditoria.registrar(sess.usuario, 'sofia.desconectar', 'WhatsApp da SoFIA', ''); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?dcon=1' }); res.end();
     });
   }
@@ -4733,6 +4775,7 @@ const server = http.createServer((req, res) => {
   // qualquer ajuste que precise de reinício, sem SSH. Sai do ar ~1 min ao reconectar.
   if (req.method === 'POST' && url === '/sofia/reiniciar') {
     return lerCorpo(req, 1e5, () => {
+      try { auditoria.registrar(sess.usuario, 'sofia.reiniciar', 'SoFIA', ''); } catch (_) {}
       exec('pm2 restart sofia-listener --update-env', { timeout: 25000 }, (err) => {
         res.writeHead(303, { Location: '/sofia?' + (err ? 'errsof=1' : 'oksof=1') }); res.end();
       });
@@ -4768,6 +4811,7 @@ const server = http.createServer((req, res) => {
             fotoArquivo, destinatarios,
           },
         });
+        try { auditoria.registrar(sess.usuario, 'campanha.criar', nome, 'tag: ' + tag + ' · ' + destinatarios.length + ' contato(s)'); } catch (_) {}
         res.end(JSON.stringify({ ok: true }));
       } catch (e) {
         res.end(JSON.stringify({ ok: false, erro: e.message }));
@@ -4865,16 +4909,24 @@ const server = http.createServer((req, res) => {
     }));
   }
   if (req.method === 'POST' && url === '/sofia/campanhas/controle') {
+    const quem = (sess && sess.usuario) ? sess.usuario : '';
     return lerCorpo(req, 1e5, corpo => {
       const p = new URLSearchParams(corpo);
-      try { sofia.opCampanha({ op: 'controle', id: p.get('id'), acao: p.get('acao') }); } catch (_) {}
+      const id = p.get('id'), acao = String(p.get('acao') || 'controle');
+      let nomeC = ''; try { const c = (sofia.lerCampanhas() || []).find(x => String(x.id) === String(id)); if (c) nomeC = c.nome || ''; } catch (_) {}
+      try { sofia.opCampanha({ op: 'controle', id, acao }); } catch (_) {}
+      try { auditoria.registrar(quem, 'campanha.' + acao, nomeC || id, ''); } catch (_) {} // iniciar/pausar/cancelar
       res.writeHead(303, { Location: '/sofia?view=campanhas&okc=ok' }); res.end();
     });
   }
   if (req.method === 'POST' && url === '/sofia/campanhas/excluir') {
+    const quem = (sess && sess.usuario) ? sess.usuario : '';
     return lerCorpo(req, 1e5, corpo => {
       const p = new URLSearchParams(corpo);
-      try { sofia.opCampanha({ op: 'excluir', id: p.get('id') }); } catch (_) {}
+      const id = p.get('id');
+      let nomeC = ''; try { const c = (sofia.lerCampanhas() || []).find(x => String(x.id) === String(id)); if (c) nomeC = c.nome || ''; } catch (_) {}
+      try { sofia.opCampanha({ op: 'excluir', id }); } catch (_) {}
+      try { auditoria.registrar(quem, 'campanha.excluir', nomeC || id, ''); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?view=campanhas&okc=ok' }); res.end();
     });
   }
@@ -4964,12 +5016,14 @@ const server = http.createServer((req, res) => {
         const arq = p.join(p.dirname(waStatus.ARQUIVO), 'wa-comando.json');
         fs.writeFileSync(arq, JSON.stringify({ cmd: 'logout', em: Date.now() }), 'utf8');
       } catch (_) {}
+      try { auditoria.registrar(sess.usuario, 'robo.desconectar', 'WhatsApp do robô', ''); } catch (_) {}
       res.writeHead(303, { Location: '/?dcon=1' }); res.end();
     });
   }
   // Reiniciar o robô (pm2 restart slimfit-exp) direto do painel, sem SSH.
   if (req.method === 'POST' && url === '/wa/reiniciar') {
     return lerCorpo(req, 1e5, () => {
+      try { auditoria.registrar(sess.usuario, 'robo.reiniciar', 'Robô (slimfit-exp)', ''); } catch (_) {}
       exec('pm2 restart slimfit-exp --update-env', { timeout: 25000 }, (err) => {
         res.writeHead(303, { Location: '/?' + (err ? 'errsof=1' : 'oksof=1') }); res.end();
       });

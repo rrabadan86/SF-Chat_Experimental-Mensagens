@@ -60,6 +60,8 @@ data/.sessao-segredo
 # Registro de acessos ao painel (último acesso + histórico de logins) — estado por VPS
 data/acessos-ultimo.json
 data/acessos-login.jsonl
+# Registro de atividades / auditoria (quem fez o quê) — estado por VPS
+data/auditoria.jsonl
 
 data/tags-config.json
 
