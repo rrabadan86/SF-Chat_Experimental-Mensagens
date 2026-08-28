@@ -2696,15 +2696,17 @@ function paginaSofiaCampanhas(aviso, erro) {
             <div class="cpf-field"><label>Nome da campanha</label><input type="text" name="nome" placeholder="ex.: Reativação outubro" required></div>
             <div class="cpf-field"><label>Enviar para a tag</label><select name="tag" required style="text-overflow:ellipsis">${opcoesTag}</select></div>
           </div>
-          <div class="cpf-field" style="margin-top:14px">
-            <label>✨ Deixe a SoFIA escrever <span class="sub">— diga o que você quer e ela cria a frase para você revisar</span></label>
-            <textarea id="cpInstr" rows="2" placeholder="Ex.: quero uma campanha promocional enfatizando o nosso treino — uma excelente oportunidade para vivenciar o SlimFit!"></textarea>
-            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px">
-              <button type="button" id="cpGerarBtn" class="reset" onclick="gerarFraseCampanha()" style="padding:9px 16px;flex:none">✨ Gerar frase</button>
-              <span id="cpGerarMsg" class="quando" style="margin:0"></span>
+          <details class="cpf-acc" style="margin-top:14px">
+            <summary class="cpf-sum">✨ Deixe a SoFIA escrever <span class="sub quando" style="margin:0">— diga o que você quer e ela cria a frase para você revisar</span></summary>
+            <div class="cpf-body">
+              <textarea id="cpInstr" rows="2" placeholder="Ex.: quero uma campanha promocional enfatizando o nosso treino — uma excelente oportunidade para vivenciar o SlimFit!"></textarea>
+              <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px">
+                <button type="button" id="cpGerarBtn" class="reset" onclick="gerarFraseCampanha()" style="padding:9px 16px;flex:none">✨ Gerar frase</button>
+                <span id="cpGerarMsg" class="quando" style="margin:0"></span>
+              </div>
+              <p class="quando" style="margin:8px 0 0">A frase gerada cai no campo <b>Mensagem base</b> para você <b>ajustar antes de criar</b>. Depois, a IA ainda cria ~10 variações naturais dela no envio.</p>
             </div>
-            <p class="quando" style="margin:8px 0 0">A frase gerada cai no campo abaixo para você <b>ajustar antes de criar</b>. Depois, a IA ainda cria ~10 variações naturais dela no envio.</p>
-          </div>
+          </details>
           <div class="cpf-field" style="margin-top:14px">
             <label>Mensagem base <span class="sub">— a IA cria ~10 variações naturais a partir dela</span></label>
             <textarea name="textoBase" rows="4" placeholder="Escreva como você mandaria para uma aluna…  Use {nome} para personalizar (ex.: Oi, {nome}!)" required></textarea>
