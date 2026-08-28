@@ -2859,6 +2859,8 @@ function paginaSofia(aviso, erro) {
   const e = sofia.estado();
   let avh = { on: false, numero: '' }; try { avh = sofia.lerAvisoHumano(); } catch (_) {}
   const cmp = lerCompCfg();
+  let cmpH = null; try { cmpH = horarios.listar().find(j => j.chave === 'comparecimento'); } catch (_) {}
+  const cmpHoraBloco = cmpH ? `<div class="hsec"><div class="hsec-t">Quando roda ${cmpH.editado ? '<span class="badge-ed">alterado</span>' : ''}</div>${blocoHorario(cmpH, '', 'formCmp')}</div>` : '';
   let cmpTags = []; try { cmpTags = contatos.tagsDistintas().map(t => t.tag); } catch (_) {}
   const cmpSel = (val) => { const opts = ['<option value="">— escolha —</option>'].concat(cmpTags.map(t => `<option value="${esc(t)}"${t === val ? ' selected' : ''}>${esc(t)}</option>`)); if (val && !cmpTags.includes(val)) opts.push(`<option value="${esc(val)}" selected>${esc(val)} (atual)</option>`); return opts.join(''); };
   // Cada seção é um card recolhível (começa MINIMIZADA — só o título aparece) e
@@ -2914,8 +2916,8 @@ function paginaSofia(aviso, erro) {
     <details class="acc-sec">
       <summary class="sec-t" style="cursor:pointer;padding:4px 0">Presença da experimental (troca de tags) <small style="font-weight:400;color:var(--cinza)">— 1x/semana, cruza a presença no EVO e atualiza as tags</small></summary>
       <div class="card">
-        <p class="quando" style="margin:0 0 12px">Toda semana (no dia/horário definidos em <b>WhatsApp → Horários</b>, chave "Presença da experimental"), o robô lê a <b>presença/falta</b> das aulas experimentais no <b>EVO</b> e troca as tags de quem estava com a tag de <b>agendou</b>: quem <b>compareceu</b> vira "fez aula" e quem <b>faltou</b> vira "encerrado sem presença". As outras tags (manuais) não são tocadas.</p>
-        <form method="POST" action="/sofia/comparecimento">
+        <p class="quando" style="margin:0 0 12px">No <b>dia/horário definidos abaixo</b>, o robô lê a <b>presença/falta</b> das aulas experimentais no <b>EVO</b> e troca as tags de quem estava com a tag de <b>agendou</b>: quem <b>compareceu</b> vira "fez aula" e quem <b>faltou</b> vira "encerrado sem presença". As outras tags (manuais) não são tocadas.</p>
+        <form method="POST" action="/sofia/comparecimento" id="formCmp">
           <label class="chk" style="margin:0 0 12px"><input type="checkbox" name="on" value="1"${cmp.on ? ' checked' : ''}> Ligado</label>
           <div style="display:flex;gap:16px;flex-wrap:wrap">
             <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Tag de "agendou" (origem)</label><select name="tagAgendou">${cmpSel(cmp.tagAgendou)}</select></div>
@@ -2925,6 +2927,7 @@ function paginaSofia(aviso, erro) {
           <label class="chk" style="margin:14px 0 0"><input type="checkbox" name="criarNovos" value="1"${cmp.criarNovos ? ' checked' : ''}> Cadastrar na SoFIA quem fez a experimental e ainda não existe <small style="font-weight:400;color:var(--cinza)">(entrou por outro canal — assim pode receber campanhas)</small></label>
           <label style="margin:14px 0 4px">Número que recebe o relatório <small style="font-weight:400;color:var(--cinza)">(opcional — resumo do que foi trocado)</small></label>
           <input type="tel" name="numeroRelatorio" value="${esc(cmp.numeroRelatorio)}" placeholder="Ex.: 62998887777" style="max-width:220px">
+          ${cmpHoraBloco}
           <div class="acts" style="margin-top:14px"><button type="submit" class="save">Salvar</button></div>
         </form>
         <p class="quando" style="margin:12px 0 0">🧪 Para <b>testar antes</b> sem alterar nada (só mostra o que faria), rode na VPS, em <code>~/SF-Chat_Experimental-Mensagens/Experimental</code>: <code>HEADLESS=true node src/comparecimento.js --dry</code>. Se o EVO bloquear o modo sem tela, use <code>xvfb-run -a node src/comparecimento.js --dry</code>. Trocar <code>--dry</code> por <code>--run</code> executa de verdade. (O robô agendado não precisa disso — já roda com tela virtual.)</p>
@@ -3827,6 +3830,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. A SoFIA vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
     else if (/(?:^|&)okc=criada/.test(q)) aviso = '📣 Campanha criada! A IA está gerando as variações. Quando ficar “pronta”, clique em ▶️ Iniciar para começar o envio.';
     else if (/(?:^|&)okah=1/.test(q)) aviso = 'Aviso "precisa de humano" salvo.';
+    else if (/(?:^|&)okcmp=1/.test(q) && /(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Config salva, mas não consegui reiniciar o robô p/ aplicar o novo horário. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     else if (/(?:^|&)okcmp=1/.test(q)) aviso = 'Config de presença (troca de tags) salva.';
     else if (/(?:^|&)okc=ok/.test(q)) aviso = '✔️ Feito.';
     else if (/(?:^|&)errc=/.test(q)) { aviso = decodeURIComponent((q.match(/errc=([^&]*)/) || [])[1] || 'Erro na campanha.'); erro = true; }
@@ -4182,7 +4186,19 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e4, corpo => {
       const p = new URLSearchParams(corpo);
       try { gravarCompCfg({ on: p.get('on') === '1', tagAgendou: p.get('tagAgendou') || '', tagCompareceu: p.get('tagCompareceu') || '', tagFaltou: p.get('tagFaltou') || '', numeroRelatorio: p.get('numeroRelatorio') || '', criarNovos: p.get('criarNovos') === '1' }); } catch (_) {}
-      res.writeHead(303, { Location: '/sofia?okcmp=1' }); res.end();
+      // Dia/hora que o job roda (mesmo cofre dos horários do robô). Se mudou, salva
+      // e reinicia o robô p/ reagendar; senão, redireciona direto (sem reiniciar).
+      const hora = p.get('hora_comparecimento');
+      const dias = p.getAll('dias_comparecimento').map(Number);
+      let mudouHora = false;
+      if (hora != null) {
+        try { const novo = horarios.build(hora, dias); mudouHora = (novo !== horarios.cronDe('comparecimento')); horarios.salvar('comparecimento', hora, dias); }
+        catch (_) { /* horário inválido → ignora, mantém o atual */ }
+      }
+      if (!mudouHora) { res.writeHead(303, { Location: '/sofia?okcmp=1' }); return res.end(); }
+      exec('pm2 restart slimfit-exp --update-env', { timeout: 25000 }, (err) => {
+        res.writeHead(303, { Location: '/sofia?okcmp=1' + (err ? '&errh=1' : '') }); res.end();
+      });
     });
   }
   // Salvar config do aviso "precisa de humano".
