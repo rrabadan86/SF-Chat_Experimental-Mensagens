@@ -141,13 +141,17 @@ async function rodar({ dry = false } = {}) {
   }
   if (ultimoErro) { resumo.erro = 'EVO indisponível: ' + (ultimoErro.message || ultimoErro); return resumo; }
 
+  resumo.mapaSize = nAguardando;         // quantos contatos estão com a tag de "agendou"
+  resumo.evo = [];                       // diagnóstico: cada aula lida no EVO + se bateu
+
   // Para cada aluna com veredito, se ela está na lista de "aguardando", troca a tag.
   const jaMexido = new Set();
   for (const a of semana) {
     const chave = last8(a.telefone);
+    const alvo = chave ? mapa[chave] : null;
+    resumo.evo.push({ nome: a.nome, status: a.status, veredito: a.veredito, telefone: a.telefone, data: a.data, bateu: !!alvo });
     if (!chave || jaMexido.has(chave)) continue;
-    const alvo = mapa[chave];
-    if (!alvo) continue;                 // não está aguardando veredito → ignora
+    if (!alvo) continue;                 // não está com a tag de "agendou" → ignora
     jaMexido.add(chave);
     const destino = a.veredito === 'compareceu' ? cfg.tagCompareceu : cfg.tagFaltou;
     const item = { nome: alvo.nome || a.nome, telefone: alvo.tel, data: a.data };
@@ -195,8 +199,17 @@ module.exports = { ler, gravar, rodar, rodarAgendado, textoRelatorio, PADRAO };
 // CLI para teste manual na VPS.
 if (require.main === module) {
   const dry = process.argv.includes('--dry') || !process.argv.includes('--run');
+  const cfg = ler();
   rodar({ dry }).then(r => {
-    console.log('\n' + textoRelatorio(r, ler()));
+    console.log('\n──────── DIAGNÓSTICO ────────');
+    console.log(`Contatos com a tag "${cfg.tagAgendou}" (é só nesses que o job age): ${r.mapaSize != null ? r.mapaSize : (r.aviso || 0)}`);
+    console.log(`Aulas com presença/falta lidas no EVO na semana: ${(r.evo || []).length}`);
+    if (r.evo && r.evo.length) {
+      console.log('  (nome · status → veredito · telefone · bateu com a tag?)');
+      for (const e of r.evo) console.log(`   • ${e.nome} · ${e.status} → ${e.veredito} · ${e.telefone || '(sem tel)'} · ${e.bateu ? 'SIM ✅' : 'não ❌'}`);
+    }
+    if (r.aviso) console.log('Aviso: ' + r.aviso);
+    console.log('\n' + textoRelatorio(r, cfg));
     console.log(`\n${dry ? '(SIMULAÇÃO — nenhuma tag foi alterada. Use --run para valer.)' : '(Tags atualizadas.)'}`);
     process.exit(0);
   }).catch(e => { console.error('erro:', e && e.message); process.exit(1); });
