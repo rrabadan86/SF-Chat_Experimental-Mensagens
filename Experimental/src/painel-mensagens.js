@@ -1863,8 +1863,9 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       : '<button type="button" onclick="toggleHumano()" class="'+(donoMeu?'save':'reset')+'" title="'+(donoMeu?'Devolver à SoFIA (ela volta a responder)':'Assumir a conversa (você atende — trava por '+LOCK_MIN+' min)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">'+(donoMeu?'🤖':'🧑')+'</button>';
     var btnInt='<button type="button" onclick="abrirInteracoes(selecionada)" class="reset" title="Interações" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">📊</button>';
     var encM=!!c.enc; // encerrada AGORA (cadeado à mão / automático por tag)
-    // Cadeado FECHADO 🔒 = fechar; cadeado ABERTO 🔓 = reabrir. O botão alterna.
-    var btnEnc='<button type="button" onclick="encerrarConversa()" class="reset" title="'+(encM?'Reabrir conversa (a SoFIA volta a responder normalmente)':'Encerrar conversa agora (cadeado — a SoFIA recomeça do zero)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(encM?';color:#1c8f52':'')+'">'+(encM?'🔓':'🔒')+'</button>';
+    // Encerrar é de mão única: 🔒 fecha. Já fechada → cadeado fechado desabilitado
+    // (só indica o estado). A aluna voltando a escrever reabre a conversa sozinho.
+    var btnEnc='<button type="button" '+(encM?'disabled':'onclick="encerrarConversa()"')+' class="reset" title="'+(encM?'Conversa encerrada (a aluna voltando reabre sozinho — a SoFIA recomeça do zero)':'Encerrar conversa agora (cadeado — a SoFIA recomeça do zero)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(encM?';opacity:.5;cursor:not-allowed':'')+'">🔒</button>';
     var bloq=!!c.bloq;
     var btnBloq='<button type="button" onclick="bloquearConversa()" class="reset" title="'+(bloq?'Desbloquear contato':'Bloquear contato (a SoFIA ignora)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(bloq?';color:#1c8f52':'')+'">'+(bloq?'✅':'🚫')+'</button>';
     var selo=bloq?'<span title="Contato bloqueado" style="background:#fdeaea;color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700;margin-left:6px">🚫 bloqueado</span>':'';
@@ -1936,11 +1937,10 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   }
   function encerrarConversa(){
     var k=selecionada; if(!k) return;
-    var c=ultimoData[k]||{}; var reabrir=!!c.enc;
-    if(reabrir){ if(!confirm('Reabrir esta conversa? 🔓\\n\\nO cadeado sai e a SoFIA volta a responder normalmente este contato.')) return; }
-    else { if(!confirm('Encerrar esta conversa agora?\\n\\nAparece o cadeado 🔒, a SoFIA recomeça do zero se a aluna voltar a escrever e o follow-up deixa de incomodar este contato.')) return; }
-    fetch('/sofia/conversas/encerrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,ativo:!reabrir})})
-      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].enc=!reabrir; ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); } else { alert(j.erro||'Não consegui atualizar a conversa.'); } })
+    var c=ultimoData[k]||{}; if(c.enc) return; // já encerrada — mão única
+    if(!confirm('Encerrar esta conversa agora?\\n\\nAparece o cadeado 🔒, a SoFIA recomeça do zero se a aluna voltar a escrever e o follow-up deixa de incomodar este contato.')) return;
+    fetch('/sofia/conversas/encerrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k})})
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].enc=true; ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); } else { alert(j.erro||'Não consegui encerrar a conversa.'); } })
       .catch(function(){ alert('Erro de rede.'); });
   }
   function msgKey(ev){ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); enviarMsg(); } }
@@ -3457,15 +3457,15 @@ function paginaLogin(erro) {
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <style>${ESTILO}
   .loginwrap{max-width:380px;margin:8vh auto;padding:16px}
-  .loginwrap .logo-box{background:var(--teal);border-radius:14px;padding:14px 16px;text-align:center;margin-bottom:18px}
-  .loginwrap .logo-box img{height:34px}
+  .loginwrap .logo-box{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:16px;text-align:center;margin-bottom:18px}
+  .loginwrap .logo-box img{height:46px;width:auto}
   .loginwrap .card{padding:22px}
   .loginwrap h1{font-family:"Inter";font-weight:600;font-size:1.2rem;margin:0 0 4px;text-align:center;letter-spacing:-.02em}
   .loginwrap p.sub{color:var(--cinza);font-size:.86rem;text-align:center;margin:0 0 12px}
   .loginwrap button{width:100%;margin-top:16px}
 </style></head><body>
 <div class="loginwrap">
-  <div class="logo-box"><img alt="SlimFit Studio" src="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/logo-com-contraste.svg"></div>
+  <div class="logo-box"><img alt="SlimFit Studio" src="https://drive.google.com/thumbnail?id=1pl1mh709FGcitG9uHo0J6nzMUKFYqg-w&sz=w400"></div>
   <div class="card">
     <h1>Painel do Studio</h1>
     <p class="sub">Entre com o seu usuário e senha.</p>
