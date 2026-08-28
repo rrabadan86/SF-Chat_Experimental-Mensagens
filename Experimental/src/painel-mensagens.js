@@ -1962,7 +1962,7 @@ function paginaSofiaConversas(aviso, erro) {
       return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:7px 10px;border-radius:9px;margin-bottom:5px;border:1px solid '+bd+';'+(c.atencao&&!on?'border-left:4px solid #c0392b;':'')+'background:'+bg+'">'+nome+'<div class="quando" style="margin:0;font-size:.7rem">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
     }).join('');
     if(pag){
-      if(paginas>1){ pag.innerHTML='<div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center;align-items:center">'+setaPag('‹',pagina-1,pagina<=0)+pagNumsHtml(pagina,paginas)+setaPag('›',pagina+1,pagina>=paginas-1)+'</div><span class="quando" style="text-align:center;margin:0">Página '+(pagina+1)+' de '+paginas+' · '+total+' conversas</span>'; }
+      if(paginas>1){ var salto=10; pag.innerHTML='<div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center;align-items:center">'+setaPag('«',Math.max(0,pagina-salto),pagina<=0,'Voltar '+salto+' páginas')+setaPag('‹',pagina-1,pagina<=0)+pagNumsHtml(pagina,paginas)+setaPag('›',pagina+1,pagina>=paginas-1)+setaPag('»',Math.min(paginas-1,pagina+salto),pagina>=paginas-1,'Avançar '+salto+' páginas')+'</div><span class="quando" style="text-align:center;margin:0">Página '+(pagina+1)+' de '+paginas+' · '+total+' conversas</span>'; }
       else { pag.innerHTML='<span class="quando" style="text-align:center;margin:0">'+total+' conversa'+(total>1?'s':'')+'</span>'; }
     }
     if(selecionada && ultimoData[selecionada]){
@@ -1975,7 +1975,7 @@ function paginaSofiaConversas(aviso, erro) {
   function mudarPag(d){ pagina+=d; renderInbox(ultimoData); }
   function irPag(n){ pagina=Math.max(0,n); renderInbox(ultimoData); }
   function celPag(p, cur){ return p===cur ? '<span class="save" style="padding:4px 9px;border-radius:7px;font-size:.72rem;pointer-events:none">'+(p+1)+'</span>' : '<a class="reset" style="padding:4px 9px;font-size:.72rem;cursor:pointer" onclick="irPag('+p+')">'+(p+1)+'</a>'; }
-  function setaPag(txt, dest, off){ return off ? '<span class="reset" style="padding:4px 9px;font-size:.72rem;opacity:.35">'+txt+'</span>' : '<a class="reset" style="padding:4px 9px;font-size:.72rem;cursor:pointer" onclick="irPag('+dest+')">'+txt+'</a>'; }
+  function setaPag(txt, dest, off, tit){ var t=tit?' title="'+tit+'"':''; return off ? '<span class="reset" style="padding:4px 9px;font-size:.72rem;opacity:.35"'+t+'>'+txt+'</span>' : '<a class="reset" style="padding:4px 9px;font-size:.72rem;cursor:pointer"'+t+' onclick="irPag('+dest+')">'+txt+'</a>'; }
   // Números com janela (±2) + 1ª/última + reticências; buraco de 1 vira o número.
   function pagNumsHtml(cur, paginas){
     var last=paginas-1, nums={};
