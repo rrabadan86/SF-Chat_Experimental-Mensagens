@@ -874,9 +874,10 @@ Mensagem:
 // edita antes de criar a campanha — este é só o rascunho. Usa o modelo de
 // conversa (escrita melhor). Devolve o texto, ou "" em qualquer falha (o painel
 // avisa e mantém o campo para escrita manual).
-export async function gerarTextoCampanha(instrucao: string): Promise<string> {
+export async function gerarTextoCampanha(instrucao: string, model?: string): Promise<string> {
   const pedido = String(instrucao || "").trim();
   if (!pedido) return "";
+  const mdl = String(model || "").trim() || MODELO_CONVERSA; // modelo escolhido no painel (ou o da conversa)
   const instr = `Você escreve mensagens de WhatsApp para as alunas e leads de um Studio de treinamento para mulheres (SlimFit — Setor Bueno, Goiânia; público adulto e de alto padrão; comunicação acolhedora e assertiva).
 Escreva UMA mensagem de campanha (disparo em massa) a partir do PEDIDO abaixo. Regras:
 - Português do Brasil, tom amigável e humano de WhatsApp — acolhedor e direto, nada de linguagem corporativa.
@@ -890,12 +891,12 @@ Pedido:
   try {
     const resp = await comRetry(() =>
       anthropic.messages.create({
-        model: MODELO_CONVERSA,
+        model: mdl,
         max_tokens: 700,
         messages: [{ role: "user", content: instr }],
       }),
     );
-    registrarUso("gerador", MODELO_CONVERSA, resp); // frase da campanha (gerador)
+    registrarUso("gerador", mdl, resp); // frase da campanha (gerador)
     const txt = resp.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.TextBlock).text).join("").trim();
     return txt.replace(/^"+|"+$/g, "").trim();
   } catch (e: any) {

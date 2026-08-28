@@ -1198,8 +1198,9 @@ async function processarCampInbox() {
         // Escrever uma frase de campanha a partir da instrução do painel. O painel
         // faz poll do resultado (campanha-rascunhos.json) até ficar pronto.
         const instrucao = String(op.instrucao || "");
-        log(`gerando frase de campanha (rascunho ${op.id})…`);
-        gerarTextoCampanha(instrucao)
+        const modeloFrase = String(op.model || "");
+        log(`gerando frase de campanha (rascunho ${op.id})${modeloFrase ? ` [${modeloFrase}]` : ""}…`);
+        gerarTextoCampanha(instrucao, modeloFrase)
           .then((t) => { escreverRascunho(String(op.id), { texto: t || "" }); log(`rascunho ${op.id} pronto (${(t || "").length} caracteres).`); })
           .catch((e: any) => { escreverRascunho(String(op.id), { texto: "" }); log(`rascunho ${op.id} falhou: ${e?.message || e}`); });
       } else if (op.op === "variacoes" && op.id) {

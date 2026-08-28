@@ -2777,6 +2777,10 @@ function paginaSofiaCampanhas(aviso, erro) {
   const opcoesTag = tags.length
     ? '<option value="" disabled selected>— escolha uma tag —</option>' + tags.map(t => `<option value="${esc(t.tag)}">${esc(t.tag)} (${t.n})</option>`).join('')
     : '';
+  // Modelos de IA (mesma lista da Configuração) para escolher no "Gerar frase".
+  let modelosIA = []; try { modelosIA = sofia.MODELOS_VALIDOS || []; } catch (_) {}
+  let modeloPadraoFrase = ''; try { modeloPadraoFrase = (sofia.lerModelos() || {}).conversa || ''; } catch (_) {}
+  const optModelosFrase = modelosIA.map(m => `<option value="${esc(m.id)}"${m.id === modeloPadraoFrase ? ' selected' : ''}>${esc(m.rot)}</option>`).join('');
 
   const novo = `
     <div class="sec-t">Nova campanha</div>
@@ -2792,6 +2796,10 @@ function paginaSofiaCampanhas(aviso, erro) {
             <summary class="cpf-sum">✨ Deixe a SoFIA escrever <span class="sub quando" style="margin:0">— diga o que você quer e ela cria a frase para você revisar</span></summary>
             <div class="cpf-body">
               <textarea id="cpInstr" rows="2" placeholder="Ex.: quero uma campanha promocional enfatizando o nosso treino — uma excelente oportunidade para vivenciar o SlimFit!"></textarea>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px">
+                <label style="margin:0;font-size:.82rem;color:var(--cinza);flex:none">Modelo da IA:</label>
+                <select id="cpFraseModelo" style="flex:1;min-width:200px;padding:7px 9px">${optModelosFrase}</select>
+              </div>
               <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px">
                 <button type="button" id="cpGerarBtn" class="reset" onclick="gerarFraseCampanha()" style="padding:9px 16px;flex:none">✨ Gerar frase</button>
                 <span id="cpGerarMsg" class="quando" style="margin:0"></span>
@@ -2901,8 +2909,9 @@ function paginaSofiaCampanhas(aviso, erro) {
             var instr=(document.getElementById('cpInstr').value||'').trim();
             var msg=document.getElementById('cpGerarMsg'); var btn=document.getElementById('cpGerarBtn');
             if(!instr){ if(msg){msg.className='quando';msg.style.margin='0';msg.textContent='Escreva o que você quer que a SoFIA fale.';} return; }
+            var mdlEl=document.getElementById('cpFraseModelo'); var mdl=mdlEl?mdlEl.value:'';
             _gerando=true; if(btn){btn.disabled=true;} if(msg){msg.textContent='✨ gerando… (uns segundos)';}
-            fetch('/sofia/campanhas/rascunho',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instrucao:instr})})
+            fetch('/sofia/campanhas/rascunho',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instrucao:instr,model:mdl})})
               .then(function(r){return r.json();}).then(function(j){
                 if(!j.ok){ throw new Error(j.erro||'falha'); }
                 var tentativas=0;
@@ -4708,7 +4717,8 @@ const server = http.createServer((req, res) => {
       const instrucao = String(d.instrucao || '').trim();
       if (!instrucao) return res.end(JSON.stringify({ ok: false, erro: 'Escreva a instrução do que você quer.' }));
       const id = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-      try { sofia.opCampanha({ op: 'rascunho', id, instrucao }); } catch (e) { return res.end(JSON.stringify({ ok: false, erro: 'Falha ao enviar o pedido à SoFIA.' })); }
+      const model = String(d.model || '').trim();
+      try { sofia.opCampanha({ op: 'rascunho', id, instrucao, model }); } catch (e) { return res.end(JSON.stringify({ ok: false, erro: 'Falha ao enviar o pedido à SoFIA.' })); }
       res.end(JSON.stringify({ ok: true, id }));
     });
   }
