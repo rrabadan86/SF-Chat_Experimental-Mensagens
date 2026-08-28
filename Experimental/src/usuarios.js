@@ -74,7 +74,7 @@ function conferirSenha(senha, armazenado) {
 }
 
 // ── API pública (só o essencial; sem devolver o hash) ───────────────────────
-function semSenha(c) { return { usuario: c.usuario, email: c.email || '', telas: c.telas || [], criadoEm: c.criadoEm, atualizadoEm: c.atualizadoEm }; }
+function semSenha(c) { return { usuario: c.usuario, email: c.email || '', admin: !!c.admin, telas: c.telas || [], criadoEm: c.criadoEm, atualizadoEm: c.atualizadoEm }; }
 
 function listar() {
   return Object.values(carregar()).map(semSenha).sort((a, b) => a.usuario.localeCompare(b.usuario, 'pt-BR'));
@@ -88,7 +88,7 @@ function emailEmUso(map, email, exceto) {
   for (const k in map) { if (k === normU(exceto)) continue; if (normEmail(map[k].email) === e) return true; }
   return false;
 }
-function criar({ usuario, senha, telas, email }) {
+function criar({ usuario, senha, telas, email, admin }) {
   const u = normU(usuario);
   if (!u || u.length < 3) throw new Error('Usuário precisa de pelo menos 3 caracteres.');
   if (!/^[a-z0-9._-]+$/.test(u)) throw new Error('Use só letras, números, ponto, hífen ou sublinhado no usuário.');
@@ -98,9 +98,19 @@ function criar({ usuario, senha, telas, email }) {
   const map = carregar();
   if (map[u]) throw new Error('Já existe um usuário com esse nome.');
   if (em && emailEmUso(map, em)) throw new Error('Esse e-mail já está em outro usuário.');
-  map[u] = { usuario: u, email: em, senha: hashSenha(senha), telas: limparTelas(telas), criadoEm: Date.now(), atualizadoEm: Date.now() };
+  // Admin vê tudo — as telas ficam vazias (não são usadas quando admin=true).
+  map[u] = { usuario: u, email: em, senha: hashSenha(senha), admin: !!admin, telas: admin ? [] : limparTelas(telas), criadoEm: Date.now(), atualizadoEm: Date.now() };
   salvar(map);
   return semSenha(map[u]);
+}
+// Promove/rebaixa um usuário a administrador (vê tudo + gerencia Perfis).
+function definirAdmin(usuario, ativo) {
+  const map = carregar(); const u = normU(usuario);
+  if (!map[u]) return false;
+  map[u].admin = !!ativo;
+  if (ativo) map[u].telas = []; // admin não usa telas específicas
+  map[u].atualizadoEm = Date.now();
+  salvar(map); return true;
 }
 // Define/limpa o e-mail de um usuário (para login com Google). Vazio = remove.
 function definirEmail(usuario, email) {
@@ -146,5 +156,5 @@ function verificar(usuario, senha) {
 
 module.exports = {
   TELAS, TELAS_KEYS, normU, normEmail, emailValido, listar, existe, obter, criar,
-  definirTelas, definirSenha, definirEmail, porEmail, remover, verificar, ARQUIVO,
+  definirTelas, definirSenha, definirEmail, definirAdmin, porEmail, remover, verificar, ARQUIVO,
 };

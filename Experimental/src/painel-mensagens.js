@@ -157,6 +157,7 @@ function usuarioDaReq(req) {
   if (SENHA && usuarios.normU(o.u) === usuarios.normU(USER)) return { usuario: USER, admin: true, telas: TODAS_TELAS };
   const u = usuarios.obter(o.u);
   if (!u) return null; // usuário apagado depois de logar
+  if (u.admin) return { usuario: u.usuario, admin: true, telas: TODAS_TELAS }; // admin promovido pela checkbox → vê tudo
   return { usuario: u.usuario, admin: false, telas: u.telas || [] };
 }
 // ── Login com Google (OAuth 2.0 / OpenID) — opcional, ligado pelo .env ───────
@@ -176,7 +177,7 @@ function loginPorEmail(email) {
   if (!e) return null;
   if (ADMIN_EMAIL && e === ADMIN_EMAIL) return { usuario: USER, admin: true };
   const u = usuarios.porEmail(e);
-  return u ? { usuario: u.usuario, admin: false } : null;
+  return u ? { usuario: u.usuario, admin: !!u.admin } : null;
 }
 // Cookie curto (10 min) com o "state" anti-CSRF do fluxo OAuth.
 function setStateCookie(req, res, valor) {
@@ -206,7 +207,7 @@ function validarLogin(usuario, senha) {
   const u = String(usuario || '').trim();
   if (SENHA && usuarios.normU(u) === usuarios.normU(USER) && seguraIgual(senha, SENHA)) return { usuario: USER, admin: true };
   const fu = usuarios.verificar(u, senha);
-  return fu ? { usuario: fu.usuario, admin: false } : null;
+  return fu ? { usuario: fu.usuario, admin: !!fu.admin } : null;
 }
 // Qual aba uma URL pertence (para a checagem de acesso). O resto é a aba WhatsApp.
 function telaDaUrl(u) {
@@ -3591,8 +3592,9 @@ function paginaPerfis(aviso, erro, view) {
     <details class="card" style="margin-bottom:8px">
       <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:2px 0;user-select:none">
         <span style="font-weight:700;font-size:var(--fs-h2)">${esc(u.usuario)}</span>
+        ${u.admin ? '<span style="background:#fdf2e0;color:#8a6300;border:1px solid #f0d9a8;border-radius:999px;padding:1px 9px;font-size:.68rem;font-weight:700">👑 admin</span>' : ''}
         ${u.email ? `<span class="quando" style="margin:0">📧 ${esc(u.email)}</span>` : '<span class="quando" style="margin:0;color:var(--faint)">sem e-mail</span>'}
-        <span class="quando" style="margin:0">· ${(u.telas || []).length} tela(s)</span>
+        <span class="quando" style="margin:0">· ${u.admin ? 'vê todas as telas' : (u.telas || []).length + ' tela(s)'}</span>
         ${seloAcesso(u.usuario)}
         <span class="u-caret" style="margin-left:auto;color:var(--faint);font-size:.9rem">▸</span>
       </summary>
@@ -3604,7 +3606,8 @@ function paginaPerfis(aviso, erro, view) {
       <form method="POST" action="/perfis/email" id="em-${esc(u.usuario)}" style="display:none"><input type="hidden" name="usuario" value="${esc(u.usuario)}"></form>
       <form method="POST" action="/perfis/telas" style="margin-top:12px">
         <input type="hidden" name="usuario" value="${esc(u.usuario)}">
-        <div style="margin:0 0 10px">${chkTelas(u.telas, 'telas')}</div>
+        <label style="display:inline-flex;align-items:center;gap:8px;font-weight:700;margin:0 0 10px;cursor:pointer"><input type="checkbox" name="admin" value="1"${u.admin ? ' checked' : ''} onchange="perfAdminTgl(this)" style="width:16px;height:16px;margin:0"> 👑 Administrador <small style="font-weight:400;color:var(--cinza)">— vê tudo e gerencia usuários</small></label>
+        <div class="perf-telas" style="margin:0 0 10px${u.admin ? ';display:none' : ''}">${chkTelas(u.telas, 'telas')}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding-top:10px;border-top:1px dashed var(--linha)">
           <button type="submit" class="save" style="padding:6px 13px">Salvar telas</button>
           <input type="text" name="senha" placeholder="nova senha" style="width:140px" form="sn-${esc(u.usuario)}">
@@ -3625,7 +3628,7 @@ function paginaPerfis(aviso, erro, view) {
     'sofia.desconectar': '📴 Desconectou WhatsApp da SoFIA', 'sofia.config': '⚙️ Salvou configuração/prompt',
     'robo.reiniciar': '🔄 Reiniciou o robô', 'robo.desconectar': '📴 Desconectou WhatsApp do robô',
     'perfil.criar': '👤 Criou usuário', 'perfil.excluir': '🗑️ Excluiu usuário', 'perfil.telas': '🔑 Mudou telas de acesso',
-    'perfil.senha': '🔑 Redefiniu senha', 'perfil.email': '📧 Alterou e-mail',
+    'perfil.senha': '🔑 Redefiniu senha', 'perfil.email': '📧 Alterou e-mail', 'perfil.admin': '👑 Mudou administrador',
   };
   const fmtAlvo = (acao, alvo) => { const d = String(alvo || '').replace(/\D/g, ''); return (/^conversa\.|^contato\./.test(acao) && d.length >= 10) ? fmtTel(alvo) : alvo; };
   const auditoriaLinhas = logsAud.map(l => `<tr style="border-bottom:1px solid var(--linha)">
@@ -3646,12 +3649,14 @@ function paginaPerfis(aviso, erro, view) {
         </div>
         <label style="margin-top:12px">E-mail <small style="font-weight:400;color:var(--cinza)">— opcional, para o login com Google (só quem tem e-mail aqui entra pelo Google)</small></label>
         <input type="email" name="email" autocapitalize="none" spellcheck="false" placeholder="email@gmail.com">
-        <label style="margin-top:12px">Telas que este usuário pode acessar</label>
-        <div style="margin:4px 0 2px">${chkTelas([], 'telas')}</div>
+        <label style="display:inline-flex;align-items:center;gap:8px;font-weight:700;margin:14px 0 8px;cursor:pointer"><input type="checkbox" name="admin" value="1" onchange="perfAdminTgl(this)" style="width:16px;height:16px;margin:0"> 👑 Administrador <small style="font-weight:400;color:var(--cinza)">— vê tudo e gerencia usuários (igual ao admin do sistema)</small></label>
+        <div class="perf-telas"><label style="margin:0">Telas que este usuário pode acessar</label>
+        <div style="margin:4px 0 2px">${chkTelas([], 'telas')}</div></div>
         <div class="acts"><button type="submit" class="save">Criar usuário</button></div>
         <p class="quando" style="margin:8px 0 0">O usuário entra com esse login e senha na hora — sem reiniciar. A senha pode ser trocada depois aqui mesmo.</p>
       </form>
     </div>
+    <script>function perfAdminTgl(cb){var f=cb.closest('form');if(!f)return;var t=f.querySelector('.perf-telas');if(t)t.style.display=cb.checked?'none':'';}</script>
 
     <div class="sec-t">Usuários</div>
     <div class="card" style="background:#f3fbfb;border-color:#bfe8e7"><p class="quando" style="margin:0">🔑 <b>Admin</b> (do sistema): <b>${esc(USER)}</b>${ADMIN_EMAIL ? ` · 📧 ${esc(ADMIN_EMAIL)}` : ''} ${ults[USER] ? `· 🕘 ${fmtAcesso(ults[USER])}` : ''} — vê todas as telas e gerencia os Perfis. A senha do admin fica em <code>PAINEL_SENHA</code> e o e-mail do login com Google em <code>PAINEL_ADMIN_EMAIL</code>, no <code>.env</code>.</p></div>
@@ -4110,7 +4115,7 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && url === '/perfis/criar') {
       return lerCorpo(req, 1e5, corpo => {
         const p = new URLSearchParams(corpo);
-        try { usuarios.criar({ usuario: p.get('usuario'), senha: p.get('senha') || '', telas: p.getAll('telas'), email: p.get('email') || '' }); try { auditoria.registrar(sess.usuario, 'perfil.criar', p.get('usuario') || '', ''); } catch (_) {} res.writeHead(303, { Location: '/perfis?ok=criado' }); res.end(); }
+        try { const ehAdmin = p.get('admin') === '1'; usuarios.criar({ usuario: p.get('usuario'), senha: p.get('senha') || '', telas: p.getAll('telas'), email: p.get('email') || '', admin: ehAdmin }); try { auditoria.registrar(sess.usuario, 'perfil.criar', p.get('usuario') || '', ehAdmin ? '👑 como administrador' : ''); } catch (_) {} res.writeHead(303, { Location: '/perfis?ok=criado' }); res.end(); }
         catch (e) { res.writeHead(303, { Location: '/perfis?err=' + encodeURIComponent(e.message) }); res.end(); }
       });
     }
@@ -4124,8 +4129,13 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && url === '/perfis/telas') {
       return lerCorpo(req, 1e5, corpo => {
         const p = new URLSearchParams(corpo);
-        usuarios.definirTelas(p.get('usuario'), p.getAll('telas'));
-        try { auditoria.registrar(sess.usuario, 'perfil.telas', p.get('usuario') || '', (p.getAll('telas') || []).join(', ')); } catch (_) {}
+        const alvoU = p.get('usuario');
+        const ehAdmin = p.get('admin') === '1';
+        let eraAdmin = false; try { const cu = usuarios.obter(alvoU); eraAdmin = !!(cu && cu.admin); } catch (_) {}
+        try { usuarios.definirAdmin(alvoU, ehAdmin); } catch (_) {}       // liga/desliga admin (admin limpa as telas)
+        if (!ehAdmin) usuarios.definirTelas(alvoU, p.getAll('telas'));      // só mexe em telas quando NÃO é admin
+        if (ehAdmin !== eraAdmin) { try { auditoria.registrar(sess.usuario, 'perfil.admin', alvoU || '', ehAdmin ? 'promoveu a administrador' : 'removeu o administrador'); } catch (_) {} }
+        else { try { auditoria.registrar(sess.usuario, 'perfil.telas', alvoU || '', ehAdmin ? 'admin (todas as telas)' : (p.getAll('telas') || []).join(', ')); } catch (_) {} }
         res.writeHead(303, { Location: '/perfis?ok=telas' }); res.end();
       });
     }
