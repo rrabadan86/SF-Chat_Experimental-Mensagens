@@ -91,6 +91,7 @@ const config = {
     circuitoLembrete: '15 16 * * 5',    // 16:15 sexta ("é amanhã!" no grupo Circuito Slim)
     agendadosManha:   '45 10 * * *',    // 10:45 todos os dias (envios agendados no painel — turno manhã)
     agendadosTarde:   '45 15 * * *',    // 15:45 todos os dias (envios agendados no painel — turno tarde)
+    comparecimento:   '0 16 * * 6',     // 16:00 sábado (cruza presença da semana no EVO → troca tags)
   },
 
   // Filtros de horário

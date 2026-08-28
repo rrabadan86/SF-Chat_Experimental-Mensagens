@@ -28,6 +28,7 @@ const CATALOGO = [
   { chave: 'circuitoLembrete',  titulo: 'Circuito — lembrete',          padrao: '15 16 * * 5' },
   { chave: 'resumoDia',         titulo: 'Resumo do dia (equipe)',       padrao: '45 19 * * *' },
   { chave: 'resumoSemana',      titulo: 'Resumo da semana (equipe)',    padrao: '30 16 * * 5' },
+  { chave: 'comparecimento',    titulo: 'Presença da experimental (troca de tags)', padrao: '0 16 * * 6' },
   { chave: 'agendadosManha',    titulo: 'Envios agendados — manhã',     padrao: '45 10 * * *' },
   { chave: 'agendadosTarde',    titulo: 'Envios agendados — tarde',     padrao: '45 15 * * *' },
 ];

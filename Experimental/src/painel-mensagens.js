@@ -34,6 +34,12 @@ const contatos = require('./contatos');
 const grupos = require('./grupos');
 const usuarios = require('./usuarios');
 const config = require('./config'); // STUDIO_NOME etc.
+// Config do job de comparecimento (lida/gravada direto do JSON — NÃO requerer
+// comparecimento.js aqui, para não carregar o puppeteer/EVO no painel).
+const COMP_CFG_FILE = path.resolve(__dirname, '..', 'data', 'comparecimento.json');
+const COMP_PADRAO = { on: false, tagAgendou: 'FX - 3. Agendou Aula Exp', tagCompareceu: 'FX - 5. Fez Aula Experimental', tagFaltou: 'FX - 2. Encerrado com Agendamento sem Presença', numeroRelatorio: '' };
+function lerCompCfg() { try { const o = JSON.parse(fs.readFileSync(COMP_CFG_FILE, 'utf8')); return { ...COMP_PADRAO, ...(o && typeof o === 'object' ? o : {}) }; } catch (_) { return { ...COMP_PADRAO }; } }
+function gravarCompCfg(c) { const o = { on: !!c.on, tagAgendou: String(c.tagAgendou || '').trim() || COMP_PADRAO.tagAgendou, tagCompareceu: String(c.tagCompareceu || '').trim() || COMP_PADRAO.tagCompareceu, tagFaltou: String(c.tagFaltou || '').trim() || COMP_PADRAO.tagFaltou, numeroRelatorio: String(c.numeroRelatorio || '').replace(/\D/g, '') }; try { fs.mkdirSync(path.dirname(COMP_CFG_FILE), { recursive: true }); } catch (_) {} fs.writeFileSync(COMP_CFG_FILE, JSON.stringify(o, null, 2)); return o; }
 
 // Limite de aulas experimentais por turma — editável na aba SoFIA → Configuração.
 // Gravado em data/sofia-exp-limite.txt; o cálculo da grade (Python) lê este arquivo.
@@ -154,7 +160,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/contatos/bloquear') return has('sofia_conversas') || has('sofia_contatos'); // bloquear vem tb do chat (Conversas)
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano') return has('sofia_config');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/comparecimento') return has('sofia_config');
   return false;
 }
 // WhatsApp é dividido em três sub-abas: Configuração, Agendamento e Hoje.
@@ -2852,6 +2858,9 @@ function paginaSofia(aviso, erro) {
 
   const e = sofia.estado();
   let avh = { on: false, numero: '' }; try { avh = sofia.lerAvisoHumano(); } catch (_) {}
+  const cmp = lerCompCfg();
+  let cmpTags = []; try { cmpTags = contatos.tagsDistintas().map(t => t.tag); } catch (_) {}
+  const cmpSel = (val) => { const opts = ['<option value="">— escolha —</option>'].concat(cmpTags.map(t => `<option value="${esc(t)}"${t === val ? ' selected' : ''}>${esc(t)}</option>`)); if (val && !cmpTags.includes(val)) opts.push(`<option value="${esc(val)}" selected>${esc(val)} (atual)</option>`); return opts.join(''); };
   // Cada seção é um card recolhível (começa MINIMIZADA — só o título aparece) e
   // reordenável (↑ ↓). A ordem no DOM = ordem salva no prompt. O textarea, mesmo
   // recolhido (display:none), continua sendo enviado no POST.
@@ -2899,6 +2908,25 @@ function paginaSofia(aviso, erro) {
           <textarea name="palavras" rows="6" spellcheck="false" style="font-size:.86rem">${esc((avh.palavras && avh.palavras.length ? avh.palavras : (sofia.PALAVRAS_HUMANO_PADRAO || [])).join('\n'))}</textarea>
           <div class="acts" style="margin-top:12px"><button type="submit" class="save">Salvar</button></div>
         </form>
+      </div>
+    </details>
+
+    <details class="acc-sec">
+      <summary class="sec-t" style="cursor:pointer;padding:4px 0">Presença da experimental (troca de tags) <small style="font-weight:400;color:var(--cinza)">— 1x/semana, cruza a presença no EVO e atualiza as tags</small></summary>
+      <div class="card">
+        <p class="quando" style="margin:0 0 12px">Toda semana (no dia/horário definidos em <b>WhatsApp → Horários</b>, chave "Presença da experimental"), o robô lê a <b>presença/falta</b> das aulas experimentais no <b>EVO</b> e troca as tags de quem estava com a tag de <b>agendou</b>: quem <b>compareceu</b> vira "fez aula" e quem <b>faltou</b> vira "encerrado sem presença". As outras tags (manuais) não são tocadas.</p>
+        <form method="POST" action="/sofia/comparecimento">
+          <label class="chk" style="margin:0 0 12px"><input type="checkbox" name="on" value="1"${cmp.on ? ' checked' : ''}> Ligado</label>
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Tag de "agendou" (origem)</label><select name="tagAgendou">${cmpSel(cmp.tagAgendou)}</select></div>
+            <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Compareceu → vira</label><select name="tagCompareceu">${cmpSel(cmp.tagCompareceu)}</select></div>
+            <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Faltou → vira</label><select name="tagFaltou">${cmpSel(cmp.tagFaltou)}</select></div>
+          </div>
+          <label style="margin:14px 0 4px">Número que recebe o relatório <small style="font-weight:400;color:var(--cinza)">(opcional — resumo do que foi trocado)</small></label>
+          <input type="tel" name="numeroRelatorio" value="${esc(cmp.numeroRelatorio)}" placeholder="Ex.: 62998887777" style="max-width:220px">
+          <div class="acts" style="margin-top:14px"><button type="submit" class="save">Salvar</button></div>
+        </form>
+        <p class="quando" style="margin:12px 0 0">🧪 Para <b>testar antes</b> sem alterar nada, rode na VPS: <code>cd ~/SF-Chat_Experimental-Mensagens/Experimental &amp;&amp; node src/comparecimento.js --dry</code> (só mostra o que faria). Trocar <code>--dry</code> por <code>--run</code> executa de verdade.</p>
       </div>
     </details>
 
@@ -3773,6 +3801,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. A SoFIA vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
     else if (/(?:^|&)okc=criada/.test(q)) aviso = '📣 Campanha criada! A IA está gerando as variações. Quando ficar “pronta”, clique em ▶️ Iniciar para começar o envio.';
     else if (/(?:^|&)okah=1/.test(q)) aviso = 'Aviso "precisa de humano" salvo.';
+    else if (/(?:^|&)okcmp=1/.test(q)) aviso = 'Config de presença (troca de tags) salva.';
     else if (/(?:^|&)okc=ok/.test(q)) aviso = '✔️ Feito.';
     else if (/(?:^|&)errc=/.test(q)) { aviso = decodeURIComponent((q.match(/errc=([^&]*)/) || [])[1] || 'Erro na campanha.'); erro = true; }
     const sp = new URLSearchParams(q);
@@ -4120,6 +4149,14 @@ const server = http.createServer((req, res) => {
       let novo = true;
       try { novo = !sofia.estadoAtivo(); sofia.gravarEstado(novo); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?' + (novo ? 'on=1' : 'off=1') }); res.end();
+    });
+  }
+  // Salvar config do job de presença/comparecimento (troca de tags).
+  if (req.method === 'POST' && url === '/sofia/comparecimento') {
+    return lerCorpo(req, 1e4, corpo => {
+      const p = new URLSearchParams(corpo);
+      try { gravarCompCfg({ on: p.get('on') === '1', tagAgendou: p.get('tagAgendou') || '', tagCompareceu: p.get('tagCompareceu') || '', tagFaltou: p.get('tagFaltou') || '', numeroRelatorio: p.get('numeroRelatorio') || '' }); } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?okcmp=1' }); res.end();
     });
   }
   // Salvar config do aviso "precisa de humano".

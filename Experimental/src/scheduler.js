@@ -758,6 +758,25 @@ async function main() {
     console.log('   → Lembrete "é amanhã" no grupo Circuito Slim');
   }
 
+  // Schedule: sábado 16:00 (editável em Horários) → cruza a PRESENÇA da semana
+  // no EVO e troca as tags (Agendou → Fez aula / Sem presença). Usa o EVO, então
+  // respeita o mutex jobRunning. Só age se estiver ligado na config.
+  if (config.schedule.comparecimento) {
+    cron.schedule(config.schedule.comparecimento, async () => {
+      log('⏰ Cron disparado: Presença da experimental (troca de tags)');
+      if (jobRunning) { log('⚠️  Comparecimento ignorado — outro job em execução'); return; }
+      jobRunning = true;
+      atividade.setContexto('Presença da experimental (tags)');
+      try {
+        const comp = require('./comparecimento');
+        await comp.rodarAgendado((num, txt) => wa.sendTexto(num, txt, 'Relatório de presença'));
+        log('✅ Comparecimento processado');
+      } catch (err) { logError('Comparecimento', err); }
+      finally { jobRunning = false; }
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job PRESENÇA (troca de tags) agendado: ${config.schedule.comparecimento} (sáb 16:00)`);
+  }
+
   // Schedule: 10:45 (manhã) e 15:45 (tarde) → dispara os ENVIOS AGENDADOS no
   // painel para o dia+turno atual (texto ou foto com legenda).
   function agendarEnvios(turno, label) {
