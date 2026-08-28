@@ -245,12 +245,45 @@ async function telefoneDoLid(msg: any, jid: string, lid: string): Promise<string
 //   • telefone → telefone REAL para o AGENDAMENTO (ou "" quando não dá pra achar;
 //                NUNCA o LID, pra não mandar lixo ao EVO).
 const telRealCache = new Map<string, string>();
+
+// ── Blindagem LID (preparação para o WhatsApp esconder o telefone) ───────────
+// APRENDE o telefone de cada LID assim que descobre e PERSISTE. Assim, se uma
+// mensagem futura vier só com o LID (telefoneDoLid falhar naquela hora), a gente
+// ainda reconhece o mesmo contato pelo que já aprendeu. Também conta os LIDs que
+// NUNCA resolveram um telefone — é o termômetro que aparece no painel → Saúde:
+// se esse número começar a subir, é sinal de que a migração está nos afetando.
+const LID_MAP_FILE = path.join(DIR, "sofia-lid-map.json");     // { "<lid>": { tel, em } }
+const LID_STATS_FILE = path.join(DIR, "sofia-lid-stats.json"); // { mapeados, semTel, ultimoSemTelEm, em }
+const lidMap = new Map<string, string>();  // lid → telefone real aprendido
+const lidSemTel = new Set<string>();       // lids vistos que nunca deram telefone
+let ultimoSemTelEm = 0;
+try { const o = JSON.parse(fs.readFileSync(LID_MAP_FILE, "utf8")); if (o && typeof o === "object") for (const k of Object.keys(o)) { const t = o[k] && (o[k].tel || o[k]); if (t) lidMap.set(k, String(t)); } } catch {}
+try { const s = JSON.parse(fs.readFileSync(LID_STATS_FILE, "utf8")); if (s && Array.isArray(s.semTelLista)) for (const l of s.semTelLista) lidSemTel.add(String(l)); if (s && s.ultimoSemTelEm) ultimoSemTelEm = +s.ultimoSemTelEm || 0; } catch {}
+let lidSalvarTimer: ReturnType<typeof setTimeout> | null = null;
+function persistirLid() {
+  if (lidSalvarTimer) return;
+  lidSalvarTimer = setTimeout(() => {
+    lidSalvarTimer = null;
+    try { const m: Record<string, { tel: string; em: number }> = {}; for (const [k, v] of lidMap) m[k] = { tel: v, em: Date.now() }; fs.writeFileSync(LID_MAP_FILE, JSON.stringify(m)); } catch {}
+    try { fs.writeFileSync(LID_STATS_FILE, JSON.stringify({ mapeados: lidMap.size, semTel: lidSemTel.size, ultimoSemTelEm, semTelLista: [...lidSemTel].slice(-500), em: Date.now() })); } catch {}
+  }, 2000);
+}
+function lembrarLid(lid: string, tel: string) { if (!lid || !tel) return; const mudou = lidMap.get(lid) !== tel || lidSemTel.has(lid); lidMap.set(lid, tel); lidSemTel.delete(lid); if (mudou) persistirLid(); }
+function telLembradoDoLid(lid: string): string { return lidMap.get(lid) || ""; }
+function marcarLidSemTel(lid: string) { if (!lid || lidMap.has(lid) || lidSemTel.has(lid)) return; lidSemTel.add(lid); ultimoSemTelEm = Date.now(); persistirLid(); }
+
 async function resolverTel(msg: any): Promise<{ chave: string; telefone: string }> {
   const jid: string = msg.from || msg.to || "";
   if (telCache.has(jid)) return { chave: telCache.get(jid) as string, telefone: telRealCache.get(jid) || "" };
   let telefone = "";
-  if (jid.endsWith("@lid")) telefone = await telefoneDoLid(msg, jid, jidParaTel(jid)); // "" se não achar
-  else telefone = jidParaTel(jid); // @c.us: o jid já é o telefone
+  if (jid.endsWith("@lid")) {
+    const lid = jidParaTel(jid);
+    telefone = await telefoneDoLid(msg, jid, lid); // "" se não achar agora
+    if (telefone) lembrarLid(lid, telefone);       // aprendeu → guarda p/ sempre
+    else { telefone = telLembradoDoLid(lid); if (!telefone) marcarLidSemTel(lid); } // tenta o que já sabia; senão, conta no termômetro
+  } else {
+    telefone = jidParaTel(jid); // @c.us: o jid já é o telefone
+  }
   const chave = telefone || jidParaTel(jid); // estável: telefone real, senão o LID
   telCache.set(jid, chave);
   telRealCache.set(jid, telefone);

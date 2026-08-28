@@ -45,6 +45,7 @@ const F = {
   campanhas: path.join(DIR, 'campanhas.json'), // estado das campanhas — publicado pelo listener (painel só lê)
   campanhasInbox: path.join(DIR, 'campanhas-inbox.jsonl'), // pedidos do painel → listener (criar/controle/excluir/rascunho)
   campanhaRascunhos: path.join(DIR, 'campanha-rascunhos.json'), // frases geradas por instrução — listener escreve, painel lê
+  lidStats: path.join(DIR, 'sofia-lid-stats.json'), // termômetro LID×telefone — listener escreve, painel (Saúde) lê
   custo: path.join(DIR, 'sofia-custo.jsonl'), // custo/tokens por turno — sofia.ts escreve, painel soma
   custoLimite: path.join(DIR, 'sofia-custo-limite.txt'), // alerta de gasto diário (US$; 0 = sem alerta) — painel
   avisoHumano: path.join(DIR, 'sofia-avisohumano.json'), // avisar nº quando a aluna pedir humano — painel escreve, sofia.ts lê
@@ -434,6 +435,13 @@ function opCampanha(obj) {
 // Lê o rascunho de campanha gerado pela SoFIA (por id). { pronto:false } enquanto
 // a SoFIA ainda está gerando; { pronto:true, texto } quando termina (texto vazio
 // = a geração falhou, o painel avisa).
+// Termômetro da migração LID do WhatsApp (escrito pelo listener). mapeados =
+// quantos LIDs já tiveram o telefone descoberto; semTel = LIDs que nunca deram
+// telefone (se crescer, é sinal de que o WhatsApp começou a esconder o número).
+function lerLidStats() {
+  try { const o = JSON.parse(ler(F.lidStats)); if (!o || typeof o !== 'object') return null; return { mapeados: +o.mapeados || 0, semTel: +o.semTel || 0, ultimoSemTelEm: +o.ultimoSemTelEm || 0, em: +o.em || 0 }; }
+  catch (_) { return null; }
+}
 function lerRascunhoCampanha(id) {
   if (!id) return { pronto: false };
   try {
@@ -706,5 +714,5 @@ module.exports = {
   lerCusto, lerCustoPorConversa, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
   conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
-  lerCampanhas, opCampanha, lerRascunhoCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
+  lerCampanhas, opCampanha, lerRascunhoCampanha, lerLidStats, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

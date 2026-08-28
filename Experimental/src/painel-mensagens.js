@@ -3703,10 +3703,24 @@ function paginaSaude(list) {
     '<span class="sd-muted">Obs.: o status do servidor do Render é consultado no painel do Render, não aqui.</span>',
   ]);
 
+  // Termômetro da migração LID do WhatsApp (número × LID). Fica verde enquanto
+  // todo LID atendido tem o telefone recuperável; amarelo se aparecerem LIDs sem
+  // telefone (sinal de que o WhatsApp começou a esconder o número).
+  let lidS = null; try { lidS = sofia.lerLidStats(); } catch (_) {}
+  const corLid = (lidS && lidS.semTel > 0) ? 'warn' : 'ok';
+  const lidId = (lidS && lidS.ultimoSemTelEm) ? fmtIdadeSaude(lidS.ultimoSemTelEm) : null;
+  const cardLid = card('Identidade WhatsApp (número × LID)', corLid, corLid === 'warn' ? '🟡 Atenção' : '🟢 OK', [
+    lidS ? `📇 Contatos com telefone <b>recuperado a partir do LID</b>: <b>${lidS.mapeados}</b>.` : '<span class="sd-muted">ainda sem dados — a SoFIA registra conforme atende.</span>',
+    lidS && lidS.semTel > 0
+      ? `⚠️ LIDs <b>sem telefone recuperável</b>: <b>${lidS.semTel}</b>${lidId ? ` <span class="sd-muted">(último ${lidId.txt})</span>` : ''}. Se este número <b>crescer</b>, é sinal de que o WhatsApp começou a esconder o telefone no 1‑a‑1.`
+      : (lidS ? '✅ Todo LID atendido teve o telefone recuperado.' : ''),
+    '<span class="sd-muted">A SoFIA já lê e envia com o formato LID; aqui é só o termômetro dessa transição.</span>',
+  ]);
+
   const corpo = `<div class="wrap">
     <div class="sec-t">Saúde do sistema</div>
     <p class="quando" style="margin:0 0 14px">Estado de cada parte da automação num lugar só. Atualiza a cada visita a esta página.</p>
-    <div class="sd-grid">${cardExp}${cardSof}${cardIg}${cardForm}</div>
+    <div class="sd-grid">${cardExp}${cardSof}${cardIg}${cardForm}${cardLid}</div>
     <p class="quando" style="text-align:center;margin-top:14px"><a href="/saude" style="color:var(--teal-esc);font-weight:600;text-decoration:none">↻ Atualizar</a></p>
   </div>`;
   return chrome({ tab: 'Saúde', h1: 'Saúde', p: 'Estado de robô, SoFIA, painel, Instagram e formulário.' }, 'saude', corpo);
