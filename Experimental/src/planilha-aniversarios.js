@@ -134,7 +134,8 @@ async function buscarAlunasAniversario() {
     //    dropdown aberto (o menu lateral tem um segmento chamado "Todos" que
     //    NÃO pode ser clicado por engano; era isso que estourava para 306).
     console.log('🗓️  Selecionando "Mês de aniversário: Todos"...');
-    await selecionarMesTodos(page);
+    try { await selecionarMesTodos(page); }
+    catch (e) { console.log(`   ⚠️  Filtro de mês falhou (${e && e.message ? e.message : e}) — seguindo com o padrão.`); }
     await sleep(4000);
 
     // 4. LÊ A TABELA DO DOM em todas as páginas. A tabela reflete EXATAMENTE a
@@ -217,6 +218,9 @@ async function buscarAlunasAniversario() {
  */
 async function selecionarMesTodos(page) {
   // Componentes Angular ignoram .click() — usamos clique por COORDENADA (mouse).
+  // .catch(...) engole erros transitórios do Puppeteer (ex.: "detached Frame",
+  // quando o EVO re-renderiza a página no meio da leitura). Vira "não achei" e o
+  // loop de retry tenta de novo — em vez de derrubar a planilha inteira.
   const acharChip = () => page.evaluate(() => {
     const els = document.querySelectorAll('span, div, button, [class*="chip"], [class*="filter"]');
     let best = null;
@@ -231,12 +235,12 @@ async function selecionarMesTodos(page) {
       }
     }
     return best;
-  });
+  }).catch(() => null);
   const overlayAberto = () => page.evaluate(() => {
     const o = document.querySelector('.cdk-overlay-container');
     if (!o || o.offsetHeight === 0) return false;
     return /janeiro|fevereiro|aplicar/i.test(o.textContent || '');
-  });
+  }).catch(() => false);
 
   let aberto = false;
   for (let t = 1; t <= 4 && !aberto; t++) {
