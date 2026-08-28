@@ -846,6 +846,40 @@ Mensagem:
   return [base]; // fallback: usa o texto original
 }
 
+// Gera UMA mensagem de campanha pronta a partir de uma INSTRUÇÃO do painel
+// (ex.: "campanha promocional enfatizando o nosso treino"). A recepção revisa e
+// edita antes de criar a campanha — este é só o rascunho. Usa o modelo de
+// conversa (escrita melhor). Devolve o texto, ou "" em qualquer falha (o painel
+// avisa e mantém o campo para escrita manual).
+export async function gerarTextoCampanha(instrucao: string): Promise<string> {
+  const pedido = String(instrucao || "").trim();
+  if (!pedido) return "";
+  const instr = `Você escreve mensagens de WhatsApp para as alunas e leads de um Studio de treinamento para mulheres (SlimFit — Setor Bueno, Goiânia; público adulto e de alto padrão; comunicação acolhedora e assertiva).
+Escreva UMA mensagem de campanha (disparo em massa) a partir do PEDIDO abaixo. Regras:
+- Português do Brasil, tom amigável e humano de WhatsApp — acolhedor e direto, nada de linguagem corporativa.
+- Curta: 2 a 5 linhas curtas. Pode usar 1–2 emojis e *negrito* do WhatsApp com moderação.
+- Use o marcador literal {nome} UMA vez, logo no começo (ex.: "Oi, {nome}!") — ele é trocado depois pelo nome da pessoa.
+- NÃO invente preço, data, desconto ou promoção que não esteja no pedido. Se o pedido não trouxer números, faça um convite sem inventar valores.
+- Responda APENAS com o texto da mensagem: sem aspas em volta, sem markdown de bloco, sem explicação.
+
+Pedido:
+"""${pedido}"""`;
+  try {
+    const resp = await comRetry(() =>
+      anthropic.messages.create({
+        model: MODELO_CONVERSA,
+        max_tokens: 700,
+        messages: [{ role: "user", content: instr }],
+      }),
+    );
+    const txt = resp.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.TextBlock).text).join("").trim();
+    return txt.replace(/^"+|"+$/g, "").trim();
+  } catch (e: any) {
+    console.log("⚠️  gerarTextoCampanha falhou:", e?.message ?? e);
+    return "";
+  }
+}
+
 // Resumo curto e natural de UMA sessão de atendimento (para a aba Contatos →
 // Interações do painel). Recebe as linhas da conversa e devolve 2–4 frases em
 // português. Usado pelo listener quando uma sessão encerra. Best-effort: em

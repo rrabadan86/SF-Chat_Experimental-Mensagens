@@ -43,7 +43,8 @@ const F = {
   followup: path.join(DIR, 'sofia-followup.jsonl'), // fila de follow-ups a gerar+enviar — painel escreve, listener consome
   encerradas: path.join(DIR, 'sofia-encerradas.json'), // conversas encerradas à mão (cadeado) — painel escreve; sofia.ts/listener leem
   campanhas: path.join(DIR, 'campanhas.json'), // estado das campanhas — publicado pelo listener (painel só lê)
-  campanhasInbox: path.join(DIR, 'campanhas-inbox.jsonl'), // pedidos do painel → listener (criar/controle/excluir)
+  campanhasInbox: path.join(DIR, 'campanhas-inbox.jsonl'), // pedidos do painel → listener (criar/controle/excluir/rascunho)
+  campanhaRascunhos: path.join(DIR, 'campanha-rascunhos.json'), // frases geradas por instrução — listener escreve, painel lê
   custo: path.join(DIR, 'sofia-custo.jsonl'), // custo/tokens por turno — sofia.ts escreve, painel soma
   custoLimite: path.join(DIR, 'sofia-custo-limite.txt'), // alerta de gasto diário (US$; 0 = sem alerta) — painel
   avisoHumano: path.join(DIR, 'sofia-avisohumano.json'), // avisar nº quando a aluna pedir humano — painel escreve, sofia.ts lê
@@ -430,6 +431,17 @@ function opCampanha(obj) {
   const linha = JSON.stringify(Object.assign({ em: Date.now() }, obj)) + '\n';
   fs.appendFileSync(F.campanhasInbox, linha, 'utf8');
 }
+// Lê o rascunho de campanha gerado pela SoFIA (por id). { pronto:false } enquanto
+// a SoFIA ainda está gerando; { pronto:true, texto } quando termina (texto vazio
+// = a geração falhou, o painel avisa).
+function lerRascunhoCampanha(id) {
+  if (!id) return { pronto: false };
+  try {
+    const o = JSON.parse(ler(F.campanhaRascunhos));
+    const r = o && typeof o === 'object' ? o[id] : null;
+    return r ? { pronto: true, texto: String(r.texto || '') } : { pronto: false };
+  } catch (_) { return { pronto: false }; }
+}
 // Salva a foto de uma campanha (dataURL base64) em ChatBot/campanha-fotos/<id>.<ext>
 // e devolve o caminho absoluto (o listener, na mesma máquina, envia a partir dele).
 function salvarFotoCampanha(id, dataUrl) {
@@ -690,5 +702,5 @@ module.exports = {
   lerCusto, lerCustoPorConversa, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
   conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
-  lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
+  lerCampanhas, opCampanha, lerRascunhoCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

@@ -23,7 +23,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
-import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, deveResponder, janelaSessaoMs, resumirConversa, gerarFollowup, classificarIntencaoTags } from "./sofia";
+import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirConversa, gerarFollowup, classificarIntencaoTags } from "./sofia";
 
 // Pasta dos arquivos da Sofia. Por padrão, a pasta de trabalho (comportamento
 // atual). Se SOFIA_DIR estiver definida, usa ela — permite guardar prompt/estado
@@ -1022,6 +1022,19 @@ type Campanha = {
 const CAMP_MAX_FALHAS_SEGUIDAS = parseInt(process.env.SOFIA_CAMP_MAX_FALHAS || "5", 10);
 const CAMP_FILE = path.join(DIR, "campanhas.json");
 const CAMP_INBOX = path.join(DIR, "campanhas-inbox.jsonl");
+// Rascunhos de campanha gerados a partir de uma instrução (painel → SoFIA). Mapa
+// { <id>: { texto, em } }; o painel escreve o pedido no inbox e lê o resultado
+// daqui. Guardamos só os mais recentes para não crescer sem fim.
+const CAMP_RASCUNHOS = path.join(DIR, "campanha-rascunhos.json");
+function escreverRascunho(id: string, texto: string) {
+  let m: Record<string, { texto: string; em: number }> = {};
+  try { const o = JSON.parse(fs.readFileSync(CAMP_RASCUNHOS, "utf8")); if (o && typeof o === "object") m = o; } catch {}
+  m[id] = { texto, em: Date.now() };
+  const recentes = Object.keys(m).sort((a, b) => (m[b].em - m[a].em)).slice(0, 20);
+  const novo: Record<string, { texto: string; em: number }> = {};
+  for (const k of recentes) novo[k] = m[k];
+  try { fs.writeFileSync(CAMP_RASCUNHOS, JSON.stringify(novo), "utf8"); } catch {}
+}
 let campanhas: Campanha[] = [];
 let campSalvarTimer: ReturnType<typeof setTimeout> | null = null;
 function carregarCampanhas() {
@@ -1097,6 +1110,14 @@ async function processarCampInbox() {
         }
       } else if (op.op === "excluir" && op.id) {
         campanhas = campanhas.filter((x) => x.id !== String(op.id)); agendarSalvarCampanhas();
+      } else if (op.op === "rascunho" && op.id) {
+        // Escrever uma frase de campanha a partir da instrução do painel. O painel
+        // faz poll do resultado (campanha-rascunhos.json) até ficar pronto.
+        const instrucao = String(op.instrucao || "");
+        log(`gerando frase de campanha (rascunho ${op.id})…`);
+        gerarTextoCampanha(instrucao)
+          .then((t) => { escreverRascunho(String(op.id), t || ""); log(`rascunho ${op.id} pronto (${(t || "").length} caracteres).`); })
+          .catch((e: any) => { escreverRascunho(String(op.id), ""); log(`rascunho ${op.id} falhou: ${e?.message || e}`); });
       } else if (op.op === "teste" && op.telefone) {
         // Enviar teste: manda a mensagem (com foto) para um número seu, na hora.
         const texto = aplicarNome(String(op.texto || ""), op.nome || "Maria");

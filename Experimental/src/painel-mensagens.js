@@ -2690,6 +2690,15 @@ function paginaSofiaCampanhas(aviso, erro) {
             <div class="cpf-field"><label>Enviar para a tag</label><select name="tag" required style="text-overflow:ellipsis">${opcoesTag}</select></div>
           </div>
           <div class="cpf-field" style="margin-top:14px">
+            <label>✨ Deixe a SoFIA escrever <span class="sub">— diga o que você quer e ela cria a frase para você revisar</span></label>
+            <textarea id="cpInstr" rows="2" placeholder="Ex.: quero uma campanha promocional enfatizando o nosso treino — uma excelente oportunidade para vivenciar o SlimFit!"></textarea>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px">
+              <button type="button" id="cpGerarBtn" class="reset" onclick="gerarFraseCampanha()" style="padding:9px 16px;flex:none">✨ Gerar frase</button>
+              <span id="cpGerarMsg" class="quando" style="margin:0"></span>
+            </div>
+            <p class="quando" style="margin:8px 0 0">A frase gerada cai no campo abaixo para você <b>ajustar antes de criar</b>. Depois, a IA ainda cria ~10 variações naturais dela no envio.</p>
+          </div>
+          <div class="cpf-field" style="margin-top:14px">
             <label>Mensagem base <span class="sub">— a IA cria ~10 variações naturais a partir dela</span></label>
             <textarea name="textoBase" rows="4" placeholder="Escreva como você mandaria para uma aluna…  Use {nome} para personalizar (ex.: Oi, {nome}!)" required></textarea>
             <p class="quando" style="margin:6px 0 0">💡 <b>{nome}</b> vira o primeiro nome do contato. Quem não tem nome salvo recebe a versão sem o nome.</p>
@@ -2756,6 +2765,32 @@ function paginaSofiaCampanhas(aviso, erro) {
           document.addEventListener('DOMContentLoaded',estCamp);
           var _st=selTagEl(); if(_st) _st.addEventListener('change',estCamp);
           function prevFoto(){ var f=document.getElementById('cpFoto').files[0]; var box=document.getElementById('cpFotoPrev'); if(!f){box.style.display='none';return;} var rd=new FileReader(); rd.onload=function(){ document.getElementById('cpFotoImg').src=rd.result; box.style.display='block'; }; rd.readAsDataURL(f); }
+          var _gerando=false;
+          function gerarFraseCampanha(){
+            if(_gerando) return;
+            var instr=(document.getElementById('cpInstr').value||'').trim();
+            var msg=document.getElementById('cpGerarMsg'); var btn=document.getElementById('cpGerarBtn');
+            if(!instr){ if(msg){msg.className='quando';msg.style.margin='0';msg.textContent='Escreva o que você quer que a SoFIA fale.';} return; }
+            _gerando=true; if(btn){btn.disabled=true;} if(msg){msg.textContent='✨ gerando… (uns segundos)';}
+            fetch('/sofia/campanhas/rascunho',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instrucao:instr})})
+              .then(function(r){return r.json();}).then(function(j){
+                if(!j.ok){ throw new Error(j.erro||'falha'); }
+                var tentativas=0;
+                function poll(){
+                  tentativas++;
+                  if(tentativas>40){ fim('❌ demorou demais — tente de novo.'); return; }
+                  fetch('/sofia/campanhas/rascunho?id='+encodeURIComponent(j.id),{cache:'no-store'})
+                    .then(function(r){return r.json();}).then(function(rr){
+                      if(rr && rr.pronto){
+                        if(rr.texto){ document.querySelector('textarea[name=textoBase]').value=rr.texto; fim('✓ frase gerada — revise e ajuste abaixo.'); }
+                        else { fim('❌ a SoFIA não conseguiu gerar. Tente reescrever o pedido.'); }
+                      } else { setTimeout(poll,1200); }
+                    }).catch(function(){ setTimeout(poll,1500); });
+                }
+                setTimeout(poll,1200);
+              }).catch(function(e){ fim('❌ '+((e&&e.message)||'erro de rede')); });
+            function fim(t){ _gerando=false; if(btn){btn.disabled=false;} if(msg){msg.textContent=t;} }
+          }
           function testarCampanha(){
             var tel=document.getElementById('cpTesteTel').value.replace(/\\D/g,''); var msg=document.getElementById('cpTesteMsg');
             var texto=document.querySelector('textarea[name=textoBase]').value.trim();
@@ -4274,6 +4309,26 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ ok: true }));
       } catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
+  }
+  // Pedir à SoFIA uma frase de campanha a partir de uma INSTRUÇÃO (assíncrono):
+  // enfileira o pedido; o painel faz poll de /sofia/campanhas/rascunho?id=… .
+  if (req.method === 'POST' && url === '/sofia/campanhas/rascunho') {
+    return lerCorpo(req, 1e5, corpo => {
+      let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      const instrucao = String(d.instrucao || '').trim();
+      if (!instrucao) return res.end(JSON.stringify({ ok: false, erro: 'Escreva a instrução do que você quer.' }));
+      const id = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      try { sofia.opCampanha({ op: 'rascunho', id, instrucao }); } catch (e) { return res.end(JSON.stringify({ ok: false, erro: 'Falha ao enviar o pedido à SoFIA.' })); }
+      res.end(JSON.stringify({ ok: true, id }));
+    });
+  }
+  // Resultado do rascunho (poll do painel). { pronto:false } enquanto gera.
+  if (req.method === 'GET' && url === '/sofia/campanhas/rascunho') {
+    const id = (new URLSearchParams(req.url.split('?')[1] || '')).get('id') || '';
+    let r = { pronto: false }; try { r = sofia.lerRascunhoCampanha(id); } catch (_) {}
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify(r));
   }
   // Fragmento HTML só da lista de campanhas — o painel busca a cada poucos segundos
   // para atualizar o progresso sem recarregar a página inteira.
