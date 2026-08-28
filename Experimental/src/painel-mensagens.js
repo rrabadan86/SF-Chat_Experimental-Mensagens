@@ -4492,7 +4492,11 @@ const server = http.createServer((req, res) => {
       const ativo = (typeof d.ativo === 'undefined') ? true : !!d.ativo; // true = encerrar (padrão) · false = reabrir
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
-      if (ativo) { try { sofia.setAtencao(chave, false); } catch (_) {} } // encerrou → tira o vermelho
+      if (ativo) {
+        try { sofia.setAtencao(chave, false); } catch (_) {}                 // encerrou → tira o vermelho
+        try { sofia.setControleHumano(chave, false); } catch (_) {}          // encerrou → devolve à SoFIA (não fica "sob atendimento humano")
+        try { const autos = contatos.tagsPorGatilho('humano'); for (const a of autos) { try { contatos.removerTag(chave, a.tag); } catch (_) {} } } catch (_) {} // e tira a tag de atendimento humano
+      }
       try { sofia.setEncerrada(chave, ativo, quem); return res.end(JSON.stringify({ ok: true })); }
       catch (e) { return res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
