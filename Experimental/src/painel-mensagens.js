@@ -1807,6 +1807,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   var MEU_USUARIO = ${JSON.stringify(String(meuUsuario || ''))}; // quem está logado (atribuição + trava de atendimento)
   var LOCK_MIN = ${Math.max(1, parseInt(lockMinIni, 10) || 60)}; // minutos que uma conversa assumida fica travada p/ outros
   var LOCK_MS = LOCK_MIN*60000;
+  var SESSAO_MS = ${Math.round(sessaoHoras * 3600 * 1000)};
   var QUIETO_MS = ${Math.round(quietoCfg.horas * 3600 * 1000)}, QUIETO_MAX_MS = ${Math.round(quietoCfg.dias * 24 * 3600 * 1000)};
   function encerrada(c){ return !!(c && (c.enc || (c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS)))); }
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
