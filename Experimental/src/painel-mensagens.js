@@ -3714,6 +3714,18 @@ function paginaSofiaCusto(aviso, erro, params) {
   const convBloco = convRows
     ? convRows + (convNota.length ? `<p class="quando" style="margin:12px 0 0">${convNota.join(' ')}</p>` : '')
     : `<div class="vazio">Nenhuma conversa com gasto por aluna neste período ainda.${porConv.semTel > 0.005 ? ` (Há ${brl(porConv.semTel)} de conversas anteriores à ativação, sem separar por aluna.)` : ''}</div>`;
+  // Gasto por TIPO (tudo que gasta token: conversas, gerador de frases, resumos,
+  // tags por intenção, follow-up).
+  let porTipo = []; try { porTipo = sofia.lerCustoPorTipo(ini, fim || hojeStr); } catch (_) {}
+  const rotTipo = { conversa: '💬 Conversas', gerador: '✨ Gerador de frases', resumo: '📝 Resumos de interações', tags: '🏷️ Tags por intenção', followup: '🔁 Follow-up' };
+  const tipoRows = porTipo.map(t => `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--linha)">
+      <div style="min-width:0"><b>${rotTipo[t.tipo] || esc(t.tipo)}</b> <small style="color:var(--faint)">· ${t.n}×</small></div>
+      <div style="display:flex;gap:14px;align-items:baseline;white-space:nowrap;font-variant-numeric:tabular-nums">
+        <span style="color:var(--faint);font-size:.8rem">${ktok(t.inTok + t.outTok)} tok</span>
+        <span style="white-space:nowrap"><b>${brl(t.usd)}</b> <small style="color:var(--faint);font-size:.72rem">${usd(t.usd)}</small></span></div></div>`).join('');
+  const tipoBloco = tipoRows
+    ? tipoRows + `<p class="quando" style="margin:12px 0 0">As <b>Conversas</b> usam o custo real da IA. O restante (gerador, resumos, tags, follow-up) é <b>estimado</b> por tokens × preço do modelo.</p>`
+    : '<div class="vazio">Sem uso de IA registrado no período.</div>';
   const segs = janelas.map(([v, l]) => `<a href="/sofia?view=custo&per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
   const limite = c.limite;
   const alerta = (limite > 0 && c.hoje.usd >= limite) ? `<div class="aviso err">⚠️ O gasto de <b>hoje</b> (${brl(c.hoje.usd)} · ${usd(c.hoje.usd)}) atingiu o limite de ${usd(limite)}.</div>` : '';
@@ -3741,6 +3753,8 @@ function paginaSofiaCusto(aviso, erro, params) {
     ${cotLinha}
     <div class="sec-t">Gasto por dia</div>
     <div class="card">${barras}</div>
+    <div class="sec-t">Gasto por tipo <small style="font-weight:600;color:var(--cinza)">(tudo que consome token)</small></div>
+    <div class="card">${tipoBloco}</div>
     <div class="sec-t">Gasto por conversa <small style="font-weight:600;color:var(--cinza)">(quanto a IA custou com cada aluna no período)</small></div>
     <div class="card">${convBloco}</div>
     <div class="sec-t">Alerta de gasto diário</div>
@@ -3752,7 +3766,7 @@ function paginaSofiaCusto(aviso, erro, params) {
       </form>
       <p class="quando" style="margin:10px 0 0">Mostra um aviso nesta tela quando o gasto do dia atingir o valor. Deixe <b>0</b> para não alertar.</p>
     </div>
-    <p class="quando" style="text-align:center">Valores calculados pela própria SDK da IA (custo real de cada conversa). As extrações internas (resumos) são pequenas e não entram nesta conta.</p>
+    <p class="quando" style="text-align:center">Agora inclui <b>tudo que consome token</b>: conversas, gerador de frases, resumos, tags por intenção e follow-up. As conversas usam o custo real da IA; o restante é estimado por tokens × preço do modelo.</p>
   </div>`;
   return chrome({ tab: 'Custo IA', h1: 'SoFIA', p: 'Custo da IA — gasto das conversas por período.' }, 'sofia', corpo);
 }

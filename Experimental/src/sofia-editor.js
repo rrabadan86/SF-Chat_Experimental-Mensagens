@@ -435,6 +435,27 @@ function opCampanha(obj) {
 // Lê o rascunho de campanha gerado pela SoFIA (por id). { pronto:false } enquanto
 // a SoFIA ainda está gerando; { pronto:true, texto } quando termina (texto vazio
 // = a geração falhou, o painel avisa).
+// Soma custo/tokens/nº agrupado por TIPO (conversa, gerador, resumo, tags,
+// followup) num intervalo de dias locais. Alimenta a quebra "por tipo" da tela
+// de Custo — mostra TUDO que gasta token, não só as conversas.
+function lerCustoPorTipo(ini, fim) {
+  let linhas = [];
+  try { linhas = fs.readFileSync(F.custo, 'utf8').split('\n'); } catch (_) { return []; }
+  if (linhas.length > 20000) linhas = linhas.slice(-20000);
+  const dentro = (dia) => (!ini || dia >= ini) && (!fim || dia <= fim);
+  const mapa = {};
+  for (const l of linhas) {
+    const s = l.trim(); if (!s) continue;
+    let o; try { o = JSON.parse(s); } catch (_) { continue; }
+    if (!dentro(_diaLocal(o.em))) continue;
+    const tipo = String(o.tipo || 'conversa');
+    if (!mapa[tipo]) mapa[tipo] = { tipo, usd: 0, inTok: 0, outTok: 0, n: 0 };
+    const m = mapa[tipo];
+    m.usd += o.usd || 0; m.inTok += o.inTok || 0; m.outTok += o.outTok || 0; m.n += 1;
+  }
+  return Object.values(mapa).sort((a, b) => b.usd - a.usd);
+}
+
 // Termômetro da migração LID do WhatsApp (escrito pelo listener). mapeados =
 // quantos LIDs já tiveram o telefone descoberto; semTel = LIDs que nunca deram
 // telefone (se crescer, é sinal de que o WhatsApp começou a esconder o número).
@@ -711,7 +732,7 @@ function gravarAvisoHumano(on, numero, palavras) {
 
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
-  lerCusto, lerCustoPorConversa, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
+  lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
   conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, lerRascunhoCampanha, lerLidStats, salvarFotoCampanha, DIR, ARQUIVOS: F,

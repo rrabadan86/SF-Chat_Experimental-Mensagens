@@ -102,6 +102,28 @@ function registrarCusto(rec: { tipo: string; model?: string; inTok?: number; out
     }) + "\n");
   } catch { /* best-effort */ }
 }
+// Preço aproximado por modelo (US$ por 1 MILHÃO de tokens: entrada / saída).
+// Usado para ESTIMAR o custo das chamadas fora da conversa (gerador, resumos,
+// tags, follow-up), que usam a API messages e não trazem total_cost_usd. Ajustável.
+const PRECO_MODELO: Record<string, { in: number; out: number }> = {
+  opus: { in: 15, out: 75 },
+  sonnet: { in: 3, out: 15 },
+  haiku: { in: 1, out: 5 },
+};
+function custoUSD(model: string, inTok: number, outTok: number): number {
+  const m = String(model || "").toLowerCase();
+  const p = m.includes("opus") ? PRECO_MODELO.opus : m.includes("haiku") ? PRECO_MODELO.haiku : PRECO_MODELO.sonnet;
+  return (inTok / 1e6) * p.in + (outTok / 1e6) * p.out;
+}
+// Registra o uso de uma chamada messages.create (usage → tokens + custo estimado).
+function registrarUso(tipo: string, model: string, resp: any) {
+  try {
+    const u: any = (resp && resp.usage) || {};
+    const inTok = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+    const outTok = u.output_tokens || 0;
+    registrarCusto({ tipo, model, inTok, outTok, usd: custoUSD(model, inTok, outTok) });
+  } catch { /* best-effort */ }
+}
 
 // Semeadura: prompt/extração/mídias são editáveis pelo painel e ficam FORA do Git
 // (sofia-*.txt no .gitignore). O conteúdo base mora nos sofia-*.default.txt
@@ -834,6 +856,7 @@ Mensagem:
         messages: [{ role: "user", content: instr }],
       }),
     );
+    registrarUso("gerador", MODELO_EXTRACAO, resp); // variações da campanha
     const txt = resp.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.TextBlock).text).join("").replace(/```json|```/g, "").trim();
     const arr = JSON.parse(txt);
     if (Array.isArray(arr)) {
@@ -872,6 +895,7 @@ Pedido:
         messages: [{ role: "user", content: instr }],
       }),
     );
+    registrarUso("gerador", MODELO_CONVERSA, resp); // frase da campanha (gerador)
     const txt = resp.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.TextBlock).text).join("").trim();
     return txt.replace(/^"+|"+$/g, "").trim();
   } catch (e: any) {
@@ -903,6 +927,7 @@ export async function resumirConversa(linhas: { autor: string; texto: string }[]
         messages: [{ role: "user", content: `Resuma este atendimento:\n\n${texto}` }],
       }),
     );
+    registrarUso("resumo", MODELO_EXTRACAO, resp); // resumo de interação (Contatos)
     return resp.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.TextBlock).text).join("").trim();
   } catch (e: any) {
     console.log("⚠️  resumirConversa falhou:", e?.message ?? e);
@@ -943,6 +968,7 @@ export async function classificarIntencaoTags(
         messages: [{ role: "user", content: `CONVERSA:\n${texto}\n\nTAGS:\n${catalogo}\n\nResponda apenas com o array JSON:` }],
       }),
     );
+    registrarUso("tags", MODELO_EXTRACAO, resp); // classificação de intenção (tags 'ia')
     const bruto = resp.content
       .filter((b) => b.type === "text")
       .map((b) => (b as Anthropic.TextBlock).text)
@@ -991,6 +1017,7 @@ export async function gerarFollowup(
         messages: [{ role: "user", content: `Conversa até aqui:\n\n${texto || "(sem histórico registrado)"}\n\nEscreva a mensagem de retomada:` }],
       }),
     );
+    registrarUso("followup", MODELO_CONVERSA, resp); // mensagem de retomada
     return resp.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.TextBlock).text).join("").trim();
   } catch (e: any) {
     console.log("⚠️  gerarFollowup falhou:", e?.message ?? e);
