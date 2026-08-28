@@ -466,6 +466,20 @@ function salvarInbox() {
   const corte = Date.now() - retencaoMs();
   const obj: Record<string, InboxConversa> = {};
   for (const [k, c] of inbox) { if (c.ultimaEm >= corte) obj[k] = c; else inbox.delete(k); }
+  // Trava de segurança contra perda de dados: NUNCA sobrescrever um arquivo de
+  // conversas populado com um vazio. Se o mapa em memória está vazio (ex.: boot
+  // falhou em carregar, ou path/cwd errado) mas o arquivo em disco tem conversas,
+  // NÃO grava — assim um reinício problemático não apaga o histórico do painel.
+  if (Object.keys(obj).length === 0) {
+    try {
+      const atual = fs.readFileSync(CONVERSAS_FILE, "utf8");
+      const antes = JSON.parse(atual);
+      if (antes && typeof antes === "object" && Object.keys(antes).length > 0) {
+        log("⚠️  salvarInbox abortado: inbox em memória vazia, mas o arquivo tem " + Object.keys(antes).length + " conversas — preservando o arquivo.");
+        return;
+      }
+    } catch { /* arquivo inexistente/ilegível → pode gravar (nada a perder) */ }
+  }
   try { fs.writeFileSync(CONVERSAS_FILE, JSON.stringify(obj), "utf8"); } catch {}
 }
 function agendarSalvarInbox() { if (inboxTimer) return; inboxTimer = setTimeout(() => { inboxTimer = null; salvarInbox(); }, 1500); }
