@@ -212,6 +212,7 @@ function normCfg(c) {
     instrucao,
     avisarWpp: wpp,
     remove,       // tags a remover do contato quando ESTA tag for aplicada
+    encerrar: !!c.encerrar, // ao aplicar esta tag, encerra a conversa (🔒) → follow-up não incomoda
     criada: !!c.criada,
   };
 }
@@ -222,7 +223,7 @@ function definirTagConfig(tag, cfg) {
   const n = normCfg(cfg);
   n.criada = !!(map[tag] && map[tag].criada) || !!(cfg && cfg.criada); // uma vez criada, permanece "conhecida"
   // Config totalmente vazia e não-criada → não guarda (evita lixo).
-  if (!n.gatilho && !n.avisarWpp && !n.palavras.length && !n.instrucao && !n.remove.length && !n.criada) delete map[tag];
+  if (!n.gatilho && !n.avisarWpp && !n.palavras.length && !n.instrucao && !n.remove.length && !n.encerrar && !n.criada) delete map[tag];
   else map[tag] = n;
   salvarTagsConfig(map);
   return true;

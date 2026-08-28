@@ -2225,6 +2225,10 @@ function paginaSofiaContatos(aviso, erro, params) {
         <input type="tel" id="tgWpp" placeholder="(62) 99999-9999" inputmode="tel">
         <p class="quando" style="margin:6px 0 0">Deixe em branco para só etiquetar, sem avisar ninguém.</p>
       </div>
+      <div id="tgEncBox" style="margin-top:16px;display:none">
+        <label class="chk" style="margin:0"><input type="checkbox" id="tgEncerrar"> 🔒 Encerrar a conversa ao aplicar esta tag</label>
+        <p class="quando" style="margin:6px 0 0">A SoFIA <b>fecha a conversa</b> (como o cadeado): o <b>follow-up para de incomodar</b> e, se a aluna voltar a escrever, a SoFIA <b>recomeça do zero</b>. Ideal para "Sem interesse", "Já treina em outro lugar" etc.</p>
+      </div>
       <div style="margin-top:16px">
         <label>Ao aplicar esta tag, remover <span class="sub" style="font-weight:400;color:var(--cinza)">— transição de funil (ex.: entrar em "Agendou" tira "Contato inicial")</span></label>
         <div id="tgRemove" class="ct-tglist" style="max-height:150px;overflow:auto"></div>
@@ -2255,7 +2259,7 @@ function paginaSofiaContatos(aviso, erro, params) {
   </div>
 <script>
   var CONTATOS = ${JSON.stringify(r.itens.map(c => ({ tel: c.tel, telFmt: fmtTelP(c.tel), nome: c.nome || '', tags: c.tags || [], ini: iniciais(c.nome, c.tel), cor: corAv(c.nome || c.tel), bloq: sofia.estaBloqueado(c.tel) })))};
-  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, wpp: c.avisarWpp, remove: c.remove }; }))};
+  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, wpp: c.avisarWpp, remove: c.remove, enc: c.encerrar }; }))};
   var TODAS_TAGS_LISTA = ${JSON.stringify(tags.map(t => t.tag))};
   var tgRemove = [];
   var tgSel=null;
@@ -2266,6 +2270,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     document.getElementById('tgPalavras').value=(c.palavras||[]).join(', ');
     document.getElementById('tgInstrucao').value=c.instrucao||'';
     document.getElementById('tgWpp').value=c.wpp||'';
+    document.getElementById('tgEncerrar').checked=!!c.enc;
     tgRemove=(c.remove||[]).slice();
     tgRenderRemove();
     tgSync();
@@ -2286,6 +2291,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     document.getElementById('tgPalBox').style.display=(g==='palavra')?'block':'none';
     document.getElementById('tgIaBox').style.display=(g==='ia')?'block':'none';
     document.getElementById('tgWppBox').style.display=g?'block':'none';
+    document.getElementById('tgEncBox').style.display=g?'block':'none';
   }
   function fecharTagCfg(){ document.getElementById('tgModal').style.display='none'; tgSel=null; }
   function salvarTagCfg(){
@@ -2295,7 +2301,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     if(g==='ia' && !document.getElementById('tgInstrucao').value.trim()){ alert('Descreva a intenção na instrução (ex.: quando a aluna perguntar sobre preço).'); return; }
     var b=document.getElementById('tgSalvar'); b.disabled=true; b.textContent='Salvando…';
     var pals=document.getElementById('tgPalavras').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
-    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, instrucao:document.getElementById('tgInstrucao').value, avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove };
+    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, instrucao:document.getElementById('tgInstrucao').value, avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove, encerrar:document.getElementById('tgEncerrar').checked };
     fetch('/sofia/contatos/tagcfg',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
       .then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.reload(); } else { b.disabled=false; b.textContent='Salvar'; alert('❌ '+(j.erro||'falha ao salvar')); } })
       .catch(function(){ b.disabled=false; b.textContent='Salvar'; alert('❌ erro de rede'); });
@@ -2610,6 +2616,10 @@ function paginaSofiaTags(aviso, erro) {
         <input type="tel" id="tgWpp" placeholder="(62) 99999-9999" inputmode="tel">
         <p class="quando" style="margin:6px 0 0">Deixe em branco para só etiquetar, sem avisar ninguém.</p>
       </div>
+      <div id="tgEncBox" style="margin-top:16px;display:none">
+        <label class="chk" style="margin:0"><input type="checkbox" id="tgEncerrar"> 🔒 Encerrar a conversa ao aplicar esta tag</label>
+        <p class="quando" style="margin:6px 0 0">A SoFIA <b>fecha a conversa</b> (como o cadeado): o <b>follow-up para de incomodar</b> e, se a aluna voltar a escrever, a SoFIA <b>recomeça do zero</b>. Ideal para "Sem interesse", "Já treina em outro lugar" etc.</p>
+      </div>
       <div style="margin-top:16px">
         <label>Ao aplicar esta tag, remover <span class="sub" style="font-weight:400;color:var(--cinza)">— transição de funil (ex.: entrar em "Agendou" tira "Contato inicial")</span></label>
         <div id="tgRemove" class="ct-tglist" style="max-height:150px;overflow:auto"></div>
@@ -2622,7 +2632,7 @@ function paginaSofiaTags(aviso, erro) {
   </div>
 <script>
   function esc(s){return String(s).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];});}
-  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, wpp: c.avisarWpp, remove: c.remove }; }))};
+  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, wpp: c.avisarWpp, remove: c.remove, enc: c.encerrar }; }))};
   var TODAS_TAGS_LISTA = ${JSON.stringify(tags.map(t => t.tag))};
   var tgRemove = [];
   var tgSel=null;
@@ -2633,6 +2643,7 @@ function paginaSofiaTags(aviso, erro) {
     document.getElementById('tgPalavras').value=(c.palavras||[]).join(', ');
     document.getElementById('tgInstrucao').value=c.instrucao||'';
     document.getElementById('tgWpp').value=c.wpp||'';
+    document.getElementById('tgEncerrar').checked=!!c.enc;
     tgRemove=(c.remove||[]).slice();
     tgRenderRemove();
     tgSync();
@@ -2653,6 +2664,7 @@ function paginaSofiaTags(aviso, erro) {
     document.getElementById('tgPalBox').style.display=(g==='palavra')?'block':'none';
     document.getElementById('tgIaBox').style.display=(g==='ia')?'block':'none';
     document.getElementById('tgWppBox').style.display=g?'block':'none';
+    document.getElementById('tgEncBox').style.display=g?'block':'none';
   }
   function fecharTagCfg(){ document.getElementById('tgModal').style.display='none'; tgSel=null; }
   function salvarTagCfg(){
@@ -2662,7 +2674,7 @@ function paginaSofiaTags(aviso, erro) {
     if(g==='ia' && !document.getElementById('tgInstrucao').value.trim()){ alert('Descreva a intenção na instrução (ex.: quando a aluna perguntar sobre preço).'); return; }
     var b=document.getElementById('tgSalvar'); b.disabled=true; b.textContent='Salvando…';
     var pals=document.getElementById('tgPalavras').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
-    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, instrucao:document.getElementById('tgInstrucao').value, avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove };
+    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, instrucao:document.getElementById('tgInstrucao').value, avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove, encerrar:document.getElementById('tgEncerrar').checked };
     fetch('/sofia/contatos/tagcfg',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
       .then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.reload(); } else { b.disabled=false; b.textContent='Salvar'; alert('❌ '+(j.erro||'falha ao salvar')); } })
       .catch(function(){ b.disabled=false; b.textContent='Salvar'; alert('❌ erro de rede'); });
@@ -4109,7 +4121,7 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e5, corpo => {
       try {
         const d = JSON.parse(corpo || '{}');
-        contatos.definirTagConfig(d.tag, { gatilho: d.gatilho || '', palavras: d.palavras || [], instrucao: d.instrucao || '', avisarWpp: d.avisarWpp || '', remove: d.remove || [] });
+        contatos.definirTagConfig(d.tag, { gatilho: d.gatilho || '', palavras: d.palavras || [], instrucao: d.instrucao || '', avisarWpp: d.avisarWpp || '', remove: d.remove || [], encerrar: !!d.encerrar });
         try { publicarRegras(); } catch (_) {} // atualiza o listener na hora
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true }));
       } catch (e) {
@@ -4633,6 +4645,10 @@ function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra }) {
   const tel = String(telefone || '').replace(/\D/g, '');
   if (!tel || !tag) return;
   try { contatos.adicionarTag(tel, nome || '', tag); } catch (_) {}
+  // Tag configurada para encerrar a conversa (ex.: "Sem interesse") → fecha (🔒)
+  // como o cadeado do painel: o follow-up para de incomodar e a SoFIA recomeça
+  // do zero se a aluna voltar a escrever. Usa a mesma chave que o feed/inbox usa.
+  try { if (contatos.tagConfig(tag).encerrar) { try { sofia.setAtencao(tel, false); } catch (_) {} sofia.setEncerrada(tel, true, 'SoFIA'); } } catch (_) {}
   if (avisarWpp) {
     const cab = AUTO_ROTULO[motivo] || '🔔 Automação da SoFIA';
     const texto = `${cab}\n👤 ${nome || '(sem nome)'}\n📱 ${fmtTelAviso(tel)}${extra ? `\n${extra}` : ''}\n🏷️ ${tag}`;
