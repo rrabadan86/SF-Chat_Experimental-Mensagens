@@ -456,9 +456,22 @@ async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
   // sem serialização (rápido) e sem varrer contato por contato (lento/inútil).
   // Código em STRING para o esbuild não injetar o helper __name (inexistente no
   // navegador).
-  const code = "(function(LIM){\n"
+  const code = "(async function(LIM){\n"
     + "  var W = window;\n"
+    + "  var PAGINAS = 8;\n"                       // até 8 páginas de histórico por conversa
+    + "  var fimBudget = Date.now() + 110000;\n"   // teto (~2 min) carregando — margem p/ não estourar o timeout do protocolo
     + "  function req(n){ try { return W.require ? W.require(n) : null; } catch(e){ return null; } }\n"
+    + "  function nModels(c){ try { return (c && c.msgs && c.msgs.getModelsArray) ? c.msgs.getModelsArray().length : ((c&&c.msgs&&c.msgs._models&&c.msgs._models.length)||0); } catch(e){ return 0; } }\n"
+    + "  async function carregarAntigas(c){\n"       // pede ao WhatsApp as mensagens antigas (várias páginas)
+    + "    try { if (typeof (c&&c.loadEarlierMsgs) !== 'function') return; } catch(e){ return; }\n"
+    + "    for (var p=0;p<PAGINAS;p++){\n"
+    + "      if (Date.now() >= fimBudget) break;\n"
+    + "      var antes = nModels(c);\n"
+    + "      if (antes >= LIM) break;\n"
+    + "      try { await c.loadEarlierMsgs(); } catch(e){ break; }\n"
+    + "      if (nModels(c) <= antes) break;\n"      // não veio nada novo → não há mais histórico
+    + "    }\n"
+    + "  }\n"
     + "  function getChatColl(){\n"
     + "    try { if (W.Store && W.Store.Chat && W.Store.Chat.getModelsArray) return W.Store.Chat; } catch(e){}\n"
     + "    var m = req('WAWebCollections');\n"
@@ -474,7 +487,7 @@ async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
     + "    return { erro:'Nao achei a colecao de conversas (Chat).', diag: diag };\n"
     + "  }\n"
     + "  var arr = Chat.getModelsArray();\n"
-    + "  var out=[];\n"
+    + "  var out=[]; var totMsgs=0;\n"
     + "  function digits(x){ return String(x||'').replace(/\\D/g,''); }\n"
     + "  function telDe(c, id){\n"
     + "    if (id.indexOf('@c.us')>=0) return id.split('@')[0];\n"
@@ -495,16 +508,18 @@ async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
     + "      if (id.indexOf('@c.us')>=0 || (tel !== id.split('@')[0])) comTel++; else soLid++;\n"
     + "      var name = (c && (c.formattedTitle || c.name || (c.contact && (c.contact.pushname||c.contact.name||c.contact.formattedName||c.contact.verifiedName)))) || '';\n"
     + "      var t = (c && (c.t||c.timestamp||0)) || 0;\n"
+    + "      try { await carregarAntigas(c); } catch(e){}\n"
     + "      var models=[]; try { models = (c.msgs && c.msgs.getModelsArray) ? c.msgs.getModelsArray() : ((c.msgs&&c.msgs._models)||[]); } catch(e){ models=[]; }\n"
     + "      var msgs = models.slice(-LIM).map(function(m){ return { fromMe: !!(m&&m.id&&m.id.fromMe), body: (m&&(m.body||m.caption||''))||'', t: (m&&(m.t||m.timestamp))||0 }; });\n"
+    + "      totMsgs += msgs.length;\n"
     + "      out.push({ id: tel, name: name, t: t, msgs: msgs });\n"
     + "    } catch(e){}\n"
     + "  }\n"
     + "  var tipos={}; for (var q=0;q<arr.length;q++){ try { var s=(arr[q]&&arr[q].id&&arr[q].id.server)||'?'; tipos[s]=(tipos[s]||0)+1; } catch(e){} }\n"
-    + "  return { chats: out, via:'store-raw', total: arr.length, tipos: tipos, comTel: comTel, soLid: soLid };\n"
+    + "  return { chats: out, via:'store-raw', total: arr.length, tipos: tipos, comTel: comTel, soLid: soLid, totMsgs: totMsgs };\n"
     + "})(" + LIM + ")";
   const r: any = await page.evaluate(code);
-  if (r && r.via) log(`import: leitura via ${r.via} — ${(r.chats && r.chats.length) || 0} conversas de ${r.total || 0} no store (com telefone: ${r.comTel || 0}, só LID: ${r.soLid || 0}). tipos=${JSON.stringify(r.tipos || {})}`);
+  if (r && r.via) log(`import: leitura via ${r.via} — ${(r.chats && r.chats.length) || 0} conversas de ${r.total || 0} no store (com telefone: ${r.comTel || 0}, só LID: ${r.soLid || 0}, ${r.totMsgs || 0} mensagens no total). tipos=${JSON.stringify(r.tipos || {})}`);
   if (r && r.erro) throw new Error(r.erro + (r.diag ? " Diag: " + JSON.stringify(r.diag) : ""));
   return (r && r.chats) || [];
 }
