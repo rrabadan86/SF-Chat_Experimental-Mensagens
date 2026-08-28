@@ -1761,9 +1761,10 @@ function paginaSofiaConversas(aviso, erro) {
     var bloq=!!c.bloq;
     var btnBloq='<button type="button" onclick="bloquearConversa()" class="reset" title="'+(bloq?'Desbloquear contato':'Bloquear contato (a SoFIA ignora)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(bloq?';color:#1c8f52':'')+'">'+(bloq?'✅':'🚫')+'</button>';
     var selo=bloq?'<span title="Contato bloqueado" style="background:#fdeaea;color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700;margin-left:6px">🚫 bloqueado</span>':'';
+    var agSelo=c.agendou?'<span title="Aula experimental agendada" style="display:inline-flex;align-items:center;justify-content:center;color:#1c8f52;font-size:1.05rem;margin-right:2px">✔️</span>':'';
     var header='<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">'
       +'<div style="flex:1;min-width:0"><div style="font-weight:800">'+escH(c.nome||'(sem nome)')+selo+'</div><div class="quando" style="margin:0">'+escH(fmtTel(k))+'</div></div>'
-      +'<div style="display:flex;gap:6px;align-items:center;flex:none">'+btnInt+btnEnc+btnBloq+pill+'</div></div>';
+      +'<div style="display:flex;gap:6px;align-items:center;flex:none">'+agSelo+btnInt+btnEnc+btnBloq+pill+'</div></div>';
     // Linha de tags recolhível — o editor completo só aparece ao clicar em "editar".
     var mini=function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:1px 8px;font-size:.7rem;margin:0 4px 0 0">'+escH(t)+'</span>';};
     var resumo = ncSel.length ? ncSel.map(mini).join('') : '<span class="quando" style="margin:0">sem tags</span>';
@@ -3944,6 +3945,7 @@ const server = http.createServer((req, res) => {
     try { const em = sofia.lerEncerradas() || {}; for (const k in obj) { const v = em[k]; const isObj = v && typeof v === 'object'; obj[k].encEm = isObj ? (Number(v.em) || 0) : (Number(v) || 0); obj[k].encPor = isObj ? String(v.por || '') : ''; } } catch (_) {} // instante + autor do encerramento manual (p/ a divisória)
     try { for (const k in obj) obj[k].fuEspera = fuEsperando[k] || ''; } catch (_) {} // follow-up pronto, segurando pelo horário?
     try { const at = sofia.lerAtencao() || {}; const a8 = {}; for (const kk in at) a8[String(kk).replace(/\D/g, '').slice(-8)] = 1; for (const k in obj) obj[k].atencao = !!(at[k] || a8[String(k).replace(/\D/g, '').slice(-8)]); } catch (_) {} // pediu atendimento humano?
+    try { const agSet = new Set((fuLerJson(FU_AGENDOU_FILE, []) || []).map(x => String(x).replace(/\D/g, '').slice(-8))); let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {} for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].agendou = agSet.has(l8) || (obj[k].tagsContato || []).some(t => agTags.includes(t)); } } catch (_) {} // agendou aula experimental? (mesma lógica do follow-up)
     let wa = ''; try { wa = (sofia.waStatus() || {}).estado || ''; } catch (_) {} // online/off-line do WhatsApp da SoFIA
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify({ conv: obj, wa }));
