@@ -455,7 +455,7 @@ function retencaoMs(): number {
   const d = Number.isFinite(_retDias) && _retDias >= 0 ? _retDias : 365;
   return d > 0 ? d * 24 * 3600 * 1000 : Number.POSITIVE_INFINITY;
 }
-type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string };
+type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string };
 type InboxConversa = { jid: string; nome: string; ultimaEm: number; msgs: InboxMsg[] };
 const inbox = new Map<string, InboxConversa>();
 let inboxTimer: ReturnType<typeof setTimeout> | null = null;
@@ -469,7 +469,7 @@ function salvarInbox() {
   try { fs.writeFileSync(CONVERSAS_FILE, JSON.stringify(obj), "utf8"); } catch {}
 }
 function agendarSalvarInbox() { if (inboxTimer) return; inboxTimer = setTimeout(() => { inboxTimer = null; salvarInbox(); }, 1500); }
-function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMsg["autor"], texto: string, foto?: string) {
+function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMsg["autor"], texto: string, foto?: string, porNome?: string) {
   const t = String(texto || "").trim();
   if (!t && !foto) return;                         // nada de texto e nada de foto → ignora
   let c = inbox.get(chave);
@@ -479,6 +479,7 @@ function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMs
   const em = Date.now();
   const msg: InboxMsg = { autor, texto: t, em };
   if (foto) msg.foto = foto;                        // nome do arquivo em humano-fotos/ (o painel serve)
+  if (porNome) msg.por = String(porNome);           // atendente que escreveu (bolha "humano") — atribuição/segurança
   c.msgs.push(msg);
   if (c.msgs.length > INBOX_MAX_MSGS) c.msgs.splice(0, c.msgs.length - INBOX_MAX_MSGS);
   c.ultimaEm = em;
@@ -912,6 +913,7 @@ async function processarRespostas() {
     if (!texto && !fotoArquivo) continue;           // sem texto e sem foto → nada a enviar
     const chave = String(ent?.chave || "").trim();
     const jid = String(ent?.jid || "").trim();
+    const porNome = String(ent?.porNome || "").trim();     // atendente do painel que escreveu
     // Telefone REAL para enviar: a chave (telefone real, mesmo em contato "@lid").
     // Só usa os dígitos do jid quando ele é "@c.us" (aí o jid já é o telefone).
     const telefone = pareceTelefone(chave) ? chave : (jid.endsWith("@c.us") ? jidParaTel(jid) : "");
@@ -930,9 +932,9 @@ async function processarRespostas() {
           // idade — ver limparFotosAntigas). Registra no painel = WhatsApp.
           const media = MessageMedia.fromFilePath(fotoArquivo);
           await enviar(alvo, media, texto ? { caption: texto } : undefined);
-          registrarInbox(chave, alvo, "", "humano", texto, path.basename(fotoArquivo));
+          registrarInbox(chave, alvo, "", "humano", texto, path.basename(fotoArquivo), porNome);
         } else {
-          registrarInbox(chave, alvo, "", "humano", texto);
+          registrarInbox(chave, alvo, "", "humano", texto, undefined, porNome);
           await enviar(alvo, texto);
         }
         log(`resposta do painel enviada para ${chave}.`);

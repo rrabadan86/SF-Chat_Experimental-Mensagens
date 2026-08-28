@@ -391,10 +391,23 @@ function pausaMinutos(): number {
 // as demais conversas seguem com a Sofia normalmente. Gravado em sofia-humano.json
 // pelo painel e lido AQUI a cada mensagem — muda sem reiniciar.
 const HUMANO_FILE = path.join(BASE_DIR, "sofia-humano.json");
+const HUMANO_LOCK_FILE = path.join(BASE_DIR, "sofia-humano-lock.txt");
+// Minutos da trava de atendimento humano (o painel grava; padrão 60 = 1 h).
+function humanoLockMs(): number {
+  try { const n = parseInt(String(fs.readFileSync(HUMANO_LOCK_FILE, "utf-8")).trim(), 10); if (isFinite(n) && n > 0) return n * 60_000; } catch {}
+  return 60 * 60_000;
+}
+// Controle humano ATIVO = a conversa foi assumida no painel E ainda está dentro da
+// trava. Passado o tempo, expira sozinha: a Sofia reassume a conversa. Aceita o
+// valor legado (só o instante) além do novo formato { por, em }.
 function controleHumanoAtivo(chave: string): boolean {
   try {
     const o = JSON.parse(fs.readFileSync(HUMANO_FILE, "utf-8"));
-    return !!(o && typeof o === "object" && o[chave]);
+    const v = o && typeof o === "object" ? o[chave] : null;
+    if (!v) return false;
+    const em = (typeof v === "object") ? Number(v.em || 0) : Number(v || 0);
+    if (!(em > 0)) return false;
+    return (em + humanoLockMs()) > Date.now();
   } catch { return false; }
 }
 

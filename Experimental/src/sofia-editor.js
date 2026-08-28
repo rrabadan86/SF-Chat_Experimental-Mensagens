@@ -36,6 +36,7 @@ const F = {
   eventos: path.join(DIR, 'sofia-eventos.jsonl'), // ações de automação — listener escreve, painel consome
   respostas: path.join(DIR, 'sofia-respostas.jsonl'), // fila de respostas do painel → listener envia
   humano: path.join(DIR, 'sofia-humano.json'), // conversas sob controle humano (Sofia não responde) — lido pela Sofia
+  humanoLock: path.join(DIR, 'sofia-humano-lock.txt'), // minutos que uma conversa assumida fica travada p/ outros atendentes (e a Sofia fora) — painel escreve, sofia.ts lê
   bloqueios: path.join(DIR, 'sofia-bloqueios.json'), // números bloqueados (Sofia ignora) — painel escreve, listener lê
   modelo: path.join(DIR, 'sofia-modelo.json'), // modelo de IA (conversa/extração) — painel escreve, sofia.ts lê no boot
   transcricao: path.join(DIR, 'sofia-transcricao.txt'), // liga/desliga transcrição de áudio — painel escreve, listener lê
@@ -377,9 +378,10 @@ function enfileirarAviso(numero, texto) {
 }
 
 // Enfileira uma resposta do painel para o listener enviar (Parte 2 usa isto).
-function enfileirarResposta(chave, jid, texto, fotoArquivo) {
+// porNome = usuário do painel que escreveu (atribuição na bolha e segurança).
+function enfileirarResposta(chave, jid, texto, fotoArquivo, porNome) {
   const linha = JSON.stringify({ chave, jid, texto: String(texto || ''),
-    fotoArquivo: fotoArquivo || '', em: Date.now() }) + '\n';
+    fotoArquivo: fotoArquivo || '', porNome: String(porNome || ''), em: Date.now() }) + '\n';
   fs.appendFileSync(F.respostas, linha, 'utf8');
 }
 
@@ -399,13 +401,41 @@ function salvarFotoResposta(dataUrl) {
 }
 
 // ── controle humano por conversa (interruptor no painel) ────────────────────
-// { "<chave>": <ativadoEm> }. Quando a chave existe, a Sofia não responde AQUELA
-// conversa (você conversa manualmente). As outras seguem com a Sofia normalmente.
+// { "<chave>": { por, em } }. Quando existe E ainda está dentro do tempo de trava
+// (LOCK), a Sofia não responde AQUELA conversa e SÓ o atendente "por" pode escrever
+// (os outros veem cadeado). Passado o tempo, a trava expira sozinha: a conversa
+// volta 100% para a Sofia e outro atendente pode reassumir. Valor legado = número
+// (só o instante) ainda é lido. As demais conversas seguem com a Sofia normalmente.
 function lerHumano() {
   try { const o = JSON.parse(ler(F.humano)); return (o && typeof o === 'object') ? o : {}; }
   catch (_) { return {}; }
 }
-function controleHumanoDe(chave) { return !!lerHumano()[chave]; }
+function _humEm(v) { return (v && typeof v === 'object') ? Number(v.em || 0) : Number(v || 0); }
+function _humPor(v) { return (v && typeof v === 'object') ? String(v.por || '') : ''; }
+// Minutos da trava de atendimento humano (configurável). Padrão: 60 (1 hora).
+function lerHumanoLockMin() {
+  try { const n = parseInt(String(ler(F.humanoLock)).trim(), 10); if (isFinite(n) && n > 0) return n; } catch (_) {}
+  return 60;
+}
+function gravarHumanoLockMin(min) {
+  const n = Math.max(1, Math.min(1440, parseInt(min, 10) || 60)); // 1 min … 24 h
+  gravarArquivo(F.humanoLock, String(n));
+  return n;
+}
+function _humLockMs() { return lerHumanoLockMin() * 60 * 1000; }
+// A conversa está sob controle humano ATIVO agora? (assumida e dentro da trava)
+function controleHumanoDe(chave) {
+  const em = _humEm(lerHumano()[chave]);
+  return em > 0 && (em + _humLockMs()) > Date.now();
+}
+// Quem assumiu + quando + se a trava ainda vale. null quando ninguém está no controle.
+function humanoDono(chave) {
+  const v = lerHumano()[chave];
+  const em = _humEm(v);
+  if (!(em > 0)) return null;
+  const ativo = (em + _humLockMs()) > Date.now();
+  return { por: _humPor(v), em, ativo };
+}
 
 // Comando painel → listener (ex.: desconectar o WhatsApp da Sofia). O listener lê,
 // executa e apaga o arquivo. Gravado em sofia-comando.json (fora do Git).
@@ -628,9 +658,15 @@ function enfileirarFollowup(tel, instrucao) {
   return true;
 }
 
-function setControleHumano(chave, ativo) {
+// Assume (ativo=true, guardando quem e o instante — usado também para RENOVAR a
+// trava a cada mensagem do dono) ou devolve à Sofia (ativo=false). Poda registros
+// já expirados para o arquivo não crescer.
+function setControleHumano(chave, ativo, por) {
   const o = lerHumano();
-  if (ativo) o[chave] = Date.now(); else delete o[chave];
+  const corteMs = _humLockMs();
+  const agora = Date.now();
+  for (const k of Object.keys(o)) if (!(_humEm(o[k]) + corteMs > agora)) delete o[k];
+  if (ativo) o[chave] = { por: String(por || '').trim(), em: agora }; else delete o[chave];
   fs.writeFileSync(F.humano, JSON.stringify(o), 'utf8');
   return !!ativo;
 }
@@ -747,6 +783,6 @@ module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, lerRascunhoCampanha, lerLidStats, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

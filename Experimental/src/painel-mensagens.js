@@ -1702,9 +1702,10 @@ function subnavSofia(view) {
 }
 
 // Aba Sofia → Conversas: inbox das conversas da Sofia (ler e, na Parte 2, responder).
-function paginaSofiaConversas(aviso, erro) {
+function paginaSofiaConversas(aviso, erro, meuUsuario) {
   const tagsLista = contatos.tagsDistintas().map(t => t.tag);
   let sessaoHoras = 12; try { sessaoHoras = sofia.lerSessaoHoras(); } catch (_) {}
+  let lockMinIni = 60; try { lockMinIni = sofia.lerHumanoLockMin(); } catch (_) {}
   let quietoCfg = { horas: 24, dias: 4 }; try { quietoCfg = sofia.lerQuietoCfg(); } catch (_) {}
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
@@ -1803,7 +1804,9 @@ function paginaSofiaConversas(aviso, erro) {
   }
   function fecharResumo(){ document.getElementById('ctResModal').style.display='none'; }
   var TAGS_EXISTENTES = ${JSON.stringify(tagsLista)};
-  var SESSAO_MS = ${Math.round(sessaoHoras * 3600 * 1000)};
+  var MEU_USUARIO = ${JSON.stringify(String(meuUsuario || ''))}; // quem está logado (atribuição + trava de atendimento)
+  var LOCK_MIN = ${Math.max(1, parseInt(lockMinIni, 10) || 60)}; // minutos que uma conversa assumida fica travada p/ outros
+  var LOCK_MS = LOCK_MIN*60000;
   var QUIETO_MS = ${Math.round(quietoCfg.horas * 3600 * 1000)}, QUIETO_MAX_MS = ${Math.round(quietoCfg.dias * 24 * 3600 * 1000)};
   function encerrada(c){ return !!(c && (c.enc || (c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS)))); }
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -1811,7 +1814,10 @@ function paginaSofiaConversas(aviso, erro) {
   // Rótulo de quem enviou. Para a aluna, usa o PRIMEIRO NOME do contato quando
   // conhecido (cai em "Aluna" se o contato não tiver nome cadastrado).
   function primeiroNome(nome){ var n=String(nome||'').trim(); if(!n) return ''; return n.split(/\\s+/)[0]; }
-  function autorRot(a, nomeAluna){ return a==='aluna'?(nomeAluna||'Aluna'):(a==='humano'?'Você':'SoFIA'); }
+  // Rótulo de quem enviou. Para "humano", mostra o NOME do atendente que escreveu
+  // (segurança: saber quem falou). Cai em "Atendente" se a mensagem for antiga/sem
+  // autor (ex.: resposta enviada direto do celular do Studio).
+  function autorRot(a, nomeAluna, por){ return a==='aluna'?(nomeAluna||'Aluna'):(a==='humano'?(por?('🧑 '+por):'Atendente'):'SoFIA'); }
   function fmtTel(k){ var d=String(k||'').replace(/\\D/g,''); if(/^55\\d{10,11}$/.test(d)){ var ddd=d.slice(2,4), r=d.slice(4); return '+55 ('+ddd+') '+(r.length===9?r.slice(0,5)+'-'+r.slice(5):r.slice(0,4)+'-'+r.slice(4)); } return k; }
   function renderChat(c,k){
     var chat=document.getElementById('convChat'); if(!chat) return;
@@ -1839,12 +1845,19 @@ function paginaSofiaConversas(aviso, erro) {
       var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e4efee');
       var img = m.foto ? '<img src="/sofia/humano-foto?arq='+encodeURIComponent(m.foto)+'" alt="foto enviada" style="display:block;max-width:100%;max-height:220px;border-radius:9px;margin:'+(m.texto?'6px 0 0':'2px 0 0')+';cursor:pointer" onclick="window.open(this.src,\\'_blank\\')">' : '';
       var corpoMsg = (m.texto?'<div style="white-space:pre-wrap">'+escH(m.texto)+'</div>':'') + img;
-      return sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna))+' · '+fmtHora(m.em)+'</div>'+corpoMsg+'</div></div>';
+      return sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna, m.por))+' · '+fmtHora(m.em)+'</div>'+corpoMsg+'</div></div>';
     }).join('');
     var fim = encerrada(c) ? '<div style="text-align:center;margin:10px 0 2px"><span style="display:inline-block;background:#f3eaea;color:#a15a5a;border:1px solid #e6cfcf;border-radius:999px;padding:3px 12px;font-size:.72rem;font-weight:700">🔒 Encerrada '+(encPorTxt?'por '+encPorTxt:'manualmente')+' · a SoFIA recomeça do zero se a aluna voltar</span></div>' : '';
-    var hum = !!c.humano;
+    var hum = !!c.humano;                                   // alguém no controle AGORA (trava ativa)
+    var donoMeu = hum && c.humanoPor===MEU_USUARIO;          // EU assumi
+    var donoOutro = hum && !donoMeu;                         // outro atendente assumiu
+    var donoTxt = c.humanoPor||'';
+    var restaMin = (hum && c.humanoEm) ? Math.max(1, Math.ceil((c.humanoEm+LOCK_MS-Date.now())/60000)) : 0;
     // Cabeçalho enxuto: nome + telefone à esquerda, botão de controle (compacto) à direita.
-    var pill='<button type="button" onclick="toggleHumano()" class="'+(hum?'save':'reset')+'" title="'+(hum?'Devolver à SoFIA (ela volta a responder)':'Assumir a conversa (você atende)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">'+(hum?'🤖':'🧑')+'</button>';
+    // 🧑 assumir · 🤖 devolver à SoFIA · 🔒 (bloqueado) quando OUTRO atendente assumiu.
+    var pill = donoOutro
+      ? '<button type="button" disabled title="Assumida por '+escH(donoTxt)+' — livre em ~'+restaMin+' min" style="padding:5px 10px;font-size:.9rem;white-space:nowrap;opacity:.55;cursor:not-allowed">🔒</button>'
+      : '<button type="button" onclick="toggleHumano()" class="'+(donoMeu?'save':'reset')+'" title="'+(donoMeu?'Devolver à SoFIA (ela volta a responder)':'Assumir a conversa (você atende — trava por '+LOCK_MIN+' min)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">'+(donoMeu?'🤖':'🧑')+'</button>';
     var btnInt='<button type="button" onclick="abrirInteracoes(selecionada)" class="reset" title="Interações" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">📊</button>';
     var encM=!!c.enc; // encerrada AGORA (cadeado à mão / automático por tag)
     // Cadeado FECHADO 🔒 = fechar; cadeado ABERTO 🔓 = reabrir. O botão alterna.
@@ -1878,12 +1891,16 @@ function paginaSofiaConversas(aviso, erro) {
       +'<button type="button" id="ncSalvar" class="save" style="padding:5px 12px" onclick="salvarContato(\\''+k+'\\')">💾 '+(c.salvo?'Salvar tags':'Salvar contato')+'</button>'
       +'<span id="ncMsg" class="quando" style="margin:0"></span>'
       +'</div></div>') : '';
+    // Só o dono da trava escreve. Placeholder explica o porquê quando bloqueado.
+    var podeEscrever = donoMeu;
+    var phBloq = donoOutro ? ('🔒 '+ (donoTxt||'Outro atendente') +' está atendendo (livre em ~'+restaMin+' min)') : '🔒 Clique em “assumir” para responder';
+    var bannerDono = donoOutro ? ('<div style="margin-top:8px;background:#fdf2e0;color:#8a5a00;border:1px solid #f0d9a8;border-radius:8px;padding:6px 10px;font-size:.78rem;font-weight:600">🔒 Conversa assumida por '+escH(donoTxt||'outro atendente')+' — você não pode escrever agora (livre em ~'+restaMin+' min).</div>') : '';
     var composer='<div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end">'
       +'<input type="file" id="msgFoto" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="msgFotoSel()">'
-      +'<button type="button" id="msgClip" title="Anexar foto" onclick="msgAbreFoto()" '+(hum?'':'disabled')+' style="padding:9px 12px;font-size:1.05rem;line-height:1;background:#fff;border:1px solid var(--linha,#ddd);border-radius:8px;cursor:pointer'+(hum?'':';opacity:.4;cursor:not-allowed')+'">📎</button>'
-      +'<textarea id="msgTxt" rows="2" '+(hum?'':'disabled')+' placeholder="'+(hum?'Escreva uma mensagem…  (Enter envia)':'🔒 Clique em “assumir” para responder')+'" oninput="if(selecionada)rascunhos[selecionada]=this.value" onkeydown="msgKey(event)" style="flex:1;resize:vertical;min-height:44px;font-size:.9rem'+(hum?'':';background:#f5f5f5;color:#aaa;cursor:not-allowed')+'"></textarea>'
-      +'<button type="button" class="save" onclick="enviarMsg()" '+(hum?'':'disabled')+' style="padding:9px 16px;white-space:nowrap'+(hum?'':';opacity:.4;cursor:not-allowed')+'">Enviar ➤</button>'
-      +'</div>'
+      +'<button type="button" id="msgClip" title="Anexar foto" onclick="msgAbreFoto()" '+(podeEscrever?'':'disabled')+' style="padding:9px 12px;font-size:1.05rem;line-height:1;background:#fff;border:1px solid var(--linha,#ddd);border-radius:8px;cursor:pointer'+(podeEscrever?'':';opacity:.4;cursor:not-allowed')+'">📎</button>'
+      +'<textarea id="msgTxt" rows="2" '+(podeEscrever?'':'disabled')+' placeholder="'+(podeEscrever?'Escreva uma mensagem…  (Enter envia)':phBloq)+'" oninput="if(selecionada)rascunhos[selecionada]=this.value" onkeydown="msgKey(event)" style="flex:1;resize:vertical;min-height:44px;font-size:.9rem'+(podeEscrever?'':';background:#f5f5f5;color:#aaa;cursor:not-allowed')+'"></textarea>'
+      +'<button type="button" class="save" onclick="enviarMsg()" '+(podeEscrever?'':'disabled')+' style="padding:9px 16px;white-space:nowrap'+(podeEscrever?'':';opacity:.4;cursor:not-allowed')+'">Enviar ➤</button>'
+      +'</div>'+bannerDono
       +'<div id="msgFotoPrev" style="display:none;margin-top:6px;align-items:center;gap:8px">'
       +'<img id="msgFotoImg" alt="prévia" style="max-width:64px;max-height:64px;border-radius:8px;border:1px solid var(--linha,#ddd);vertical-align:middle">'
       +'<span class="quando" style="margin:0">foto anexada</span> '
@@ -1898,9 +1915,13 @@ function paginaSofiaConversas(aviso, erro) {
   function toggleTagEd(){ tagEdAberto=!tagEdAberto; if(selecionada){ ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[selecionada],selecionada); } }
   function toggleHumano(){
     var k=selecionada; if(!k) return;
-    var c=ultimoData[k]||{}; var novo=!c.humano;
+    var c=ultimoData[k]||{};
+    // Se OUTRO atendente é o dono (trava ativa), nem tenta — o servidor recusaria.
+    if(c.humano && c.humanoPor!==MEU_USUARIO){ alert('🔒 Conversa assumida por '+(c.humanoPor||'outro atendente')+'. Você não pode assumir nem devolver agora.'); return; }
+    var novo=!c.humano;
     fetch('/sofia/humano',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,ativo:novo})})
-      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].humano=novo; ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[k],k); } });
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k]){ ultimoData[k].humano=novo; ultimoData[k].humanoPor=novo?(j.por||MEU_USUARIO):''; ultimoData[k].humanoEm=novo?Date.now():0; } ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[k],k); } else { alert(j.erro||'Não consegui atualizar o controle da conversa.'); } })
+      .catch(function(){ alert('Erro de rede.'); });
   }
   function bloquearConversa(){
     var k=selecionada; if(!k) return;
@@ -1939,12 +1960,14 @@ function paginaSofiaConversas(aviso, erro) {
     var ta=document.getElementById('msgTxt'); var txt=(ta&&ta.value||'').trim();
     var foto=fotoPend[k]||'';
     var st=document.getElementById('msgStatus');
-    if(!c.humano){ if(st)st.textContent='Ative o controle humano para responder.'; return; }
+    if(c.humano && c.humanoPor!==MEU_USUARIO){ if(st)st.textContent='🔒 Assumida por '+(c.humanoPor||'outro atendente')+' — você não pode escrever agora.'; return; }
+    if(!c.humano || c.humanoPor!==MEU_USUARIO){ if(st)st.textContent='Clique em “assumir” (🧑) para responder.'; return; }
     if(!txt && !foto){ if(st)st.textContent=''; return; }
     if(st)st.textContent='Enviando…';
     fetch('/sofia/responder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,jid:jid,texto:txt,fotoBase64:foto})})
       .then(function(r){return r.json();}).then(function(j){
         if(j.ok){ if(ta)ta.value=''; rascunhos[k]=''; delete fotoPend[k]; var inp=document.getElementById('msgFoto'); if(inp)inp.value=''; msgFotoMostra(k); if(st)st.textContent='✓ enviada';
+          if(ultimoData[k]){ ultimoData[k].humanoEm=Date.now(); ultimoData[k].humanoPor=MEU_USUARIO; ultimoData[k].humano=true; } // renova a trava (o servidor também renovou)
           setTimeout(atualizaInbox,800); setTimeout(atualizaInbox,2000); setTimeout(atualizaInbox,3600); }
         else if(st){ st.textContent='❌ '+(j.erro||'não consegui enviar'); }
       }).catch(function(){ if(st)st.textContent='❌ erro de rede'; });
@@ -2036,7 +2059,8 @@ function paginaSofiaConversas(aviso, erro) {
       var dot = pendente ? '<span title="aguardando resposta" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#0e6e6b;flex:none"></span>' : '';
       var tgs=(c.tagsContato||[]).map(function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:0 7px;font-size:.64rem;margin-left:5px">'+escH(t)+'</span>';}).join('');
       var enc=encerrada(c)?'<span style="display:inline-block;background:#f3eaea;color:#a15a5a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🔒 encerrada</span>':'';
-      var hb=c.humano?'<span style="display:inline-block;background:#e6f6ec;color:#1f8f52;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 você</span>':'';
+      var hbMeu=c.humano&&c.humanoPor===MEU_USUARIO;
+      var hb=c.humano?('<span title="'+(hbMeu?'Você assumiu esta conversa':'Assumida por '+escH(c.humanoPor||'atendente'))+'" style="display:inline-block;background:'+(hbMeu?'#e6f6ec;color:#1f8f52':'#fdf2e0;color:#8a5a00')+';border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">'+(hbMeu?'🙋 você':'🔒 '+escH(c.humanoPor||'atendente'))+'</span>'):'';
       var fu=c.fuEspera?'<span title="Follow-up pronto, aguardando o horário permitido" style="display:inline-block;background:#fdf2e0;color:#b8770a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">⏳ follow-up '+escH(c.fuEspera)+'</span>':'';
       var at=c.atencao?'<span title="A aluna pediu atendimento humano" style="display:inline-block;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 pediu humano</span>':'';
       var agMini=c.agendou?'<span title="Aula experimental agendada" style="font-size:.8rem;flex:none">📅</span>':'';
@@ -2084,7 +2108,7 @@ function paginaSofiaConversas(aviso, erro) {
     var s=m[e]||['⚪','—','#7a7a7a','#eee'];
     b.textContent=s[0]+' '+s[1]; b.style.color=s[2]; b.style.background=s[3];
   }
-  function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){ j=j||{}; atualizaWa(j.wa); renderInbox(j.conv||{}); }).catch(function(){}); }
+  function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){ j=j||{}; if(j.lockMin){ LOCK_MIN=j.lockMin; LOCK_MS=LOCK_MIN*60000; } atualizaWa(j.wa); renderInbox(j.conv||{}); }).catch(function(){}); }
   atualizaInbox(); setInterval(atualizaInbox, 4000);
   try { if(localStorage.getItem('convFiltrosOpen')==='1'){ var _d=document.getElementById('convFiltrosDet'); if(_d)_d.open=true; } } catch(e){}
 </script>`;
@@ -3273,6 +3297,10 @@ function paginaSofia(aviso, erro) {
             <div class="cfg-in"><input type="number" name="expLimite" min="0" max="50" step="1" value="${lerExpLimite() == null ? 2 : lerExpLimite()}"><span class="suf">por turma (0 = sem limite)</span></div>
           </div>
           <div>
+            <label>Trava de atendimento humano${infoI('Quando um atendente clica em <b>assumir</b> (🧑) uma conversa, ela fica <b>travada só para ele</b> por este tempo — os outros veem cadeado 🔒 e não conseguem escrever (evita dois atendentes na mesma conversa). Cada mensagem enviada <b>renova</b> a trava. Passado o tempo <b>sem atividade</b>, a trava libera e a <b>SoFIA reassume sozinha</b> a conversa. Padrão: 60 minutos. Vale na hora.')}</label>
+            <div class="cfg-in"><input type="number" name="humanoLockMin" min="1" max="1440" step="1" value="${(function(){try{return sofia.lerHumanoLockMin();}catch(_){return 60;}})()}"><span class="suf">min</span></div>
+          </div>
+          <div>
             <label>"Sem resposta" — silêncio mínimo${infoI('Na aba <b>Conversas</b> existe um filtro que mostra só os contatos que <b>pararam de responder</b>. Aqui você define o <b>silêncio mínimo</b>: só entra quem não manda mensagem há pelo menos esse tempo. Só afeta a listagem do painel — não o robô nem o follow-up. Padrão: 24 horas.')}</label>
             <div class="cfg-in"><input type="number" name="quietoHoras" min="1" max="720" step="1" value="${e.quieto.horas}"><span class="suf">horas</span></div>
           </div>
@@ -4269,7 +4297,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     if (view === 'contatos') return res.end(paginaSofiaContatos(aviso, erro, { q: sp.get('q') || '', tag: sp.get('tag') || '', bloq: sp.get('bloq') || '', pagina: sp.get('pagina') || 0 }));
     if (view === 'tags') return res.end(paginaSofiaTags(aviso, erro));
-    if (view === 'conversas') return res.end(paginaSofiaConversas(aviso, erro));
+    if (view === 'conversas') return res.end(paginaSofiaConversas(aviso, erro, (sess && sess.usuario) ? sess.usuario : ''));
     if (view === 'campanhas') return res.end(paginaSofiaCampanhas(aviso, erro));
     if (view === 'funil') return res.end(paginaSofiaFunil({ per: sp.get('per') || '7', de: sp.get('de') || '', ate: sp.get('ate') || '' }));
     if (view === 'custo') return res.end(paginaSofiaCusto(aviso, erro, { per: sp.get('per') || '7', de: sp.get('de') || '', ate: sp.get('ate') || '' }));
@@ -4424,7 +4452,8 @@ const server = http.createServer((req, res) => {
     let obj = {};
     try { obj = sofia.conversas() || {}; } catch (_) {}
     try { const cmap = contatos.carregar(); for (const k in obj) { const c = cmap[contatos.normTel(k)]; obj[k].salvo = !!c; obj[k].tagsContato = c ? (c.tags || []) : []; if (c && c.nome) obj[k].nome = c.nome; } } catch (_) {} // salvo? + tags + nome salvo do contato (prefere o editado ao do WhatsApp)
-    try { const hum = sofia.lerHumano(); for (const k in obj) obj[k].humano = !!hum[k]; } catch (_) {} // controle humano por conversa
+    let lockMin = 60; try { lockMin = sofia.lerHumanoLockMin(); } catch (_) {}
+    try { const hum = sofia.lerHumano(); const lockMs = lockMin * 60000, agora = Date.now(); for (const k in obj) { const v = hum[k]; const isObj = v && typeof v === 'object'; const em = isObj ? (Number(v.em) || 0) : (Number(v) || 0); const ativo = em > 0 && (em + lockMs > agora); obj[k].humano = ativo; obj[k].humanoPor = ativo ? (isObj ? String(v.por || '') : '') : ''; obj[k].humanoEm = ativo ? em : 0; } } catch (_) {} // controle humano por conversa: quem assumiu + instante (a trava expira sozinha → SoFIA reassume)
     try { for (const k in obj) obj[k].bloq = sofia.estaBloqueado(k); } catch (_) {} // contato bloqueado?
     try { for (const k in obj) obj[k].enc = sofia.estaEncerrada(k, sofia.ultimaAlunaEm(obj[k])); } catch (_) {} // encerrada à mão (cadeado)? — mede pela última msg DA ALUNA, para a despedida da SoFIA depois do fechamento não reabrir
     try { const em = sofia.lerEncerradas() || {}; for (const k in obj) { const v = em[k]; const isObj = v && typeof v === 'object'; obj[k].encEm = isObj ? (Number(v.em) || 0) : (Number(v) || 0); obj[k].encPor = isObj ? String(v.por || '') : ''; } } catch (_) {} // instante + autor do encerramento manual (p/ a divisória)
@@ -4433,7 +4462,7 @@ const server = http.createServer((req, res) => {
     try { const agSet = new Set((fuLerJson(FU_AGENDOU_FILE, []) || []).map(x => String(x).replace(/\D/g, '').slice(-8))); let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {} for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].agendou = agSet.has(l8) || (obj[k].tagsContato || []).some(t => agTags.includes(t)); } } catch (_) {} // agendou aula experimental? (mesma lógica do follow-up)
     let wa = ''; try { wa = (sofia.waStatus() || {}).estado || ''; } catch (_) {} // online/off-line do WhatsApp da SoFIA
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    return res.end(JSON.stringify({ conv: obj, wa }));
+    return res.end(JSON.stringify({ conv: obj, wa, lockMin }));
   }
   // Interações (histórico de sessões) de UM contato — aba Contatos → Interações.
   if (req.method === 'GET' && url === '/sofia/contatos/interacoes') {
@@ -4480,6 +4509,7 @@ const server = http.createServer((req, res) => {
   }
   // Liga/desliga o controle humano de UMA conversa (a Sofia para de responder só ela).
   if (req.method === 'POST' && url === '/sofia/humano') {
+    const quem = (sess && sess.usuario) ? sess.usuario : ''; // quem está assumindo/devolvendo AGORA
     return lerCorpo(req, 1e6, corpo => {
       let d = {};
       try { d = JSON.parse(corpo || '{}'); } catch (_) {}
@@ -4487,7 +4517,14 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
       try {
-        const ativo = sofia.setControleHumano(chave, !!d.ativo);
+        // Trava por atendente: se OUTRO já assumiu e a trava ainda vale, não deixa
+        // assumir nem devolver por cima (só o dono, ou depois que a trava expira).
+        let dono = null; try { dono = sofia.humanoDono(chave); } catch (_) {}
+        if (dono && dono.ativo && dono.por && dono.por !== quem) {
+          const restaMin = Math.max(1, Math.ceil((dono.em + sofia.lerHumanoLockMin() * 60000 - Date.now()) / 60000));
+          return res.end(JSON.stringify({ ok: false, erro: '🔒 Conversa assumida por ' + dono.por + '. Fica livre em ~' + restaMin + ' min (ou peça pra ela devolver à SoFIA).' }));
+        }
+        const ativo = sofia.setControleHumano(chave, !!d.ativo, quem);
         if (ativo) { try { sofia.setAtencao(chave, false); } catch (_) {} } // recepção assumiu → tira o vermelho
         // Gatilho 'humano' (estado): ao ASSUMIR aplica a tag + avisa; ao DEVOLVER
         // à SoFIA, remove a tag (é um marcador de "sob controle humano agora").
@@ -4503,7 +4540,7 @@ const server = http.createServer((req, res) => {
             }
           }
         } catch (_) {}
-        res.end(JSON.stringify({ ok: true, ativo }));
+        res.end(JSON.stringify({ ok: true, ativo, por: ativo ? quem : '' }));
       }
       catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
@@ -4511,6 +4548,7 @@ const server = http.createServer((req, res) => {
   // Responder uma conversa pelo painel: enfileira para o listener da Sofia enviar
   // pelo WhatsApp (e assumir a conversa, pausando a Sofia nela).
   if (req.method === 'POST' && url === '/sofia/responder') {
+    const quem = (sess && sess.usuario) ? sess.usuario : ''; // quem está escrevendo AGORA (atribuição + trava)
     return lerCorpo(req, 12e6, corpo => { // cabe a foto anexada em base64 (~10-12 MB)
       let d = {};
       try { d = JSON.parse(corpo || '{}'); } catch (_) {}
@@ -4521,9 +4559,17 @@ const server = http.createServer((req, res) => {
       if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'faltou destinatário' }));
       // Pode enviar só texto, só foto (com ou sem legenda), ou os dois.
       if (!texto && !d.fotoBase64) return res.end(JSON.stringify({ ok: false, erro: 'faltou texto ou foto' }));
+      // Segurança: só o atendente que assumiu (dono da trava) pode escrever. Se outro
+      // assumiu e a trava vale, bloqueia. Se ninguém assumiu ainda, este assume.
+      let dono = null; try { dono = sofia.humanoDono(chave); } catch (_) {}
+      if (dono && dono.ativo && dono.por && dono.por !== quem) {
+        const restaMin = Math.max(1, Math.ceil((dono.em + sofia.lerHumanoLockMin() * 60000 - Date.now()) / 60000));
+        return res.end(JSON.stringify({ ok: false, erro: '🔒 Conversa assumida por ' + dono.por + '. Fica livre em ~' + restaMin + ' min.' }));
+      }
+      try { sofia.setControleHumano(chave, true, quem); } catch (_) {} // assume/RENOVA a trava a cada envio do dono
       let fotoArquivo = '';
       if (d.fotoBase64) { try { fotoArquivo = sofia.salvarFotoResposta(d.fotoBase64); } catch (e) { return res.end(JSON.stringify({ ok: false, erro: 'Foto: ' + e.message })); } }
-      try { sofia.enfileirarResposta(chave, jid, texto, fotoArquivo); res.end(JSON.stringify({ ok: true })); }
+      try { sofia.enfileirarResposta(chave, jid, texto, fotoArquivo, quem); res.end(JSON.stringify({ ok: true })); }
       catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
   }
@@ -4580,6 +4626,7 @@ const server = http.createServer((req, res) => {
           },
         });
         try { const el = p.get('expLimite'); if (el != null && el !== '') gravarExpLimite(el); } catch (_) {}
+        try { const lm = p.get('humanoLockMin'); if (lm != null && lm !== '') sofia.gravarHumanoLockMin(lm); } catch (_) {}
         res.writeHead(303, { Location: '/sofia?ok=1' }); res.end();
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
