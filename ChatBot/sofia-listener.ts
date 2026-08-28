@@ -1013,6 +1013,7 @@ type Campanha = {
   id: string; nome: string; tag: string; textoBase: string; variacoes: string[];
   limiteDia: number; delayMinSeg: number; delayMaxSeg: number; janelaIni: string; janelaFim: string;
   dataInicio: string; // YYYY-MM-DD (não envia antes deste dia)
+  dias?: number[]; // dias da semana permitidos (0=Dom … 6=Sáb); vazio/ausente = todos
   fotoArquivo?: string; // caminho da imagem a enviar junto (opcional)
   status: "gerando" | "pronta" | "enviando" | "pausada" | "concluida" | "cancelada";
   pendentes: CampDest[]; enviados: { tel: string; nome?: string; em: number }[]; falhas: { tel: string; erro: string; em: number }[];
@@ -1054,6 +1055,18 @@ function carregarCampanhas() {
 function salvarCampanhas() { try { fs.writeFileSync(CAMP_FILE, JSON.stringify(campanhas), "utf8"); } catch {} }
 function agendarSalvarCampanhas() { if (campSalvarTimer) return; campSalvarTimer = setTimeout(() => { campSalvarTimer = null; salvarCampanhas(); }, 800); }
 function hojeSP(): string { return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); }
+// Dia da semana atual no fuso de São Paulo (0=Dom … 6=Sáb).
+function diaSemanaSP(): number {
+  const wd = new Date().toLocaleDateString("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" });
+  const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return wd in map ? map[wd] : new Date().getDay();
+}
+// A campanha pode enviar HOJE? (vazio/ausente/7 dias = todos os dias)
+function diaPermitido(c: Campanha): boolean {
+  const d = c.dias;
+  if (!d || !d.length || d.length >= 7) return true;
+  return d.indexOf(diaSemanaSP()) >= 0;
+}
 function agoraHHMM(): string { return new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false }); }
 function dentroJanela(ini: string, fim: string): boolean {
   const a = agoraHHMM();
@@ -1087,6 +1100,7 @@ async function processarCampInbox() {
           delayMaxSeg: Math.max(1, parseInt(p.delayMaxSeg, 10) || 60),
           janelaIni: String(p.janelaIni || "09:00"), janelaFim: String(p.janelaFim || "20:00"),
           dataInicio: String(p.dataInicio || hojeSP()),
+          dias: Array.isArray(p.dias) ? p.dias.map((x: any) => Number(x)).filter((x: number) => x >= 0 && x <= 6) : [],
           fotoArquivo: p.fotoArquivo ? String(p.fotoArquivo) : "",
           status: "gerando", pendentes: dests, enviados: [], falhas: [],
           enviadosHoje: 0, diaRef: hojeSP(), proxEnvioEm: 0, criadoEm: Date.now(), atualizadoEm: Date.now(),
@@ -1145,6 +1159,7 @@ async function tickCampanha() {
   if (c.diaRef !== hojeSP()) { c.diaRef = hojeSP(); c.enviadosHoje = 0; } // vira o dia → zera o contador
   if (!c.pendentes.length) { c.status = "concluida"; c.atualizadoEm = Date.now(); agendarSalvarCampanhas(); return; }
   if (c.dataInicio && hojeSP() < c.dataInicio) return;        // ainda não chegou a data de início
+  if (!diaPermitido(c)) return;                               // dia da semana não marcado → espera
   if (!dentroJanela(c.janelaIni, c.janelaFim)) return;        // fora do horário → espera
   if (c.enviadosHoje >= c.limiteDia) return;                  // bateu o teto do dia → espera amanhã
   if (Date.now() < c.proxEnvioEm) return;                     // ainda no intervalo entre envios

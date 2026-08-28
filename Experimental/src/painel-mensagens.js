@@ -2501,7 +2501,13 @@ function estimarCampanha(c) {
   const dias = Math.max(1, Math.ceil(restantes / porDia));
   const hoje = hojeSP();
   const iniStr = (c.dataInicio && c.dataInicio > hoje) ? c.dataInicio : hoje;
-  const d = new Date(iniStr + 'T12:00:00'); d.setDate(d.getDate() + (dias - 1));
+  // Avança contando só os dias da semana permitidos (vazio/7 = todos).
+  const sel = Array.isArray(c.dias) ? c.dias.map(Number).filter(x => x >= 0 && x <= 6) : [];
+  const d = new Date(iniStr + 'T12:00:00');
+  if (sel.length && sel.length < 7) {
+    let contados = 0, guarda = 0;
+    while (guarda < 3660) { if (sel.indexOf(d.getDay()) >= 0) { contados++; if (contados >= dias) break; } d.setDate(d.getDate() + 1); guarda++; }
+  } else { d.setDate(d.getDate() + (dias - 1)); }
   const fim = `${('0' + d.getDate()).slice(-2)}/${('0' + (d.getMonth() + 1)).slice(-2)}/${d.getFullYear()}`;
   return { porDia, dias, fim };
 }
@@ -2719,6 +2725,18 @@ function paginaSofiaCampanhas(aviso, erro) {
             <div class="cpf-field"><label>Horário de envio</label><div class="cpf-range"><input type="time" id="cpJi" name="janelaIni" value="09:00" oninput="estCamp()"><span class="cpf-suf">até</span><input type="time" id="cpJf" name="janelaFim" value="20:00" oninput="estCamp()"></div></div>
             <div class="cpf-field"><label>Intervalo entre envios</label><div class="cpf-range"><input type="number" id="cpDmin" name="delayMinSeg" min="1" max="3600" value="25" oninput="estCamp()"><span class="cpf-suf">a</span><input type="number" id="cpDmax" name="delayMaxSeg" min="1" max="3600" value="70" oninput="estCamp()"><span class="cpf-suf">s</span></div></div>
           </div>
+          <div class="cpf-field" style="margin-top:14px">
+            <label>Dias da semana <span class="sub">— só envia nos dias marcados</span></label>
+            <div class="dias" id="cpDias">
+              <label><input type="checkbox" class="cpDia" value="0" checked onchange="estCamp()"><span>Dom</span></label>
+              <label><input type="checkbox" class="cpDia" value="1" checked onchange="estCamp()"><span>Seg</span></label>
+              <label><input type="checkbox" class="cpDia" value="2" checked onchange="estCamp()"><span>Ter</span></label>
+              <label><input type="checkbox" class="cpDia" value="3" checked onchange="estCamp()"><span>Qua</span></label>
+              <label><input type="checkbox" class="cpDia" value="4" checked onchange="estCamp()"><span>Qui</span></label>
+              <label><input type="checkbox" class="cpDia" value="5" checked onchange="estCamp()"><span>Sex</span></label>
+              <label><input type="checkbox" class="cpDia" value="6" checked onchange="estCamp()"><span>Sáb</span></label>
+            </div>
+          </div>
           <p class="quando" style="margin:10px 0 0">Intervalo aleatório entre cada mensagem — quanto maior, mais natural e seguro.</p>
           </div>
         </details>
@@ -2756,11 +2774,15 @@ function paginaSofiaCampanhas(aviso, erro) {
             if(win<=0){ el.style.display='block'; el.className='aviso err'; el.textContent='O horário "até" precisa ser depois do "das".'; return; }
             var maxWin=Math.max(1,Math.floor(win*60/avg));
             var porDia=Math.max(1,Math.min(maxd,maxWin));
-            var dias=Math.max(1,Math.ceil(n/porDia));
+            var sel=Array.prototype.map.call(document.querySelectorAll('.cpDia:checked'),function(e){return +e.value;});
+            if(!sel.length){ el.style.display='block'; el.className='aviso err'; el.textContent='Escolha ao menos um dia da semana.'; return; }
+            var envioDias=Math.max(1,Math.ceil(n/porDia)); // dias EM QUE haverá envio
             var ini=document.getElementById('cpIni').value; var d=ini?new Date(ini+'T12:00:00'):new Date();
-            d.setDate(d.getDate()+(dias-1));
+            var contados=0,guarda=0;
+            while(guarda<3660){ if(sel.indexOf(d.getDay())>=0){ contados++; if(contados>=envioDias) break; } d.setDate(d.getDate()+1); guarda++; }
+            var restr=sel.length<7?' <span style="opacity:.8">('+sel.length+' dia'+(sel.length>1?'s':'')+'/semana)</span>':'';
             el.className='aviso'; el.style.display='block';
-            el.innerHTML='📊 <b>'+n+' contatos</b> nesta tag · ~<b>'+porDia+'/dia</b> · leva ~<b>'+dias+' dia'+(dias>1?'s':'')+'</b> · término previsto: <b>'+fmtD(d)+'</b>'+(porDia<maxd?' <span style="opacity:.8">(a janela de horário limita a '+porDia+'/dia)</span>':'');
+            el.innerHTML='📊 <b>'+n+' contatos</b> nesta tag · ~<b>'+porDia+'/dia</b> · <b>'+envioDias+' dia'+(envioDias>1?'s':'')+'</b> de envio · término previsto: <b>'+fmtD(d)+'</b>'+restr+(porDia<maxd?' <span style="opacity:.8">(a janela de horário limita a '+porDia+'/dia)</span>':'');
           }
           document.addEventListener('DOMContentLoaded',estCamp);
           var _st=selTagEl(); if(_st) _st.addEventListener('change',estCamp);
@@ -2807,8 +2829,10 @@ function paginaSofiaCampanhas(aviso, erro) {
           function enviarCampanha(ev){
             ev.preventDefault();
             var f=ev.target;
+            var dias=Array.prototype.map.call(document.querySelectorAll('.cpDia:checked'),function(e){return +e.value;});
+            if(!dias.length){ alert('Escolha ao menos um dia da semana para o envio.'); return false; }
             if(!confirm('Criar a campanha e preparar o envio? Nada é enviado até você clicar em Iniciar.')) return false;
-            var d={ nome:f.nome.value, tag:f.tag.value, textoBase:f.textoBase.value, limiteDia:f.limiteDia.value, delayMinSeg:f.delayMinSeg.value, delayMaxSeg:f.delayMaxSeg.value, janelaIni:f.janelaIni.value, janelaFim:f.janelaFim.value, dataInicio:f.dataInicio.value };
+            var d={ nome:f.nome.value, tag:f.tag.value, textoBase:f.textoBase.value, limiteDia:f.limiteDia.value, delayMinSeg:f.delayMinSeg.value, delayMaxSeg:f.delayMaxSeg.value, janelaIni:f.janelaIni.value, janelaFim:f.janelaFim.value, dataInicio:f.dataInicio.value, dias:dias };
             var btn=f.querySelector('button[type=submit]'); if(btn){btn.disabled=true;btn.textContent='Criando…';}
             function post(){ fetch('/sofia/campanhas/criar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.href='/sofia?view=campanhas&okc=criada'; } else { alert(j.erro||'Erro ao criar campanha'); if(btn){btn.disabled=false;btn.textContent='Criar campanha';} } }).catch(function(){ alert('Erro de rede'); if(btn){btn.disabled=false;btn.textContent='Criar campanha';} }); }
             var file=document.getElementById('cpFoto').files[0];
@@ -4283,6 +4307,7 @@ const server = http.createServer((req, res) => {
             limiteDia: String(d.limiteDia || '40'), delayMinSeg: String(d.delayMinSeg || '25'), delayMaxSeg: String(d.delayMaxSeg || '70'),
             janelaIni: String(d.janelaIni || '09:00'), janelaFim: String(d.janelaFim || '20:00'),
             dataInicio: String(d.dataInicio || hojeSP()),
+            dias: Array.isArray(d.dias) ? d.dias.map(Number).filter(x => x >= 0 && x <= 6) : [],
             fotoArquivo, destinatarios,
           },
         });
