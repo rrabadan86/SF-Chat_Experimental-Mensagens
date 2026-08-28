@@ -477,10 +477,10 @@ async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
     + "    if (!chamar) return;\n"
     + "    for (var p=0;p<PAGINAS;p++){\n"
     + "      if (Date.now() >= fimBudget) break;\n"
-    + "      var antes = nModels(c);\n"
-    + "      if (antes >= LIM) break;\n"
-    + "      try { await chamar(); } catch(e){ break; }\n"
-    + "      if (nModels(c) <= antes) break;\n"      // não veio nada novo → não há mais histórico
+    + "      if (nModels(c) >= LIM) break;\n"
+    + "      var loaded; try { loaded = await chamar(); } catch(e){ break; }\n"
+    // decide pelo VALOR DE RETORNO (como a whatsapp-web.js): lista vazia = acabou o histórico local
+    + "      if (!loaded || !loaded.length) break;\n"
     + "    }\n"
     + "  }\n"
     + "  function getChatColl(){\n"
