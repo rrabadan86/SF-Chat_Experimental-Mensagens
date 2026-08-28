@@ -462,13 +462,24 @@ async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
     + "  var fimBudget = Date.now() + 110000;\n"   // teto (~2 min) carregando — margem p/ não estourar o timeout do protocolo
     + "  function req(n){ try { return W.require ? W.require(n) : null; } catch(e){ return null; } }\n"
     + "  function nModels(c){ try { return (c && c.msgs && c.msgs.getModelsArray) ? c.msgs.getModelsArray().length : ((c&&c.msgs&&c.msgs._models&&c.msgs._models.length)||0); } catch(e){ return 0; } }\n"
+    // Resolve a função que carrega mensagens antigas: nesta versão é uma função de
+    // MÓDULO (loadEarlierMsgs(chat)), não um método do modelo. Tenta módulos/nomes.
+    + "  function getLoader(){\n"
+    + "    var mods=['WAWebChatLoadMessages','WAWebLoadEarlierMsgsAction','WAWebMsgLoad','WAWebChatLoadUtils'];\n"
+    + "    var nomes=['loadEarlierMsgs','loadEarlierMessages','loadEarlier','loadMoreMsgs','loadPageMessages'];\n"
+    + "    for (var i=0;i<mods.length;i++){ var m=req(mods[i]); if(!m) continue; var cand=[m, m.default]; for (var ci=0;ci<cand.length;ci++){ var o=cand[ci]; if(!o) continue; for (var j=0;j<nomes.length;j++){ if (typeof o[nomes[j]]==='function') return { fn:o[nomes[j]], via: mods[i]+'.'+nomes[j] }; } } }\n"
+    + "    return null;\n"
+    + "  }\n"
+    + "  var loader = getLoader();\n"
     + "  async function carregarAntigas(c){\n"       // pede ao WhatsApp as mensagens antigas (várias páginas)
-    + "    try { if (typeof (c&&c.loadEarlierMsgs) !== 'function') return; } catch(e){ return; }\n"
+    + "    var chamar = loader ? function(){ return loader.fn(c); }\n"
+    + "                : (typeof (c&&c.loadEarlierMsgs)==='function' ? function(){ return c.loadEarlierMsgs(); } : null);\n"
+    + "    if (!chamar) return;\n"
     + "    for (var p=0;p<PAGINAS;p++){\n"
     + "      if (Date.now() >= fimBudget) break;\n"
     + "      var antes = nModels(c);\n"
     + "      if (antes >= LIM) break;\n"
-    + "      try { await c.loadEarlierMsgs(); } catch(e){ break; }\n"
+    + "      try { await chamar(); } catch(e){ break; }\n"
     + "      if (nModels(c) <= antes) break;\n"      // não veio nada novo → não há mais histórico
     + "    }\n"
     + "  }\n"
@@ -516,10 +527,13 @@ async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
     + "    } catch(e){}\n"
     + "  }\n"
     + "  var tipos={}; for (var q=0;q<arr.length;q++){ try { var s=(arr[q]&&arr[q].id&&arr[q].id.server)||'?'; tipos[s]=(tipos[s]||0)+1; } catch(e){} }\n"
-    + "  return { chats: out, via:'store-raw', total: arr.length, tipos: tipos, comTel: comTel, soLid: soLid, totMsgs: totMsgs };\n"
+    + "  var loaderDiag=null;\n"
+    + "  if(!loader){ loaderDiag={}; var mm2=['WAWebChatLoadMessages','WAWebLoadEarlierMsgsAction','WAWebMsgLoad','WAWebChatLoadUtils','WAWebChatMsgs']; for (var z=0;z<mm2.length;z++){ try { var mo=req(mm2[z]); loaderDiag[mm2[z]] = mo ? Object.keys(mo).slice(0,40) : null; } catch(e){ loaderDiag[mm2[z]]='erro'; } } var proto0=null; try { proto0 = arr[0] ? Object.getOwnPropertyNames(Object.getPrototypeOf(arr[0])).filter(function(n){return /load|earlier|msg/i.test(n);}).slice(0,20) : null; } catch(e){} loaderDiag._modelMethods = proto0; }\n"
+    + "  return { chats: out, via:'store-raw', total: arr.length, tipos: tipos, comTel: comTel, soLid: soLid, totMsgs: totMsgs, loaderVia: (loader?loader.via:''), loaderDiag: loaderDiag };\n"
     + "})(" + LIM + ")";
   const r: any = await page.evaluate(code);
   if (r && r.via) log(`import: leitura via ${r.via} — ${(r.chats && r.chats.length) || 0} conversas de ${r.total || 0} no store (com telefone: ${r.comTel || 0}, só LID: ${r.soLid || 0}, ${r.totMsgs || 0} mensagens no total). tipos=${JSON.stringify(r.tipos || {})}`);
+  if (r) log(`import: carregador de histórico = ${r.loaderVia || "(nenhum encontrado)"}${r.loaderDiag ? " · diag=" + JSON.stringify(r.loaderDiag) : ""}`);
   if (r && r.erro) throw new Error(r.erro + (r.diag ? " Diag: " + JSON.stringify(r.diag) : ""));
   return (r && r.chats) || [];
 }
