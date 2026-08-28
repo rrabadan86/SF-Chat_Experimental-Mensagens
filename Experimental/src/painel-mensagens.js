@@ -1954,8 +1954,9 @@ function paginaSofiaConversas(aviso, erro) {
       var fu=c.fuEspera?'<span title="Follow-up pronto, aguardando o horário permitido" style="display:inline-block;background:#fdf2e0;color:#b8770a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">⏳ follow-up '+escH(c.fuEspera)+'</span>':'';
       var at=c.atencao?'<span title="A aluna pediu atendimento humano" style="display:inline-block;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 pediu humano</span>':'';
       var agMini=c.agendou?'<span title="Aula experimental agendada" style="font-size:.8rem;flex:none">📅</span>':'';
+      var blq=c.bloq?'<span title="Contato bloqueado" style="display:inline-block;background:#fdeaea;color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🚫 bloqueado</span>':'';
       var nome='<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:'+(pendente?'700':'600')+';font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escH(c.nome||fmtTel(k))+'</span>'+agMini+dot+'</div>';
-      var meta='<div class="quando" style="font-size:.72rem;margin:0;display:flex;align-items:center;flex-wrap:wrap;row-gap:3px">'+fmtHora(c.ultimaEm)+at+tgs+hb+enc+fu+'</div>';
+      var meta='<div class="quando" style="font-size:.72rem;margin:0;display:flex;align-items:center;flex-wrap:wrap;row-gap:3px">'+fmtHora(c.ultimaEm)+blq+at+tgs+hb+enc+fu+'</div>';
       var bg = on?'#e4efee':(c.atencao?'#fdecea':(encerrada(c)?'#fbf7f7':'#fff'));
       var bd = on?'#0e6e6b':(c.atencao?'#e0a09a':'#eee');
       return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:7px 10px;border-radius:9px;margin-bottom:5px;border:1px solid '+bd+';'+(c.atencao&&!on?'border-left:4px solid #c0392b;':'')+'background:'+bg+'">'+nome+'<div class="quando" style="margin:0;font-size:.7rem">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
