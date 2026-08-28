@@ -37,9 +37,9 @@ const config = require('./config'); // STUDIO_NOME etc.
 // Config do job de comparecimento (lida/gravada direto do JSON — NÃO requerer
 // comparecimento.js aqui, para não carregar o puppeteer/EVO no painel).
 const COMP_CFG_FILE = path.resolve(__dirname, '..', 'data', 'comparecimento.json');
-const COMP_PADRAO = { on: false, tagAgendou: 'FX - 3. Agendou Aula Exp', tagCompareceu: 'FX - 5. Fez Aula Experimental', tagFaltou: 'FX - 2. Encerrado com Agendamento sem Presença', numeroRelatorio: '' };
+const COMP_PADRAO = { on: false, tagAgendou: 'FX - 3. Agendou Aula Exp', tagCompareceu: 'FX - 5. Fez Aula Experimental', tagFaltou: 'FX - 2. Encerrado com Agendamento sem Presença', numeroRelatorio: '', criarNovos: false };
 function lerCompCfg() { try { const o = JSON.parse(fs.readFileSync(COMP_CFG_FILE, 'utf8')); return { ...COMP_PADRAO, ...(o && typeof o === 'object' ? o : {}) }; } catch (_) { return { ...COMP_PADRAO }; } }
-function gravarCompCfg(c) { const o = { on: !!c.on, tagAgendou: String(c.tagAgendou || '').trim() || COMP_PADRAO.tagAgendou, tagCompareceu: String(c.tagCompareceu || '').trim() || COMP_PADRAO.tagCompareceu, tagFaltou: String(c.tagFaltou || '').trim() || COMP_PADRAO.tagFaltou, numeroRelatorio: String(c.numeroRelatorio || '').replace(/\D/g, '') }; try { fs.mkdirSync(path.dirname(COMP_CFG_FILE), { recursive: true }); } catch (_) {} fs.writeFileSync(COMP_CFG_FILE, JSON.stringify(o, null, 2)); return o; }
+function gravarCompCfg(c) { const o = { on: !!c.on, tagAgendou: String(c.tagAgendou || '').trim() || COMP_PADRAO.tagAgendou, tagCompareceu: String(c.tagCompareceu || '').trim() || COMP_PADRAO.tagCompareceu, tagFaltou: String(c.tagFaltou || '').trim() || COMP_PADRAO.tagFaltou, numeroRelatorio: String(c.numeroRelatorio || '').replace(/\D/g, ''), criarNovos: !!c.criarNovos }; try { fs.mkdirSync(path.dirname(COMP_CFG_FILE), { recursive: true }); } catch (_) {} fs.writeFileSync(COMP_CFG_FILE, JSON.stringify(o, null, 2)); return o; }
 
 // Limite de aulas experimentais por turma — editável na aba SoFIA → Configuração.
 // Gravado em data/sofia-exp-limite.txt; o cálculo da grade (Python) lê este arquivo.
@@ -2922,6 +2922,7 @@ function paginaSofia(aviso, erro) {
             <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Compareceu → vira</label><select name="tagCompareceu">${cmpSel(cmp.tagCompareceu)}</select></div>
             <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Faltou → vira</label><select name="tagFaltou">${cmpSel(cmp.tagFaltou)}</select></div>
           </div>
+          <label class="chk" style="margin:14px 0 0"><input type="checkbox" name="criarNovos" value="1"${cmp.criarNovos ? ' checked' : ''}> Cadastrar na SoFIA quem fez a experimental e ainda não existe <small style="font-weight:400;color:var(--cinza)">(entrou por outro canal — assim pode receber campanhas)</small></label>
           <label style="margin:14px 0 4px">Número que recebe o relatório <small style="font-weight:400;color:var(--cinza)">(opcional — resumo do que foi trocado)</small></label>
           <input type="tel" name="numeroRelatorio" value="${esc(cmp.numeroRelatorio)}" placeholder="Ex.: 62998887777" style="max-width:220px">
           <div class="acts" style="margin-top:14px"><button type="submit" class="save">Salvar</button></div>
@@ -4155,7 +4156,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url === '/sofia/comparecimento') {
     return lerCorpo(req, 1e4, corpo => {
       const p = new URLSearchParams(corpo);
-      try { gravarCompCfg({ on: p.get('on') === '1', tagAgendou: p.get('tagAgendou') || '', tagCompareceu: p.get('tagCompareceu') || '', tagFaltou: p.get('tagFaltou') || '', numeroRelatorio: p.get('numeroRelatorio') || '' }); } catch (_) {}
+      try { gravarCompCfg({ on: p.get('on') === '1', tagAgendou: p.get('tagAgendou') || '', tagCompareceu: p.get('tagCompareceu') || '', tagFaltou: p.get('tagFaltou') || '', numeroRelatorio: p.get('numeroRelatorio') || '', criarNovos: p.get('criarNovos') === '1' }); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?okcmp=1' }); res.end();
     });
   }

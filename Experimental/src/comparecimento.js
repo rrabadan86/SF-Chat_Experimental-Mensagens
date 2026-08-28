@@ -30,6 +30,7 @@ const PADRAO = {
   tagCompareceu: 'FX - 5. Fez Aula Experimental',
   tagFaltou: 'FX - 2. Encerrado com Agendamento sem Presença',
   numeroRelatorio: '',
+  criarNovos: false, // cadastrar na SoFIA quem fez experimental e não existe (p/ campanhas)
 };
 
 function ler() {
@@ -43,6 +44,7 @@ function gravar(cfg) {
     tagCompareceu: String(cfg.tagCompareceu || '').trim() || PADRAO.tagCompareceu,
     tagFaltou: String(cfg.tagFaltou || '').trim() || PADRAO.tagFaltou,
     numeroRelatorio: String(cfg.numeroRelatorio || '').replace(/\D/g, ''),
+    criarNovos: !!cfg.criarNovos,
   };
   try { fs.mkdirSync(path.dirname(ARQ), { recursive: true }); } catch (_) {}
   fs.writeFileSync(ARQ, JSON.stringify(o, null, 2), 'utf8');
@@ -142,24 +144,32 @@ async function rodar({ dry = false } = {}) {
   if (ultimoErro) { resumo.erro = 'EVO indisponível: ' + (ultimoErro.message || ultimoErro); return resumo; }
 
   resumo.mapaSize = nAguardando;         // quantos contatos estão com a tag de "agendou"
-  resumo.evo = [];                       // diagnóstico: cada aula lida no EVO + se bateu
+  resumo.evo = [];                       // diagnóstico: cada aula lida no EVO + a ação
+  resumo.novos = [];                     // contatos cadastrados a partir do EVO (modo criarNovos)
 
-  // Para cada aluna com veredito, se ela está na lista de "aguardando", troca a tag.
   const jaMexido = new Set();
   for (const a of semana) {
     const chave = last8(a.telefone);
     const alvo = chave ? mapa[chave] : null;
-    resumo.evo.push({ nome: a.nome, status: a.status, veredito: a.veredito, telefone: a.telefone, data: a.data, bateu: !!alvo });
-    if (!chave || jaMexido.has(chave)) continue;
-    if (!alvo) continue;                 // não está com a tag de "agendou" → ignora
-    jaMexido.add(chave);
     const destino = a.veredito === 'compareceu' ? cfg.tagCompareceu : cfg.tagFaltou;
-    const item = { nome: alvo.nome || a.nome, telefone: alvo.tel, data: a.data };
-    if (!dry) {
-      try { contatos.removerTag(alvo.tel, cfg.tagAgendou); contatos.adicionarTag(alvo.tel, alvo.nome || a.nome, destino); }
-      catch (e) { console.log(`   ⚠️  troca de tag falhou (${alvo.tel}): ${e && e.message}`); }
+    let acao = 'ignorado';
+    if (chave && !jaMexido.has(chave)) {
+      if (alvo) {
+        // Já rastreado como "agendou" na SoFIA → transição de tag.
+        jaMexido.add(chave); acao = 'transicao';
+        const item = { nome: alvo.nome || a.nome, telefone: alvo.tel, data: a.data };
+        if (!dry) { try { contatos.removerTag(alvo.tel, cfg.tagAgendou); contatos.adicionarTag(alvo.tel, alvo.nome || a.nome, destino); } catch (e) { console.log(`   ⚠️  troca de tag falhou (${alvo.tel}): ${e && e.message}`); } }
+        (a.veredito === 'compareceu' ? resumo.compareceu : resumo.faltou).push(item);
+      } else if (cfg.criarNovos && a.telefone) {
+        // Não está na SoFIA (ou sem a tag) → cadastra + tag do resultado (p/ campanha).
+        jaMexido.add(chave); acao = 'cadastrado';
+        const item = { nome: a.nome, telefone: a.telefone, data: a.data, novo: true };
+        if (!dry) { try { contatos.adicionarTag(a.telefone, a.nome, destino); } catch (e) { console.log(`   ⚠️  cadastro/tag falhou (${a.telefone}): ${e && e.message}`); } }
+        (a.veredito === 'compareceu' ? resumo.compareceu : resumo.faltou).push(item);
+        resumo.novos.push(item);
+      }
     }
-    (a.veredito === 'compareceu' ? resumo.compareceu : resumo.faltou).push(item);
+    resumo.evo.push({ nome: a.nome, status: a.status, veredito: a.veredito, telefone: a.telefone, data: a.data, bateu: !!alvo, acao });
   }
   // Quem estava aguardando mas não apareceu na semana com veredito (aula futura,
   // ou não achei no EVO) — fica como está.
@@ -176,6 +186,7 @@ function textoRelatorio(r, cfg) {
   linhas.push(`❌ Faltaram: ${r.faltou.length}`);
   for (const x of r.faltou.slice(0, 40)) linhas.push(`   • ${x.nome || x.telefone} (${x.data})`);
   linhas.push(`⏳ Ainda sem veredito: ${r.semTag.length}`);
+  if (r.novos && r.novos.length) linhas.push(`🆕 Cadastrados novos (não passaram pela SoFIA): ${r.novos.length}`);
   if (r.erro) linhas.push(`⚠️ ${r.erro}`);
   return linhas.join('\n');
 }
@@ -205,9 +216,11 @@ if (require.main === module) {
     console.log(`Contatos com a tag "${cfg.tagAgendou}" (é só nesses que o job age): ${r.mapaSize != null ? r.mapaSize : (r.aviso || 0)}`);
     console.log(`Aulas com presença/falta lidas no EVO na semana: ${(r.evo || []).length}`);
     if (r.evo && r.evo.length) {
-      console.log('  (nome · status → veredito · telefone · bateu com a tag?)');
-      for (const e of r.evo) console.log(`   • ${e.nome} · ${e.status} → ${e.veredito} · ${e.telefone || '(sem tel)'} · ${e.bateu ? 'SIM ✅' : 'não ❌'}`);
+      const rotAcao = { transicao: 'troca de tag ✅', cadastrado: 'cadastrado 🆕', ignorado: 'ignorado —' };
+      console.log('  (nome · status → veredito · telefone · ação)');
+      for (const e of r.evo) console.log(`   • ${e.nome} · ${e.status} → ${e.veredito} · ${e.telefone || '(sem tel)'} · ${rotAcao[e.acao] || e.acao}`);
     }
+    if (r.novos && r.novos.length) console.log(`Cadastrados novos (não passaram pela SoFIA): ${r.novos.length}`);
     if (r.aviso) console.log('Aviso: ' + r.aviso);
     console.log('\n' + textoRelatorio(r, cfg));
     console.log(`\n${dry ? '(SIMULAÇÃO — nenhuma tag foi alterada. Use --run para valer.)' : '(Tags atualizadas.)'}`);
