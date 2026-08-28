@@ -272,6 +272,16 @@ function lembrarLid(lid: string, tel: string) { if (!lid || !tel) return; const 
 function telLembradoDoLid(lid: string): string { return lidMap.get(lid) || ""; }
 function marcarLidSemTel(lid: string) { if (!lid || lidMap.has(lid) || lidSemTel.has(lid)) return; lidSemTel.add(lid); ultimoSemTelEm = Date.now(); persistirLid(); }
 
+// Chave de inbox para uma mensagem que NÓS iniciamos (campanha): usa a identidade
+// CANÔNICA resolvida no envio (a mesma em que a resposta da pessoa vai cair),
+// não o número cru do cadastro. Sem isso, o envio caía numa conversa e a resposta
+// dela em OUTRA (por causa do 9º dígito / LID), sumindo do painel.
+function chaveDoEnvio(alvo: string, telCru: string): string {
+  if (alvo && alvo.endsWith("@c.us")) return jidParaTel(alvo);       // telefone canônico (com o 9 certo)
+  if (alvo && alvo.endsWith("@lid")) { const lid = jidParaTel(alvo); return telLembradoDoLid(lid) || lid; }
+  return String(telCru || "").replace(/\D/g, "");
+}
+
 async function resolverTel(msg: any): Promise<{ chave: string; telefone: string }> {
   const jid: string = msg.from || msg.to || "";
   if (telCache.has(jid)) return { chave: telCache.get(jid) as string, telefone: telRealCache.get(jid) || "" };
@@ -1247,7 +1257,7 @@ async function tickCampanha() {
     c.enviados.push({ tel: alvoDest.tel, nome: alvoDest.nome, em: Date.now() });
     c.enviadosHoje++;
     c.falhasSeguidas = 0; // deu certo → zera o contador de falhas seguidas
-    registrarInbox(alvoDest.tel, alvo, alvoDest.nome || "", "sofia", (c.fotoArquivo ? "📷 " : "") + variacao); // aparece nas Conversas
+    registrarInbox(chaveDoEnvio(alvo, alvoDest.tel), alvo, alvoDest.nome || "", "sofia", (c.fotoArquivo ? "📷 " : "") + variacao); // chave canônica → cai na MESMA conversa da resposta dela
     log(`campanha "${c.nome}": enviada ${c.enviados.length}/${c.enviados.length + c.pendentes.length} (${alvoDest.tel}).`);
   } catch (e: any) {
     c.pendentes.shift();
