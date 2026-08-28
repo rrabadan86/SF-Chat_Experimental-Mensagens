@@ -2926,7 +2926,7 @@ function paginaSofia(aviso, erro) {
           <input type="tel" name="numeroRelatorio" value="${esc(cmp.numeroRelatorio)}" placeholder="Ex.: 62998887777" style="max-width:220px">
           <div class="acts" style="margin-top:14px"><button type="submit" class="save">Salvar</button></div>
         </form>
-        <p class="quando" style="margin:12px 0 0">🧪 Para <b>testar antes</b> sem alterar nada, rode na VPS: <code>cd ~/SF-Chat_Experimental-Mensagens/Experimental &amp;&amp; xvfb-run -a node src/comparecimento.js --dry</code> (só mostra o que faria). Trocar <code>--dry</code> por <code>--run</code> executa de verdade. O <b>xvfb-run</b> é necessário só no teste manual (o robô já roda com tela virtual).</p>
+        <p class="quando" style="margin:12px 0 0">🧪 Para <b>testar antes</b> sem alterar nada (só mostra o que faria), rode na VPS, em <code>~/SF-Chat_Experimental-Mensagens/Experimental</code>: <code>HEADLESS=true node src/comparecimento.js --dry</code>. Se o EVO bloquear o modo sem tela, use <code>xvfb-run -a node src/comparecimento.js --dry</code>. Trocar <code>--dry</code> por <code>--run</code> executa de verdade. (O robô agendado não precisa disso — já roda com tela virtual.)</p>
       </div>
     </details>
 
