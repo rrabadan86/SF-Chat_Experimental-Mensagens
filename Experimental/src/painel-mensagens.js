@@ -34,6 +34,41 @@ const contatos = require('./contatos');
 const grupos = require('./grupos');
 const usuarios = require('./usuarios');
 const config = require('./config'); // STUDIO_NOME etc.
+const https = require('https');
+
+// ── Cotação do dólar (US$ → R$) para mostrar o custo da IA em reais ──────────
+// Busca a cotação atual numa API pública (awesomeapi), com cache em memória +
+// arquivo e fallback. Não bloqueia a página: usa o valor em cache e atualiza
+// em segundo plano quando fica velho. Guarda o último valor em data/ p/ o boot.
+const COTACAO_FILE = path.resolve(__dirname, '..', 'data', 'cotacao-usd.json');
+const COTACAO_TTL = 6 * 3600 * 1000; // revalida a cada 6h
+let _cotacao = { valor: 5.40, em: 0, fonte: 'padrão' };
+try { const o = JSON.parse(fs.readFileSync(COTACAO_FILE, 'utf8')); if (o && o.valor > 0) _cotacao = { valor: +o.valor, em: +o.em || 0, fonte: o.fonte || 'cache' }; } catch (_) {}
+function atualizarCotacao() {
+  return new Promise((resolve) => {
+    try {
+      const req = https.get('https://economia.awesomeapi.com.br/json/last/USD-BRL', { timeout: 5000 }, (res) => {
+        let data = ''; res.on('data', c => data += c);
+        res.on('end', () => {
+          try {
+            const o = JSON.parse(data); const v = parseFloat(o && o.USDBRL && o.USDBRL.bid);
+            if (isFinite(v) && v > 0) {
+              _cotacao = { valor: v, em: Date.now(), fonte: 'awesomeapi' };
+              try { fs.mkdirSync(path.dirname(COTACAO_FILE), { recursive: true }); fs.writeFileSync(COTACAO_FILE, JSON.stringify(_cotacao)); } catch (_) {}
+            }
+          } catch (_) {}
+          resolve(_cotacao.valor);
+        });
+      });
+      req.on('error', () => resolve(_cotacao.valor));
+      req.on('timeout', () => { try { req.destroy(); } catch (_) {} resolve(_cotacao.valor); });
+    } catch (_) { resolve(_cotacao.valor); }
+  });
+}
+function cotacaoUSD() { if (Date.now() - _cotacao.em > COTACAO_TTL) atualizarCotacao().catch(() => {}); return _cotacao.valor; }
+function cotacaoInfo() { return { valor: _cotacao.valor, em: _cotacao.em, fonte: _cotacao.fonte }; }
+atualizarCotacao().catch(() => {}); // aquece no boot
+setInterval(() => atualizarCotacao().catch(() => {}), COTACAO_TTL);
 // Config do job de comparecimento (lida/gravada direto do JSON — NÃO requerer
 // comparecimento.js aqui, para não carregar o puppeteer/EVO no painel).
 const COMP_CFG_FILE = path.resolve(__dirname, '..', 'data', 'comparecimento.json');
@@ -3512,11 +3547,16 @@ function paginaSofiaCusto(aviso, erro, params) {
   const dias = c.porDia.filter(d => dentro(d.dia)).sort((a, b) => a.dia < b.dia ? -1 : 1);
   const tot = dias.reduce((a, d) => ({ usd: a.usd + d.usd, convs: a.convs + d.convs, inTok: a.inTok + d.inTok, outTok: a.outTok + d.outTok }), { usd: 0, convs: 0, inTok: 0, outTok: 0 });
   const usd = (v) => 'US$ ' + (v || 0).toFixed(2);
+  const cot = cotacaoUSD();
+  const brl = (v) => 'R$ ' + ((v || 0) * cot).toFixed(2).replace('.', ',');
+  const ci = cotacaoInfo();
+  const cotHora = ci.em ? new Date(ci.em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+  const cotLinha = `<p class="quando" style="text-align:center;margin:8px 0 0">💱 Convertido a US$ 1 = R$ ${cot.toFixed(2).replace('.', ',')}${ci.fonte === 'awesomeapi' && cotHora ? ` · cotação de ${cotHora}` : ' · cotação aproximada'}</p>`;
   const ktok = (v) => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(v || 0);
   const fmtDiaC = (s) => { const p = String(s).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : s; };
   const maxU = Math.max(0.0001, ...dias.map(d => d.usd));
   const barras = dias.length
-    ? dias.slice().reverse().map(d => `<div class="bar"><span class="bd">${fmtDiaC(d.dia)}</span><span class="btrack"><span class="bfill" style="width:${Math.round((d.usd / maxU) * 100)}%"></span></span><span class="bn">${usd(d.usd)} <small>· ${d.convs} conv.</small></span></div>`).join('')
+    ? dias.slice().reverse().map(d => `<div class="bar"><span class="bd">${fmtDiaC(d.dia)}</span><span class="btrack"><span class="bfill" style="width:${Math.round((d.usd / maxU) * 100)}%"></span></span><span class="bn">${brl(d.usd)} <small style="opacity:.55">(${usd(d.usd)})</small> <small>· ${d.convs} conv.</small></span></div>`).join('')
     : '<div class="vazio">Sem gasto registrado no período.</div>';
   // Gasto por conversa (telefone) no mesmo período. Só entram os turnos que já
   // trazem o telefone (registrados após ativar este detalhamento).
@@ -3533,17 +3573,17 @@ function paginaSofiaCusto(aviso, erro, params) {
       <div style="display:flex;gap:14px;align-items:baseline;white-space:nowrap;font-variant-numeric:tabular-nums">
         <span style="color:var(--cinza);font-size:.8rem">${x.turnos} msg</span>
         <span style="color:var(--faint);font-size:.8rem">${ktok(x.inTok + x.outTok)} tok</span>
-        <b>${usd(x.usd)}</b></div></div>`;
+        <span style="text-align:right"><b>${brl(x.usd)}</b><br><small style="color:var(--faint);font-size:.72rem">${usd(x.usd)}</small></span></div></div>`;
   }).join('');
   const convNota = [];
   if (porConv.linhas.length > 60) convNota.push(`Mostrando as 60 conversas de maior gasto (de ${porConv.linhas.length}).`);
-  if (porConv.semTel > 0.005) convNota.push(`Conversas anteriores à ativação deste detalhamento somam ${usd(porConv.semTel)} sem separar por aluna.`);
+  if (porConv.semTel > 0.005) convNota.push(`Conversas anteriores à ativação deste detalhamento somam ${brl(porConv.semTel)} (${usd(porConv.semTel)}) sem separar por aluna.`);
   const convBloco = convRows
     ? convRows + (convNota.length ? `<p class="quando" style="margin:12px 0 0">${convNota.join(' ')}</p>` : '')
-    : `<div class="vazio">Nenhuma conversa com gasto por aluna neste período ainda.${porConv.semTel > 0.005 ? ` (Há ${usd(porConv.semTel)} de conversas anteriores à ativação, sem separar por aluna.)` : ''}</div>`;
+    : `<div class="vazio">Nenhuma conversa com gasto por aluna neste período ainda.${porConv.semTel > 0.005 ? ` (Há ${brl(porConv.semTel)} de conversas anteriores à ativação, sem separar por aluna.)` : ''}</div>`;
   const segs = janelas.map(([v, l]) => `<a href="/sofia?view=custo&per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
   const limite = c.limite;
-  const alerta = (limite > 0 && c.hoje.usd >= limite) ? `<div class="aviso err">⚠️ O gasto de <b>hoje</b> (${usd(c.hoje.usd)}) atingiu o limite de ${usd(limite)}.</div>` : '';
+  const alerta = (limite > 0 && c.hoje.usd >= limite) ? `<div class="aviso err">⚠️ O gasto de <b>hoje</b> (${brl(c.hoje.usd)} · ${usd(c.hoje.usd)}) atingiu o limite de ${usd(limite)}.</div>` : '';
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('custo')}
@@ -3560,11 +3600,12 @@ function paginaSofiaCusto(aviso, erro, params) {
       ${custom ? `<a href="/sofia?view=custo&per=7" class="reset filtro-limpar" style="text-decoration:none">🧹</a>` : ''}
     </form>
     <div class="stats">
-      <div class="stat tot"><div class="n">${usd(tot.usd)}</div><div class="l">gasto · ${esc(rotulo)}</div></div>
+      <div class="stat tot"><div class="n">${brl(tot.usd)}</div><div class="l">gasto · ${esc(rotulo)}</div><div class="l" style="opacity:.6;margin-top:2px">${usd(tot.usd)}</div></div>
       <div class="stat"><div class="n" style="color:var(--cinza)">${tot.convs}</div><div class="l">conversas</div></div>
       <div class="stat"><div class="n" style="color:var(--cinza)">${ktok(tot.inTok + tot.outTok)}</div><div class="l">tokens</div></div>
-      <div class="stat ok"><div class="n">${tot.convs ? usd(tot.usd / tot.convs) : usd(0)}</div><div class="l">média/conversa</div></div>
+      <div class="stat ok"><div class="n">${tot.convs ? brl(tot.usd / tot.convs) : brl(0)}</div><div class="l">média/conversa</div><div class="l" style="opacity:.6;margin-top:2px">${tot.convs ? usd(tot.usd / tot.convs) : usd(0)}</div></div>
     </div>
+    ${cotLinha}
     <div class="sec-t">Gasto por dia</div>
     <div class="card">${barras}</div>
     <div class="sec-t">Gasto por conversa <small style="font-weight:600;color:var(--cinza)">(quanto a IA custou com cada aluna no período)</small></div>
