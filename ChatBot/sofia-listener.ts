@@ -1027,12 +1027,13 @@ const CAMP_INBOX = path.join(DIR, "campanhas-inbox.jsonl");
 // { <id>: { texto, em } }; o painel escreve o pedido no inbox e lê o resultado
 // daqui. Guardamos só os mais recentes para não crescer sem fim.
 const CAMP_RASCUNHOS = path.join(DIR, "campanha-rascunhos.json");
-function escreverRascunho(id: string, texto: string) {
-  let m: Record<string, { texto: string; em: number }> = {};
+type RascunhoVal = { em: number; texto?: string; variacoes?: string[] };
+function escreverRascunho(id: string, payload: { texto?: string; variacoes?: string[] }) {
+  let m: Record<string, RascunhoVal> = {};
   try { const o = JSON.parse(fs.readFileSync(CAMP_RASCUNHOS, "utf8")); if (o && typeof o === "object") m = o; } catch {}
-  m[id] = { texto, em: Date.now() };
+  m[id] = { ...payload, em: Date.now() };
   const recentes = Object.keys(m).sort((a, b) => (m[b].em - m[a].em)).slice(0, 20);
-  const novo: Record<string, { texto: string; em: number }> = {};
+  const novo: Record<string, RascunhoVal> = {};
   for (const k of recentes) novo[k] = m[k];
   try { fs.writeFileSync(CAMP_RASCUNHOS, JSON.stringify(novo), "utf8"); } catch {}
 }
@@ -1092,9 +1093,12 @@ async function processarCampInbox() {
       if (op.op === "criar" && op.campanha) {
         const p = op.campanha;
         const dests: CampDest[] = Array.isArray(p.destinatarios) ? p.destinatarios.filter((d: any) => d && d.tel) : [];
+        // Variações já revisadas/editadas no painel? Usa elas e já fica "pronta".
+        // Senão, cria como "gerando" e a IA gera as variações aqui (comportamento antigo).
+        const preVars: string[] = Array.isArray(p.variacoes) ? p.variacoes.map((s: any) => String(s || "").trim()).filter(Boolean) : [];
         const camp: Campanha = {
           id: String(p.id || Date.now()), nome: String(p.nome || "Campanha"), tag: String(p.tag || ""),
-          textoBase: String(p.textoBase || ""), variacoes: [],
+          textoBase: String(p.textoBase || ""), variacoes: preVars,
           limiteDia: Math.max(1, parseInt(p.limiteDia, 10) || 40),
           delayMinSeg: Math.max(1, parseInt(p.delayMinSeg, 10) || 20),
           delayMaxSeg: Math.max(1, parseInt(p.delayMaxSeg, 10) || 60),
@@ -1102,18 +1106,22 @@ async function processarCampInbox() {
           dataInicio: String(p.dataInicio || hojeSP()),
           dias: Array.isArray(p.dias) ? p.dias.map((x: any) => Number(x)).filter((x: number) => x >= 0 && x <= 6) : [],
           fotoArquivo: p.fotoArquivo ? String(p.fotoArquivo) : "",
-          status: "gerando", pendentes: dests, enviados: [], falhas: [],
+          status: preVars.length ? "pronta" : "gerando", pendentes: dests, enviados: [], falhas: [],
           enviadosHoje: 0, diaRef: hojeSP(), proxEnvioEm: 0, criadoEm: Date.now(), atualizadoEm: Date.now(),
         };
         if (camp.delayMaxSeg < camp.delayMinSeg) camp.delayMaxSeg = camp.delayMinSeg;
         campanhas.unshift(camp);
         agendarSalvarCampanhas();
-        log(`campanha "${camp.nome}" criada (${dests.length} destinatários) — gerando variações…`);
-        gerarVariacoes(camp.textoBase, 10).then((vs) => {
-          camp.variacoes = vs.length ? vs : [camp.textoBase];
-          camp.status = "pronta"; camp.atualizadoEm = Date.now(); agendarSalvarCampanhas();
-          log(`campanha "${camp.nome}": ${camp.variacoes.length} variações prontas.`);
-        }).catch(() => { camp.variacoes = [camp.textoBase]; camp.status = "pronta"; agendarSalvarCampanhas(); });
+        if (preVars.length) {
+          log(`campanha "${camp.nome}" criada com ${preVars.length} variações do painel (pronta).`);
+        } else {
+          log(`campanha "${camp.nome}" criada (${dests.length} destinatários) — gerando variações…`);
+          gerarVariacoes(camp.textoBase, 10).then((vs) => {
+            camp.variacoes = vs.length ? vs : [camp.textoBase];
+            camp.status = "pronta"; camp.atualizadoEm = Date.now(); agendarSalvarCampanhas();
+            log(`campanha "${camp.nome}": ${camp.variacoes.length} variações prontas.`);
+          }).catch(() => { camp.variacoes = [camp.textoBase]; camp.status = "pronta"; agendarSalvarCampanhas(); });
+        }
       } else if (op.op === "controle" && op.id) {
         const c = campanhas.find((x) => x.id === String(op.id));
         if (c) {
@@ -1130,8 +1138,16 @@ async function processarCampInbox() {
         const instrucao = String(op.instrucao || "");
         log(`gerando frase de campanha (rascunho ${op.id})…`);
         gerarTextoCampanha(instrucao)
-          .then((t) => { escreverRascunho(String(op.id), t || ""); log(`rascunho ${op.id} pronto (${(t || "").length} caracteres).`); })
-          .catch((e: any) => { escreverRascunho(String(op.id), ""); log(`rascunho ${op.id} falhou: ${e?.message || e}`); });
+          .then((t) => { escreverRascunho(String(op.id), { texto: t || "" }); log(`rascunho ${op.id} pronto (${(t || "").length} caracteres).`); })
+          .catch((e: any) => { escreverRascunho(String(op.id), { texto: "" }); log(`rascunho ${op.id} falhou: ${e?.message || e}`); });
+      } else if (op.op === "variacoes" && op.id) {
+        // Gerar as ~10 variações da mensagem base para o painel ver/editar ANTES
+        // de criar a campanha. O painel faz poll do mesmo campanha-rascunhos.json.
+        const texto = String(op.texto || "");
+        log(`gerando variações de campanha (${op.id})…`);
+        gerarVariacoes(texto, 10)
+          .then((vs) => { escreverRascunho(String(op.id), { variacoes: Array.isArray(vs) ? vs : [] }); log(`variações ${op.id}: ${(vs || []).length}.`); })
+          .catch((e: any) => { escreverRascunho(String(op.id), { variacoes: [] }); log(`variações ${op.id} falhou: ${e?.message || e}`); });
       } else if (op.op === "teste" && op.telefone) {
         // Enviar teste: manda a mensagem (com foto) para um número seu, na hora.
         const texto = aplicarNome(String(op.texto || ""), op.nome || "Maria");

@@ -439,7 +439,11 @@ function lerRascunhoCampanha(id) {
   try {
     const o = JSON.parse(ler(F.campanhaRascunhos));
     const r = o && typeof o === 'object' ? o[id] : null;
-    return r ? { pronto: true, texto: String(r.texto || '') } : { pronto: false };
+    if (!r) return { pronto: false };
+    const out = { pronto: true };
+    if (typeof r.texto !== 'undefined') out.texto = String(r.texto || '');
+    if (Array.isArray(r.variacoes)) out.variacoes = r.variacoes.map(x => String(x || ''));
+    return out;
   } catch (_) { return { pronto: false }; }
 }
 // Salva a foto de uma campanha (dataURL base64) em ChatBot/campanha-fotos/<id>.<ext>

@@ -2744,6 +2744,19 @@ function paginaSofiaCampanhas(aviso, erro) {
         <div id="cpEst" class="aviso" style="margin:14px 0 0;display:none"></div>
 
         <details class="cpf-acc">
+          <summary class="cpf-sum">Variações da mensagem <span class="sub quando" style="margin:0">— veja e edite as ~10 versões antes de criar</span></summary>
+          <div class="cpf-body">
+            <p class="quando" style="margin:0 0 10px">A IA cria variações da <b>mensagem base</b> para o envio não parecer robô — cada aluna recebe uma versão. Gere aqui para <b>ver e ajustar</b> exatamente o que será enviado. Se você não gerar, a IA cria as variações sozinha ao criar a campanha.</p>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <button type="button" id="cpVarBtn" class="reset" onclick="gerarVariacoesCampanha()" style="padding:9px 16px;flex:none">✨ Gerar variações</button>
+              <span id="cpVarMsg" class="quando" style="margin:0"></span>
+            </div>
+            <div id="cpVars" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"></div>
+            <button type="button" id="cpVarAdd" onclick="addVariacao('')" class="reset" style="display:none;padding:7px 14px;margin-top:10px;align-self:flex-start">＋ adicionar variação</button>
+          </div>
+        </details>
+
+        <details class="cpf-acc">
           <summary class="cpf-sum">Testar e criar</summary>
           <div class="cpf-body">
           <p class="quando" style="margin:0 0 10px">Mande a mensagem (e a foto) para um número seu antes, pra conferir como chega.</p>
@@ -2814,6 +2827,46 @@ function paginaSofiaCampanhas(aviso, erro) {
               }).catch(function(e){ fim('❌ '+((e&&e.message)||'erro de rede')); });
             function fim(t){ _gerando=false; if(btn){btn.disabled=false;} if(msg){msg.textContent=t;} }
           }
+          function renumVariacoes(){ var it=document.querySelectorAll('#cpVars .cpVarItem'); for(var i=0;i<it.length;i++){ var l=it[i].querySelector('.cpVarLbl'); if(l) l.textContent='Variação '+(i+1); } document.getElementById('cpVarAdd').style.display=it.length?'inline-block':'none'; }
+          function addVariacao(t){
+            var box=document.getElementById('cpVars'); if(!box) return;
+            var wrap=document.createElement('div'); wrap.className='cpVarItem'; wrap.style.cssText='border:1px solid var(--linha);border-radius:10px;padding:8px 10px;background:#fff';
+            var top=document.createElement('div'); top.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;gap:8px';
+            var lbl=document.createElement('span'); lbl.className='quando cpVarLbl'; lbl.style.margin='0';
+            var rm=document.createElement('a'); rm.href='javascript:void(0)'; rm.className='quando'; rm.style.cssText='text-decoration:underline;margin:0;flex:none'; rm.textContent='remover'; rm.onclick=function(){ wrap.parentNode.removeChild(wrap); renumVariacoes(); };
+            top.appendChild(lbl); top.appendChild(rm);
+            var ta=document.createElement('textarea'); ta.className='cpVarTa'; ta.rows=3; ta.style.cssText='width:100%;font-size:.9rem'; ta.value=t||'';
+            wrap.appendChild(top); wrap.appendChild(ta); box.appendChild(wrap); renumVariacoes();
+          }
+          var _gerVars=false;
+          function gerarVariacoesCampanha(){
+            if(_gerVars) return;
+            var texto=(document.querySelector('textarea[name=textoBase]').value||'').trim();
+            var msg=document.getElementById('cpVarMsg'); var btn=document.getElementById('cpVarBtn');
+            if(!texto){ if(msg)msg.textContent='Escreva (ou gere) a mensagem base primeiro.'; return; }
+            var atuais=document.querySelectorAll('#cpVars .cpVarItem').length;
+            if(atuais && !confirm('Gerar novas variações vai substituir as '+atuais+' que estão aí. Continuar?')) return;
+            _gerVars=true; if(btn){btn.disabled=true;} if(msg){msg.textContent='✨ gerando ~10 variações… (uns segundos)';}
+            fetch('/sofia/campanhas/variacoes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({texto:texto})})
+              .then(function(r){return r.json();}).then(function(j){
+                if(!j.ok){ throw new Error(j.erro||'falha'); }
+                var tentativas=0;
+                function poll(){
+                  tentativas++;
+                  if(tentativas>50){ fim('❌ demorou demais — tente de novo.'); return; }
+                  fetch('/sofia/campanhas/rascunho?id='+encodeURIComponent(j.id),{cache:'no-store'})
+                    .then(function(r){return r.json();}).then(function(rr){
+                      if(rr && rr.pronto){
+                        var vs=(rr.variacoes||[]).filter(function(s){return String(s||'').trim();});
+                        if(vs.length){ document.getElementById('cpVars').innerHTML=''; vs.forEach(function(v){ addVariacao(v); }); fim('✓ '+vs.length+' variações — revise e ajuste. Elas serão usadas no envio.'); }
+                        else { fim('❌ a SoFIA não conseguiu gerar. Tente de novo.'); }
+                      } else { setTimeout(poll,1200); }
+                    }).catch(function(){ setTimeout(poll,1500); });
+                }
+                setTimeout(poll,1200);
+              }).catch(function(e){ fim('❌ '+((e&&e.message)||'erro de rede')); });
+            function fim(t){ _gerVars=false; if(btn){btn.disabled=false;} if(msg){msg.textContent=t;} }
+          }
           function testarCampanha(){
             var tel=document.getElementById('cpTesteTel').value.replace(/\\D/g,''); var msg=document.getElementById('cpTesteMsg');
             var texto=document.querySelector('textarea[name=textoBase]').value.trim();
@@ -2832,8 +2885,9 @@ function paginaSofiaCampanhas(aviso, erro) {
             var f=ev.target;
             var dias=Array.prototype.map.call(document.querySelectorAll('.cpDia:checked'),function(e){return +e.value;});
             if(!dias.length){ alert('Escolha ao menos um dia da semana para o envio.'); return false; }
+            var variacoes=Array.prototype.map.call(document.querySelectorAll('#cpVars .cpVarTa'),function(e){return e.value.trim();}).filter(Boolean);
             if(!confirm('Criar a campanha e preparar o envio? Nada é enviado até você clicar em Iniciar.')) return false;
-            var d={ nome:f.nome.value, tag:f.tag.value, textoBase:f.textoBase.value, limiteDia:f.limiteDia.value, delayMinSeg:f.delayMinSeg.value, delayMaxSeg:f.delayMaxSeg.value, janelaIni:f.janelaIni.value, janelaFim:f.janelaFim.value, dataInicio:f.dataInicio.value, dias:dias };
+            var d={ nome:f.nome.value, tag:f.tag.value, textoBase:f.textoBase.value, limiteDia:f.limiteDia.value, delayMinSeg:f.delayMinSeg.value, delayMaxSeg:f.delayMaxSeg.value, janelaIni:f.janelaIni.value, janelaFim:f.janelaFim.value, dataInicio:f.dataInicio.value, dias:dias, variacoes:variacoes };
             var btn=f.querySelector('button[type=submit]'); if(btn){btn.disabled=true;btn.textContent='Criando…';}
             function post(){ fetch('/sofia/campanhas/criar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.href='/sofia?view=campanhas&okc=criada'; } else { alert(j.erro||'Erro ao criar campanha'); if(btn){btn.disabled=false;btn.textContent='Criar campanha';} } }).catch(function(){ alert('Erro de rede'); if(btn){btn.disabled=false;btn.textContent='Criar campanha';} }); }
             var file=document.getElementById('cpFoto').files[0];
@@ -4309,6 +4363,7 @@ const server = http.createServer((req, res) => {
             janelaIni: String(d.janelaIni || '09:00'), janelaFim: String(d.janelaFim || '20:00'),
             dataInicio: String(d.dataInicio || hojeSP()),
             dias: Array.isArray(d.dias) ? d.dias.map(Number).filter(x => x >= 0 && x <= 6) : [],
+            variacoes: Array.isArray(d.variacoes) ? d.variacoes.map(s => String(s || '').trim()).filter(Boolean).slice(0, 50) : [],
             fotoArquivo, destinatarios,
           },
         });
@@ -4346,6 +4401,19 @@ const server = http.createServer((req, res) => {
       if (!instrucao) return res.end(JSON.stringify({ ok: false, erro: 'Escreva a instrução do que você quer.' }));
       const id = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
       try { sofia.opCampanha({ op: 'rascunho', id, instrucao }); } catch (e) { return res.end(JSON.stringify({ ok: false, erro: 'Falha ao enviar o pedido à SoFIA.' })); }
+      res.end(JSON.stringify({ ok: true, id }));
+    });
+  }
+  // Pedir à SoFIA as ~10 variações da mensagem base (para ver/editar antes de
+  // criar). Assíncrono: o painel faz poll de /sofia/campanhas/rascunho?id=… .
+  if (req.method === 'POST' && url === '/sofia/campanhas/variacoes') {
+    return lerCorpo(req, 1e6, corpo => {
+      let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      const texto = String(d.texto || '').trim();
+      if (!texto) return res.end(JSON.stringify({ ok: false, erro: 'Escreva a mensagem base primeiro.' }));
+      const id = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      try { sofia.opCampanha({ op: 'variacoes', id, texto }); } catch (e) { return res.end(JSON.stringify({ ok: false, erro: 'Falha ao enviar o pedido à SoFIA.' })); }
       res.end(JSON.stringify({ ok: true, id }));
     });
   }
