@@ -1607,8 +1607,8 @@ function subnavSofia(view) {
   const item = (v, rot) => `<a href="/sofia${v === 'config' ? '' : '?view=' + v}"${view === v ? ' class="on"' : ''}>${rot}</a>`;
   const sess = _navSess || { admin: true, telas: [] };
   let its = '';
-  if (podeSofiaSub(sess, 'config')) its += item('config', 'Configuração');
   if (podeSofiaSub(sess, 'conversas')) its += item('conversas', 'Conversas');
+  if (podeSofiaSub(sess, 'config')) its += item('config', 'Configuração');
   if (podeSofiaSub(sess, 'contatos')) its += item('contatos', 'Contatos');
   if (podeSofiaSub(sess, 'contatos')) its += item('tags', 'Tags');
   if (podeSofiaSub(sess, 'campanhas')) its += item('campanhas', 'Campanhas');
