@@ -3287,7 +3287,7 @@ function paginaSofiaFunil(params) {
   }
   const naoAg = Math.max(0, convs - agend);
   const conv = convs ? Math.round((agend / convs) * 1000) / 10 : 0;
-  const barra = (rot, n, max, cor) => `<div style="display:flex;align-items:center;gap:10px;margin:9px 0"><span style="width:150px;flex:none;color:var(--tinta);font-weight:600;font-size:.86rem">${rot}</span><span style="flex:1;height:26px;background:var(--linha-soft);border-radius:8px;overflow:hidden"><span style="display:block;height:100%;width:${max ? Math.max(3, Math.round(n / max * 100)) : 0}%;background:${cor}"></span></span><span style="width:44px;flex:none;text-align:right;font-weight:700;color:var(--tinta)">${n}</span></div>`;
+  const barra = (rot, n, max, cor) => `<div style="display:flex;align-items:center;gap:10px;margin:9px 0"><span style="width:150px;flex:none;color:var(--tinta);font-weight:600;font-size:.86rem">${rot}</span><span style="flex:1;height:26px;background:var(--linha-soft);border-radius:8px;overflow:hidden"><span style="display:block;height:100%;width:${(max && n > 0) ? Math.max(3, Math.round(n / max * 100)) : 0}%;background:${cor}"></span></span><span style="width:44px;flex:none;text-align:right;font-weight:700;color:var(--tinta)">${n}</span></div>`;
   const segs = janelas.map(([v, l]) => `<a href="/sofia?view=funil&per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
   const corpo = `<div class="wrap">
     ${subnavSofia('funil')}
