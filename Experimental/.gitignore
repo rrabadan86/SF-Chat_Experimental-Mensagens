@@ -57,6 +57,9 @@ data/contatos.json
 # Usuários do painel (hash de senha) e segredo de sessão — NUNCA versionar
 data/usuarios.json
 data/.sessao-segredo
+# Registro de acessos ao painel (último acesso + histórico de logins) — estado por VPS
+data/acessos-ultimo.json
+data/acessos-login.jsonl
 
 data/tags-config.json
 

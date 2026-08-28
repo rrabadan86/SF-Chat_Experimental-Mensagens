@@ -33,6 +33,7 @@ const sofia = require('./sofia-editor');
 const contatos = require('./contatos');
 const grupos = require('./grupos');
 const usuarios = require('./usuarios');
+const acessos = require('./acessos');
 const config = require('./config'); // STUDIO_NOME etc.
 const https = require('https');
 
@@ -3563,6 +3564,10 @@ function paginaTermos() {
 // Aba "Perfis" (só admin): cria usuários, define telas, senha e exclui.
 function paginaPerfis(aviso, erro) {
   const lista = usuarios.listar();
+  let ults = {}; try { ults = acessos.ultimosAcessos(); } catch (_) {}          // { usuario: ts }
+  let logins = []; try { logins = acessos.historicoLogins(30); } catch (_) {}   // últimos logins (recente→antigo)
+  const fmtAcesso = (ts) => { if (!ts) return ''; try { return new Date(Number(ts)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return '—'; } };
+  const seloAcesso = (usuario) => { const ts = ults[usuario]; return `<span class="quando" style="margin:0">· ${ts ? '🕘 ' + fmtAcesso(ts) : 'nunca acessou'}</span>`; };
   const umChk = (t, marcadas, prefixo) => `<label style="display:inline-flex;align-items:center;gap:6px;margin:0;font-weight:600;font-size:var(--fs-sm);cursor:pointer;white-space:nowrap"><input type="checkbox" name="${prefixo}" value="${t.key}"${(marcadas || []).includes(t.key) ? ' checked' : ''} style="width:15px;height:15px;margin:0"> ${t.rot}</label>`;
   const chkTelas = (marcadas, prefixo) => {
     const soltas = usuarios.TELAS.filter(t => !t.grupo);
@@ -3579,6 +3584,7 @@ function paginaPerfis(aviso, erro) {
         <span style="font-weight:700;font-size:var(--fs-h2)">${esc(u.usuario)}</span>
         ${u.email ? `<span class="quando" style="margin:0">📧 ${esc(u.email)}</span>` : '<span class="quando" style="margin:0;color:var(--faint)">sem e-mail</span>'}
         <span class="quando" style="margin:0">· ${(u.telas || []).length} tela(s)</span>
+        ${seloAcesso(u.usuario)}
         <span class="u-caret" style="margin-left:auto;color:var(--faint);font-size:.9rem">▸</span>
       </summary>
       <div style="display:flex;gap:8px;align-items:flex-end;margin:12px 0 0">
@@ -3619,8 +3625,25 @@ function paginaPerfis(aviso, erro) {
     </div>
 
     <div class="sec-t">Usuários</div>
-    <div class="card" style="background:#f3fbfb;border-color:#bfe8e7"><p class="quando" style="margin:0">🔑 <b>Admin</b> (do sistema): <b>${esc(USER)}</b>${ADMIN_EMAIL ? ` · 📧 ${esc(ADMIN_EMAIL)}` : ''} — vê todas as telas e gerencia os Perfis. A senha do admin fica em <code>PAINEL_SENHA</code> e o e-mail do login com Google em <code>PAINEL_ADMIN_EMAIL</code>, no <code>.env</code>.</p></div>
+    <div class="card" style="background:#f3fbfb;border-color:#bfe8e7"><p class="quando" style="margin:0">🔑 <b>Admin</b> (do sistema): <b>${esc(USER)}</b>${ADMIN_EMAIL ? ` · 📧 ${esc(ADMIN_EMAIL)}` : ''} ${ults[USER] ? `· 🕘 ${fmtAcesso(ults[USER])}` : ''} — vê todas as telas e gerencia os Perfis. A senha do admin fica em <code>PAINEL_SENHA</code> e o e-mail do login com Google em <code>PAINEL_ADMIN_EMAIL</code>, no <code>.env</code>.</p></div>
     ${cardsUsuarios}
+
+    <div class="sec-t">Últimos acessos</div>
+    <div class="card">
+      <p class="quando" style="margin:0 0 12px">O <b>🕘 último acesso</b> ao lado de cada usuário (acima) mostra a última vez que a pessoa <b>usou</b> o painel. A tabela abaixo lista os <b>logins</b> (quando cada um <b>entrou</b> e como). Como a sessão dura ${SESSAO_DIAS} dias, quem já está logado não precisa entrar de novo — por isso costuma haver poucos logins.</p>
+      ${logins.length ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:var(--fs-sm)">
+        <thead><tr style="text-align:left;border-bottom:1px solid var(--linha)">
+          <th style="padding:7px 10px;font-weight:700">Usuário</th>
+          <th style="padding:7px 10px;font-weight:700">Quando entrou</th>
+          <th style="padding:7px 10px;font-weight:700">Como</th>
+        </tr></thead>
+        <tbody>${logins.map(l => `<tr style="border-bottom:1px solid var(--linha)">
+          <td style="padding:7px 10px;font-weight:600">${esc(l.usuario)}</td>
+          <td style="padding:7px 10px;font-variant-numeric:tabular-nums">${fmtAcesso(l.em)}</td>
+          <td style="padding:7px 10px">${l.metodo === 'google' ? '🟢 Google' : '🔑 Senha'}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>` : '<p class="vazio" style="margin:0">Nenhum login registrado ainda. Assim que alguém entrar (senha ou Google), aparece aqui.</p>'}
+    </div>
   </div>`;
   return chrome({ tab: 'Perfis', h1: 'Perfis', p: 'Crie usuários e escolha quais telas cada um pode acessar.' }, 'perfis', corpo);
 }
@@ -3944,6 +3967,7 @@ const server = http.createServer((req, res) => {
         const p = new URLSearchParams(corpo);
         const ok = validarLogin(p.get('usuario'), p.get('senha') || '');
         if (!ok) { res.writeHead(303, { Location: '/login?e=1' }); return res.end(); }
+        try { acessos.registrarLogin(ok.usuario, 'senha'); } catch (_) {}
         setCookieSessao(req, res, criarToken(ok.usuario), SESSAO_DIAS * 86400);
         const sess = { admin: ok.admin, telas: ok.admin ? TODAS_TELAS : (usuarios.obter(ok.usuario) || { telas: [] }).telas };
         res.writeHead(303, { Location: primeiraTela(sess) || '/hoje' }); res.end();
@@ -3982,6 +4006,7 @@ const server = http.createServer((req, res) => {
       if (!claims || claims.aud !== GOOGLE_ID || !emailOk) { res.writeHead(303, { Location: '/login?g=erro' }); return res.end(); }
       const ok = loginPorEmail(claims.email);
       if (!ok) { res.writeHead(303, { Location: '/login?g=naoaut' }); return res.end(); }
+      try { acessos.registrarLogin(ok.usuario, 'google'); } catch (_) {}
       setCookieSessao(req, res, criarToken(ok.usuario), SESSAO_DIAS * 86400);
       const sess = { admin: ok.admin, telas: ok.admin ? TODAS_TELAS : (usuarios.obter(ok.usuario) || { telas: [] }).telas };
       res.writeHead(303, { Location: primeiraTela(sess) || '/hoje' }); res.end();
@@ -3996,6 +4021,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(401, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Faça login.');
   }
   _navSess = sess;
+  try { acessos.registrarAcesso(sess.usuario); } catch (_) {} // marca "último acesso" (com trava de tempo)
 
   // ── Autorização por tela ─────────────────────────────────────────────────
   const tela = telaDaUrl(url);
