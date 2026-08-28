@@ -47,6 +47,7 @@ const F = {
   custo: path.join(DIR, 'sofia-custo.jsonl'), // custo/tokens por turno — sofia.ts escreve, painel soma
   custoLimite: path.join(DIR, 'sofia-custo-limite.txt'), // alerta de gasto diário (US$; 0 = sem alerta) — painel
   avisoHumano: path.join(DIR, 'sofia-avisohumano.json'), // avisar nº quando a aluna pedir humano — painel escreve, sofia.ts lê
+  atencao: path.join(DIR, 'sofia-atencao.json'), // conversas que pediram humano — sofia.ts marca, painel pinta/filtra e limpa
 };
 
 // Padrões do "jeito humano" (mesmos do listener). O painel edita e o listener lê
@@ -632,6 +633,20 @@ function lerAvisoHumano() {
     return { on: !!o.on, numero: String(o.numero || '').replace(/\D/g, ''), palavras };
   } catch (_) { return { on: false, numero: '', palavras: [] }; }
 }
+// Conversas que pediram atendimento humano (fundo vermelho + filtro).
+function lerAtencao() {
+  try { const o = JSON.parse(ler(F.atencao)); return (o && typeof o === 'object') ? o : {}; }
+  catch (_) { return {}; }
+}
+function setAtencao(chave, ativo) {
+  chave = String(chave || '').trim(); if (!chave) return false;
+  const o = lerAtencao();
+  const corte = Date.now() - 45 * 24 * 3600 * 1000;
+  for (const k of Object.keys(o)) if (!(Number(o[k]) > corte)) delete o[k]; // poda antigos
+  if (ativo) o[chave] = Date.now(); else delete o[chave];
+  gravarArquivo(F.atencao, JSON.stringify(o));
+  return !!ativo;
+}
 function gravarAvisoHumano(on, numero, palavras) {
   let arr = [];
   if (Array.isArray(palavras)) arr = palavras;
@@ -644,7 +659,7 @@ function gravarAvisoHumano(on, numero, palavras) {
 
 module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
-  lerCusto, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO,
+  lerCusto, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
   conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, salvarFotoCampanha, DIR, ARQUIVOS: F,

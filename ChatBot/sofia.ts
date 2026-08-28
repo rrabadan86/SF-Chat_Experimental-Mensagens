@@ -40,6 +40,15 @@ const BASE_DIR = process.env.SOFIA_DIR || process.cwd();
 // painel (SoFIA → Configuração): sofia-avisohumano.json = { on, numero }.
 const AVISOHUMANO_FILE = path.join(BASE_DIR, "sofia-avisohumano.json");
 const AVISOS_OUT_FILE = path.join(BASE_DIR, "sofia-avisos.jsonl"); // mesmo arquivo que o listener envia
+const ATENCAO_FILE = path.join(BASE_DIR, "sofia-atencao.json"); // conversas que pediram humano — o painel pinta de vermelho e filtra
+function marcarAtencao(chave: string) {
+  try {
+    let o: Record<string, number> = {};
+    try { o = JSON.parse(fs.readFileSync(ATENCAO_FILE, "utf8")) || {}; } catch { /* arquivo novo */ }
+    o[String(chave)] = Date.now();
+    fs.writeFileSync(ATENCAO_FILE, JSON.stringify(o));
+  } catch { /* best-effort */ }
+}
 // Expressões-padrão que disparam o aviso (editáveis no painel — uma por linha).
 const PALAVRAS_HUMANO_PADRAO = [
   "atendente", "falar com uma pessoa", "falar com um humano", "falar com alguém",
@@ -73,6 +82,7 @@ function avisarPrecisaHumano(telefone: string, conversa: Conversa, texto: string
     const tel = String(telefone || "").replace(/\D/g, "");
     const aviso = `🙋 *Possível pedido de atendimento humano*\n\nContato: ${tel}\nÚltima mensagem: "${String(texto || "").slice(0, 180)}"\n\nAbra o painel (SoFIA → Conversas) e clique em "assumir" para atender.`;
     fs.appendFileSync(AVISOS_OUT_FILE, JSON.stringify({ numero: cfg.numero, texto: aviso, em: Date.now() }) + "\n");
+    marcarAtencao(telefone); // pinta a conversa de vermelho no painel até a recepção assumir
     conversa.avisouHumano = true;
     console.log(`🙋 aviso "precisa de humano" enfileirado para ${cfg.numero} (contato ${tel}).`);
   } catch { /* best-effort */ }

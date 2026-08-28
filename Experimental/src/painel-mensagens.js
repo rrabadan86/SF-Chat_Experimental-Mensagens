@@ -1642,6 +1642,7 @@ function paginaSofiaConversas(aviso, erro) {
         <details id="convFiltrosDet" class="filtros-det" ontoggle="try{localStorage.setItem('convFiltrosOpen', this.open?'1':'0')}catch(e){}">
           <summary class="filtros-sum"><span class="s-mais">⚙️ Mais filtros</span><span class="s-menos">⚙️ Menos filtros</span></summary>
           <div class="filtros-corpo">
+            <label class="filtro-check"><input type="checkbox" id="convAtencao" onchange="filtrarAtencao(this)">🔴 <b>Pediram atendimento humano</b></label>
             <label class="filtro-check"><input type="checkbox" id="convQuieto" onchange="filtrarQuieto(this)">😴 Sem resposta há <b>${esc(String(quietoCfg.horas))}h+</b> <small>(${esc(String(quietoCfg.dias))}d)</small></label>
             <div class="filtro-periodo">
               <span class="filtro-lbl">Conversaram no período</span>
@@ -1675,7 +1676,7 @@ function paginaSofiaConversas(aviso, erro) {
     </div>
   </div>
 <script>
-  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', buscaTexto='', quietoFiltro=false, tagEdAberto=false, ncNome='', ncDirty=false, ncTodas=[];
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', buscaTexto='', quietoFiltro=false, atencaoFiltro=false, tagEdAberto=false, ncNome='', ncDirty=false, ncTodas=[];
   // Atalho vindo de Contatos: ?chat=<telefone> abre a conversa correspondente.
   var alvoChat=(new URLSearchParams(location.search).get('chat')||'').replace(/\\D/g,''), alvoAplicado=false;
   function mesmoTel(a,b){ a=String(a||'').replace(/\\D/g,''); b=String(b||'').replace(/\\D/g,''); if(!a||!b) return false; if(a===b) return true; var la=a.slice(-8), lb=b.slice(-8); return la.length===8 && la===lb; }
@@ -1882,6 +1883,7 @@ function paginaSofiaConversas(aviso, erro) {
   function filtrarTag(t){ tagFiltro=t||''; pagina=0; renderInbox(ultimoData); }
   function filtrarBusca(v){ buscaTexto=String(v||'').trim().toLowerCase(); pagina=0; renderInbox(ultimoData); }
   function filtrarQuieto(cb){ quietoFiltro=!!cb.checked; pagina=0; renderInbox(ultimoData); }
+  function filtrarAtencao(cb){ atencaoFiltro=!!cb.checked; pagina=0; renderInbox(ultimoData); }
   // Filtro por PERÍODO: conversas com alguma mensagem entre os dias De e Até
   // (inclusive). Só olha os horários já guardados — nenhuma chamada de IA.
   var dataIniMs=0, dataFimMs=0;
@@ -1925,12 +1927,13 @@ function paginaSofiaConversas(aviso, erro) {
     if(tagFiltro==='__sem__') chaves = chaves.filter(function(k){ return !((ultimoData[k].tagsContato||[]).length); });
     else if(tagFiltro) chaves = chaves.filter(function(k){ return (ultimoData[k].tagsContato||[]).indexOf(tagFiltro)>=0; });
     if(buscaTexto) chaves = chaves.filter(function(k){ return casaBusca(k, ultimoData[k]||{}); });
+    if(atencaoFiltro) chaves = chaves.filter(function(k){ return !!(ultimoData[k]||{}).atencao; });
     if(quietoFiltro) chaves = chaves.filter(function(k){ return quieto(ultimoData[k]||{}); });
     if(dataIniMs || dataFimMs) chaves = chaves.filter(function(k){ return naData(ultimoData[k]||{}); });
     var total=chaves.length, paginas=Math.max(1,Math.ceil(total/POR_PAGINA));
     if(pagina>=paginas) pagina=paginas-1; if(pagina<0) pagina=0;
     var lista=document.getElementById('convLista'), pag=document.getElementById('convPag');
-    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+((dataIniMs||dataFimMs)?'Nenhuma conversa no período escolhido.':(quietoFiltro?'Nenhum contato quieto há 24h+ (dentro dos últimos 4 dias). 🎉':(buscaTexto?'Nada encontrado para “'+escH(buscaTexto)+'” (nome, telefone ou palavra na conversa).':(tagFiltro==='__sem__'?'Nenhuma conversa sem tag.':(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a SoFIA receber mensagens, elas aparecem aqui.')))))+'</p>'; if(pag)pag.innerHTML=''; return; }
+    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+(atencaoFiltro?'Nenhuma conversa pedindo atendimento humano agora. 🎉':((dataIniMs||dataFimMs)?'Nenhuma conversa no período escolhido.':(quietoFiltro?'Nenhum contato quieto há 24h+ (dentro dos últimos 4 dias). 🎉':(buscaTexto?'Nada encontrado para “'+escH(buscaTexto)+'” (nome, telefone ou palavra na conversa).':(tagFiltro==='__sem__'?'Nenhuma conversa sem tag.':(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a SoFIA receber mensagens, elas aparecem aqui.'))))))+'</p>'; if(pag)pag.innerHTML=''; return; }
     var ini=pagina*POR_PAGINA, fatia=chaves.slice(ini,ini+POR_PAGINA);
     lista.innerHTML = fatia.map(function(k){
       var c=ultimoData[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
@@ -1941,9 +1944,12 @@ function paginaSofiaConversas(aviso, erro) {
       var enc=encerrada(c)?'<span style="display:inline-block;background:#f3eaea;color:#a15a5a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🔒 encerrada</span>':'';
       var hb=c.humano?'<span style="display:inline-block;background:#e6f6ec;color:#1f8f52;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 você</span>':'';
       var fu=c.fuEspera?'<span title="Follow-up pronto, aguardando o horário permitido" style="display:inline-block;background:#fdf2e0;color:#b8770a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">⏳ follow-up '+escH(c.fuEspera)+'</span>':'';
+      var at=c.atencao?'<span title="A aluna pediu atendimento humano" style="display:inline-block;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 pediu humano</span>':'';
       var nome='<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:'+(pendente?'700':'600')+';font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escH(c.nome||fmtTel(k))+'</span>'+dot+'</div>';
-      var meta='<div class="quando" style="font-size:.72rem;margin:0;display:flex;align-items:center;flex-wrap:wrap;row-gap:3px">'+fmtHora(c.ultimaEm)+tgs+hb+enc+fu+'</div>';
-      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:7px 10px;border-radius:9px;margin-bottom:5px;border:1px solid '+(on?'#0e6e6b':'#eee')+';background:'+(on?'#e4efee':(encerrada(c)?'#fbf7f7':'#fff'))+'">'+nome+'<div class="quando" style="margin:0;font-size:.7rem">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
+      var meta='<div class="quando" style="font-size:.72rem;margin:0;display:flex;align-items:center;flex-wrap:wrap;row-gap:3px">'+fmtHora(c.ultimaEm)+at+tgs+hb+enc+fu+'</div>';
+      var bg = on?'#e4efee':(c.atencao?'#fdecea':(encerrada(c)?'#fbf7f7':'#fff'));
+      var bd = on?'#0e6e6b':(c.atencao?'#e0a09a':'#eee');
+      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:7px 10px;border-radius:9px;margin-bottom:5px;border:1px solid '+bd+';'+(c.atencao&&!on?'border-left:4px solid #c0392b;':'')+'background:'+bg+'">'+nome+'<div class="quando" style="margin:0;font-size:.7rem">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
     }).join('');
     if(pag){
       if(paginas>1){ pag.innerHTML='<div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center;align-items:center">'+setaPag('‹',pagina-1,pagina<=0)+pagNumsHtml(pagina,paginas)+setaPag('›',pagina+1,pagina>=paginas-1)+'</div><span class="quando" style="text-align:center;margin:0">Página '+(pagina+1)+' de '+paginas+' · '+total+' conversas</span>'; }
@@ -3954,6 +3960,7 @@ const server = http.createServer((req, res) => {
     try { for (const k in obj) obj[k].enc = sofia.estaEncerrada(k, obj[k].ultimaEm); } catch (_) {} // encerrada à mão (cadeado)?
     try { const em = sofia.lerEncerradas() || {}; for (const k in obj) { const v = em[k]; const isObj = v && typeof v === 'object'; obj[k].encEm = isObj ? (Number(v.em) || 0) : (Number(v) || 0); obj[k].encPor = isObj ? String(v.por || '') : ''; } } catch (_) {} // instante + autor do encerramento manual (p/ a divisória)
     try { for (const k in obj) obj[k].fuEspera = fuEsperando[k] || ''; } catch (_) {} // follow-up pronto, segurando pelo horário?
+    try { const at = sofia.lerAtencao() || {}; const a8 = {}; for (const kk in at) a8[String(kk).replace(/\D/g, '').slice(-8)] = 1; for (const k in obj) obj[k].atencao = !!(at[k] || a8[String(k).replace(/\D/g, '').slice(-8)]); } catch (_) {} // pediu atendimento humano?
     let wa = ''; try { wa = (sofia.waStatus() || {}).estado || ''; } catch (_) {} // online/off-line do WhatsApp da SoFIA
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify({ conv: obj, wa }));
@@ -3982,6 +3989,7 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
       const quem = (_navSess && _navSess.usuario) ? _navSess.usuario : '';
+      try { sofia.setAtencao(chave, false); } catch (_) {} // encerrou → tira o vermelho
       try { sofia.setEncerrada(chave, true, quem); return res.end(JSON.stringify({ ok: true })); }
       catch (e) { return res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
@@ -4009,6 +4017,7 @@ const server = http.createServer((req, res) => {
       if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
       try {
         const ativo = sofia.setControleHumano(chave, !!d.ativo);
+        if (ativo) { try { sofia.setAtencao(chave, false); } catch (_) {} } // recepção assumiu → tira o vermelho
         // Gatilho 'humano' (estado): ao ASSUMIR aplica a tag + avisa; ao DEVOLVER
         // à SoFIA, remove a tag (é um marcador de "sob controle humano agora").
         try {
