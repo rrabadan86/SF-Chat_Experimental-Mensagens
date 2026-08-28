@@ -2527,7 +2527,7 @@ function campListHTML() {
     const est = (c.status === 'pronta' || c.status === 'pausada' || c.status === 'enviando') ? estimarCampanha(c) : null;
     const podeIniciar = (c.status === 'pronta' || c.status === 'pausada') && (c.pendentes || []).length;
     const podePausar = c.status === 'enviando';
-    const variacoes = (c.variacoes || []).slice(0, 12).map((v, i) => `<div style="padding:6px 0;border-bottom:1px solid var(--linha);font-size:var(--fs-sm)"><b style="color:var(--teal-esc)">#${i + 1}</b> ${esc(v)}</div>`).join('');
+    const variacoes = (c.variacoes || []).slice(0, 12).map((v, i) => `<div class="varItem" data-cid="${esc(c.id)}" data-idx="${i}" style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--linha);font-size:var(--fs-sm)"><b style="color:var(--teal-esc);flex:none">#${i + 1}</b><span class="varTxt" style="flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere">${esc(v)}</span><a href="javascript:void(0)" class="varEdit" onclick="editarVar(this)" title="Editar esta variação" style="flex:none;text-decoration:none;font-size:.95rem">✏️</a></div>`).join('');
     const btn = (acao, rot, cls) => `<form method="POST" action="/sofia/campanhas/${acao === 'excluir' ? 'excluir' : 'controle'}"${acao === 'cancelar' || acao === 'excluir' ? ` onsubmit="return confirm('${acao === 'excluir' ? 'Excluir esta campanha do painel?' : 'Cancelar o envio desta campanha?'}')"` : ''} style="display:inline"><input type="hidden" name="id" value="${esc(c.id)}">${acao !== 'excluir' ? `<input type="hidden" name="acao" value="${acao}">` : ''}<button type="submit" class="${cls}" style="padding:5px 12px;font-size:var(--fs-sm)">${rot}</button></form>`;
     return `<div class="card">
       <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
@@ -2918,9 +2918,41 @@ function paginaSofiaCampanhas(aviso, erro) {
     (function(){
       var box=document.getElementById('campList'); if(!box) return;
       var ultimo=box.innerHTML;
-      function poll(){ fetch('/sofia/campanhas/lista',{cache:'no-store'}).then(function(r){return r.text();}).then(function(h){ if(h && h!==ultimo){ ultimo=h; box.innerHTML=h; } }).catch(function(){}); }
+      function poll(){ if(window.campEditando) return; fetch('/sofia/campanhas/lista',{cache:'no-store'}).then(function(r){return r.text();}).then(function(h){ if(window.campEditando) return; if(h && h!==ultimo){ ultimo=h; box.innerHTML=h; } }).catch(function(){}); }
       var n=0, iv=setInterval(function(){ n++; poll(); if(n>=3){ clearInterval(iv); setInterval(poll,6000); } },1200);
     })();
+    // Editar uma variação de uma campanha já criada (inline; pausa o auto-refresh).
+    window.campEditando=false;
+    function editarVar(a){
+      if(window.campEditando) return;
+      var item=a.closest('.varItem'); if(!item) return;
+      var cid=item.getAttribute('data-cid'), idx=item.getAttribute('data-idx');
+      var atual=(item.querySelector('.varTxt')||{}).textContent||'';
+      window.campEditando=true;
+      var orig=item.innerHTML;
+      item.innerHTML='';
+      var ta=document.createElement('textarea'); ta.rows=4; ta.style.cssText='width:100%;font-size:.9rem'; ta.value=atual;
+      var bar=document.createElement('div'); bar.style.cssText='display:flex;gap:10px;align-items:center;margin-top:6px';
+      var sv=document.createElement('button'); sv.type='button'; sv.className='save'; sv.style.cssText='padding:6px 14px;font-size:.82rem'; sv.textContent='Salvar';
+      var cc=document.createElement('a'); cc.href='javascript:void(0)'; cc.className='quando'; cc.style.cssText='margin:0;text-decoration:underline'; cc.textContent='cancelar';
+      var st=document.createElement('span'); st.className='quando'; st.style.margin='0';
+      bar.appendChild(sv); bar.appendChild(cc); bar.appendChild(st);
+      item.appendChild(ta); item.appendChild(bar); ta.focus();
+      function restaurar(html){ item.innerHTML=html; window.campEditando=false; }
+      cc.onclick=function(){ restaurar(orig); };
+      sv.onclick=function(){
+        var novo=(ta.value||'').trim();
+        if(!novo){ st.textContent='Não pode ficar vazia.'; return; }
+        sv.disabled=true; st.textContent='salvando…';
+        fetch('/sofia/campanhas/variacao',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:cid,index:+idx,texto:novo})})
+          .then(function(r){return r.json();}).then(function(j){
+            if(j.ok){
+              var novoHtml='<b style="color:var(--teal-esc);flex:none">#'+(+idx+1)+'</b><span class="varTxt" style="flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere">'+cpEsc(novo)+'</span><a href="javascript:void(0)" class="varEdit" onclick="editarVar(this)" title="Editar esta variação" style="flex:none;text-decoration:none;font-size:.95rem">✏️</a>';
+              restaurar(novoHtml);
+            } else { sv.disabled=false; st.textContent='❌ '+(j.erro||'falha'); }
+          }).catch(function(){ sv.disabled=false; st.textContent='❌ erro de rede'; });
+      };
+    }
     var cpId=null, cpTimer=null, CP_CONV=${podeSofiaSub(_navSess || { admin: true, telas: [] }, 'conversas') ? 'true' : 'false'};
     function irConversaCamp(tel){ location.href='/sofia?view=conversas&chat='+encodeURIComponent(tel); }
     function cpEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];}); }
@@ -4415,6 +4447,20 @@ const server = http.createServer((req, res) => {
       const id = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
       try { sofia.opCampanha({ op: 'variacoes', id, texto }); } catch (e) { return res.end(JSON.stringify({ ok: false, erro: 'Falha ao enviar o pedido à SoFIA.' })); }
       res.end(JSON.stringify({ ok: true, id }));
+    });
+  }
+  // Editar UMA variação de uma campanha já criada (id + índice + texto novo).
+  if (req.method === 'POST' && url === '/sofia/campanhas/variacao') {
+    return lerCorpo(req, 1e5, corpo => {
+      let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      const id = String(d.id || '').trim();
+      const index = parseInt(d.index, 10);
+      const texto = String(d.texto || '').trim();
+      if (!id || !Number.isInteger(index) || index < 0) return res.end(JSON.stringify({ ok: false, erro: 'Dados inválidos.' }));
+      if (!texto) return res.end(JSON.stringify({ ok: false, erro: 'A variação não pode ficar vazia.' }));
+      try { sofia.opCampanha({ op: 'editar-variacao', id, index, texto }); } catch (e) { return res.end(JSON.stringify({ ok: false, erro: 'Falha ao salvar.' })); }
+      res.end(JSON.stringify({ ok: true }));
     });
   }
   // Resultado do rascunho (poll do painel). { pronto:false } enquanto gera.
