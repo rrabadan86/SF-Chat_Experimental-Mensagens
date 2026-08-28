@@ -3563,7 +3563,14 @@ function paginaTermos() {
 }
 
 // Aba "Perfis" (só admin): cria usuários, define telas, senha e exclui.
-function paginaPerfis(aviso, erro) {
+// Sub-abas de Perfis (igual à subnav da SoFIA): Usuários · Acessos · Auditoria.
+const PERFIS_SUBS = ['usuarios', 'acessos', 'auditoria'];
+function subnavPerfis(view) {
+  const item = (v, rot) => `<a href="/perfis${v === 'usuarios' ? '' : '?view=' + v}"${view === v ? ' class="on"' : ''}>${rot}</a>`;
+  return `<div class="subtabs">${item('usuarios', 'Usuários')}${item('acessos', 'Acessos')}${item('auditoria', 'Auditoria')}</div>`;
+}
+function paginaPerfis(aviso, erro, view) {
+  view = PERFIS_SUBS.includes(view) ? view : 'usuarios';
   const lista = usuarios.listar();
   let ults = {}; try { ults = acessos.ultimosAcessos(); } catch (_) {}          // { usuario: ts }
   let logins = []; try { logins = acessos.historicoLogins(30); } catch (_) {}   // últimos logins (recente→antigo)
@@ -3628,8 +3635,8 @@ function paginaPerfis(aviso, erro) {
     <td style="padding:7px 10px;color:var(--cinza)">${esc(fmtAlvo(l.acao, l.alvo))}${l.detalhe ? ` <span style="color:var(--faint)">· ${esc(l.detalhe)}</span>` : ''}</td>
   </tr>`).join('');
 
-  const corpo = `<div class="wrap">
-    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+  // ── Sub-aba: Usuários (criar + lista) ──
+  const secUsuarios = `
     <div class="sec-t">Novo usuário</div>
     <div class="card">
       <form method="POST" action="/perfis/criar">
@@ -3648,8 +3655,10 @@ function paginaPerfis(aviso, erro) {
 
     <div class="sec-t">Usuários</div>
     <div class="card" style="background:#f3fbfb;border-color:#bfe8e7"><p class="quando" style="margin:0">🔑 <b>Admin</b> (do sistema): <b>${esc(USER)}</b>${ADMIN_EMAIL ? ` · 📧 ${esc(ADMIN_EMAIL)}` : ''} ${ults[USER] ? `· 🕘 ${fmtAcesso(ults[USER])}` : ''} — vê todas as telas e gerencia os Perfis. A senha do admin fica em <code>PAINEL_SENHA</code> e o e-mail do login com Google em <code>PAINEL_ADMIN_EMAIL</code>, no <code>.env</code>.</p></div>
-    ${cardsUsuarios}
+    ${cardsUsuarios}`;
 
+  // ── Sub-aba: Acessos (último acesso + logins) ──
+  const secAcessos = `
     <div class="sec-t">Últimos acessos</div>
     <div class="card">
       <p class="quando" style="margin:0 0 12px">O <b>🕘 último acesso</b> ao lado de cada usuário (acima) mostra a última vez que a pessoa <b>usou</b> o painel. A tabela abaixo lista os <b>logins</b> (quando cada um <b>entrou</b> e como). Como a sessão dura ${SESSAO_DIAS} dias, quem já está logado não precisa entrar de novo — por isso costuma haver poucos logins.</p>
@@ -3665,8 +3674,10 @@ function paginaPerfis(aviso, erro) {
           <td style="padding:7px 10px">${l.metodo === 'google' ? '🟢 Google' : '🔑 Senha'}</td>
         </tr>`).join('')}</tbody>
       </table></div>` : '<p class="vazio" style="margin:0">Nenhum login registrado ainda. Assim que alguém entrar (senha ou Google), aparece aqui.</p>'}
-    </div>
+    </div>`;
 
+  // ── Sub-aba: Auditoria (quem fez o quê) ──
+  const secAuditoria = `
     <div class="sec-t">📜 Auditoria <small style="font-weight:600;color:var(--cinza)">— quem fez o quê</small></div>
     <div class="card">
       <p class="quando" style="margin:0 0 12px">Registro das ações de <b>impacto e segurança</b>: campanhas (criar/iniciar/pausar/cancelar/excluir), configuração/prompt da SoFIA, gestão de usuários, bloqueio/encerramento de conversa e reiniciar/desconectar. Mostra os 150 mais recentes.</p>
@@ -3679,7 +3690,12 @@ function paginaPerfis(aviso, erro) {
         </tr></thead>
         <tbody>${auditoriaLinhas}</tbody>
       </table></div>` : '<p class="vazio" style="margin:0">Nenhuma atividade registrada ainda. Assim que alguém criar/iniciar/pausar uma campanha, mudar o prompt, etc., aparece aqui.</p>'}
-    </div>
+    </div>`;
+
+  const corpo = `<div class="wrap">
+    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    ${subnavPerfis(view)}
+    ${view === 'acessos' ? secAcessos : view === 'auditoria' ? secAuditoria : secUsuarios}
   </div>`;
   return chrome({ tab: 'Perfis', h1: 'Perfis', p: 'Crie usuários e escolha quais telas cada um pode acessar.' }, 'perfis', corpo);
 }
@@ -4087,8 +4103,9 @@ const server = http.createServer((req, res) => {
       else if (/(?:^|&)ok=email/.test(q)) aviso = 'E-mail salvo. Já pode entrar com o Google.';
       else if (/(?:^|&)ok=excluido/.test(q)) aviso = 'Usuário excluído.';
       else if (/(?:^|&)err=/.test(q)) { aviso = decodeURIComponent((q.match(/err=([^&]*)/) || [])[1] || 'Erro.'); erro = true; }
+      const viewPerfis = new URLSearchParams(q).get('view') || 'usuarios';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      return res.end(paginaPerfis(aviso, erro));
+      return res.end(paginaPerfis(aviso, erro, viewPerfis));
     }
     if (req.method === 'POST' && url === '/perfis/criar') {
       return lerCorpo(req, 1e5, corpo => {
