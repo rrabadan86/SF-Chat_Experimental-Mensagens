@@ -1947,7 +1947,8 @@ function paginaSofiaConversas(aviso, erro) {
       var hb=c.humano?'<span style="display:inline-block;background:#e6f6ec;color:#1f8f52;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 você</span>':'';
       var fu=c.fuEspera?'<span title="Follow-up pronto, aguardando o horário permitido" style="display:inline-block;background:#fdf2e0;color:#b8770a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">⏳ follow-up '+escH(c.fuEspera)+'</span>':'';
       var at=c.atencao?'<span title="A aluna pediu atendimento humano" style="display:inline-block;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 pediu humano</span>':'';
-      var nome='<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:'+(pendente?'700':'600')+';font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escH(c.nome||fmtTel(k))+'</span>'+dot+'</div>';
+      var agMini=c.agendou?'<span title="Aula experimental agendada" style="color:#1c8f52;font-size:.8rem;flex:none">✔️</span>':'';
+      var nome='<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:'+(pendente?'700':'600')+';font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escH(c.nome||fmtTel(k))+'</span>'+agMini+dot+'</div>';
       var meta='<div class="quando" style="font-size:.72rem;margin:0;display:flex;align-items:center;flex-wrap:wrap;row-gap:3px">'+fmtHora(c.ultimaEm)+at+tgs+hb+enc+fu+'</div>';
       var bg = on?'#e4efee':(c.atencao?'#fdecea':(encerrada(c)?'#fbf7f7':'#fff'));
       var bd = on?'#0e6e6b':(c.atencao?'#e0a09a':'#eee');
