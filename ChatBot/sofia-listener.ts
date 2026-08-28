@@ -72,7 +72,17 @@ async function alertarQuedaQR() {
 function aplicarNome(texto: string, nome?: string): string {
   const primeiro = String(nome || "").trim().split(/\s+/)[0] || "";
   if (primeiro) return texto.replace(/\{nome\}/gi, primeiro);
-  return texto.replace(/\s*,?\s*\{nome\}/gi, "").replace(/\{nome\}/gi, "");
+  // Sem nome: remove o {nome} E a pontuação/espaço grudada nele, dos dois lados
+  // ("Oi, {nome}!" → "Oi!"; "{nome}, tudo bem?" → "tudo bem?"), depois limpa
+  // espaços dobrados, espaço antes de pontuação e vírgula/pontuação sobrando no início.
+  return texto
+    .replace(/\s*,\s*\{nome\}/gi, "")   // vírgula ANTES: "Oi, {nome}" → "Oi"
+    .replace(/\{nome\}\s*,\s*/gi, "")   // vírgula DEPOIS: "{nome}, tudo" → "tudo"
+    .replace(/\{nome\}/gi, "")          // qualquer resto do marcador
+    .replace(/[ \t]{2,}/g, " ")         // espaços dobrados
+    .replace(/[ \t]+([!?.,;:])/g, "$1") // espaço antes de pontuação
+    .replace(/^[\s,;:!?.]+/, "")        // pontuação/vírgula sobrando no começo
+    .trim();
 }
 
 // ── "Jeito humano": divide a resposta em várias mensagens e mostra "digitando…"
