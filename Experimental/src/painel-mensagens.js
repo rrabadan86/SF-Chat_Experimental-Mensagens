@@ -254,6 +254,8 @@ function msgRotaPermitida(sess, url, fullUrl) {
   return has('msg_config'); // /, /salvar, /mensagem/*, /teste/*, /horarios*, /wa*
 }
 function primeiraTela(sess) {
+  // Tela inicial ao logar: Conversas da SoFIA (para quem tem acesso — inclui admin).
+  if (podeSofiaSub(sess, 'conversas')) return '/sofia?view=conversas';
   if (sess.admin) return '/hoje';
   if (temMsg(sess)) return msgHref(sess);
   if (sess.telas.includes('ind')) return '/indicadores';
