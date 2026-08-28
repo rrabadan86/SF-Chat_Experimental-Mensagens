@@ -503,9 +503,9 @@ function setEncerrada(chave, ativo, por) {
 const MODELO_PADRAO = 'claude-sonnet-5';
 // Lista fixa de modelos válidos (rótulo amigável + id). Menu suspenso no painel.
 const MODELOS_VALIDOS = [
-  { id: 'claude-sonnet-5', rot: 'Sonnet 5 — padrão (equilíbrio)' },
-  { id: 'claude-opus-5', rot: 'Opus 5 — mais capaz (mais caro)' },
-  { id: 'claude-haiku-4-5-20251001', rot: 'Haiku 4.5 — mais rápido e barato' },
+  { id: 'claude-sonnet-5', rot: 'Sonnet 5 — equilíbrio (qualidade alta · custo médio) · recomendado p/ conversa' },
+  { id: 'claude-opus-5', rot: 'Opus 5 — qualidade máxima (mais caro e um pouco mais lento)' },
+  { id: 'claude-haiku-4-5-20251001', rot: 'Haiku 4.5 — rápido e barato (qualidade um pouco menor) · ideal p/ extração' },
 ];
 function _modeloValido(m) { return MODELOS_VALIDOS.some(x => x.id === m) ? m : MODELO_PADRAO; }
 function lerModelos() {
