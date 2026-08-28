@@ -17,7 +17,14 @@
 #         bash setup-novo-studio.sh --slug lagosul --start --domain painel-lagosul.exemplo.com
 #
 #  FLAGS: --slug (obrigatório) · --studio "Nome" · --install-deps · --evo-ids
-#         --domain <subdominio> · --start
+#         --domain <subdominio> · --port <n> · --start
+#
+#  DUAS LOJAS NO MESMO SERVIDOR (mesmo franqueado): use DOIS clones do repo,
+#  um por loja, cada um com --slug e --port diferentes. Ex.:
+#     ~/slimfit-lagosul1  →  --slug lagosul1 --port 8080
+#     ~/slimfit-lagosul2  →  --slug lagosul2 --port 8081
+#  Assim cada loja tem seu SOFIA_DIR, seus processos PM2 (slug-prefixados),
+#  seu painel (porta própria) e seus .env — 100% isolados no mesmo VPS.
 #
 #  Segurança: os .env NUNCA vão para o Git (estão no .gitignore). Este script
 #  só ESCREVE .env se ele ainda não existir — nunca sobrescreve o seu.
@@ -31,6 +38,7 @@ START=0            # --start liga os processos no PM2
 INSTALL_DEPS=0     # --install-deps instala Node/pm2/tsx/chromium/python (apt)
 EVO_IDS=0          # --evo-ids descobre os ids da aula no EVO (precisa do .env)
 DOMAIN=""          # --domain <subdominio> gera + liga o Caddy (HTTPS) no --start
+PAINEL_PORT=""     # --port <n> porta do painel (default 8080; use outra p/ 2ª loja)
 while [ $# -gt 0 ]; do
   case "$1" in
     --slug)         SLUG="${2:-}"; shift 2 ;;
@@ -39,6 +47,7 @@ while [ $# -gt 0 ]; do
     --install-deps) INSTALL_DEPS=1; shift ;;
     --evo-ids)      EVO_IDS=1; shift ;;
     --domain)       DOMAIN="${2:-}"; shift 2 ;;
+    --port)         PAINEL_PORT="${2:-}"; shift 2 ;;
     -h|--help)
       grep -E '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Argumento desconhecido: $1"; exit 1 ;;
@@ -48,6 +57,8 @@ done
 [ -n "$SLUG" ] || { echo "❌ Faltou --slug (ex.: --slug lagosul)"; exit 1; }
 echo "$SLUG" | grep -qE '^[a-z0-9][a-z0-9-]{1,30}$' \
   || { echo "❌ --slug deve ser minúsculo, sem espaço/acento (ex.: lagosul)"; exit 1; }
+[ -n "$PAINEL_PORT" ] || PAINEL_PORT=8080
+echo "$PAINEL_PORT" | grep -qE '^[0-9]{2,5}$' || { echo "❌ --port deve ser um número (ex.: --port 8081)"; exit 1; }
 
 # ---- caminhos -------------------------------------------------------------
 EXP_DIR="$(cd "$(dirname "$0")" && pwd)"     # .../Experimental
@@ -63,6 +74,7 @@ echo "────────────────────────�
 echo "  Studio: ${STUDIO_NOME:-($SLUG)}"
 echo "  Repo:      $REPO_DIR"
 echo "  SOFIA_DIR: $SOFIA_DIR"
+echo "  Painel:    porta $PAINEL_PORT"
 echo "  Processos: $P_PAINEL · $P_EXP · $P_SOFIA"
 echo "──────────────────────────────────────────────────────────"
 
@@ -257,11 +269,21 @@ else
 STUDIO_NOME=${STUDIO_NOME:-Studio SlimFit $SLUG}
 
 # ===== Painel (HTTP interno; o HTTPS é do Caddy) =====
-PAINEL_PORT=8080
+PAINEL_PORT=$PAINEL_PORT
 PAINEL_HOST=127.0.0.1
 PAINEL_USER=admin
 PAINEL_SENHA=$SENHA_SUGERIDA
 PAINEL_SESSAO_SEGREDO=$SEG_PAINEL
+# Duração da sessão de login, em dias (padrão 30):
+# PAINEL_SESSAO_DIAS=30
+
+# ===== Login com Google (opcional) — só ativa se preencher os DOIS =====
+# Crie no Google Cloud (OAuth) e libere o domínio do painel. Só entram os
+# e-mails já cadastrados em Perfis (o admin usa PAINEL_ADMIN_EMAIL abaixo).
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# E-mail Google do admin do sistema (entra pelo Google como admin):
+# PAINEL_ADMIN_EMAIL=
 
 # ===== Onde vivem os dados da SoFIA (prompt/estado/pontes) =====
 SOFIA_DIR=$SOFIA_DIR
