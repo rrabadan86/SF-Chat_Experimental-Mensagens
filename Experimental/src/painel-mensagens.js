@@ -3457,8 +3457,8 @@ function paginaLogin(erro) {
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <style>${ESTILO}
   .loginwrap{max-width:380px;margin:8vh auto;padding:16px}
-  .loginwrap .logo-box{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:16px;text-align:center;margin-bottom:18px}
-  .loginwrap .logo-box img{height:46px;width:auto}
+  .loginwrap .logo-box{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:22px 16px;text-align:center;margin-bottom:18px}
+  .loginwrap .logo-box img{height:82px;width:auto;max-width:100%}
   .loginwrap .card{padding:22px}
   .loginwrap h1{font-family:"Inter";font-weight:600;font-size:1.2rem;margin:0 0 4px;text-align:center;letter-spacing:-.02em}
   .loginwrap p.sub{color:var(--cinza);font-size:.86rem;text-align:center;margin:0 0 12px}
