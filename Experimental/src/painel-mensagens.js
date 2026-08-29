@@ -508,7 +508,7 @@ const ESTILO = `
   .ev .ic{flex:none}
   .datesel{display:flex;gap:8px;align-items:center;margin:4px 0 0}
   .datesel input{width:auto}
-  .segs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 0}
+  .segs{position:sticky;top:var(--seg-top,var(--topbar-h,46px));z-index:54;display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px;padding:9px 0;background:var(--bg);box-shadow:0 5px 6px -6px rgba(16,24,40,.16)}
   .segs a{text-decoration:none;font-weight:700;font-size:var(--fs-sm);color:var(--cinza);background:#fff;border:1px solid var(--linha);border-radius:999px;padding:6px 13px}
   .segs a.on{background:var(--teal);color:#fff;border-color:var(--teal)}
   .bar{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--linha);font-size:var(--fs-sm)}
@@ -657,7 +657,13 @@ ${corpo}
    variável --topbar-h, usada pelo submenu (.subtabs) para "grudar" logo abaixo
    dela ao rolar — no desktop e no celular. */
 (function(){
-  function setTBH(){ try{ var tb=document.querySelector('.topbar'); if(tb) document.documentElement.style.setProperty('--topbar-h', Math.round(tb.getBoundingClientRect().height)+'px'); }catch(e){} }
+  function setTBH(){ try{
+    var tb=document.querySelector('.topbar'); var h=tb?Math.round(tb.getBoundingClientRect().height):46;
+    document.documentElement.style.setProperty('--topbar-h', h+'px');
+    // Se a tela tem submenu (.subtabs), o filtro de período (.segs) gruda ABAIXO dele.
+    var st=document.querySelector('.subtabs'); var sh=st?Math.round(st.getBoundingClientRect().height):0;
+    document.documentElement.style.setProperty('--seg-top', (h+sh)+'px');
+  }catch(e){} }
   setTBH();
   window.addEventListener('resize', setTBH);
   window.addEventListener('load', setTBH);
