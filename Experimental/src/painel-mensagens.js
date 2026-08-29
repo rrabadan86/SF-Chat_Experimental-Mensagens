@@ -254,7 +254,8 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/contatos/bloquear') return has('sofia_conversas') || has('sofia_contatos'); // bloquear vem tb do chat (Conversas)
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/comparecimento') return has('sofia_config');
+  if (url === '/sofia/comparecimento') return has('sofia_contatos') || has('sofia_config'); // agora mora na aba Tags
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano') return has('sofia_config');
   return false;
 }
 // WhatsApp é dividido em três sub-abas: Configuração, Agendamento e Hoje.
@@ -2747,6 +2748,12 @@ function campListHTML(filtro = {}) {
 // como card dentro de Contatos; virou sub-aba própria entre Contatos e Campanhas).
 function paginaSofiaTags(aviso, erro) {
   const tags = contatos.tagsDistintas();
+  // Presença da experimental (troca de tags): mora nesta aba (Tags) por ser sobre tags.
+  const cmp = lerCompCfg();
+  let cmpH = null; try { cmpH = horarios.listar().find(j => j.chave === 'comparecimento'); } catch (_) {}
+  const cmpHoraBloco = cmpH ? `<div class="hsec"><div class="hsec-t">Quando roda ${cmpH.editado ? '<span class="badge-ed">alterado</span>' : ''}</div>${blocoHorario(cmpH, '', 'formCmp')}</div>` : '';
+  const cmpTags = tags.map(t => t.tag);
+  const cmpSel = (val) => { const opts = ['<option value="">— escolha —</option>'].concat(cmpTags.map(t => `<option value="${esc(t)}"${t === val ? ' selected' : ''}>${esc(t)}</option>`)); if (val && !cmpTags.includes(val)) opts.push(`<option value="${esc(val)}" selected>${esc(val)} (atual)</option>`); return opts.join(''); };
   const lista = tags.length
     ? tags.map((t, i) => { const cfg = contatos.tagConfig(t.tag); const on = (cfg.gatilho || cfg.remove.length); return `<div class="tagrow">
       <form method="POST" action="/sofia/contatos/tag">
@@ -2768,6 +2775,27 @@ function paginaSofiaTags(aviso, erro) {
       <div style="margin-bottom:12px"><button type="button" class="save" onclick="criarTagNova()" style="padding:8px 16px">＋ Criar tag</button></div>
       ${lista}
     </div>
+
+    <details class="acc-sec">
+      <summary class="sec-t" style="cursor:pointer;padding:4px 0">Presença da experimental (troca de tags) <small style="font-weight:400;color:var(--cinza)">— 1x/semana, cruza a presença no EVO e atualiza as tags</small></summary>
+      <div class="card">
+        <p class="quando" style="margin:0 0 12px">No <b>dia/horário definidos abaixo</b>, o robô lê a <b>presença/falta</b> das aulas experimentais no <b>EVO</b> e troca as tags de quem estava com a tag de <b>agendou</b>: quem <b>compareceu</b> vira "fez aula" e quem <b>faltou</b> vira "encerrado sem presença". As outras tags (manuais) não são tocadas.</p>
+        <form method="POST" action="/sofia/comparecimento" id="formCmp">
+          <label class="chk" style="margin:0 0 12px"><input type="checkbox" name="on" value="1"${cmp.on ? ' checked' : ''}> Ligado</label>
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Tag de "agendou" (origem)</label><select name="tagAgendou">${cmpSel(cmp.tagAgendou)}</select></div>
+            <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Compareceu → vira</label><select name="tagCompareceu">${cmpSel(cmp.tagCompareceu)}</select></div>
+            <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Faltou → vira</label><select name="tagFaltou">${cmpSel(cmp.tagFaltou)}</select></div>
+          </div>
+          <label class="chk" style="margin:14px 0 0"><input type="checkbox" name="criarNovos" value="1"${cmp.criarNovos ? ' checked' : ''}> Cadastrar na SoFIA quem fez a experimental e ainda não existe <small style="font-weight:400;color:var(--cinza)">(entrou por outro canal — assim pode receber campanhas)</small></label>
+          <label style="margin:14px 0 4px">Número que recebe o relatório <small style="font-weight:400;color:var(--cinza)">(opcional — resumo do que foi trocado)</small></label>
+          <input type="tel" name="numeroRelatorio" value="${esc(cmp.numeroRelatorio)}" placeholder="Ex.: 62998887777" style="max-width:220px">
+          ${cmpHoraBloco}
+          <div class="acts" style="margin-top:14px"><button type="submit" class="save">Salvar</button></div>
+        </form>
+        <p class="quando" style="margin:12px 0 0">🧪 Para <b>testar antes</b> sem alterar nada (só mostra o que faria), rode na VPS, em <code>~/SF-Chat_Experimental-Mensagens/Experimental</code>: <code>HEADLESS=true node src/comparecimento.js --dry</code>. Se o EVO bloquear o modo sem tela, use <code>xvfb-run -a node src/comparecimento.js --dry</code>. Trocar <code>--dry</code> por <code>--run</code> executa de verdade. (O robô agendado não precisa disso — já roda com tela virtual.)</p>
+      </div>
+    </details>
   </div>
 
   <div id="tgModal" class="ct-ov" onclick="if(event.target===this)fecharTagCfg()">
@@ -3255,11 +3283,6 @@ function paginaSofia(aviso, erro) {
 
   const e = sofia.estado();
   let avh = { on: false, numero: '' }; try { avh = sofia.lerAvisoHumano(); } catch (_) {}
-  const cmp = lerCompCfg();
-  let cmpH = null; try { cmpH = horarios.listar().find(j => j.chave === 'comparecimento'); } catch (_) {}
-  const cmpHoraBloco = cmpH ? `<div class="hsec"><div class="hsec-t">Quando roda ${cmpH.editado ? '<span class="badge-ed">alterado</span>' : ''}</div>${blocoHorario(cmpH, '', 'formCmp')}</div>` : '';
-  let cmpTags = []; try { cmpTags = contatos.tagsDistintas().map(t => t.tag); } catch (_) {}
-  const cmpSel = (val) => { const opts = ['<option value="">— escolha —</option>'].concat(cmpTags.map(t => `<option value="${esc(t)}"${t === val ? ' selected' : ''}>${esc(t)}</option>`)); if (val && !cmpTags.includes(val)) opts.push(`<option value="${esc(val)}" selected>${esc(val)} (atual)</option>`); return opts.join(''); };
   // Cada seção é um card recolhível (começa MINIMIZADA — só o título aparece) e
   // reordenável (↑ ↓). A ordem no DOM = ordem salva no prompt. O textarea, mesmo
   // recolhido (display:none), continua sendo enviado no POST.
@@ -3308,27 +3331,6 @@ function paginaSofia(aviso, erro) {
           <textarea name="palavras" rows="6" spellcheck="false" style="font-size:.86rem">${esc((avh.palavras && avh.palavras.length ? avh.palavras : (sofia.PALAVRAS_HUMANO_PADRAO || [])).join('\n'))}</textarea>
           <div class="acts" style="margin-top:12px"><button type="submit" class="save">Salvar</button></div>
         </form>
-      </div>
-    </details>
-
-    <details class="acc-sec">
-      <summary class="sec-t" style="cursor:pointer;padding:4px 0">Presença da experimental (troca de tags) <small style="font-weight:400;color:var(--cinza)">— 1x/semana, cruza a presença no EVO e atualiza as tags</small></summary>
-      <div class="card">
-        <p class="quando" style="margin:0 0 12px">No <b>dia/horário definidos abaixo</b>, o robô lê a <b>presença/falta</b> das aulas experimentais no <b>EVO</b> e troca as tags de quem estava com a tag de <b>agendou</b>: quem <b>compareceu</b> vira "fez aula" e quem <b>faltou</b> vira "encerrado sem presença". As outras tags (manuais) não são tocadas.</p>
-        <form method="POST" action="/sofia/comparecimento" id="formCmp">
-          <label class="chk" style="margin:0 0 12px"><input type="checkbox" name="on" value="1"${cmp.on ? ' checked' : ''}> Ligado</label>
-          <div style="display:flex;gap:16px;flex-wrap:wrap">
-            <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Tag de "agendou" (origem)</label><select name="tagAgendou">${cmpSel(cmp.tagAgendou)}</select></div>
-            <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Compareceu → vira</label><select name="tagCompareceu">${cmpSel(cmp.tagCompareceu)}</select></div>
-            <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Faltou → vira</label><select name="tagFaltou">${cmpSel(cmp.tagFaltou)}</select></div>
-          </div>
-          <label class="chk" style="margin:14px 0 0"><input type="checkbox" name="criarNovos" value="1"${cmp.criarNovos ? ' checked' : ''}> Cadastrar na SoFIA quem fez a experimental e ainda não existe <small style="font-weight:400;color:var(--cinza)">(entrou por outro canal — assim pode receber campanhas)</small></label>
-          <label style="margin:14px 0 4px">Número que recebe o relatório <small style="font-weight:400;color:var(--cinza)">(opcional — resumo do que foi trocado)</small></label>
-          <input type="tel" name="numeroRelatorio" value="${esc(cmp.numeroRelatorio)}" placeholder="Ex.: 62998887777" style="max-width:220px">
-          ${cmpHoraBloco}
-          <div class="acts" style="margin-top:14px"><button type="submit" class="save">Salvar</button></div>
-        </form>
-        <p class="quando" style="margin:12px 0 0">🧪 Para <b>testar antes</b> sem alterar nada (só mostra o que faria), rode na VPS, em <code>~/SF-Chat_Experimental-Mensagens/Experimental</code>: <code>HEADLESS=true node src/comparecimento.js --dry</code>. Se o EVO bloquear o modo sem tela, use <code>xvfb-run -a node src/comparecimento.js --dry</code>. Trocar <code>--dry</code> por <code>--run</code> executa de verdade. (O robô agendado não precisa disso — já roda com tela virtual.)</p>
       </div>
     </details>
 
@@ -4904,9 +4906,9 @@ const server = http.createServer((req, res) => {
         try { const novo = horarios.build(hora, dias); mudouHora = (novo !== horarios.cronDe('comparecimento')); horarios.salvar('comparecimento', hora, dias); }
         catch (_) { /* horário inválido → ignora, mantém o atual */ }
       }
-      if (!mudouHora) { res.writeHead(303, { Location: '/sofia?okcmp=1' }); return res.end(); }
+      if (!mudouHora) { res.writeHead(303, { Location: '/sofia?view=tags&okcmp=1' }); return res.end(); }
       exec('pm2 restart slimfit-exp --update-env', { timeout: 25000 }, (err) => {
-        res.writeHead(303, { Location: '/sofia?okcmp=1' + (err ? '&errh=1' : '') }); res.end();
+        res.writeHead(303, { Location: '/sofia?view=tags&okcmp=1' + (err ? '&errh=1' : '') }); res.end();
       });
     });
   }
