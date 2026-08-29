@@ -277,8 +277,11 @@ async function horariosDoDiaEvo(dataISO: string): Promise<string[] | null> {
 // drena esta fila logo após responderComMemoria e envia as imagens de verdade.
 // (é resetada no início de cada responderComMemoria; o listener serializa as
 // mensagens, então não há corrida entre conversas.)
-let _midiasDaVez: string[] = [];
-export function drenarMidias(): string[] { const m = _midiasDaVez; _midiasDaVez = []; return m; }
+// Cada imagem pedida nesta resposta guarda o arquivo (imagem) E o link que a SoFIA
+// cita no texto. O listener usa o link para soltar a foto logo DEPOIS da bolha que a
+// anuncia (ex.: "aqui está a grade: <link>"), em vez de jogar tudo no fim.
+let _midiasDaVez: { imagem: string; link: string }[] = [];
+export function drenarMidias(): { imagem: string; link: string }[] { const m = _midiasDaVez; _midiasDaVez = []; return m; }
 
 const enviarMidia = tool(
   "enviar_midia",
@@ -287,7 +290,7 @@ const enviarMidia = tool(
   async ({ tipo }) => {
     const url = tipo === "grade" ? MIDIAS.grade_imagem : MIDIAS.precos_imagem;
     const link = tipo === "grade" ? MIDIAS.grade_link : MIDIAS.precos_link;
-    if (url) _midiasDaVez.push(url); // o listener envia a imagem de verdade após a resposta
+    if (url) _midiasDaVez.push({ imagem: url, link }); // o listener envia a foto logo após a bolha que cita o link
     console.log(`🖼️  [ENVIAR IMAGEM] ${tipo}: ${url}`);
     return { content: [{ type: "text", text: `Imagem "${tipo}" enviada. Link: ${link}` }] };
   },

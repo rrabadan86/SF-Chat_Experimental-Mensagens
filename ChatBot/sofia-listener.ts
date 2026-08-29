@@ -146,10 +146,27 @@ async function pararDigitando(jid: string) { await chatstate(jid, "stop"); }
 // `chaveRegistro` (opcional): quando informado, registra CADA parte enviada no
 // inbox — assim o painel mostra as mesmas bolhas que a aluna vê no WhatsApp (no
 // modo humano a resposta vira várias mensagens).
-async function enviarHumano(to: string, texto: string, chaveRegistro?: string) {
+// Solta UMA imagem (grade/preços) no WhatsApp, com o "digitando..." antes.
+async function soltarImagem(to: string, imagemUrl: string, chaveRegistro?: string) {
+  try {
+    await mostrarDigitando(to);
+    await sleep(900);
+    const media = await MessageMedia.fromUrl(imagemUrl, { unsafeMime: true });
+    await enviar(to, media);
+    if (chaveRegistro) registrarInbox(chaveRegistro, to, "", "sofia", "🖼️ (imagem enviada)"); // aparece no painel
+  } catch (e: any) { log("falha ao enviar imagem: " + (e?.message || e)); }
+}
+
+async function enviarHumano(
+  to: string,
+  texto: string,
+  chaveRegistro?: string,
+  midias?: { imagem: string; link: string }[], // imagens desta resposta (grade/preços)
+) {
   const r = lerRitmo(); // fresco a cada resposta — o painel manda no ritmo
   const partes = r.humano ? dividirEmMensagens(texto) : [String(texto || "").trim()];
   const jaEnviadas = new Set<string>(); // evita mandar a MESMA parte 2x na resposta (modelo às vezes repete)
+  const pend = (midias || []).filter((m) => m && m.imagem).map((m) => ({ ...m, enviada: false }));
   for (let i = 0; i < partes.length; i++) {
     if (!partes[i]) continue;
     const chaveParte = partes[i].replace(/\s+/g, " ").trim().toLowerCase();
@@ -159,7 +176,20 @@ async function enviarHumano(to: string, texto: string, chaveRegistro?: string) {
     await sleep(delayDigitando(partes[i], r));
     await enviar(to, partes[i]);
     if (chaveRegistro) registrarInbox(chaveRegistro, to, "", "sofia", partes[i]); // painel = WhatsApp
+    // Se ESTA bolha anuncia uma imagem (cita o link dela), manda a foto AGORA — logo
+    // depois da bolha e ANTES da próxima (ex.: antes do convite). Não deixa pro fim.
+    for (const m of pend) {
+      if (!m.enviada && m.link && partes[i].includes(m.link)) {
+        m.enviada = true;
+        await sleep(400 + Math.floor(Math.random() * 500));
+        await soltarImagem(to, m.imagem, chaveRegistro);
+      }
+    }
     if (i < partes.length - 1) await sleep(400 + Math.floor(Math.random() * 500));
+  }
+  // Imagens que o texto não anunciou (nenhuma bolha citou o link) → manda no fim.
+  for (const m of pend) {
+    if (!m.enviada) { m.enviada = true; await soltarImagem(to, m.imagem, chaveRegistro); }
   }
   await pararDigitando(to);
 }
@@ -1456,19 +1486,12 @@ function dispararResposta(chave: string) {
   enfileirar(async () => {
     try {
       const reply = await responderComMemoria(chave, textoJunto, telefone); // trata on/off, handoff e memória
-      const urls = drenarMidias(); // imagens que a Sofia pediu nesta resposta
-      if ((reply && reply.trim()) || urls.length) {
-        if (reply && reply.trim()) await enviarHumano(jid, reply, chave); // registra cada parte (= WhatsApp)
-        for (const url of urls) {
-          try {
-            await mostrarDigitando(jid);
-            await sleep(900);
-            const media = await MessageMedia.fromUrl(url, { unsafeMime: true });
-            await enviar(jid, media);
-            registrarInbox(chave, jid, "", "sofia", "🖼️ (imagem enviada)"); // aparece no painel
-          } catch (e: any) { log("falha ao enviar imagem: " + (e?.message || e)); }
-        }
-        await pararDigitando(jid);
+      const midias = drenarMidias(); // imagens que a Sofia pediu nesta resposta ({imagem, link})
+      if ((reply && reply.trim()) || midias.length) {
+        // Texto e imagens juntos: enviarHumano solta cada foto logo APÓS a bolha que a
+        // anuncia (cita o link) — a grade não cai mais embaixo do convite. Sem texto,
+        // manda só as imagens (o laço final do enviarHumano cuida disso).
+        await enviarHumano(jid, reply || "", chave, midias);
       }
     } finally {
       emVoo.delete(chave);
