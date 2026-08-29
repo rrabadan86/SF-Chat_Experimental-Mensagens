@@ -149,8 +149,12 @@ async function pararDigitando(jid: string) { await chatstate(jid, "stop"); }
 async function enviarHumano(to: string, texto: string, chaveRegistro?: string) {
   const r = lerRitmo(); // fresco a cada resposta — o painel manda no ritmo
   const partes = r.humano ? dividirEmMensagens(texto) : [String(texto || "").trim()];
+  const jaEnviadas = new Set<string>(); // evita mandar a MESMA parte 2x na resposta (modelo às vezes repete)
   for (let i = 0; i < partes.length; i++) {
     if (!partes[i]) continue;
+    const chaveParte = partes[i].replace(/\s+/g, " ").trim().toLowerCase();
+    if (jaEnviadas.has(chaveParte)) { log("parte duplicada ignorada"); continue; }
+    jaEnviadas.add(chaveParte);
     await mostrarDigitando(to);
     await sleep(delayDigitando(partes[i], r));
     await enviar(to, partes[i]);
@@ -1423,11 +1427,16 @@ function agruparMs(): number {
 }
 type Pend = { jid: string; telefone: string; textos: string[]; timer: ReturnType<typeof setTimeout> | null };
 const pendencias = new Map<string, Pend>();
+// Contatos com uma resposta EM ANDAMENTO (gerando/enviando). Enquanto está em voo,
+// novas mensagens só ACUMULAM — não disparam uma 2ª resposta sobreposta (era o que
+// gerava respostas em duplicata quando a aluna mandava outra msg durante a geração).
+const emVoo = new Set<string>();
 function agendarResposta(chave: string, jid: string, telefone: string, texto: string) {
   let p = pendencias.get(chave);
   if (!p) { p = { jid, telefone, textos: [], timer: null }; pendencias.set(chave, p); }
   p.jid = jid; p.telefone = telefone;
   p.textos.push(texto);
+  if (emVoo.has(chave)) return; // já respondendo → acumula; dispara ao terminar (no finally)
   const ms = agruparMs();
   if (ms <= 0) { dispararResposta(chave); return; } // desligado → responde já
   if (p.timer) clearTimeout(p.timer);
@@ -1436,26 +1445,40 @@ function agendarResposta(chave: string, jid: string, telefone: string, texto: st
 function dispararResposta(chave: string) {
   const p = pendencias.get(chave);
   if (!p) return;
+  if (emVoo.has(chave)) return; // uma resposta por vez por contato
   pendencias.delete(chave);
   if (p.timer) clearTimeout(p.timer);
   const jid = p.jid, telefone = p.telefone;
   const textoJunto = p.textos.join("\n").trim();
   if (!textoJunto) return;
+  emVoo.add(chave);
   enfileirar(async () => {
-    const reply = await responderComMemoria(chave, textoJunto, telefone); // trata on/off, handoff e memória
-    const urls = drenarMidias(); // imagens que a Sofia pediu nesta resposta
-    if ((reply && reply.trim()) || urls.length) {
-      if (reply && reply.trim()) await enviarHumano(jid, reply, chave); // registra cada parte (= WhatsApp)
-      for (const url of urls) {
-        try {
-          await mostrarDigitando(jid);
-          await sleep(900);
-          const media = await MessageMedia.fromUrl(url, { unsafeMime: true });
-          await enviar(jid, media);
-          registrarInbox(chave, jid, "", "sofia", "🖼️ (imagem enviada)"); // aparece no painel
-        } catch (e: any) { log("falha ao enviar imagem: " + (e?.message || e)); }
+    try {
+      const reply = await responderComMemoria(chave, textoJunto, telefone); // trata on/off, handoff e memória
+      const urls = drenarMidias(); // imagens que a Sofia pediu nesta resposta
+      if ((reply && reply.trim()) || urls.length) {
+        if (reply && reply.trim()) await enviarHumano(jid, reply, chave); // registra cada parte (= WhatsApp)
+        for (const url of urls) {
+          try {
+            await mostrarDigitando(jid);
+            await sleep(900);
+            const media = await MessageMedia.fromUrl(url, { unsafeMime: true });
+            await enviar(jid, media);
+            registrarInbox(chave, jid, "", "sofia", "🖼️ (imagem enviada)"); // aparece no painel
+          } catch (e: any) { log("falha ao enviar imagem: " + (e?.message || e)); }
+        }
+        await pararDigitando(jid);
       }
-      await pararDigitando(jid);
+    } finally {
+      emVoo.delete(chave);
+      // Mensagens que chegaram DURANTE a geração → responde UMA vez mais (juntas),
+      // em vez de sobrepor. Sem greeting repetido, sem token dobrado.
+      const q = pendencias.get(chave);
+      if (q && q.textos.length) {
+        const ms = agruparMs();
+        if (q.timer) clearTimeout(q.timer);
+        q.timer = setTimeout(() => dispararResposta(chave), ms > 0 ? ms : 0);
+      }
     }
   });
 }
