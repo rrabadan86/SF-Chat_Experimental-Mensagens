@@ -246,6 +246,34 @@ function proximaSegundaTarde(ref: Date) {
   return d;
 }
 
+// Busca a grade REAL do EVO (via /api/slots que o formulário expõe): mapa
+// data(AAAA-MM-DD) -> lista de slots { time, activityDate, disponivel, freeSpots }.
+// Devolve null se a rede/serviço falhar — aí o chamador usa o fallback local.
+async function buscarSlots(): Promise<Record<string, any[]> | null> {
+  const base = process.env.SOFIA_BOOK_URL || "https://sf-formularioexperimental.onrender.com/api/book-sofia";
+  const slotsUrl = process.env.SOFIA_SLOTS_URL || base.replace(/\/api\/book-sofia\/?$/, "/api/slots");
+  try {
+    const r = await comRetry(async () => {
+      const resp = await fetch(slotsUrl + "?days=10", { headers: { Accept: "application/json" } });
+      if (resp.status >= 500) throw Object.assign(new Error(`slots ${resp.status}`), { status: resp.status });
+      return resp;
+    });
+    const j: any = await r.json().catch(() => ({}));
+    return (j && j.dias) || {};
+  } catch (e: any) {
+    console.log("⚠️  buscarSlots falhou:", e?.message ?? e);
+    return null;
+  }
+}
+// Horários (HH:MM) que EXISTEM num dia, direto do EVO — para validar o horário
+// sem depender de uma grade mantida à mão. null = EVO não respondeu (use o fallback).
+async function horariosDoDiaEvo(dataISO: string): Promise<string[] | null> {
+  const dias = await buscarSlots();
+  if (!dias) return null;
+  const doDia = Array.isArray(dias[dataISO]) ? dias[dataISO] : [];
+  return doDia.map((s: any) => String(s.time).slice(0, 5));
+}
+
 // Imagens que a Sofia pediu para enviar NESTA resposta. O listener (WhatsApp)
 // drena esta fila logo após responderComMemoria e envia as imagens de verdade.
 // (é resetada no início de cada responderComMemoria; o listener serializa as
@@ -278,12 +306,16 @@ const verificarDisponibilidade = tool(
     const agora = new Date();
     const alvo = new Date(`${data_desejada}T${horario_desejado}:00-03:00`);
     const diaSemana = alvo.getDay();
-    const grade = lerGrade();
-    const slots = grade[diaSemana] ?? [];
+    const hh = String(horario_desejado).slice(0, 5);
+    // Horários do dia: PRIMEIRO do EVO (via /api/slots) — sempre em sincronia com a
+    // unidade, ninguém mantém à mão. Só se o EVO não responder (null) caímos na grade
+    // configurável (SOFIA_GRADE / sofia-grade.json / padrão) como reserva.
+    const doEvo = await horariosDoDiaEvo(data_desejada);
+    const slots = doEvo === null ? (lerGrade()[diaSemana] ?? []) : doEvo;
 
     if (slots.length === 0)
-      return json({ valido: false, motivo: `Não há aula na ${DIAS[diaSemana]}.`, opcoes_proximas: grade[1] ?? [] });
-    if (!slots.includes(horario_desejado))
+      return json({ valido: false, motivo: `Não há aula na ${DIAS[diaSemana]}.`, opcoes_do_dia: [] });
+    if (!slots.includes(hh))
       return json({ valido: false, motivo: `${horario_desejado} não existe na ${DIAS[diaSemana]}.`, opcoes_do_dia: slots });
 
     const diaAgora = agora.getDay();
@@ -353,36 +385,24 @@ const consultarVaga = tool(
     + "para dizer o que está disponível. Complementa a verificar_disponibilidade (que só checa grade/antecedência).",
   { data: z.string().describe("AAAA-MM-DD"), horario: z.string().describe("HH:MM") },
   async ({ data, horario }) => {
-    const base = process.env.SOFIA_BOOK_URL || "https://sf-formularioexperimental.onrender.com/api/book-sofia";
-    const slotsUrl = process.env.SOFIA_SLOTS_URL || base.replace(/\/api\/book-sofia\/?$/, "/api/slots");
     const hh = String(horario).slice(0, 5);
-    try {
-      const r = await comRetry(async () => {
-        const resp = await fetch(slotsUrl + "?days=10", { headers: { Accept: "application/json" } });
-        if (resp.status >= 500) throw Object.assign(new Error(`slots ${resp.status}`), { status: resp.status });
-        return resp;
-      });
-      const j: any = await r.json().catch(() => ({}));
-      const dias: Record<string, any[]> = (j && j.dias) || {};
-      const doDia: any[] = Array.isArray(dias[data]) ? dias[data] : [];
-      const alvo = doDia.find((s) => String(s.time).slice(0, 5) === hh);
-      // Alternativas com vaga: primeiro o mesmo dia, depois os próximos.
-      const comVaga: string[] = [];
-      const juntar = (arr: any[]) => arr.forEach((s) => { if (s && s.disponivel) comVaga.push(s.activityDate); });
-      juntar(doDia);
-      for (const d of Object.keys(dias).sort()) { if (d !== data) juntar(dias[d] || []); }
-      const alternativas = comVaga.slice(0, 5);
-      // Horários COM VAGA no MESMO dia pedido (para oferecer só o que dá pra marcar).
-      const disponiveis_do_dia = doDia.filter((s) => s && s.disponivel).map((s) => String(s.time).slice(0, 5));
-      if (alvo && alvo.disponivel) return json({ vaga: true, freeSpots: alvo.freeSpots, disponiveis_do_dia });
-      if (alvo && !alvo.disponivel) return json({ vaga: false, motivo: "lotada", disponiveis_do_dia, alternativas });
-      return json({ vaga: false, motivo: "inexistente", disponiveis_do_dia, alternativas });
-    } catch (e: any) {
-      // Se a grade não responder, NÃO trava o atendimento: segue (a
-      // solicitar_agendamento ainda valida a vaga de verdade na hora de agendar).
-      console.log("⚠️  consultar_vaga falhou:", e?.message ?? e);
-      return json({ vaga: null, indisponivel_checar: true });
-    }
+    const dias = await buscarSlots();
+    // Se a grade não responder, NÃO trava o atendimento: segue (a
+    // solicitar_agendamento ainda valida a vaga de verdade na hora de agendar).
+    if (dias === null) return json({ vaga: null, indisponivel_checar: true });
+    const doDia: any[] = Array.isArray(dias[data]) ? dias[data] : [];
+    const alvo = doDia.find((s) => String(s.time).slice(0, 5) === hh);
+    // Alternativas com vaga: primeiro o mesmo dia, depois os próximos.
+    const comVaga: string[] = [];
+    const juntar = (arr: any[]) => arr.forEach((s) => { if (s && s.disponivel) comVaga.push(s.activityDate); });
+    juntar(doDia);
+    for (const d of Object.keys(dias).sort()) { if (d !== data) juntar(dias[d] || []); }
+    const alternativas = comVaga.slice(0, 5);
+    // Horários COM VAGA no MESMO dia pedido (para oferecer só o que dá pra marcar).
+    const disponiveis_do_dia = doDia.filter((s) => s && s.disponivel).map((s) => String(s.time).slice(0, 5));
+    if (alvo && alvo.disponivel) return json({ vaga: true, freeSpots: alvo.freeSpots, disponiveis_do_dia });
+    if (alvo && !alvo.disponivel) return json({ vaga: false, motivo: "lotada", disponiveis_do_dia, alternativas });
+    return json({ vaga: false, motivo: "inexistente", disponiveis_do_dia, alternativas });
   },
 );
 

@@ -554,11 +554,11 @@ SOFIA_TOKEN=$TOK_SOFIA
 NTFY_TOPIC=$NTFY_TOPIC_VAL
 NTFY_URL=https://ntfy.sh
 
-# ===== Grade de horários da SoFIA (que horários existem em cada dia) — [POR STUDIO] =====
-# A SoFIA valida o horário da experimental por esta grade (a vaga REAL vem do EVO).
-# Sem definir, ela usa a grade da UNIDADE ORIGINAL. Defina a desta unidade — por aqui
-# (JSON: 0=domingo … 6=sábado) ou depois no arquivo sofia-grade.json (SOFIA_DIR)/painel.
-# Ex.: SOFIA_GRADE={"1":["07:00","08:15"],"2":["07:00","09:30"],"6":["08:30","09:45"]}
+# ===== Grade da SoFIA — RESERVA (normalmente NÃO precisa mexer) =====
+# A SoFIA já pega os horários direto do EVO (via /api/slots do formulário), sempre
+# em sincronia com a unidade. Esta grade só é usada de RESERVA, caso o EVO não
+# responda na hora. Se quiser definir a reserva desta unidade (JSON: 0=domingo … 6=sábado):
+# Ex.: SOFIA_GRADE={"1":["07:00","08:15"],"6":["08:30","09:45"]}
 # SOFIA_GRADE=
 
 # ===== Transcrição de áudio (opcional; liga/desliga também pelo painel) =====
