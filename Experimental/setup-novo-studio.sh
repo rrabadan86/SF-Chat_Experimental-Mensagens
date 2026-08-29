@@ -549,8 +549,11 @@ SOFIA_TOKEN=$TOK_SOFIA
 NTFY_TOPIC=$NTFY_TOPIC_VAL
 NTFY_URL=https://ntfy.sh
 
-# ===== Transcrição de áudio (opcional) — chave OpenAI/Groq =====
+# ===== Transcrição de áudio (opcional; liga/desliga também pelo painel) =====
+# Padrão OpenAI (Whisper). Para GROQ, defina também URL e MODELO abaixo.
 # TRANSCRICAO_API_KEY=
+# TRANSCRICAO_URL=https://api.groq.com/openai/v1/audio/transcriptions
+# TRANSCRICAO_MODELO=whisper-large-v3-turbo
 EOF
 fi
 
