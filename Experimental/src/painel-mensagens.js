@@ -343,7 +343,7 @@ const ESTILO = `
     .tabs a{flex:1 1 84px;padding:9px 8px}
   }
   /* Sub-menu: mesmas pílulas do menu principal, em escala menor (secundário). */
-  .subtabs{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 18px}
+  .subtabs{position:sticky;top:var(--topbar-h,46px);z-index:55;display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px;padding:9px 0;background:var(--bg);box-shadow:0 5px 6px -6px rgba(16,24,40,.16)}
   .subtabs a{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-family:"Inter",sans-serif;font-weight:500;font-size:.82rem;line-height:1;color:var(--cinza);background:transparent;border:1px solid var(--linha);border-radius:999px;padding:7px 15px;transition:.12s}
   .subtabs a:hover{background:var(--linha-soft);color:var(--tinta);border-color:var(--linha)}
   .subtabs a.on{background:var(--teal);color:#fff;border-color:var(--teal);font-weight:600}
@@ -652,6 +652,18 @@ function chrome(titSubtitulo, ativo, corpo) {
 </div></nav>
 ${corpo}
 <footer>SlimFit · painel do Studio</footer>
+<script>
+/* Altura real da barra de topo (varia: no mobile ela quebra em 2 linhas) vira a
+   variável --topbar-h, usada pelo submenu (.subtabs) para "grudar" logo abaixo
+   dela ao rolar — no desktop e no celular. */
+(function(){
+  function setTBH(){ try{ var tb=document.querySelector('.topbar'); if(tb) document.documentElement.style.setProperty('--topbar-h', Math.round(tb.getBoundingClientRect().height)+'px'); }catch(e){} }
+  setTBH();
+  window.addEventListener('resize', setTBH);
+  window.addEventListener('load', setTBH);
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(setTBH);
+})();
+</script>
 <script>
 /* Seções recolhíveis em TODAS as telas: transforma cada cabeçalho .sec-t (que
    não seja de uma seção já recolhível) num <details class="acc-sec">. Só recolhe
