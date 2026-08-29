@@ -189,9 +189,16 @@ const MIDIAS = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════
-// 2) GRADE DE HORÁRIOS PERMITIDOS (0=domingo ... 6=sábado)
+// 2) GRADE DE HORÁRIOS EM QUE HÁ AULA (0=domingo ... 6=sábado) — POR UNIDADE
 // ══════════════════════════════════════════════════════════════════════════
-const HORARIOS_PERMITIDOS: Record<number, string[]> = {
+// Diz QUE horários existem em cada dia (a vaga REAL vem do EVO em consultar_vaga;
+// esta grade valida o horário e a regra de antecedência). Configurável por unidade,
+// nesta ordem de prioridade:
+//   1) SOFIA_GRADE no .env (JSON), ex.: {"1":["07:00","08:15"],"6":["08:30"]};
+//   2) arquivo sofia-grade.json no SOFIA_DIR (o painel edita — vale sem reiniciar);
+//   3) senão, GRADE_PADRAO abaixo (a da unidade ORIGINAL — TROQUE pela da sua unidade).
+const GRADE_FILE = path.join(BASE_DIR, "sofia-grade.json");
+const GRADE_PADRAO: Record<number, string[]> = {
   0: [],
   1: ["05:45", "07:00", "08:15", "14:00", "16:15"],
   2: ["07:00", "08:15", "09:30", "16:30", "18:15", "19:30"],
@@ -200,6 +207,31 @@ const HORARIOS_PERMITIDOS: Record<number, string[]> = {
   5: ["05:45", "07:00", "08:15", "09:30", "14:00", "16:15"],
   6: ["08:30", "09:45"],
 };
+// Aceita {0..6:[...]} (chaves número ou string), filtra só "HH:MM" válidos.
+function normalizarGrade(o: unknown): Record<number, string[]> {
+  const g: Record<number, string[]> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+  if (o && typeof o === "object") {
+    for (let d = 0; d <= 6; d++) {
+      const v = (o as Record<string, unknown>)[d] ?? (o as Record<string, unknown>)[String(d)];
+      if (Array.isArray(v)) g[d] = v.filter((x): x is string => typeof x === "string" && /^\d{1,2}:\d{2}$/.test(x));
+    }
+  }
+  return g;
+}
+// Lê a grade a cada chamada (edição no painel vale sem reiniciar). Se a fonte for
+// inválida ou ficar TOTALMENTE vazia, cai para a próxima — nunca trava o agendamento.
+function lerGrade(): Record<number, string[]> {
+  let doArquivo = "";
+  try { doArquivo = fs.readFileSync(GRADE_FILE, "utf-8"); } catch { /* sem arquivo */ }
+  for (const raw of [process.env.SOFIA_GRADE, doArquivo]) {
+    if (!raw) continue;
+    try {
+      const g = normalizarGrade(JSON.parse(raw));
+      if (Object.values(g).some((a) => a.length)) return g; // só usa se tiver ao menos 1 horário
+    } catch { /* JSON inválido → tenta a próxima fonte */ }
+  }
+  return GRADE_PADRAO;
+}
 const DIAS = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -246,10 +278,11 @@ const verificarDisponibilidade = tool(
     const agora = new Date();
     const alvo = new Date(`${data_desejada}T${horario_desejado}:00-03:00`);
     const diaSemana = alvo.getDay();
-    const slots = HORARIOS_PERMITIDOS[diaSemana] ?? [];
+    const grade = lerGrade();
+    const slots = grade[diaSemana] ?? [];
 
-    if (diaSemana === 0)
-      return json({ valido: false, motivo: "O Studio não abre aos domingos.", opcoes_proximas: HORARIOS_PERMITIDOS[1] });
+    if (slots.length === 0)
+      return json({ valido: false, motivo: `Não há aula na ${DIAS[diaSemana]}.`, opcoes_proximas: grade[1] ?? [] });
     if (!slots.includes(horario_desejado))
       return json({ valido: false, motivo: `${horario_desejado} não existe na ${DIAS[diaSemana]}.`, opcoes_do_dia: slots });
 
