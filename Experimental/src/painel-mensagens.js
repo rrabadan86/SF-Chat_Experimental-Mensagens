@@ -1773,6 +1773,11 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       #convLista{flex:1 1 auto;overflow-y:auto;min-height:0}
       #convChat{display:flex;flex-direction:column;min-height:360px;max-height:calc(100vh - 190px)}
       @media(max-width:760px){ .inbox-grid{grid-template-columns:minmax(0,1fr);align-items:start} .inbox-grid>div:first-child{max-height:none} #convLista{flex:none;max-height:260px;overflow:auto} #convChat{min-height:60vh;max-height:80vh;max-height:80dvh} }
+      /* Separador de dia na lista de conversas — chip centralizado que "gruda" no topo */
+      .convDiaSep{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:9px;margin:8px 2px 7px;pointer-events:none}
+      .convDiaSep::before,.convDiaSep::after{content:"";height:1px;background:var(--linha,#e7e8ea);flex:1}
+      .convDiaSep span{font-size:.66rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:#0b7275;background:#e4efee;border-radius:999px;padding:3px 11px;white-space:nowrap;box-shadow:0 1px 2px rgba(16,24,40,.07)}
+      .convDiaSep.hoje span{background:#0e8e91;color:#fff}
     </style>
     <div class="inbox-grid">
       <div>
@@ -1865,6 +1870,10 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   function encerrada(c){ return !!(c && (c.enc || (c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS)))); }
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function fmtHora(ts){ try{return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
+  // Separador de dia na lista (chip "gruda no topo"): agrupa por dia de São Paulo.
+  function diaKeySP(ts){ try{ return new Date(ts).toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'}); }catch(e){ return ''; } }
+  function rotuloDiaSep(ts){ var k=diaKeySP(ts); if(!k) return ''; var hoje=diaKeySP(Date.now()), ontem=diaKeySP(Date.now()-86400000); var base=k; try{ base=new Date(ts).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo',weekday:'short',day:'2-digit',month:'2-digit'}).replace('.',''); }catch(e){} if(k===hoje) return 'Hoje · '+base; if(k===ontem) return 'Ontem · '+base; return base; }
+  function sepDiaHtml(ts){ var ehHoje=(diaKeySP(ts)===diaKeySP(Date.now())); return '<div class="convDiaSep'+(ehHoje?' hoje':'')+'"><span>'+escH(rotuloDiaSep(ts))+'</span></div>'; }
   // Rótulo de quem enviou. Para a aluna, usa o PRIMEIRO NOME do contato quando
   // conhecido (cai em "Aluna" se o contato não tiver nome cadastrado).
   function primeiroNome(nome){ var n=String(nome||'').trim(); if(!n) return ''; return n.split(/\\s+/)[0]; }
@@ -2108,6 +2117,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     var lista=document.getElementById('convLista'), pag=document.getElementById('convPag');
     if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+(atencaoFiltro?'Nenhuma conversa pedindo atendimento humano agora. 🎉':((dataIniMs||dataFimMs)?'Nenhuma conversa no período escolhido.':(quietoFiltro?'Nenhum contato quieto há 24h+ (dentro dos últimos 4 dias). 🎉':(buscaTexto?'Nada encontrado para “'+escH(buscaTexto)+'” (nome, telefone ou palavra na conversa).':(tagFiltro==='__sem__'?'Nenhuma conversa sem tag.':(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a SoFIA receber mensagens, elas aparecem aqui.'))))))+'</p>'; if(pag)pag.innerHTML=''; return; }
     var ini=pagina*POR_PAGINA, fatia=chaves.slice(ini,ini+POR_PAGINA);
+    var diaSepAnterior=null;
     lista.innerHTML = fatia.map(function(k){
       var c=ultimoData[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
       var on=(k===selecionada);
@@ -2125,7 +2135,10 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var meta='<div class="quando" style="font-size:.72rem;margin:0;display:flex;align-items:center;flex-wrap:wrap;row-gap:3px">'+fmtHora(c.ultimaEm)+blq+at+tgs+hb+enc+fu+'</div>';
       var bg = on?'#e4efee':(c.atencao?'#fdecea':(encerrada(c)?'#fbf7f7':'#fff'));
       var bd = on?'#0e6e6b':(c.atencao?'#e0a09a':'#eee');
-      return '<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:7px 10px;border-radius:9px;margin-bottom:5px;border:1px solid '+bd+';'+(c.atencao&&!on?'border-left:4px solid #c0392b;':'')+'background:'+bg+'">'+nome+'<div class="quando" style="margin:0;font-size:.7rem">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
+      var itemHtml='<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:7px 10px;border-radius:9px;margin-bottom:5px;border:1px solid '+bd+';'+(c.atencao&&!on?'border-left:4px solid #c0392b;':'')+'background:'+bg+'">'+nome+'<div class="quando" style="margin:0;font-size:.7rem">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
+      var dk=diaKeySP(c.ultimaEm); var sep='';
+      if(dk && dk!==diaSepAnterior){ sep=sepDiaHtml(c.ultimaEm); diaSepAnterior=dk; }
+      return sep+itemHtml;
     }).join('');
     if(pag){
       if(paginas>1){ var salto=10; pag.innerHTML='<div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center;align-items:center">'+setaPag('«',Math.max(0,pagina-salto),pagina<=0,'Voltar '+salto+' páginas')+setaPag('‹',pagina-1,pagina<=0)+pagNumsHtml(pagina,paginas)+setaPag('›',pagina+1,pagina>=paginas-1)+setaPag('»',Math.min(paginas-1,pagina+salto),pagina>=paginas-1,'Avançar '+salto+' páginas')+'</div><span class="quando" style="text-align:center;margin:0">Página '+(pagina+1)+' de '+paginas+' · '+total+' conversas</span>'; }
