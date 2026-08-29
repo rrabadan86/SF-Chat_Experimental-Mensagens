@@ -386,6 +386,19 @@ command -v xvfb-run >/dev/null 2>&1 && echo "   ✔ Xvfb (tela virtual p/ o EVO)
 echo "📁 Criando a pasta de dados vivos (fora do repo): $SOFIA_DIR"
 mkdir -p "$SOFIA_DIR"
 
+# Semente do conteúdo da SoFIA: os modelos (sofia-*.default.txt) vivem no repo
+# (ChatBot/), mas o "semear" do painel/listener procura no SOFIA_DIR. Copiamos os
+# .default para lá (sem sobrescrever) para uma unidade NOVA já subir com o
+# roteiro-modelo, as mídias e a extração — com os marcadores [ENTRE COLCHETES]
+# prontos para o franqueado preencher no painel.
+_semeou=0
+for _d in "$CHATBOT_DIR"/sofia-*.default.txt; do
+  [ -e "$_d" ] || continue
+  _dest="$SOFIA_DIR/$(basename "$_d")"
+  if [ ! -e "$_dest" ]; then cp "$_d" "$_dest" && _semeou=$((_semeou+1)); fi
+done
+[ "$_semeou" -gt 0 ] && echo "   ✔ modelos da SoFIA copiados para o SOFIA_DIR ($_semeou) — o roteiro/mídias sobem prontos p/ editar."
+
 echo "📦 Instalando dependências (Experimental)…"
 ( cd "$EXP_DIR" && npm install --no-audit --no-fund )
 echo "📦 Instalando dependências (ChatBot)…"
