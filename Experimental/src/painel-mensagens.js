@@ -124,6 +124,20 @@ function gravarSessaoDias(n) {
   require('fs').writeFileSync(SESSAO_DIAS_FILE, String(v));
   return v;
 }
+// De quantos em quantos SEGUNDOS a aba Conversas se atualiza sozinha. Editável em
+// SoFIA → Configuração → "Jeito de responder". Guardado em data/painel-refresh-seg.txt.
+// Limitado a 3–60s (3s é o mínimo para não pesar). Padrão 4s.
+const REFRESH_SEG_FILE = path.join(__dirname, '..', 'data', 'painel-refresh-seg.txt');
+function lerRefreshSeg() {
+  try { const n = parseInt(require('fs').readFileSync(REFRESH_SEG_FILE, 'utf8').trim(), 10); if (n >= 3 && n <= 60) return n; } catch (_) {}
+  return 4;
+}
+function gravarRefreshSeg(n) {
+  const v = Math.min(60, Math.max(3, parseInt(n, 10) || 4));
+  try { require('fs').mkdirSync(path.dirname(REFRESH_SEG_FILE), { recursive: true }); } catch (_) {}
+  require('fs').writeFileSync(REFRESH_SEG_FILE, String(v));
+  return v;
+}
 // Segredo de assinatura: do .env, senão gerado e guardado em data/.sessao-segredo
 // (assim as sessões sobrevivem a reinícios). Nunca vai para o Git.
 const SEGREDO = (function () {
@@ -1745,7 +1759,8 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   let sessaoHoras = 12; try { sessaoHoras = sofia.lerSessaoHoras(); } catch (_) {}
   let lockMinIni = 60; try { lockMinIni = sofia.lerHumanoLockMin(); } catch (_) {}
   let quietoCfg = { horas: 24, dias: 4 }; try { quietoCfg = sofia.lerQuietoCfg(); } catch (_) {}
-  const corpo = `<div class="wrap">
+  const refreshMs = lerRefreshSeg() * 1000; // intervalo do auto-refresh da lista (config em "Jeito de responder")
+  const corpo =`<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('conversas')}
     <div class="sec-t" data-nosec="1">Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span><small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
@@ -2150,7 +2165,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     b.textContent=s[0]+' '+s[1]; b.style.color=s[2]; b.style.background=s[3];
   }
   function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){ j=j||{}; if(j.lockMin){ LOCK_MIN=j.lockMin; LOCK_MS=LOCK_MIN*60000; } atualizaWa(j.wa); renderInbox(j.conv||{}); }).catch(function(){}); }
-  atualizaInbox(); setInterval(atualizaInbox, 4000);
+  atualizaInbox(); setInterval(atualizaInbox, ${refreshMs});
   try { if(localStorage.getItem('convFiltrosOpen')==='1'){ var _d=document.getElementById('convFiltrosDet'); if(_d)_d.open=true; } } catch(e){}
 </script>`;
   return chrome({ tab: 'SoFIA', h1: 'SoFIA', p: 'Conversas da SoFIA — leia o histórico de cada atendimento.' }, 'sofia', corpo);
@@ -3282,6 +3297,7 @@ function paginaSofia(aviso, erro) {
   }
 
   const e = sofia.estado();
+  const refreshSeg = lerRefreshSeg(); // atualização automática da aba Conversas (segundos)
   let avh = { on: false, numero: '' }; try { avh = sofia.lerAvisoHumano(); } catch (_) {}
   // Cada seção é um card recolhível (começa MINIMIZADA — só o título aparece) e
   // reordenável (↑ ↓). A ordem no DOM = ordem salva no prompt. O textarea, mesmo
@@ -3409,6 +3425,10 @@ function paginaSofia(aviso, erro) {
           <div>
             <label>Tempo de sessão (memória)${infoI('Depois desse tempo <b>sem mensagens</b>, a próxima mensagem da aluna começa uma conversa <b>nova</b> — a SoFIA não lembra do que foi dito antes. Na aba Conversas aparece como <b>“Sessão encerrada”</b>. Padrão: 12 horas.')}</label>
             <div class="cfg-in"><input type="number" name="sessaoHoras" min="1" max="720" step="1" value="${e.sessaoHoras}"><span class="suf">horas</span></div>
+          </div>
+          <div>
+            <label>Atualizar as Conversas a cada${infoI('De quantos em quantos segundos a aba <b>Conversas</b> se atualiza sozinha (a lista e as bolhas). Menor = mais “ao vivo”, porém pesa um pouco mais. Mínimo 3s. Padrão: 4 segundos.')}</label>
+            <div class="cfg-in"><input type="number" name="refreshSeg" min="3" max="60" step="1" value="${refreshSeg}"><span class="suf">segundos</span></div>
           </div>
           <div>
             <label>Verificação de conexão${infoI('De tempos em tempos a SoFIA confere se o WhatsApp dela ainda está <b>de verdade</b> conectado. Se travar (parar de responder sem cair o QR), ela <b>te avisa no celular</b> e <b>reinicia sozinha</b>. Padrão: 3 minutos. Vale na hora, sem reiniciar.')}</label>
@@ -4863,6 +4883,7 @@ const server = http.createServer((req, res) => {
         });
         try { const el = p.get('expLimite'); if (el != null && el !== '') gravarExpLimite(el); } catch (_) {}
         try { const lm = p.get('humanoLockMin'); if (lm != null && lm !== '') sofia.gravarHumanoLockMin(lm); } catch (_) {}
+        try { const rf = p.get('refreshSeg'); if (rf != null && rf !== '') gravarRefreshSeg(rf); } catch (_) {}
         try { auditoria.registrar(sess.usuario, 'sofia.config', 'Configuração/prompt da SoFIA', 'modelo: ' + (p.get('modeloConversa') || '—')); } catch (_) {}
         res.writeHead(303, { Location: '/sofia?ok=1' }); res.end();
       } catch (e) {
