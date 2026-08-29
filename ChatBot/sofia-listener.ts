@@ -812,7 +812,7 @@ function varrerSessoes() {
 //    e devolvemos as AÇÕES em sofia-eventos.jsonl (o painel aplica a tag + avisa).
 const REGRAS_FILE = path.join(DIR, "sofia-regras.json");
 const EVENTOS_FILE = path.join(DIR, "sofia-eventos.jsonl");
-type RegraTag = { tag: string; avisarWpp?: string; palavras?: string[]; instrucao?: string };
+type RegraTag = { tag: string; avisarWpp?: string; palavras?: string[]; instrucao?: string; campanhaId?: string };
 let regras: Record<string, RegraTag[]> = {};
 let regrasMtime = -1;
 function lerRegras(): Record<string, RegraTag[]> {
@@ -899,12 +899,21 @@ function checarGatilhosAluna(chave: string, nome: string, texto: string) {
       })
       .catch((e: any) => log("ia-tag: " + (e?.message || e)));
   }
-  // respondeu campanha: a aluna está na lista de enviados de alguma campanha?
+  // respondeu campanha: a aluna está na lista de ENVIADOS de uma campanha?
+  // Cada regra pode estar AMARRADA a uma campanha (r.campanhaId): aí só dispara se
+  // a aluna recebeu AQUELA campanha. Sem id (regra antiga) = qualquer campanha.
   const camps = (rs.campanha || []);
   if (camps.length) {
     const alvo8 = soDigitos(chave).slice(-8);
-    const recebeu = alvo8.length === 8 && campanhas.some((c) => (c.enviados || []).some((e: any) => soDigitos(e.tel).slice(-8) === alvo8));
-    if (recebeu) for (const r of camps) if (!jaDisparou(chave, "campanha", r.tag)) emitirAcao(chave, nome, r, "campanha");
+    if (alvo8.length === 8) {
+      const recebeuDe = (c: Campanha) => (c.enviados || []).some((e: any) => soDigitos(e.tel).slice(-8) === alvo8);
+      for (const r of camps) {
+        const recebeu = r.campanhaId
+          ? campanhas.some((c) => String(c.id) === String(r.campanhaId) && recebeuDe(c))
+          : campanhas.some(recebeuDe);
+        if (recebeu && !jaDisparou(chave, "campanha", r.tag)) emitirAcao(chave, nome, r, "campanha");
+      }
+    }
   }
 }
 

@@ -206,10 +206,15 @@ function normCfg(c) {
   // Instrução em linguagem natural para o gatilho 'ia' (ex.: "quando a aluna
   // perguntar sobre preço, valores ou planos"). Limitada para não inflar o prompt.
   const instrucao = String(c.instrucao || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  // Gatilho 'campanha': id da campanha à qual a regra está amarrada. Vazio = qualquer
+  // campanha (comportamento antigo). Com id, a tag só é aplicada a quem respondeu
+  // ÀQUELA campanha — não a quem respondeu qualquer outra (ou um teste antigo).
+  const campanhaId = String(c.campanhaId || '').trim().slice(0, 40);
   return {
     gatilho: GATILHOS.includes(gatilho) ? gatilho : '',
     palavras,
     instrucao,
+    campanhaId,
     avisarWpp: wpp,
     remove,       // tags a remover do contato quando ESTA tag for aplicada
     encerrar: !!c.encerrar, // ao aplicar esta tag, encerra a conversa (🔒) → follow-up não incomoda
@@ -223,7 +228,7 @@ function definirTagConfig(tag, cfg) {
   const n = normCfg(cfg);
   n.criada = !!(map[tag] && map[tag].criada) || !!(cfg && cfg.criada); // uma vez criada, permanece "conhecida"
   // Config totalmente vazia e não-criada → não guarda (evita lixo).
-  if (!n.gatilho && !n.avisarWpp && !n.palavras.length && !n.instrucao && !n.remove.length && !n.encerrar && !n.criada) delete map[tag];
+  if (!n.gatilho && !n.avisarWpp && !n.palavras.length && !n.instrucao && !n.campanhaId && !n.remove.length && !n.encerrar && !n.criada) delete map[tag];
   else map[tag] = n;
   salvarTagsConfig(map);
   return true;
@@ -252,7 +257,7 @@ function tagsPorGatilho(g) {
   return Object.keys(map)
     .map(t => ({ tag: t, cfg: normCfg(map[t]) }))
     .filter(x => x.cfg.gatilho === g)
-    .map(x => ({ tag: x.tag, avisarWpp: x.cfg.avisarWpp, palavras: x.cfg.palavras, instrucao: x.cfg.instrucao }));
+    .map(x => ({ tag: x.tag, avisarWpp: x.cfg.avisarWpp, palavras: x.cfg.palavras, instrucao: x.cfg.instrucao, campanhaId: x.cfg.campanhaId }));
 }
 
 // Adiciona UMA tag a um contato (cria o contato se não existir), sem mexer nas

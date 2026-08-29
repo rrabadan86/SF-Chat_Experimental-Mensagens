@@ -2338,6 +2338,11 @@ function paginaSofiaContatos(aviso, erro, params) {
         <textarea id="tgInstrucao" rows="3" maxlength="300" placeholder="Ex.: quando a aluna perguntar sobre preço, valores, mensalidade ou planos." style="width:100%;resize:vertical"></textarea>
         <p class="quando" style="margin:6px 0 0">A SoFIA <b>lê a conversa</b> e aplica a tag quando entende essa intenção — mesmo sem a palavra exata. Dispara <b>uma vez por conversa</b>. Usa a IA (custo pequeno por mensagem).</p>
       </div>
+      <div id="tgCampBox" style="margin-top:14px;display:none">
+        <label>De qual campanha? <span class="sub" style="font-weight:400;color:var(--cinza)">— a tag só entra para quem respondeu ESTA campanha</span></label>
+        <select id="tgCampanha" style="width:100%"></select>
+        <p class="quando" style="margin:6px 0 0">Escolha a campanha. A tag só é aplicada a quem <b>recebeu e respondeu</b> a ela. <b>"Qualquer campanha"</b> é o comportamento antigo (vale para quem respondeu qualquer campanha — inclusive testes).</p>
+      </div>
       <div id="tgWppBox" style="margin-top:16px;display:none">
         <label>Avisar no WhatsApp <span class="sub" style="font-weight:400;color:var(--cinza)">— número que recebe o recado (nome + telefone)</span></label>
         <input type="tel" id="tgWpp" placeholder="(62) 99999-9999" inputmode="tel">
@@ -2377,8 +2382,9 @@ function paginaSofiaContatos(aviso, erro, params) {
   </div>
 <script>
   var CONTATOS = ${JSON.stringify(r.itens.map(c => ({ tel: c.tel, telFmt: fmtTelP(c.tel), nome: c.nome || '', tags: c.tags || [], ini: iniciais(c.nome, c.tel), cor: corAv(c.nome || c.tel), bloq: sofia.estaBloqueado(c.tel) })))};
-  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, wpp: c.avisarWpp, remove: c.remove, enc: c.encerrar }; }))};
+  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, camp: c.campanhaId, wpp: c.avisarWpp, remove: c.remove, enc: c.encerrar }; }))};
   var TODAS_TAGS_LISTA = ${JSON.stringify(tags.map(t => t.tag))};
+  var CAMPS_LISTA = ${JSON.stringify((() => { try { return sofia.lerCampanhas().map(c => ({ id: String(c.id), nome: String(c.nome || 'Campanha') })); } catch (_) { return []; } })())};
   var tgRemove = [];
   var tgSel=null;
   function abrirTagCfg(i){
@@ -2389,6 +2395,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     document.getElementById('tgInstrucao').value=c.instrucao||'';
     document.getElementById('tgWpp').value=c.wpp||'';
     document.getElementById('tgEncerrar').checked=!!c.enc;
+    tgFillCamps(c.camp||'');
     tgRemove=(c.remove||[]).slice();
     tgRenderRemove();
     tgSync();
@@ -2404,10 +2411,19 @@ function paginaSofiaContatos(aviso, erro, params) {
     }).join('');
   }
   function tgToggleRemove(btn,t){ var i=tgRemove.indexOf(t); if(i>=0)tgRemove.splice(i,1); else tgRemove.push(t); tgRenderRemove(); }
+  function tgFillCamps(sel){
+    var s=document.getElementById('tgCampanha'); if(!s) return;
+    var opts='<option value="">— qualquer campanha (comportamento antigo) —</option>';
+    (CAMPS_LISTA||[]).forEach(function(c){ opts+='<option value="'+esc(c.id)+'">'+esc(c.nome)+'</option>'; });
+    // Campanha amarrada que já não está na lista (foi excluída): mantém a opção.
+    if(sel && !(CAMPS_LISTA||[]).some(function(c){return String(c.id)===String(sel);})) opts+='<option value="'+esc(sel)+'">campanha removida ('+esc(sel)+')</option>';
+    s.innerHTML=opts; s.value=sel||'';
+  }
   function tgSync(){
     var g=document.getElementById('tgGatilho').value;
     document.getElementById('tgPalBox').style.display=(g==='palavra')?'block':'none';
     document.getElementById('tgIaBox').style.display=(g==='ia')?'block':'none';
+    document.getElementById('tgCampBox').style.display=(g==='campanha')?'block':'none';
     document.getElementById('tgWppBox').style.display=g?'block':'none';
     document.getElementById('tgEncBox').style.display=g?'block':'none';
   }
@@ -2419,7 +2435,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     if(g==='ia' && !document.getElementById('tgInstrucao').value.trim()){ alert('Descreva a intenção na instrução (ex.: quando a aluna perguntar sobre preço).'); return; }
     var b=document.getElementById('tgSalvar'); b.disabled=true; b.textContent='Salvando…';
     var pals=document.getElementById('tgPalavras').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
-    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, instrucao:document.getElementById('tgInstrucao').value, avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove, encerrar:document.getElementById('tgEncerrar').checked };
+    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, instrucao:document.getElementById('tgInstrucao').value, campanhaId:(g==='campanha'?document.getElementById('tgCampanha').value:''), avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove, encerrar:document.getElementById('tgEncerrar').checked };
     fetch('/sofia/contatos/tagcfg',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
       .then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.reload(); } else { b.disabled=false; b.textContent='Salvar'; alert('❌ '+(j.erro||'falha ao salvar')); } })
       .catch(function(){ b.disabled=false; b.textContent='Salvar'; alert('❌ erro de rede'); });
@@ -2729,6 +2745,11 @@ function paginaSofiaTags(aviso, erro) {
         <textarea id="tgInstrucao" rows="3" maxlength="300" placeholder="Ex.: quando a aluna perguntar sobre preço, valores, mensalidade ou planos." style="width:100%;resize:vertical"></textarea>
         <p class="quando" style="margin:6px 0 0">A SoFIA <b>lê a conversa</b> e aplica a tag quando entende essa intenção — mesmo sem a palavra exata. Dispara <b>uma vez por conversa</b>. Usa a IA (custo pequeno por mensagem).</p>
       </div>
+      <div id="tgCampBox" style="margin-top:14px;display:none">
+        <label>De qual campanha? <span class="sub" style="font-weight:400;color:var(--cinza)">— a tag só entra para quem respondeu ESTA campanha</span></label>
+        <select id="tgCampanha" style="width:100%"></select>
+        <p class="quando" style="margin:6px 0 0">Escolha a campanha. A tag só é aplicada a quem <b>recebeu e respondeu</b> a ela. <b>"Qualquer campanha"</b> é o comportamento antigo (vale para quem respondeu qualquer campanha — inclusive testes).</p>
+      </div>
       <div id="tgWppBox" style="margin-top:16px;display:none">
         <label>Avisar no WhatsApp <span class="sub" style="font-weight:400;color:var(--cinza)">— número que recebe o recado (nome + telefone)</span></label>
         <input type="tel" id="tgWpp" placeholder="(62) 99999-9999" inputmode="tel">
@@ -2750,8 +2771,9 @@ function paginaSofiaTags(aviso, erro) {
   </div>
 <script>
   function esc(s){return String(s).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];});}
-  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, wpp: c.avisarWpp, remove: c.remove, enc: c.encerrar }; }))};
+  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, camp: c.campanhaId, wpp: c.avisarWpp, remove: c.remove, enc: c.encerrar }; }))};
   var TODAS_TAGS_LISTA = ${JSON.stringify(tags.map(t => t.tag))};
+  var CAMPS_LISTA = ${JSON.stringify((() => { try { return sofia.lerCampanhas().map(c => ({ id: String(c.id), nome: String(c.nome || 'Campanha') })); } catch (_) { return []; } })())};
   var tgRemove = [];
   var tgSel=null;
   function abrirTagCfg(i){
@@ -2762,6 +2784,7 @@ function paginaSofiaTags(aviso, erro) {
     document.getElementById('tgInstrucao').value=c.instrucao||'';
     document.getElementById('tgWpp').value=c.wpp||'';
     document.getElementById('tgEncerrar').checked=!!c.enc;
+    tgFillCamps(c.camp||'');
     tgRemove=(c.remove||[]).slice();
     tgRenderRemove();
     tgSync();
@@ -2777,10 +2800,19 @@ function paginaSofiaTags(aviso, erro) {
     }).join('');
   }
   function tgToggleRemove(btn,t){ var i=tgRemove.indexOf(t); if(i>=0)tgRemove.splice(i,1); else tgRemove.push(t); tgRenderRemove(); }
+  function tgFillCamps(sel){
+    var s=document.getElementById('tgCampanha'); if(!s) return;
+    var opts='<option value="">— qualquer campanha (comportamento antigo) —</option>';
+    (CAMPS_LISTA||[]).forEach(function(c){ opts+='<option value="'+esc(c.id)+'">'+esc(c.nome)+'</option>'; });
+    // Campanha amarrada que já não está na lista (foi excluída): mantém a opção.
+    if(sel && !(CAMPS_LISTA||[]).some(function(c){return String(c.id)===String(sel);})) opts+='<option value="'+esc(sel)+'">campanha removida ('+esc(sel)+')</option>';
+    s.innerHTML=opts; s.value=sel||'';
+  }
   function tgSync(){
     var g=document.getElementById('tgGatilho').value;
     document.getElementById('tgPalBox').style.display=(g==='palavra')?'block':'none';
     document.getElementById('tgIaBox').style.display=(g==='ia')?'block':'none';
+    document.getElementById('tgCampBox').style.display=(g==='campanha')?'block':'none';
     document.getElementById('tgWppBox').style.display=g?'block':'none';
     document.getElementById('tgEncBox').style.display=g?'block':'none';
   }
@@ -2792,7 +2824,7 @@ function paginaSofiaTags(aviso, erro) {
     if(g==='ia' && !document.getElementById('tgInstrucao').value.trim()){ alert('Descreva a intenção na instrução (ex.: quando a aluna perguntar sobre preço).'); return; }
     var b=document.getElementById('tgSalvar'); b.disabled=true; b.textContent='Salvando…';
     var pals=document.getElementById('tgPalavras').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
-    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, instrucao:document.getElementById('tgInstrucao').value, avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove, encerrar:document.getElementById('tgEncerrar').checked };
+    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, instrucao:document.getElementById('tgInstrucao').value, campanhaId:(g==='campanha'?document.getElementById('tgCampanha').value:''), avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove, encerrar:document.getElementById('tgEncerrar').checked };
     fetch('/sofia/contatos/tagcfg',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
       .then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.reload(); } else { b.disabled=false; b.textContent='Salvar'; alert('❌ '+(j.erro||'falha ao salvar')); } })
       .catch(function(){ b.disabled=false; b.textContent='Salvar'; alert('❌ erro de rede'); });
@@ -4518,7 +4550,7 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e5, corpo => {
       try {
         const d = JSON.parse(corpo || '{}');
-        contatos.definirTagConfig(d.tag, { gatilho: d.gatilho || '', palavras: d.palavras || [], instrucao: d.instrucao || '', avisarWpp: d.avisarWpp || '', remove: d.remove || [], encerrar: !!d.encerrar });
+        contatos.definirTagConfig(d.tag, { gatilho: d.gatilho || '', palavras: d.palavras || [], instrucao: d.instrucao || '', campanhaId: d.campanhaId || '', avisarWpp: d.avisarWpp || '', remove: d.remove || [], encerrar: !!d.encerrar });
         try { publicarRegras(); } catch (_) {} // atualiza o listener na hora
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true }));
       } catch (e) {
@@ -5118,6 +5150,7 @@ function publicarRegras() {
       for (const r of contatos.tagsPorGatilho(g)) {
         if (g === 'palavra') regras[g].push({ tag: r.tag, avisarWpp: r.avisarWpp, palavras: r.palavras });
         else if (g === 'ia') regras[g].push({ tag: r.tag, avisarWpp: r.avisarWpp, instrucao: r.instrucao });
+        else if (g === 'campanha') regras[g].push({ tag: r.tag, avisarWpp: r.avisarWpp, campanhaId: r.campanhaId || '' });
         else regras[g].push({ tag: r.tag, avisarWpp: r.avisarWpp });
       }
     }
