@@ -189,24 +189,15 @@ const MIDIAS = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════
-// 2) GRADE DE HORÁRIOS EM QUE HÁ AULA (0=domingo ... 6=sábado) — POR UNIDADE
+// 2) GRADE DE HORÁRIOS EM QUE HÁ AULA (0=domingo ... 6=sábado)
 // ══════════════════════════════════════════════════════════════════════════
-// Diz QUE horários existem em cada dia (a vaga REAL vem do EVO em consultar_vaga;
-// esta grade valida o horário e a regra de antecedência). Configurável por unidade,
-// nesta ordem de prioridade:
-//   1) SOFIA_GRADE no .env (JSON), ex.: {"1":["07:00","08:15"],"6":["08:30"]};
-//   2) arquivo sofia-grade.json no SOFIA_DIR (o painel edita — vale sem reiniciar);
-//   3) senão, GRADE_PADRAO abaixo (a da unidade ORIGINAL — TROQUE pela da sua unidade).
+// A SoFIA descobre QUE horários existem em cada dia DIRETO DO EVO (via /api/slots do
+// formulário — a mesma fonte da vaga). Assim CADA unidade usa a SUA grade real, sempre
+// em sincronia, sem ninguém manter nada à mão. A grade abaixo (SOFIA_GRADE no .env ou
+// sofia-grade.json no SOFIA_DIR) é só uma RESERVA OPCIONAL, usada se o EVO não responder
+// naquele instante. Sem reserva e com o EVO fora, a SoFIA NÃO rejeita por existência —
+// a marcação valida ao vivo no EVO.
 const GRADE_FILE = path.join(BASE_DIR, "sofia-grade.json");
-const GRADE_PADRAO: Record<number, string[]> = {
-  0: [],
-  1: ["05:45", "07:00", "08:15", "14:00", "16:15"],
-  2: ["07:00", "08:15", "09:30", "16:30", "18:15", "19:30"],
-  3: ["05:45", "07:00", "08:15", "09:30", "14:00", "16:15"],
-  4: ["07:00", "08:15", "09:30", "16:30", "18:15", "19:30"],
-  5: ["05:45", "07:00", "08:15", "09:30", "14:00", "16:15"],
-  6: ["08:30", "09:45"],
-};
 // Aceita {0..6:[...]} (chaves número ou string), filtra só "HH:MM" válidos.
 function normalizarGrade(o: unknown): Record<number, string[]> {
   const g: Record<number, string[]> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
@@ -218,9 +209,10 @@ function normalizarGrade(o: unknown): Record<number, string[]> {
   }
   return g;
 }
-// Lê a grade a cada chamada (edição no painel vale sem reiniciar). Se a fonte for
-// inválida ou ficar TOTALMENTE vazia, cai para a próxima — nunca trava o agendamento.
-function lerGrade(): Record<number, string[]> {
+// Reserva configurada (SOFIA_GRADE no .env, ou sofia-grade.json no SOFIA_DIR — o painel
+// edita, vale sem reiniciar). Devolve null se NADA estiver configurado; aí a SoFIA é
+// tolerante quando o EVO falha (não inventa a grade de outra unidade).
+function lerGradeConfigurada(): Record<number, string[]> | null {
   let doArquivo = "";
   try { doArquivo = fs.readFileSync(GRADE_FILE, "utf-8"); } catch { /* sem arquivo */ }
   for (const raw of [process.env.SOFIA_GRADE, doArquivo]) {
@@ -230,7 +222,7 @@ function lerGrade(): Record<number, string[]> {
       if (Object.values(g).some((a) => a.length)) return g; // só usa se tiver ao menos 1 horário
     } catch { /* JSON inválido → tenta a próxima fonte */ }
   }
-  return GRADE_PADRAO;
+  return null;
 }
 const DIAS = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
 
@@ -264,6 +256,21 @@ async function buscarSlots(): Promise<Record<string, any[]> | null> {
     console.log("⚠️  buscarSlots falhou:", e?.message ?? e);
     return null;
   }
+}
+// Horários (HH:MM) que EXISTEM num dia, direto do EVO (a grade real da unidade).
+//  - string[] (mesmo os cheios) quando o feed cobre essa data;
+//  - []   quando a data está DENTRO do alcance do feed mas sem aula (dia fechado);
+//  - null quando o feed está indisponível/vazio, ou a data está FORA do alcance —
+//    aí o chamador usa a reserva configurada ou é tolerante (não rejeita).
+async function horariosDoDiaEvo(dataISO: string): Promise<string[] | null> {
+  const dias = await buscarSlots();
+  if (!dias) return null;
+  const keys = Object.keys(dias);
+  if (keys.length === 0) return null;
+  if (Array.isArray(dias[dataISO])) return dias[dataISO].map((s: any) => String(s.time).slice(0, 5));
+  keys.sort();
+  if (dataISO >= keys[0] && dataISO <= keys[keys.length - 1]) return []; // no alcance, sem aula
+  return null; // fora do alcance do feed
 }
 
 // Imagens que a Sofia pediu para enviar NESTA resposta. O listener (WhatsApp)
@@ -299,18 +306,22 @@ const verificarDisponibilidade = tool(
     const alvo = new Date(`${data_desejada}T${horario_desejado}:00-03:00`);
     const diaSemana = alvo.getDay();
     const hh = String(horario_desejado).slice(0, 5);
-    // Grade da unidade = QUE horários EXISTEM em cada dia (configurável: SOFIA_GRADE /
-    // sofia-grade.json / padrão). NÃO derive isto do /api/slots: aquele feed é de
-    // VAGA para experimental (filtra atividade/ocupação/turma fechada), então uma aula
-    // que existe mas está cheia/fora do filtro sumiria e diríamos "não existe" — errado.
-    // A vaga REAL (turma cheia) é o consultar_vaga que confere no EVO.
-    const grade = lerGrade();
-    const slots = grade[diaSemana] ?? [];
-
-    if (slots.length === 0)
-      return json({ valido: false, motivo: `Não há aula na ${DIAS[diaSemana]}.`, opcoes_do_dia: [] });
-    if (!slots.includes(hh))
-      return json({ valido: false, motivo: `${horario_desejado} não existe na ${DIAS[diaSemana]}.`, opcoes_do_dia: slots });
+    // QUE horários existem no dia: PRIMEIRO do EVO (feed real da unidade — cada franquia
+    // tem a sua grade, sempre em sincronia, sem manutenção). Se o feed não cobrir a data
+    // (vazio/fora do alcance), usa a RESERVA configurada (SOFIA_GRADE/sofia-grade.json)
+    // se houver; senão, NÃO checa existência aqui — a marcação valida ao vivo no EVO
+    // (assim nunca dizemos "não existe" por causa de um soluço do feed).
+    let slots: string[] | null = await horariosDoDiaEvo(data_desejada);
+    if (slots === null) {
+      const reserva = lerGradeConfigurada();
+      slots = reserva ? (reserva[diaSemana] ?? []) : null;
+    }
+    if (slots !== null) {
+      if (slots.length === 0)
+        return json({ valido: false, motivo: `Não há aula na ${DIAS[diaSemana]}.`, opcoes_do_dia: [] });
+      if (!slots.includes(hh))
+        return json({ valido: false, motivo: `${horario_desejado} não existe na ${DIAS[diaSemana]}.`, opcoes_do_dia: slots });
+    }
 
     const diaAgora = agora.getDay();
     const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
@@ -322,11 +333,11 @@ const verificarDisponibilidade = tool(
     if (emJanelaSemana) {
       const horas = (alvo.getTime() - agora.getTime()) / 3_600_000;
       if (horas < 4)
-        return json({ valido: false, motivo: "Em dias úteis é preciso pelo menos 4h de antecedência.", opcoes_do_dia: slots });
+        return json({ valido: false, motivo: "Em dias úteis é preciso pelo menos 4h de antecedência.", opcoes_do_dia: slots ?? [] });
     } else {
       const segundaTarde = proximaSegundaTarde(agora);
       if (alvo < segundaTarde)
-        return json({ valido: false, motivo: "No fim de semana só agendamos a partir de segunda-feira à tarde.", primeiro_horario_valido: "segunda-feira, 14:00" });
+        return json({ valido: false, motivo: "No fim de semana só agendamos a partir de segunda-feira à tarde.", primeiro_horario_valido: "segunda-feira à tarde" });
     }
     return json({ valido: true, dia_semana: DIAS[diaSemana], horario: horario_desejado });
   },
