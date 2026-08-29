@@ -5,7 +5,7 @@ const mensagens = require('./mensagens');
 
 // Nome do Studio como aparece nas mensagens para a aluna. Cada franquia define o
 // seu no .env (STUDIO_NOME); o padrão mantém a unidade original funcionando igual.
-const STUDIO_NOME = process.env.STUDIO_NOME || 'Studio Slimfit Setor Bueno';
+const STUDIO_NOME = process.env.STUDIO_NOME || 'Studio SlimFit';
 
 // Mapa professora → arquivo de áudio (pós-aula). O padrão é o da unidade original.
 // Cada franquia pode sobrescrever no .env com AUDIO_MAP (um JSON), ex.:

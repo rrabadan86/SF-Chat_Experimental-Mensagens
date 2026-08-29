@@ -43,7 +43,7 @@ const CATALOGO = [
     titulo: 'Confirmação — aula experimental (agendada pelo site/Sofia)',
     quando: 'Enviada logo após a lead agendar pelo formulário ou pela Sofia. Só é usada aqui se você EDITAR este texto; sem edição, vale o texto padrão do sistema.',
     vars: [['nome', 'primeiro nome da lead'], ['quando', 'dia e hora amigável, ex.: sexta-feira, 28/08 às 16:15']],
-    padrao: 'Oie, {nome}! 🎉 Tudo bem? Me chamo Juliana e sou do *Studio Slim Fit* do Setor Bueno.\n\nEstou mandando essa mensagem para informar que a sua aula experimental está confirmada para *{quando}*.\nQualquer dúvida que tiver, ou precisar remarcar a sua aula, pode me chamar por aqui.❤️\n\n*Endereço:* R. C-235, 846, Setor Bueno, Goiânia-GO, 74280-130.\n*Localização:* https://goo.gl/maps/LFBZhkzbCZ5wJ99f6\n\nSe possível, tente chegar 10 minutos antes para você conhecer o Studio e conversarmos! 💪\nMuito bem vinda ao #SlimFit - A Revolução do Treinamento Feminino! ❤️',
+    padrao: 'Oie, {nome}! 🎉 Tudo bem? Aqui é do *{studio}*.\n\nEstou mandando essa mensagem para informar que a sua aula experimental está confirmada para *{quando}*.\nQualquer dúvida que tiver, ou precisar remarcar a sua aula, pode me chamar por aqui.❤️\n\n*Endereço:* [ENDEREÇO DA UNIDADE]\n*Localização:* [LINK DO MAPA DA UNIDADE]\n\nSe possível, tente chegar 10 minutos antes para você conhecer o Studio e conversarmos! 💪\nMuito bem vinda ao #SlimFit - A Revolução do Treinamento Feminino! ❤️',
   },
   {
     chave: 'followup',
@@ -100,7 +100,7 @@ const CATALOGO = [
     titulo: 'Boas-vindas no Instagram (DM)',
     quando: 'Enviada às 07:00 para novas seguidoras (em teste).',
     vars: [],
-    padrao: 'Seja muito bem vinda ao SlimFit, a Revolução do Treinamento Feminino! ❤️\n\nEstou te presenteando com uma aula experimental gratuita para conhecer a nossa metodologia e o nosso studio! Faça o agendamento através deste link: https://sf-formularioexperimental.onrender.com/\n\nNos links abaixo eu explico sobre a nossa metodologia:\n-> O que é o SlimFit: https://www.instagram.com/reel/Crluss-AWPu/\n\n-> Personal X SlimFit: https://www.instagram.com/p/CwkvRzggYrs/\n\nAté mais!',
+    padrao: 'Seja muito bem vinda ao SlimFit, a Revolução do Treinamento Feminino! ❤️\n\nEstou te presenteando com uma aula experimental gratuita para conhecer a nossa metodologia e o nosso studio! Faça o agendamento através deste link: [LINK DO FORMULÁRIO DA UNIDADE]\n\nNos links abaixo eu explico sobre a nossa metodologia:\n-> O que é o SlimFit: https://www.instagram.com/reel/Crluss-AWPu/\n\n-> Personal X SlimFit: https://www.instagram.com/p/CwkvRzggYrs/\n\nAté mais!',
   },
   {
     chave: 'circuito_convocacao',
@@ -182,7 +182,7 @@ function globais() {
   const h = parseInt(agora.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }), 10);
   const saudacao = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
   return {
-    studio: process.env.STUDIO_NOME || 'Studio Slimfit Setor Bueno',
+    studio: process.env.STUDIO_NOME || 'Studio SlimFit',
     saudacao,
     hoje: agora.toLocaleDateString('pt-BR', opt),
     dia_semana: agora.toLocaleDateString('pt-BR', Object.assign({ weekday: 'long' }, opt)),
