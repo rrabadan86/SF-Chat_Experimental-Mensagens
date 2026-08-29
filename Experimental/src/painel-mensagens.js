@@ -2656,10 +2656,26 @@ const fmtDataBR = (s) => { const p = String(s || '').split('-'); return p.length
 
 // Só a LISTA de campanhas (usada tanto na página quanto no fragmento que o painel
 // busca a cada poucos segundos para atualizar o progresso SEM recarregar a página).
-function campListHTML() {
+function campListHTML(filtro = {}) {
   let campanhas = []; try { campanhas = sofia.lerCampanhas(); } catch (_) {}
   const rotStatus = { gerando: '⏳ gerando variações', pronta: '✅ pronta p/ iniciar', enviando: '📤 enviando', pausada: '⏸️ pausada', concluida: '✔️ concluída', cancelada: '🚫 cancelada' };
   if (!campanhas.length) return '<p class="vazio">Nenhuma campanha ainda.</p>';
+  // Filtro por período de início (data no formato AAAA-MM-DD; comparação lexicográfica).
+  // Data de referência = dataInicio (o "início" mostrado no card); se faltar, cai no dia
+  // da criação (criadoEm). de/ate vazios = sem limite naquele lado.
+  const de = String(filtro.de || '').trim(), ate = String(filtro.ate || '').trim();
+  if (de || ate) {
+    const totalAntes = campanhas.length;
+    campanhas = campanhas.filter(c => {
+      let d = String(c.dataInicio || '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { try { d = new Date(c.criadoEm || 0).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); } catch (_) { d = ''; } }
+      if (!d) return false;
+      if (de && d < de) return false;
+      if (ate && d > ate) return false;
+      return true;
+    });
+    if (!campanhas.length) return `<p class="vazio">Nenhuma campanha iniciada nesse período${totalAntes ? ` (de ${totalAntes} no total)` : ''}.</p>`;
+  }
   return campanhas.map(c => {
     const total = (c.enviados ? c.enviados.length : 0) + (c.pendentes ? c.pendentes.length : 0) + (c.falhas ? c.falhas.length : 0);
     const enviados = c.enviados ? c.enviados.length : 0;
@@ -3076,6 +3092,12 @@ function paginaSofiaCampanhas(aviso, erro) {
     ${subnavSofia('campanhas')}
     ${novo}
     <div class="sec-t">Campanhas</div>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:0 0 12px">
+      <label style="margin:0;font-size:.82rem;display:flex;flex-direction:column;gap:3px">📅 De<input type="date" id="campDe" onchange="campFiltrar()" style="padding:7px 9px"></label>
+      <label style="margin:0;font-size:.82rem;display:flex;flex-direction:column;gap:3px">Até<input type="date" id="campAte" onchange="campFiltrar()" style="padding:7px 9px"></label>
+      <button type="button" class="reset" id="campLimpar" onclick="campLimparFiltro()" style="padding:8px 14px;display:none">🧹 Limpar</button>
+      <span class="quando" style="margin:0 0 6px">filtra pelo <b>início</b> da campanha</span>
+    </div>
     <div id="campList">${campListHTML()}</div>
   </div>
   <div id="cpModal" class="ct-ov" onclick="if(event.target===this)fecharCampDet()">
@@ -3086,10 +3108,16 @@ function paginaSofiaCampanhas(aviso, erro) {
     </div>
   </div>
   <script>
+    // Filtro por período (início da campanha). Os valores viajam no fetch do poll,
+    // então o auto-refresh mantém o filtro. Mudar as datas força um refresh na hora.
+    function campFiltroQS(){ var de=(document.getElementById('campDe')||{}).value||'', ate=(document.getElementById('campAte')||{}).value||''; var p=[]; if(de)p.push('de='+encodeURIComponent(de)); if(ate)p.push('ate='+encodeURIComponent(ate)); var b=document.getElementById('campLimpar'); if(b)b.style.display=(de||ate)?'inline-flex':'none'; return p.length?('?'+p.join('&')):''; }
+    function campFiltrar(){ if(window.campForcar) window.campForcar(); }
+    function campLimparFiltro(){ var de=document.getElementById('campDe'), ate=document.getElementById('campAte'); if(de)de.value=''; if(ate)ate.value=''; campFiltrar(); }
     (function(){
       var box=document.getElementById('campList'); if(!box) return;
       var ultimo=box.innerHTML;
-      function poll(){ if(window.campEditando) return; fetch('/sofia/campanhas/lista',{cache:'no-store'}).then(function(r){return r.text();}).then(function(h){ if(window.campEditando) return; if(h && h!==ultimo){
+      window.campForcar=function(){ ultimo='\\u0000'; poll(); }; // invalida o cache p/ aplicar o filtro já
+      function poll(){ if(window.campEditando) return; fetch('/sofia/campanhas/lista'+campFiltroQS(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(h){ if(window.campEditando) return; if(h && h!==ultimo){
         // Guarda o que o usuário estava vendo ANTES de trocar o DOM: variações abertas
         // e a rolagem da página. Sem isto, uma campanha "enviando" (contadores mudando)
         // recolhe o "ver variações" e volta a lista pro topo a cada poll.
@@ -4966,7 +4994,8 @@ const server = http.createServer((req, res) => {
   // para atualizar o progresso sem recarregar a página inteira.
   if (req.method === 'GET' && url === '/sofia/campanhas/lista') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-    try { return res.end(campListHTML()); } catch (_) { return res.end(''); }
+    const spc = new URLSearchParams(req.url.split('?')[1] || '');
+    try { return res.end(campListHTML({ de: spc.get('de') || '', ate: spc.get('ate') || '' })); } catch (_) { return res.end(''); }
   }
   // Detalhe de UMA campanha: quem já recebeu, quem está na fila e as falhas.
   if (req.method === 'GET' && url === '/sofia/campanhas/detalhe') {
