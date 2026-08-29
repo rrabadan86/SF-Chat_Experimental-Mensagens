@@ -17,7 +17,12 @@
 #         bash setup-novo-studio.sh --slug lagosul --start --domain painel-lagosul.exemplo.com
 #
 #  FLAGS: --slug (obrigatório) · --studio "Nome" · --install-deps · --evo-ids
-#         --domain <subdominio> · --port <n> · --start
+#         --domain <subdominio> · --port <n> · --evo-tenant <slug> · --evo-branch <n> · --start
+#
+#  EVO POR UNIDADE: --evo-tenant e --evo-branch montam os caminhos que o robô usa
+#  para LER o EVO (grade, faltantes, suspensões). Ache os dois na URL do EVO da
+#  unidade: .../app/<tenant>/<branch>/... . Sem passar, cai no padrão da unidade
+#  original (slimfit/15) — e a franquia lê os dados errados.
 #
 #  DUAS LOJAS NO MESMO SERVIDOR (mesmo franqueado): use DOIS clones do repo,
 #  um por loja, cada um com --slug e --port diferentes. Ex.:
@@ -39,6 +44,8 @@ INSTALL_DEPS=0     # --install-deps instala Node/pm2/tsx/chromium/python (apt)
 EVO_IDS=0          # --evo-ids descobre os ids da aula no EVO (precisa do .env)
 DOMAIN=""          # --domain <subdominio> gera + liga o Caddy (HTTPS) no --start
 PAINEL_PORT=""     # --port <n> porta do painel (default 8080; use outra p/ 2ª loja)
+EVO_TENANT=""      # --evo-tenant <slug> identificador da rede no EVO (na URL; ex.: slimfit)
+EVO_BRANCH=""      # --evo-branch <n> número da unidade no EVO (aparece no caminho; ex.: 15)
 while [ $# -gt 0 ]; do
   case "$1" in
     --slug)         SLUG="${2:-}"; shift 2 ;;
@@ -48,6 +55,8 @@ while [ $# -gt 0 ]; do
     --evo-ids)      EVO_IDS=1; shift ;;
     --domain)       DOMAIN="${2:-}"; shift 2 ;;
     --port)         PAINEL_PORT="${2:-}"; shift 2 ;;
+    --evo-tenant)   EVO_TENANT="${2:-}"; shift 2 ;;
+    --evo-branch)   EVO_BRANCH="${2:-}"; shift 2 ;;
     -h|--help)
       grep -E '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Argumento desconhecido: $1"; exit 1 ;;
@@ -59,6 +68,18 @@ echo "$SLUG" | grep -qE '^[a-z0-9][a-z0-9-]{1,30}$' \
   || { echo "❌ --slug deve ser minúsculo, sem espaço/acento (ex.: lagosul)"; exit 1; }
 [ -n "$PAINEL_PORT" ] || PAINEL_PORT=8080
 echo "$PAINEL_PORT" | grep -qE '^[0-9]{2,5}$' || { echo "❌ --port deve ser um número (ex.: --port 8081)"; exit 1; }
+
+# EVO: identificador da rede (tenant) e número da unidade (branch). O robô loga no
+# EVO pelo NAVEGADOR e lê a grade/faltantes/suspensões nesses caminhos — que embutem
+# o tenant e o branch. Sem passar, cai no padrão da unidade ORIGINAL (slimfit/15) e a
+# franquia lê os dados errados. Avisamos alto se ficar no default.
+[ -n "$EVO_TENANT" ] || EVO_TENANT="slimfit"
+[ -n "$EVO_BRANCH" ] || EVO_BRANCH="15"
+if [ "$EVO_TENANT" = "slimfit" ] && [ "$EVO_BRANCH" = "15" ]; then
+  echo "⚠️  --evo-tenant/--evo-branch no PADRÃO (slimfit/15 = Setor Bueno)."
+  echo "    Se esta NÃO é a unidade original, passe os corretos, ex.: --evo-tenant slimfitlagosul --evo-branch 22"
+  echo "    (você acha os dois na URL do EVO da unidade: .../app/<tenant>/<branch>/...)"
+fi
 
 # ---- caminhos -------------------------------------------------------------
 EXP_DIR="$(cd "$(dirname "$0")" && pwd)"     # .../Experimental
@@ -75,6 +96,7 @@ echo "  Studio: ${STUDIO_NOME:-($SLUG)}"
 echo "  Repo:      $REPO_DIR"
 echo "  SOFIA_DIR: $SOFIA_DIR"
 echo "  Painel:    porta $PAINEL_PORT"
+echo "  EVO:       tenant=$EVO_TENANT · branch=$EVO_BRANCH"
 echo "  Processos: $P_PAINEL · $P_EXP · $P_SOFIA"
 echo "──────────────────────────────────────────────────────────"
 
@@ -258,6 +280,9 @@ SEG_PAINEL="$(segredo)"
 TOK_FORM="$(segredo)"
 TOK_SOFIA="$(segredo)"
 SENHA_SUGERIDA="$(segredo | cut -c1-16)"
+# Tópico ntfy ÚNICO desta unidade — o MESMO no robô e na SoFIA (senão a SoFIA não
+# alerta quando a sessão dela cai/trava). Gerado uma vez e usado nos dois .env.
+NTFY_TOPIC_VAL="slimfit-alertas-$SLUG-$(segredo | cut -c1-6)"
 
 # ---- Experimental/.env ----------------------------------------------------
 if [ -f "$EXP_DIR/.env" ]; then
@@ -292,17 +317,37 @@ SOFIA_DIR=$SOFIA_DIR
 FORM_CLOUD_URL=https://SEU-FORM.onrender.com
 FORM_SLOTS_TOKEN=$TOK_FORM
 
-# ===== EVO (API W12) — [POR STUDIO] =====
+# ===== EVO (API W12 — usado pela SoFIA/formulário p/ AGENDAR) — [POR STUDIO] =====
 EVO_BASE_URL=https://evo-integracao-api.w12app.com.br
 EVO_DNS=
 EVO_TOKEN=
-EVO_BRANCH_ID=
+EVO_BRANCH_ID=$EVO_BRANCH
 EVO_ACTIVITY=
 EVO_SERVICE=
 # (ou por id) EVO_ACTIVITY_ID= / EVO_SERVICE_ID=
 
+# ===== EVO (robô — login pelo NAVEGADOR p/ LER grade/faltantes/etc.) — [POR STUDIO] =====
+# Sem EVO_EMAIL/EVO_PASSWORD o robô NÃO loga no EVO e os jobs diários (ausentes,
+# renovação, presença, resumos) falham. Os caminhos abaixo já vêm montados com o
+# tenant "$EVO_TENANT" e a unidade "$EVO_BRANCH" (das flags --evo-tenant/--evo-branch).
+EVO_URL=https://$EVO_TENANT.w12app.com.br
+EVO_EMAIL=
+EVO_PASSWORD=
+EVO_LOGIN_PATH="#/acesso/$EVO_TENANT/autenticacao"
+EVO_EXPERIMENTAL_PATH="#/app/$EVO_TENANT/$EVO_BRANCH/gerencial/aula-experimental"
+EVO_SUSPENSOES_HASH="#/app/$EVO_TENANT/$EVO_BRANCH/gerencial/suspensoes"
+EVO_FALTANTES_HASH="#/app/$EVO_TENANT/$EVO_BRANCH/evo3/-CRM-Faltantes-Faltantes"
+
 # ===== Alerta ao Studio (turma lotada) =====
 ZEE_STUDIO_PHONE=
+
+# ===== Vigia externo (watchdog) — processos DESTA unidade (nomes já corretos) =====
+WATCHDOG_PROCS=$P_EXP,$P_PAINEL,$P_SOFIA
+
+# ===== Planilha de aniversários (opcional) — [POR STUDIO se for usar] =====
+# GOOGLE_SA_KEY=$EXP_DIR/service-account.json
+# SHEETS_ID=
+# SHEETS_ABA=Aniversarios
 
 # ===== WhatsApp / navegador =====
 CHROMIUM_PATH=${CHROMIUM:-/usr/bin/chromium-browser}
@@ -310,7 +355,7 @@ HEADLESS=true
 WA_HEADLESS=true
 
 # ===== Alertas (ntfy) — tópico secreto só desta unidade =====
-NTFY_TOPIC=slimfit-alertas-$SLUG-$(segredo | cut -c1-6)
+NTFY_TOPIC=$NTFY_TOPIC_VAL
 NTFY_URL=https://ntfy.sh
 
 # ===== Python (venv do agendamento) =====
@@ -335,6 +380,10 @@ SOFIA_BOOK_URL=https://SEU-FORM.onrender.com/api/book-sofia
 # Token que a SoFIA envia ao formulário (o MESMO valor no formulário):
 SOFIA_TOKEN=$TOK_SOFIA
 
+# ===== Alertas (ntfy) — MESMO tópico do robô, p/ a SoFIA avisar QR/queda/travamento =====
+NTFY_TOPIC=$NTFY_TOPIC_VAL
+NTFY_URL=https://ntfy.sh
+
 # ===== Transcrição de áudio (opcional) — chave OpenAI/Groq =====
 # TRANSCRICAO_API_KEY=
 EOF
@@ -342,7 +391,9 @@ fi
 
 echo
 echo "✅ Preparação concluída. AGORA edite os campos [POR STUDIO]:"
-echo "   • $EXP_DIR/.env      → EVO_DNS/EVO_TOKEN, EVO_ACTIVITY/SERVICE, FORM_CLOUD_URL, ZEE_STUDIO_PHONE"
+echo "   • $EXP_DIR/.env      → EVO_EMAIL + EVO_PASSWORD (login do robô no EVO — SEM eles os jobs diários falham),"
+echo "                          EVO_DNS/EVO_TOKEN, EVO_ACTIVITY/SERVICE, FORM_CLOUD_URL, ZEE_STUDIO_PHONE"
+echo "                          (confira EVO_URL e os *_PATH/*_HASH: tenant=$EVO_TENANT branch=$EVO_BRANCH)"
 echo "   • $CHATBOT_DIR/.env  → ANTHROPIC_API_KEY, SOFIA_BOOK_URL"
 echo "   • Confira que SOFIA_DIR é IGUAL nos dois arquivos."
 echo "   • No formulário (Render): use o MESMO FORM_SLOTS_TOKEN e o MESMO SOFIA_TOKEN."
