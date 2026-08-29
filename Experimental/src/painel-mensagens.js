@@ -1822,7 +1822,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     </div>
   </div>
 <script>
-  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', buscaTexto='', quietoFiltro=false, atencaoFiltro=false, tagEdAberto=false, ncNome='', ncDirty=false, ncTodas=[];
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ultimoInboxHtml='', ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', buscaTexto='', quietoFiltro=false, atencaoFiltro=false, tagEdAberto=false, ncNome='', ncDirty=false, ncTodas=[];
   // Atalho vindo de Contatos: ?chat=<telefone> abre a conversa correspondente.
   var alvoChat=(new URLSearchParams(location.search).get('chat')||'').replace(/\\D/g,''), alvoAplicado=false;
   function mesmoTel(a,b){ a=String(a||'').replace(/\\D/g,''); b=String(b||'').replace(/\\D/g,''); if(!a||!b) return false; if(a===b) return true; var la=a.slice(-8), lb=b.slice(-8); return la.length===8 && la===lb; }
@@ -2112,13 +2112,13 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     if(atencaoFiltro) chaves = chaves.filter(function(k){ return !!(ultimoData[k]||{}).atencao; });
     if(quietoFiltro) chaves = chaves.filter(function(k){ return quieto(ultimoData[k]||{}); });
     if(dataIniMs || dataFimMs) chaves = chaves.filter(function(k){ return naData(ultimoData[k]||{}); });
-    var total=chaves.length, paginas=Math.max(1,Math.ceil(total/POR_PAGINA));
-    if(pagina>=paginas) pagina=paginas-1; if(pagina<0) pagina=0;
+    var total=chaves.length;
     var lista=document.getElementById('convLista'), pag=document.getElementById('convPag');
-    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+(atencaoFiltro?'Nenhuma conversa pedindo atendimento humano agora. 🎉':((dataIniMs||dataFimMs)?'Nenhuma conversa no período escolhido.':(quietoFiltro?'Nenhum contato quieto há 24h+ (dentro dos últimos 4 dias). 🎉':(buscaTexto?'Nada encontrado para “'+escH(buscaTexto)+'” (nome, telefone ou palavra na conversa).':(tagFiltro==='__sem__'?'Nenhuma conversa sem tag.':(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a SoFIA receber mensagens, elas aparecem aqui.'))))))+'</p>'; if(pag)pag.innerHTML=''; return; }
-    var ini=pagina*POR_PAGINA, fatia=chaves.slice(ini,ini+POR_PAGINA);
+    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+(atencaoFiltro?'Nenhuma conversa pedindo atendimento humano agora. 🎉':((dataIniMs||dataFimMs)?'Nenhuma conversa no período escolhido.':(quietoFiltro?'Nenhum contato quieto há 24h+ (dentro dos últimos 4 dias). 🎉':(buscaTexto?'Nada encontrado para “'+escH(buscaTexto)+'” (nome, telefone ou palavra na conversa).':(tagFiltro==='__sem__'?'Nenhuma conversa sem tag.':(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a SoFIA receber mensagens, elas aparecem aqui.'))))))+'</p>'; ultimoInboxHtml=''; if(pag)pag.innerHTML=''; return; }
+    // Lista COMPLETA (sem paginação) — só o #convLista rola; a janela da conversa fica fixa.
+    var fatia=chaves;
     var diaSepAnterior=null;
-    lista.innerHTML = fatia.map(function(k){
+    var novoHtml = fatia.map(function(k){
       var c=ultimoData[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
       var on=(k===selecionada);
       var pendente = !!(ult && ult.autor==='aluna'); // última foi da aluna → esperando resposta
@@ -2140,10 +2140,10 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       if(dk && dk!==diaSepAnterior){ sep=sepDiaHtml(c.ultimaEm); diaSepAnterior=dk; }
       return sep+itemHtml;
     }).join('');
-    if(pag){
-      if(paginas>1){ var salto=10; pag.innerHTML='<div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center;align-items:center">'+setaPag('«',Math.max(0,pagina-salto),pagina<=0,'Voltar '+salto+' páginas')+setaPag('‹',pagina-1,pagina<=0)+pagNumsHtml(pagina,paginas)+setaPag('›',pagina+1,pagina>=paginas-1)+setaPag('»',Math.min(paginas-1,pagina+salto),pagina>=paginas-1,'Avançar '+salto+' páginas')+'</div><span class="quando" style="text-align:center;margin:0">Página '+(pagina+1)+' de '+paginas+' · '+total+' conversas</span>'; }
-      else { pag.innerHTML='<span class="quando" style="text-align:center;margin:0">'+total+' conversa'+(total>1?'s':'')+'</span>'; }
-    }
+    // Só troca o DOM quando algo muda — e preserva a rolagem da lista (o refresh de 4s
+    // não joga a lista de volta pro topo enquanto você está olhando).
+    if(novoHtml!==ultimoInboxHtml){ var _sc=lista.scrollTop; lista.innerHTML=novoHtml; ultimoInboxHtml=novoHtml; try{ lista.scrollTop=_sc; }catch(e){} }
+    if(pag){ pag.innerHTML='<span class="quando" style="text-align:center;margin:0">'+total+' conversa'+(total>1?'s':'')+'</span>'; }
     if(selecionada && ultimoData[selecionada]){
       var cc=ultimoData[selecionada], nn=(cc.msgs?cc.msgs.length:0);
       // Só re-renderiza o chat quando muda de conversa, chega mensagem nova ou muda
