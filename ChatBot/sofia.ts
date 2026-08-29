@@ -265,14 +265,6 @@ async function buscarSlots(): Promise<Record<string, any[]> | null> {
     return null;
   }
 }
-// Horários (HH:MM) que EXISTEM num dia, direto do EVO — para validar o horário
-// sem depender de uma grade mantida à mão. null = EVO não respondeu (use o fallback).
-async function horariosDoDiaEvo(dataISO: string): Promise<string[] | null> {
-  const dias = await buscarSlots();
-  if (!dias) return null;
-  const doDia = Array.isArray(dias[dataISO]) ? dias[dataISO] : [];
-  return doDia.map((s: any) => String(s.time).slice(0, 5));
-}
 
 // Imagens que a Sofia pediu para enviar NESTA resposta. O listener (WhatsApp)
 // drena esta fila logo após responderComMemoria e envia as imagens de verdade.
@@ -307,11 +299,13 @@ const verificarDisponibilidade = tool(
     const alvo = new Date(`${data_desejada}T${horario_desejado}:00-03:00`);
     const diaSemana = alvo.getDay();
     const hh = String(horario_desejado).slice(0, 5);
-    // Horários do dia: PRIMEIRO do EVO (via /api/slots) — sempre em sincronia com a
-    // unidade, ninguém mantém à mão. Só se o EVO não responder (null) caímos na grade
-    // configurável (SOFIA_GRADE / sofia-grade.json / padrão) como reserva.
-    const doEvo = await horariosDoDiaEvo(data_desejada);
-    const slots = doEvo === null ? (lerGrade()[diaSemana] ?? []) : doEvo;
+    // Grade da unidade = QUE horários EXISTEM em cada dia (configurável: SOFIA_GRADE /
+    // sofia-grade.json / padrão). NÃO derive isto do /api/slots: aquele feed é de
+    // VAGA para experimental (filtra atividade/ocupação/turma fechada), então uma aula
+    // que existe mas está cheia/fora do filtro sumiria e diríamos "não existe" — errado.
+    // A vaga REAL (turma cheia) é o consultar_vaga que confere no EVO.
+    const grade = lerGrade();
+    const slots = grade[diaSemana] ?? [];
 
     if (slots.length === 0)
       return json({ valido: false, motivo: `Não há aula na ${DIAS[diaSemana]}.`, opcoes_do_dia: [] });
