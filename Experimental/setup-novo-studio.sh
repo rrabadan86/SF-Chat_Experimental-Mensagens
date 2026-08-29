@@ -116,7 +116,7 @@ _sudo() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi; }
 
 # ---- --install-deps: instala os pré-requisitos do sistema (apt/Debian/Ubuntu) --
 install_system_deps() {
-  echo "🧰 Instalando pré-requisitos do sistema (Node, pm2, tsx, Chromium, Python)…"
+  echo "🧰 Instalando pré-requisitos do sistema (Node, pm2, tsx, Chromium, Xvfb, Python)…"
   command -v apt-get >/dev/null 2>&1 || {
     echo "   ❌ apt-get não encontrado — este instalador cobre Debian/Ubuntu."
     echo "      Instale à mão: Node 20+, git, chromium, python3-venv, e 'npm i -g pm2 tsx'."
@@ -136,6 +136,10 @@ install_system_deps() {
     _sudo apt-get install -y nodejs || true
   fi
   _sudo apt-get install -y git python3 python3-venv python3-pip || true
+  # Xvfb (tela virtual): o EVO (Angular) é INSTÁVEL em headless puro; a configuração
+  # validada roda o robô com tela virtual (HEADLESS=false + xvfb-run). Sem isso os
+  # jobs diários do EVO (faltantes, suspensões, presença, renovação) podem falhar.
+  _sudo apt-get install -y xvfb || echo "   ⚠️  não instalei o Xvfb — instale à mão: apt install -y xvfb (o robô precisa dele p/ ler o EVO)."
   # Chromium: nome do pacote varia entre distros
   _sudo apt-get install -y chromium-browser 2>/dev/null || _sudo apt-get install -y chromium || \
     echo "   ⚠️  não instalei o Chromium automaticamente — ajuste CHROMIUM_PATH no .env depois."
@@ -285,6 +289,16 @@ run_check() {
     avisos=1
   fi
 
+  # 5) tela virtual: o EVO é instável em headless puro
+  echo "▸ Navegador do robô (ler o EVO):"
+  local hl; hl="$(envget HEADLESS "$EENV")"
+  if [ "$hl" = "true" ]; then
+    echo "   ⚠️  HEADLESS=true — o EVO (Angular) é instável em headless puro; o recomendado é HEADLESS=false + Xvfb."
+    avisos=1
+  else echo "   ✔ HEADLESS=$hl (roda com tela virtual)"; fi
+  if command -v xvfb-run >/dev/null 2>&1; then echo "   ✔ Xvfb instalado (scheduler-vps.sh usa xvfb-run)"
+  else echo "   ⚠️  Xvfb não encontrado — instale: apt install -y xvfb (o robô lê o EVO com tela virtual)."; avisos=1; fi
+
   echo "──────────────────────────────────────────────────────────"
   if [ "$problemas" = "1" ]; then
     echo "❌ Verificação REPROVADA. Corrija os ❌ acima e rode --check de novo antes de --start."
@@ -321,12 +335,15 @@ if [ "$START" = "1" ]; then
   # Painel (porta do .env; Caddy faz o HTTPS por cima)
   pm2 delete "$P_PAINEL" >/dev/null 2>&1 || true
   ( cd "$EXP_DIR" && pm2 start src/painel-mensagens.js --name "$P_PAINEL" --time )
-  # Agendador do robô (confirmações, follow-ups, push_slots, backup)
+  # Agendador do robô (confirmações, follow-ups, push_slots, backup). Sobe pelo
+  # wrapper scheduler-vps.sh, que embrulha o node em xvfb-run (tela virtual) —
+  # o EVO (Angular) é instável em headless puro, então rodamos com HEADLESS=false.
+  chmod +x "$EXP_DIR/scheduler-vps.sh" 2>/dev/null || true
   pm2 delete "$P_EXP" >/dev/null 2>&1 || true
-  ( cd "$EXP_DIR" && pm2 start src/scheduler.js --name "$P_EXP" --time )
-  # SoFIA (chatbot no WhatsApp) — roda .ts via tsx
+  ( cd "$EXP_DIR" && pm2 start ./scheduler-vps.sh --name "$P_EXP" --interpreter bash --time )
+  # SoFIA (chatbot no WhatsApp) — roda o script "listener" do package.json (tsx)
   pm2 delete "$P_SOFIA" >/dev/null 2>&1 || true
-  ( cd "$CHATBOT_DIR" && pm2 start "npx tsx sofia-listener.ts" --name "$P_SOFIA" --time )
+  ( cd "$CHATBOT_DIR" && pm2 start npm --name "$P_SOFIA" --time -- run listener )
 
   pm2 save
 
@@ -354,6 +371,7 @@ command -v pm2 >/dev/null 2>&1 || echo "   ⚠️  pm2 não instalado (instale d
 command -v tsx >/dev/null 2>&1 || command -v npx >/dev/null 2>&1 || echo "   ⚠️  tsx/npx não encontrados (a SoFIA usa: npm i -g tsx)"
 CHROMIUM="$(command -v chromium-browser || command -v chromium || command -v google-chrome || true)"
 [ -n "$CHROMIUM" ] && echo "   ✔ Chromium: $CHROMIUM" || echo "   ⚠️  Chromium não encontrado (o WhatsApp precisa; ajuste CHROMIUM_PATH no .env)"
+command -v xvfb-run >/dev/null 2>&1 && echo "   ✔ Xvfb (tela virtual p/ o EVO)" || echo "   ⚠️  Xvfb não encontrado — o robô lê o EVO com tela virtual (instale: apt install -y xvfb)"
 [ "$falta" = "0" ] || { echo "Instale os itens marcados ❌ e rode de novo."; exit 1; }
 
 echo "📁 Criando a pasta de dados vivos (fora do repo): $SOFIA_DIR"
@@ -466,8 +484,23 @@ WATCHDOG_PROCS=$P_EXP,$P_PAINEL,$P_SOFIA
 
 # ===== WhatsApp / navegador =====
 CHROMIUM_PATH=${CHROMIUM:-/usr/bin/chromium-browser}
-HEADLESS=true
+# HEADLESS=false: o robô lê o EVO (Angular) com TELA VIRTUAL (Xvfb) — o wrapper
+# scheduler-vps.sh já embrulha em xvfb-run. Headless puro é instável no EVO e os
+# jobs diários podem falhar. Só mude para true se souber o que está fazendo.
+HEADLESS=false
+# WhatsApp roda bem headless (não precisa de tela) — deixe true p/ economizar.
 WA_HEADLESS=true
+
+# ===== Instagram — boas-vindas (opcional; ver Fase 6 do /implantacao) =====
+# Precisa de proxy residencial/móvel do BRASIL (IP de datacenter é bloqueado) e
+# dos cookies do Studio (instagram-cookies.json). O liga/desliga e o limite/dia
+# também dá para ajustar depois pela aba Instagram do painel.
+# IG_ENABLED=true
+# IG_USERNAME=usuario_do_studio
+# IG_MAX_DIA=5
+# IG_PROXY=HOST:PORTA
+# IG_PROXY_USER=
+# IG_PROXY_PASS=
 
 # ===== Alertas (ntfy) — tópico secreto só desta unidade =====
 NTFY_TOPIC=$NTFY_TOPIC_VAL
