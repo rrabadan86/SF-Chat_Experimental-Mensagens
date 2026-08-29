@@ -13,11 +13,14 @@
 #    2) Edite os .env que ele apontar (EVO_DNS/EVO_TOKEN, ANTHROPIC_API_KEY, formulário…).
 #    3) (opcional) Descubra os ids da aula no EVO — precisa do EVO já no .env:
 #         bash setup-novo-studio.sh --slug lagosul --evo-ids
-#    4) Subida — liga os processos e (com --domain) já configura o HTTPS via Caddy:
+#    4) Confira se o .env está completo e coerente ANTES de subir:
+#         bash setup-novo-studio.sh --slug lagosul --check
+#    5) Subida — liga os processos e (com --domain) já configura o HTTPS via Caddy:
 #         bash setup-novo-studio.sh --slug lagosul --start --domain painel-lagosul.exemplo.com
 #
 #  FLAGS: --slug (obrigatório) · --studio "Nome" · --install-deps · --evo-ids
-#         --domain <subdominio> · --port <n> · --evo-tenant <slug> · --evo-branch <n> · --start
+#         --check · --domain <subdominio> · --port <n> · --evo-tenant <slug>
+#         --evo-branch <n> · --start
 #
 #  EVO POR UNIDADE: --evo-tenant e --evo-branch montam os caminhos que o robô usa
 #  para LER o EVO (grade, faltantes, suspensões). Ache os dois na URL do EVO da
@@ -46,6 +49,7 @@ DOMAIN=""          # --domain <subdominio> gera + liga o Caddy (HTTPS) no --star
 PAINEL_PORT=""     # --port <n> porta do painel (default 8080; use outra p/ 2ª loja)
 EVO_TENANT=""      # --evo-tenant <slug> identificador da rede no EVO (na URL; ex.: slimfit)
 EVO_BRANCH=""      # --evo-branch <n> número da unidade no EVO (aparece no caminho; ex.: 15)
+CHECK=0            # --check valida os .env preenchidos (antes do --start)
 while [ $# -gt 0 ]; do
   case "$1" in
     --slug)         SLUG="${2:-}"; shift 2 ;;
@@ -53,6 +57,7 @@ while [ $# -gt 0 ]; do
     --start)        START=1; shift ;;
     --install-deps) INSTALL_DEPS=1; shift ;;
     --evo-ids)      EVO_IDS=1; shift ;;
+    --check)        CHECK=1; shift ;;
     --domain)       DOMAIN="${2:-}"; shift 2 ;;
     --port)         PAINEL_PORT="${2:-}"; shift 2 ;;
     --evo-tenant)   EVO_TENANT="${2:-}"; shift 2 ;;
@@ -193,11 +198,116 @@ run_evo_ids() {
   echo "   (ou use os nomes em EVO_SERVICE / EVO_ACTIVITY). Depois: --start"
 }
 
+# ---- --check: valida os .env preenchidos ANTES de subir os processos ---------
+# Lê um valor do .env: envget CHAVE ARQUIVO → devolve o valor (tira aspas/espaços).
+envget() {
+  grep -E "^$1=" "$2" 2>/dev/null | head -1 | cut -d= -f2- \
+    | sed 's/[[:space:]]*$//' | sed 's/^["'\'']//;s/["'\'']$//'
+}
+run_check() {
+  local EENV="$EXP_DIR/.env" CENV="$CHATBOT_DIR/.env"
+  local problemas=0 avisos=0
+  echo "🔍 Validando a configuração desta unidade ($SLUG) antes de subir…"
+  echo "──────────────────────────────────────────────────────────"
+
+  # 1) os dois .env têm que existir
+  [ -f "$EENV" ] || { echo "❌ falta $EENV — rode a preparação primeiro."; problemas=1; }
+  [ -f "$CENV" ] || { echo "❌ falta $CENV — rode a preparação primeiro."; problemas=1; }
+  if [ "$problemas" = "1" ]; then
+    echo "──────────────────────────────────────────────────────────"
+    echo "❌ Verificação abortada: crie os .env com a fase de preparação."
+    exit 1
+  fi
+
+  # helper: exige valor não-vazio numa chave; $1=chave $2=arquivo $3=por quê
+  req() {
+    local v; v="$(envget "$1" "$2")"
+    if [ -z "$v" ]; then echo "   ❌ $1 vazio — $3"; problemas=1
+    else echo "   ✔ $1"; fi
+  }
+  # helper: valor não pode ser o placeholder $3
+  naoplaceholder() {
+    local v; v="$(envget "$1" "$2")"
+    if echo "$v" | grep -qF "$3"; then echo "   ❌ $1 ainda é o exemplo ($3) — troque pelo valor real."; problemas=1
+    elif [ -z "$v" ]; then echo "   ❌ $1 vazio."; problemas=1
+    else echo "   ✔ $1"; fi
+  }
+
+  echo "▸ Experimental/.env — robô + painel + agendamento:"
+  req PAINEL_SENHA          "$EENV" "sem senha do painel ninguém entra."
+  req PAINEL_SESSAO_SEGREDO "$EENV" "sem ele as sessões de login não assinam."
+  req SOFIA_DIR             "$EENV" "sem a pasta de dados o painel não lê as conversas."
+  naoplaceholder FORM_CLOUD_URL "$EENV" "SEU-FORM.onrender.com"
+  req FORM_SLOTS_TOKEN      "$EENV" "sem ele o robô não envia a grade ao formulário."
+  req FORM_OUTBOX_TOKEN     "$EENV" "sem ele o robô não puxa agendamentos/confirmações do form."
+  echo "  · EVO (API — agendar):"
+  req EVO_DNS               "$EENV" "sem o DNS do EVO o agendamento não acha a unidade."
+  req EVO_TOKEN             "$EENV" "sem o token o EVO recusa a API."
+  req EVO_BRANCH_ID         "$EENV" "número da unidade no EVO."
+  echo "  · EVO (navegador — ler grade/faltantes/suspensões):"
+  req EVO_EMAIL             "$EENV" "sem login o robô não lê o EVO (jobs diários falham)."
+  req EVO_PASSWORD          "$EENV" "sem senha o robô não loga no EVO."
+
+  echo "▸ ChatBot/.env — SoFIA (IA no WhatsApp):"
+  req ANTHROPIC_API_KEY     "$CENV" "sem a chave da IA a SoFIA não responde."
+  req SOFIA_DIR             "$CENV" "a SoFIA grava as conversas aqui."
+  req SOFIA_TOKEN           "$CENV" "sem ele o formulário recusa o agendamento da SoFIA."
+  naoplaceholder SOFIA_BOOK_URL "$CENV" "SEU-FORM.onrender.com"
+
+  # 2) consistências entre os dois arquivos
+  echo "▸ Consistência entre os dois .env:"
+  local sdE sdC; sdE="$(envget SOFIA_DIR "$EENV")"; sdC="$(envget SOFIA_DIR "$CENV")"
+  if [ -n "$sdE" ] && [ "$sdE" = "$sdC" ]; then echo "   ✔ SOFIA_DIR igual nos dois (painel e SoFIA leem a mesma pasta)"
+  else echo "   ❌ SOFIA_DIR DIFERE entre os .env — o painel e a SoFIA vão ler pastas diferentes."; echo "        Experimental=$sdE  ·  ChatBot=$sdC"; problemas=1; fi
+  local ntE ntC; ntE="$(envget NTFY_TOPIC "$EENV")"; ntC="$(envget NTFY_TOPIC "$CENV")"
+  if [ -n "$ntE" ] && [ "$ntE" = "$ntC" ]; then echo "   ✔ NTFY_TOPIC igual nos dois (alertas do robô e da SoFIA no mesmo canal)"
+  elif [ -n "$ntE" ] || [ -n "$ntC" ]; then echo "   ⚠️  NTFY_TOPIC diferente entre os .env — a SoFIA e o robô alertam em canais separados."; avisos=1; fi
+  # o form vê os dois pela mesma URL? (host do SOFIA_BOOK_URL deve bater com FORM_CLOUD_URL)
+  local fcu sbu; fcu="$(envget FORM_CLOUD_URL "$EENV")"; sbu="$(envget SOFIA_BOOK_URL "$CENV")"
+  if [ -n "$fcu" ] && [ -n "$sbu" ]; then
+    local hf hs; hf="$(echo "$fcu" | sed -E 's#^https?://##;s#/.*##')"; hs="$(echo "$sbu" | sed -E 's#^https?://##;s#/.*##')"
+    if [ "$hf" = "$hs" ]; then echo "   ✔ FORM_CLOUD_URL e SOFIA_BOOK_URL apontam para o mesmo formulário ($hf)"
+    else echo "   ⚠️  FORM_CLOUD_URL ($hf) e SOFIA_BOOK_URL ($hs) apontam para formulários diferentes — confira."; avisos=1; fi
+  fi
+
+  # 3) EVO no padrão da unidade original? (lê os *_PATH do .env, não as flags)
+  echo "▸ EVO desta unidade (caminhos do robô):"
+  local exp; exp="$(envget EVO_EXPERIMENTAL_PATH "$EENV")"
+  if echo "$exp" | grep -qE '/slimfit/15/'; then
+    echo "   ⚠️  EVO_EXPERIMENTAL_PATH ainda aponta para slimfit/15 (Setor Bueno original)."
+    echo "        Se esta NÃO é a unidade original, refaça a preparação com --evo-tenant/--evo-branch corretos."
+    avisos=1
+  else echo "   ✔ caminhos do EVO fora do padrão original ($exp)"; fi
+
+  # 4) SOFIA_DIR existe em disco?
+  if [ -n "$sdE" ] && [ ! -d "$sdE" ]; then
+    echo "   ⚠️  a pasta SOFIA_DIR ($sdE) ainda não existe em disco — será criada no --start."
+    avisos=1
+  fi
+
+  echo "──────────────────────────────────────────────────────────"
+  if [ "$problemas" = "1" ]; then
+    echo "❌ Verificação REPROVADA. Corrija os ❌ acima e rode --check de novo antes de --start."
+    exit 1
+  elif [ "$avisos" = "1" ]; then
+    echo "🟡 Verificação passou com AVISOS (⚠️). Revise os pontos acima — pode subir se forem esperados:"
+    echo "     bash setup-novo-studio.sh --slug $SLUG --start --domain painel-$SLUG.SEU-DOMINIO"
+    exit 0
+  else
+    echo "✅ Tudo certo! Pode subir os processos:"
+    echo "     bash setup-novo-studio.sh --slug $SLUG --start --domain painel-$SLUG.SEU-DOMINIO"
+    exit 0
+  fi
+}
+
 # ---- --install-deps: instala os pré-requisitos ANTES de qualquer fase --------
 if [ "$INSTALL_DEPS" = "1" ]; then install_system_deps || true; fi
 
 # ---- --evo-ids: fase isolada de descoberta dos ids do EVO --------------------
 if [ "$EVO_IDS" = "1" ]; then run_evo_ids; exit 0; fi
+
+# ---- --check: fase isolada de validação dos .env (antes do --start) ----------
+if [ "$CHECK" = "1" ]; then run_check; exit 0; fi
 
 # ==========================================================================
 #  FASE --start: só liga os processos (assume .env já preenchidos)
@@ -409,6 +519,9 @@ echo "     PAINEL_SENHA (sugerida) = $SENHA_SUGERIDA"
 echo
 echo "   Depois de preencher o EVO no .env, descubra os ids da aula (opcional):"
 echo "     bash setup-novo-studio.sh --slug $SLUG --evo-ids"
+echo
+echo "   Confira se ficou tudo completo e coerente ANTES de subir:"
+echo "     bash setup-novo-studio.sh --slug $SLUG --check"
 echo
 echo "   E para subir tudo (com HTTPS automático):"
 echo "     bash setup-novo-studio.sh --slug $SLUG --start --domain painel-$SLUG.SEU-DOMINIO"
