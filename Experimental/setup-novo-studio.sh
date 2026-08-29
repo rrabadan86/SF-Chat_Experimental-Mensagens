@@ -251,6 +251,10 @@ run_check() {
   echo "  · EVO (navegador — ler grade/faltantes/suspensões):"
   req EVO_EMAIL             "$EENV" "sem login o robô não lê o EVO (jobs diários falham)."
   req EVO_PASSWORD          "$EENV" "sem senha o robô não loga no EVO."
+  # Grupo da equipe: opcional (dá p/ pôr no painel), mas sem ele os alertas internos somem.
+  local ge; ge="$(envget GRUPO_EQUIPE "$EENV")"
+  if [ -z "$ge" ]; then echo "   ⚠️  GRUPO_EQUIPE vazio — os alertas internos (aniversário/ausentes/resumo) só saem com o nome EXATO do grupo (aqui ou no painel)."; avisos=1
+  else echo "   ✔ GRUPO_EQUIPE"; fi
 
   echo "▸ ChatBot/.env — SoFIA (IA no WhatsApp):"
   req ANTHROPIC_API_KEY     "$CENV" "sem a chave da IA a SoFIA não responde."
@@ -471,6 +475,19 @@ EVO_EXPERIMENTAL_PATH="#/app/$EVO_TENANT/$EVO_BRANCH/gerencial/aula-experimental
 EVO_SUSPENSOES_HASH="#/app/$EVO_TENANT/$EVO_BRANCH/gerencial/suspensoes"
 EVO_FALTANTES_HASH="#/app/$EVO_TENANT/$EVO_BRANCH/evo3/-CRM-Faltantes-Faltantes"
 
+# ===== Grupos do WhatsApp (alertas internos da equipe) — [POR STUDIO] =====
+# Nome EXATO do grupo no WhatsApp da unidade. Sem isto, os jobs de grupo
+# (aniversário, ausentes, resumo do dia, circuito) procuram um grupo com o nome
+# padrão e NÃO acham → os alertas internos não saem. Também dá para definir/mudar
+# depois no painel (WhatsApp → Configuração → "Grupos do WhatsApp").
+GRUPO_EQUIPE=
+CIRCUITO_GRUPO=
+
+# ===== Áudio de confirmação por professora (opcional) =====
+# JSON professora(minúsculo, como no EVO) → arquivo em audios/. Ex.:
+# AUDIO_MAP={"marina":"marina.ogg","paula":"paula.ogg"}
+# AUDIO_MAP=
+
 # ===== Alerta ao Studio (turma lotada) =====
 ZEE_STUDIO_PHONE=
 
@@ -541,7 +558,8 @@ echo
 echo "✅ Preparação concluída. AGORA edite os campos [POR STUDIO]:"
 echo "   • $EXP_DIR/.env      → EVO_EMAIL + EVO_PASSWORD (login do robô no EVO — SEM eles os jobs diários falham),"
 echo "                          EVO_DNS/EVO_TOKEN, EVO_ACTIVITY/SERVICE, FORM_CLOUD_URL, ZEE_STUDIO_PHONE"
-echo "                          (confira EVO_URL e os *_PATH/*_HASH: tenant=$EVO_TENANT branch=$EVO_BRANCH)"
+echo "                          (confira EVO_URL e os *_PATH/*_HASH: tenant=$EVO_TENANT branch=$EVO_BRANCH),"
+echo "                          GRUPO_EQUIPE (nome EXATO do grupo da equipe no WhatsApp — ou defina no painel)"
 echo "   • $CHATBOT_DIR/.env  → ANTHROPIC_API_KEY, SOFIA_BOOK_URL"
 echo "   • Confira que SOFIA_DIR é IGUAL nos dois arquivos."
 echo "   • No formulário (Render): use os MESMOS TRÊS tokens — FORM_SLOTS_TOKEN,"
