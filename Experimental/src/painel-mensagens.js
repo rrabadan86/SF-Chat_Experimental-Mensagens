@@ -109,7 +109,21 @@ function seguraIgual(a, b) {
 // (via usuarios.js) e só veem as telas marcadas. Sessão = cookie assinado com
 // HMAC (não dá pra forjar), guardado no navegador; nada de senha no cookie.
 const TODAS_TELAS = usuarios.TELAS_KEYS.slice();
-const SESSAO_DIAS = parseInt(process.env.PAINEL_SESSAO_DIAS || '30', 10);
+// Duração da sessão do painel, em DIAS. Editável SÓ pelo admin (Perfis → Acessos),
+// guardada em data/painel-sessao-dias.txt. Sem o arquivo, usa o .env
+// (PAINEL_SESSAO_DIAS) ou 7 dias. Limitada a 1–90 dias. Vale para os PRÓXIMOS logins.
+const SESSAO_DIAS_FILE = path.join(__dirname, '..', 'data', 'painel-sessao-dias.txt');
+const SESSAO_DIAS_DEFAULT = Math.min(90, Math.max(1, parseInt(process.env.PAINEL_SESSAO_DIAS || '7', 10) || 7));
+function lerSessaoDias() {
+  try { const n = parseInt(require('fs').readFileSync(SESSAO_DIAS_FILE, 'utf8').trim(), 10); if (n >= 1 && n <= 90) return n; } catch (_) {}
+  return SESSAO_DIAS_DEFAULT;
+}
+function gravarSessaoDias(n) {
+  const v = Math.min(90, Math.max(1, parseInt(n, 10) || SESSAO_DIAS_DEFAULT));
+  try { require('fs').mkdirSync(path.dirname(SESSAO_DIAS_FILE), { recursive: true }); } catch (_) {}
+  require('fs').writeFileSync(SESSAO_DIAS_FILE, String(v));
+  return v;
+}
 // Segredo de assinatura: do .env, senão gerado e guardado em data/.sessao-segredo
 // (assim as sessões sobrevivem a reinícios). Nunca vai para o Git.
 const SEGREDO = (function () {
@@ -126,7 +140,7 @@ const SEGREDO = (function () {
 function b64url(buf) { return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 function assinar(dado) { return crypto.createHmac('sha256', SEGREDO).update(dado).digest('hex'); }
 function criarToken(usuario) {
-  const payload = b64url(JSON.stringify({ u: usuario, exp: Date.now() + SESSAO_DIAS * 864e5 }));
+  const payload = b64url(JSON.stringify({ u: usuario, exp: Date.now() + lerSessaoDias() * 864e5 }));
   return payload + '.' + assinar(payload);
 }
 function lerToken(tok) {
@@ -3676,6 +3690,7 @@ function paginaPerfis(aviso, erro, view) {
   let ults = {}; try { ults = acessos.ultimosAcessos(); } catch (_) {}          // { usuario: ts }
   let logins = []; try { logins = acessos.historicoLogins(30); } catch (_) {}   // últimos logins (recente→antigo)
   let logsAud = []; try { logsAud = auditoria.ler(150); } catch (_) {}          // registro de atividades (recente→antigo)
+  const sessDias = lerSessaoDias();                                             // duração da sessão (dias), editável só aqui
   const fmtAcesso = (ts) => { if (!ts) return ''; try { return new Date(Number(ts)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return '—'; } };
   const seloAcesso = (usuario) => { const ts = ults[usuario]; return `<span class="quando" style="margin:0">· ${ts ? '🕘 ' + fmtAcesso(ts) : 'nunca acessou'}</span>`; };
   const umChk = (t, marcadas, prefixo) => `<label style="display:inline-flex;align-items:center;gap:6px;margin:0;font-weight:600;font-size:var(--fs-sm);cursor:pointer;white-space:nowrap"><input type="checkbox" name="${prefixo}" value="${t.key}"${(marcadas || []).includes(t.key) ? ' checked' : ''} style="width:15px;height:15px;margin:0"> ${t.rot}</label>`;
@@ -3764,9 +3779,21 @@ function paginaPerfis(aviso, erro, view) {
 
   // ── Sub-aba: Acessos (último acesso + logins) ──
   const secAcessos = `
+    <div class="sec-t">Duração da sessão</div>
+    <form class="card" method="POST" action="/perfis/sessao" style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
+      <div style="flex:1 1 260px;min-width:0">
+        <label style="margin:0;display:block;font-weight:700;font-size:.9rem">Por quantos dias a sessão dura</label>
+        <p class="quando" style="margin:4px 0 0">Depois desse tempo (a partir do login), a pessoa precisa <b>entrar de novo</b>. Vale só para os <b>próximos logins</b> — quem já está logado mantém a sessão atual. Só o admin edita.</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="number" name="dias" min="1" max="90" step="1" value="${sessDias}" required style="width:90px;font-size:.9rem;padding:8px 9px;border:1px solid var(--linha);border-radius:8px;background:#fff;color:var(--tinta)">
+        <span class="quando" style="margin:0">dias</span>
+      </div>
+      <button type="submit" class="save" style="padding:9px 18px">Salvar</button>
+    </form>
     <div class="sec-t">Últimos acessos</div>
     <div class="card">
-      <p class="quando" style="margin:0 0 12px">O <b>🕘 último acesso</b> ao lado de cada usuário (acima) mostra a última vez que a pessoa <b>usou</b> o painel. A tabela abaixo lista os <b>logins</b> (quando cada um <b>entrou</b> e como). Como a sessão dura ${SESSAO_DIAS} dias, quem já está logado não precisa entrar de novo — por isso costuma haver poucos logins.</p>
+      <p class="quando" style="margin:0 0 12px">O <b>🕘 último acesso</b> ao lado de cada usuário (acima) mostra a última vez que a pessoa <b>usou</b> o painel. A tabela abaixo lista os <b>logins</b> (quando cada um <b>entrou</b> e como). Como a sessão dura ${sessDias} dia${sessDias === 1 ? '' : 's'}, quem já está logado não precisa entrar de novo — por isso costuma haver poucos logins.</p>
       ${logins.length ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:var(--fs-sm)">
         <thead><tr style="text-align:left;border-bottom:1px solid var(--linha)">
           <th style="padding:7px 10px;font-weight:700">Usuário</th>
@@ -4125,7 +4152,7 @@ const server = http.createServer((req, res) => {
         const ok = validarLogin(p.get('usuario'), p.get('senha') || '');
         if (!ok) { res.writeHead(303, { Location: '/login?e=1' }); return res.end(); }
         try { acessos.registrarLogin(ok.usuario, 'senha'); } catch (_) {}
-        setCookieSessao(req, res, criarToken(ok.usuario), SESSAO_DIAS * 86400);
+        setCookieSessao(req, res, criarToken(ok.usuario), lerSessaoDias() * 86400);
         const sess = { admin: ok.admin, telas: ok.admin ? TODAS_TELAS : (usuarios.obter(ok.usuario) || { telas: [] }).telas };
         res.writeHead(303, { Location: primeiraTela(sess) || '/hoje' }); res.end();
       });
@@ -4164,7 +4191,7 @@ const server = http.createServer((req, res) => {
       const ok = loginPorEmail(claims.email);
       if (!ok) { res.writeHead(303, { Location: '/login?g=naoaut' }); return res.end(); }
       try { acessos.registrarLogin(ok.usuario, 'google'); } catch (_) {}
-      setCookieSessao(req, res, criarToken(ok.usuario), SESSAO_DIAS * 86400);
+      setCookieSessao(req, res, criarToken(ok.usuario), lerSessaoDias() * 86400);
       const sess = { admin: ok.admin, telas: ok.admin ? TODAS_TELAS : (usuarios.obter(ok.usuario) || { telas: [] }).telas };
       res.writeHead(303, { Location: primeiraTela(sess) || '/hoje' }); res.end();
     }).catch(() => { res.writeHead(303, { Location: '/login?g=erro' }); res.end(); });
@@ -4207,6 +4234,7 @@ const server = http.createServer((req, res) => {
       else if (/(?:^|&)ok=senha/.test(q)) aviso = 'Senha redefinida.';
       else if (/(?:^|&)ok=email/.test(q)) aviso = 'E-mail salvo. Já pode entrar com o Google.';
       else if (/(?:^|&)ok=excluido/.test(q)) aviso = 'Usuário excluído.';
+      else if (/(?:^|&)ok=sessao/.test(q)) aviso = 'Duração da sessão salva. Vale para os próximos logins.';
       else if (/(?:^|&)err=/.test(q)) { aviso = decodeURIComponent((q.match(/err=([^&]*)/) || [])[1] || 'Erro.'); erro = true; }
       const viewPerfis = new URLSearchParams(q).get('view') || 'usuarios';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -4217,6 +4245,13 @@ const server = http.createServer((req, res) => {
         const p = new URLSearchParams(corpo);
         try { const ehAdmin = p.get('admin') === '1'; usuarios.criar({ usuario: p.get('usuario'), senha: p.get('senha') || '', telas: p.getAll('telas'), email: p.get('email') || '', admin: ehAdmin }); try { auditoria.registrar(sess.usuario, 'perfil.criar', p.get('usuario') || '', ehAdmin ? '👑 como administrador' : ''); } catch (_) {} res.writeHead(303, { Location: '/perfis?ok=criado' }); res.end(); }
         catch (e) { res.writeHead(303, { Location: '/perfis?err=' + encodeURIComponent(e.message) }); res.end(); }
+      });
+    }
+    if (req.method === 'POST' && url === '/perfis/sessao') {
+      return lerCorpo(req, 1e5, corpo => {
+        const p = new URLSearchParams(corpo);
+        try { const v = gravarSessaoDias(p.get('dias')); try { auditoria.registrar(sess.usuario, 'perfil.sessao', '', v + ' dia(s)'); } catch (_) {} res.writeHead(303, { Location: '/perfis?view=acessos&ok=sessao' }); res.end(); }
+        catch (e) { res.writeHead(303, { Location: '/perfis?view=acessos&err=' + encodeURIComponent(e.message) }); res.end(); }
       });
     }
     if (req.method === 'POST' && url === '/perfis/email') {
