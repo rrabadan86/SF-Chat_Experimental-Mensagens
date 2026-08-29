@@ -3094,7 +3094,7 @@ function paginaSofiaCampanhas(aviso, erro) {
     ${subnavSofia('campanhas')}
     ${novo}
     <div class="sec-t">Campanhas</div>
-    <div class="card" style="padding:11px 17px;margin:12px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <div class="card" style="padding:11px 17px;margin:12px;background:var(--card);box-shadow:0 1px 2px rgba(16,24,40,.04);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span class="filtro-lbl" style="margin:0">📅 Início no período:</span>
       <input type="date" id="campDe" onchange="campFiltrar()" title="De (início a partir de)" style="width:150px;font-size:.82rem;padding:7px 9px;border:1px solid var(--linha);border-radius:8px;background:#fff;color:var(--tinta)">
       <span class="ate" style="font-size:.8rem;color:var(--cinza)">até</span>
