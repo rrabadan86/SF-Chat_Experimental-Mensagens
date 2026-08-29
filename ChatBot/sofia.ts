@@ -384,6 +384,11 @@ const consultarVaga = tool(
     // Se a grade não responder, NÃO trava o atendimento: segue (a
     // solicitar_agendamento ainda valida a vaga de verdade na hora de agendar).
     if (dias === null) return json({ vaga: null, indisponivel_checar: true });
+    // Feed SEM NENHUM dia = a grade ainda não chegou/está "aquecendo" no formulário
+    // (Render pode ter reiniciado e perdido a grade empurrada). NUNCA afirme que o
+    // horário não existe nesse caso — deixe seguir e confirmar a vaga depois.
+    if (Object.keys(dias).length === 0)
+      return json({ vaga: null, indisponivel_checar: true, nota: "Não consegui conferir as vagas agora (grade indisponível). NÃO diga que o horário não existe nem que não tem vaga: diga que vai confirmar a disponibilidade e siga, ou que a secretária confirma." });
     const doDia: any[] = Array.isArray(dias[data]) ? dias[data] : [];
     const alvo = doDia.find((s) => String(s.time).slice(0, 5) === hh);
     // Alternativas com vaga: primeiro o mesmo dia, depois os próximos.
