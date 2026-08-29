@@ -3133,13 +3133,13 @@ function paginaSofiaCampanhas(aviso, erro) {
           }).catch(function(){ sv.disabled=false; st.textContent='❌ erro de rede'; });
       };
     }
-    var cpId=null, cpTimer=null, CP_CONV=${podeSofiaSub(_navSess || { admin: true, telas: [] }, 'conversas') ? 'true' : 'false'};
+    var cpId=null, cpTimer=null, cpLastBody='', CP_CONV=${podeSofiaSub(_navSess || { admin: true, telas: [] }, 'conversas') ? 'true' : 'false'};
     function irConversaCamp(tel){ location.href='/sofia?view=conversas&chat='+encodeURIComponent(tel); }
     function cpEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];}); }
     function cpFmtTel(k){ var d=String(k||'').replace(/\\D/g,''); if(/^55\\d{10,11}$/.test(d)){ var ddd=d.slice(2,4), r=d.slice(4); return '+55 ('+ddd+') '+(r.length===9?r.slice(0,5)+'-'+r.slice(5):r.slice(0,4)+'-'+r.slice(4)); } return k||''; }
     function cpFmtHora(ts){ if(!ts) return ''; try{ return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
     function abrirCampDetalhe(id){
-      cpId=id;
+      cpId=id; cpLastBody='';
       document.getElementById('cpBody').innerHTML='<p class="quando">Carregando…</p>';
       document.getElementById('cpStats').textContent='';
       document.getElementById('cpModal').style.display='flex';
@@ -3162,10 +3162,18 @@ function paginaSofiaCampanhas(aviso, erro) {
       var env=j.enviados.slice().reverse().map(function(x){ return linha(x.nome,x.tel,'✅ '+cpFmtHora(x.em)); }).join('')+maisN(j.enviados.length,tEnv) || '<p class="quando">Ninguém ainda.</p>';
       var fila=j.pendentes.map(function(x){ return linha(x.nome,x.tel,'⏳ na fila'); }).join('')+maisN(j.pendentes.length,tPen) || '<p class="quando">Fila vazia.</p>';
       var fal=j.falhas.slice().reverse().map(function(x){ return linha(x.nome,x.tel,'<span style="color:var(--erro)">⚠️ '+cpEsc((x.erro||'').slice(0,40))+'</span>'); }).join('') || '<p class="quando">Nenhuma falha. 🎉</p>';
-      document.getElementById('cpBody').innerHTML=
+      var cpBodyEl=document.getElementById('cpBody');
+      var html=
         '<div class="cp-sec"><div class="cp-h">Enviadas ('+tEnv+')</div><div class="cp-list">'+env+'</div></div>'+
         '<div class="cp-sec"><div class="cp-h">Na fila ('+tPen+')</div><div class="cp-list">'+fila+'</div></div>'+
         (tFal?('<div class="cp-sec"><div class="cp-h">Falhas ('+tFal+')</div><div class="cp-list">'+fal+'</div></div>'):'');
+      // Nada mudou desde o último refresh → NÃO redesenha (senão a rolagem das listas
+      // volta pro topo a cada 5s enquanto o usuário está olhando).
+      if(html===cpLastBody) return;
+      // Mudou (enviou mais, etc.): guarda a rolagem de cada lista e restaura após trocar o DOM.
+      var scr=[]; try{ cpBodyEl.querySelectorAll('.cp-list').forEach(function(l){ scr.push(l.scrollTop); }); }catch(e){}
+      cpLastBody=html; cpBodyEl.innerHTML=html;
+      try{ cpBodyEl.querySelectorAll('.cp-list').forEach(function(l,i){ if(scr[i]!=null) l.scrollTop=scr[i]; }); }catch(e){}
     }
     function fecharCampDet(){ document.getElementById('cpModal').style.display='none'; cpId=null; if(cpTimer){ clearInterval(cpTimer); cpTimer=null; } }
   </script>`;
