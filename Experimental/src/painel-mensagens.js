@@ -3092,11 +3092,14 @@ function paginaSofiaCampanhas(aviso, erro) {
     ${subnavSofia('campanhas')}
     ${novo}
     <div class="sec-t">Campanhas</div>
-    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:0 0 12px">
-      <label style="margin:0;font-size:.82rem;display:flex;flex-direction:column;gap:3px">📅 De<input type="date" id="campDe" onchange="campFiltrar()" style="padding:7px 9px"></label>
-      <label style="margin:0;font-size:.82rem;display:flex;flex-direction:column;gap:3px">Até<input type="date" id="campAte" onchange="campFiltrar()" style="padding:7px 9px"></label>
-      <button type="button" class="reset" id="campLimpar" onclick="campLimparFiltro()" style="padding:8px 14px;display:none">🧹 Limpar</button>
-      <span class="quando" style="margin:0 0 6px">filtra pelo <b>início</b> da campanha</span>
+    <div class="filtro-periodo" style="margin:0 0 14px;max-width:440px">
+      <span class="filtro-lbl">📅 Início da campanha no período</span>
+      <div class="filtro-datas">
+        <input type="date" id="campDe" onchange="campFiltrar()" title="De (início a partir de)">
+        <span class="ate">até</span>
+        <input type="date" id="campAte" onchange="campFiltrar()" title="Até (início até)">
+        <button type="button" id="campLimpar" onclick="campLimparFiltro()" title="Limpar datas" class="reset filtro-limpar" style="display:none">🧹</button>
+      </div>
     </div>
     <div id="campList">${campListHTML()}</div>
   </div>
