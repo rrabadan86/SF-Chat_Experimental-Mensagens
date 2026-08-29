@@ -3057,7 +3057,16 @@ function paginaSofiaCampanhas(aviso, erro) {
     (function(){
       var box=document.getElementById('campList'); if(!box) return;
       var ultimo=box.innerHTML;
-      function poll(){ if(window.campEditando) return; fetch('/sofia/campanhas/lista',{cache:'no-store'}).then(function(r){return r.text();}).then(function(h){ if(window.campEditando) return; if(h && h!==ultimo){ ultimo=h; box.innerHTML=h; } }).catch(function(){}); }
+      function poll(){ if(window.campEditando) return; fetch('/sofia/campanhas/lista',{cache:'no-store'}).then(function(r){return r.text();}).then(function(h){ if(window.campEditando) return; if(h && h!==ultimo){
+        // Guarda o que o usuário estava vendo ANTES de trocar o DOM: variações abertas
+        // e a rolagem da página. Sem isto, uma campanha "enviando" (contadores mudando)
+        // recolhe o "ver variações" e volta a lista pro topo a cada poll.
+        var abertas=[]; try{ box.querySelectorAll('div[class^="vars-"]').forEach(function(d){ if(d.style.display && d.style.display!=='none') abertas.push(d.className); }); }catch(e){}
+        var sy=window.scrollY||window.pageYOffset||0;
+        ultimo=h; box.innerHTML=h;
+        try{ abertas.forEach(function(cls){ var d=box.querySelector('div.'+cls); if(d) d.style.display='block'; }); }catch(e){}
+        try{ window.scrollTo(0, sy); }catch(e){}
+      } }).catch(function(){}); }
       var n=0, iv=setInterval(function(){ n++; poll(); if(n>=3){ clearInterval(iv); setInterval(poll,6000); } },1200);
     })();
     // Editar uma variação de uma campanha já criada (inline; pausa o auto-refresh).
