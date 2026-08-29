@@ -278,6 +278,7 @@ fi
 # gera segredos uma vez só (reaproveitados nos dois .env quando fizer sentido)
 SEG_PAINEL="$(segredo)"
 TOK_FORM="$(segredo)"
+TOK_OUTBOX="$(segredo)"
 TOK_SOFIA="$(segredo)"
 SENHA_SUGERIDA="$(segredo | cut -c1-16)"
 # Tópico ntfy ÚNICO desta unidade — o MESMO no robô e na SoFIA (senão a SoFIA não
@@ -315,7 +316,11 @@ SOFIA_DIR=$SOFIA_DIR
 
 # ===== Formulário (Render) desta unidade =====
 FORM_CLOUD_URL=https://SEU-FORM.onrender.com
+# Token que o robô ENVIA a grade ao formulário (mesmo valor no form: FORM_SLOTS_TOKEN):
 FORM_SLOTS_TOKEN=$TOK_FORM
+# Token que o robô PUXA agendamentos/confirmações/indicadores do formulário
+# (mesmo valor no form: FORM_OUTBOX_TOKEN) — SEM ele o form recusa (403) e nada volta:
+FORM_OUTBOX_TOKEN=$TOK_OUTBOX
 
 # ===== EVO (API W12 — usado pela SoFIA/formulário p/ AGENDAR) — [POR STUDIO] =====
 EVO_BASE_URL=https://evo-integracao-api.w12app.com.br
@@ -396,7 +401,8 @@ echo "                          EVO_DNS/EVO_TOKEN, EVO_ACTIVITY/SERVICE, FORM_CL
 echo "                          (confira EVO_URL e os *_PATH/*_HASH: tenant=$EVO_TENANT branch=$EVO_BRANCH)"
 echo "   • $CHATBOT_DIR/.env  → ANTHROPIC_API_KEY, SOFIA_BOOK_URL"
 echo "   • Confira que SOFIA_DIR é IGUAL nos dois arquivos."
-echo "   • No formulário (Render): use o MESMO FORM_SLOTS_TOKEN e o MESMO SOFIA_TOKEN."
+echo "   • No formulário (Render): use os MESMOS TRÊS tokens — FORM_SLOTS_TOKEN,"
+echo "     FORM_OUTBOX_TOKEN e SOFIA_TOKEN (os valores gerados estão nos .env acima)."
 echo
 echo "   Segredos gerados (guarde a senha do painel):"
 echo "     PAINEL_SENHA (sugerida) = $SENHA_SUGERIDA"
