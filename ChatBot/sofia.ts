@@ -296,7 +296,9 @@ const enviarMidia = tool(
 const verificarDisponibilidade = tool(
   "verificar_disponibilidade",
   "Verifica se dia/horário da aula experimental são válidos, aplicando a regra de antecedência. " +
-    "SEMPRE use antes de confirmar agendamento. Nunca invente horário — use só o que retornar aqui.",
+    "SEMPRE use antes de confirmar agendamento. Nunca invente horário — use só o que retornar aqui. " +
+    "É PROIBIDO dizer que um horário 'está ok/certinho/dá certo/disponível' — e PROIBIDO pedir nome/e-mail — " +
+    "sem ANTES ter chamado consultar_vaga (vaga) E verificar_disponibilidade para EXATAMENTE aquele dia e horário.",
   {
     data_desejada: z.string().describe("Data no formato AAAA-MM-DD, ex: '2026-07-30'"),
     horario_desejado: z.string().describe("Horário no formato HH:MM, ex: '08:15'"),
@@ -384,7 +386,10 @@ const consultarVaga = tool(
   "consultar_vaga",
   "Verifica se um dia/horário da aula experimental TEM VAGA (turma não lotada), consultando a grade real. " +
     "Use ASSIM QUE a aluna informar o dia (e ANTES de pedir nome/e-mail), mesmo que ela não diga a hora — " +
-    "passe qualquer hora do dia só para consultar. Se vaga=true, prossiga. Se vaga=false, ofereça SOMENTE os " +
+    "passe qualquer hora do dia só para consultar. É PROIBIDO confirmar um horário ('está ok/certinho/dá certo') " +
+    "ou pedir nome/e-mail sem ANTES chamar esta ferramenta para aquele dia/horário e receber vaga=true. Se a aluna " +
+    "mudar de dia/horário durante a conversa, chame de novo para o NOVO dia/horário antes de confirmar. " +
+    "Se vaga=true, prossiga. Se vaga=false, ofereça SOMENTE os " +
     "horários de 'disponiveis_do_dia' (os que têm vaga NAQUELE dia); se esse estiver vazio, use 'alternativas' " +
     "(outros dias). NUNCA ofereça horário que não esteja em disponiveis_do_dia/alternativas — não use a grade "
     + "para dizer o que está disponível. Complementa a verificar_disponibilidade (que só checa grade/antecedência).",
