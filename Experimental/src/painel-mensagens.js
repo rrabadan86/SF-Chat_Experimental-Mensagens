@@ -2689,20 +2689,22 @@ function campListHTML(filtro = {}) {
       <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
         <a href="javascript:void(0)" onclick="abrirCampDetalhe('${esc(c.id)}')" style="font-weight:700;font-size:var(--fs-h2);color:var(--teal-esc);text-decoration:none;cursor:pointer" title="Ver detalhes do envio">${esc(c.nome)}</a>
         <span class="pill" style="border-color:var(--linha)">🏷️ ${esc(c.tag)}</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 0">
         ${c.fotoArquivo ? '<span class="pill" style="border-color:var(--linha)">📷 com foto</span>' : ''}
         <span class="quando" style="margin:0">${rotStatus[c.status] || c.status}${(c.status === 'pausada' && (c.falhasSeguidas || 0) >= 3) ? ' <span style="color:var(--erro)">(pausada por falhas — verifique a conexão)</span>' : ''}</span>
+        <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          ${podeIniciar ? btn('iniciar', '▶️ Iniciar', 'save') : ''}
+          ${podePausar ? btn('pausar', '⏸️ Pausar', 'reset') : ''}
+          ${(c.status !== 'concluida' && c.status !== 'cancelada') ? btn('cancelar', '🚫 Cancelar', 'reset') : ''}
+          ${btn('excluir', '🗑️ Excluir', 'reset')}
+          ${(c.variacoes || []).length ? `<a href="javascript:void(0)" onclick="var d=this.closest('.card').querySelector('.vars-'+'${esc(c.id)}');if(d)d.style.display=d.style.display==='none'?'block':'none'" class="quando" style="margin:0;text-decoration:underline">ver variações (${(c.variacoes || []).length})</a>` : ''}
+        </div>
       </div>
-      <div style="margin:8px 0">
+      <div style="margin:8px 0 0">
         <div style="background:#eef1f2;border-radius:6px;height:16px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div>
         <div class="quando" style="margin:4px 0 0">${enviados} enviadas · ${(c.pendentes || []).length} na fila · ${(c.falhas || []).length} falha(s) · ${total} no total · hoje: ${c.enviadosHoje || 0}/${c.limiteDia}</div>
         <div class="quando" style="margin:2px 0 0">📅 início ${esc(fmtDataBR(c.dataInicio))} · das ${esc(c.janelaIni)} às ${esc(c.janelaFim)} · ${c.delayMinSeg}–${c.delayMaxSeg}s entre envios${est ? ` · <b>término previsto ${est.fim}</b> (~${est.dias} dia${est.dias > 1 ? 's' : ''}, ~${est.porDia}/dia)` : ''}</div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        ${podeIniciar ? btn('iniciar', '▶️ Iniciar', 'save') : ''}
-        ${podePausar ? btn('pausar', '⏸️ Pausar', 'reset') : ''}
-        ${(c.status !== 'concluida' && c.status !== 'cancelada') ? btn('cancelar', '🚫 Cancelar', 'reset') : ''}
-        ${btn('excluir', '🗑️ Excluir', 'reset')}
-        ${(c.variacoes || []).length ? `<a href="javascript:void(0)" onclick="var d=this.parentNode.parentNode.querySelector('.vars-'+'${esc(c.id)}');if(d)d.style.display=d.style.display==='none'?'block':'none'" class="quando" style="margin:0;text-decoration:underline">ver variações (${(c.variacoes || []).length})</a>` : ''}
       </div>
       <div class="vars-${esc(c.id)}" style="display:none;margin-top:8px">${variacoes}</div>
     </div>`;
@@ -3092,14 +3094,12 @@ function paginaSofiaCampanhas(aviso, erro) {
     ${subnavSofia('campanhas')}
     ${novo}
     <div class="sec-t">Campanhas</div>
-    <div class="filtro-periodo" style="margin:0 0 14px;max-width:440px">
-      <span class="filtro-lbl">📅 Início da campanha no período</span>
-      <div class="filtro-datas">
-        <input type="date" id="campDe" onchange="campFiltrar()" title="De (início a partir de)">
-        <span class="ate">até</span>
-        <input type="date" id="campAte" onchange="campFiltrar()" title="Até (início até)">
-        <button type="button" id="campLimpar" onclick="campLimparFiltro()" title="Limpar datas" class="reset filtro-limpar" style="display:none">🧹</button>
-      </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px">
+      <span class="filtro-lbl" style="margin:0">📅 Início no período:</span>
+      <input type="date" id="campDe" onchange="campFiltrar()" title="De (início a partir de)" style="width:150px;font-size:.82rem;padding:7px 9px;border:1px solid var(--linha);border-radius:8px;background:#fff;color:var(--tinta)">
+      <span class="ate" style="font-size:.8rem;color:var(--cinza)">até</span>
+      <input type="date" id="campAte" onchange="campFiltrar()" title="Até (início até)" style="width:150px;font-size:.82rem;padding:7px 9px;border:1px solid var(--linha);border-radius:8px;background:#fff;color:var(--tinta)">
+      <button type="button" id="campLimpar" onclick="campLimparFiltro()" title="Limpar datas" class="reset filtro-limpar" style="display:none">🧹</button>
     </div>
     <div id="campList">${campListHTML()}</div>
   </div>
