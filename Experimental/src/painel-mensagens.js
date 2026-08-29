@@ -1848,10 +1848,12 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
         if(gap>SESSAO_MS) sep=divisorHtml('⏱️ Sessão encerrada automaticamente · nova conversa');
       }
       var mine = (m.autor!=='aluna');
-      var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':'#e4efee');
+      var ehFup = (m.tipo==='followup');
+      var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':(ehFup?'#fff4e5':'#e4efee'));
+      var selo = ehFup ? ' <span style="display:inline-block;font-size:.6rem;font-weight:700;color:#b45309;background:#ffedd5;border-radius:6px;padding:1px 6px;margin-left:4px">↩︎ follow-up</span>' : '';
       var img = m.foto ? '<img src="/sofia/humano-foto?arq='+encodeURIComponent(m.foto)+'" alt="foto enviada" style="display:block;max-width:100%;max-height:220px;border-radius:9px;margin:'+(m.texto?'6px 0 0':'2px 0 0')+';cursor:pointer" onclick="window.open(this.src,\\'_blank\\')">' : '';
       var corpoMsg = (m.texto?'<div style="white-space:pre-wrap">'+escH(m.texto)+'</div>':'') + img;
-      return sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna, m.por))+' · '+fmtHora(m.em)+'</div>'+corpoMsg+'</div></div>';
+      return sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna, m.por))+' · '+fmtHora(m.em)+selo+'</div>'+corpoMsg+'</div></div>';
     }).join('');
     var fim = encerrada(c) ? '<div style="text-align:center;margin:10px 0 2px"><span style="display:inline-block;background:#f3eaea;color:#a15a5a;border:1px solid #e6cfcf;border-radius:999px;padding:3px 12px;font-size:.72rem;font-weight:700">🔒 Encerrada '+(encPorTxt?'por '+encPorTxt:'manualmente')+' · a SoFIA recomeça do zero se a aluna voltar</span></div>' : '';
     var hum = !!c.humano;                                   // alguém no controle AGORA (trava ativa)

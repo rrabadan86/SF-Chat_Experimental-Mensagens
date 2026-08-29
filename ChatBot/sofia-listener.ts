@@ -459,7 +459,7 @@ function retencaoMs(): number {
   const d = Number.isFinite(_retDias) && _retDias >= 0 ? _retDias : 365;
   return d > 0 ? d * 24 * 3600 * 1000 : Number.POSITIVE_INFINITY;
 }
-type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string };
+type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string; tipo?: "followup" };
 type InboxConversa = { jid: string; nome: string; ultimaEm: number; msgs: InboxMsg[] };
 const inbox = new Map<string, InboxConversa>();
 let inboxTimer: ReturnType<typeof setTimeout> | null = null;
@@ -487,7 +487,7 @@ function salvarInbox() {
   try { fs.writeFileSync(CONVERSAS_FILE, JSON.stringify(obj), "utf8"); } catch {}
 }
 function agendarSalvarInbox() { if (inboxTimer) return; inboxTimer = setTimeout(() => { inboxTimer = null; salvarInbox(); }, 1500); }
-function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMsg["autor"], texto: string, foto?: string, porNome?: string) {
+function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMsg["autor"], texto: string, foto?: string, porNome?: string, tipo?: InboxMsg["tipo"]) {
   const t = String(texto || "").trim();
   if (!t && !foto) return;                         // nada de texto e nada de foto → ignora
   let c = inbox.get(chave);
@@ -498,6 +498,7 @@ function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMs
   const msg: InboxMsg = { autor, texto: t, em };
   if (foto) msg.foto = foto;                        // nome do arquivo em humano-fotos/ (o painel serve)
   if (porNome) msg.por = String(porNome);           // atendente que escreveu (bolha "humano") — atribuição/segurança
+  if (tipo) msg.tipo = tipo;                        // "followup" → o painel mostra um selo na bolha
   c.msgs.push(msg);
   if (c.msgs.length > INBOX_MAX_MSGS) c.msgs.splice(0, c.msgs.length - INBOX_MAX_MSGS);
   c.ultimaEm = em;
@@ -1042,7 +1043,7 @@ async function processarFollowups() {
         if (!msg) { log(`follow-up de ${tel}: IA não gerou mensagem — pulado.`); return; }
         const alvo = await resolverIdEnvio(tel);
         registrarNaMemoria(tel, "sofia", msg);
-        registrarInbox(tel, alvo, "", "sofia", msg);
+        registrarInbox(tel, alvo, "", "sofia", msg, undefined, undefined, "followup");
         await enviar(alvo, msg);
         log(`follow-up enviado para ${tel}.`);
       } catch (e: any) { log(`falha no follow-up de ${tel}: ${e?.message || e}`); }
