@@ -356,6 +356,10 @@ if [ "$START" = "1" ]; then
 
   echo
   echo "✅ Processos no ar. Próximos passos:"
+  echo "   • ⚠️  A SoFIA sobe com o ROTEIRO PADRÃO (unidade original, Setor Bueno):"
+  echo "        endereço, mapa, e-mail, WhatsApp, Instagram e link do formulário são de LÁ."
+  echo "        ANTES de divulgar, reescreva no painel (SoFIA → Configuração → roteiro) com os"
+  echo "        dados DESTA unidade — senão a SoFIA passa o endereço/contatos do Setor Bueno."
   echo "   • Leia os QRs dos 2 WhatsApp:  pm2 logs $P_EXP   e   pm2 logs $P_SOFIA"
   [ -n "$DOMAIN" ] || echo "   • Configure o HTTPS: rode com --domain <subdominio> (gera + liga o Caddy)."
   echo "   • pm2 startup   (para subir sozinho após reboot do VPS)"
