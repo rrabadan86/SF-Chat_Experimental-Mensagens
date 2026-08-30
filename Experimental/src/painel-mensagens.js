@@ -2117,8 +2117,8 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+(atencaoFiltro?'Nenhuma conversa pedindo atendimento humano agora. 🎉':((dataIniMs||dataFimMs)?'Nenhuma conversa no período escolhido.':(quietoFiltro?'Nenhum contato quieto há 24h+ (dentro dos últimos 4 dias). 🎉':(buscaTexto?'Nada encontrado para “'+escH(buscaTexto)+'” (nome, telefone ou palavra na conversa).':(tagFiltro==='__sem__'?'Nenhuma conversa sem tag.':(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a SoFIA receber mensagens, elas aparecem aqui.'))))))+'</p>'; ultimoInboxHtml=''; if(pag)pag.innerHTML=''; return; }
     // Lista COMPLETA (sem paginação) — só o #convLista rola; a janela da conversa fica fixa.
     var fatia=chaves;
-    var diaSepAnterior=null;
-    var novoHtml = fatia.map(function(k){
+    var grupos=[], gAtual=null;
+    fatia.forEach(function(k){
       var c=ultimoData[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
       var on=(k===selecionada);
       var pendente = !!(ult && ult.autor==='aluna'); // última foi da aluna → esperando resposta
@@ -2136,10 +2136,13 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var bg = on?'#e4efee':(c.atencao?'#fdecea':(encerrada(c)?'#fbf7f7':'#fff'));
       var bd = on?'#0e6e6b':(c.atencao?'#e0a09a':'#eee');
       var itemHtml='<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:7px 10px;border-radius:9px;margin-bottom:5px;border:1px solid '+bd+';'+(c.atencao&&!on?'border-left:4px solid #c0392b;':'')+'background:'+bg+'">'+nome+'<div class="quando" style="margin:0;font-size:.7rem">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
-      var dk=diaKeySP(c.ultimaEm); var sep='';
-      if(dk && dk!==diaSepAnterior){ sep=sepDiaHtml(c.ultimaEm); diaSepAnterior=dk; }
-      return sep+itemHtml;
-    }).join('');
+      var dk=diaKeySP(c.ultimaEm);
+      if(!gAtual || gAtual.dk!==dk){ gAtual={dk:dk, ts:c.ultimaEm, itens:[]}; grupos.push(gAtual); }
+      gAtual.itens.push(itemHtml);
+    });
+    // Cada dia num container próprio: o separador é sticky DENTRO do grupo, então o do
+    // dia anterior sai da tela quando o próximo dia chega (não empilha no topo).
+    var novoHtml = grupos.map(function(g){ return '<div class="diaGrupo">'+sepDiaHtml(g.ts)+g.itens.join('')+'</div>'; }).join('');
     // Só troca o DOM quando algo muda — e preserva a rolagem da lista (o refresh de 4s
     // não joga a lista de volta pro topo enquanto você está olhando).
     if(novoHtml!==ultimoInboxHtml){ var _sc=lista.scrollTop; lista.innerHTML=novoHtml; ultimoInboxHtml=novoHtml; try{ lista.scrollTop=_sc; }catch(e){} }
