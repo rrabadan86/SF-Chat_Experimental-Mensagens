@@ -153,10 +153,36 @@ const SEGREDO = (function () {
 })();
 function b64url(buf) { return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 function assinar(dado) { return crypto.createHmac('sha256', SEGREDO).update(dado).digest('hex'); }
-function criarToken(usuario) {
-  const payload = b64url(JSON.stringify({ u: usuario, exp: Date.now() + lerSessaoDias() * 864e5 }));
+function criarToken(usuario, sid) {
+  const payload = b64url(JSON.stringify({ u: usuario, sid: sid || '', exp: Date.now() + lerSessaoDias() * 864e5 }));
   return payload + '.' + assinar(payload);
 }
+// ── Sessões ativas (para listar/encerrar em Perfis → Acessos) ────────────────
+// O cookie é stateless (HMAC), mas guardamos cada sessão emitida (por sid) para o
+// admin ver quem está logado e ENCERRAR uma sessão (revoga o sid → o próximo
+// acesso daquele cookie cai no login). Guardado em data/painel-sessoes.json.
+const SESSOES_FILE = path.join(__dirname, '..', 'data', 'painel-sessoes.json');
+let _sessoes = {};
+try { _sessoes = JSON.parse(require('fs').readFileSync(SESSOES_FILE, 'utf8')) || {}; } catch (_) { _sessoes = {}; }
+let _sessoesDirty = false, _sessoesTimer = null;
+function _salvarSessoesJa() { try { require('fs').mkdirSync(path.dirname(SESSOES_FILE), { recursive: true }); require('fs').writeFileSync(SESSOES_FILE, JSON.stringify(_sessoes)); _sessoesDirty = false; } catch (_) {} }
+function salvarSessoesSoon() { // usado pelo "toque" frequente (último uso) — pode esperar
+  _sessoesDirty = true; if (_sessoesTimer) return;
+  _sessoesTimer = setTimeout(() => { _sessoesTimer = null; if (_sessoesDirty) _salvarSessoesJa(); }, 2500);
+}
+function podarSessoes() {
+  const lim = Date.now() - Math.max(1, lerSessaoDias()) * 864e5; let mud = false;
+  for (const sid in _sessoes) { const s = _sessoes[sid]; if ((s.criadoEm || 0) < lim || (s.revogadoEm && s.revogadoEm < Date.now() - 2 * 864e5)) { delete _sessoes[sid]; mud = true; } }
+  if (mud) salvarSessoesSoon();
+}
+function criarSessao(usuario, metodo, req) {
+  let sid; try { sid = crypto.randomBytes(12).toString('hex'); } catch (_) { sid = String(Date.now()) + Math.random().toString(16).slice(2); }
+  _sessoes[sid] = { usuario: String(usuario || ''), metodo: metodo || '', criadoEm: Date.now(), ultimoEm: Date.now(), ua: String((req && req.headers && req.headers['user-agent']) || '').slice(0, 300) };
+  podarSessoes(); _salvarSessoesJa(); return sid; // grava JÁ (não perde a sessão se reiniciar logo após o login)
+}
+function tocarSessao(sid) { const s = _sessoes[sid]; if (!s || s.revogadoEm) return; const agora = Date.now(); if (agora - (s.ultimoEm || 0) > 60000) { s.ultimoEm = agora; salvarSessoesSoon(); } }
+function sessaoValida(sid) { const s = _sessoes[sid]; return !!(s && !s.revogadoEm); }
+function revogarSessao(sid) { const s = _sessoes[sid]; if (s && !s.revogadoEm) { s.revogadoEm = Date.now(); _salvarSessoesJa(); return true; } return false; }
 function lerToken(tok) {
   const i = String(tok || '').indexOf('.');
   if (i < 0) return null;
@@ -182,11 +208,14 @@ function setCookieSessao(req, res, valor, maxAgeSec) {
 function usuarioDaReq(req) {
   const o = lerToken(lerCookie(req, 'sf_sess'));
   if (!o) return null;
-  if (SENHA && usuarios.normU(o.u) === usuarios.normU(USER)) return { usuario: USER, admin: true, telas: TODAS_TELAS };
+  if (o.sid && !sessaoValida(o.sid)) return null; // sessão encerrada pelo admin → força novo login
+  if (o.sid) tocarSessao(o.sid);
+  const sid = o.sid || '';
+  if (SENHA && usuarios.normU(o.u) === usuarios.normU(USER)) return { usuario: USER, admin: true, telas: TODAS_TELAS, sid };
   const u = usuarios.obter(o.u);
   if (!u) return null; // usuário apagado depois de logar
-  if (u.admin) return { usuario: u.usuario, admin: true, telas: TODAS_TELAS }; // admin promovido pela checkbox → vê tudo
-  return { usuario: u.usuario, admin: false, telas: u.telas || [] };
+  if (u.admin) return { usuario: u.usuario, admin: true, telas: TODAS_TELAS, sid }; // admin promovido pela checkbox → vê tudo
+  return { usuario: u.usuario, admin: false, telas: u.telas || [], sid };
 }
 // ── Login com Google (OAuth 2.0 / OpenID) — opcional, ligado pelo .env ───────
 // Só entra quem tem o e-mail cadastrado num Perfil (ou o e-mail do admin em
@@ -3807,9 +3836,13 @@ function paginaPerfis(aviso, erro, view) {
   view = PERFIS_SUBS.includes(view) ? view : 'usuarios';
   const lista = usuarios.listar();
   let ults = {}; try { ults = acessos.ultimosAcessos(); } catch (_) {}          // { usuario: ts }
-  let logins = []; try { logins = acessos.historicoLogins(30); } catch (_) {}   // últimos logins (recente→antigo)
   let logsAud = []; try { logsAud = auditoria.ler(150); } catch (_) {}          // registro de atividades (recente→antigo)
   const sessDias = lerSessaoDias();                                             // duração da sessão (dias), editável só aqui
+  const meuSid = (_navSess && _navSess.sid) || '';                              // a sessão de quem está vendo esta página
+  const uaCurto = (ua) => { ua = String(ua || ''); const nav = /Edg\//.test(ua) ? 'Edge' : /OPR\/|Opera/.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : ''; const so = /Android/.test(ua) ? 'Android' : /iPhone|iPad|iPod/.test(ua) ? 'iPhone/iPad' : /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : ''; const mob = /Mobile|Android|iPhone|iPad|iPod/.test(ua) ? '📱' : '💻'; const txt = [nav, so].filter(Boolean).join(' · '); return mob + ' ' + (txt || 'desconhecido'); };
+  let sessArr = [];
+  try { const corte = Date.now() - sessDias * 864e5; sessArr = Object.keys(_sessoes).map(sid => Object.assign({ sid }, _sessoes[sid] || {})).filter(s => !s.revogadoEm && (s.criadoEm || 0) >= corte); } catch (_) {}
+  sessArr.sort((a, b) => (b.ultimoEm || 0) - (a.ultimoEm || 0));
   const fmtAcesso = (ts) => { if (!ts) return ''; try { return new Date(Number(ts)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return '—'; } };
   const seloAcesso = (usuario) => { const ts = ults[usuario]; return `<span class="quando" style="margin:0">· ${ts ? '🕘 ' + fmtAcesso(ts) : 'nunca acessou'}</span>`; };
   const umChk = (t, marcadas, prefixo) => `<label style="display:inline-flex;align-items:center;gap:6px;margin:0;font-weight:600;font-size:var(--fs-sm);cursor:pointer;white-space:nowrap"><input type="checkbox" name="${prefixo}" value="${t.key}"${(marcadas || []).includes(t.key) ? ' checked' : ''} style="width:15px;height:15px;margin:0"> ${t.rot}</label>`;
@@ -3863,6 +3896,7 @@ function paginaPerfis(aviso, erro, view) {
     'robo.reiniciar': '🔄 Reiniciou o robô', 'robo.desconectar': '📴 Desconectou WhatsApp do robô',
     'perfil.criar': '👤 Criou usuário', 'perfil.excluir': '🗑️ Excluiu usuário', 'perfil.telas': '🔑 Mudou telas de acesso',
     'perfil.senha': '🔑 Redefiniu senha', 'perfil.email': '📧 Alterou e-mail', 'perfil.admin': '👑 Mudou administrador',
+    'perfil.sessao': '⏲️ Mudou duração da sessão', 'perfil.sessao-encerrar': '🚪 Encerrou uma sessão',
   };
   const fmtAlvo = (acao, alvo) => { const d = String(alvo || '').replace(/\D/g, ''); return (/^conversa\.|^contato\./.test(acao) && d.length >= 10) ? fmtTel(alvo) : alvo; };
   const auditoriaLinhas = logsAud.map(l => `<tr style="border-bottom:1px solid var(--linha)">
@@ -3910,21 +3944,29 @@ function paginaPerfis(aviso, erro, view) {
       </div>
       <button type="submit" class="save" style="padding:9px 18px">Salvar</button>
     </form>
-    <div class="sec-t">Últimos acessos</div>
+    <div class="sec-t">Sessões ativas <small style="font-weight:600;color:var(--cinza)">— quem está logado agora</small></div>
     <div class="card">
-      <p class="quando" style="margin:0 0 12px">O <b>🕘 último acesso</b> ao lado de cada usuário (acima) mostra a última vez que a pessoa <b>usou</b> o painel. A tabela abaixo lista os <b>logins</b> (quando cada um <b>entrou</b> e como). Como a sessão dura ${sessDias} dia${sessDias === 1 ? '' : 's'}, quem já está logado não precisa entrar de novo — por isso costuma haver poucos logins.</p>
-      ${logins.length ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:var(--fs-sm)">
+      <p class="quando" style="margin:0 0 12px">Cada linha é um <b>login ativo</b> (um navegador/aparelho). O admin pode <b>Encerrar</b> qualquer sessão — a pessoa é <b>deslogada</b> e precisa entrar de novo. A <b>sua sessão atual</b> aparece destacada. Some daqui sozinho ao expirar (${sessDias} dia${sessDias === 1 ? '' : 's'}) ou no logout.</p>
+      ${sessArr.length ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:var(--fs-sm)">
         <thead><tr style="text-align:left;border-bottom:1px solid var(--linha)">
           <th style="padding:7px 10px;font-weight:700">Usuário</th>
-          <th style="padding:7px 10px;font-weight:700">Quando entrou</th>
+          <th style="padding:7px 10px;font-weight:700">Entrou</th>
+          <th style="padding:7px 10px;font-weight:700">Último uso</th>
           <th style="padding:7px 10px;font-weight:700">Como</th>
+          <th style="padding:7px 10px;font-weight:700">Dispositivo</th>
+          <th style="padding:7px 10px;font-weight:700;text-align:right">Ação</th>
         </tr></thead>
-        <tbody>${logins.map(l => `<tr style="border-bottom:1px solid var(--linha)">
-          <td style="padding:7px 10px;font-weight:600">${esc(l.usuario)}</td>
-          <td style="padding:7px 10px;font-variant-numeric:tabular-nums">${fmtAcesso(l.em)}</td>
-          <td style="padding:7px 10px">${l.metodo === 'google' ? '🟢 Google' : '🔑 Senha'}</td>
-        </tr>`).join('')}</tbody>
-      </table></div>` : '<p class="vazio" style="margin:0">Nenhum login registrado ainda. Assim que alguém entrar (senha ou Google), aparece aqui.</p>'}
+        <tbody>${sessArr.map(s => { const eu = (s.sid === meuSid); return `<tr style="border-bottom:1px solid var(--linha)${eu ? ';background:#f3fbfb' : ''}">
+          <td style="padding:7px 10px;font-weight:600">${esc(s.usuario || '—')}${eu ? ' <span style="background:#e6f6ec;color:#1f8f52;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700">você</span>' : ''}</td>
+          <td style="padding:7px 10px;font-variant-numeric:tabular-nums">${fmtAcesso(s.criadoEm)}</td>
+          <td style="padding:7px 10px;font-variant-numeric:tabular-nums">${fmtAcesso(s.ultimoEm)}</td>
+          <td style="padding:7px 10px">${s.metodo === 'google' ? '🟢 Google' : '🔑 Senha'}</td>
+          <td style="padding:7px 10px">${esc(uaCurto(s.ua))}</td>
+          <td style="padding:7px 10px;text-align:right">${eu
+            ? `<a href="/logout" class="reset" style="padding:5px 12px;text-decoration:none;white-space:nowrap">Sair</a>`
+            : `<form method="POST" action="/perfis/sessao-encerrar" style="display:inline" onsubmit="return confirm('Encerrar a sessão de ${esc(s.usuario || 'usuário')}? A pessoa vai precisar entrar de novo.')"><input type="hidden" name="sid" value="${esc(s.sid)}"><button type="submit" class="reset" style="padding:5px 12px;white-space:nowrap;color:#c0392b">Encerrar</button></form>`}</td>
+        </tr>`; }).join('')}</tbody>
+      </table></div>` : '<p class="vazio" style="margin:0">Nenhuma sessão ativa registrada. Assim que alguém entrar (senha ou Google), aparece aqui. <small>(Quem já estava logado antes desta atualização aparece só depois de entrar de novo.)</small></p>'}
     </div>`;
 
   // ── Sub-aba: Auditoria (quem fez o quê) ──
@@ -4271,13 +4313,14 @@ const server = http.createServer((req, res) => {
         const ok = validarLogin(p.get('usuario'), p.get('senha') || '');
         if (!ok) { res.writeHead(303, { Location: '/login?e=1' }); return res.end(); }
         try { acessos.registrarLogin(ok.usuario, 'senha'); } catch (_) {}
-        setCookieSessao(req, res, criarToken(ok.usuario), lerSessaoDias() * 86400);
+        setCookieSessao(req, res, criarToken(ok.usuario, criarSessao(ok.usuario, 'senha', req)), lerSessaoDias() * 86400);
         const sess = { admin: ok.admin, telas: ok.admin ? TODAS_TELAS : (usuarios.obter(ok.usuario) || { telas: [] }).telas };
         res.writeHead(303, { Location: primeiraTela(sess) || '/hoje' }); res.end();
       });
     }
   }
   if (url === '/logout') {
+    try { const o = lerToken(lerCookie(req, 'sf_sess')); if (o && o.sid) revogarSessao(o.sid); } catch (_) {} // encerra a própria sessão
     setCookieSessao(req, res, '', 0);
     res.writeHead(303, { Location: '/login' }); return res.end();
   }
@@ -4310,7 +4353,7 @@ const server = http.createServer((req, res) => {
       const ok = loginPorEmail(claims.email);
       if (!ok) { res.writeHead(303, { Location: '/login?g=naoaut' }); return res.end(); }
       try { acessos.registrarLogin(ok.usuario, 'google'); } catch (_) {}
-      setCookieSessao(req, res, criarToken(ok.usuario), lerSessaoDias() * 86400);
+      setCookieSessao(req, res, criarToken(ok.usuario, criarSessao(ok.usuario, 'google', req)), lerSessaoDias() * 86400);
       const sess = { admin: ok.admin, telas: ok.admin ? TODAS_TELAS : (usuarios.obter(ok.usuario) || { telas: [] }).telas };
       res.writeHead(303, { Location: primeiraTela(sess) || '/hoje' }); res.end();
     }).catch(() => { res.writeHead(303, { Location: '/login?g=erro' }); res.end(); });
@@ -4354,6 +4397,7 @@ const server = http.createServer((req, res) => {
       else if (/(?:^|&)ok=email/.test(q)) aviso = 'E-mail salvo. Já pode entrar com o Google.';
       else if (/(?:^|&)ok=excluido/.test(q)) aviso = 'Usuário excluído.';
       else if (/(?:^|&)ok=sessao/.test(q)) aviso = 'Duração da sessão salva. Vale para os próximos logins.';
+      else if (/(?:^|&)ok=sess-enc/.test(q)) aviso = 'Sessão encerrada. A pessoa precisará entrar de novo.';
       else if (/(?:^|&)err=/.test(q)) { aviso = decodeURIComponent((q.match(/err=([^&]*)/) || [])[1] || 'Erro.'); erro = true; }
       const viewPerfis = new URLSearchParams(q).get('view') || 'usuarios';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -4371,6 +4415,16 @@ const server = http.createServer((req, res) => {
         const p = new URLSearchParams(corpo);
         try { const v = gravarSessaoDias(p.get('dias')); try { auditoria.registrar(sess.usuario, 'perfil.sessao', '', v + ' dia(s)'); } catch (_) {} res.writeHead(303, { Location: '/perfis?view=acessos&ok=sessao' }); res.end(); }
         catch (e) { res.writeHead(303, { Location: '/perfis?view=acessos&err=' + encodeURIComponent(e.message) }); res.end(); }
+      });
+    }
+    if (req.method === 'POST' && url === '/perfis/sessao-encerrar') {
+      return lerCorpo(req, 1e5, corpo => {
+        const p = new URLSearchParams(corpo);
+        const sid = String(p.get('sid') || '').trim();
+        let alvoU = ''; try { alvoU = (_sessoes[sid] || {}).usuario || ''; } catch (_) {}
+        const ok = sid ? revogarSessao(sid) : false;
+        try { if (ok) auditoria.registrar(sess.usuario, 'perfil.sessao-encerrar', alvoU || sid, ''); } catch (_) {}
+        res.writeHead(303, { Location: '/perfis?view=acessos&' + (ok ? 'ok=sess-enc' : 'err=' + encodeURIComponent('sessão não encontrada')) }); res.end();
       });
     }
     if (req.method === 'POST' && url === '/perfis/email') {
