@@ -1305,6 +1305,19 @@ async function processarCampInbox() {
         }
       } else if (op.op === "excluir" && op.id) {
         campanhas = campanhas.filter((x) => x.id !== String(op.id)); agendarSalvarCampanhas();
+      } else if (op.op === "remover-fila" && op.id && op.tel) {
+        // Remove UM número da fila (pendentes): não vai receber a campanha.
+        const c = campanhas.find((x) => x.id === String(op.id));
+        if (c) {
+          const alvo8 = soDigitos(op.tel).slice(-8);
+          const antes = (c.pendentes || []).length;
+          c.pendentes = (c.pendentes || []).filter((d: any) => soDigitos(d.tel).slice(-8) !== alvo8);
+          if (c.pendentes.length !== antes) {
+            if (!c.pendentes.length && c.status === "enviando") c.status = "concluida";
+            c.atualizadoEm = Date.now(); agendarSalvarCampanhas();
+            log(`campanha "${c.nome}": ${op.tel} removido da fila (manual).`);
+          }
+        }
       } else if (op.op === "reenviar" && op.id && op.tel) {
         // Reenvio manual de UM número que falhou: tira das falhas e volta pra fila.
         const c = campanhas.find((x) => x.id === String(op.id));
