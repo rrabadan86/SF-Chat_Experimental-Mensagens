@@ -3279,11 +3279,11 @@ function paginaSofiaCampanhas(aviso, erro) {
       var tEnv=j.enviadosTotal!=null?j.enviadosTotal:j.enviados.length, tPen=j.pendentesTotal!=null?j.pendentesTotal:j.pendentes.length, tFal=j.falhasTotal!=null?j.falhasTotal:j.falhas.length;
       document.getElementById('cpTit').textContent='Envio · '+(j.nome||'');
       document.getElementById('cpStats').innerHTML='<b style="color:var(--ok)">'+tEnv+'</b> enviadas · <b>'+tPen+'</b> na fila · <b style="color:var(--erro)">'+tFal+'</b> falha(s) · hoje '+(j.enviadosHoje||0)+'/'+(j.limiteDia||0);
-      function linha(nome,tel,dir){ var ir=CP_CONV?('<button type="button" class="ct-ic" title="Ir para a conversa" style="margin:0" onclick="irConversaCamp(\\''+cpEsc(String(tel).replace(/[^0-9]/g,''))+'\\')">💬</button>'):''; return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--linha)"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>'+cpEsc(nome||'(sem nome)')+'</b> <span class="quando">'+cpEsc(cpFmtTel(tel))+'</span></span><span style="white-space:nowrap;flex:none;display:flex;align-items:center;gap:8px"><span class="quando" style="margin:0">'+dir+'</span>'+ir+'</span></div>'; }
+      function linha(nome,tel,dir,extra){ var ir=CP_CONV?('<button type="button" class="ct-ic" title="Ir para a conversa" style="margin:0" onclick="irConversaCamp(\\''+cpEsc(String(tel).replace(/[^0-9]/g,''))+'\\')">💬</button>'):''; return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--linha)"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>'+cpEsc(nome||'(sem nome)')+'</b> <span class="quando">'+cpEsc(cpFmtTel(tel))+'</span></span><span style="white-space:nowrap;flex:none;display:flex;align-items:center;gap:8px"><span class="quando" style="margin:0">'+dir+'</span>'+(extra||'')+ir+'</span></div>'; }
       function maisN(mostrados,total){ return total>mostrados?('<div class="quando" style="padding:7px 0">…e mais '+(total-mostrados)+'</div>'):''; }
       var env=j.enviados.slice().reverse().map(function(x){ return linha(x.nome,x.tel,'✅ '+cpFmtHora(x.em)); }).join('')+maisN(j.enviados.length,tEnv) || '<p class="quando">Ninguém ainda.</p>';
       var fila=j.pendentes.map(function(x){ return linha(x.nome,x.tel,'⏳ na fila'); }).join('')+maisN(j.pendentes.length,tPen) || '<p class="quando">Fila vazia.</p>';
-      var fal=j.falhas.slice().reverse().map(function(x){ return linha(x.nome,x.tel,'<span style="color:var(--erro)">⚠️ '+cpEsc((x.erro||'').slice(0,40))+'</span>'); }).join('') || '<p class="quando">Nenhuma falha. 🎉</p>';
+      var fal=j.falhas.slice().reverse().map(function(x){ return linha(x.nome,x.tel,'<span style="color:var(--erro)">⚠️ '+cpEsc((x.erro||'').slice(0,40))+'</span>','<button type="button" class="ct-ic" title="Reenviar este número (volta pra fila)" style="margin:0" onclick="cpReenviar(\\''+cpEsc(String(x.tel).replace(/[^0-9]/g,''))+'\\')">↻</button>'); }).join('') || '<p class="quando">Nenhuma falha. 🎉</p>';
       var cpBodyEl=document.getElementById('cpBody');
       var html=
         '<div class="cp-sec"><div class="cp-h">Enviadas ('+tEnv+')</div><div class="cp-list">'+env+'</div></div>'+
@@ -3296,6 +3296,13 @@ function paginaSofiaCampanhas(aviso, erro) {
       var scr=[]; try{ cpBodyEl.querySelectorAll('.cp-list').forEach(function(l){ scr.push(l.scrollTop); }); }catch(e){}
       cpLastBody=html; cpBodyEl.innerHTML=html;
       try{ cpBodyEl.querySelectorAll('.cp-list').forEach(function(l,i){ if(scr[i]!=null) l.scrollTop=scr[i]; }); }catch(e){}
+    }
+    function cpReenviar(tel){
+      if(!cpId||!tel) return;
+      if(!confirm('Reenviar para '+cpFmtTel(tel)+'?\\n\\nO número volta para a fila e a campanha tenta de novo. (Se a falha for "sem WhatsApp", vai falhar de novo.)')) return;
+      fetch('/sofia/campanhas/reenviar',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'id='+encodeURIComponent(cpId)+'&tel='+encodeURIComponent(tel)})
+        .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ setTimeout(cpCarregar,600); } else { alert('❌ '+((j&&j.erro)||'falha ao reenviar')); } })
+        .catch(function(){ alert('❌ erro de rede'); });
     }
     function fecharCampDet(){ document.getElementById('cpModal').style.display='none'; cpId=null; if(cpTimer){ clearInterval(cpTimer); cpTimer=null; } }
   </script>`;
@@ -5119,6 +5126,18 @@ const server = http.createServer((req, res) => {
       try { sofia.opCampanha({ op: 'controle', id, acao }); } catch (_) {}
       try { auditoria.registrar(quem, 'campanha.' + acao, nomeC || id, ''); } catch (_) {} // iniciar/pausar/cancelar
       res.writeHead(303, { Location: '/sofia?view=campanhas&okc=ok' }); res.end();
+    });
+  }
+  if (req.method === 'POST' && url === '/sofia/campanhas/reenviar') {
+    const quem = (sess && sess.usuario) ? sess.usuario : '';
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      const id = p.get('id'), tel = String(p.get('tel') || '').replace(/\D/g, '');
+      if (!id || !tel) { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: false, erro: 'faltou id/telefone' })); }
+      let nomeC = ''; try { const c = (sofia.lerCampanhas() || []).find(x => String(x.id) === String(id)); if (c) nomeC = c.nome || ''; } catch (_) {}
+      try { sofia.opCampanha({ op: 'reenviar', id, tel }); } catch (_) {}
+      try { auditoria.registrar(quem, 'campanha.reenviar', nomeC || id, tel); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true }));
     });
   }
   if (req.method === 'POST' && url === '/sofia/campanhas/excluir') {

@@ -1254,6 +1254,20 @@ async function processarCampInbox() {
         }
       } else if (op.op === "excluir" && op.id) {
         campanhas = campanhas.filter((x) => x.id !== String(op.id)); agendarSalvarCampanhas();
+      } else if (op.op === "reenviar" && op.id && op.tel) {
+        // Reenvio manual de UM número que falhou: tira das falhas e volta pra fila.
+        const c = campanhas.find((x) => x.id === String(op.id));
+        if (c) {
+          const alvo8 = soDigitos(op.tel).slice(-8);
+          const idx = (c.falhas || []).findIndex((f: any) => soDigitos(f.tel).slice(-8) === alvo8);
+          if (idx >= 0) {
+            const f: any = c.falhas.splice(idx, 1)[0];
+            c.pendentes.push({ tel: f.tel, nome: f.nome || "" });
+            if (c.status === "concluida" || c.status === "cancelada") c.status = "pausada"; // volta a poder iniciar
+            c.falhasSeguidas = 0; c.atualizadoEm = Date.now(); agendarSalvarCampanhas();
+            log(`campanha "${c.nome}": reenfileirado ${f.tel} (reenvio manual).`);
+          }
+        }
       } else if (op.op === "editar-variacao" && op.id) {
         // Editar UMA variação de uma campanha (o painel edita inline).
         const c = campanhas.find((x) => x.id === String(op.id));
