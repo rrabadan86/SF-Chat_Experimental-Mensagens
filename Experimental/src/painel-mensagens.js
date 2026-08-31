@@ -1797,6 +1797,10 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
         body.ver-conversa #convChat{display:flex}
         body.ver-conversa .voltar-lista{display:inline-flex}
         #convLista{max-height:calc(100dvh - 300px)}
+        /* Cabeçalho da conversa: botões de ação descem pra 2ª linha e o nome+telefone
+           ficam com a 1ª linha inteira (senão o nome sai como "Glória …"). */
+        .chat-head{flex-wrap:wrap}
+        .chat-head .chat-acts{flex-basis:100%;justify-content:flex-end;margin-top:5px}
       }
       /* Separador de dia na lista de conversas — chip centralizado que "gruda" no topo */
       .convDiaSep{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:9px;margin:8px 2px 7px;pointer-events:none}
@@ -1964,10 +1968,10 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     var agSelo=c.agendou?'<span title="Aula experimental agendada" style="display:inline-flex;align-items:center;justify-content:center;font-size:1.05rem;margin-right:2px">📅</span>':'';
     var chAv='<div class="ch-av" style="background:'+corAv(c.nome||k)+'">'+escH(iniciais(c.nome,k))+'</div>';
     var btnVoltar='<button type="button" class="voltar-lista reset" onclick="voltarLista()" title="Voltar para a lista" style="padding:6px 10px;font-size:1rem;line-height:1;align-items:center">←</button>';
-    var header='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+    var header='<div class="chat-head" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
       +btnVoltar+chAv
-      +'<div style="flex:1;min-width:0"><div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(c.nome||'(sem nome)')+selo+'</div><div class="quando" style="margin:0">'+escH(fmtTel(k))+'</div></div>'
-      +'<div style="display:flex;gap:6px;align-items:center;flex:none">'+agSelo+btnInt+btnEnc+btnBloq+pill+'</div></div>';
+      +'<div style="flex:1 1 auto;min-width:0"><div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(c.nome||'(sem nome)')+selo+'</div><div class="quando" style="margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(fmtTel(k))+'</div></div>'
+      +'<div class="chat-acts" style="display:flex;gap:6px;align-items:center;flex:none">'+agSelo+btnInt+btnEnc+btnBloq+pill+'</div></div>';
     // Linha de tags recolhível — o editor completo só aparece ao clicar em "editar".
     var mini=function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:1px 8px;font-size:.7rem;margin:0 4px 0 0">'+escH(t)+'</span>';};
     var resumo = ncSel.length ? ncSel.map(mini).join('') : '<span class="quando" style="margin:0">sem tags</span>';
