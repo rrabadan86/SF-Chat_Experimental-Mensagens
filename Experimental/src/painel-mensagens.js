@@ -304,7 +304,7 @@ function sofiaRotaPermitida(sess, url) {
 // WhatsApp é dividido em três sub-abas: Configuração, Agendamento e Hoje.
 function podeMsgSub(sess, sub) { return sess.admin || (sess.telas || []).includes('msg_' + sub); }
 function temMsg(sess) { return sess.admin || ['config', 'agendar', 'hoje'].some(s => podeMsgSub(sess, s)); }
-function msgHref(sess) { return podeMsgSub(sess, 'config') ? '/' : (podeMsgSub(sess, 'agendar') ? '/?view=agendar' : (podeMsgSub(sess, 'hoje') ? '/hoje' : '/')); }
+function msgHref(sess) { return podeMsgSub(sess, 'config') ? '/?view=config' : (podeMsgSub(sess, 'agendar') ? '/?view=agendar' : (podeMsgSub(sess, 'hoje') ? '/hoje' : '/?view=config')); }
 // Rota da aba WhatsApp → sub-permissão. Agendamento = /agendar* e /?view=agendar;
 // Hoje = /hoje; o resto (mensagens, fotos, teste, horários, conexão) é Configuração.
 function msgRotaPermitida(sess, url, fullUrl) {
@@ -4410,6 +4410,16 @@ const server = http.createServer((req, res) => {
   _navSess = sess;
   try { acessos.registrarAcesso(sess.usuario); } catch (_) {} // marca "último acesso" (com trava de tempo)
 
+  // ── Raiz "pura" → tela inicial da pessoa (Conversas da SoFIA) ─────────────
+  // Abrir o domínio/bookmark (GET "/" sem querystring) leva à primeira tela
+  // permitida — Conversas da SoFIA para quem tem acesso (inclui admin). A aba
+  // WhatsApp continua acessível por /?view=config (o menu já aponta pra lá),
+  // então não há loop.
+  if (req.method === 'GET' && req.url === '/') {
+    const dest = primeiraTela(sess);
+    if (dest && dest !== '/') { res.writeHead(302, { Location: dest }); return res.end(); }
+  }
+
   // ── Autorização por tela ─────────────────────────────────────────────────
   const tela = telaDaUrl(url);
   if (tela === 'perfis') { if (!sess.admin) return negarAcesso(res, sess); }
@@ -4641,7 +4651,7 @@ const server = http.createServer((req, res) => {
 
   // /horarios agora vive dentro da aba Mensagens — redireciona quem tiver link antigo.
   if (req.method === 'GET' && url === '/horarios') {
-    res.writeHead(301, { Location: '/' }); return res.end();
+    res.writeHead(301, { Location: '/?view=config' }); return res.end();
   }
   if (req.method === 'POST' && url === '/horarios/salvar') {
     return lerCorpo(req, 1e6, corpo => {
@@ -5472,7 +5482,7 @@ const server = http.createServer((req, res) => {
   }
   // A conexão do WhatsApp agora vive no topo da aba Mensagens — redireciona link antigo.
   if (req.method === 'GET' && url === '/wa') {
-    res.writeHead(301, { Location: '/' }); return res.end();
+    res.writeHead(301, { Location: '/?view=config' }); return res.end();
   }
 
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
