@@ -1260,7 +1260,7 @@ function paginaExpress() {
 
     <div style="display:flex;gap:14px;flex-wrap:wrap">
       <div style="flex:1 1 200px;min-width:0"><label>Telefone (WhatsApp)</label><input id="exTel" type="tel" inputmode="numeric" placeholder="(62) 99999-9999" maxlength="16"></div>
-      <div style="flex:1 1 200px;min-width:0"><label>E-mail</label><input id="exEmail" type="email" placeholder="email@exemplo.com" autocomplete="off"></div>
+      <div style="flex:1 1 200px;min-width:0"><label>E-mail <small style="font-weight:400;color:var(--cinza)">(opcional)</small></label><input id="exEmail" type="email" placeholder="email@exemplo.com" autocomplete="off"></div>
     </div>
 
     <div style="display:flex;gap:14px;flex-wrap:wrap">
@@ -1292,7 +1292,7 @@ function paginaExpress() {
     var hora=(document.getElementById('exHora').value||'').trim();
     if(!nome){ exStatus('Preencha o nome.','err'); return; }
     if(tel.length<12){ exStatus('Telefone inválido — inclua o DDD.','err'); return; }
-    if(!email||email.indexOf('@')<1){ exStatus('Preencha um e-mail válido.','err'); return; }
+    if(email&&email.indexOf('@')<1){ exStatus('E-mail inválido — deixe em branco ou corrija.','err'); return; } // e-mail é opcional
     if(!data||!hora){ exStatus('Escolha a data e o horário.','err'); return; }
     var when=data+' '+hora; // AAAA-MM-DD HH:MM (o EVO/form entende)
     exBtnOn(false); exStatus('⏳ Agendando no EVO…');
@@ -5169,7 +5169,7 @@ const server = http.createServer((req, res) => {
       const chave = String(d.chave || '').replace(/\D/g, '');
       const nome = String(d.nome || '').trim(), email = String(d.email || '').trim(), when = String(d.when || '').trim();
       if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
-      if (!nome || !email || !when) return res.end(JSON.stringify({ ok: false, erro: 'preencha nome, e-mail e data/horário' }));
+      if (!nome || !when) return res.end(JSON.stringify({ ok: false, erro: 'preencha nome e data/horário' })); // e-mail é opcional (o EVO identifica pelo telefone)
       try {
         const id = sofia.enfileirarAgendamento({ chave, telefone: chave, nome, email, when, por: quem });
         try { auditoria.registrar(quem, 'conversa.agendar', chave, when); } catch (_) {}
