@@ -291,7 +291,8 @@ function sofiaHref(sess) {
 // (marcar tags/salvar contato a partir de uma conversa) vale para Conversas OU Contatos.
 function sofiaRotaPermitida(sess, url) {
   const has = k => (sess.telas || []).includes(k);
-  if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto' || url === '/sofia/conversas/encerrar' || url === '/sofia/agendar' || url === '/sofia/agendar/status') return has('sofia_conversas');
+  if (url === '/sofia/agendar' || url === '/sofia/agendar/status') return has('sofia_conversas') || has('msg_config'); // agendar no EVO: das Conversas OU do Cadastro Express (aba WhatsApp)
+  if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto' || url === '/sofia/conversas/encerrar') return has('sofia_conversas');
   if (url === '/sofia/importar' || url === '/sofia/importar/status') return has('sofia_conversas') || has('sofia_config');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
   if (url === '/sofia/contatos/bloquear') return has('sofia_conversas') || has('sofia_contatos'); // bloquear vem tb do chat (Conversas)
@@ -952,14 +953,16 @@ function blocoWaRobo() {
   return `<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>Confira se o robô (<code>slimfit-exp</code>) está rodando.</p></div>`;
 }
 
-// Sub-navegação da aba WhatsApp Mensagens: Configuração (mensagens/horários) x Agendamento (envios pontuais).
+// Sub-navegação da aba WhatsApp Mensagens: Configuração (mensagens/horários),
+// Agendamento (envios pontuais), Express (cadastro rápido → agenda no EVO) e Log.
 function subnavMensagens(view) {
-  const href = (v) => v === 'agendar' ? '/?view=agendar' : (v === 'hoje' ? '/hoje' : '/');
+  const href = (v) => v === 'agendar' ? '/?view=agendar' : (v === 'express' ? '/?view=express' : (v === 'hoje' ? '/hoje' : '/?view=config'));
   const item = (v, rot) => `<a href="${href(v)}"${view === v ? ' class="on"' : ''}>${rot}</a>`;
   const sess = _navSess || { admin: true, telas: [] };
   let its = '';
   if (podeMsgSub(sess, 'config')) its += item('config', 'Configuração');
   if (podeMsgSub(sess, 'agendar')) its += item('agendar', 'Agendamento');
+  if (podeMsgSub(sess, 'config')) its += item('express', '📅 Express'); // agenda no EVO — mesma permissão da Configuração
   if (podeMsgSub(sess, 'hoje')) its += item('hoje', 'Log');
   return `<div class="subtabs">${its}</div>`;
 }
@@ -1232,6 +1235,80 @@ function paginaAgendar(aviso, erro) {
   });
 </script>`;
   return chrome({ tab: 'Agendamento', h1: 'Agendamento de envios', p: `Mensagens são enviadas <b>${esc(horaAg('manha'))}</b> (manhã) e <b>${esc(horaAg('tarde'))}</b> (tarde) do dia agendado.` }, 'msg', corpo);
+}
+
+// ── Sub-aba Express: cadastro rápido → agenda a experimental no EVO ───────────
+// Reaproveita o mesmo motor do botão "Agendar no EVO" da conversa (/sofia/agendar):
+// marca no EVO, entra na fila de confirmação (WhatsApp) e aplica a tag "agendou".
+// Aqui não há conversa — o telefone digitado vira a chave/telefone do agendamento.
+function paginaExpress() {
+  const hoje = hojeSP();
+  const corpo = `<div class="wrap">${subnavMensagens('express')}
+  <div class="card">
+    <div class="chead"><h2>📅 Cadastro express — agendar aula experimental</h2></div>
+    <p class="meta" style="margin:-2px 0 14px;color:var(--cinza)">Para marcar a experimental de quem chegou <b>por telefone ou no balcão</b>, sem precisar de uma conversa. Marca no <b>EVO</b>, manda a <b>confirmação no WhatsApp</b> e aplica a tag <b>“agendou”</b> — igual quando a SoFIA agenda.</p>
+    <label>Nome completo</label>
+    <input id="exNome" placeholder="Nome da aluna" autocomplete="off">
+    <label>Telefone (WhatsApp)</label>
+    <input id="exTel" inputmode="numeric" placeholder="(62) 99999-9999" maxlength="16">
+    <label>E-mail</label>
+    <input id="exEmail" type="email" placeholder="email@exemplo.com" autocomplete="off">
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1 1 150px"><label>Data</label><input type="date" id="exData" value="${hoje}" min="${hoje}" style="width:100%"></div>
+      <div style="flex:1 1 120px"><label>Horário</label><input type="time" id="exHora" step="900" style="width:100%"></div>
+    </div>
+    <div class="acts" style="margin-top:14px"><button type="button" class="save" id="exBtn" onclick="exAgendar()">Agendar no EVO</button></div>
+    <div id="exMsg" class="aviso" style="display:none"></div>
+  </div>
+</div>
+<script>
+  function exEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function exSoDig(s){ return (s||'').replace(/\\D/g,''); }
+  document.getElementById('exTel').addEventListener('input',function(e){
+    var v=exSoDig(e.target.value).slice(0,11);
+    if(v.length>=7)e.target.value=v.replace(/(\\d{2})(\\d{4,5})(\\d{0,4})/,'($1) $2-$3').replace(/-$/,'');
+    else if(v.length>=3)e.target.value=v.replace(/(\\d{2})(\\d{0,5})/,'($1) $2'); else e.target.value=v;
+  });
+  // Normaliza p/ DDI 55 (o EVO e a confirmação por WhatsApp esperam o número cheio).
+  function exNormTel(s){ var d=exSoDig(s); if(d.length===10||d.length===11) d='55'+d; return d; }
+  function exBtnOn(on){ var b=document.getElementById('exBtn'); if(b){ b.disabled=!on; b.textContent=on?'Agendar no EVO':'Agendando…'; } }
+  function exStatus(html,cls){ var m=document.getElementById('exMsg'); if(!m)return; m.className='aviso'+(cls?(' '+cls):''); m.innerHTML=html; m.style.display='block'; }
+  function exAgendar(){
+    var nome=(document.getElementById('exNome').value||'').trim();
+    var tel=exNormTel(document.getElementById('exTel').value||'');
+    var email=(document.getElementById('exEmail').value||'').trim();
+    var data=(document.getElementById('exData').value||'').trim();
+    var hora=(document.getElementById('exHora').value||'').trim();
+    if(!nome){ exStatus('Preencha o nome.','err'); return; }
+    if(tel.length<12){ exStatus('Telefone inválido — inclua o DDD.','err'); return; }
+    if(!email||email.indexOf('@')<1){ exStatus('Preencha um e-mail válido.','err'); return; }
+    if(!data||!hora){ exStatus('Escolha a data e o horário.','err'); return; }
+    var when=data+' '+hora; // AAAA-MM-DD HH:MM (o EVO/form entende)
+    exBtnOn(false); exStatus('⏳ Agendando no EVO…');
+    fetch('/sofia/agendar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:tel,nome:nome,email:email,when:when})})
+      .then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok||!j.id){ exStatus('❌ '+exEsc((j&&j.erro)||'falha ao enviar'),'err'); exBtnOn(true); return; }
+        var n=0;
+        (function poll(){
+          n++;
+          fetch('/sofia/agendar/status?id='+encodeURIComponent(j.id),{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){
+            var res=s&&s.res;
+            if(!res){ if(n>40){ exStatus('⏳ Ainda processando… confira em instantes.'); exBtnOn(true); return; } setTimeout(poll,1500); return; }
+            exBtnOn(true);
+            if(res.ok){
+              exStatus('✅ Agendada no EVO para <b>'+exEsc(res.when||when)+'</b>! A confirmação foi para a fila do WhatsApp.');
+              document.getElementById('exNome').value=''; document.getElementById('exTel').value='';
+              document.getElementById('exEmail').value=''; document.getElementById('exHora').value='';
+              document.getElementById('exNome').focus();
+            }
+            else if(res.lotada){ exStatus('⚠️ Turma cheia nesse horário. Alternativas: '+exEsc((res.alternativas||[]).join('  ·  ')||'—'),'err'); }
+            else { exStatus('❌ Não consegui agendar: '+exEsc(res.detalhe||'erro no EVO'),'err'); }
+          }).catch(function(){ if(n>40){ exStatus('❌ erro de rede','err'); exBtnOn(true); return; } setTimeout(poll,1500); });
+        })();
+      }).catch(function(){ exStatus('❌ erro de rede','err'); exBtnOn(true); });
+  }
+</script>`;
+  return chrome({ tab: 'Express', h1: 'Cadastro express', p: 'Marque a aula experimental de quem chegou por telefone ou no balcão — direto no EVO.' }, 'msg', corpo);
 }
 
 // ── Página 3: conexão do WhatsApp (QR quando cai) ───────────────────────────
@@ -4552,10 +4629,13 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar o robô pelo painel. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     // Só a sub-aba permitida; se pediu uma sem acesso, cai na primeira permitida.
-    let view = /(?:^|&)view=agendar/.test(q) ? 'agendar' : 'config';
-    if (!podeMsgSub(sess, view)) view = ['config', 'agendar', 'hoje'].find(s => podeMsgSub(sess, s)) || 'config';
+    let view = /(?:^|&)view=agendar/.test(q) ? 'agendar' : (/(?:^|&)view=express/.test(q) ? 'express' : 'config');
+    // "express" (Cadastro Express → agenda no EVO) reaproveita a permissão de Configuração.
+    const temView = view === 'express' ? podeMsgSub(sess, 'config') : podeMsgSub(sess, view);
+    if (!temView) view = ['config', 'agendar', 'hoje'].find(s => podeMsgSub(sess, s)) || 'config';
     if (view === 'hoje') { res.writeHead(303, { Location: '/hoje' }); return res.end(); } // só tem Hoje → vai pra lá
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    if (view === 'express') return res.end(paginaExpress()); // sub-aba Express (cadastro rápido)
     if (view === 'agendar') return res.end(paginaAgendar(aviso, erro)); // sub-aba Agendamento
     return res.end(paginaMensagens(aviso, erro));
   }
