@@ -1765,7 +1765,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     ${subnavSofia('conversas')}
     <div class="sec-t" data-nosec="1">Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span><small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
     <style>
-      .inbox-grid{display:grid;grid-template-columns:236px minmax(0,1fr);gap:14px;align-items:start}
+      .inbox-grid{display:grid;grid-template-columns:288px minmax(0,1fr);gap:14px;align-items:start}
       .inbox-grid>div{min-width:0}
       /* Coluna da esquerda: mesma altura do chat; a LISTA rola por dentro (não
          empurra a página nem desalinha as duas colunas no desktop). */
@@ -1773,6 +1773,31 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       #convLista{flex:1 1 auto;overflow-y:auto;min-height:0}
       #convChat{display:flex;flex-direction:column;min-height:360px;max-height:calc(100vh - 190px)}
       @media(max-width:760px){ .inbox-grid{grid-template-columns:minmax(0,1fr);align-items:start} .inbox-grid>div:first-child{max-height:none} #convLista{flex:none;max-height:260px;overflow:auto} #convChat{min-height:60vh;max-height:80vh;max-height:80dvh} }
+      /* ── Cartões de conversa (v2): avatar + nome/hora + chips ── */
+      .cv-item{display:flex;gap:10px;align-items:flex-start;padding:8px 9px;border-radius:11px;cursor:pointer;position:relative;border:1px solid transparent;margin-bottom:3px}
+      .cv-item:hover{background:#f2f5f5}
+      .cv-item.on{background:#eff7f6;box-shadow:inset 0 0 0 1px #0e8e91}
+      .cv-item.aten{border-left:4px solid #c0392b}
+      .cv-av{flex:none;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.82rem;position:relative}
+      .cv-badge{position:absolute;right:-1px;bottom:-1px;width:13px;height:13px;border-radius:50%;background:#0e6e6b;border:2px solid var(--card,#fff)}
+      .cv-b{flex:1;min-width:0}
+      .cv-r1{display:flex;align-items:baseline;gap:8px}
+      .cv-nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.86rem}
+      .cv-tm{margin-left:auto;flex:none;color:#9a97a0;font-size:.7rem;font-variant-numeric:tabular-nums}
+      .cv-ph{color:#6b6870;font-size:.72rem;margin:1px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .cv-chips{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:5px}
+      .cv-dot{position:absolute;right:9px;top:11px;width:9px;height:9px;border-radius:50%;background:#0e6e6b;box-shadow:0 0 0 2px var(--card,#fff)}
+      #convPag{border-top:1px solid var(--linha);padding-top:8px}
+      .ch-av{flex:none;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.9rem}
+      .voltar-lista{display:none}
+      /* Mobile: mostra a LISTA ou a CONVERSA (master-detail), não as duas ── item 5 ── */
+      @media(max-width:760px){
+        #convChat{display:none}
+        body.ver-conversa #convLista-col{display:none}
+        body.ver-conversa #convChat{display:flex}
+        body.ver-conversa .voltar-lista{display:inline-flex}
+        #convLista{max-height:calc(100dvh - 300px)}
+      }
       /* Separador de dia na lista de conversas — chip centralizado que "gruda" no topo */
       .convDiaSep{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:9px;margin:8px 2px 7px;pointer-events:none}
       .convDiaSep::before,.convDiaSep::after{content:"";height:1px;background:var(--linha,#e7e8ea);flex:1}
@@ -1780,7 +1805,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       .convDiaSep.hoje span{background:#0e8e91;color:#fff}
     </style>
     <div class="inbox-grid">
-      <div>
+      <div id="convLista-col">
         <div style="display:flex;gap:6px;margin-bottom:8px">
           <input type="search" id="convBusca" oninput="filtrarBusca(this.value)" placeholder="🔎 Buscar nome, telefone ou palavra" style="flex:1 1 auto;min-width:0;font-size:.82rem;padding:8px 10px;border:1px solid var(--linha);border-radius:9px">
           <select id="convFiltroTag" onchange="filtrarTag(this.value)" title="Filtrar por tag" style="flex:0 0 42px;width:42px;font-size:.82rem;padding:8px 2px"><option value="">🏷️</option><option value="__sem__">🏷️ Sem tag</option>${tagsLista.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select>
@@ -1882,6 +1907,11 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   // autor (ex.: resposta enviada direto do celular do Studio).
   function autorRot(a, nomeAluna, por){ return a==='aluna'?(nomeAluna||'Aluna'):(a==='humano'?(por?('🧑 '+por):'Atendente'):'SoFIA'); }
   function fmtTel(k){ var d=String(k||'').replace(/\\D/g,''); if(/^55\\d{10,11}$/.test(d)){ var ddd=d.slice(2,4), r=d.slice(4); return '+55 ('+ddd+') '+(r.length===9?r.slice(0,5)+'-'+r.slice(5):r.slice(0,4)+'-'+r.slice(4)); } return k; }
+  // Só a hora (o dia já aparece no separador de dia da lista).
+  function soHora(ts){ try{ return new Date(ts).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
+  // Avatar: cor estável por contato + iniciais do nome (sem nome, os últimos 2 dígitos).
+  function corAv(seed){ var s=String(seed||''); var h=0; for(var i=0;i<s.length;i++){ h=(h*31+s.charCodeAt(i))>>>0; } var cores=['#e07a3f','#3f9e8f','#7b61c9','#c94f8a','#4a90d9','#5aa469','#d9873f','#5b8def','#c9695a','#2fa39b','#b3792f','#8a6cd1']; return cores[h%cores.length]; }
+  function iniciais(nome,key){ var n=String(nome||'').trim(); if(n){ var p=n.split(/\\s+/).filter(Boolean); var a=(p[0]||'')[0]||''; var b=(p.length>1?(p[p.length-1][0]||''):''); return (a+b).toUpperCase(); } var d=String(key||'').replace(/\\D/g,''); return d?d.slice(-2):'?'; }
   function renderChat(c,k){
     var chat=document.getElementById('convChat'); if(!chat) return;
     var msgs=c.msgs||[];
@@ -1932,8 +1962,11 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     var btnBloq='<button type="button" onclick="bloquearConversa()" class="reset" title="'+(bloq?'Desbloquear contato':'Bloquear contato (a SoFIA ignora)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(bloq?';color:#1c8f52':'')+'">'+(bloq?'✅':'🚫')+'</button>';
     var selo=bloq?'<span title="Contato bloqueado" style="background:#fdeaea;color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700;margin-left:6px">🚫 bloqueado</span>':'';
     var agSelo=c.agendou?'<span title="Aula experimental agendada" style="display:inline-flex;align-items:center;justify-content:center;font-size:1.05rem;margin-right:2px">📅</span>':'';
-    var header='<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">'
-      +'<div style="flex:1;min-width:0"><div style="font-weight:800">'+escH(c.nome||'(sem nome)')+selo+'</div><div class="quando" style="margin:0">'+escH(fmtTel(k))+'</div></div>'
+    var chAv='<div class="ch-av" style="background:'+corAv(c.nome||k)+'">'+escH(iniciais(c.nome,k))+'</div>';
+    var btnVoltar='<button type="button" class="voltar-lista reset" onclick="voltarLista()" title="Voltar para a lista" style="padding:6px 10px;font-size:1rem;line-height:1;align-items:center">←</button>';
+    var header='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+      +btnVoltar+chAv
+      +'<div style="flex:1;min-width:0"><div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(c.nome||'(sem nome)')+selo+'</div><div class="quando" style="margin:0">'+escH(fmtTel(k))+'</div></div>'
       +'<div style="display:flex;gap:6px;align-items:center;flex:none">'+agSelo+btnInt+btnEnc+btnBloq+pill+'</div></div>';
     // Linha de tags recolhível — o editor completo só aparece ao clicar em "editar".
     var mini=function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:1px 8px;font-size:.7rem;margin:0 4px 0 0">'+escH(t)+'</span>';};
@@ -2131,11 +2164,17 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var at=c.atencao?'<span title="A aluna pediu atendimento humano" style="display:inline-block;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 pediu humano</span>':'';
       var agMini=c.agendou?'<span title="Aula experimental agendada" style="font-size:.8rem;flex:none">📅</span>':'';
       var blq=c.bloq?'<span title="Contato bloqueado" style="display:inline-block;background:#fdeaea;color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🚫 bloqueado</span>':'';
-      var nome='<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:'+(pendente?'700':'600')+';font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escH(c.nome||fmtTel(k))+'</span>'+agMini+dot+'</div>';
-      var meta='<div class="quando" style="font-size:.72rem;margin:0;display:flex;align-items:center;flex-wrap:wrap;row-gap:3px">'+fmtHora(c.ultimaEm)+blq+at+tgs+hb+enc+fu+'</div>';
-      var bg = on?'#e4efee':(c.atencao?'#fdecea':(encerrada(c)?'#fbf7f7':'#fff'));
-      var bd = on?'#0e6e6b':(c.atencao?'#e0a09a':'#eee');
-      var itemHtml='<div onclick="abrir(\\''+k+'\\')" style="cursor:pointer;padding:7px 10px;border-radius:9px;margin-bottom:5px;border:1px solid '+bd+';'+(c.atencao&&!on?'border-left:4px solid #c0392b;':'')+'background:'+bg+'">'+nome+'<div class="quando" style="margin:0;font-size:.7rem">'+escH(fmtTel(k))+'</div>'+meta+'</div>';
+      // Cartão v2: avatar (iniciais) + nome/hora + telefone + chips de status/tag numa linha.
+      var chips=[blq,at,tgs,hb,enc,fu].join(''); // já vêm como <span>…</span> estilizados
+      var cls='cv-item'+(on?' on':'')+((c.atencao&&!on)?' aten':'');
+      var av='<div class="cv-av" style="background:'+corAv(c.nome||k)+'">'+escH(iniciais(c.nome,k))+(pendente?'<span class="cv-badge" title="aguardando resposta"></span>':'')+'</div>';
+      var itemHtml='<div class="'+cls+'" onclick="abrir(\\''+k+'\\')">'+av
+        +'<div class="cv-b">'
+        +  '<div class="cv-r1"><span class="cv-nm" style="font-weight:'+(pendente?'700':'600')+'">'+escH(c.nome||fmtTel(k))+'</span>'+agMini+'<span class="cv-tm">'+soHora(c.ultimaEm)+'</span></div>'
+        +  '<div class="cv-ph">'+escH(fmtTel(k))+'</div>'
+        +  (chips?('<div class="cv-chips">'+chips+'</div>'):'')
+        +'</div>'
+        +'</div>';
       var dk=diaKeySP(c.ultimaEm);
       if(!gAtual || gAtual.dk!==dk){ gAtual={dk:dk, ts:c.ultimaEm, itens:[]}; grupos.push(gAtual); }
       gAtual.itens.push(itemHtml);
@@ -2173,7 +2212,9 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     });
     return out.join('');
   }
-  function abrir(k){ selecionada=k; ncSel=(ultimoData[k]&&ultimoData[k].tagsContato?ultimoData[k].tagsContato.slice():[]); ncNome=(ultimoData[k]&&ultimoData[k].nome)||''; ncDirty=false; tagEdAberto=false; ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); }
+  function abrir(k){ selecionada=k; ncSel=(ultimoData[k]&&ultimoData[k].tagsContato?ultimoData[k].tagsContato.slice():[]); ncNome=(ultimoData[k]&&ultimoData[k].nome)||''; ncDirty=false; tagEdAberto=false; ultimoRender={chave:null,n:-1,humano:null}; try{document.body.classList.add('ver-conversa');}catch(e){} renderInbox(ultimoData); }
+  // Mobile: volta da conversa para a lista (no desktop as duas ficam lado a lado).
+  function voltarLista(){ try{document.body.classList.remove('ver-conversa');}catch(e){} }
   function atualizaWa(e){
     var b=document.getElementById('waTag'); if(!b) return;
     var m={conectado:['🟢','online','#1c8f52','#e6f6ec'],desconectado:['🔴','off-line','#c0392b','#fdeaea'],qr:['🟠','reconectar','#b8770a','#fdf2e0'],iniciando:['🟡','conectando','#b8770a','#fdf2e0']};
