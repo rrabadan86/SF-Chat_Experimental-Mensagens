@@ -291,7 +291,7 @@ function sofiaHref(sess) {
 // (marcar tags/salvar contato a partir de uma conversa) vale para Conversas OU Contatos.
 function sofiaRotaPermitida(sess, url) {
   const has = k => (sess.telas || []).includes(k);
-  if (url === '/sofia/agendar' || url === '/sofia/agendar/status') return has('sofia_conversas') || has('msg_express'); // agendar no EVO: das Conversas OU do Cadastro Express (aba WhatsApp)
+  if (url === '/sofia/agendar' || url === '/sofia/agendar/status') return has('sofia_conversas') || has('msg_express') || has('msg_agendar'); // agendar no EVO: das Conversas OU do Cadastro Express (aba WhatsApp)
   if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto' || url === '/sofia/conversas/encerrar') return has('sofia_conversas');
   if (url === '/sofia/importar' || url === '/sofia/importar/status') return has('sofia_conversas') || has('sofia_config');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
@@ -311,9 +311,9 @@ function msgHref(sess) { return podeMsgSub(sess, 'config') ? '/?view=config' : (
 function msgRotaPermitida(sess, url, fullUrl) {
   const has = k => (sess.telas || []).includes(k);
   if (url === '/hoje') return has('msg_hoje');
-  if (url === '/agendar' || url.startsWith('/agendar/')) return has('msg_agendar');
-  if (url === '/' && /(?:^|[?&])view=agendar/.test(fullUrl || '')) return has('msg_agendar');
-  if (url === '/' && /(?:^|[?&])view=express/.test(fullUrl || '')) return has('msg_express');
+  const podeExpr = has('msg_express') || has('msg_agendar'); // tela unificada (aceita a chave antiga)
+  if (url === '/agendar' || url.startsWith('/agendar/')) return podeExpr;
+  if (url === '/' && /(?:^|[?&])view=(agendar|express)/.test(fullUrl || '')) return podeExpr;
   return has('msg_config'); // /, /salvar, /mensagem/*, /teste/*, /horarios*, /wa*
 }
 function primeiraTela(sess) {
@@ -1248,8 +1248,10 @@ function blocoAgendarMsg() {
 // distintas. Permissões: Express = msg_express; Agendar mensagem = msg_agendar.
 function paginaExpress(aviso, erro) {
   const sess = _navSess || { admin: true, telas: [] };
-  const podeExpress = podeMsgSub(sess, 'express');
-  const podeAgendar = podeMsgSub(sess, 'agendar');
+  // Permissão UNIFICADA: quem pode ver a tela vê as duas seções. Aceita a chave
+  // antiga msg_agendar (migra sozinha ao salvar o perfil).
+  const podeTela = podeMsgSub(sess, 'express') || podeMsgSub(sess, 'agendar');
+  const podeExpress = podeTela, podeAgendar = podeTela;
   const hoje = hojeSP();
   // Cabeçalho de seção (ícone + título + subtítulo) — fica DENTRO do painel colorido.
   const cab = (ic, tit, sub) => `<div style="display:flex;align-items:center;gap:12px;margin:2px 2px 12px"><span style="font-size:1.5rem;line-height:1;flex:none">${ic}</span><div style="min-width:0"><div style="font-family:'Manrope','Inter',sans-serif;font-weight:800;font-size:1.05rem;color:var(--tinta);line-height:1.15">${tit}</div><div style="font-size:.82rem;color:var(--cinza)">${sub}</div></div></div>`;
@@ -4034,6 +4036,9 @@ function paginaPerfis(aviso, erro, view) {
   const seloAcesso = (usuario) => { const ts = ults[usuario]; return `<span class="quando" style="margin:0">· ${ts ? '🕘 ' + fmtAcesso(ts) : 'nunca acessou'}</span>`; };
   const umChk = (t, marcadas, prefixo) => `<label style="display:inline-flex;align-items:center;gap:6px;margin:0;font-weight:600;font-size:var(--fs-sm);cursor:pointer;white-space:nowrap"><input type="checkbox" name="${prefixo}" value="${t.key}"${(marcadas || []).includes(t.key) ? ' checked' : ''} style="width:15px;height:15px;margin:0"> ${t.rot}</label>`;
   const chkTelas = (marcadas, prefixo) => {
+    marcadas = (marcadas || []);
+    // Compat: quem tinha a permissão antiga "msg_agendar" já aparece com a tela unificada marcada.
+    if (marcadas.includes('msg_agendar') && !marcadas.includes('msg_express')) marcadas = marcadas.concat('msg_express');
     const soltas = usuarios.TELAS.filter(t => !t.grupo);
     const grupos = {};
     for (const t of usuarios.TELAS) if (t.grupo) (grupos[t.grupo] = grupos[t.grupo] || []).push(t);
