@@ -1788,6 +1788,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   let sessaoHoras = 12; try { sessaoHoras = sofia.lerSessaoHoras(); } catch (_) {}
   let lockMinIni = 60; try { lockMinIni = sofia.lerHumanoLockMin(); } catch (_) {}
   let quietoCfg = { horas: 24, dias: 4 }; try { quietoCfg = sofia.lerQuietoCfg(); } catch (_) {}
+  let pausaMinIni = 30; try { pausaMinIni = sofia.lerPausaMin(); } catch (_) {} // pausa (min) ao responder pelo celular da SoFIA
   const refreshMs = lerRefreshSeg() * 1000; // intervalo do auto-refresh da lista (config em "Jeito de responder")
   const corpo =`<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
@@ -1927,6 +1928,8 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   var LOCK_MS = LOCK_MIN*60000;
   var SESSAO_MS = ${Math.round(sessaoHoras * 3600 * 1000)};
   var QUIETO_MS = ${Math.round(quietoCfg.horas * 3600 * 1000)}, QUIETO_MAX_MS = ${Math.round(quietoCfg.dias * 24 * 3600 * 1000)};
+  var PAUSA_MIN = ${Math.max(1, parseInt(pausaMinIni, 10) || 30)}; // pausa (min) quando respondem direto pelo celular da SoFIA
+  function fmtPausa(min){ min=parseInt(min,10)||0; if(min<60) return min+' min'; var h=min/60; var s=Number.isInteger(h)?String(h):h.toFixed(1).replace(/\\.0$/,''); return s+(h===1?' hora':' horas'); }
   function encerrada(c){ return !!(c && (c.enc || (c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS)))); }
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function fmtHora(ts){ try{return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
@@ -1940,7 +1943,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   // Rótulo de quem enviou. Para "humano", mostra o NOME do atendente que escreveu
   // (segurança: saber quem falou). Cai em "Atendente" se a mensagem for antiga/sem
   // autor (ex.: resposta enviada direto do celular do Studio).
-  function autorRot(a, nomeAluna, por){ return a==='aluna'?(nomeAluna||'Aluna'):(a==='humano'?(por?('🧑 '+por):'Atendente'):'SoFIA'); }
+  function autorRot(a, nomeAluna, por, tipo){ return a==='aluna'?(nomeAluna||'Aluna'):(a==='humano'?(tipo==='wpp'?'📱 Direto pelo WhatsApp':(por?('🧑 '+por):'Atendente')):'SoFIA'); }
   function fmtTel(k){ var d=String(k||'').replace(/\\D/g,''); if(/^55\\d{10,11}$/.test(d)){ var ddd=d.slice(2,4), r=d.slice(4); return '+55 ('+ddd+') '+(r.length===9?r.slice(0,5)+'-'+r.slice(5):r.slice(0,4)+'-'+r.slice(4)); } return k; }
   // Só a hora (o dia já aparece no separador de dia da lista).
   function soHora(ts){ try{ return new Date(ts).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
@@ -1955,6 +1958,8 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     // seguinte. Aparece quando o intervalo entre duas mensagens passa do Tempo de
     // sessão (memória) OU quando houve encerramento manual (cadeado) entre elas.
     function divisorHtml(txt){ return '<div style="display:flex;align-items:center;gap:10px;margin:16px 2px 8px;color:#a15a5a"><span style="flex:1;height:1px;background:#e6cfcf"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap">'+txt+'</span><span style="flex:1;height:1px;background:#e6cfcf"></span></div>'; }
+    // Marcador: resposta manual DIRETO pelo celular da SoFIA (dispara a pausa por tempo).
+    function wppDivisor(){ return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#f0dcc2"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#b45309;background:#fff4e5;border-radius:999px;padding:2px 11px">📱 Resposta manual pelo WhatsApp · SoFIA pausada por '+fmtPausa(PAUSA_MIN)+' nesta conversa</span><span style="flex:1;height:1px;background:#f0dcc2"></span></div>'; }
     var encPorTxt=(c.encPor && String(c.encPor).trim())?escH(c.encPor):'';
     // A "nova conversa" após um encerramento começa na PRÓXIMA mensagem da aluna
     // depois do fechamento — não na resposta que a SoFIA ainda mandou de despedida.
@@ -1969,21 +1974,42 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
         var gap=(m.em||0)-(ant.em||0);
         if(gap>SESSAO_MS) sep=divisorHtml('⏱️ Sessão encerrada automaticamente · nova conversa');
       }
+      // Início de uma resposta manual pelo celular: marca a divisória (uma vez por
+      // sequência, não em cada mensagem seguida) avisando que a SoFIA foi pausada.
+      var ehWpp = (m.autor==='humano' && m.tipo==='wpp');
+      if(ehWpp){ var pv=i>0?msgs[i-1]:null; if(!(pv && pv.autor==='humano' && pv.tipo==='wpp')) sep+=wppDivisor(); }
       var mine = (m.autor!=='aluna');
       var ehFup = (m.tipo==='followup');
-      var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?'#dff5e6':(ehFup?'#fff4e5':'#e4efee'));
+      var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?(ehWpp?'#fff4e5':'#dff5e6'):(ehFup?'#fff4e5':'#e4efee'));
       var selo = ehFup ? ' <span style="display:inline-block;font-size:.6rem;font-weight:700;color:#b45309;background:#ffedd5;border-radius:6px;padding:1px 6px;margin-left:4px">↩︎ follow-up</span>' : '';
       var img = m.foto ? '<img src="/sofia/humano-foto?arq='+encodeURIComponent(m.foto)+'" alt="foto enviada" style="display:block;max-width:100%;max-height:220px;border-radius:9px;margin:'+(m.texto?'6px 0 0':'2px 0 0')+';cursor:pointer" onclick="window.open(this.src,\\'_blank\\')">' : '';
       var corpoMsg = (m.texto?'<div style="white-space:pre-wrap">'+escH(m.texto)+'</div>':'') + img;
-      return {em:(m.em||0), html: sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna, m.por))+' · '+fmtHora(m.em)+selo+'</div>'+corpoMsg+'</div></div>'};
+      return {em:(m.em||0), html: sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna, m.por, m.tipo))+' · '+fmtHora(m.em)+selo+'</div>'+corpoMsg+'</div></div>'};
     });
     // Marcadores de controle humano (assumiu/devolveu) intercalados por horário.
     function evtDivisor(e){
       var quem=e.por?escH(e.por):'';
       if(e.acao==='assumir') return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cdeadd"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#1f7a4d;background:#e7f6ec;border-radius:999px;padding:2px 11px">🙋 Conversa assumida por '+(quem||'atendente')+'</span><span style="flex:1;height:1px;background:#cdeadd"></span></div>';
+      // Fim do prazo de pausa da resposta manual pelo celular (computado por horário).
+      if(e.acao==='wpp-fim'){
+        if(e.ativo) return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#f0dcc2"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#b45309;background:#fff4e5;border-radius:999px;padding:2px 11px">⏳ SoFIA pausada até '+soHora(e.em)+' (resposta manual pelo WhatsApp)</span><span style="flex:1;height:1px;background:#f0dcc2"></span></div>';
+        return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cfe4e3"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#0b6f72;background:#e4efee;border-radius:999px;padding:2px 11px">🤖 Prazo da pausa terminou — SoFIA voltou a responder</span><span style="flex:1;height:1px;background:#cfe4e3"></span></div>';
+      }
       return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cfe4e3"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#0b6f72;background:#e4efee;border-radius:999px;padding:2px 11px">🤖 Devolvida à SoFIA'+(quem?' por '+quem:(e.auto?' — trava expirou':''))+'</span><span style="flex:1;height:1px;background:#cfe4e3"></span></div>';
     }
-    var evts=(c.humanoLog||[]).slice().sort(function(a,b){return (a.em||0)-(b.em||0);});
+    // Prazo da pausa (resposta pelo celular): a SoFIA volta PAUSA_MIN min após a
+    // ÚLTIMA resposta manual seguida. Marca "voltou" (se já passou) ou "pausada até"
+    // (se ainda corre), intercalado por horário junto dos demais eventos.
+    var pauseEvts=[];
+    for(var wi=0; wi<msgs.length; wi++){
+      var mw=msgs[wi];
+      if(!(mw.autor==='humano' && mw.tipo==='wpp')) continue;
+      var prox=msgs[wi+1];
+      if(prox && prox.autor==='humano' && prox.tipo==='wpp') continue; // ainda no meio da sequência
+      var endEm=(mw.em||0)+PAUSA_MIN*60000;
+      pauseEvts.push({em:endEm, acao:'wpp-fim', ativo:(endEm>Date.now())});
+    }
+    var evts=(c.humanoLog||[]).concat(pauseEvts).slice().sort(function(a,b){return (a.em||0)-(b.em||0);});
     var out=[], ei=0;
     for(var mi=0; mi<itensMsg.length; mi++){
       while(ei<evts.length && (evts[ei].em||0) <= itensMsg[mi].em){ out.push(evtDivisor(evts[ei])); ei++; }

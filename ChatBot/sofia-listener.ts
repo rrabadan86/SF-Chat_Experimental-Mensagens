@@ -498,7 +498,7 @@ function retencaoMs(): number {
   const d = Number.isFinite(_retDias) && _retDias >= 0 ? _retDias : 365;
   return d > 0 ? d * 24 * 3600 * 1000 : Number.POSITIVE_INFINITY;
 }
-type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string; tipo?: "followup" };
+type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string; tipo?: "followup" | "wpp" };
 type InboxConversa = { jid: string; nome: string; ultimaEm: number; msgs: InboxMsg[] };
 const inbox = new Map<string, InboxConversa>();
 let inboxTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1644,7 +1644,9 @@ client.on("message_create", (msg: any) => {
     const tel = telCache.get(jid) || jidParaTel(jid); // mesma chave da memória (telefone real do "@lid")
     assumirConversa(tel);
     registrarNaMemoria(tel, "humano", msg.body || "");
-    registrarInbox(tel, jid, "", "humano", msg.body || ""); // registra sua resposta no inbox
+    // tipo "wpp" = resposta manual DIRETO pelo celular da SoFIA (handoff). O painel
+    // marca isso na timeline (diferente de uma resposta enviada pelo painel, que leva o "por").
+    registrarInbox(tel, jid, "", "humano", msg.body || "", undefined, undefined, "wpp"); // registra sua resposta no inbox
     log(`você assumiu a conversa com ${tel} — Sofia pausada nela.`);
   } catch (e: any) { log("erro no on(message_create): " + (e?.message || e)); }
 });
