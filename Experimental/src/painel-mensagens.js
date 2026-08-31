@@ -2511,7 +2511,7 @@ function paginaSofiaContatos(aviso, erro, params) {
         <option value="novo">🆕 a aluna mandar a 1ª mensagem (lead novo)</option>
         <option value="palavra">🔑 a aluna escrever uma palavra-chave</option>
         <option value="ia">🧠 a SoFIA entender uma intenção (você descreve)</option>
-        <option value="agendou">📅 a SoFIA agendar uma aula experimental</option>
+        <option value="agendou">📅 agendar uma aula experimental (a SoFIA ou você pelo botão)</option>
         <option value="humano">🙋 você assumir a conversa (controle humano)</option>
         <option value="encerrou">🔒 a conversa encerrar sem agendamento</option>
         <option value="campanha">💬 a aluna responder a uma campanha</option>
@@ -2963,7 +2963,7 @@ function paginaSofiaTags(aviso, erro) {
         <option value="novo">🆕 a aluna mandar a 1ª mensagem (lead novo)</option>
         <option value="palavra">🔑 a aluna escrever uma palavra-chave</option>
         <option value="ia">🧠 a SoFIA entender uma intenção (você descreve)</option>
-        <option value="agendou">📅 a SoFIA agendar uma aula experimental</option>
+        <option value="agendou">📅 agendar uma aula experimental (a SoFIA ou você pelo botão)</option>
         <option value="humano">🙋 você assumir a conversa (controle humano)</option>
         <option value="encerrou">🔒 a conversa encerrar sem agendamento</option>
         <option value="campanha">💬 a aluna responder a uma campanha</option>
