@@ -35,6 +35,8 @@ const F = {
   regras: path.join(DIR, 'sofia-regras.json'), // regras de automação por gatilho — painel escreve, listener lê
   eventos: path.join(DIR, 'sofia-eventos.jsonl'), // ações de automação — listener escreve, painel consome
   respostas: path.join(DIR, 'sofia-respostas.jsonl'), // fila de respostas do painel → listener envia
+  agendarInbox: path.join(DIR, 'sofia-agendar-inbox.jsonl'), // pedidos de agendamento manual do painel → listener agenda no EVO
+  agendarResult: path.join(DIR, 'sofia-agendar-result.json'), // resultado do agendamento manual por id → painel consulta
   humano: path.join(DIR, 'sofia-humano.json'), // conversas sob controle humano (Sofia não responde) — lido pela Sofia
   humanoLock: path.join(DIR, 'sofia-humano-lock.txt'), // minutos que uma conversa assumida fica travada p/ outros atendentes (e a Sofia fora) — painel escreve, sofia.ts lê
   humanoLog: path.join(DIR, 'sofia-humano-log.jsonl'), // histórico de assumir/devolver por conversa — mostrado no timeline do painel
@@ -384,6 +386,25 @@ function enfileirarResposta(chave, jid, texto, fotoArquivo, porNome) {
   const linha = JSON.stringify({ chave, jid, texto: String(texto || ''),
     fotoArquivo: fotoArquivo || '', porNome: String(porNome || ''), em: Date.now() }) + '\n';
   fs.appendFileSync(F.respostas, linha, 'utf8');
+}
+
+// Agendamento MANUAL (atendente pelo painel): enfileira o pedido; o listener agenda
+// no EVO (mesma rota da SoFIA) e grava o resultado por id. Devolve o id p/ consulta.
+function enfileirarAgendamento({ chave, telefone, nome, email, when, por } = {}) {
+  const id = String(Date.now()) + Math.random().toString(16).slice(2, 8);
+  const linha = JSON.stringify({
+    id,
+    chave: String(chave || '').replace(/\D/g, ''),
+    telefone: String(telefone || chave || '').replace(/\D/g, ''),
+    nome: String(nome || '').trim(), email: String(email || '').trim(),
+    when: String(when || '').trim(), por: String(por || '').trim(), em: Date.now(),
+  }) + '\n';
+  fs.appendFileSync(F.agendarInbox, linha, 'utf8');
+  return id;
+}
+function lerAgendamentoResult(id) {
+  try { const o = JSON.parse(fs.readFileSync(F.agendarResult, 'utf8')); return (o && typeof o === 'object') ? (o[id] || null) : null; }
+  catch (_) { return null; }
 }
 
 // Salva a foto anexada numa resposta manual (dataURL base64) em
@@ -821,6 +842,6 @@ module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerHumanoLog, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, enfileirarAgendamento, lerAgendamentoResult, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerHumanoLog, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, lerRascunhoCampanha, lerLidStats, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

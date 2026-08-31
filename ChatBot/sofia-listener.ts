@@ -23,7 +23,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
-import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirConversa, gerarFollowup, classificarIntencaoTags } from "./sofia";
+import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirConversa, gerarFollowup, classificarIntencaoTags, agendarManual } from "./sofia";
 
 // Pasta dos arquivos da Sofia. Por padrão, a pasta de trabalho (comportamento
 // atual). Se SOFIA_DIR estiver definida, usa ela — permite guardar prompt/estado
@@ -1011,6 +1011,57 @@ async function processarRespostas() {
   processandoResp = false;
 }
 setInterval(() => { processarRespostas().catch(() => {}); }, 1500);
+
+// ── Agendamento MANUAL pelo painel (atendente) ──────────────────────────────
+// O painel enfileira pedidos em sofia-agendar-inbox.jsonl; aqui agendamos no EVO
+// (mesma rota da SoFIA) e gravamos o resultado por id em sofia-agendar-result.json,
+// que o painel consulta. Registra também um marcador na conversa.
+const AGENDAR_INBOX = path.join(DIR, "sofia-agendar-inbox.jsonl");
+const AGENDAR_RESULT = path.join(DIR, "sofia-agendar-result.json");
+let processandoAgendar = false;
+function lerAgendarResult(): Record<string, any> { try { const o = JSON.parse(fs.readFileSync(AGENDAR_RESULT, "utf8")); return (o && typeof o === "object") ? o : {}; } catch { return {}; } }
+function gravarAgendarResult(mapa: Record<string, any>) {
+  // Mantém só os ~200 mais recentes para o arquivo não crescer.
+  const ids = Object.keys(mapa).sort((a, b) => (mapa[a]?.em || 0) - (mapa[b]?.em || 0));
+  while (ids.length > 200) { delete mapa[ids.shift() as string]; }
+  try { fs.writeFileSync(AGENDAR_RESULT, JSON.stringify(mapa), "utf8"); } catch {}
+}
+async function processarAgendarInbox() {
+  if (processandoAgendar) return;
+  let tam = 0; try { tam = fs.statSync(AGENDAR_INBOX).size; } catch { return; }
+  if (!tam) return;
+  processandoAgendar = true;
+  const tmp = AGENDAR_INBOX + "." + Date.now() + ".proc";
+  let linhas: string[] = [];
+  try { fs.renameSync(AGENDAR_INBOX, tmp); linhas = fs.readFileSync(tmp, "utf8").split("\n").map((l) => l.trim()).filter(Boolean); fs.rmSync(tmp, { force: true }); }
+  catch (e: any) { log("erro lendo agendar-inbox: " + (e?.message || e)); processandoAgendar = false; return; }
+  const mapa = lerAgendarResult();
+  for (const linha of linhas) {
+    let op: any; try { op = JSON.parse(linha); } catch { continue; }
+    const id = String(op?.id || "");
+    const chave = String(op?.chave || "");
+    const telefone = String(op?.telefone || chave).replace(/\D/g, "");
+    if (!id) continue;
+    try {
+      const r: any = await agendarManual(telefone, String(op?.nome || ""), String(op?.email || ""), String(op?.when || ""));
+      mapa[id] = { ...r, em: Date.now() };
+      if (r && r.ok) {
+        const por = String(op?.por || "").trim();
+        registrarInbox(chave || telefone, telefone, "", "humano", "📅 Aula experimental agendada no EVO — " + String(r.when || op?.when || ""), undefined, por);
+        log(`agendamento manual OK (${por || "painel"}): ${op?.nome} em ${r.when}`);
+      } else {
+        log(`agendamento manual falhou: ${JSON.stringify(r).slice(0, 160)}`);
+      }
+    } catch (e: any) {
+      mapa[id] = { erro: true, detalhe: e?.message || String(e), em: Date.now() };
+      log("agendamento manual erro: " + (e?.message || e));
+    }
+  }
+  gravarAgendarResult(mapa);
+  processandoAgendar = false;
+}
+setInterval(() => { processarAgendarInbox().catch(() => {}); }, 1200);
+
 setInterval(() => { try { varrerSessoes(); } catch {} }, 60 * 1000); // encerra + resume sessões paradas
 
 // Fotos que você anexou nas respostas ficam em humano-fotos/ para o painel exibir

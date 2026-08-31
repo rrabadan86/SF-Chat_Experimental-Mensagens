@@ -1089,6 +1089,15 @@ async function enviarParaSeuSistema(telefone: string, resumo: ResumoAgendamento)
   return bookNoEvo(telefone, resumo.nome_completo, resumo.email, `${resumo.dia} às ${resumo.hora}`);
 }
 
+// Agendamento MANUAL (atendente pelo painel): mesma rota do EVO que a SoFIA usa
+// (cadastra + marca). Devolve o resultado real para o painel mostrar.
+export async function agendarManual(telefone: string, nome: string, email: string, when: string): Promise<ResultadoAgendamento> {
+  const tel = String(telefone || "").replace(/\D/g, "");
+  if (!tel) return { erro: true, detalhe: "telefone inválido" };
+  if (!String(nome || "").trim() || !String(email || "").trim() || !String(when || "").trim()) return { erro: true, detalhe: "faltam nome, e-mail ou data/horário" };
+  return bookNoEvo(tel, String(nome).trim(), String(email).trim(), String(when).trim());
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // 7) TESTES
 // ══════════════════════════════════════════════════════════════════════════

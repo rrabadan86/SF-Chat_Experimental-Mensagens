@@ -291,7 +291,7 @@ function sofiaHref(sess) {
 // (marcar tags/salvar contato a partir de uma conversa) vale para Conversas OU Contatos.
 function sofiaRotaPermitida(sess, url) {
   const has = k => (sess.telas || []).includes(k);
-  if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto' || url === '/sofia/conversas/encerrar') return has('sofia_conversas');
+  if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto' || url === '/sofia/conversas/encerrar' || url === '/sofia/agendar' || url === '/sofia/agendar/status') return has('sofia_conversas');
   if (url === '/sofia/importar' || url === '/sofia/importar/status') return has('sofia_conversas') || has('sofia_config');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
   if (url === '/sofia/contatos/bloquear') return has('sofia_conversas') || has('sofia_contatos'); // bloquear vem tb do chat (Conversas)
@@ -1882,7 +1882,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     </div>
   </div>
 <script>
-  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ultimoInboxHtml='', ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', buscaTexto='', quietoFiltro=false, atencaoFiltro=false, tagEdAberto=false, ncNome='', ncDirty=false, ncTodas=[];
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ultimoInboxHtml='', ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', buscaTexto='', quietoFiltro=false, atencaoFiltro=false, tagEdAberto=false, agAberto=false, ncNome='', ncDirty=false, ncTodas=[];
   // Atalho vindo de Contatos: ?chat=<telefone> abre a conversa correspondente.
   var alvoChat=(new URLSearchParams(location.search).get('chat')||'').replace(/\\D/g,''), alvoAplicado=false;
   function mesmoTel(a,b){ a=String(a||'').replace(/\\D/g,''); b=String(b||'').replace(/\\D/g,''); if(!a||!b) return false; if(a===b) return true; var la=a.slice(-8), lb=b.slice(-8); return la.length===8 && la===lb; }
@@ -2003,6 +2003,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       ? '<button type="button" disabled title="Assumida por '+escH(donoTxt)+' — livre em ~'+restaMin+' min" style="padding:5px 10px;font-size:.9rem;white-space:nowrap;opacity:.55;cursor:not-allowed">🔒</button>'
       : '<button type="button" onclick="toggleHumano()" class="'+(donoMeu?'save':'reset')+'" title="'+(donoMeu?'Devolver à SoFIA (ela volta a responder)':'Assumir a conversa (você atende — trava por '+LOCK_MIN+' min)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">'+(donoMeu?'🤖':'🧑')+'</button>';
     var btnInt='<button type="button" onclick="abrirInteracoes(selecionada)" class="reset" title="Interações" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">📊</button>';
+    var btnAgendar='<button type="button" onclick="toggleAgendar()" class="'+(agAberto?'save':'reset')+'" title="Agendar aula experimental no EVO (cadastra + marca, igual a SoFIA)" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">📅</button>';
     var encM=!!c.enc; // encerrada AGORA (cadeado à mão / automático por tag)
     // Encerrar é de mão única: 🔒 fecha. Já fechada → cadeado fechado desabilitado
     // (só indica o estado). A aluna voltando a escrever reabre a conversa sozinho.
@@ -2016,7 +2017,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     var header='<div class="chat-head" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
       +btnVoltar+chAv
       +'<div style="flex:1 1 auto;min-width:0"><div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(c.nome||'(sem nome)')+selo+'</div><div class="quando" style="margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(fmtTel(k))+'</div></div>'
-      +'<div class="chat-acts" style="display:flex;gap:6px;align-items:center;flex:none">'+agSelo+btnInt+btnEnc+btnBloq+pill+'</div></div>';
+      +'<div class="chat-acts" style="display:flex;gap:6px;align-items:center;flex:none">'+agSelo+btnAgendar+btnInt+btnEnc+btnBloq+pill+'</div></div>';
     // Linha de tags recolhível — o editor completo só aparece ao clicar em "editar".
     var mini=function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:1px 8px;font-size:.7rem;margin:0 4px 0 0">'+escH(t)+'</span>';};
     var resumo = ncSel.length ? ncSel.map(mini).join('') : '<span class="quando" style="margin:0">sem tags</span>';
@@ -2054,13 +2055,46 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       +'<span class="quando" style="margin:0">foto anexada</span> '
       +'<a href="javascript:void(0)" onclick="msgFotoLimpa()" class="quando" style="margin:0;text-decoration:underline">remover</a></div>'
       +'<div id="msgStatus" class="quando" style="margin-top:4px;min-height:14px;font-size:.75rem"></div>';
-    chat.innerHTML = header+tagLinha+editor+'<div id="bolhas" style="flex:1;min-height:120px;overflow:auto;padding-right:4px">'+bolhas+fim+'</div>'+composer;
+    var agBox = agAberto ? ('<div style="margin:0 0 12px;padding:12px;background:#f4fbfb;border:1px solid #cfe8e7;border-radius:10px">'
+      +'<div style="font-weight:700;font-size:.9rem;margin-bottom:8px">📅 Agendar aula experimental no EVO</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap"><input id="agNome" placeholder="Nome completo" value="'+escH(c.nome||'')+'" style="flex:1 1 180px;min-width:0;font-size:.85rem"><input id="agEmail" type="email" placeholder="E-mail" style="flex:1 1 180px;min-width:0;font-size:.85rem"></div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center"><input id="agData" type="date" style="font-size:.85rem"><input id="agHora" type="time" step="900" style="font-size:.85rem"><button type="button" class="save" onclick="enviarAgendamento()" style="padding:7px 14px">Agendar no EVO</button><a href="javascript:void(0)" onclick="toggleAgendar()" class="quando" style="margin:0;text-decoration:underline">cancelar</a></div>'
+      +'<div id="agMsg" class="quando" style="margin:8px 0 0;min-height:16px"></div>'
+      +'<p class="quando" style="margin:6px 0 0">Cadastra e marca no EVO, igual a SoFIA. Turma cheia → mostra alternativas.</p></div>') : '';
+    chat.innerHTML = header+tagLinha+editor+agBox+'<div id="bolhas" style="flex:1;min-height:120px;overflow:auto;padding-right:4px">'+bolhas+fim+'</div>'+composer;
     if(tagEdAberto){ ncRenderTags(); ncAtualizaStatus(); }
     var ta=document.getElementById('msgTxt'); if(ta) ta.value=rascunhos[k]||'';
     msgFotoMostra(k); // reexibe a prévia se havia foto anexada nessa conversa
     var b=document.getElementById('bolhas'); if(b) b.scrollTop=b.scrollHeight;
   }
   function toggleTagEd(){ tagEdAberto=!tagEdAberto; if(selecionada){ ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[selecionada],selecionada); } }
+  function toggleAgendar(){ agAberto=!agAberto; if(selecionada){ ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[selecionada],selecionada); } }
+  function enviarAgendamento(){
+    var k=selecionada; if(!k) return;
+    var nome=(document.getElementById('agNome').value||'').trim();
+    var email=(document.getElementById('agEmail').value||'').trim();
+    var data=(document.getElementById('agData').value||'').trim();
+    var hora=(document.getElementById('agHora').value||'').trim();
+    var st=document.getElementById('agMsg');
+    if(!nome||!email||!data||!hora){ if(st)st.textContent='Preencha nome, e-mail, data e horário.'; return; }
+    var when=data+' '+hora; // AAAA-MM-DD HH:MM (o EVO/form entende)
+    if(st)st.textContent='⏳ Agendando no EVO…';
+    fetch('/sofia/agendar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,nome:nome,email:email,when:when})})
+      .then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok||!j.id){ if(st)st.textContent='❌ '+((j&&j.erro)||'falha ao enviar'); return; }
+        var n=0;
+        (function poll(){
+          n++;
+          fetch('/sofia/agendar/status?id='+encodeURIComponent(j.id),{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){
+            var res=s&&s.res;
+            if(!res){ if(n>40){ if(st)st.textContent='⏳ Ainda processando… confira em instantes.'; return; } setTimeout(poll,1500); return; }
+            if(res.ok){ if(st)st.innerHTML='✅ Agendada no EVO para <b>'+escH(res.when||when)+'</b>!'; setTimeout(function(){ agAberto=false; if(selecionada){ ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[selecionada],selecionada); } },2000); }
+            else if(res.lotada){ if(st)st.innerHTML='⚠️ Turma cheia nesse horário. Alternativas: '+escH((res.alternativas||[]).join('  ·  ')||'—'); }
+            else { if(st)st.textContent='❌ Não consegui agendar: '+(res.detalhe||'erro no EVO'); }
+          }).catch(function(){ if(n>40){ if(st)st.textContent='❌ erro de rede'; return; } setTimeout(poll,1500); });
+        })();
+      }).catch(function(){ if(st)st.textContent='❌ erro de rede'; });
+  }
   function toggleHumano(){
     var k=selecionada; if(!k) return;
     var c=ultimoData[k]||{};
@@ -2239,7 +2273,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var cc=ultimoData[selecionada], nn=(cc.msgs?cc.msgs.length:0);
       // Só re-renderiza o chat quando muda de conversa, chega mensagem nova ou muda
       // o controle humano — assim o refresh de 4s não apaga o que você está digitando.
-      if(ultimoRender.chave!==selecionada || ultimoRender.n!==nn || ultimoRender.humano!==!!cc.humano){ renderChat(cc, selecionada); ultimoRender={chave:selecionada,n:nn,humano:!!cc.humano}; }
+      if(!agAberto && (ultimoRender.chave!==selecionada || ultimoRender.n!==nn || ultimoRender.humano!==!!cc.humano)){ renderChat(cc, selecionada); ultimoRender={chave:selecionada,n:nn,humano:!!cc.humano}; }
     }
   }
   function mudarPag(d){ pagina+=d; renderInbox(ultimoData); }
@@ -3889,7 +3923,7 @@ function paginaPerfis(aviso, erro, view) {
   const rotAcao = {
     'campanha.criar': '📣 Criou campanha', 'campanha.iniciar': '▶️ Iniciou campanha', 'campanha.retomar': '▶️ Retomou campanha',
     'campanha.pausar': '⏸️ Pausou campanha', 'campanha.cancelar': '🚫 Cancelou campanha', 'campanha.excluir': '🗑️ Excluiu campanha',
-    'conversa.assumir': '🧑 Assumiu conversa', 'conversa.devolver': '🤖 Devolveu à SoFIA', 'conversa.encerrar': '🔒 Encerrou conversa',
+    'conversa.assumir': '🧑 Assumiu conversa', 'conversa.devolver': '🤖 Devolveu à SoFIA', 'conversa.encerrar': '🔒 Encerrou conversa', 'conversa.agendar': '📅 Agendou no EVO',
     'contato.bloquear': '🚫 Bloqueou contato', 'contato.desbloquear': '✅ Desbloqueou contato',
     'sofia.ligar': '▶️ Ligou a SoFIA', 'sofia.pausar': '⏸️ Pausou a SoFIA', 'sofia.reiniciar': '🔄 Reiniciou a SoFIA',
     'sofia.desconectar': '📴 Desconectou WhatsApp da SoFIA', 'sofia.config': '⚙️ Salvou configuração/prompt',
@@ -4980,6 +5014,29 @@ const server = http.createServer((req, res) => {
       try { sofia.enfileirarResposta(chave, jid, texto, fotoArquivo, quem); res.end(JSON.stringify({ ok: true })); }
       catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
+  }
+  // Agendamento MANUAL no EVO (atendente pelo painel) — enfileira; o listener agenda.
+  if (req.method === 'POST' && url === '/sofia/agendar') {
+    const quem = (sess && sess.usuario) ? sess.usuario : '';
+    return lerCorpo(req, 1e5, corpo => {
+      let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      const chave = String(d.chave || '').replace(/\D/g, '');
+      const nome = String(d.nome || '').trim(), email = String(d.email || '').trim(), when = String(d.when || '').trim();
+      if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
+      if (!nome || !email || !when) return res.end(JSON.stringify({ ok: false, erro: 'preencha nome, e-mail e data/horário' }));
+      try {
+        const id = sofia.enfileirarAgendamento({ chave, telefone: chave, nome, email, when, por: quem });
+        try { auditoria.registrar(quem, 'conversa.agendar', chave, when); } catch (_) {}
+        res.end(JSON.stringify({ ok: true, id }));
+      } catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
+    });
+  }
+  if (req.method === 'GET' && url === '/sofia/agendar/status') {
+    const id = (new URLSearchParams(req.url.split('?')[1] || '')).get('id') || '';
+    let r = null; try { r = sofia.lerAgendamentoResult(id); } catch (_) {}
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ ok: true, res: r }));
   }
   // Serve a foto que VOCÊ enviou numa resposta manual (mostrada na bolha do chat).
   // Os arquivos ficam em ChatBot/humano-fotos/ (mesma máquina do listener).
