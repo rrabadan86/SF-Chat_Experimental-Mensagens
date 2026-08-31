@@ -37,6 +37,7 @@ const F = {
   respostas: path.join(DIR, 'sofia-respostas.jsonl'), // fila de respostas do painel → listener envia
   humano: path.join(DIR, 'sofia-humano.json'), // conversas sob controle humano (Sofia não responde) — lido pela Sofia
   humanoLock: path.join(DIR, 'sofia-humano-lock.txt'), // minutos que uma conversa assumida fica travada p/ outros atendentes (e a Sofia fora) — painel escreve, sofia.ts lê
+  humanoLog: path.join(DIR, 'sofia-humano-log.jsonl'), // histórico de assumir/devolver por conversa — mostrado no timeline do painel
   bloqueios: path.join(DIR, 'sofia-bloqueios.json'), // números bloqueados (Sofia ignora) — painel escreve, listener lê
   modelo: path.join(DIR, 'sofia-modelo.json'), // modelo de IA (conversa/extração) — painel escreve, sofia.ts lê no boot
   transcricao: path.join(DIR, 'sofia-transcricao.txt'), // liga/desliga transcrição de áudio — painel escreve, listener lê
@@ -665,10 +666,47 @@ function setControleHumano(chave, ativo, por) {
   const o = lerHumano();
   const corteMs = _humLockMs();
   const agora = Date.now();
-  for (const k of Object.keys(o)) if (!(_humEm(o[k]) + corteMs > agora)) delete o[k];
+  // Poda registros expirados — e REGISTRA no histórico da conversa que a SoFIA
+  // reassumiu sozinha (a trava venceu), para aparecer no timeline do painel.
+  for (const k of Object.keys(o)) {
+    if (!(_humEm(o[k]) + corteMs > agora)) {
+      const dono = (o[k] && typeof o[k] === 'object') ? String(o[k].por || '') : '';
+      registrarHumanoLog(k, 'devolver', dono, _humEm(o[k]) + corteMs, true); // devolvida por expiração
+      delete o[k];
+    }
+  }
+  const estavaAtivo = !!(o[chave] && _humEm(o[chave]) + corteMs > agora);
   if (ativo) o[chave] = { por: String(por || '').trim(), em: agora }; else delete o[chave];
   fs.writeFileSync(F.humano, JSON.stringify(o), 'utf8');
+  // Marca a AÇÃO do atendente no histórico (assumir / devolver) — só nas transições.
+  if (ativo && !estavaAtivo) registrarHumanoLog(chave, 'assumir', por, agora, false);
+  else if (!ativo && estavaAtivo) registrarHumanoLog(chave, 'devolver', por, agora, false);
   return !!ativo;
+}
+// Histórico de controle humano (assumiu/devolveu) por conversa — mostrado no timeline
+// do painel. Uma linha JSON por evento; o painel lê os últimos por chave.
+function registrarHumanoLog(chave, acao, por, em, auto) {
+  try {
+    const d = String(chave || '').replace(/\D/g, '');
+    if (!d) return;
+    fs.appendFileSync(F.humanoLog, JSON.stringify({ chave: d, acao, por: String(por || '').trim(), em: Number(em) || Date.now(), auto: !!auto }) + '\n', 'utf8');
+  } catch (_) { /* best-effort */ }
+}
+// Devolve os últimos eventos por conversa: { <chave-8díg>: [ {acao,por,em,auto}, ... ] }.
+function lerHumanoLog() {
+  const mapa = {};
+  let linhas = [];
+  try { linhas = fs.readFileSync(F.humanoLog, 'utf8').split('\n'); } catch (_) { return mapa; }
+  if (linhas.length > 6000) linhas = linhas.slice(-6000); // performance
+  for (const l of linhas) {
+    const s = l.trim(); if (!s) continue;
+    let o; try { o = JSON.parse(s); } catch (_) { continue; }
+    const k8 = String(o.chave || '').replace(/\D/g, '').slice(-8);
+    if (!k8) continue;
+    (mapa[k8] = mapa[k8] || []).push({ acao: o.acao, por: o.por || '', em: Number(o.em) || 0, auto: !!o.auto });
+  }
+  for (const k in mapa) mapa[k] = mapa[k].slice(-12); // no máx 12 eventos por conversa
+  return mapa;
 }
 
 // ── Custo da IA ─────────────────────────────────────────────────────────────
@@ -783,6 +821,6 @@ module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerHumanoLog, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, lerRascunhoCampanha, lerLidStats, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

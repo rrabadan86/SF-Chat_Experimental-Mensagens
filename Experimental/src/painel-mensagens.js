@@ -1763,7 +1763,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   const corpo =`<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('conversas')}
-    <div class="sec-t" data-nosec="1">Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span><small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
+    <div class="sec-t" id="conv-head" data-nosec="1">Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span><small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
     <style>
       .inbox-grid{display:grid;grid-template-columns:288px minmax(0,1fr);gap:14px;align-items:start}
       .inbox-grid>div{min-width:0}
@@ -1801,6 +1801,8 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
            ficam com a 1ª linha inteira (senão o nome sai como "Glória …"). */
         .chat-head{flex-wrap:wrap}
         .chat-head .chat-acts{flex-basis:100%;justify-content:flex-end;margin-top:5px}
+        /* Com a conversa aberta, o título "Conversas da SoFIA…" só ocupa espaço. */
+        body.ver-conversa #conv-head{display:none}
       }
       /* Separador de dia na lista de conversas — chip centralizado que "gruda" no topo */
       .convDiaSep{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:9px;margin:8px 2px 7px;pointer-events:none}
@@ -1930,7 +1932,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     // Achamos esse índice para pôr a divisória no lugar certo (depois da despedida).
     var idxNova=-1;
     if(c.encEm){ for(var _j=0;_j<msgs.length;_j++){ if(msgs[_j].autor==='aluna' && (msgs[_j].em||0)>c.encEm){ idxNova=_j; break; } } }
-    var bolhas = msgs.map(function(m,i){
+    var itensMsg = msgs.map(function(m,i){
       var sep='';
       if(i===idxNova) sep=divisorHtml('🔒 Encerrada '+(encPorTxt?'por '+encPorTxt:'manualmente')+' · nova conversa');
       else if(i>0){
@@ -1944,8 +1946,22 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var selo = ehFup ? ' <span style="display:inline-block;font-size:.6rem;font-weight:700;color:#b45309;background:#ffedd5;border-radius:6px;padding:1px 6px;margin-left:4px">↩︎ follow-up</span>' : '';
       var img = m.foto ? '<img src="/sofia/humano-foto?arq='+encodeURIComponent(m.foto)+'" alt="foto enviada" style="display:block;max-width:100%;max-height:220px;border-radius:9px;margin:'+(m.texto?'6px 0 0':'2px 0 0')+';cursor:pointer" onclick="window.open(this.src,\\'_blank\\')">' : '';
       var corpoMsg = (m.texto?'<div style="white-space:pre-wrap">'+escH(m.texto)+'</div>':'') + img;
-      return sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna, m.por))+' · '+fmtHora(m.em)+selo+'</div>'+corpoMsg+'</div></div>';
-    }).join('');
+      return {em:(m.em||0), html: sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna, m.por))+' · '+fmtHora(m.em)+selo+'</div>'+corpoMsg+'</div></div>'};
+    });
+    // Marcadores de controle humano (assumiu/devolveu) intercalados por horário.
+    function evtDivisor(e){
+      var quem=e.por?escH(e.por):'';
+      if(e.acao==='assumir') return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cdeadd"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#1f7a4d;background:#e7f6ec;border-radius:999px;padding:2px 11px">🙋 Conversa assumida por '+(quem||'atendente')+'</span><span style="flex:1;height:1px;background:#cdeadd"></span></div>';
+      return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cfe4e3"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#0b6f72;background:#e4efee;border-radius:999px;padding:2px 11px">🤖 Devolvida à SoFIA'+(quem?' por '+quem:(e.auto?' — trava expirou':''))+'</span><span style="flex:1;height:1px;background:#cfe4e3"></span></div>';
+    }
+    var evts=(c.humanoLog||[]).slice().sort(function(a,b){return (a.em||0)-(b.em||0);});
+    var out=[], ei=0;
+    for(var mi=0; mi<itensMsg.length; mi++){
+      while(ei<evts.length && (evts[ei].em||0) <= itensMsg[mi].em){ out.push(evtDivisor(evts[ei])); ei++; }
+      out.push(itensMsg[mi].html);
+    }
+    while(ei<evts.length){ out.push(evtDivisor(evts[ei])); ei++; }
+    var bolhas = out.join('');
     var fim = encerrada(c) ? '<div style="text-align:center;margin:10px 0 2px"><span style="display:inline-block;background:#f3eaea;color:#a15a5a;border:1px solid #e6cfcf;border-radius:999px;padding:3px 12px;font-size:.72rem;font-weight:700">🔒 Encerrada '+(encPorTxt?'por '+encPorTxt:'manualmente')+' · a SoFIA recomeça do zero se a aluna voltar</span></div>' : '';
     var hum = !!c.humano;                                   // alguém no controle AGORA (trava ativa)
     var donoMeu = hum && c.humanoPor===MEU_USUARIO;          // EU assumi
@@ -4789,6 +4805,7 @@ const server = http.createServer((req, res) => {
     try { for (const k in obj) obj[k].bloq = sofia.estaBloqueado(k); } catch (_) {} // contato bloqueado?
     try { for (const k in obj) obj[k].enc = sofia.estaEncerrada(k, sofia.ultimaAlunaEm(obj[k])); } catch (_) {} // encerrada à mão (cadeado)? — mede pela última msg DA ALUNA, para a despedida da SoFIA depois do fechamento não reabrir
     try { const em = sofia.lerEncerradas() || {}; for (const k in obj) { const v = em[k]; const isObj = v && typeof v === 'object'; obj[k].encEm = isObj ? (Number(v.em) || 0) : (Number(v) || 0); obj[k].encPor = isObj ? String(v.por || '') : ''; } } catch (_) {} // instante + autor do encerramento manual (p/ a divisória)
+    try { const hl = sofia.lerHumanoLog() || {}; for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].humanoLog = hl[l8] || []; } } catch (_) {} // histórico assumiu/devolveu (para o timeline)
     try { for (const k in obj) obj[k].fuEspera = fuEsperando[k] || ''; } catch (_) {} // follow-up pronto, segurando pelo horário?
     try { const at = sofia.lerAtencao() || {}; const a8 = {}; for (const kk in at) a8[String(kk).replace(/\D/g, '').slice(-8)] = 1; for (const k in obj) obj[k].atencao = !!(at[k] || a8[String(k).replace(/\D/g, '').slice(-8)]); } catch (_) {} // pediu atendimento humano?
     try { const agSet = new Set((fuLerJson(FU_AGENDOU_FILE, []) || []).map(x => String(x).replace(/\D/g, '').slice(-8))); let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {} for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].agendou = agSet.has(l8) || (obj[k].tagsContato || []).some(t => agTags.includes(t)); } } catch (_) {} // agendou aula experimental? (mesma lógica do follow-up)
