@@ -2747,7 +2747,7 @@ function campListHTML(filtro = {}) {
     const est = (c.status === 'pronta' || c.status === 'pausada' || c.status === 'enviando') ? estimarCampanha(c) : null;
     const podeIniciar = (c.status === 'pronta' || c.status === 'pausada') && (c.pendentes || []).length;
     const podePausar = c.status === 'enviando';
-    const variacoes = (c.variacoes || []).slice(0, 12).map((v, i) => `<div class="varItem" data-cid="${esc(c.id)}" data-idx="${i}" style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--linha);font-size:var(--fs-sm)"><b style="color:var(--teal-esc);flex:none">#${i + 1}</b><span class="varTxt" style="flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere">${esc(v)}</span><a href="javascript:void(0)" class="varEdit" onclick="editarVar(this)" title="Editar esta variação" style="flex:none;text-decoration:none;font-size:.95rem">✏️</a></div>`).join('');
+    const variacoes = (c.variacoes || []).slice(0, 12).map((v, i) => `<div class="varItem" data-cid="${esc(c.id)}" data-idx="${i}" style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--linha);font-size:var(--fs-sm)"><b style="color:var(--teal-esc);flex:none">#${i + 1}</b><span class="varTxt" style="flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere">${esc(v)}</span><a href="javascript:void(0)" class="varEdit" onclick="editarVar(this)" title="Editar esta variação" style="flex:none;text-decoration:none;font-size:.95rem">✏️</a><a href="javascript:void(0)" class="varDel" onclick="excluirVar(this)" title="Excluir esta variação" style="flex:none;text-decoration:none;font-size:.95rem">🗑️</a></div>`).join('');
     const btn = (acao, rot, cls) => `<form method="POST" action="/sofia/campanhas/${acao === 'excluir' ? 'excluir' : 'controle'}"${acao === 'cancelar' || acao === 'excluir' ? ` onsubmit="return confirm('${acao === 'excluir' ? 'Excluir esta campanha do painel?' : 'Cancelar o envio desta campanha?'}')"` : ''} style="display:inline"><input type="hidden" name="id" value="${esc(c.id)}">${acao !== 'excluir' ? `<input type="hidden" name="acao" value="${acao}">` : ''}<button type="submit" class="${cls}" style="padding:5px 12px;font-size:var(--fs-sm)">${rot}</button></form>`;
     return `<div class="card">
       <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
@@ -3225,6 +3225,19 @@ function paginaSofiaCampanhas(aviso, erro) {
     })();
     // Editar uma variação de uma campanha já criada (inline; pausa o auto-refresh).
     window.campEditando=false;
+    // Excluir uma variação: a campanha passa a trabalhar com as restantes.
+    function excluirVar(a){
+      if(window.campEditando) return;
+      var item=a.closest('.varItem'); if(!item) return;
+      var cid=item.getAttribute('data-cid'), idx=item.getAttribute('data-idx');
+      var box=item.parentNode; var total=box?box.querySelectorAll('.varItem').length:0;
+      if(total<=1){ alert('A campanha precisa de pelo menos 1 variação.'); return; }
+      if(!confirm('Excluir esta variação? A campanha passa a usar '+(total-1)+' variações.')) return;
+      window.campEditando=true; // pausa o auto-refresh enquanto exclui
+      fetch('/sofia/campanhas/variacao-excluir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:cid,index:+idx})})
+        .then(function(r){return r.json();}).then(function(j){ window.campEditando=false; if(j&&j.ok){ if(window.campForcar) window.campForcar(); } else { alert('❌ '+((j&&j.erro)||'falha ao excluir')); } })
+        .catch(function(){ window.campEditando=false; alert('❌ erro de rede'); });
+    }
     function editarVar(a){
       if(window.campEditando) return;
       var item=a.closest('.varItem'); if(!item) return;
@@ -5082,6 +5095,21 @@ const server = http.createServer((req, res) => {
       if (!id || !Number.isInteger(index) || index < 0) return res.end(JSON.stringify({ ok: false, erro: 'Dados inválidos.' }));
       if (!texto) return res.end(JSON.stringify({ ok: false, erro: 'A variação não pode ficar vazia.' }));
       try { sofia.opCampanha({ op: 'editar-variacao', id, index, texto }); } catch (e) { return res.end(JSON.stringify({ ok: false, erro: 'Falha ao salvar.' })); }
+      res.end(JSON.stringify({ ok: true }));
+    });
+  }
+  // Excluir UMA variação de uma campanha (id + índice). A campanha passa a usar as restantes.
+  if (req.method === 'POST' && url === '/sofia/campanhas/variacao-excluir') {
+    const quem = (sess && sess.usuario) ? sess.usuario : '';
+    return lerCorpo(req, 1e5, corpo => {
+      let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      const id = String(d.id || '').trim();
+      const index = parseInt(d.index, 10);
+      if (!id || !Number.isInteger(index) || index < 0) return res.end(JSON.stringify({ ok: false, erro: 'Dados inválidos.' }));
+      let nomeC = ''; try { const c = (sofia.lerCampanhas() || []).find(x => String(x.id) === String(id)); if (c) nomeC = c.nome || ''; } catch (_) {}
+      try { sofia.opCampanha({ op: 'excluir-variacao', id, index }); } catch (e) { return res.end(JSON.stringify({ ok: false, erro: 'Falha ao excluir.' })); }
+      try { auditoria.registrar(quem, 'campanha.variacao-excluir', nomeC || id, '#' + (index + 1)); } catch (_) {}
       res.end(JSON.stringify({ ok: true }));
     });
   }

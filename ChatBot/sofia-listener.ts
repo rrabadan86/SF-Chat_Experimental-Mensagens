@@ -1277,6 +1277,14 @@ async function processarCampInbox() {
           c.variacoes[idx] = txt; c.atualizadoEm = Date.now(); agendarSalvarCampanhas();
           log(`campanha "${c.nome}": variação #${idx + 1} editada.`);
         }
+      } else if (op.op === "excluir-variacao" && op.id) {
+        // Excluir UMA variação; nunca deixa a campanha sem nenhuma.
+        const c = campanhas.find((x) => x.id === String(op.id));
+        const idx = Number(op.index);
+        if (c && Array.isArray(c.variacoes) && Number.isInteger(idx) && idx >= 0 && idx < c.variacoes.length && c.variacoes.length > 1) {
+          c.variacoes.splice(idx, 1); c.atualizadoEm = Date.now(); agendarSalvarCampanhas();
+          log(`campanha "${c.nome}": variação #${idx + 1} excluída (restam ${c.variacoes.length}).`);
+        }
       } else if (op.op === "rascunho" && op.id) {
         // Escrever uma frase de campanha a partir da instrução do painel. O painel
         // faz poll do resultado (campanha-rascunhos.json) até ficar pronto.
