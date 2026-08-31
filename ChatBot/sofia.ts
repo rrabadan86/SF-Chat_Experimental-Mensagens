@@ -497,10 +497,29 @@ function conversaAssumida(telefone: string): boolean {
   return true;
 }
 
-// A Sofia deve responder ESTA conversa agora? (ligada, sem controle humano e sem
-// handoff por tempo). Usado pelo listener p/ decidir o aviso de "só texto" no áudio.
+// ── "NÃO RESPONDER" (silenciar por número) ───────────────────────────────────
+// Números que a SoFIA NUNCA responde sozinha — mesmo ligada e sem controle humano.
+// Ela ainda RECEBE (aparece nas Conversas), roda as tags/automações e pode ser
+// alvo de CAMPANHAS; só não gera resposta automática nem follow-up. O painel grava
+// a lista (sofia-nao-responder.json, só dígitos) e o processo lê aqui a cada mensagem.
+// Casa pelos ÚLTIMOS 8 dígitos, tolerando variação de DDI 55 / 9º dígito.
+const NAORESP_FILE = path.join(BASE_DIR, "sofia-nao-responder.json");
+function estaNaoResponder(telefone: string): boolean {
+  try {
+    const arr = JSON.parse(fs.readFileSync(NAORESP_FILE, "utf-8"));
+    if (!Array.isArray(arr)) return false;
+    const alvo = String(telefone || "").replace(/\D/g, "");
+    if (!alvo) return false;
+    const a8 = alvo.slice(-8);
+    return arr.some((x: any) => { const d = String(x).replace(/\D/g, ""); return d.length >= 8 && d.slice(-8) === a8; });
+  } catch { return false; }
+}
+
+// A Sofia deve responder ESTA conversa agora? (ligada, fora da lista "não responder",
+// sem controle humano e sem handoff por tempo). Usado pelo listener p/ o aviso de
+// "só texto" no áudio e para pular o follow-up.
 export function deveResponder(telefone: string): boolean {
-  return sofiaAtiva() && !controleHumanoAtivo(telefone) && !conversaAssumida(telefone);
+  return sofiaAtiva() && !estaNaoResponder(telefone) && !controleHumanoAtivo(telefone) && !conversaAssumida(telefone);
 }
 
 // Registra uma mensagem na memória SEM a Sofia responder. Usado quando ela está
@@ -636,6 +655,13 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
   // Retorna string vazia — o webhook/listener trata isso como "não enviar nada".
   if (!sofiaAtiva()) {
     console.log(`🔕 Sofia DESLIGADA — mensagem de ${telefone} não respondida (atenda manualmente).`);
+    return "";
+  }
+  // Lista "NÃO RESPONDER" do painel: a SoFIA nunca responde sozinha este número.
+  // Registra a mensagem (aparece nas Conversas e dá contexto se você responder à mão), mas cala.
+  if (estaNaoResponder(telefone)) {
+    registrarNaMemoria(telefone, "aluna", mensagem);
+    console.log(`🔕 ${telefone} está em "não responder" — Sofia anotou a mensagem, mas não responde.`);
     return "";
   }
   // Controle humano LIGADO para esta conversa (interruptor do painel): Sofia fica

@@ -41,6 +41,7 @@ const F = {
   humanoLock: path.join(DIR, 'sofia-humano-lock.txt'), // minutos que uma conversa assumida fica travada p/ outros atendentes (e a Sofia fora) — painel escreve, sofia.ts lê
   humanoLog: path.join(DIR, 'sofia-humano-log.jsonl'), // histórico de assumir/devolver por conversa — mostrado no timeline do painel
   bloqueios: path.join(DIR, 'sofia-bloqueios.json'), // números bloqueados (Sofia ignora) — painel escreve, listener lê
+  naoResponder: path.join(DIR, 'sofia-nao-responder.json'), // números que a Sofia NUNCA responde sozinha (mas recebe e pode receber campanha) — painel escreve, sofia.ts lê
   modelo: path.join(DIR, 'sofia-modelo.json'), // modelo de IA (conversa/extração) — painel escreve, sofia.ts lê no boot
   transcricao: path.join(DIR, 'sofia-transcricao.txt'), // liga/desliga transcrição de áudio — painel escreve, listener lê
   followupCfg: path.join(DIR, 'sofia-followup-cfg.json'), // config do follow-up (ligado/tempo/instrução) — painel
@@ -559,6 +560,28 @@ function setBloqueio(tel, ativo) {
   return !!ativo;
 }
 
+// ── Lista "NÃO RESPONDER" (silenciar): a Sofia recebe/etiqueta e pode mandar ──
+// campanha, mas NUNCA responde sozinha estes números. Array de telefones (só
+// dígitos). O painel escreve; o sofia.ts lê a cada mensagem/follow-up.
+function lerNaoResponder() {
+  try { const a = JSON.parse(ler(F.naoResponder)); return Array.isArray(a) ? a.map(x => String(x).replace(/\D/g, '')).filter(Boolean) : []; }
+  catch (_) { return []; }
+}
+// Grava a lista inteira a partir de um texto livre (um número por linha, ou
+// separados por vírgula/;). Normaliza p/ só dígitos, remove vazios e duplicados.
+function gravarNaoResponder(texto) {
+  const brutos = String(texto || '').split(/[\n,;]+/).map(s => String(s).replace(/\D/g, '')).filter(d => d.length >= 8);
+  const unicos = Array.from(new Set(brutos));
+  gravarArquivo(F.naoResponder, JSON.stringify(unicos));
+  return unicos;
+}
+function estaNaoResponder(tel) {
+  const d = String(tel || '').replace(/\D/g, '');
+  if (d.length < 8) return false;
+  const a8 = d.slice(-8);
+  return lerNaoResponder().some(x => x.slice(-8) === a8);
+}
+
 // ── Encerrar conversa à mão (como esperar o tempo da sessão, só que agora) ────
 // Guarda { "<chave>": <em> } = instante do encerramento manual. Uma conversa é
 // considerada "encerrada à mão" enquanto NÃO houver mensagem nova depois disso
@@ -842,6 +865,6 @@ module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, enfileirarAgendamento, lerAgendamentoResult, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerHumanoLog, lerBloqueios, estaBloqueado, setBloqueio, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, enfileirarAgendamento, lerAgendamentoResult, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerHumanoLog, lerBloqueios, estaBloqueado, setBloqueio, lerNaoResponder, gravarNaoResponder, estaNaoResponder, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, lerRascunhoCampanha, lerLidStats, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };

@@ -23,6 +23,7 @@ const TELAS = [
   { key: 'ind', rot: '📈 Formulário' },
   { key: 'msg_config', rot: '⚙️ Configuração', grupo: '💬 WhatsApp' },
   { key: 'msg_agendar', rot: '📅 Agendamento', grupo: '💬 WhatsApp' },
+  { key: 'msg_express', rot: '📅 Express', grupo: '💬 WhatsApp' },
   { key: 'msg_hoje', rot: '📊 Log', grupo: '💬 WhatsApp' },
   { key: 'ig', rot: '📸 Instagram' },
   { key: 'sofia_conversas', rot: '💬 Conversas', grupo: '🤖 Sofia' },
@@ -32,7 +33,7 @@ const TELAS = [
 ];
 const TELAS_KEYS = TELAS.map(t => t.key);
 // Chaves "legado" (abas inteiras) que expandem para as sub-telas ao salvar.
-const LEGADO = { sofia: ['sofia_conversas', 'sofia_config', 'sofia_contatos', 'sofia_campanhas'], msg: ['msg_config', 'msg_agendar', 'msg_hoje'], hoje: ['msg_hoje'] };
+const LEGADO = { sofia: ['sofia_conversas', 'sofia_config', 'sofia_contatos', 'sofia_campanhas'], msg: ['msg_config', 'msg_agendar', 'msg_express', 'msg_hoje'], hoje: ['msg_hoje'] };
 
 function normU(u) { return String(u == null ? '' : u).trim().toLowerCase(); }
 function normEmail(e) { return String(e == null ? '' : e).trim().toLowerCase(); }

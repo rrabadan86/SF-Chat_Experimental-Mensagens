@@ -291,7 +291,7 @@ function sofiaHref(sess) {
 // (marcar tags/salvar contato a partir de uma conversa) vale para Conversas OU Contatos.
 function sofiaRotaPermitida(sess, url) {
   const has = k => (sess.telas || []).includes(k);
-  if (url === '/sofia/agendar' || url === '/sofia/agendar/status') return has('sofia_conversas') || has('msg_config'); // agendar no EVO: das Conversas OU do Cadastro Express (aba WhatsApp)
+  if (url === '/sofia/agendar' || url === '/sofia/agendar/status') return has('sofia_conversas') || has('msg_express'); // agendar no EVO: das Conversas OU do Cadastro Express (aba WhatsApp)
   if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto' || url === '/sofia/conversas/encerrar') return has('sofia_conversas');
   if (url === '/sofia/importar' || url === '/sofia/importar/status') return has('sofia_conversas') || has('sofia_config');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
@@ -299,20 +299,21 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/comparecimento') return has('sofia_contatos') || has('sofia_config'); // agora mora na aba Tags
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano') return has('sofia_config');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder') return has('sofia_config');
   return false;
 }
-// WhatsApp é dividido em três sub-abas: Configuração, Agendamento e Hoje.
+// WhatsApp é dividido em sub-abas: Configuração, Agendamento, Express e Log.
 function podeMsgSub(sess, sub) { return sess.admin || (sess.telas || []).includes('msg_' + sub); }
-function temMsg(sess) { return sess.admin || ['config', 'agendar', 'hoje'].some(s => podeMsgSub(sess, s)); }
-function msgHref(sess) { return podeMsgSub(sess, 'config') ? '/?view=config' : (podeMsgSub(sess, 'agendar') ? '/?view=agendar' : (podeMsgSub(sess, 'hoje') ? '/hoje' : '/?view=config')); }
+function temMsg(sess) { return sess.admin || ['config', 'agendar', 'express', 'hoje'].some(s => podeMsgSub(sess, s)); }
+function msgHref(sess) { return podeMsgSub(sess, 'config') ? '/?view=config' : (podeMsgSub(sess, 'agendar') ? '/?view=agendar' : (podeMsgSub(sess, 'express') ? '/?view=express' : (podeMsgSub(sess, 'hoje') ? '/hoje' : '/?view=config'))); }
 // Rota da aba WhatsApp → sub-permissão. Agendamento = /agendar* e /?view=agendar;
-// Hoje = /hoje; o resto (mensagens, fotos, teste, horários, conexão) é Configuração.
+// Express = /?view=express; Hoje = /hoje; o resto (mensagens, fotos, teste, horários, conexão) é Configuração.
 function msgRotaPermitida(sess, url, fullUrl) {
   const has = k => (sess.telas || []).includes(k);
   if (url === '/hoje') return has('msg_hoje');
   if (url === '/agendar' || url.startsWith('/agendar/')) return has('msg_agendar');
   if (url === '/' && /(?:^|[?&])view=agendar/.test(fullUrl || '')) return has('msg_agendar');
+  if (url === '/' && /(?:^|[?&])view=express/.test(fullUrl || '')) return has('msg_express');
   return has('msg_config'); // /, /salvar, /mensagem/*, /teste/*, /horarios*, /wa*
 }
 function primeiraTela(sess) {
@@ -962,7 +963,7 @@ function subnavMensagens(view) {
   let its = '';
   if (podeMsgSub(sess, 'config')) its += item('config', 'Configuração');
   if (podeMsgSub(sess, 'agendar')) its += item('agendar', 'Agendamento');
-  if (podeMsgSub(sess, 'config')) its += item('express', '📅 Express'); // agenda no EVO — mesma permissão da Configuração
+  if (podeMsgSub(sess, 'express')) its += item('express', '📅 Express'); // cadastro rápido → agenda no EVO (permissão própria)
   if (podeMsgSub(sess, 'hoje')) its += item('hoje', 'Log');
   return `<div class="subtabs">${its}</div>`;
 }
@@ -3579,6 +3580,7 @@ function paginaSofia(aviso, erro) {
   const e = sofia.estado();
   const refreshSeg = lerRefreshSeg(); // atualização automática da aba Conversas (segundos)
   let avh = { on: false, numero: '' }; try { avh = sofia.lerAvisoHumano(); } catch (_) {}
+  let naoResp = []; try { naoResp = sofia.lerNaoResponder(); } catch (_) {} // números que a SoFIA nunca responde sozinha
   // Cada seção é um card recolhível (começa MINIMIZADA — só o título aparece) e
   // reordenável (↑ ↓). A ordem no DOM = ordem salva no prompt. O textarea, mesmo
   // recolhido (display:none), continua sendo enviado no POST.
@@ -3626,6 +3628,17 @@ function paginaSofia(aviso, erro) {
           <label style="margin:14px 0 4px">Palavras/expressões que disparam o aviso <small style="font-weight:400;color:var(--cinza)">(uma por linha; ignora acento e maiúsculas)</small></label>
           <textarea name="palavras" rows="6" spellcheck="false" style="font-size:.86rem">${esc((avh.palavras && avh.palavras.length ? avh.palavras : (sofia.PALAVRAS_HUMANO_PADRAO || [])).join('\n'))}</textarea>
           <div class="acts" style="margin-top:12px"><button type="submit" class="save">Salvar</button></div>
+        </form>
+      </div>
+    </details>
+
+    <details class="acc-sec">
+      <summary class="sec-t" style="cursor:pointer;padding:4px 0">🔕 Números que a SoFIA não responde <small style="font-weight:400;color:var(--cinza)">— ela recebe e pode mandar campanha, mas nunca responde sozinha</small></summary>
+      <div class="card">
+        <p class="quando" style="margin:0 0 12px">Coloque aqui os números que a SoFIA <b>nunca deve responder sozinha</b>. As mensagens dessas pessoas <b>continuam aparecendo nas Conversas</b> (e você responde à mão, se quiser), as <b>tags e automações seguem valendo</b> e elas <b>ainda podem receber campanhas</b> — a SoFIA só <b>não responde automaticamente</b> nem manda follow-up para elas. Um número por linha, com DDD (pode colar com ou sem formatação).</p>
+        <form method="POST" action="/sofia/nao-responder">
+          <textarea name="numeros" rows="6" spellcheck="false" placeholder="Ex.:&#10;62998887777&#10;11991234567" style="font-size:.9rem;font-family:ui-monospace,monospace">${esc(naoResp.join('\n'))}</textarea>
+          <div class="acts" style="margin-top:12px;align-items:center"><button type="submit" class="save">Salvar lista</button><span class="quando" style="margin:0 0 0 10px">${naoResp.length} número(s) na lista</span></div>
         </form>
       </div>
     </details>
@@ -4046,7 +4059,7 @@ function paginaPerfis(aviso, erro, view) {
     'conversa.assumir': '🧑 Assumiu conversa', 'conversa.devolver': '🤖 Devolveu à SoFIA', 'conversa.encerrar': '🔒 Encerrou conversa', 'conversa.agendar': '📅 Agendou no EVO',
     'contato.bloquear': '🚫 Bloqueou contato', 'contato.desbloquear': '✅ Desbloqueou contato',
     'sofia.ligar': '▶️ Ligou a SoFIA', 'sofia.pausar': '⏸️ Pausou a SoFIA', 'sofia.reiniciar': '🔄 Reiniciou a SoFIA',
-    'sofia.desconectar': '📴 Desconectou WhatsApp da SoFIA', 'sofia.config': '⚙️ Salvou configuração/prompt',
+    'sofia.desconectar': '📴 Desconectou WhatsApp da SoFIA', 'sofia.config': '⚙️ Salvou configuração/prompt', 'sofia.nao-responder': '🔕 Atualizou "não responder"',
     'robo.reiniciar': '🔄 Reiniciou o robô', 'robo.desconectar': '📴 Desconectou WhatsApp do robô',
     'perfil.criar': '👤 Criou usuário', 'perfil.excluir': '🗑️ Excluiu usuário', 'perfil.telas': '🔑 Mudou telas de acesso',
     'perfil.senha': '🔑 Redefiniu senha', 'perfil.email': '📧 Alterou e-mail', 'perfil.admin': '👑 Mudou administrador',
@@ -4640,9 +4653,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     // Só a sub-aba permitida; se pediu uma sem acesso, cai na primeira permitida.
     let view = /(?:^|&)view=agendar/.test(q) ? 'agendar' : (/(?:^|&)view=express/.test(q) ? 'express' : 'config');
-    // "express" (Cadastro Express → agenda no EVO) reaproveita a permissão de Configuração.
-    const temView = view === 'express' ? podeMsgSub(sess, 'config') : podeMsgSub(sess, view);
-    if (!temView) view = ['config', 'agendar', 'hoje'].find(s => podeMsgSub(sess, s)) || 'config';
+    if (!podeMsgSub(sess, view)) view = ['config', 'agendar', 'express', 'hoje'].find(s => podeMsgSub(sess, s)) || 'config';
     if (view === 'hoje') { res.writeHead(303, { Location: '/hoje' }); return res.end(); } // só tem Hoje → vai pra lá
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     if (view === 'express') return res.end(paginaExpress()); // sub-aba Express (cadastro rápido)
@@ -4852,6 +4863,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar a SoFIA pelo painel. Rode no servidor: pm2 restart sofia-listener'; erro = true; }
     else if (/(?:^|&)okc=criada/.test(q)) aviso = '📣 Campanha criada! A IA está gerando as variações. Quando ficar “pronta”, clique em ▶️ Iniciar para começar o envio.';
     else if (/(?:^|&)okah=1/.test(q)) aviso = 'Aviso "precisa de humano" salvo.';
+    else if (/(?:^|&)oknr=\d+/.test(q)) aviso = '🔕 Lista de "não responder" salva (' + ((q.match(/oknr=(\d+)/) || [])[1] || '0') + ' número(s)).';
     else if (/(?:^|&)okcmp=1/.test(q) && /(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Config salva, mas não consegui reiniciar o robô p/ aplicar o novo horário. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     else if (/(?:^|&)okcmp=1/.test(q)) aviso = 'Config de presença (troca de tags) salva.';
     else if (/(?:^|&)okc=ok/.test(q)) aviso = '✔️ Feito.';
@@ -5281,6 +5293,16 @@ const server = http.createServer((req, res) => {
       const p = new URLSearchParams(corpo);
       try { sofia.gravarAvisoHumano(p.get('on') === '1', p.get('numero') || '', p.get('palavras') || ''); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?okah=1' }); res.end();
+    });
+  }
+  // Lista "não responder": números que a SoFIA nunca responde sozinha (mas recebe e pode receber campanha).
+  if (req.method === 'POST' && url === '/sofia/nao-responder') {
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      let lista = [];
+      try { lista = sofia.gravarNaoResponder(p.get('numeros') || ''); } catch (_) {}
+      try { auditoria.registrar(sess.usuario, 'sofia.nao-responder', '', lista.length + ' número(s)'); } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?oknr=' + lista.length }); res.end();
     });
   }
   // Salvar o limite de alerta de gasto diário (Custo IA).
