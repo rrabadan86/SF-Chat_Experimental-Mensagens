@@ -312,8 +312,17 @@ function marcarLidSemTel(lid: string) { if (!lid || lidMap.has(lid) || lidSemTel
 // dela em OUTRA (por causa do 9º dígito / LID), sumindo do painel.
 function chaveDoEnvio(alvo: string, telCru: string): string {
   if (alvo && alvo.endsWith("@c.us")) return jidParaTel(alvo);       // telefone canônico (com o 9 certo)
-  if (alvo && alvo.endsWith("@lid")) { const lid = jidParaTel(alvo); return telLembradoDoLid(lid) || lid; }
-  return String(telCru || "").replace(/\D/g, "");
+  const tel = String(telCru || "").replace(/\D/g, "");
+  if (alvo && alvo.endsWith("@lid")) {
+    const lid = jidParaTel(alvo);
+    // Numa campanha nós JÁ conhecemos o telefone real (telCru, do cadastro). Usa ele
+    // como chave — em vez do LID cru — e memoriza o mapa LID→telefone, para a RESPOSTA
+    // dela (que chega como "@lid") cair na MESMA conversa. Sem isso, a conversa
+    // aparecia no painel como um número interno (ex.: 262091856445504).
+    if (pareceTelefone(tel)) { lembrarLid(lid, tel); return tel; }
+    return telLembradoDoLid(lid) || lid; // sem telefone conhecido → o que já sabíamos, senão o LID
+  }
+  return tel;
 }
 
 async function resolverTel(msg: any): Promise<{ chave: string; telefone: string }> {
