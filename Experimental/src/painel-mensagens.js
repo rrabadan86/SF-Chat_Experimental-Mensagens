@@ -472,7 +472,7 @@ const ESTILO = `
   .var{display:inline-block;background:#eef7f7;color:var(--teal-esc);border:1px solid #cdeaea;border-radius:6px;padding:2px 8px;font-family:ui-monospace,monospace;font-size:var(--fs-sm);cursor:pointer;user-select:none;transition:.12s}
   .var:hover{background:var(--teal);color:#fff;border-color:var(--teal)}
   label{display:block;font-weight:600;font-size:var(--fs-sm);margin:12px 0 4px}
-  input[type=text],input[type=tel],input[type=date],input[type=time],input[type=number],textarea{width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
+  input[type=text],input[type=tel],input[type=email],input[type=date],input[type=time],input[type=number],textarea{width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
   select{width:100%;max-width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:9px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
   textarea{line-height:1.5;resize:vertical}
   input:focus,textarea:focus,select:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(14,110,107,.16)}
@@ -1244,20 +1244,30 @@ function paginaAgendar(aviso, erro) {
 function paginaExpress() {
   const hoje = hojeSP();
   const corpo = `<div class="wrap">${subnavMensagens('express')}
-  <div class="card">
-    <div class="chead"><h2>📅 Cadastro express — agendar aula experimental</h2></div>
-    <p class="meta" style="margin:-2px 0 14px;color:var(--cinza)">Para marcar a experimental de quem chegou <b>por telefone ou no balcão</b>, sem precisar de uma conversa. Marca no <b>EVO</b>, manda a <b>confirmação no WhatsApp</b> e aplica a tag <b>“agendou”</b> — igual quando a SoFIA agenda.</p>
-    <label>Nome completo</label>
-    <input id="exNome" placeholder="Nome da aluna" autocomplete="off">
-    <label>Telefone (WhatsApp)</label>
-    <input id="exTel" inputmode="numeric" placeholder="(62) 99999-9999" maxlength="16">
-    <label>E-mail</label>
-    <input id="exEmail" type="email" placeholder="email@exemplo.com" autocomplete="off">
-    <div style="display:flex;gap:12px;flex-wrap:wrap">
-      <div style="flex:1 1 150px"><label>Data</label><input type="date" id="exData" value="${hoje}" min="${hoje}" style="width:100%"></div>
-      <div style="flex:1 1 120px"><label>Horário</label><input type="time" id="exHora" step="900" style="width:100%"></div>
+  <div class="card" style="max-width:560px;margin:12px auto;padding:20px 22px">
+    <div class="chead" style="gap:12px;align-items:center">
+      <div style="flex:none;width:42px;height:42px;border-radius:12px;background:var(--teal-soft);display:grid;place-items:center;font-size:1.35rem">📅</div>
+      <div>
+        <h2 style="margin:0;line-height:1.15">Cadastro express</h2>
+        <div class="quando" style="margin:2px 0 0">Agende a aula experimental sem precisar de uma conversa.</div>
+      </div>
     </div>
-    <div class="acts" style="margin-top:14px"><button type="button" class="save" id="exBtn" onclick="exAgendar()">Agendar no EVO</button></div>
+    <div style="margin:14px 0 6px;background:var(--teal-soft);border:1px solid #cdeaea;border-radius:11px;padding:11px 13px;font-size:.85rem;color:var(--tinta)">Para quem chegou <b>por telefone ou no balcão</b>. Marca no <b>EVO</b>, envia a <b>confirmação no WhatsApp</b> e aplica a tag <b>“agendou”</b> — igual quando a SoFIA agenda.</div>
+
+    <label>Nome completo</label>
+    <input id="exNome" type="text" placeholder="Nome da aluna" autocomplete="off">
+
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div style="flex:1 1 200px;min-width:0"><label>Telefone (WhatsApp)</label><input id="exTel" type="tel" inputmode="numeric" placeholder="(62) 99999-9999" maxlength="16"></div>
+      <div style="flex:1 1 200px;min-width:0"><label>E-mail</label><input id="exEmail" type="email" placeholder="email@exemplo.com" autocomplete="off"></div>
+    </div>
+
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div style="flex:1 1 170px;min-width:0"><label>Data</label><input type="date" id="exData" value="${hoje}" min="${hoje}"></div>
+      <div style="flex:1 1 120px;min-width:0"><label>Horário</label><input type="time" id="exHora" step="900"></div>
+    </div>
+
+    <div class="acts" style="margin-top:20px"><button type="button" class="save" id="exBtn" onclick="exAgendar()" style="width:100%;padding:12px 20px;font-size:1rem;font-weight:600">📅 Agendar no EVO</button></div>
     <div id="exMsg" class="aviso" style="display:none"></div>
   </div>
 </div>
