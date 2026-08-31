@@ -1251,14 +1251,15 @@ function paginaExpress(aviso, erro) {
   const podeExpress = podeMsgSub(sess, 'express');
   const podeAgendar = podeMsgSub(sess, 'agendar');
   const hoje = hojeSP();
-  // Banda de cabeçalho de seção: ícone + título + subtítulo, com acento colorido.
-  const banda = (ic, tit, sub, cor, bg) => `<div style="display:flex;align-items:center;gap:12px;margin:0 0 12px;padding:11px 14px;border-radius:12px;background:${bg};border:1px solid var(--linha);border-left:5px solid ${cor}"><span style="font-size:1.5rem;line-height:1;flex:none">${ic}</span><div style="min-width:0"><div style="font-family:'Manrope','Inter',sans-serif;font-weight:800;font-size:1.05rem;color:var(--tinta);line-height:1.15">${tit}</div><div style="font-size:.82rem;color:var(--cinza)">${sub}</div></div></div>`;
+  // Cabeçalho de seção (ícone + título + subtítulo) — fica DENTRO do painel colorido.
+  const cab = (ic, tit, sub) => `<div style="display:flex;align-items:center;gap:12px;margin:2px 2px 12px"><span style="font-size:1.5rem;line-height:1;flex:none">${ic}</span><div style="min-width:0"><div style="font-family:'Manrope','Inter',sans-serif;font-weight:800;font-size:1.05rem;color:var(--tinta);line-height:1.15">${tit}</div><div style="font-size:.82rem;color:var(--cinza)">${sub}</div></div></div>`;
 
-  // ── Seção 1 · Cadastro express (agenda no EVO) ──
+  // ── Seção 1 · Cadastro express (agenda no EVO) — painel TEAL, um bloco só ──
   const secExpress = !podeExpress ? '' : `
-    <section style="margin:4px 0 26px">
-      ${banda('📅', 'Cadastro express', 'Agenda a aula experimental no EVO — sem precisar de conversa', 'var(--teal)', 'var(--teal-soft)')}
-      <div class="card">
+    <section style="margin:4px 0 24px">
+      <div style="border:1px solid var(--linha);border-left:5px solid var(--teal);border-radius:14px;background:var(--teal-soft);padding:13px 13px 4px">
+      ${cab('📅', 'Cadastro express', 'Agenda a aula experimental no EVO — sem precisar de conversa')}
+      <div class="card" style="margin:0 0 9px">
         <div style="margin:0 0 14px;font-size:.86rem;color:var(--cinza)">Para quem chegou <b>por telefone ou no balcão</b>. Marca no <b>EVO</b>, envia a <b>confirmação no WhatsApp</b> e aplica a tag <b>“agendou”</b> — igual quando a SoFIA agenda.</div>
         <label>Nome completo</label>
         <input id="exNome" type="text" placeholder="Nome da aluna" autocomplete="off">
@@ -1272,6 +1273,7 @@ function paginaExpress(aviso, erro) {
         </div>
         <div class="acts" style="margin-top:18px"><button type="button" class="save" id="exBtn" onclick="exAgendar()" style="width:100%;padding:12px 20px;font-size:1rem;font-weight:600">📅 Agendar no EVO</button></div>
         <div id="exMsg" class="aviso" style="display:none"></div>
+      </div>
       </div>
     </section>`;
   const scriptExpress = !podeExpress ? '' : `<script>
@@ -1326,8 +1328,10 @@ function paginaExpress(aviso, erro) {
   const ag = podeAgendar ? blocoAgendarMsg() : { form: '', script: '' };
   const secAgendar = !podeAgendar ? '' : `
     <section style="margin:4px 0 8px">
-      ${banda('💬', 'Agendar mensagem no WhatsApp', 'Envio pontual pela linha do robô, nos horários dos turnos', 'var(--coral)', 'var(--erro-bg)')}
-      ${ag.form}
+      <div style="border:1px solid var(--linha);border-left:5px solid var(--coral);border-radius:14px;background:var(--erro-bg);padding:13px 13px 6px">
+        ${cab('💬', 'Agendar mensagem no WhatsApp', 'Envio pontual pela linha do robô — não tem relação com o agendamento do EVO')}
+        ${ag.form}
+      </div>
     </section>`;
 
   const vazio = (!podeExpress && !podeAgendar) ? '<div class="card"><p class="quando" style="margin:0">Você não tem acesso a estas funções.</p></div>' : '';
