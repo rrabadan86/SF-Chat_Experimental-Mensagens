@@ -962,8 +962,9 @@ function subnavMensagens(view) {
   const sess = _navSess || { admin: true, telas: [] };
   let its = '';
   if (podeMsgSub(sess, 'config')) its += item('config', 'Configuração');
-  if (podeMsgSub(sess, 'agendar')) its += item('agendar', 'Agendamento');
-  if (podeMsgSub(sess, 'express')) its += item('express', '📅 Express'); // cadastro rápido → agenda no EVO (permissão própria)
+  // "Express" = tela unificada (Cadastro Express + Agendar mensagem). Aparece p/
+  // quem tem QUALQUER uma das duas permissões (cada seção é gated lá dentro).
+  if (podeMsgSub(sess, 'express') || podeMsgSub(sess, 'agendar')) its += item('express', '📅 Express');
   if (podeMsgSub(sess, 'hoje')) its += item('hoje', 'Log');
   return `<div class="subtabs">${its}</div>`;
 }
@@ -1109,7 +1110,10 @@ function cardHorariosAgendados() {
   </div>`;
 }
 
-function paginaAgendar(aviso, erro) {
+// Bloco "Agendar mensagem no WhatsApp" (form + pendentes/histórico + script),
+// usado dentro da tela unificada paginaExpress. Devolve { form, script } — sem
+// wrap/subnav/chrome. As mensagens são enviadas nos horários dos turnos.
+function blocoAgendarMsg() {
   const hoje = hojeSP();
   const todos = ag.carregar();
   const pend = todos.filter(a => a.status === 'pendente').sort((x, y) => (x.data + x.turno).localeCompare(y.data + y.turno));
@@ -1159,8 +1163,7 @@ function paginaAgendar(aviso, erro) {
   ${cardHorariosAgendados()}
   `;
 
-  const corpo = `<div class="wrap">${subnavMensagens('agendar')}${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}${form}</div>
-<script>
+  const script = `<script>
   var AGS = ${dadosJson};
   var chk=document.getElementById('temFoto'), wrap=document.getElementById('fotoWrap'), file=document.getElementById('foto');
   var editId=document.getElementById('editId'), fotoAtual=document.getElementById('fotoAtual');
@@ -1235,44 +1238,43 @@ function paginaAgendar(aviso, erro) {
     finally{ btn.disabled=false; btn.textContent=rotuloBtn(); }
   });
 </script>`;
-  return chrome({ tab: 'Agendamento', h1: 'Agendamento de envios', p: `Mensagens são enviadas <b>${esc(horaAg('manha'))}</b> (manhã) e <b>${esc(horaAg('tarde'))}</b> (tarde) do dia agendado.` }, 'msg', corpo);
+  return { form, script };
 }
 
-// ── Sub-aba Express: cadastro rápido → agenda a experimental no EVO ───────────
-// Reaproveita o mesmo motor do botão "Agendar no EVO" da conversa (/sofia/agendar):
-// marca no EVO, entra na fila de confirmação (WhatsApp) e aplica a tag "agendou".
-// Aqui não há conversa — o telefone digitado vira a chave/telefone do agendamento.
-function paginaExpress() {
+// ── Sub-aba "Express" (tela unificada) ───────────────────────────────────────
+// Junta, numa tela só, o Cadastro Express (agenda a aula no EVO — topo) e o
+// Agendamento de mensagens do WhatsApp (abaixo). Cada bloco é uma SEÇÃO com banda
+// de cabeçalho própria (cores diferentes) pra deixar claro que são funções
+// distintas. Permissões: Express = msg_express; Agendar mensagem = msg_agendar.
+function paginaExpress(aviso, erro) {
+  const sess = _navSess || { admin: true, telas: [] };
+  const podeExpress = podeMsgSub(sess, 'express');
+  const podeAgendar = podeMsgSub(sess, 'agendar');
   const hoje = hojeSP();
-  const corpo = `<div class="wrap">${subnavMensagens('express')}
-  <div class="card" style="max-width:560px;margin:12px auto;padding:20px 22px">
-    <div class="chead" style="gap:12px;align-items:center">
-      <div style="flex:none;width:42px;height:42px;border-radius:12px;background:var(--teal-soft);display:grid;place-items:center;font-size:1.35rem">📅</div>
-      <div>
-        <h2 style="margin:0;line-height:1.15">Cadastro express</h2>
-        <div class="quando" style="margin:2px 0 0">Agende a aula experimental sem precisar de uma conversa.</div>
+  // Banda de cabeçalho de seção: ícone + título + subtítulo, com acento colorido.
+  const banda = (ic, tit, sub, cor, bg) => `<div style="display:flex;align-items:center;gap:12px;margin:0 0 12px;padding:11px 14px;border-radius:12px;background:${bg};border:1px solid var(--linha);border-left:5px solid ${cor}"><span style="font-size:1.5rem;line-height:1;flex:none">${ic}</span><div style="min-width:0"><div style="font-family:'Manrope','Inter',sans-serif;font-weight:800;font-size:1.05rem;color:var(--tinta);line-height:1.15">${tit}</div><div style="font-size:.82rem;color:var(--cinza)">${sub}</div></div></div>`;
+
+  // ── Seção 1 · Cadastro express (agenda no EVO) ──
+  const secExpress = !podeExpress ? '' : `
+    <section style="margin:4px 0 26px">
+      ${banda('📅', 'Cadastro express', 'Agenda a aula experimental no EVO — sem precisar de conversa', 'var(--teal)', 'var(--teal-soft)')}
+      <div class="card">
+        <div style="margin:0 0 14px;font-size:.86rem;color:var(--cinza)">Para quem chegou <b>por telefone ou no balcão</b>. Marca no <b>EVO</b>, envia a <b>confirmação no WhatsApp</b> e aplica a tag <b>“agendou”</b> — igual quando a SoFIA agenda.</div>
+        <label>Nome completo</label>
+        <input id="exNome" type="text" placeholder="Nome da aluna" autocomplete="off">
+        <div style="display:flex;gap:14px;flex-wrap:wrap">
+          <div style="flex:1 1 200px;min-width:0"><label>Telefone (WhatsApp)</label><input id="exTel" type="tel" inputmode="numeric" placeholder="(62) 99999-9999" maxlength="16"></div>
+          <div style="flex:1 1 200px;min-width:0"><label>E-mail <small style="font-weight:400;color:var(--cinza)">(opcional)</small></label><input id="exEmail" type="email" placeholder="email@exemplo.com" autocomplete="off"></div>
+        </div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">
+          <div style="flex:1 1 170px;min-width:0"><label>Data</label><input type="date" id="exData" value="${hoje}" min="${hoje}"></div>
+          <div style="flex:1 1 120px;min-width:0"><label>Horário</label><input type="time" id="exHora" step="900"></div>
+        </div>
+        <div class="acts" style="margin-top:18px"><button type="button" class="save" id="exBtn" onclick="exAgendar()" style="width:100%;padding:12px 20px;font-size:1rem;font-weight:600">📅 Agendar no EVO</button></div>
+        <div id="exMsg" class="aviso" style="display:none"></div>
       </div>
-    </div>
-    <div style="margin:14px 0 6px;background:var(--teal-soft);border:1px solid #cdeaea;border-radius:11px;padding:11px 13px;font-size:.85rem;color:var(--tinta)">Para quem chegou <b>por telefone ou no balcão</b>. Marca no <b>EVO</b>, envia a <b>confirmação no WhatsApp</b> e aplica a tag <b>“agendou”</b> — igual quando a SoFIA agenda.</div>
-
-    <label>Nome completo</label>
-    <input id="exNome" type="text" placeholder="Nome da aluna" autocomplete="off">
-
-    <div style="display:flex;gap:14px;flex-wrap:wrap">
-      <div style="flex:1 1 200px;min-width:0"><label>Telefone (WhatsApp)</label><input id="exTel" type="tel" inputmode="numeric" placeholder="(62) 99999-9999" maxlength="16"></div>
-      <div style="flex:1 1 200px;min-width:0"><label>E-mail <small style="font-weight:400;color:var(--cinza)">(opcional)</small></label><input id="exEmail" type="email" placeholder="email@exemplo.com" autocomplete="off"></div>
-    </div>
-
-    <div style="display:flex;gap:14px;flex-wrap:wrap">
-      <div style="flex:1 1 170px;min-width:0"><label>Data</label><input type="date" id="exData" value="${hoje}" min="${hoje}"></div>
-      <div style="flex:1 1 120px;min-width:0"><label>Horário</label><input type="time" id="exHora" step="900"></div>
-    </div>
-
-    <div class="acts" style="margin-top:20px"><button type="button" class="save" id="exBtn" onclick="exAgendar()" style="width:100%;padding:12px 20px;font-size:1rem;font-weight:600">📅 Agendar no EVO</button></div>
-    <div id="exMsg" class="aviso" style="display:none"></div>
-  </div>
-</div>
-<script>
+    </section>`;
+  const scriptExpress = !podeExpress ? '' : `<script>
   function exEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function exSoDig(s){ return (s||'').replace(/\\D/g,''); }
   document.getElementById('exTel').addEventListener('input',function(e){
@@ -1319,7 +1321,21 @@ function paginaExpress() {
       }).catch(function(){ exStatus('❌ erro de rede','err'); exBtnOn(true); });
   }
 </script>`;
-  return chrome({ tab: 'Express', h1: 'Cadastro express', p: 'Marque a aula experimental de quem chegou por telefone ou no balcão — direto no EVO.' }, 'msg', corpo);
+
+  // ── Seção 2 · Agendar mensagem no WhatsApp ──
+  const ag = podeAgendar ? blocoAgendarMsg() : { form: '', script: '' };
+  const secAgendar = !podeAgendar ? '' : `
+    <section style="margin:4px 0 8px">
+      ${banda('💬', 'Agendar mensagem no WhatsApp', 'Envio pontual pela linha do robô, nos horários dos turnos', 'var(--coral)', 'var(--erro-bg)')}
+      ${ag.form}
+    </section>`;
+
+  const vazio = (!podeExpress && !podeAgendar) ? '<div class="card"><p class="quando" style="margin:0">Você não tem acesso a estas funções.</p></div>' : '';
+
+  const corpo = `<div class="wrap">${subnavMensagens('express')}${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    <div style="max-width:720px;margin:0 auto">${secExpress}${secAgendar}${vazio}</div>
+  </div>${scriptExpress}${podeAgendar ? ag.script : ''}`;
+  return chrome({ tab: 'Express', h1: 'Express & agendamentos', p: 'Cadastro express (agenda no EVO) e agendamento de mensagens do WhatsApp — no mesmo lugar.' }, 'msg', corpo);
 }
 
 // ── Página 3: conexão do WhatsApp (QR quando cai) ───────────────────────────
@@ -4652,12 +4668,15 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar o robô pelo painel. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     // Só a sub-aba permitida; se pediu uma sem acesso, cai na primeira permitida.
-    let view = /(?:^|&)view=agendar/.test(q) ? 'agendar' : (/(?:^|&)view=express/.test(q) ? 'express' : 'config');
-    if (!podeMsgSub(sess, view)) view = ['config', 'agendar', 'express', 'hoje'].find(s => podeMsgSub(sess, s)) || 'config';
+    // "Express" é a tela unificada (Express + Agendar mensagem); view=agendar cai nela.
+    const podeMerged = podeMsgSub(sess, 'express') || podeMsgSub(sess, 'agendar');
+    let view = /(?:^|&)view=(agendar|express)/.test(q) ? 'express' : 'config';
+    if (view === 'express' ? !podeMerged : !podeMsgSub(sess, view)) {
+      view = podeMsgSub(sess, 'config') ? 'config' : (podeMerged ? 'express' : (podeMsgSub(sess, 'hoje') ? 'hoje' : 'config'));
+    }
     if (view === 'hoje') { res.writeHead(303, { Location: '/hoje' }); return res.end(); } // só tem Hoje → vai pra lá
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    if (view === 'express') return res.end(paginaExpress()); // sub-aba Express (cadastro rápido)
-    if (view === 'agendar') return res.end(paginaAgendar(aviso, erro)); // sub-aba Agendamento
+    if (view === 'express') return res.end(paginaExpress(aviso, erro)); // tela unificada Express + Agendar mensagem
     return res.end(paginaMensagens(aviso, erro));
   }
   if (req.method === 'POST' && url === '/salvar') {
@@ -4746,7 +4765,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horários salvos e robô reiniciado. Já valem.';
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(paginaAgendar(aviso, erro));
+    return res.end(paginaExpress(aviso, erro)); // /agendar (link antigo) → tela unificada Express
   }
   if (req.method === 'POST' && url === '/agendar/salvar') {
     return lerCorpo(req, 12e6, corpo => { // base64 da foto cabe aqui (~10-12 MB)
@@ -4798,7 +4817,7 @@ const server = http.createServer((req, res) => {
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         const msg = 'Erro ao salvar horários: ' + e.message + ' (nada foi alterado).';
-        return res.end(voltar === '/agendar' ? paginaAgendar(msg, true) : voltar === '/instagram' ? paginaInstagram(msg, true) : paginaMensagens(msg, true));
+        return res.end(voltar === '/agendar' ? paginaExpress(msg, true) : voltar === '/instagram' ? paginaInstagram(msg, true) : paginaMensagens(msg, true));
       }
       // Reinicia o robô para reagendar os jobs com os novos horários.
       exec('pm2 restart slimfit-exp --update-env', { timeout: 25000 }, (err) => {
