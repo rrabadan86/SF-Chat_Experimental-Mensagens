@@ -71,3 +71,7 @@ data/origens.json
 
 # Nomes dos grupos do WhatsApp editados no painel (ponte painel<->robo) — por VPS
 data/grupos.json
+
+# Instagram oficial (Graph API) — token e config por VPS, NUNCA versionar
+data/instagram-api-token.json
+data/instagram-api-config.json

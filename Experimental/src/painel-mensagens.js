@@ -23,6 +23,7 @@ const horarios = require('./horarios');
 const atividade = require('./atividade');
 const teste = require('./teste-envio');
 const igcfg = require('./instagram-config');
+const igApi = require('./instagram-api'); // integração OFICIAL (Graph API): webhook comentário/DM → resposta
 const igcookies = require('./instagram-cookies');
 const igforcar = require('./ig-forcar');
 const testeIg = require('./teste-instagram');
@@ -4592,6 +4593,25 @@ const server = http.createServer((req, res) => {
   // Páginas legais públicas (o Google lê ao publicar o app OAuth).
   if (url === '/privacidade') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(paginaPrivacidade()); }
   if (url === '/termos') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(paginaTermos()); }
+  // ── Webhook OFICIAL do Instagram (público — a Meta chama sem login) ────────
+  // GET = verificação (devolve o hub.challenge). POST = eventos (comentário/DM),
+  // com assinatura conferida pelo APP_SECRET antes de processar.
+  if (url === '/ig/webhook') {
+    if (req.method === 'GET') {
+      const challenge = igApi.verificar(req.url.split('?')[1] || '');
+      if (challenge !== null) { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end(challenge); }
+      res.writeHead(403, { 'Content-Type': 'text/plain' }); return res.end('forbidden');
+    }
+    if (req.method === 'POST') {
+      return lerCorpo(req, 1e6, corpo => {
+        if (!igApi.assinaturaValida(corpo, req.headers['x-hub-signature-256'])) { res.writeHead(403, { 'Content-Type': 'text/plain' }); return res.end('bad signature'); }
+        res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('EVENT_RECEIVED'); // responde rápido; processa depois
+        let body = null; try { body = JSON.parse(corpo); } catch (_) { body = null; }
+        if (body) igApi.processar(body).catch(e => console.log('[ig-api] processar:', e.message));
+      });
+    }
+    res.writeHead(405, { 'Content-Type': 'text/plain' }); return res.end('method not allowed');
+  }
   // Login com Google — só ativo com GOOGLE_CLIENT_ID/SECRET no .env.
   if (url === '/auth/google') {
     if (!googleAtivo()) { res.writeHead(303, { Location: '/login' }); return res.end(); }
@@ -5953,4 +5973,7 @@ server.listen(PORT, HOST, () => {
   if (!SENHA) console.warn('⚠️  PAINEL_SENHA não definido no .env — o painel vai NEGAR todo acesso até você definir usuário e senha.');
   console.log(`🖥️  Painel do Studio ouvindo em ${HOST}:${PORT} (usuário: ${USER}).`);
   console.log('   Páginas: /hoje · /indicadores · /  (WhatsApp+mensagens) · /agendar · /instagram · /sofia. Exponha SEMPRE atrás de HTTPS.');
+  // Instagram oficial (Graph API): valida token e descobre a conta. Silencioso
+  // se as variáveis não estiverem no .env — não atrapalha o resto do painel.
+  try { igApi.bootstrap().catch(() => {}); } catch (_) {}
 });
