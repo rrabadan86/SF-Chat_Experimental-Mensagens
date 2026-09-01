@@ -622,6 +622,9 @@ const ESTILO = `
   .info.aviso{background:#fbe6c2;color:#9a6512;border:1px solid #e6b357;width:17px;height:17px;border-radius:50%;font-size:.74rem;font-weight:800}
   .info.aviso:hover,.info.aviso:focus{background:#e0a53a;color:#fff;border-color:#e0a53a;outline:none}
   .info.aviso .info-pop{border-left:3px solid #e0a53a;width:300px}
+  @keyframes waPulseOff{0%{box-shadow:0 0 0 0 rgba(192,57,43,.55)}70%{box-shadow:0 0 0 9px rgba(192,57,43,0)}100%{box-shadow:0 0 0 0 rgba(192,57,43,0)}}
+  #waTag.wa-off{font-size:.82rem!important;padding:4px 14px!important;font-weight:800!important;border:1.5px solid currentColor;animation:waPulseOff 1.7s ease-out infinite;text-transform:uppercase;letter-spacing:.2px}
+  @media(prefers-reduced-motion:reduce){ #waTag.wa-off{animation:none} }
   .cfg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px 22px}
   .cfg-grid label{display:flex;align-items:center;font-weight:700;font-size:.82rem;margin:0 0 6px}
   .cfg-in{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -1909,7 +1912,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   const corpo =`<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('conversas')}
-    <div class="sec-t" id="conv-head" data-nosec="1">Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span><small style="font-weight:600;color:#5c5960">(atualiza sozinho — histórico das conversas neste número)</small></div>
+    <div class="sec-t" id="conv-head" data-nosec="1">Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span></div>
     <style>
       .inbox-grid{display:grid;grid-template-columns:288px minmax(0,1fr);gap:14px;align-items:start}
       .inbox-grid>div{min-width:0}
@@ -2445,6 +2448,9 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     var m={conectado:['🟢','online','#1c8f52','#e6f6ec'],desconectado:['🔴','off-line','#c0392b','#fdeaea'],qr:['🟠','reconectar','#b8770a','#fdf2e0'],iniciando:['🟡','conectando','#b8770a','#fdf2e0']};
     var s=m[e]||['⚪','—','#7a7a7a','#eee'];
     b.textContent=s[0]+' '+s[1]; b.style.color=s[2]; b.style.background=s[3];
+    // Fora do ar (qualquer estado que não seja 'conectado') ganha destaque: maior,
+    // com borda e pulso, para o Studio perceber de longe que precisa de ação.
+    if(e==='conectado'){ b.classList.remove('wa-off'); } else { b.classList.add('wa-off'); }
   }
   function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){ j=j||{}; if(j.lockMin){ LOCK_MIN=j.lockMin; LOCK_MS=LOCK_MIN*60000; } atualizaWa(j.wa); renderInbox(j.conv||{}); }).catch(function(){}); }
   atualizaInbox(); setInterval(atualizaInbox, ${refreshMs});
