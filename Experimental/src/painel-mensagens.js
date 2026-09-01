@@ -3273,7 +3273,7 @@ function paginaSofiaCampanhas(aviso, erro) {
             <div class="cpf-field"><label>Começar em</label><input type="date" id="cpIni" name="dataInicio" value="${esc(hojeSP())}" min="${esc(hojeSP())}" oninput="estCamp()"></div>
             <div class="cpf-field"><label>Máx. por dia</label><div class="cpf-range"><input type="number" id="cpMax" name="limiteDia" min="1" max="1000" value="40" oninput="estCamp()"><span class="cpf-suf">msg</span></div></div>
             <div class="cpf-field"><label>Horário de envio</label><div class="cpf-range"><input type="time" id="cpJi" name="janelaIni" value="09:00" oninput="estCamp()"><span class="cpf-suf">até</span><input type="time" id="cpJf" name="janelaFim" value="20:00" oninput="estCamp()"></div></div>
-            <div class="cpf-field"><label>Intervalo entre envios</label><div class="cpf-range"><input type="number" id="cpDmin" name="delayMinSeg" min="1" max="3600" value="25" oninput="estCamp()"><span class="cpf-suf">a</span><input type="number" id="cpDmax" name="delayMaxSeg" min="1" max="3600" value="70" oninput="estCamp()"><span class="cpf-suf">s</span></div></div>
+            <div class="cpf-field"><label>Intervalo entre envios</label><div class="cpf-range"><input type="number" id="cpDmin" name="delayMinSeg" min="1" max="3600" value="50" oninput="estCamp()"><span class="cpf-suf">a</span><input type="number" id="cpDmax" name="delayMaxSeg" min="1" max="3600" value="120" oninput="estCamp()"><span class="cpf-suf">s</span></div></div>
           </div>
           <div class="cpf-field" style="margin-top:14px">
             <label>Dias da semana <span class="sub">— só envia nos dias marcados</span></label>
@@ -5424,7 +5424,7 @@ const server = http.createServer((req, res) => {
           op: 'criar',
           campanha: {
             id, nome, tag, textoBase,
-            limiteDia: String(d.limiteDia || '40'), delayMinSeg: String(d.delayMinSeg || '25'), delayMaxSeg: String(d.delayMaxSeg || '70'),
+            limiteDia: String(d.limiteDia || '40'), delayMinSeg: String(d.delayMinSeg || '50'), delayMaxSeg: String(d.delayMaxSeg || '120'),
             janelaIni: String(d.janelaIni || '09:00'), janelaFim: String(d.janelaFim || '20:00'),
             dataInicio: String(d.dataInicio || hojeSP()),
             dias: Array.isArray(d.dias) ? d.dias.map(Number).filter(x => x >= 0 && x <= 6) : [],
