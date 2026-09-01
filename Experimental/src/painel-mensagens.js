@@ -3029,7 +3029,17 @@ function campListHTML(filtro = {}) {
       <div style="margin:8px 0 0">
         <div style="background:#eef1f2;border-radius:6px;height:16px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div>
         <div class="quando" style="margin:4px 0 0">${enviados} enviadas · ${(c.pendentes || []).length} na fila · ${(c.falhas || []).length} falha(s) · ${total} no total · hoje: ${c.enviadosHoje || 0}/${c.limiteDia}</div>
-        <div class="quando" style="margin:2px 0 0">📅 início ${esc(fmtDataBR(c.dataInicio))} · das ${esc(c.janelaIni)} às ${esc(c.janelaFim)} · ${c.delayMinSeg}–${c.delayMaxSeg}s entre envios${est ? ` · <b>término previsto ${est.fim}</b> (~${est.dias} dia${est.dias > 1 ? 's' : ''}, ~${est.porDia}/dia)` : ''}</div>
+        <div class="quando" style="margin:2px 0 0">📅 início ${esc(fmtDataBR(c.dataInicio))} · das ${esc(c.janelaIni)} às ${esc(c.janelaFim)} · ${c.delayMinSeg}–${c.delayMaxSeg}s entre envios${est ? ` · <b>término previsto ${est.fim}</b> (~${est.dias} dia${est.dias > 1 ? 's' : ''}, ~${est.porDia}/dia)` : ''} ${(c.status !== 'concluida' && c.status !== 'cancelada') ? `· <a href="javascript:void(0)" onclick="toggleRitmo('${esc(c.id)}')" style="text-decoration:underline">⚙️ ajustar ritmo</a>` : ''}</div>
+      </div>
+      <div class="ritmoBox-${esc(c.id)}" style="display:none;margin:8px 0 0;background:var(--bg);border:1px solid var(--linha);border-radius:10px;padding:10px 12px">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+          <div><label style="margin:0 0 3px;font-size:.72rem;font-weight:700;color:var(--cinza)">Entre envios (seg)</label><div style="display:flex;gap:6px;align-items:center"><input type="number" min="1" max="3600" value="${c.delayMinSeg}" id="rmin-${esc(c.id)}" style="width:72px"><span class="quando" style="margin:0">a</span><input type="number" min="1" max="3600" value="${c.delayMaxSeg}" id="rmax-${esc(c.id)}" style="width:72px"></div></div>
+          <div><label style="margin:0 0 3px;font-size:.72rem;font-weight:700;color:var(--cinza)">Máx. por dia</label><input type="number" min="1" max="1000" value="${c.limiteDia}" id="rlim-${esc(c.id)}" style="width:84px"></div>
+          <div><label style="margin:0 0 3px;font-size:.72rem;font-weight:700;color:var(--cinza)">Janela</label><div style="display:flex;gap:6px;align-items:center"><input type="time" value="${esc(c.janelaIni)}" id="rji-${esc(c.id)}" style="width:auto"><span class="quando" style="margin:0">às</span><input type="time" value="${esc(c.janelaFim)}" id="rjf-${esc(c.id)}" style="width:auto"></div></div>
+          <button type="button" class="save" style="padding:6px 13px" onclick="salvarRitmo('${esc(c.id)}')">Salvar ritmo</button>
+          <a href="javascript:void(0)" onclick="toggleRitmo('${esc(c.id)}')" class="quando" style="margin:0;text-decoration:underline">cancelar</a>
+        </div>
+        <div class="quando" style="margin:7px 0 0">💡 Intervalo maior ou teto/dia menor é <b>mais seguro</b> para o número — e aumenta o término previsto. Vale para os próximos envios.</div>
       </div>
       <div class="vars-${esc(c.id)}" style="display:none;margin-top:8px">${variacoes}</div>
     </div>`;
@@ -3546,6 +3556,25 @@ function paginaSofiaCampanhas(aviso, erro) {
       if(n>naFila) n=naFila;
       fetch('/sofia/campanhas/enviar-agora',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'id='+encodeURIComponent(id)+'&n='+n})
         .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ alert('🚀 Disparando '+n+' mensagem(ns) agora! Elas saem uma a cada 35–70s — acompanhe a barra da campanha.'); } else { alert('❌ '+((j&&j.erro)||'falha')); } })
+        .catch(function(){ alert('❌ erro de rede'); });
+    }
+    // Ajustar o ritmo/limites de uma campanha JÁ criada. Pausa o auto-refresh
+    // enquanto o formulário está aberto (window.campEditando) para não sumir.
+    function toggleRitmo(id){
+      var box=document.querySelector('.ritmoBox-'+id); if(!box) return;
+      var abrir = (box.style.display==='none' || !box.style.display);
+      box.style.display = abrir ? 'block' : 'none';
+      window.campEditando = abrir;
+    }
+    function salvarRitmo(id){
+      function val(p){ var e=document.getElementById(p+'-'+id); return e?e.value:''; }
+      var mn=parseInt(val('rmin'),10), mx=parseInt(val('rmax'),10), lim=parseInt(val('rlim'),10);
+      if(!(mn>0)||!(mx>0)){ alert('Preencha o intervalo entre envios (segundos).'); return; }
+      if(mx<mn){ alert('O tempo máximo deve ser maior ou igual ao mínimo.'); return; }
+      if(!(lim>0)){ alert('Preencha o máximo por dia.'); return; }
+      var d={ id:id, delayMinSeg:mn, delayMaxSeg:mx, limiteDia:lim, janelaIni:val('rji'), janelaFim:val('rjf') };
+      fetch('/sofia/campanhas/ritmo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
+        .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ window.campEditando=false; var b=document.querySelector('.ritmoBox-'+id); if(b)b.style.display='none'; alert('✅ Ritmo atualizado! O término previsto vai recalcular.'); } else { alert('❌ '+((j&&j.erro)||'falha')); } })
         .catch(function(){ alert('❌ erro de rede'); });
     }
     function abrirCampDetalhe(id){
@@ -4095,7 +4124,7 @@ function paginaPerfis(aviso, erro, view) {
   // Rótulos amigáveis das ações auditadas (código estável → texto com ícone).
   const rotAcao = {
     'campanha.criar': '📣 Criou campanha', 'campanha.iniciar': '▶️ Iniciou campanha', 'campanha.retomar': '▶️ Retomou campanha',
-    'campanha.pausar': '⏸️ Pausou campanha', 'campanha.cancelar': '🚫 Cancelou campanha', 'campanha.excluir': '🗑️ Excluiu campanha', 'campanha.enviar-agora': '🚀 Enviou agora (campanha)',
+    'campanha.pausar': '⏸️ Pausou campanha', 'campanha.cancelar': '🚫 Cancelou campanha', 'campanha.excluir': '🗑️ Excluiu campanha', 'campanha.enviar-agora': '🚀 Enviou agora (campanha)', 'campanha.ritmo': '⚙️ Ajustou ritmo da campanha',
     'conversa.assumir': '🧑 Assumiu conversa', 'conversa.devolver': '🤖 Devolveu à SoFIA', 'conversa.encerrar': '🔒 Encerrou conversa', 'conversa.agendar': '📅 Agendou no EVO',
     'contato.bloquear': '🚫 Bloqueou contato', 'contato.desbloquear': '✅ Desbloqueou contato',
     'sofia.ligar': '▶️ Ligou a SoFIA', 'sofia.pausar': '⏸️ Pausou a SoFIA', 'sofia.reiniciar': '🔄 Reiniciou a SoFIA',
@@ -5550,6 +5579,19 @@ const server = http.createServer((req, res) => {
       let nomeC = ''; try { const c = (sofia.lerCampanhas() || []).find(x => String(x.id) === String(id)); if (c) nomeC = c.nome || ''; } catch (_) {}
       try { sofia.opCampanha({ op: 'rajada', id, n }); } catch (_) {}
       try { auditoria.registrar(quem, 'campanha.enviar-agora', nomeC || id, n + ' envio(s)'); } catch (_) {}
+      return res.end(JSON.stringify({ ok: true }));
+    });
+  }
+  // Ajustar o ritmo/limites de uma campanha já criada (delay, teto/dia, janela).
+  if (req.method === 'POST' && url === '/sofia/campanhas/ritmo') {
+    const quem = (sess && sess.usuario) ? sess.usuario : '';
+    return lerCorpo(req, 1e5, corpo => {
+      let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      const id = String(d.id || ''); if (!id) return res.end(JSON.stringify({ ok: false, erro: 'faltou id' }));
+      let nomeC = ''; try { const c = (sofia.lerCampanhas() || []).find(x => String(x.id) === id); if (c) nomeC = c.nome || ''; } catch (_) {}
+      try { sofia.opCampanha({ op: 'ritmo', id, delayMinSeg: d.delayMinSeg, delayMaxSeg: d.delayMaxSeg, limiteDia: d.limiteDia, janelaIni: d.janelaIni, janelaFim: d.janelaFim }); } catch (_) {}
+      try { auditoria.registrar(quem, 'campanha.ritmo', nomeC || id, `${d.delayMinSeg}-${d.delayMaxSeg}s · ${d.limiteDia}/dia`); } catch (_) {}
       return res.end(JSON.stringify({ ok: true }));
     });
   }

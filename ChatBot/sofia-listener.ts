@@ -1319,6 +1319,18 @@ async function processarCampInbox() {
             log(`campanha "${c.nome}": ${op.tel} removido da fila (manual).`);
           }
         }
+      } else if (op.op === "ritmo" && op.id) {
+        // Ajusta o ritmo/limites de uma campanha JÁ criada (delay, teto/dia, janela).
+        const c = campanhas.find((x) => x.id === String(op.id));
+        if (c) {
+          const iMin = parseInt(String(op.delayMinSeg), 10); if (Number.isFinite(iMin) && iMin > 0) c.delayMinSeg = Math.min(3600, iMin);
+          const iMax = parseInt(String(op.delayMaxSeg), 10); if (Number.isFinite(iMax) && iMax > 0) c.delayMaxSeg = Math.min(3600, Math.max(c.delayMinSeg, iMax));
+          const iLim = parseInt(String(op.limiteDia), 10); if (Number.isFinite(iLim) && iLim > 0) c.limiteDia = Math.min(1000, iLim);
+          if (op.janelaIni && /^\d{2}:\d{2}$/.test(String(op.janelaIni))) c.janelaIni = String(op.janelaIni);
+          if (op.janelaFim && /^\d{2}:\d{2}$/.test(String(op.janelaFim))) c.janelaFim = String(op.janelaFim);
+          c.atualizadoEm = Date.now(); agendarSalvarCampanhas();
+          log(`campanha "${c.nome}": ritmo atualizado — ${c.delayMinSeg}-${c.delayMaxSeg}s, teto ${c.limiteDia}/dia, janela ${c.janelaIni}-${c.janelaFim}.`);
+        }
       } else if (op.op === "rajada" && op.id) {
         // "Enviar agora": dispara N mensagens JÁ, ignorando o teto diário e a janela
         // de horário — mas mantém o espaçamento (delay) para não queimar o número.
