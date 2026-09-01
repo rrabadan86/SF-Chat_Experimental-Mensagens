@@ -1192,6 +1192,7 @@ type Campanha = {
   pendentes: CampDest[]; enviados: { tel: string; nome?: string; em: number }[]; falhas: { tel: string; erro: string; em: number }[];
   enviadosHoje: number; diaRef: string; proxEnvioEm: number; criadoEm: number; atualizadoEm: number;
   falhasSeguidas?: number; // falhas consecutivas — se estourar, pausa sozinha e alerta
+  rajadaRestante?: number; // "enviar agora": nº de envios a disparar JÁ, ignorando teto/janela (mantém o espaçamento)
 };
 const CAMP_MAX_FALHAS_SEGUIDAS = parseInt(process.env.SOFIA_CAMP_MAX_FALHAS || "5", 10);
 const CAMP_FILE = path.join(DIR, "campanhas.json");
@@ -1318,6 +1319,18 @@ async function processarCampInbox() {
             log(`campanha "${c.nome}": ${op.tel} removido da fila (manual).`);
           }
         }
+      } else if (op.op === "rajada" && op.id) {
+        // "Enviar agora": dispara N mensagens JÁ, ignorando o teto diário e a janela
+        // de horário — mas mantém o espaçamento (delay) para não queimar o número.
+        const c = campanhas.find((x) => x.id === String(op.id));
+        const n = Math.max(1, Math.min(1000, parseInt(String(op.n), 10) || 0));
+        if (c && n && (c.pendentes || []).length) {
+          c.rajadaRestante = (c.rajadaRestante || 0) + n;
+          if (c.status === "pronta" || c.status === "pausada" || c.status === "concluida") c.status = "enviando";
+          c.proxEnvioEm = 0; // libera o primeiro envio na hora
+          c.atualizadoEm = Date.now(); agendarSalvarCampanhas();
+          log(`campanha "${c.nome}": ENVIAR AGORA +${n} (rajada total ${c.rajadaRestante}) — ignora teto/janela, mantém o espaçamento.`);
+        }
       } else if (op.op === "reenviar" && op.id && op.tel) {
         // Reenvio manual de UM número que falhou: tira das falhas e volta pra fila.
         const c = campanhas.find((x) => x.id === String(op.id));
@@ -1392,11 +1405,12 @@ async function tickCampanha() {
   if (!c) return;
   if (c.diaRef !== hojeSP()) { c.diaRef = hojeSP(); c.enviadosHoje = 0; } // vira o dia → zera o contador
   if (!c.pendentes.length) { c.status = "concluida"; c.atualizadoEm = Date.now(); agendarSalvarCampanhas(); return; }
-  if (c.dataInicio && hojeSP() < c.dataInicio) return;        // ainda não chegou a data de início
-  if (!diaPermitido(c)) return;                               // dia da semana não marcado → espera
-  if (!dentroJanela(c.janelaIni, c.janelaFim)) return;        // fora do horário → espera
-  if (c.enviadosHoje >= c.limiteDia) return;                  // bateu o teto do dia → espera amanhã
-  if (Date.now() < c.proxEnvioEm) return;                     // ainda no intervalo entre envios
+  const emRajada = (c.rajadaRestante || 0) > 0;               // "enviar agora": ignora data/dia/janela/teto
+  if (c.dataInicio && hojeSP() < c.dataInicio && !emRajada) return; // ainda não chegou a data de início
+  if (!diaPermitido(c) && !emRajada) return;                  // dia da semana não marcado → espera
+  if (!dentroJanela(c.janelaIni, c.janelaFim) && !emRajada) return; // fora do horário → espera
+  if (c.enviadosHoje >= c.limiteDia && !emRajada) return;     // bateu o teto do dia → espera amanhã
+  if (Date.now() < c.proxEnvioEm) return;                     // espaçamento entre envios — SEMPRE respeitado (segurança do número)
   const alvoDest = c.pendentes[0];
   const variacaoBase = (c.variacoes.length ? c.variacoes[(c.enviados.length) % c.variacoes.length] : c.textoBase) || c.textoBase;
   const variacao = aplicarNome(variacaoBase, alvoDest.nome); // personaliza com o 1º nome
@@ -1426,6 +1440,7 @@ async function tickCampanha() {
       enviarNtfy("Campanha pausada", `A campanha "${c.nome}" foi pausada apos ${c.falhasSeguidas} falhas seguidas. Verifique a conexao da SoFIA e os numeros. Retome pelo painel quando estiver ok.`, "warning", "high");
     }
   } finally {
+    if (c.rajadaRestante && c.rajadaRestante > 0) c.rajadaRestante--; // consumiu um envio da rajada "enviar agora"
     c.proxEnvioEm = Date.now() + aleatorio(c.delayMinSeg, c.delayMaxSeg) * 1000;
     if (!c.pendentes.length) c.status = "concluida";
     c.atualizadoEm = Date.now();

@@ -3019,6 +3019,7 @@ function campListHTML(filtro = {}) {
         <span class="quando" style="margin:0">${rotStatus[c.status] || c.status}${(c.status === 'pausada' && (c.falhasSeguidas || 0) >= 3) ? ' <span style="color:var(--erro)">(pausada por falhas — verifique a conexão)</span>' : ''}</span>
         <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           ${podeIniciar ? btn('iniciar', '▶️ Iniciar', 'save') : ''}
+          ${((c.pendentes || []).length && c.status !== 'cancelada') ? `<button type="button" class="save" style="padding:5px 12px;font-size:var(--fs-sm);background:var(--coral,#c0453f)" title="Disparar N mensagens agora, ignorando o teto do dia e o horário" onclick="cpEnviarAgora('${esc(c.id)}',${(c.pendentes || []).length})">🚀 Enviar agora</button>` : ''}
           ${podePausar ? btn('pausar', '⏸️ Pausar', 'reset') : ''}
           ${(c.status !== 'concluida' && c.status !== 'cancelada') ? btn('cancelar', '🚫 Cancelar', 'reset') : ''}
           ${btn('excluir', '🗑️ Excluir', 'reset')}
@@ -3533,6 +3534,20 @@ function paginaSofiaCampanhas(aviso, erro) {
     function cpEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];}); }
     function cpFmtTel(k){ var d=String(k||'').replace(/\\D/g,''); if(/^55\\d{10,11}$/.test(d)){ var ddd=d.slice(2,4), r=d.slice(4); return '+55 ('+ddd+') '+(r.length===9?r.slice(0,5)+'-'+r.slice(5):r.slice(0,4)+'-'+r.slice(4)); } return k||''; }
     function cpFmtHora(ts){ if(!ts) return ''; try{ return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
+    // "Enviar agora": dispara N mensagens já, ignorando o teto do dia e a janela de
+    // horário (mas mantém o espaçamento de 35–70s entre cada, p/ proteger o número).
+    function cpEnviarAgora(id, naFila){
+      naFila = parseInt(naFila,10)||0; if(!naFila){ alert('Não há ninguém na fila desta campanha.'); return; }
+      var sug = Math.min(naFila, 20);
+      var v = prompt('Quantas mensagens você quer disparar AGORA?\n\n• Saem já, ignorando o teto do dia e o horário.\n• Uma a cada 35–70s, para proteger o número.\n\nNa fila: '+naFila, String(sug));
+      if(v===null) return;
+      var n = parseInt(v,10);
+      if(!(n>0)){ alert('Informe um número maior que zero.'); return; }
+      if(n>naFila) n=naFila;
+      fetch('/sofia/campanhas/enviar-agora',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'id='+encodeURIComponent(id)+'&n='+n})
+        .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ alert('🚀 Disparando '+n+' mensagem(ns) agora! Elas saem uma a cada 35–70s — acompanhe a barra da campanha.'); } else { alert('❌ '+((j&&j.erro)||'falha')); } })
+        .catch(function(){ alert('❌ erro de rede'); });
+    }
     function abrirCampDetalhe(id){
       cpId=id; cpLastBody='';
       document.getElementById('cpBody').innerHTML='<p class="quando">Carregando…</p>';
@@ -4080,7 +4095,7 @@ function paginaPerfis(aviso, erro, view) {
   // Rótulos amigáveis das ações auditadas (código estável → texto com ícone).
   const rotAcao = {
     'campanha.criar': '📣 Criou campanha', 'campanha.iniciar': '▶️ Iniciou campanha', 'campanha.retomar': '▶️ Retomou campanha',
-    'campanha.pausar': '⏸️ Pausou campanha', 'campanha.cancelar': '🚫 Cancelou campanha', 'campanha.excluir': '🗑️ Excluiu campanha',
+    'campanha.pausar': '⏸️ Pausou campanha', 'campanha.cancelar': '🚫 Cancelou campanha', 'campanha.excluir': '🗑️ Excluiu campanha', 'campanha.enviar-agora': '🚀 Enviou agora (campanha)',
     'conversa.assumir': '🧑 Assumiu conversa', 'conversa.devolver': '🤖 Devolveu à SoFIA', 'conversa.encerrar': '🔒 Encerrou conversa', 'conversa.agendar': '📅 Agendou no EVO',
     'contato.bloquear': '🚫 Bloqueou contato', 'contato.desbloquear': '✅ Desbloqueou contato',
     'sofia.ligar': '▶️ Ligou a SoFIA', 'sofia.pausar': '⏸️ Pausou a SoFIA', 'sofia.reiniciar': '🔄 Reiniciou a SoFIA',
@@ -5522,6 +5537,20 @@ const server = http.createServer((req, res) => {
       try { sofia.opCampanha({ op: 'remover-fila', id, tel }); } catch (_) {}
       try { auditoria.registrar(quem, 'campanha.remover-fila', nomeC || id, tel); } catch (_) {}
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true }));
+    });
+  }
+  // "Enviar agora": dispara N mensagens da campanha JÁ (ignora teto/janela; mantém espaçamento).
+  if (req.method === 'POST' && url === '/sofia/campanhas/enviar-agora') {
+    const quem = (sess && sess.usuario) ? sess.usuario : '';
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      const id = p.get('id'); const n = Math.max(1, Math.min(1000, parseInt(p.get('n'), 10) || 0));
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      if (!id || !n) return res.end(JSON.stringify({ ok: false, erro: 'faltou id/quantidade' }));
+      let nomeC = ''; try { const c = (sofia.lerCampanhas() || []).find(x => String(x.id) === String(id)); if (c) nomeC = c.nome || ''; } catch (_) {}
+      try { sofia.opCampanha({ op: 'rajada', id, n }); } catch (_) {}
+      try { auditoria.registrar(quem, 'campanha.enviar-agora', nomeC || id, n + ' envio(s)'); } catch (_) {}
+      return res.end(JSON.stringify({ ok: true }));
     });
   }
   if (req.method === 'POST' && url === '/sofia/campanhas/reenviar') {
