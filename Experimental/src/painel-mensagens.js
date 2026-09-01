@@ -491,6 +491,15 @@ const ESTILO = `
   .turnos span{display:block;text-align:center;border:1.5px solid #dcdcdc;border-radius:12px;padding:11px;font-weight:700;cursor:pointer;color:var(--tinta)}
   .turnos input:checked + span{border-color:var(--teal);background:var(--teal-soft,#e4efee);color:#0c6f70}
   .fotorow{margin-top:12px}
+  .foto-acc{margin-top:12px;border-top:1px dashed var(--linha);padding-top:10px}
+  .foto-acc>summary{list-style:none;cursor:pointer;position:relative;display:inline-flex;align-items:center;gap:9px;font-weight:700;font-size:.9rem;padding:2px 22px 2px 0;color:inherit;user-select:none}
+  .foto-acc>summary::-webkit-details-marker{display:none}
+  .foto-acc>summary::after{content:"▸";position:absolute;right:2px;color:var(--teal);font-weight:900}
+  .foto-acc[open]>summary::after{content:"▾"}
+  .foto-acc>summary:hover{color:var(--teal)}
+  .foto-status{font-weight:600;font-size:.7rem;border-radius:999px;padding:2px 9px}
+  .foto-status.on{background:#e6f6ec;color:#1c8f52}
+  .foto-status.off{background:#eee;color:#8a8a8a}
   .chk{display:flex;align-items:center;gap:9px;font-weight:600;font-size:.9rem;cursor:pointer}
   .chk input{width:18px;height:18px}
   #fotoWrap{display:none;margin-top:8px}
@@ -854,6 +863,7 @@ function scriptPreviewTeste() {
       if(!d.ok){ msg.textContent='⚠️ '+(d.erro||'Falha ao salvar.'); btn.disabled=false; return; }
       var thumb=wrap.querySelector('.mfThumb'); thumb.src='/mensagem/foto?chave='+encodeURIComponent(chave)+'&v='+Date.now(); thumb.style.display='';
       wrap.querySelector('.mfRm').style.display=''; file.value='';
+      var _fr=wrap.closest('.fotorow'), _ps=_fr&&_fr.querySelector('.foto-status'); if(_ps){_ps.textContent='✓ com foto';_ps.className='foto-status on';}
       msg.textContent='✅ Foto salva — vai junto no próximo envio desta mensagem.';
     }catch(e){ msg.textContent='⚠️ '+(e.message||'Falha.'); }
     finally{ btn.disabled=false; }
@@ -865,6 +875,7 @@ function scriptPreviewTeste() {
       var r=await fetch('/mensagem/foto/remover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:chave})});
       await r.json();
       wrap.querySelector('.mfThumb').style.display='none'; btn.style.display='none';
+      var _fr=wrap.closest('.fotorow'), _ck=_fr&&_fr.querySelector('.mfChk'); if(_ck)_ck.checked=false; var _ps=_fr&&_fr.querySelector('.foto-status'); if(_ps){_ps.textContent='sem foto';_ps.className='foto-status off';}
       msg.textContent='Foto removida — volta a enviar só o texto.';
     }catch(e){ msg.textContent='⚠️ '+(e.message||'Falha.'); btn.disabled=false; }
   }
@@ -928,8 +939,13 @@ function cardMensagem(m, voltar, opts = {}) {
 function cardFoto(m) {
   const tem = !!m.fotoNome;
   const src = tem ? `/mensagem/foto?chave=${esc(m.chave)}&v=${Date.now()}` : '';
-  return `<div class="fotorow" style="margin-top:12px;border-top:1px dashed var(--linha);padding-top:12px">
-    <label class="chk"><input type="checkbox" class="mfChk"${tem ? ' checked' : ''} onchange="mfToggle(this)"> 📎 Enviar com foto (flyer junto da mensagem)</label>
+  // Recolhido por padrão (acordeão) — o selo no título já mostra se a mensagem
+  // vai com foto ou não, sem precisar abrir. A classe "fotorow" é mantida porque
+  // o JS (mfToggle/mfSalvar/mfRemover) navega o DOM por ela.
+  return `<details class="foto-acc fotorow">
+    <summary>📎 Foto no flyer <span class="foto-status ${tem ? 'on' : 'off'}">${tem ? '✓ com foto' : 'sem foto'}</span></summary>
+    <div class="foto-body">
+    <label class="chk"><input type="checkbox" class="mfChk"${tem ? ' checked' : ''} onchange="mfToggle(this)"> Enviar com foto (flyer junto da mensagem)</label>
     <div class="mfWrap"${tem ? '' : ' style="display:none"'}>
       <img class="mfThumb thumb" style="${tem ? '' : 'display:none;'}width:130px;height:auto;max-height:180px;border-radius:9px;margin:8px 0" src="${src}" alt="foto">
       <div style="margin-top:6px"><input type="file" class="mfFile" accept="image/png,image/jpeg,image/webp"></div>
@@ -939,7 +955,8 @@ function cardFoto(m) {
       </div>
       <div class="mfMsg meta" style="margin-top:6px"></div>
     </div>
-  </div>`;
+    </div>
+  </details>`;
 }
 
 // ── Página 1: editar mensagens (texto + horário de cada uma) ────────────────
