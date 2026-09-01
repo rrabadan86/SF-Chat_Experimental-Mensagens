@@ -338,8 +338,9 @@ const esc = s => String(s == null ? '' : s)
 // Ícone de ajuda (ⓘ) com explicação ao passar o mouse / tocar. O texto é HTML
 // estático (confiável) — pode ter <b>. Usado ao lado dos rótulos de config.
 const infoI = html => `<span class="info" tabindex="0">i<span class="info-pop">${html}</span></span>`;
-// Variante de ALERTA: ⚠️ âmbar com o mesmo tooltip (para riscos, ex.: suspensão do WhatsApp).
-const avisoI = html => `<span class="info aviso" tabindex="0">⚠️<span class="info-pop">${html}</span></span>`;
+// Variante de ALERTA: badge âmbar com "!" (não usa emoji, para renderizar igual
+// em qualquer sistema) e o mesmo tooltip. Para riscos, ex.: suspensão do WhatsApp.
+const avisoI = html => `<span class="info aviso" tabindex="0" aria-label="atenção">!<span class="info-pop">${html}</span></span>`;
 
 function hojeSP() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); }
 function fmtData(d) { const p = String(d || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : d; }
@@ -618,8 +619,8 @@ const ESTILO = `
   .info .info-pop b{color:#fff}
   .info:hover .info-pop,.info:focus .info-pop{display:block}
   .info .info-pop::before{content:"";position:absolute;left:6px;top:-5px;border:5px solid transparent;border-top:0;border-bottom-color:#2d2a2f}
-  .info.aviso{background:transparent;width:auto;height:auto;border-radius:0;font-size:.9rem;line-height:1;cursor:help}
-  .info.aviso:hover,.info.aviso:focus{background:transparent;color:inherit}
+  .info.aviso{background:#fbe6c2;color:#9a6512;border:1px solid #e6b357;width:17px;height:17px;border-radius:50%;font-size:.74rem;font-weight:800}
+  .info.aviso:hover,.info.aviso:focus{background:#e0a53a;color:#fff;border-color:#e0a53a;outline:none}
   .info.aviso .info-pop{border-left:3px solid #e0a53a;width:300px}
   .cfg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px 22px}
   .cfg-grid label{display:flex;align-items:center;font-weight:700;font-size:.82rem;margin:0 0 6px}
