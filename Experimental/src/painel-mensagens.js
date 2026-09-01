@@ -3539,7 +3539,7 @@ function paginaSofiaCampanhas(aviso, erro) {
     function cpEnviarAgora(id, naFila){
       naFila = parseInt(naFila,10)||0; if(!naFila){ alert('Não há ninguém na fila desta campanha.'); return; }
       var sug = Math.min(naFila, 20);
-      var v = prompt('Quantas mensagens você quer disparar AGORA?\n\n• Saem já, ignorando o teto do dia e o horário.\n• Uma a cada 35–70s, para proteger o número.\n\nNa fila: '+naFila, String(sug));
+      var v = prompt('Quantas mensagens você quer disparar AGORA?\\n\\n• Saem já, ignorando o teto do dia e o horário.\\n• Uma a cada 35–70s, para proteger o número.\\n\\nNa fila: '+naFila, String(sug));
       if(v===null) return;
       var n = parseInt(v,10);
       if(!(n>0)){ alert('Informe um número maior que zero.'); return; }
