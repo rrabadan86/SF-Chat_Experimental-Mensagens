@@ -1537,6 +1537,13 @@ function paginaInstagram(aviso, erro) {
   // ── Card da integração OFICIAL (Graph API): comentário/DM → resposta ──────
   const igOf = igApi.status();
   const ofCfg = igApi.lerCfg();
+  const ibRows = [0, 1, 2, 3].map(i => {
+    const it = (ofCfg.iceBreakers || [])[i] || { pergunta: '', resposta: '' };
+    return `<div style="border:1px solid var(--linha);border-radius:10px;padding:10px 12px;margin:8px 0">
+        <input type="text" name="ib${i}_p" value="${esc(it.pergunta || '')}" maxlength="80" placeholder="Botão ${i + 1} — ex.: Quero minha aula grátis 💚" style="width:100%;font-weight:600">
+        <textarea name="ib${i}_r" rows="2" placeholder="Resposta ao tocar neste botão — use {link}" style="width:100%;margin-top:6px">${esc(it.resposta || '')}</textarea>
+      </div>`;
+  }).join('');
   const oficialCard = `
     <div class="card" style="border-left:4px solid ${igOf.conta ? 'var(--ok)' : 'var(--cinza)'}">
       <h2 style="margin:0 0 4px">🤖 Instagram oficial (API da Meta) <span class="badge">recomendado</span></h2>
@@ -1553,7 +1560,16 @@ function paginaInstagram(aviso, erro) {
         <label style="display:block;margin:14px 0 4px;font-weight:700;font-size:.85rem">Link do formulário <span class="sub">— para onde a lead é levada (agenda no EVO → SoFIA)</span></label>
         <input type="text" name="link" value="${esc(ofCfg.link || '')}" style="width:100%" placeholder="https://sf-formularioexperimental.onrender.com/?origem=instagram">
         <label class="chk" style="margin-top:12px"><input type="checkbox" name="responderDM" ${ofCfg.responderDM ? 'checked' : ''}> Também responder quem manda <b>DM direto</b> (janela de 24h)</label>
+        <div style="margin-top:16px;border-top:1px dashed var(--linha);padding-top:12px">
+          <label style="display:block;font-weight:700;font-size:.85rem;margin-bottom:2px">🎉 Botões de boas-vindas (Ice Breakers)</label>
+          <p class="quando" style="margin:0 0 6px">Aparecem quando alguém <b>abre a conversa</b> pela 1ª vez. A pessoa toca num botão e recebe a resposta na hora. Até 4 — deixe em branco os que não quiser.</p>
+          ${ibRows}
+        </div>
         <div class="acts" style="margin-top:14px"><button type="submit" class="save">💾 Salvar Instagram oficial</button></div>
+      </form>
+      <form method="POST" action="/instagram/oficial/icebreakers" style="margin:10px 0 0">
+        <button type="submit" class="tbtn" onclick="return confirm('Publicar os botões de boas-vindas na conta do Instagram?\\n\\nSalve as alterações antes. Só funciona com o app aprovado/\\'Ao vivo\\'.')">📤 Publicar botões no Instagram</button>
+        <span class="sub" style="margin-left:8px">salve primeiro; publica na conta (vale quando o app estiver "Ao vivo")</span>
       </form>
     </div>`;
 
@@ -5706,7 +5722,8 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && url === '/instagram') {
     const q = req.url.split('?')[1] || '';
     let aviso = '', erro = false;
-    if (/(?:^|&)oficial=1/.test(q)) aviso = '🤖 Instagram oficial salvo! Vale na hora — palavra-chave, mensagem e link atualizados.';
+    if (/(?:^|&)oficial=1/.test(q)) aviso = '🤖 Instagram oficial salvo! Vale na hora — palavra-chave, mensagem, link e botões atualizados.';
+    else if (/(?:^|&)ib=1/.test(q)) aviso = '🎉 Botões de boas-vindas publicados na conta do Instagram!';
     else if (/(?:^|&)on=1/.test(q)) aviso = '📸 Instagram LIGADO. Vale no próximo disparo (07:00).';
     else if (/(?:^|&)off=1/.test(q)) aviso = '⏸️ Instagram pausado. Nenhuma DM automática será enviada.';
     else if (/(?:^|&)lim=1/.test(q)) aviso = '🎯 Limite salvo. Vale já no próximo disparo — sem reiniciar.';
@@ -5729,6 +5746,12 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e5, corpo => {
       const p = new URLSearchParams(corpo);
       const palavras = (p.get('palavras') || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      const iceBreakers = [];
+      for (let i = 0; i < 4; i++) {
+        const pergunta = (p.get('ib' + i + '_p') || '').trim().slice(0, 80);
+        const resposta = (p.get('ib' + i + '_r') || '').trim().slice(0, 1000);
+        if (pergunta) iceBreakers.push({ pergunta, resposta });
+      }
       try {
         igApi.gravarCfg({
           enabled: p.get('enabled') === 'on',
@@ -5736,12 +5759,24 @@ const server = http.createServer((req, res) => {
           palavras,
           mensagem: (p.get('mensagem') || '').slice(0, 2000),
           link: (p.get('link') || '').trim().slice(0, 500),
+          iceBreakers,
         });
         res.writeHead(303, { Location: '/instagram?oficial=1' }); res.end();
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(paginaInstagram('Erro ao salvar o Instagram oficial: ' + e.message, true));
       }
+    });
+  }
+  // Publica os Ice Breakers (botões de boas-vindas) na conta via API.
+  if (req.method === 'POST' && url === '/instagram/oficial/icebreakers') {
+    return lerCorpo(req, 1e4, () => {
+      igApi.publicarIceBreakers()
+        .then(() => { res.writeHead(303, { Location: '/instagram?ib=1' }); res.end(); })
+        .catch(e => {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(paginaInstagram('Não deu pra publicar os botões: ' + e.message + ' — se falar em "capability"/permissão, é porque o app ainda não está "Ao vivo". Depois da aprovação, publique de novo.', true));
+        });
     });
   }
   if (req.method === 'POST' && url === '/instagram/limite') {

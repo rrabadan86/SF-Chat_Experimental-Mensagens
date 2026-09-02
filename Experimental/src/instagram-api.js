@@ -52,6 +52,14 @@ function cfgPadrao() {
     link: process.env.IG_FORM_URL || '',
     responderDM: true, // também responde quem manda DM direto (dentro das 24h)
     maxDia: parseInt(process.env.IG_MAX_DIA || '80', 10),
+    // Ice Breakers = "menu de boas-vindas" que aparece quando a pessoa ABRE a
+    // conversa pela 1ª vez. Cada item vira um botão (pergunta) + a resposta que
+    // a gente envia quando ela toca. Até 4. {link} é trocado pelo link.
+    iceBreakers: [
+      { pergunta: 'Quero minha aula grátis 💚', resposta: 'Que alegria! 🎉 Preenche aqui rapidinho que eu já organizo o melhor horário pra você:\n\n{link}' },
+      { pergunta: 'Onde fica o studio?', resposta: 'A gente fica no Setor Bueno, em Goiânia! 📍 Me conta que horário é melhor pra você que eu te passo o endereço certinho e já agendo sua experimental.' },
+      { pergunta: 'Como funciona a aula?', resposta: 'É um treino rápido e completo, feito só pra mulheres 💪 A primeira é uma experimental gratuita! Bora marcar? Preenche aqui: {link}' },
+    ],
   };
 }
 function lerCfg() {
@@ -194,11 +202,33 @@ function montarMensagem(cfg) {
   return String(cfg.mensagem || '').replace(/\{link\}/g, link).trim();
 }
 
+function trocaLink(texto, cfg) {
+  const link = (cfg && cfg.link) || process.env.IG_FORM_URL || '';
+  return String(texto || '').replace(/\{link\}/g, link).trim();
+}
+
 // ─── Envio de DM (resposta a comentário = private reply; ou DM direto) ─────
 async function enviarDM(recipient, texto) {
   const id = igUserId();
   if (!id) throw new Error('conta do Instagram ainda não resolvida (rode o bootstrap)');
   return req('POST', `/${id}/messages?${qs({ access_token: tokenAtual() })}`, { recipient, message: { text: texto } });
+}
+
+// ─── Ice Breakers (menu de boas-vindas ao abrir a conversa) ────────────────
+// Publica na conta os botões configurados. Precisa da permissão de mensagem
+// (só funciona com o app aprovado/"Ao vivo"); antes disso a Meta responde #3.
+async function publicarIceBreakers() {
+  if (!PAGE_ID) throw new Error('IG_PAGE_ID não definido');
+  const itens = (lerCfg().iceBreakers || [])
+    .filter(it => it && it.pergunta && it.pergunta.trim())
+    .slice(0, 4)
+    .map((it, i) => ({ question: String(it.pergunta).slice(0, 80), payload: 'IB_' + i }));
+  if (!itens.length) {
+    // sem itens → limpa os ice breakers da conta
+    return req('DELETE', `/${PAGE_ID}/messenger_profile?${qs({ platform: 'instagram', 'fields': 'ice_breakers', access_token: tokenAtual() })}`);
+  }
+  return req('POST', `/${PAGE_ID}/messenger_profile?${qs({ access_token: tokenAtual() })}`,
+    { platform: 'instagram', ice_breakers: [{ call_to_actions: itens, locale: 'default' }] });
 }
 
 // ─── De-dup (webhooks reenviam; não responder 2x o mesmo id) ───────────────
@@ -248,26 +278,46 @@ async function processar(body) {
       }
     }
 
-    // 2) DMs recebidos (responde quem escreve, dentro da janela de 24h)
-    if (cfg.responderDM) {
-      for (const m of (entry.messaging || [])) {
-        const msg = m.message || {};
-        if (msg.is_echo) continue;                          // ignora ecos das minhas próprias mensagens
-        const senderId = m.sender && m.sender.id;
-        if (!senderId || (meu && String(senderId) === String(meu))) continue;
-        const mid = msg.mid;
-        if (jaTratado('m:' + (mid || senderId + ':' + (m.timestamp || '')))) continue;
-        if (!combina(msg.text || '', cfg.palavras)) continue;
-        if (contadorHoje() >= cfg.maxDia) continue;
+    // 2) Eventos de mensagem: toque num Ice Breaker (postback) ou DM recebido.
+    for (const m of (entry.messaging || [])) {
+      const senderId = m.sender && m.sender.id;
+      if (!senderId || (meu && String(senderId) === String(meu))) continue;
+
+      // 2a) Ice Breaker / botão tocado → responde SEMPRE (independe do responderDM)
+      if (m.postback && m.postback.payload) {
+        const payload = String(m.postback.payload);
+        if (jaTratado('p:' + senderId + ':' + payload + ':' + (m.timestamp || ''))) continue;
+        let resposta = '';
+        const mi = payload.match(/^IB_(\d+)$/);
+        if (mi) { const it = (cfg.iceBreakers || [])[parseInt(mi[1], 10)]; resposta = it && it.resposta ? trocaLink(it.resposta, cfg) : ''; }
+        if (!resposta) resposta = msgTexto; // fallback: mensagem padrão com o link
         try {
-          await enviarDM({ id: senderId }, msgTexto);
+          await enviarDM({ id: senderId }, resposta);
           enviados++;
-          if (atividade) atividade.registrar({ contexto: 'Instagram (DM)', destino: senderId, midia: false, ok: true, preview: 'resposta a DM: ' + (msg.text || '') });
+          if (atividade) atividade.registrar({ contexto: 'Instagram (DM)', destino: senderId, ok: true, preview: 'ice breaker: ' + (m.postback.title || payload) });
         } catch (e) {
           erros++;
-          if (atividade) atividade.registrar({ contexto: 'Instagram (DM)', destino: senderId, ok: false, erro: e.message, preview: msg.text || '' });
-          console.log('[ig-api] erro ao responder DM:', e.message);
+          if (atividade) atividade.registrar({ contexto: 'Instagram (DM)', destino: senderId, ok: false, erro: e.message, preview: 'ice breaker: ' + payload });
+          console.log('[ig-api] erro ao responder ice breaker:', e.message);
         }
+        continue;
+      }
+
+      // 2b) DM de texto recebido (responde quem escreve, dentro da janela de 24h)
+      if (!cfg.responderDM) continue;
+      const msg = m.message || {};
+      if (msg.is_echo || !msg.mid) continue;                // ignora ecos e eventos sem mensagem
+      if (jaTratado('m:' + msg.mid)) continue;
+      if (!combina(msg.text || '', cfg.palavras)) continue;
+      if (contadorHoje() >= cfg.maxDia) continue;
+      try {
+        await enviarDM({ id: senderId }, msgTexto);
+        enviados++;
+        if (atividade) atividade.registrar({ contexto: 'Instagram (DM)', destino: senderId, midia: false, ok: true, preview: 'resposta a DM: ' + (msg.text || '') });
+      } catch (e) {
+        erros++;
+        if (atividade) atividade.registrar({ contexto: 'Instagram (DM)', destino: senderId, ok: false, erro: e.message, preview: msg.text || '' });
+        console.log('[ig-api] erro ao responder DM:', e.message);
       }
     }
   }
@@ -289,6 +339,6 @@ function status() {
 }
 
 module.exports = {
-  bootstrap, verificar, assinaturaValida, processar, enviarDM,
+  bootstrap, verificar, assinaturaValida, processar, enviarDM, publicarIceBreakers,
   lerCfg, gravarCfg, status, igUserId, tokenAtual, VERIFY_TOKEN_DEFINIDO: !!VERIFY_TOKEN,
 };
