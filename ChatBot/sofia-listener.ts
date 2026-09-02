@@ -1940,8 +1940,16 @@ armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia
     // processo e o pm2 reinicia na hora — um laço de ~30s que nunca chega no QR.
     log(`❌ falha ao iniciar o WhatsApp: ${e?.message || e}`);
     setStatus("desconectado");
-    log("aguardando 20s antes de sair, para o pm2 não reiniciar em laço.");
-    setTimeout(() => process.exit(1), 20000);
+    // Backoff CRESCENTE persistido. Reiniciar de 50 em 50s martela o WhatsApp e
+    // faz o servidor BLOQUEAR o número por excesso de tentativas — foi o que
+    // derrubou de vez a conexão aqui. Cada falha seguida espera mais (1, 2, 4, 8…
+    // min, teto 15) antes de deixar o pm2 subir de novo. O contador zera quando
+    // conecta ("ready" chama gravarFails(0)). Dá tempo de o bloqueio passar.
+    const n = lerFails() + 1;
+    gravarFails(n);
+    const espera = Math.min(60 * Math.pow(2, n - 1), 900); // 60,120,240,480,900…s
+    log(`falha de conexão nº ${n}. Esperando ${Math.round(espera / 60)} min antes de tentar de novo — reiniciar rápido faz o WhatsApp bloquear o número. (zera ao conectar)`);
+    setTimeout(() => process.exit(1), espera * 1000);
   }
 })();
 
