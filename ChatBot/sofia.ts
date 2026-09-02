@@ -763,9 +763,14 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
   // IMPORTANTE: reaplicamos o systemPrompt em TODA mensagem (inclusive nas retomadas).
   // Sem isso, a partir da 2ª mensagem a Sofia perdia as regras (defletir preço, inventar
   // "franquia" etc.), porque o resume não estava mantendo o system prompt.
+  // Se o contato tem a tag de ALUNA CONTRATADA, avisamos a Sofia ANTES de ela
+  // responder — assim ela não faz a apresentação de boas-vindas nem pergunta
+  // "já conhece a metodologia?" para quem treina há anos, mesmo que a aluna
+  // tenha mandado só um "oi" (sem nenhuma palavra-chave de remarcação).
+  const promptDaVez = carregarPrompt() + contextoAluna(telefone);
   const opcoesDaVez: ClaudeAgentOptions = conversa.sessionId
-    ? { ...options, resume: conversa.sessionId, systemPrompt: carregarPrompt() }
-    : { ...options, systemPrompt: carregarPrompt() };
+    ? { ...options, resume: conversa.sessionId, systemPrompt: promptDaVez }
+    : { ...options, systemPrompt: promptDaVez };
 
   let resposta = "";
   let sessionId: string | undefined;
@@ -1163,6 +1168,25 @@ function temTagAluna(telefone: string): boolean {
 // True quando a RECEPÇÃO está no expediente e o contato é aluna contratada —
 // nesse caso a Sofia não responde (quem atende é a recepcionista).
 // A janela pode virar a meia-noite (ex.: 17:00–07:00).
+// Aviso anexado ao prompt quando o contato JÁ É ALUNA (tag do painel). Resolve o
+// caso da aluna que manda só "oi": sem isso a Sofia se apresentaria como se fosse
+// a primeira conversa dela com o Studio.
+function contextoAluna(telefone: string): string {
+  try {
+    if (!temTagAluna(telefone)) return "";
+    return `
+
+# CONTEXTO DESTA CONVERSA (vale ACIMA da seção SAUDAÇÃO INICIAL)
+- Esta pessoa JÁ É ALUNA CONTRATADA do Studio — ela treina aqui. Não é lead.
+- NÃO se apresente, NÃO explique o que é o SlimFit e NÃO pergunte "você já conhece
+  a nossa metodologia?". Ela conhece. Isso vale mesmo que a mensagem dela seja só "oi".
+- NÃO ofereça aula experimental gratuita nem tabela de preços por iniciativa própria.
+- Cumprimente de forma breve e calorosa (use o nome dela quando souber) e pergunte
+  como pode ajudar. Ex.: "Oi, [nome]! 😊 Como posso te ajudar?"
+- Se ela falar em remarcar/desmarcar/reposição/horário, siga a seção ALUNAS CONTRATADAS.`;
+  } catch { return ""; }
+}
+
 function recepcaoAtendendo(telefone: string): boolean {
   try {
     const cfg = lerAlunasCfg();
