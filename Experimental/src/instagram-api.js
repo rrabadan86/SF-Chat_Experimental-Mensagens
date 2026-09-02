@@ -126,11 +126,38 @@ async function bootstrap() {
 
     _cache = gravarCache({ token: longo, igUserId: iba.id, igUsername: iba.username || '', pageName: pg.name || '', validadoEm: new Date().toISOString() });
     console.log(`[ig-api] pronto ✅ conta @${iba.username || iba.id} (id ${iba.id}) vinculada à Página "${pg.name || PAGE_ID}".`);
+    // Faz 1 chamada bem-sucedida de CADA permissão — é o que a Meta exige pra
+    // liberar o botão "Solicitar acesso avançado" (App Review). Best-effort.
+    aquecerPermissoes(longo, iba.id).catch(() => {});
     return { ok: true, igUserId: iba.id, igUsername: iba.username };
   } catch (e) {
     console.log('[ig-api] falha no bootstrap:', e.message);
     return { ok: false, motivo: e.message };
   }
+}
+
+// Dispara uma leitura leve por permissão, pra "registrar uso" na Meta e ativar
+// o pedido de acesso avançado. Cada chamada é isolada (uma falha não trava as
+// outras) e o resultado vai pro log — bom pra você acompanhar.
+async function aquecerPermissoes(token, igId) {
+  const tentar = async (rotulo, caminho) => {
+    try { await req('GET', `${caminho}${caminho.includes('?') ? '&' : '?'}${qs({ access_token: token })}`); console.log(`[ig-api] aquecimento ✓ ${rotulo}`); return true; }
+    catch (e) { console.log(`[ig-api] aquecimento ✗ ${rotulo}: ${e.message}`); return false; }
+  };
+  // instagram_basic — ler a própria conta
+  await tentar('instagram_basic (conta)', `/${igId}?fields=username,followers_count`);
+  // instagram_manage_messages — listar conversas do Instagram
+  await tentar('instagram_manage_messages (conversas)', `/${igId}/conversations?platform=instagram&fields=id&limit=1`);
+  // pages_manage_metadata — ver apps assinados na Página
+  if (PAGE_ID) await tentar('pages_manage_metadata (subscribed_apps)', `/${PAGE_ID}/subscribed_apps`);
+  // instagram_manage_comments — ler comentários da mídia mais recente
+  try {
+    const media = await req('GET', `/${igId}/media?fields=id&limit=1&${qs({ access_token: token })}`);
+    const mid = media && media.data && media.data[0] && media.data[0].id;
+    if (mid) await tentar('instagram_manage_comments (comentários)', `/${mid}/comments?fields=id&limit=1`);
+    else console.log('[ig-api] aquecimento — sem mídia p/ testar comentários (poste algo e reinicie).');
+  } catch (e) { console.log('[ig-api] aquecimento ✗ comentários (mídia):', e.message); }
+  console.log('[ig-api] aquecimento concluído — os botões "Solicitar acesso avançado" costumam ativar em até 24h.');
 }
 
 // ─── Webhook: verificação (GET) e assinatura (POST) ────────────────────────
