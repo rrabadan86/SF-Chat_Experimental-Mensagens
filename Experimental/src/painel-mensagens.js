@@ -4315,7 +4315,7 @@ function paginaPerfis(aviso, erro, view) {
           <td style="padding:7px 10px">${s.metodo === 'google' ? '🟢 Google' : '🔑 Senha'}</td>
           <td style="padding:7px 10px">${esc(uaCurto(s.ua))}</td>
           <td style="padding:7px 10px;text-align:right">${eu
-            ? `<a href="/logout" class="reset" style="padding:5px 12px;text-decoration:none;white-space:nowrap">Sair</a>`
+            ? `<a href="/logout" class="reset" style="padding:5px 12px;text-decoration:none;white-space:nowrap;color:#c0392b">Sair</a>`
             : `<form method="POST" action="/perfis/sessao-encerrar" style="display:inline" onsubmit="return confirm('Encerrar a sessão de ${esc(s.usuario || 'usuário')}? A pessoa vai precisar entrar de novo.')"><input type="hidden" name="sid" value="${esc(s.sid)}"><button type="submit" class="reset" style="padding:5px 12px;white-space:nowrap;color:#c0392b">Encerrar</button></form>`}</td>
         </tr>`; }).join('')}</tbody>
       </table></div>` : '<p class="vazio" style="margin:0">Nenhuma sessão ativa registrada. Assim que alguém entrar (senha ou Google), aparece aqui. <small>(Quem já estava logado antes desta atualização aparece só depois de entrar de novo.)</small></p>'}
