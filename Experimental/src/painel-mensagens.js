@@ -300,7 +300,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/comparecimento') return has('sofia_contatos') || has('sofia_config'); // agora mora na aba Tags
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder') return has('sofia_config');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas') return has('sofia_config');
   return false;
 }
 // WhatsApp é dividido em sub-abas: Configuração, Agendamento, Express e Log.
@@ -3718,6 +3718,8 @@ function paginaSofia(aviso, erro) {
   const refreshSeg = lerRefreshSeg(); // atualização automática da aba Conversas (segundos)
   let avh = { on: false, numero: '' }; try { avh = sofia.lerAvisoHumano(); } catch (_) {}
   let naoResp = []; try { naoResp = sofia.lerNaoResponder(); } catch (_) {} // números que a SoFIA nunca responde sozinha
+  let alu = { ativo: true, janelaIni: '05:45', janelaFim: '16:30', recepcaoNumero: '', tag: 'alunas' };
+  try { alu = sofia.lerAlunas(); } catch (_) {}
   // Cada seção é um card recolhível (começa MINIMIZADA — só o título aparece) e
   // reordenável (↑ ↓). A ordem no DOM = ordem salva no prompt. O textarea, mesmo
   // recolhido (display:none), continua sendo enviado no POST.
@@ -3776,6 +3778,27 @@ function paginaSofia(aviso, erro) {
         <form method="POST" action="/sofia/nao-responder">
           <textarea name="numeros" rows="6" spellcheck="false" placeholder="Ex.:&#10;62998887777&#10;11991234567" style="font-size:.9rem;font-family:ui-monospace,monospace">${esc(naoResp.join('\n'))}</textarea>
           <div class="acts" style="margin-top:12px;align-items:center"><button type="submit" class="save">Salvar lista</button><span class="quando" style="margin:0 0 0 10px">${naoResp.length} número(s) na lista</span></div>
+        </form>
+      </div>
+    </details>
+
+    <details class="acc-sec">
+      <summary class="sec-t" style="cursor:pointer;padding:4px 0">🎓 Alunas contratadas <small style="font-weight:400;color:var(--cinza)">— horário da recepção e aviso de atendimento</small></summary>
+      <div class="card">
+        <p class="quando" style="margin:0 0 12px">Regras para quem tem a tag <b>${esc(alu.tag || 'alunas')}</b> (aluna já contratada, não é lead). <b>Dentro do horário da recepção</b> a SoFIA fica <b>calada</b> para elas — quem responde é a recepcionista. <b>Fora desse horário</b>, a SoFIA cobre (remarcação, dúvidas). Se a aluna pedir remarcação e <b>não houver reposição disponível</b>, a SoFIA avisa a aluna e manda um WhatsApp para o número abaixo.</p>
+        <form method="POST" action="/sofia/alunas">
+          <label class="chk"><input type="checkbox" name="ativo"${alu.ativo ? ' checked' : ''}> <b>Ligado</b> — aplicar estas regras para a tag ${esc(alu.tag || 'alunas')}</label>
+          <div class="cfg-grid" style="margin-top:14px">
+            <div>
+              <label>Horário da recepção ${infoI('Nesse intervalo a SoFIA <b>não responde</b> quem tem a tag de aluna — a recepcionista atende. Fora dele, a SoFIA assume. Pode virar a meia-noite (ex.: 17:00 às 07:00).')}</label>
+              <div class="cfg-in"><input type="time" name="janelaIni" value="${esc(alu.janelaIni)}"><span class="suf">às</span><input type="time" name="janelaFim" value="${esc(alu.janelaFim)}"></div>
+            </div>
+            <div>
+              <label>WhatsApp da recepção ${infoI('Recebe o aviso <b>"a aluna precisa de atendimento"</b> quando a SoFIA não consegue resolver sozinha (ex.: remarcação sem reposição disponível). Com DDD.')}</label>
+              <div class="cfg-in"><input type="text" name="recepcaoNumero" value="${esc(alu.recepcaoNumero || '')}" placeholder="62999998888" style="width:100%"></div>
+            </div>
+          </div>
+          <div class="acts" style="margin-top:14px"><button type="submit" class="save">Salvar regras das alunas</button></div>
         </form>
       </div>
     </details>
@@ -4208,7 +4231,7 @@ function paginaPerfis(aviso, erro, view) {
     'conversa.assumir': '🧑 Assumiu conversa', 'conversa.devolver': '🤖 Devolveu à SoFIA', 'conversa.encerrar': '🔒 Encerrou conversa', 'conversa.agendar': '📅 Agendou no EVO',
     'contato.bloquear': '🚫 Bloqueou contato', 'contato.desbloquear': '✅ Desbloqueou contato',
     'sofia.ligar': '▶️ Ligou a SoFIA', 'sofia.pausar': '⏸️ Pausou a SoFIA', 'sofia.reiniciar': '🔄 Reiniciou a SoFIA',
-    'sofia.desconectar': '📴 Desconectou WhatsApp da SoFIA', 'sofia.config': '⚙️ Salvou configuração/prompt', 'sofia.nao-responder': '🔕 Atualizou "não responder"',
+    'sofia.desconectar': '📴 Desconectou WhatsApp da SoFIA', 'sofia.config': '⚙️ Salvou configuração/prompt', 'sofia.nao-responder': '🔕 Atualizou "não responder"', 'sofia.alunas': '🎓 Atualizou regras das alunas',
     'robo.reiniciar': '🔄 Reiniciou o robô', 'robo.desconectar': '📴 Desconectou WhatsApp do robô',
     'perfil.criar': '👤 Criou usuário', 'perfil.excluir': '🗑️ Excluiu usuário', 'perfil.telas': '🔑 Mudou telas de acesso',
     'perfil.senha': '🔑 Redefiniu senha', 'perfil.email': '📧 Alterou e-mail', 'perfil.admin': '👑 Mudou administrador',
@@ -5034,6 +5057,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar a SoFIA pelo painel. Rode no servidor: pm2 restart sofia-listener'; erro = true; }
     else if (/(?:^|&)okc=criada/.test(q)) aviso = '📣 Campanha criada! A IA está gerando as variações. Quando ficar “pronta”, clique em ▶️ Iniciar para começar o envio.';
     else if (/(?:^|&)okah=1/.test(q)) aviso = 'Aviso "precisa de humano" salvo.';
+    else if (/(?:^|&)okalu=1/.test(q)) aviso = '🎓 Regras das alunas salvas! Valem na hora.';
     else if (/(?:^|&)oknr=\d+/.test(q)) aviso = '🔕 Lista de "não responder" salva (' + ((q.match(/oknr=(\d+)/) || [])[1] || '0') + ' número(s)).';
     else if (/(?:^|&)okcmp=1/.test(q) && /(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Config salva, mas não consegui reiniciar o robô p/ aplicar o novo horário. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
     else if (/(?:^|&)okcmp=1/.test(q)) aviso = 'Config de presença (troca de tags) salva.';
@@ -5467,6 +5491,21 @@ const server = http.createServer((req, res) => {
     });
   }
   // Lista "não responder": números que a SoFIA nunca responde sozinha (mas recebe e pode receber campanha).
+  // Salva as regras da tag "alunas" (janela da recepção + número de aviso).
+  if (req.method === 'POST' && url === '/sofia/alunas') {
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      try {
+        sofia.gravarAlunas({
+          ativo: p.get('ativo') === 'on',
+          janelaIni: p.get('janelaIni'), janelaFim: p.get('janelaFim'),
+          recepcaoNumero: p.get('recepcaoNumero') || '',
+        });
+        auditoria.registrar(sess.usuario, 'sofia.alunas', '', 'regras das alunas');
+      } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?okalu=1' }); res.end();
+    });
+  }
   if (req.method === 'POST' && url === '/sofia/nao-responder') {
     return lerCorpo(req, 1e5, corpo => {
       const p = new URLSearchParams(corpo);

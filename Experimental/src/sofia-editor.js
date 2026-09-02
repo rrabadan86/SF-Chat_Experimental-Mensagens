@@ -41,6 +41,7 @@ const F = {
   humanoLock: path.join(DIR, 'sofia-humano-lock.txt'), // minutos que uma conversa assumida fica travada p/ outros atendentes (e a Sofia fora) — painel escreve, sofia.ts lê
   humanoLog: path.join(DIR, 'sofia-humano-log.jsonl'), // histórico de assumir/devolver por conversa — mostrado no timeline do painel
   bloqueios: path.join(DIR, 'sofia-bloqueios.json'), // números bloqueados (Sofia ignora) — painel escreve, listener lê
+  alunas: path.join(DIR, 'sofia-alunas.json'), // regras da tag 'alunas' (janela da recepcao + numero de aviso) — painel escreve, sofia.ts/listener leem
   naoResponder: path.join(DIR, 'sofia-nao-responder.json'), // números que a Sofia NUNCA responde sozinha (mas recebe e pode receber campanha) — painel escreve, sofia.ts lê
   modelo: path.join(DIR, 'sofia-modelo.json'), // modelo de IA (conversa/extração) — painel escreve, sofia.ts lê no boot
   transcricao: path.join(DIR, 'sofia-transcricao.txt'), // liga/desliga transcrição de áudio — painel escreve, listener lê
@@ -575,6 +576,37 @@ function gravarNaoResponder(texto) {
   gravarArquivo(F.naoResponder, JSON.stringify(unicos));
   return unicos;
 }
+// ─── Regras da tag "alunas" (aluna contratada) ──────────────────────────────
+// Durante o expediente da RECEPÇÃO a Sofia fica calada para quem tem a tag
+// "alunas" (quem responde é a recepcionista). Fora dessa janela, a Sofia cobre.
+// "recepcaoNumero" recebe o aviso quando a aluna precisa de atendimento humano
+// (ex.: pediu remarcação e não tem reposição disponível).
+const ALUNAS_PADRAO = { ativo: true, janelaIni: '05:45', janelaFim: '16:30', recepcaoNumero: '', tag: 'alunas' };
+function lerAlunas() {
+  try { const o = JSON.parse(ler(F.alunas)); return Object.assign({}, ALUNAS_PADRAO, (o && typeof o === 'object') ? o : {}); }
+  catch (_) { return Object.assign({}, ALUNAS_PADRAO); }
+}
+function gravarAlunas(patch) {
+  const hhmm = v => (/^\d{1,2}:\d{2}$/.test(String(v || '').trim()) ? String(v).trim().padStart(5, '0') : null);
+  const at = lerAlunas();
+  const novo = Object.assign({}, at, {
+    ativo: patch.ativo !== undefined ? !!patch.ativo : at.ativo,
+    janelaIni: hhmm(patch.janelaIni) || at.janelaIni,
+    janelaFim: hhmm(patch.janelaFim) || at.janelaFim,
+    recepcaoNumero: patch.recepcaoNumero !== undefined ? String(patch.recepcaoNumero || '').replace(/\D/g, '') : at.recepcaoNumero,
+    tag: String(patch.tag || at.tag || 'alunas').trim().toLowerCase(),
+    atualizadoEm: new Date().toISOString(),
+  });
+  gravarArquivo(F.alunas, JSON.stringify(novo, null, 2));
+  return novo;
+}
+// A janela pode virar a meia-noite (ex.: 17:00–07:00). agora = "HH:MM".
+function dentroJanelaRecepcao(agora, cfg) {
+  const c = cfg || lerAlunas();
+  const m = t => { const p = String(t || '').split(':'); return (+p[0] || 0) * 60 + (+p[1] || 0); };
+  const a = m(agora), ini = m(c.janelaIni), fim = m(c.janelaFim);
+  return ini <= fim ? (a >= ini && a < fim) : (a >= ini || a < fim);
+}
 function estaNaoResponder(tel) {
   const d = String(tel || '').replace(/\D/g, '');
   if (d.length < 8) return false;
@@ -865,6 +897,6 @@ module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, enfileirarAgendamento, lerAgendamentoResult, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerHumanoLog, lerBloqueios, estaBloqueado, setBloqueio, lerNaoResponder, gravarNaoResponder, estaNaoResponder, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, enfileirarAgendamento, lerAgendamentoResult, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerHumanoLog, lerBloqueios, estaBloqueado, setBloqueio, lerNaoResponder, gravarNaoResponder, estaNaoResponder, lerAlunas, gravarAlunas, dentroJanelaRecepcao, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, lerRascunhoCampanha, lerLidStats, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };
