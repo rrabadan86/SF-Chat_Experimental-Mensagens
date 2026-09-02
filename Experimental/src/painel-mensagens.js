@@ -1298,7 +1298,7 @@ function paginaExpress(aviso, erro) {
         </div>
         <div style="display:flex;gap:14px;flex-wrap:wrap">
           <div style="flex:1 1 170px;min-width:0"><label>Data</label><input type="date" id="exData" value="${hoje}" min="${hoje}"></div>
-          <div style="flex:1 1 120px;min-width:0"><label>Horário</label><input type="time" id="exHora" step="900"></div>
+          <div style="flex:1 1 160px;min-width:0"><label>Horário</label><select id="exHora"><option value="">carregando horários…</option></select></div>
         </div>
         <div class="acts" style="margin-top:18px"><button type="button" class="save" id="exBtn" onclick="exAgendar()" style="width:100%;padding:12px 20px;font-size:1rem;font-weight:600">📅 Agendar no EVO</button></div>
         <div id="exMsg" class="aviso" style="display:none"></div>
@@ -1317,6 +1317,28 @@ function paginaExpress(aviso, erro) {
   function exNormTel(s){ var d=exSoDig(s); if(d.length===10||d.length===11) d='55'+d; return d; }
   function exBtnOn(on){ var b=document.getElementById('exBtn'); if(b){ b.disabled=!on; b.textContent=on?'Agendar no EVO':'Agendando…'; } }
   function exStatus(html,cls){ var m=document.getElementById('exMsg'); if(!m)return; m.className='aviso'+(cls?(' '+cls):''); m.innerHTML=html; m.style.display='block'; }
+  // Combobox de horários: só os do dia escolhido que TÊM vaga (grade do form).
+  var exSlots=null;
+  function exCarregarSlots(){
+    fetch('/agendar/slots',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
+      exSlots=(j&&j.dias)||{}; exPreencherHoras();
+    }).catch(function(){ exSlots={}; exPreencherHoras(); });
+  }
+  function exPreencherHoras(){
+    var sel=document.getElementById('exHora'); if(!sel) return;
+    var data=(document.getElementById('exData').value||'').trim();
+    if(exSlots===null){ sel.innerHTML='<option value="">carregando horários…</option>'; return; }
+    var lista=(exSlots[data]||[]).filter(function(s){return s.disponivel;});
+    var atual=sel.value;
+    if(!lista.length){ sel.innerHTML='<option value="">sem horário disponível nesse dia</option>'; return; }
+    sel.innerHTML='<option value="">Selecione…</option>'+lista.map(function(s){
+      var v=(s.freeSpots!=null?' · '+s.freeSpots+(s.freeSpots===1?' vaga':' vagas'):'');
+      return '<option value="'+exEsc(s.time)+'">'+exEsc(s.time)+v+'</option>';
+    }).join('');
+    if(atual){ sel.value=atual; }
+  }
+  document.getElementById('exData').addEventListener('change',exPreencherHoras);
+  exCarregarSlots();
   function exAgendar(){
     var nome=(document.getElementById('exNome').value||'').trim();
     var tel=exNormTel(document.getElementById('exTel').value||'');
@@ -1342,7 +1364,7 @@ function paginaExpress(aviso, erro) {
             if(res.ok){
               exStatus('✅ Agendada no EVO para <b>'+exEsc(res.when||when)+'</b>! A confirmação foi para a fila do WhatsApp.');
               document.getElementById('exNome').value=''; document.getElementById('exTel').value='';
-              document.getElementById('exEmail').value=''; document.getElementById('exHora').value='';
+              document.getElementById('exEmail').value=''; document.getElementById('exHora').value=''; exCarregarSlots();
               document.getElementById('exNome').focus();
             }
             else if(res.lotada){ exStatus('⚠️ Turma cheia nesse horário. Alternativas: '+exEsc((res.alternativas||[]).join('  ·  ')||'—'),'err'); }
@@ -5379,6 +5401,16 @@ const server = http.createServer((req, res) => {
     });
   }
   // Agendamento MANUAL no EVO (atendente pelo painel) — enfileira; o listener agenda.
+  // Grade de horários disponíveis (proxy do formulário) — popula o combobox do Express.
+  if (req.method === 'GET' && url === '/agendar/slots') {
+    const FORM_BASE = (process.env.FORM_CLOUD_URL || 'https://sf-formularioexperimental.onrender.com').replace(/\/+$/, '');
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12000);
+    return fetch(FORM_BASE + '/api/slots?days=10', { signal: ctrl.signal })
+      .then(r => r.json())
+      .then(j => { clearTimeout(t); res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ dias: (j && j.dias) || {} })); })
+      .catch(e => { clearTimeout(t); res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ dias: {}, erro: String((e && e.message) || e) })); });
+  }
   if (req.method === 'POST' && url === '/sofia/agendar') {
     const quem = (sess && sess.usuario) ? sess.usuario : '';
     return lerCorpo(req, 1e5, corpo => {
