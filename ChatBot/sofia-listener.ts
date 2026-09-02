@@ -209,9 +209,42 @@ async function enviarHumano(
 const WA_UA = process.env.WA_USER_AGENT
   || "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
 
+// Decide o cache de versão do WhatsApp Web JÁ NA CONSTRUÇÃO do cliente. Trocar
+// client.options.webVersionCache DEPOIS não pega nesta lib — ela lê o cache uma
+// vez, na construção. Por isso a SoFIA continuava na versão fixa (que trava),
+// mesmo com o log dizendo "ao vivo". PADRÃO: versão AO VIVO (type "none"), que é
+// a combinação provada em produção (UA certo + ao vivo → QR). Só fixa se você
+// pedir explícito no .env: WA_WEB_VERSION_FILE (arquivo) ou WA_WEB_VERSION_URL.
+const CACHE_DIR = path.join(DIR, ".wwebjs_cache");
+function resolverCacheInicial(): { cache: any; webVersion?: string } {
+  const file = process.env.WA_WEB_VERSION_FILE;
+  if (file) {
+    try {
+      if (fs.existsSync(file)) {
+        const versao = path.basename(file).replace(/\.html$/i, "");
+        fs.mkdirSync(CACHE_DIR, { recursive: true });
+        const destino = path.join(CACHE_DIR, versao + ".html");
+        if (path.resolve(file) !== path.resolve(destino)) fs.copyFileSync(file, destino);
+        log(`WhatsApp Web: arquivo local ${versao} (${file})`);
+        return { cache: { type: "local", path: CACHE_DIR }, webVersion: versao };
+      }
+      log(`WA_WEB_VERSION_FILE aponta para arquivo inexistente (${file}) — usando versão ao vivo.`);
+    } catch (e: any) { log(`versão local falhou (${e?.message || e}) — usando versão ao vivo.`); }
+  }
+  const url = process.env.WA_WEB_VERSION_URL;
+  if (url && !/^(off|none|nao|não|0)$/i.test(url.trim())) {
+    log(`WhatsApp Web: versão fixa ${url}`);
+    return { cache: { type: "remote", remotePath: url } };
+  }
+  log("WhatsApp Web: versão ao vivo (padrão)");
+  return { cache: { type: "none" } };
+}
+const WEB0 = resolverCacheInicial();
+
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: AUTH_DIR }),
-  webVersionCache: { type: "remote", remotePath: WEB_VERSION_URL },
+  webVersionCache: WEB0.cache,
+  ...(WEB0.webVersion ? { webVersion: WEB0.webVersion } : {}),
   userAgent: WA_UA,
   puppeteer: {
     headless: HEADLESS,
@@ -1899,139 +1932,7 @@ setStatus("iniciando");
 limparLoginSePedido(); // só apaga se um LOGOUT/Desconectar tiver deixado o bilhete
 log("iniciando a conexão do WhatsApp da Sofia...");
 armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia sozinho
-// ── Versão do WhatsApp Web ──────────────────────────────────────────────────
-// O pin aponta para um arquivo de repositório de terceiros que PODE SUMIR (o
-// antigo virou 404 e derrubou a SoFIA num laço de reinício). Então: conferimos
-// a URL; se ela não existir mais, PROCURAMOS a versão mais nova publicada e
-// guardamos a escolha; se nem isso der, subimos sem pin — que é ruim, mas é
-// melhor do que um pin quebrado, com o qual o initialize morre em 30s sempre.
-const WA_VERSION_BASE = "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/";
-const WA_VERSION_API = "https://api.github.com/repos/wppconnect-team/wa-version/contents/html";
-const VERSAO_ESCOLHIDA_FILE = path.join(DIR, ".sofia-wa-version.txt");
-
-async function buscar(url: string, opts: any = {}, ms = 15000): Promise<any> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
-  finally { clearTimeout(t); }
-}
-async function existe(url: string): Promise<boolean> {
-  try { return (await buscar(url, { method: "HEAD" }, 12000)).ok; } catch { return false; }
-}
-
-// Pergunta ao repositório qual é a versão mais nova publicada. Ordena pelo número
-// (não pela ordem que a API devolve) e guarda a escolha, para não consultar a
-// cada boot — a rate limit da API do GitHub sem token é baixa.
-async function descobrirVersaoWa(): Promise<string> {
-  try {
-    const salvo = fs.readFileSync(VERSAO_ESCOLHIDA_FILE, "utf8").trim();
-    if (salvo && await existe(salvo)) return salvo;
-  } catch {}
-  try {
-    const r = await buscar(WA_VERSION_API, {}, 25000);
-    if (!r.ok) { log(`não consegui listar as versões do WhatsApp Web (HTTP ${r.status}).`); return ""; }
-    const lista: any[] = await r.json();
-    const peso = (n: string) => { const m = n.match(/^2\.(\d+)\.(\d+)/); return m ? Number(m[1]) * 1e13 + Number(m[2]) : 0; };
-    const nomes = (Array.isArray(lista) ? lista : [])
-      .map((x) => String((x && x.name) || ""))
-      .filter((n) => /^2\.\d+\.\d+.*\.html$/.test(n))
-      .sort((a, b) => peso(a) - peso(b));
-    const alvo = nomes[nomes.length - 1];
-    if (!alvo) { log("a lista de versões do WhatsApp Web veio vazia."); return ""; }
-    const url = WA_VERSION_BASE + alvo;
-    try { fs.writeFileSync(VERSAO_ESCOLHIDA_FILE, url, "utf8"); } catch {}
-    log(`versão do WhatsApp Web escolhida sozinha: ${alvo} (a fixada no código não existe mais).`);
-    return url;
-  } catch (e: any) { log(`não consegui descobrir uma versão do WhatsApp Web: ${e?.message || e}`); return ""; }
-}
-
-// Devolve a URL a usar, ou "" para subir sem pin.
-async function resolverVersaoFixa(): Promise<string> {
-  if (VERSAO_FIXA_DESLIGADA) { log("versão do WhatsApp Web NÃO fixada (WA_WEB_VERSION_URL=off)."); return ""; }
-  let r: any = null;
-  try { r = await buscar(WEB_VERSION_URL, { method: "HEAD" }, 12000); }
-  catch (e: any) {
-    // A consulta em si falhou (rede/DNS): mantemos o pin, porque o cache local
-    // ainda pode servir e tirá-lo agora não ajudaria em nada.
-    log(`não consegui conferir a versão fixa (${e?.message || e}) — sigo com ela mesmo.`);
-    return WEB_VERSION_URL;
-  }
-  if (r.ok) return WEB_VERSION_URL;
-  log(`⚠️  a versão fixa do WhatsApp Web respondeu ${r.status} — procurando a mais nova publicada…`);
-  const nova = await descobrirVersaoWa();
-  if (nova) return nova;
-  log("nenhuma versão utilizável — subindo SEM versão fixa. Se travar, ponha WA_WEB_VERSION_URL no .env.");
-  return "";
-}
-
-// ── Versão LOCAL (a que o robô já provou boa) ────────────────────────────────
-// O robô roda numa versão do WhatsApp Web que casa com esta whatsapp-web.js e a
-// tem SALVA em disco (o cache dele). Reusar esse MESMO arquivo é o jeito mais
-// seguro de subir a SoFIA: não depende do GitHub (que apagou a versão antiga) e
-// não arrisca trocar a biblioteca do robô, que está no ar. Procuramos um
-// "<versao>.html" no cache do robô (ou onde WA_WEB_VERSION_FILE apontar), copiamos
-// para o cache da SoFIA e mandamos a lib usar em modo "local" (offline).
-const CACHE_DIR = path.join(DIR, ".wwebjs_cache");
-function pesoVersao(nome: string): number {
-  const m = nome.match(/(\d+)\.(\d+)\.(\d+)/);
-  return m ? Number(m[1]) * 1e18 + Number(m[2]) * 1e13 + Number(m[3]) : 0;
-}
-function acharHtmlDeVersao(): string {
-  const env = process.env.WA_WEB_VERSION_FILE;
-  if (env && fs.existsSync(env)) return env;
-  // Dirs prováveis do cache do robô e da própria SoFIA (best-effort).
-  const dirs = [
-    CACHE_DIR,
-    path.resolve(DIR, "..", "Experimental", ".wwebjs_cache"),
-    path.resolve(DIR, "..", "Experimental", "wwebjs_cache"),
-    path.resolve(DIR, "..", ".wwebjs_cache"),
-    path.resolve(DIR, "..", "..", "Experimental", ".wwebjs_cache"),
-    process.env.HOME ? path.join(process.env.HOME, ".wwebjs_cache") : "",
-  ].filter(Boolean);
-  let melhor = "";
-  let melhorPeso = -1;
-  for (const d of dirs) {
-    let arquivos: string[] = [];
-    try { arquivos = fs.readdirSync(d); } catch { continue; }
-    for (const f of arquivos) {
-      if (!/^[\d.]+\.html$/.test(f)) continue;      // "<versao>.html"
-      const w = pesoVersao(f);
-      if (w > melhorPeso) { melhorPeso = w; melhor = path.join(d, f); }
-    }
-  }
-  return melhor;
-}
-// Devolve a versão (string) para usar em modo local, ou "" se não achou arquivo.
-function prepararVersaoLocal(): string {
-  const origem = acharHtmlDeVersao();
-  if (!origem) return "";
-  const versao = path.basename(origem).replace(/\.html$/i, "");
-  try {
-    fs.mkdirSync(CACHE_DIR, { recursive: true });
-    const destino = path.join(CACHE_DIR, versao + ".html");
-    if (path.resolve(origem) !== path.resolve(destino)) fs.copyFileSync(origem, destino);
-    log(`versão do WhatsApp Web reaproveitada do cache: ${versao} (arquivo local, sem depender do GitHub). Origem: ${origem}`);
-    return versao;
-  } catch (e: any) { log(`não consegui preparar a versão local (${e?.message || e}).`); return ""; }
-}
-
 (async () => {
-  // PADRÃO: versão AO VIVO (type "none"). Provado em produção: com o User-Agent
-  // certo, a lib 1.34.x conecta na versão ao vivo — e FIXAR uma versão (mesmo uma
-  // que existe, como a 1046) faz o inject travar em 30s nesta lib. Só fixamos se
-  // você mandar explicitamente por .env:
-  //   WA_WEB_VERSION_FILE=/caminho/versao.html  → usa esse arquivo (offline)
-  //   WA_WEB_VERSION_URL=https://.../versao.html → usa essa URL (se responder 200)
-  let cache: any = { type: "none" };
-  if (process.env.WA_WEB_VERSION_FILE) {
-    const versaoLocal = prepararVersaoLocal();
-    if (versaoLocal) { (client as any).options.webVersion = versaoLocal; cache = { type: "local", path: CACHE_DIR }; }
-  } else if (process.env.WA_WEB_VERSION_URL && !VERSAO_FIXA_DESLIGADA) {
-    const versao = await resolverVersaoFixa();
-    if (versao) cache = { type: "remote", remotePath: versao };
-  }
-  (client as any).options.webVersionCache = cache;
-  log(`WhatsApp Web: ${cache.type === "none" ? "versão ao vivo (padrão)" : cache.type === "local" ? "arquivo local " + (client as any).options.webVersion : "versão fixa " + cache.remotePath}`);
   try {
     await client.initialize();
   } catch (e: any) {
