@@ -201,9 +201,18 @@ async function enviarHumano(
   await pararDigitando(to);
 }
 
+// User-Agent REAL de Chrome desktop. Sem isso o Chrome headless se anuncia como
+// "HeadlessChrome/NNN" e a WhatsApp Web ATUAL cospe a tela "atualize o navegador"
+// (mesmo com Chrome novo) — a página nunca injeta window.Debug e o Client.inject
+// estoura em 30s. Este era o motivo real de a SoFIA não conectar. O robô só não
+// caiu nisso porque está congelado numa versão antiga da WhatsApp Web.
+const WA_UA = process.env.WA_USER_AGENT
+  || "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
+
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: AUTH_DIR }),
   webVersionCache: { type: "remote", remotePath: WEB_VERSION_URL },
+  userAgent: WA_UA,
   puppeteer: {
     headless: HEADLESS,
     executablePath: process.env.CHROMIUM_PATH || undefined,

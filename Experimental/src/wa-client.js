@@ -155,10 +155,17 @@ async function comRetry(fn, tentativas = 8, esperaMs = 4000) {
 // Cache de grupo por nome (evita reler a lista de chats a cada envio).
 const gruposCache = new Map();
 
+// User-Agent REAL de Chrome desktop. Sem isso o Chrome headless se anuncia como
+// "HeadlessChrome/NNN" e a WhatsApp Web atual mostra "atualize o navegador"
+// (mesmo com Chrome novo), a página nunca injeta e o Client.inject estoura em 30s.
+const WA_UA = process.env.WA_USER_AGENT
+  || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36';
+
 function criarClient() {
   return new Client({
     authStrategy: new LocalAuth({ dataPath: AUTH_DIR }),
     webVersionCache: { type: 'remote', remotePath: WEB_VERSION_URL },
+    userAgent: WA_UA,
     puppeteer: {
       headless: HEADLESS,
       executablePath: CHROMIUM_PATH,
