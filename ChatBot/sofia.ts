@@ -1234,6 +1234,10 @@ function temTagAluna(telefone: string): boolean {
 // a primeira conversa dela com o Studio.
 function contextoAluna(telefone: string): string {
   try {
+    // A regra de aluna é controlada pelo interruptor "Ligado" (sofia-alunas.json).
+    // Desligada (ex.: instância dos LEADS, número A) → nenhum tratamento de aluna:
+    // esta instância trata todo mundo como lead/primeiro contato.
+    if (!lerAlunasCfg().ativo) return "";
     if (!temTagAluna(telefone)) return "";
     return `
 
