@@ -1955,9 +1955,68 @@ async function resolverVersaoFixa(): Promise<string> {
   return "";
 }
 
+// ── Versão LOCAL (a que o robô já provou boa) ────────────────────────────────
+// O robô roda numa versão do WhatsApp Web que casa com esta whatsapp-web.js e a
+// tem SALVA em disco (o cache dele). Reusar esse MESMO arquivo é o jeito mais
+// seguro de subir a SoFIA: não depende do GitHub (que apagou a versão antiga) e
+// não arrisca trocar a biblioteca do robô, que está no ar. Procuramos um
+// "<versao>.html" no cache do robô (ou onde WA_WEB_VERSION_FILE apontar), copiamos
+// para o cache da SoFIA e mandamos a lib usar em modo "local" (offline).
+const CACHE_DIR = path.join(DIR, ".wwebjs_cache");
+function pesoVersao(nome: string): number {
+  const m = nome.match(/(\d+)\.(\d+)\.(\d+)/);
+  return m ? Number(m[1]) * 1e18 + Number(m[2]) * 1e13 + Number(m[3]) : 0;
+}
+function acharHtmlDeVersao(): string {
+  const env = process.env.WA_WEB_VERSION_FILE;
+  if (env && fs.existsSync(env)) return env;
+  // Dirs prováveis do cache do robô e da própria SoFIA (best-effort).
+  const dirs = [
+    CACHE_DIR,
+    path.resolve(DIR, "..", "Experimental", ".wwebjs_cache"),
+    path.resolve(DIR, "..", "Experimental", "wwebjs_cache"),
+    path.resolve(DIR, "..", ".wwebjs_cache"),
+    path.resolve(DIR, "..", "..", "Experimental", ".wwebjs_cache"),
+    process.env.HOME ? path.join(process.env.HOME, ".wwebjs_cache") : "",
+  ].filter(Boolean);
+  let melhor = "";
+  let melhorPeso = -1;
+  for (const d of dirs) {
+    let arquivos: string[] = [];
+    try { arquivos = fs.readdirSync(d); } catch { continue; }
+    for (const f of arquivos) {
+      if (!/^[\d.]+\.html$/.test(f)) continue;      // "<versao>.html"
+      const w = pesoVersao(f);
+      if (w > melhorPeso) { melhorPeso = w; melhor = path.join(d, f); }
+    }
+  }
+  return melhor;
+}
+// Devolve a versão (string) para usar em modo local, ou "" se não achou arquivo.
+function prepararVersaoLocal(): string {
+  const origem = acharHtmlDeVersao();
+  if (!origem) return "";
+  const versao = path.basename(origem).replace(/\.html$/i, "");
+  try {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+    const destino = path.join(CACHE_DIR, versao + ".html");
+    if (path.resolve(origem) !== path.resolve(destino)) fs.copyFileSync(origem, destino);
+    log(`versão do WhatsApp Web reaproveitada do cache: ${versao} (arquivo local, sem depender do GitHub). Origem: ${origem}`);
+    return versao;
+  } catch (e: any) { log(`não consegui preparar a versão local (${e?.message || e}).`); return ""; }
+}
+
 (async () => {
-  const versao = await resolverVersaoFixa();
-  (client as any).options.webVersionCache = versao ? { type: "remote", remotePath: versao } : { type: "none" };
+  // 1º: a versão local que o robô já provou boa (offline, mais confiável).
+  const versaoLocal = prepararVersaoLocal();
+  if (versaoLocal) {
+    (client as any).options.webVersion = versaoLocal;
+    (client as any).options.webVersionCache = { type: "local", path: CACHE_DIR };
+  } else {
+    // 2º: sem arquivo local — cai no fluxo remoto (pin válido ou descoberta).
+    const versao = await resolverVersaoFixa();
+    (client as any).options.webVersionCache = versao ? { type: "remote", remotePath: versao } : { type: "none" };
+  }
   try {
     await client.initialize();
   } catch (e: any) {
