@@ -274,7 +274,7 @@ function telaDaUrl(u) {
   if (u === '/instagram' || u.startsWith('/instagram/')) return 'ig';
   if (u === '/sofia' || u.startsWith('/sofia/')) return 'sofia';
   if (u === '/perfis' || u.startsWith('/perfis/')) return 'perfis';
-  if (u === '/saude') return 'perfis'; // admin-only, como Perfis (a página é renderizada em rota própria)
+  if (u === '/saude') return 'saude'; // liberável por usuário (checkbox em Perfis) — a checagem genérica cobre
   return 'msg';
 }
 // Sofia é dividida em três sub-abas com permissão própria.
@@ -711,7 +711,7 @@ function navTabs(ativo) {
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp', 'msg');
   html += item('ig', '/instagram', '📸', 'Instagram');
   if (sess.admin) html += cel('/perfis', ativo === 'perfis', '👤', 'Perfis', 'perfis');
-  if (sess.admin) html += cel('/saude', ativo === 'saude', '🩺', 'Saúde', 'saude');
+  if (sess.admin || (sess.telas || []).includes('saude')) html += cel('/saude', ativo === 'saude', '🩺', 'Saúde', 'saude');
   if (temSofia(sess)) html += cel(sofiaHref(sess), ativo === 'sofia', '🤖', 'SoFIA', 'sofia');
   return html;
 }

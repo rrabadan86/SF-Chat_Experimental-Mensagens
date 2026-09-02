@@ -25,6 +25,7 @@ const TELAS = [
   { key: 'msg_express', rot: '📅 Express e Agendamentos', grupo: '💬 WhatsApp' }, // tela unificada (cadastro no EVO + agendar mensagem)
   { key: 'msg_hoje', rot: '📊 Log', grupo: '💬 WhatsApp' },
   { key: 'ig', rot: '📸 Instagram' },
+  { key: 'saude', rot: '🩺 Saúde' },
   { key: 'sofia_conversas', rot: '💬 Conversas', grupo: '🤖 Sofia' },
   { key: 'sofia_config', rot: '⚙️ Configuração', grupo: '🤖 Sofia' },
   { key: 'sofia_contatos', rot: '📇 Contatos', grupo: '🤖 Sofia' },
