@@ -3946,10 +3946,9 @@ function paginaSofia(aviso, erro) {
             <button type="button" class="reset" onclick="expandirTodas(false)" style="padding:6px 12px">▸ Recolher todas</button>
           </div>
           <div id="secoes">${cardsSecoes}</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:2px 0 0">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 0">
             <button type="button" class="reset" onclick="adicionarSecao()">➕ Nova seção</button>
-            <a class="reset" href="/sofia/prompt/download" style="text-decoration:none;padding:8px 14px;display:inline-block">⬇️ Baixar prompt atual</a>
-            <span class="quando" style="margin:0">salva um .txt com o roteiro que está valendo agora — bom antes de mexer</span>
+            <button type="button" class="reset" title="Salva um .txt com o roteiro que está valendo agora — bom fazer antes de mexer" onclick="location.href='/sofia/prompt/download'">⬇️ Baixar prompt atual</button>
           </div>
         </div>
       </details>
@@ -5498,8 +5497,12 @@ const server = http.createServer((req, res) => {
   // Baixa o prompt ATUAL (o arquivo que a SoFIA usa) como .txt — backup rápido.
   if (req.method === 'GET' && url === '/sofia/prompt/download') {
     try {
+      const fsx = require('fs');
       const arq = (sofia.ARQUIVOS && sofia.ARQUIVOS.prompt) || '';
-      const txt = require('fs').readFileSync(arq, 'utf8');
+      // Se o arquivo ainda não existe (instalação nova), semeia a partir do
+      // roteiro padrão antes de baixar — assim o botão nunca dá erro.
+      if (!fsx.existsSync(arq)) { try { sofia.disponivel(); } catch (_) {} }
+      const txt = fsx.readFileSync(arq, 'utf8');
       const hoje = hojeSP().replace(/-/g, '');
       res.writeHead(200, {
         'Content-Type': 'text/plain; charset=utf-8',
