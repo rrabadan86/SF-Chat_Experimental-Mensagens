@@ -1244,17 +1244,19 @@ function contextoAluna(telefone: string): string {
 function recepcaoAtendendo(telefone: string): boolean {
   try {
     const cfg = lerAlunasCfg();
-    if (!cfg.ativo) return false;
-    if (!temTagAluna(telefone)) return false;
+    if (!cfg.ativo) { console.log(`(recepção) ${telefone}: regra desligada — SoFIA responde.`); return false; }
+    const ehAluna = temTagAluna(telefone);
+    if (!ehAluna) { console.log(`(recepção) ${telefone}: NÃO reconhecida como aluna (tag alvo="${cfg.tag}") — SoFIA responde.`); return false; }
     const agora = new Date().toLocaleTimeString("pt-BR", {
       timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false,
     });
     const m = (t: string) => { const p = String(t || "").split(":"); return (+p[0] || 0) * 60 + (+p[1] || 0); };
     const a = m(agora), ini = m(cfg.janelaIni), fim = m(cfg.janelaFim);
     const dentro = ini <= fim ? (a >= ini && a < fim) : (a >= ini || a < fim);
-    if (dentro) console.log(`🎓 ${telefone}: aluna dentro do horário da recepção (${cfg.janelaIni}–${cfg.janelaFim}) — SoFIA não responde.`);
+    if (dentro) console.log(`🎓 ${telefone}: aluna dentro do horário da recepção (${cfg.janelaIni}–${cfg.janelaFim}, agora ${agora}) — SoFIA não responde.`);
+    else console.log(`(recepção) ${telefone}: aluna, mas FORA do horário (${cfg.janelaIni}–${cfg.janelaFim}, agora ${agora}) — SoFIA responde.`);
     return dentro;
-  } catch { return false; }
+  } catch (e: any) { console.log(`(recepção) ${telefone}: erro — ${e?.message || e}`); return false; }
 }
 
 function avisarRecepcao(telefoneAluna: string, motivo: string) {
