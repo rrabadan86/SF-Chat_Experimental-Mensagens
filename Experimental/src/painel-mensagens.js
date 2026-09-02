@@ -4047,7 +4047,7 @@ function docLegal(titulo, atualizacao, corpo) {
 </div></body></html>`;
 }
 function paginaPrivacidade() {
-  return docLegal('Política de Privacidade', '28/08/2026', (studio, contato) => `
+  return docLegal('Política de Privacidade', '02/09/2026', (studio, contato) => `
     <p>Este painel (“Painel do Studio”) é uma ferramenta <b>interna de gestão</b> usada por ${studio} para operar o atendimento e a comunicação com alunas e leads. Esta política explica quais dados tratamos e como.</p>
     <h2>1. Quem opera</h2>
     <p>O painel é operado por ${studio}. Contato: ${contato}.</p>
@@ -4061,14 +4061,23 @@ function paginaPrivacidade() {
     <h2>4. Para que usamos</h2>
     <p>Autenticação e controle de acesso; e para operar as funções do painel (atendimento, agendamento, campanhas e indicadores).</p>
     <h2>5. Com quem compartilhamos</h2>
-    <p>Não vendemos dados. Compartilhamos apenas com os serviços necessários ao funcionamento: o <b>Google</b> (login), o <b>WhatsApp</b> (envio das mensagens) e o <b>provedor de IA</b> (respostas automáticas). Cada um trata os dados conforme as próprias políticas.</p>
-    <h2>6. Segurança</h2>
+    <p>Não vendemos dados. Compartilhamos apenas com os serviços necessários ao funcionamento: o <b>Google</b> (login), o <b>WhatsApp</b> (envio das mensagens), o <b>Instagram/Meta</b> (integração oficial de mensagens e comentários) e o <b>provedor de IA</b> (respostas automáticas). Cada um trata os dados conforme as próprias políticas.</p>
+    <h2>6. Integração com o Instagram (API oficial da Meta)</h2>
+    <p>${studio} conecta o painel à sua <b>própria conta profissional do Instagram</b>, pela <b>API oficial da Meta</b>, para responder automaticamente a quem demonstra interesse:</p>
+    <ul>
+      <li><b>O que recebemos:</b> quando alguém <b>comenta</b> em um post/reel do Studio ou <b>envia um Direct (DM)</b>, a Meta nos envia esse conteúdo — o texto e o identificador público de quem enviou.</li>
+      <li><b>Para que usamos:</b> identificar interesse (por exemplo, um comentário com uma palavra-chave) e <b>responder no Direct</b> com uma saudação e o <b>link para agendar uma aula experimental</b>.</li>
+      <li><b>O que NÃO fazemos:</b> não enviamos mensagens a quem não interagiu, não coletamos sua lista de seguidores, não publicamos em seu nome e <b>não vendemos</b> esses dados.</li>
+      <li><b>Como parar:</b> a pessoa pode pedir para não receber mensagens, bloquear a conta ou simplesmente não responder — e paramos de enviar.</li>
+    </ul>
+    <p>Esse tratamento segue as <b>Políticas da Plataforma da Meta</b>; os dados do Instagram são usados apenas para o atendimento descrito acima.</p>
+    <h2>7. Segurança</h2>
     <p>Acesso por <b>HTTPS</b>; senhas guardadas com <b>hash</b> (nunca em texto); sessão por <b>cookie assinado</b>. O acesso é limitado aos usuários cadastrados.</p>
-    <h2>7. Retenção</h2>
+    <h2>8. Retenção</h2>
     <p>Os dados ficam enquanto forem necessários à operação do Studio. O histórico de conversas tem um período de retenção configurável no painel.</p>
-    <h2>8. Seus direitos</h2>
+    <h2>9. Seus direitos</h2>
     <p>Você pode solicitar acesso, correção ou remoção dos seus dados pelo contato acima.</p>
-    <h2>9. Alterações</h2>
+    <h2>10. Alterações</h2>
     <p>Podemos atualizar esta política; a data no topo indica a última versão.</p>`);
 }
 function paginaTermos() {
