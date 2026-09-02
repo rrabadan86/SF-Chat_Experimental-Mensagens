@@ -442,6 +442,24 @@ const consultarAgendaAluna = tool(
   },
 );
 
+const consultarContratoAluna = tool(
+  "consultar_contrato_aluna",
+  "Dados do CONTRATO da aluna: plano, até quando vale, se está trancado (e até quando), " +
+    "dias de trancamento usados e restantes, e quantas reposições ela tem. " +
+    "Use quando ela perguntar sobre o contrato, vencimento, trancamento ou reposições. " +
+    "NÃO traz valores/parcelas de propósito: dinheiro é assunto da recepção.",
+  {},
+  async () => {
+    const tel = _telefoneDaVez || "";
+    if (!tel) return json({ erro: "sem telefone" });
+    const r = await apiAluna("/api/aluna/contrato", { telefone: tel });
+    if (!r?.ok || r.encontrada === false) return json({ encontrada: false });
+    // O financeiro é removido aqui: a Sofia nunca vê valor nem data de cobrança.
+    const { valor_proxima_cobranca, proxima_cobranca, ...semDinheiro } = r;
+    return json({ ...semDinheiro, financeiro: "encaminhar para a recepção" });
+  },
+);
+
 const turmasDoDia = tool(
   "turmas_do_dia",
   "Lista as turmas de um dia com horário e VAGAS, para a aluna escolher o novo horário na remarcação. " +
@@ -478,7 +496,7 @@ const servidor = createSdkMcpServer({
   name: "slimfit",
   version: "1.0.0",
   tools: [enviarMidia, verificarDisponibilidade, consultarVaga, solicitarAgendamento,
-         consultarAgendaAluna, turmasDoDia, remarcarAula],
+         consultarAgendaAluna, consultarContratoAluna, turmasDoDia, remarcarAula],
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -641,6 +659,7 @@ const options: ClaudeAgentOptions = {
     "mcp__slimfit__consultar_vaga",
     "mcp__slimfit__solicitar_agendamento",
     "mcp__slimfit__consultar_agenda_aluna",
+    "mcp__slimfit__consultar_contrato_aluna",
     "mcp__slimfit__turmas_do_dia",
     "mcp__slimfit__remarcar_aula",
   ],
