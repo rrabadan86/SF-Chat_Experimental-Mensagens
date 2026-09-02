@@ -753,6 +753,13 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
     console.log(`🙋 ${telefone} em atendimento humano — Sofia anotou a mensagem, mas não responde.`);
     return "";
   }
+  // ALUNA CONTRATADA dentro do horário da recepção: quem atende é a recepcionista,
+  // a SoFIA fica CALADA (registra a mensagem para dar contexto, mas não responde).
+  // Fora desse horário, segue o fluxo normal. (recepcaoAtendendo loga o motivo.)
+  if (recepcaoAtendendo(telefone)) {
+    registrarNaMemoria(telefone, "aluna", mensagem);
+    return "";
+  }
   const agora = Date.now();
   let conversa = conversas.get(telefone);
 
