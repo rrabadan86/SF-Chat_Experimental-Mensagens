@@ -146,8 +146,11 @@ async function aquecerPermissoes(token, igId) {
   };
   // instagram_basic — ler a própria conta
   await tentar('instagram_basic (conta)', `/${igId}?fields=username,followers_count`);
-  // instagram_manage_messages — listar conversas do Instagram
-  await tentar('instagram_manage_messages (conversas)', `/${igId}/conversations?platform=instagram&fields=id&limit=1`);
+  // instagram_manage_messages — listar conversas do Instagram. O caminho oficial
+  // é pela PÁGINA (?platform=instagram); se falhar, tenta pela conta como reserva.
+  let okMsg = false;
+  if (PAGE_ID) okMsg = await tentar('instagram_manage_messages (conversas via página)', `/${PAGE_ID}/conversations?platform=instagram&fields=id&limit=1`);
+  if (!okMsg) await tentar('instagram_manage_messages (conversas via conta)', `/${igId}/conversations?platform=instagram&fields=id&limit=1`);
   // pages_manage_metadata — ver apps assinados na Página
   if (PAGE_ID) await tentar('pages_manage_metadata (subscribed_apps)', `/${PAGE_ID}/subscribed_apps`);
   // instagram_manage_comments — ler comentários da mídia mais recente
