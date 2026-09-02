@@ -424,10 +424,61 @@ const consultarVaga = tool(
   },
 );
 
+// ══ Ferramentas de ALUNA CONTRATADA (remarcação com reposição) ═══════════
+// Só valem para quem já é aluna (tag "alunas"). O telefone vem do listener.
+const consultarAgendaAluna = tool(
+  "consultar_agenda_aluna",
+  "Mostra as aulas JÁ MARCADAS da aluna contratada (não serve para leads/experimental). " +
+    "Use quando ela falar em remarcar, trocar de horário, cancelar ou perguntar que dia tem aula. " +
+    "Retorna 'encontrada:false' se o telefone não for de aluna contratada — nesse caso trate como lead.",
+  {},
+  async () => {
+    const tel = _telefoneDaVez || "";
+    if (!tel) return json({ erro: "sem telefone" });
+    const m = await apiAluna("/api/aluna/buscar", { telefone: tel });
+    if (!m?.ok || !m.encontrada) return json({ encontrada: false });
+    const ag = await apiAluna("/api/aluna/agenda", { idMember: m.idMember });
+    return json({ encontrada: true, nome: m.nome, idMember: m.idMember, aulas: ag?.sessoes || [] });
+  },
+);
+
+const turmasDoDia = tool(
+  "turmas_do_dia",
+  "Lista as turmas de um dia com horário e VAGAS, para a aluna escolher o novo horário na remarcação. " +
+    "Ofereça só as que têm vaga. Use antes de remarcar_aula.",
+  { data: z.string().describe("AAAA-MM-DD") },
+  async ({ data }) => json(await apiAluna("/api/aluna/turmas", { data })),
+);
+
+const remarcarAula = tool(
+  "remarcar_aula",
+  "REMARCA de verdade a aula da aluna contratada. Só chame DEPOIS de ela CONFIRMAR o novo horário " +
+    "com todas as letras. Regra do Studio: 1 aula por dia — se já houver aula no mesmo dia, ela é " +
+    "desmarcada automaticamente. Aja pelo retorno: ok=confirme com alegria e, se vier " +
+    "'proxima_aula_outro_dia', pergunte se ela quer manter essa próxima aula; " +
+    "motivo=nao_foi_possivel_marcar (ex.: sem reposição) => avise que a recepção vai chamá-la; " +
+    "turma_lotada/turma_nao_roda_nesse_dia => ofereça as 'turmas_do_dia' que vierem no retorno.",
+  {
+    idMember: z.number().describe("Da consultar_agenda_aluna"),
+    idConfiguration: z.number().describe("Turma escolhida, da turmas_do_dia"),
+    data: z.string().describe("AAAA-MM-DD"),
+  },
+  async ({ idMember, idConfiguration, data }) => {
+    console.log("📋 [SOFIA VAI REMARCAR]", { idMember, idConfiguration, data });
+    const r = await apiAluna("/api/aluna/remarcar", { idMember, idConfiguration, activityDate: data, simular: false });
+    // Sem reposição/cota: avisa a recepção pelo WhatsApp configurado no painel.
+    if (r && r.ok === false && r.motivo) {
+      try { avisarRecepcao(_telefoneDaVez || "", r.motivo); } catch (_) {}
+    }
+    return json(r);
+  },
+);
+
 const servidor = createSdkMcpServer({
   name: "slimfit",
   version: "1.0.0",
-  tools: [enviarMidia, verificarDisponibilidade, consultarVaga, solicitarAgendamento],
+  tools: [enviarMidia, verificarDisponibilidade, consultarVaga, solicitarAgendamento,
+         consultarAgendaAluna, turmasDoDia, remarcarAula],
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -519,7 +570,8 @@ function estaNaoResponder(telefone: string): boolean {
 // sem controle humano e sem handoff por tempo). Usado pelo listener p/ o aviso de
 // "só texto" no áudio e para pular o follow-up.
 export function deveResponder(telefone: string): boolean {
-  return sofiaAtiva() && !estaNaoResponder(telefone) && !controleHumanoAtivo(telefone) && !conversaAssumida(telefone);
+  return sofiaAtiva() && !estaNaoResponder(telefone) && !controleHumanoAtivo(telefone)
+    && !conversaAssumida(telefone) && !recepcaoAtendendo(telefone);
 }
 
 // Registra uma mensagem na memória SEM a Sofia responder. Usado quando ela está
@@ -588,6 +640,9 @@ const options: ClaudeAgentOptions = {
     "mcp__slimfit__verificar_disponibilidade",
     "mcp__slimfit__consultar_vaga",
     "mcp__slimfit__solicitar_agendamento",
+    "mcp__slimfit__consultar_agenda_aluna",
+    "mcp__slimfit__turmas_do_dia",
+    "mcp__slimfit__remarcar_aula",
   ],
   permissionMode: "default",
 };
@@ -1053,6 +1108,16 @@ async function verificarEDispararAgendamento(telefone: string, conversa: Convers
 // Padrão = seu form no Render. Sobrescreva com:  set SOFIA_BOOK_URL=...
 const SOFIA_BOOK_URL = process.env.SOFIA_BOOK_URL || "https://sf-formularioexperimental.onrender.com/api/book-sofia";
 const SOFIA_TOKEN = process.env.SOFIA_TOKEN || "";
+// Base do formulário (mesmo serviço do book-sofia) — usada pelas ferramentas de ALUNA.
+const SOFIA_API_BASE = SOFIA_BOOK_URL.replace(/\/api\/book-sofia\/?$/, "");
+async function apiAluna(rota: string, corpo: any): Promise<any> {
+  const r = await fetch(`${SOFIA_API_BASE}${rota}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Sofia-Token": SOFIA_TOKEN },
+    body: JSON.stringify(corpo),
+  });
+  return await r.json().catch(() => ({ ok: false, erro: "resposta inválida" }));
+}
 
 type ResultadoAgendamento =
   | { ok: true; when: string }
@@ -1062,6 +1127,72 @@ type ResultadoAgendamento =
 // Registra um agendamento bem-sucedido num arquivo que o PAINEL consome para
 // (a) auto-etiquetar o contato e (b) avisar no WhatsApp — configurável por tag.
 const AGENDOU_FILE = path.join(BASE_DIR, "sofia-agendou.jsonl");
+// Lê as regras da tag "alunas" (janela da recepção + número de aviso), gravadas
+// pelo painel em sofia-alunas.json. Sem o arquivo, usa os padrões.
+const ALUNAS_FILE = path.join(BASE_DIR, "sofia-alunas.json");
+function lerAlunasCfg(): { ativo: boolean; janelaIni: string; janelaFim: string; recepcaoNumero: string; tag: string } {
+  const padrao = { ativo: true, janelaIni: "05:45", janelaFim: "16:30", recepcaoNumero: "", tag: "alunas" };
+  try { return { ...padrao, ...JSON.parse(fs.readFileSync(ALUNAS_FILE, "utf8")) }; } catch { return padrao; }
+}
+
+// Avisa a recepção quando a SoFIA não consegue resolver sozinha (ex.: a aluna
+// pediu remarcação mas não há reposição disponível). Usa a mesma fila de avisos
+// que o listener já envia pelo WhatsApp.
+// Contatos/tags são mantidos pelo painel. Caminho padrão a partir da pasta da
+// Sofia; sobrescreva com CONTATOS_FILE se a sua instalação for diferente.
+const CONTATOS_FILE = process.env.CONTATOS_FILE
+  || path.resolve(BASE_DIR, "..", "Experimental", "data", "contatos.json");
+
+function temTagAluna(telefone: string): boolean {
+  try {
+    const alvo = String(lerAlunasCfg().tag || "alunas").toLowerCase();
+    const ult8 = String(telefone || "").replace(/\D/g, "").slice(-8);
+    if (!ult8) return false;
+    const bruto = JSON.parse(fs.readFileSync(CONTATOS_FILE, "utf8"));
+    const lista: any[] = Array.isArray(bruto) ? bruto : Object.values(bruto || {});
+    for (const c of lista) {
+      const t = String(c?.tel || c?.telefone || "").replace(/\D/g, "");
+      if (t && t.endsWith(ult8)) {
+        return (c?.tags || []).some((x: any) => String(x).toLowerCase() === alvo);
+      }
+    }
+  } catch { /* sem arquivo/contato = não é aluna */ }
+  return false;
+}
+
+// True quando a RECEPÇÃO está no expediente e o contato é aluna contratada —
+// nesse caso a Sofia não responde (quem atende é a recepcionista).
+// A janela pode virar a meia-noite (ex.: 17:00–07:00).
+function recepcaoAtendendo(telefone: string): boolean {
+  try {
+    const cfg = lerAlunasCfg();
+    if (!cfg.ativo) return false;
+    if (!temTagAluna(telefone)) return false;
+    const agora = new Date().toLocaleTimeString("pt-BR", {
+      timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+    const m = (t: string) => { const p = String(t || "").split(":"); return (+p[0] || 0) * 60 + (+p[1] || 0); };
+    const a = m(agora), ini = m(cfg.janelaIni), fim = m(cfg.janelaFim);
+    const dentro = ini <= fim ? (a >= ini && a < fim) : (a >= ini || a < fim);
+    if (dentro) console.log(`🎓 ${telefone}: aluna dentro do horário da recepção (${cfg.janelaIni}–${cfg.janelaFim}) — SoFIA não responde.`);
+    return dentro;
+  } catch { return false; }
+}
+
+function avisarRecepcao(telefoneAluna: string, motivo: string) {
+  try {
+    const cfg = lerAlunasCfg();
+    if (!cfg.recepcaoNumero) return;
+    const tel = String(telefoneAluna || "").replace(/\D/g, "");
+    const porque = motivo === "nao_foi_possivel_marcar"
+      ? "pediu remarcação, mas não há reposição disponível"
+      : `pediu remarcação (${motivo})`;
+    const aviso = `🎓 *Aluna precisa de atendimento*\n\nContato: ${tel}\nMotivo: ${porque}.\n\nEla foi avisada de que a recepção entrará em contato.`;
+    fs.appendFileSync(AVISOS_OUT_FILE, JSON.stringify({ numero: cfg.recepcaoNumero, texto: aviso, em: Date.now() }) + "\n");
+    console.log(`🎓 aviso de aluna enfileirado para ${cfg.recepcaoNumero} (contato ${tel}).`);
+  } catch (e: any) { console.log("⚠️  avisarRecepcao falhou:", e?.message ?? e); }
+}
+
 function registrarAgendamento(telefone: string, nome: string, when: string) {
   try {
     const tel = String(telefone || "").replace(/\D/g, "");
