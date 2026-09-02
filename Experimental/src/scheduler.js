@@ -469,6 +469,37 @@ function perguntarUsuario(pergunta, timeoutMs = 180000) {
 }
 
 // ─── Ponte de "enviar teste" do painel ─────────────────────
+// Gatilho MANUAL de job (à mão ou pelo painel): grava data/rodar-job.json com
+// {"job":"followupAfternoon"} e este watcher roda o job DENTRO do processo do
+// robô — usando o WhatsApp persistente, sem abrir um 2º cliente. Consome o
+// arquivo uma vez e respeita o jobRunning (não roda junto com outro job).
+function iniciarRodarJobWatcher() {
+  const ARQ = require('path').resolve(__dirname, '..', 'data', 'rodar-job.json');
+  const EXEC = {
+    followupAfternoon: { nome: 'Follow-up TARDE [manual]',   fn: () => require('./followup-experimental').runFollowupAfternoon() },
+    followupMorning:   { nome: 'Follow-up MANHÃ [manual]',    fn: () => require('./followup-experimental').runFollowupMorning() },
+    confirmacaoHoje:   { nome: 'Confirmação HOJE [manual]',   fn: executeMorningJob },
+    confirmacaoAmanha: { nome: 'Confirmação AMANHÃ [manual]', fn: executeAfternoonJob },
+    noShowMorning:     { nome: 'Faltas MANHÃ [manual]',       fn: () => require('./follow-up-no-show').runNoShowMorning() },
+    noShowAfternoon:   { nome: 'Faltas TARDE [manual]',       fn: () => require('./follow-up-no-show').runNoShowAfternoon() },
+    aniversariantes:   { nome: 'Aniversariantes [manual]',    fn: () => require('./aniversariantes').runAniversariantes() },
+    renovacao:         { nome: 'Renovação [manual]',          fn: () => require('./renovar-contratos').runRenovacao() },
+  };
+  const t = setInterval(() => {
+    let pedido = null;
+    try { pedido = JSON.parse(fs.readFileSync(ARQ, 'utf8')); } catch (_) { return; } // sem pedido
+    try { fs.unlinkSync(ARQ); } catch (_) {}                                          // consome uma vez
+    const chave = pedido && String(pedido.job || '').trim();
+    const alvo = EXEC[chave];
+    if (!alvo) { log(`▶️  pedido de job desconhecido: "${chave}" — ignorado. Opções: ${Object.keys(EXEC).join(', ')}`); return; }
+    if (jobRunning) { log(`▶️  ${alvo.nome}: outro job em execução — tento de novo em 30s.`); setTimeout(() => { try { fs.writeFileSync(ARQ, JSON.stringify({ job: chave })); } catch (_) {} }, 30000); return; }
+    log(`▶️  Rodando job manual: ${alvo.nome}`);
+    runJob(alvo.nome, alvo.fn).catch(err => logError(alvo.nome, err));
+  }, 4000);
+  if (t.unref) t.unref();
+  log('▶️  Watcher de "rodar job manual" ativo (a cada 4s).');
+}
+
 // O painel grava um pedido em data/teste-envio.json; aqui (que temos a sessão
 // do WhatsApp) enviamos e escrevemos o resultado de volta. Roda fora do
 // jobRunning porque é um único envio, leve e sob demanda.
@@ -582,6 +613,7 @@ async function main() {
 
   // Ponte de "enviar teste" do painel (lê data/teste-envio.json e dispara).
   iniciarTesteWatcher(wa);
+  iniciarRodarJobWatcher(); // gatilho manual de job (data/rodar-job.json)
   // Ponte de "DM de teste" do Instagram (lê data/teste-instagram.json).
   iniciarTesteInstagramWatcher();
   // Ponte de "forçar boas-vindas do IG agora" (lê data/ig-forcar.json).
