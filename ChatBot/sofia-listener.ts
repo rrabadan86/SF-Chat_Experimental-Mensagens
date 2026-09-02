@@ -208,6 +208,12 @@ async function enviarHumano(
 // caiu nisso porque está congelado numa versão antiga da WhatsApp Web.
 const WA_UA = process.env.WA_USER_AGENT
   || "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
+// Nome do aparelho em "Dispositivos conectados". Quando DOIS clientes vivem no
+// MESMO número (ex.: robô + SoFIA Alunas no número B), usar o mesmo nome faz o
+// WhatsApp tratar como o mesmo device e DERRUBAR um (LOGOUT em loop). Dando um
+// nome distinto a cada um, eles coexistem como devices separados. Vazio = padrão
+// da lib (mantém o número A intocado).
+const WA_DEVICE_NAME = process.env.WA_DEVICE_NAME || "";
 
 // Decide o cache de versão do WhatsApp Web JÁ NA CONSTRUÇÃO do cliente. Trocar
 // client.options.webVersionCache DEPOIS não pega nesta lib — ela lê o cache uma
@@ -245,6 +251,7 @@ const client = new Client({
   authStrategy: new LocalAuth({ dataPath: AUTH_DIR }),
   webVersionCache: WEB0.cache,
   ...(WEB0.webVersion ? { webVersion: WEB0.webVersion } : {}),
+  ...(WA_DEVICE_NAME ? { deviceName: WA_DEVICE_NAME } : {}),
   userAgent: WA_UA,
   puppeteer: {
     headless: HEADLESS,
