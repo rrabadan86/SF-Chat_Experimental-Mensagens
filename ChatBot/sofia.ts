@@ -1166,8 +1166,15 @@ function lerAlunasCfg(): { ativo: boolean; janelaIni: string; janelaFim: string;
 // sua instalação for diferente. Procura o contatos.json nos lugares onde ele costuma ficar (a Sofia roda de
 // ChatBot/, mas o painel guarda o arquivo em Experimental/data/). Se nenhum
 // existir, fica com o palpite padrão — temTagAluna trata a falta do arquivo.
+// IMPORTANTE: BASE_DIR = SOFIA_DIR (ex.: /root/sofia-data), que NÃO é o
+// repositório. O contatos.json é escrito pelo painel em <repo>/Experimental/data.
+// Como a Sofia roda de <repo>/ChatBot, o caminho confiável é a partir de
+// process.cwd() (a pasta ChatBot), não de BASE_DIR — foi por isso que a tag de
+// aluna não era vista e a aluna era tratada como lead.
 const CONTATOS_CANDIDATOS = [
   process.env.CONTATOS_FILE || "",
+  path.resolve(process.cwd(), "..", "Experimental", "data", "contatos.json"),
+  path.resolve(process.cwd(), "Experimental", "data", "contatos.json"),
   path.resolve(BASE_DIR, "..", "Experimental", "data", "contatos.json"),
   path.resolve(BASE_DIR, "..", "..", "Experimental", "data", "contatos.json"),
   path.resolve(BASE_DIR, "Experimental", "data", "contatos.json"),
@@ -1175,6 +1182,10 @@ const CONTATOS_CANDIDATOS = [
 ].filter(Boolean);
 const CONTATOS_FILE = CONTATOS_CANDIDATOS.find((f) => { try { return fs.existsSync(f); } catch { return false; } })
   || CONTATOS_CANDIDATOS[CONTATOS_CANDIDATOS.length - 1];
+try {
+  const achou = fs.existsSync(CONTATOS_FILE);
+  console.log(`📇 contatos.json: ${achou ? "usando " + CONTATOS_FILE : "NÃO ENCONTRADO (tags de aluna não funcionam). Defina CONTATOS_FILE no .env."}`);
+} catch {}
 
 // Compara etiquetas do jeito que a recepção escreve na vida real: a tag do
 // painel pode vir como "0. Aluna", "Alunas", "aluna " ou "ALUNA". Tiramos
