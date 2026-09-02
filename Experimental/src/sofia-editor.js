@@ -594,7 +594,9 @@ function gravarAlunas(patch) {
     janelaIni: hhmm(patch.janelaIni) || at.janelaIni,
     janelaFim: hhmm(patch.janelaFim) || at.janelaFim,
     recepcaoNumero: patch.recepcaoNumero !== undefined ? String(patch.recepcaoNumero || '').replace(/\D/g, '') : at.recepcaoNumero,
-    tag: String(patch.tag || at.tag || 'alunas').trim().toLowerCase(),
+    // Guarda a tag COMO O STUDIO ESCREVEU (ex.: "0. Aluna") — quem compara
+    // (sofia.ts) normaliza acento, numeração e plural, então a grafia não importa.
+    tag: String(patch.tag !== undefined ? patch.tag : (at.tag || 'alunas')).trim() || 'alunas',
     atualizadoEm: new Date().toISOString(),
   });
   gravarArquivo(F.alunas, JSON.stringify(novo, null, 2));

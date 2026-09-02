@@ -1162,14 +1162,38 @@ function lerAlunasCfg(): { ativo: boolean; janelaIni: string; janelaFim: string;
 // Avisa a recepção quando a SoFIA não consegue resolver sozinha (ex.: a aluna
 // pediu remarcação mas não há reposição disponível). Usa a mesma fila de avisos
 // que o listener já envia pelo WhatsApp.
-// Contatos/tags são mantidos pelo painel. Caminho padrão a partir da pasta da
-// Sofia; sobrescreva com CONTATOS_FILE se a sua instalação for diferente.
-const CONTATOS_FILE = process.env.CONTATOS_FILE
-  || path.resolve(BASE_DIR, "..", "Experimental", "data", "contatos.json");
+// Contatos/tags são mantidos pelo painel; sobrescreva com CONTATOS_FILE se a
+// sua instalação for diferente. Procura o contatos.json nos lugares onde ele costuma ficar (a Sofia roda de
+// ChatBot/, mas o painel guarda o arquivo em Experimental/data/). Se nenhum
+// existir, fica com o palpite padrão — temTagAluna trata a falta do arquivo.
+const CONTATOS_CANDIDATOS = [
+  process.env.CONTATOS_FILE || "",
+  path.resolve(BASE_DIR, "..", "Experimental", "data", "contatos.json"),
+  path.resolve(BASE_DIR, "..", "..", "Experimental", "data", "contatos.json"),
+  path.resolve(BASE_DIR, "Experimental", "data", "contatos.json"),
+  path.resolve(BASE_DIR, "data", "contatos.json"),
+].filter(Boolean);
+const CONTATOS_FILE = CONTATOS_CANDIDATOS.find((f) => { try { return fs.existsSync(f); } catch { return false; } })
+  || CONTATOS_CANDIDATOS[CONTATOS_CANDIDATOS.length - 1];
+
+// Compara etiquetas do jeito que a recepção escreve na vida real: a tag do
+// painel pode vir como "0. Aluna", "Alunas", "aluna " ou "ALUNA". Tiramos
+// acento, pontuação, numeração de ordenação ("0.", "FX-2.") e o plural, então
+// todas essas grafias caem na MESMA chave. Sem isso, "0. Aluna" no contato não
+// casava com "alunas" na configuração e a SoFIA tratava a aluna como lead.
+function chaveTag(v: any): string {
+  return String(v || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")   // sem acento
+    .toLowerCase()
+    .replace(/^\s*[a-z]{0,3}[-\s]?\d+[.)\-]\s*/, "")   // "0. ", "1) ", "FX-2. "
+    .replace(/[^a-z0-9]+/g, "")                          // só letras/números
+    .replace(/s$/, "");                                  // singular = plural
+}
 
 function temTagAluna(telefone: string): boolean {
   try {
-    const alvo = String(lerAlunasCfg().tag || "alunas").toLowerCase();
+    const alvo = chaveTag(lerAlunasCfg().tag || "alunas");
+    if (!alvo) return false;
     const ult8 = String(telefone || "").replace(/\D/g, "").slice(-8);
     if (!ult8) return false;
     const bruto = JSON.parse(fs.readFileSync(CONTATOS_FILE, "utf8"));
@@ -1177,7 +1201,7 @@ function temTagAluna(telefone: string): boolean {
     for (const c of lista) {
       const t = String(c?.tel || c?.telefone || "").replace(/\D/g, "");
       if (t && t.endsWith(ult8)) {
-        return (c?.tags || []).some((x: any) => String(x).toLowerCase() === alvo);
+        return (c?.tags || []).some((x: any) => chaveTag(x) === alvo);
       }
     }
   } catch { /* sem arquivo/contato = não é aluna */ }
