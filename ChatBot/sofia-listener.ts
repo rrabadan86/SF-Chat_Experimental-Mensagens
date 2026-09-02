@@ -459,8 +459,14 @@ client.on("disconnected", (m: any) => {
   // e volta a pedir QR). Qualquer outro motivo é só queda de conexão, que
   // reconecta sozinha. Distinguir os dois no log evita caçar o problema errado.
   const motivo = String(m || "");
-  if (/logout/i.test(motivo)) log(`desconectada: ${motivo} — o VÍNCULO foi desfeito (não é queda de rede). Vai pedir QR de novo.`);
-  else log(`desconectada: ${motivo} — queda de conexão; tento reconectar sozinha.`);
+  if (/logout/i.test(motivo)) {
+    log(`desconectada: ${motivo} — o VÍNCULO foi desfeito (não é queda de rede). Vai pedir QR de novo.`);
+    setStatus("desconectado");
+    pedirLimpezaDoLogin("LOGOUT: o vínculo com o celular foi desfeito");
+    setTimeout(() => process.exit(0), 1500); // pm2 sobe de novo, já limpando o login morto
+    return;
+  }
+  log(`desconectada: ${motivo} — queda de conexão; tento reconectar sozinha.`);
   setStatus("desconectado");
   armarWatchdogBoot();
 });
@@ -480,6 +486,26 @@ function gravarFails(n: number) { try { fs.writeFileSync(FAILS_FILE, String(n), 
 function limparCacheWa() {
   try { fs.rmSync(path.join(AUTH_DIR, "..", ".wwebjs_cache"), { recursive: true, force: true }); } catch {}
   try { fs.rmSync(path.join(DIR, ".wwebjs_cache"), { recursive: true, force: true }); } catch {}
+}
+
+// Depois de um LOGOUT a pasta de login guarda uma sessão MORTA. O whatsapp-web.js
+// tenta reusar essa sessão e trava em "iniciando" sem nunca emitir o QR — e o
+// watchdog não resolve, porque ele limpa só o cache, nunca o login. Então quando
+// o vínculo cai deixamos um bilhete e SAÍMOS; no próximo boot a pasta é apagada
+// ANTES de subir o cliente (apagar com o navegador aberto deixa arquivo preso) e
+// o QR aparece em segundos. Some só o login — conversas, tags e prompt não moram aqui.
+const LIMPAR_AUTH_FILE = path.join(DIR, ".sofia-limpar-auth");
+function pedirLimpezaDoLogin(porque: string) {
+  try { fs.writeFileSync(LIMPAR_AUTH_FILE, JSON.stringify({ porque, em: Date.now() }), "utf8"); } catch {}
+}
+function limparLoginSePedido() {
+  if (!fs.existsSync(LIMPAR_AUTH_FILE)) return;
+  let porque = "";
+  try { porque = (JSON.parse(fs.readFileSync(LIMPAR_AUTH_FILE, "utf8")) || {}).porque || ""; } catch {}
+  try { fs.rmSync(AUTH_DIR, { recursive: true, force: true }); } catch {}
+  limparCacheWa();
+  try { fs.unlinkSync(LIMPAR_AUTH_FILE); } catch {}
+  log(`login antigo apagado (${porque}) — vou gerar um QR novo. Conversas e configurações não foram tocadas.`);
 }
 let pronta = false;
 let bootTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1324,6 +1350,9 @@ setInterval(async () => {
   setStatus("desconectado");
   try { await client.logout(); log("sessão da Sofia desvinculada (logout)."); }
   catch (e: any) { log("logout falhou (" + (e?.message || e) + ") — reinicio mesmo assim."); }
+  // Mesmo que o logout falhe (ex.: já estava desvinculada), a pasta de login não
+  // serve mais: marca para apagar no boot, senão o processo trava em "iniciando".
+  pedirLimpezaDoLogin("Desconectar pedido no painel");
   // Sai para o PM2 reiniciar: sem a sessão salva, sobe um QR novo no painel.
   setTimeout(() => process.exit(0), 500);
 }, 4000);
@@ -1851,6 +1880,7 @@ carregarHistorico(); // recupera o histórico de interações (aba Contatos → 
 // para cada LID que já aprendemos, une a conversa órfã na do telefone.
 for (const [lid, tel] of lidMap) fundirConversaLid(lid, tel);
 setStatus("iniciando");
+limparLoginSePedido(); // só apaga se um LOGOUT/Desconectar tiver deixado o bilhete
 log("iniciando a conexão do WhatsApp da Sofia...");
 armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia sozinho
 client.initialize();
