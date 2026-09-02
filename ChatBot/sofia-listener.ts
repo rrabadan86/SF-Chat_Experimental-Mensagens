@@ -453,7 +453,17 @@ client.on("qr", async (qr) => {
 client.on("authenticated", () => { log("autenticada."); setStatus("iniciando"); armarWatchdogBoot(); });
 client.on("ready", () => { pronta = true; if (bootTimer) clearTimeout(bootTimer); gravarFails(0); log("PRONTA — respondendo as alunas."); setStatus("conectado"); });
 client.on("change_state", (s: string) => log("estado: " + s));
-client.on("disconnected", (m: any) => { pronta = false; log("desconectada: " + m); setStatus("desconectado"); armarWatchdogBoot(); });
+client.on("disconnected", (m: any) => {
+  pronta = false;
+  // LOGOUT = o vínculo foi DESFEITO (o aparelho sai de "Dispositivos conectados"
+  // e volta a pedir QR). Qualquer outro motivo é só queda de conexão, que
+  // reconecta sozinha. Distinguir os dois no log evita caçar o problema errado.
+  const motivo = String(m || "");
+  if (/logout/i.test(motivo)) log(`desconectada: ${motivo} — o VÍNCULO foi desfeito (não é queda de rede). Vai pedir QR de novo.`);
+  else log(`desconectada: ${motivo} — queda de conexão; tento reconectar sozinha.`);
+  setStatus("desconectado");
+  armarWatchdogBoot();
+});
 
 // ── Auto-recuperação do "travou no carregamento" (autentica mas nunca chega em
 //    PRONTA). ESCALONA, para não virar loop destrutivo:
@@ -1280,10 +1290,30 @@ setInterval(() => { processarFollowups().catch(() => {}); }, 3000);
 // O painel grava sofia-comando.json para pedir ações que só dá para fazer aqui.
 // Hoje: "logout" (desconectar o WhatsApp da Sofia). Lemos, executamos e apagamos.
 const COMANDO_FILE = path.join(DIR, "sofia-comando.json");
+// Um comando é uma ordem para o processo que está RODANDO — nunca uma tarefa
+// em fila. Se o listener estava fora do ar quando o painel gravou (ou caiu antes
+// de consumir), o arquivo ficava no disco e era executado no PRÓXIMO boot. Com
+// "logout" isso desvinculava o WhatsApp sozinho logo depois de um pm2 restart:
+// o aparelho sumia de "Dispositivos conectados" e o painel voltava a pedir QR,
+// sem ninguém ter clicado em Desconectar. Duas travas agora:
+//   • no boot, joga fora qualquer comando que já estivesse lá;
+//   • em regime, ignora comando com mais de COMANDO_VALIDADE_MS.
+const COMANDO_VALIDADE_MS = 90000;
+try {
+  const pendente = JSON.parse(fs.readFileSync(COMANDO_FILE, "utf8"));
+  fs.unlinkSync(COMANDO_FILE);
+  log(`comando "${pendente && pendente.cmd}" estava parado no disco desde antes deste boot — descartado (não executo comando velho).`);
+} catch {}
+
 setInterval(async () => {
   let cmd: any = null;
   try { cmd = JSON.parse(fs.readFileSync(COMANDO_FILE, "utf8")); } catch { return; } // sem comando
   try { fs.unlinkSync(COMANDO_FILE); } catch {} // consome uma vez só
+  const idade = Date.now() - (+(cmd && cmd.em) || 0);
+  if (idade > COMANDO_VALIDADE_MS) {
+    log(`comando "${cmd && cmd.cmd}" com ${Math.round(idade / 1000)}s de idade — descartado (vale por ${COMANDO_VALIDADE_MS / 1000}s). Clique de novo no painel se ainda quiser.`);
+    return;
+  }
   if (cmd && cmd.cmd === "importar-historico") {
     log("📥 comando do painel: importar histórico do WhatsApp…");
     importarHistorico(parseInt(cmd.porChat, 10) || INBOX_MAX_MSGS); // async, não bloqueia
