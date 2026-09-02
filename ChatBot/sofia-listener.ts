@@ -223,6 +223,28 @@ function pareceTelefone(s: string) { return /^\d{11,15}$/.test(s); } // com DDI:
 // protocolo novo às vezes traz no msg._data → store interno (pupPage). Se nada
 // vier, loga um DIAGNÓSTICO com os campos disponíveis (pra mirarmos certo nesta
 // versão) e devolve "" (sem número). Nunca devolve o próprio LID como telefone.
+// Store interno da página (nomes variam por versão — tudo best-effort). Recebe o
+// JID, não a mensagem, então serve tanto para quem manda quanto para quem recebe.
+async function telefoneDoLidPelaPagina(jid: string, lid: string): Promise<string> {
+  try {
+    const page: any = (client as any).pupPage;
+    if (!page) return "";
+    const bruto = await page.evaluate((lidJid: string) => {
+      try {
+        const S: any = (window as any).Store || {};
+        const fns = [S.LidUtils && S.LidUtils.getPhoneNumber, S.NumberInfo && S.NumberInfo.getPhoneNumber];
+        for (const fn of fns) { if (typeof fn === "function") { const r = fn(lidJid); const s = r && (r._serialized || r.user || r); if (s) return String(s); } }
+        const WW: any = (window as any).WWebJS;
+        if (WW && typeof WW.getContact === "function") { const c = WW.getContact(lidJid); if (c && c.number) return String(c.number); }
+      } catch (e) {}
+      return "";
+    }, jid);
+    const num = soDigitos(bruto);
+    if (pareceTelefone(num) && num !== lid) { log(`@lid ${jid} → telefone ${num} (Store)`); return num; }
+  } catch {}
+  return "";
+}
+
 async function telefoneDoLid(msg: any, jid: string, lid: string): Promise<string> {
   // 1) getContact(): em "@lid", o telefone REAL vem no c.id (@c.us) — o c.number
   //    costuma trazer o próprio LID. Então tentamos o c.id PRIMEIRO.
@@ -245,23 +267,10 @@ async function telefoneDoLid(msg: any, jid: string, lid: string): Promise<string
     }
   } catch {}
   // 3) Store interno (nomes variam por versão — tudo best-effort)
-  try {
-    const page: any = (client as any).pupPage;
-    if (page) {
-      const bruto = await page.evaluate((lidJid: string) => {
-        try {
-          const S: any = (window as any).Store || {};
-          const fns = [S.LidUtils && S.LidUtils.getPhoneNumber, S.NumberInfo && S.NumberInfo.getPhoneNumber];
-          for (const fn of fns) { if (typeof fn === "function") { const r = fn(lidJid); const s = r && (r._serialized || r.user || r); if (s) return String(s); } }
-          const WW: any = (window as any).WWebJS;
-          if (WW && typeof WW.getContact === "function") { const c = WW.getContact(lidJid); if (c && c.number) return String(c.number); }
-        } catch (e) {}
-        return "";
-      }, jid);
-      const num = soDigitos(bruto);
-      if (pareceTelefone(num) && num !== lid) { log(`@lid ${jid} → telefone ${num} (Store)`); return num; }
-    }
-  } catch {}
+  {
+    const num = await telefoneDoLidPelaPagina(jid, lid);
+    if (num) return num;
+  }
   // 4) Diagnóstico: mostra o que existe, pra sabermos qual campo usar nesta versão
   try {
     const c: any = await msg.getContact().catch(() => null);
@@ -302,7 +311,12 @@ function persistirLid() {
     try { fs.writeFileSync(LID_STATS_FILE, JSON.stringify({ mapeados: lidMap.size, semTel: lidSemTel.size, ultimoSemTelEm, semTelLista: [...lidSemTel].slice(-500), em: Date.now() })); } catch {}
   }, 2000);
 }
-function lembrarLid(lid: string, tel: string) { if (!lid || !tel) return; const mudou = lidMap.get(lid) !== tel || lidSemTel.has(lid); lidMap.set(lid, tel); lidSemTel.delete(lid); if (mudou) persistirLid(); }
+function lembrarLid(lid: string, tel: string) {
+  if (!lid || !tel) return;
+  const mudou = lidMap.get(lid) !== tel || lidSemTel.has(lid);
+  lidMap.set(lid, tel); lidSemTel.delete(lid);
+  if (mudou) { persistirLid(); fundirConversaLid(lid, tel); }
+}
 function telLembradoDoLid(lid: string): string { return lidMap.get(lid) || ""; }
 function marcarLidSemTel(lid: string) { if (!lid || lidMap.has(lid) || lidSemTel.has(lid)) return; lidSemTel.add(lid); ultimoSemTelEm = Date.now(); persistirLid(); }
 
@@ -325,9 +339,29 @@ function chaveDoEnvio(alvo: string, telCru: string): string {
   return tel;
 }
 
+// Um LID que não resolveu o telefone AGORA pode resolver daqui a pouco (o
+// contato entra na agenda, o Store carrega, chega uma mensagem com o campo "Pn").
+// Por isso o cache de "não achei" vale só alguns minutos — senão a conversa
+// ficava presa ao LID cru até reiniciar o processo.
+const RETENTAR_LID_MS = 5 * 60 * 1000;
+const ultimaTentativaLid = new Map<string, number>();
+function cacheDaChave(jid: string): { chave: string; telefone: string } | null {
+  if (!telCache.has(jid)) return null;
+  const cached = { chave: telCache.get(jid) as string, telefone: telRealCache.get(jid) || "" };
+  if (cached.telefone) return cached;                                   // já resolvido
+  if (Date.now() - (ultimaTentativaLid.get(jid) || 0) < RETENTAR_LID_MS) return cached;
+  return null;                                                          // passou o prazo → tenta de novo
+}
+function guardarChave(jid: string, chave: string, telefone: string) {
+  telCache.set(jid, chave);
+  telRealCache.set(jid, telefone);
+  if (!telefone) ultimaTentativaLid.set(jid, Date.now()); else ultimaTentativaLid.delete(jid);
+}
+
 async function resolverTel(msg: any): Promise<{ chave: string; telefone: string }> {
   const jid: string = msg.from || msg.to || "";
-  if (telCache.has(jid)) return { chave: telCache.get(jid) as string, telefone: telRealCache.get(jid) || "" };
+  const cache = cacheDaChave(jid);
+  if (cache) return cache;
   let telefone = "";
   if (jid.endsWith("@lid")) {
     const lid = jidParaTel(jid);
@@ -338,8 +372,56 @@ async function resolverTel(msg: any): Promise<{ chave: string; telefone: string 
     telefone = jidParaTel(jid); // @c.us: o jid já é o telefone
   }
   const chave = telefone || jidParaTel(jid); // estável: telefone real, senão o LID
-  telCache.set(jid, chave);
-  telRealCache.set(jid, telefone);
+  guardarChave(jid, chave, telefone);
+  return { chave, telefone };
+}
+
+// Telefone de um "@lid" de DESTINO (mensagem que SAIU do nosso número). Aqui não
+// dá para usar msg.getContact(): numa mensagem fromMe ele devolve o NOSSO contato,
+// e aprender esse número gravaria o telefone errado no mapa de LIDs. Ordem:
+// o que já aprendemos → campos "Pn" do protocolo (na saída trazem o destinatário)
+// → getContactById(jid) → Store da página.
+async function telefoneDoLidDestino(msg: any, jid: string, lid: string): Promise<string> {
+  const ok = (n: string) => pareceTelefone(n) && n !== lid;
+  const lembrado = telLembradoDoLid(lid);
+  if (ok(lembrado)) return lembrado;
+  try {
+    const d: any = msg._data || {};
+    for (const cand of [d.recipientPn, d.peerRecipientPn, d.to, d.chatId]) {
+      const num = soDigitos(cand);
+      if (ok(num)) { log(`@lid ${jid} → telefone ${num} (destino, msg._data)`); return num; }
+    }
+  } catch {}
+  try {
+    const c: any = await (client as any).getContactById(jid);
+    const idSer: string = (c && c.id && c.id._serialized) || "";
+    if (idSer.endsWith("@c.us")) {
+      const num = soDigitos(c.id.user);
+      if (ok(num)) { log(`@lid ${jid} → telefone ${num} (destino, getContactById.id)`); return num; }
+    }
+    const num2 = soDigitos(c && c.number);
+    if (ok(num2)) { log(`@lid ${jid} → telefone ${num2} (destino, getContactById.number)`); return num2; }
+  } catch {}
+  return await telefoneDoLidPelaPagina(jid, lid);
+}
+
+// Mesma ideia do resolverTel, mas para o JID de DESTINO. Usado quando VOCÊ
+// responde direto pelo celular: sem isso a conversa entrava no painel com o LID
+// cru no lugar do telefone (ex.: "101047745941681").
+async function resolverTelDestino(msg: any, jid: string): Promise<{ chave: string; telefone: string }> {
+  const cache = cacheDaChave(jid);
+  if (cache) return cache;
+  let telefone = "";
+  if (jid.endsWith("@lid")) {
+    const lid = jidParaTel(jid);
+    telefone = await telefoneDoLidDestino(msg, jid, lid);
+    if (telefone) lembrarLid(lid, telefone);
+    else marcarLidSemTel(lid);
+  } else {
+    telefone = jidParaTel(jid);
+  }
+  const chave = telefone || jidParaTel(jid);
+  guardarChave(jid, chave, telefone);
   return { chave, telefone };
 }
 
@@ -732,6 +814,48 @@ function salvarHistorico() {
   try { fs.writeFileSync(HISTORICO_FILE, JSON.stringify(obj), "utf8"); } catch {}
 }
 function agendarSalvarHistorico() { if (histTimer) return; histTimer = setTimeout(() => { histTimer = null; salvarHistorico(); }, 1500); }
+
+// Quando descobrimos o telefone de um LID que JÁ tinha conversa/histórico salvos
+// com o LID cru como chave (ex.: "101047745941681" no painel), juntamos tudo na
+// conversa do TELEFONE e apagamos a órfã. Assim o painel volta a mostrar sempre
+// o número — inclusive para o que ficou registrado antes de sabermos quem era.
+function fundirConversaLid(lid: string, tel: string) {
+  try {
+    if (!lid || !tel || lid === tel) return;
+
+    const velha = inbox.get(lid);
+    if (velha) {
+      const nova = inbox.get(tel);
+      if (!nova) {
+        inbox.set(tel, velha);
+      } else {
+        nova.msgs = nova.msgs.concat(velha.msgs).sort((a, b) => a.em - b.em);
+        if (nova.msgs.length > INBOX_MAX_MSGS) nova.msgs.splice(0, nova.msgs.length - INBOX_MAX_MSGS);
+        nova.ultimaEm = Math.max(nova.ultimaEm, velha.ultimaEm);
+        if (!nova.nome && velha.nome) nova.nome = velha.nome;
+        if (!nova.jid && velha.jid) nova.jid = velha.jid;
+      }
+      inbox.delete(lid);
+      agendarSalvarInbox();
+    }
+
+    const hVelho = historico.get(lid);
+    if (hVelho) {
+      const hNovo = historico.get(tel);
+      if (!hNovo) {
+        historico.set(tel, hVelho);
+      } else {
+        hNovo.sessoes = hNovo.sessoes.concat(hVelho.sessoes).sort((a, b) => a.inicioEm - b.inicioEm);
+        if (hNovo.sessoes.length > HIST_MAX_SESSOES) hNovo.sessoes.splice(0, hNovo.sessoes.length - HIST_MAX_SESSOES);
+        if (!hNovo.nome && hVelho.nome) hNovo.nome = hVelho.nome;
+      }
+      historico.delete(lid);
+      agendarSalvarHistorico();
+    }
+
+    if (velha || hVelho) log(`conversa do LID ${lid} unida ao telefone ${tel} — o painel passa a mostrar o número.`);
+  } catch (e: any) { log("aviso: não consegui unir a conversa do LID " + lid + ": " + (e?.message || e)); }
+}
 
 function registrarSessao(chave: string, nome: string, autor: string, texto: string, em: number) {
   const janela = janelaSessaoMs();
@@ -1663,12 +1787,21 @@ client.on("message", (msg: any) => {
 // VOCÊ respondeu MANUALMENTE (fromMe, e não foi a própria Sofia) → assume a
 // conversa: a Sofia sai dela pelos minutos configurados no painel.
 client.on("message_create", (msg: any) => {
+  // A checagem do eco tem de ser SÍNCRONA (antes de qualquer await), senão duas
+  // mensagens seguidas da própria Sofia disputariam o mesmo contador.
+  if (!msg.fromMe) return;
+  const jid = msg.to;
+  if (!jid || jid.endsWith("@g.us")) return;
+  if ((pendentesEco.get(jid) || 0) > 0) { decEco(jid); return; } // foi a própria Sofia (eco do envio)
+  void tratarRespostaManual(msg, jid);
+});
+
+async function tratarRespostaManual(msg: any, jid: string) {
   try {
-    if (!msg.fromMe) return;
-    const jid = msg.to;
-    if (!jid || jid.endsWith("@g.us")) return;
-    if ((pendentesEco.get(jid) || 0) > 0) { decEco(jid); return; } // foi a própria Sofia (eco do envio)
-    const tel = telCache.get(jid) || jidParaTel(jid); // mesma chave da memória (telefone real do "@lid")
+    // Descobre o TELEFONE do destinatário (o jid pode ser "@lid"). Antes isso usava
+    // só o cache em memória: depois de um restart ele está vazio e a conversa
+    // entrava no painel com o LID cru no lugar do número.
+    const { chave: tel } = await resolverTelDestino(msg, jid);
     assumirConversa(tel);
     registrarNaMemoria(tel, "humano", msg.body || "");
     // tipo "wpp" = resposta manual DIRETO pelo celular da SoFIA (handoff). O painel
@@ -1676,7 +1809,7 @@ client.on("message_create", (msg: any) => {
     registrarInbox(tel, jid, "", "humano", msg.body || "", undefined, undefined, "wpp"); // registra sua resposta no inbox
     log(`você assumiu a conversa com ${tel} — Sofia pausada nela.`);
   } catch (e: any) { log("erro no on(message_create): " + (e?.message || e)); }
-});
+}
 
 const sair = async () => { try { await client.destroy(); } catch {} process.exit(0); };
 process.on("SIGINT", sair);
@@ -1684,6 +1817,9 @@ process.on("SIGTERM", sair);
 
 carregarInbox(); // recupera as conversas já registradas (o painel mostra na aba Conversas)
 carregarHistorico(); // recupera o histórico de interações (aba Contatos → Interações)
+// Conserta o que ficou salvo com o LID cru como chave antes de sabermos o número:
+// para cada LID que já aprendemos, une a conversa órfã na do telefone.
+for (const [lid, tel] of lidMap) fundirConversaLid(lid, tel);
 setStatus("iniciando");
 log("iniciando a conexão do WhatsApp da Sofia...");
 armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia sozinho
