@@ -2016,16 +2016,22 @@ function prepararVersaoLocal(): string {
 }
 
 (async () => {
-  // 1º: a versão local que o robô já provou boa (offline, mais confiável).
-  const versaoLocal = prepararVersaoLocal();
-  if (versaoLocal) {
-    (client as any).options.webVersion = versaoLocal;
-    (client as any).options.webVersionCache = { type: "local", path: CACHE_DIR };
-  } else {
-    // 2º: sem arquivo local — cai no fluxo remoto (pin válido ou descoberta).
+  // PADRÃO: versão AO VIVO (type "none"). Provado em produção: com o User-Agent
+  // certo, a lib 1.34.x conecta na versão ao vivo — e FIXAR uma versão (mesmo uma
+  // que existe, como a 1046) faz o inject travar em 30s nesta lib. Só fixamos se
+  // você mandar explicitamente por .env:
+  //   WA_WEB_VERSION_FILE=/caminho/versao.html  → usa esse arquivo (offline)
+  //   WA_WEB_VERSION_URL=https://.../versao.html → usa essa URL (se responder 200)
+  let cache: any = { type: "none" };
+  if (process.env.WA_WEB_VERSION_FILE) {
+    const versaoLocal = prepararVersaoLocal();
+    if (versaoLocal) { (client as any).options.webVersion = versaoLocal; cache = { type: "local", path: CACHE_DIR }; }
+  } else if (process.env.WA_WEB_VERSION_URL && !VERSAO_FIXA_DESLIGADA) {
     const versao = await resolverVersaoFixa();
-    (client as any).options.webVersionCache = versao ? { type: "remote", remotePath: versao } : { type: "none" };
+    if (versao) cache = { type: "remote", remotePath: versao };
   }
+  (client as any).options.webVersionCache = cache;
+  log(`WhatsApp Web: ${cache.type === "none" ? "versão ao vivo (padrão)" : cache.type === "local" ? "arquivo local " + (client as any).options.webVersion : "versão fixa " + cache.remotePath}`);
   try {
     await client.initialize();
   } catch (e: any) {

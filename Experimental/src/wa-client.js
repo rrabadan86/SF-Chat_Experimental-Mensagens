@@ -164,7 +164,7 @@ const WA_UA = process.env.WA_USER_AGENT
 function criarClient() {
   return new Client({
     authStrategy: new LocalAuth({ dataPath: AUTH_DIR }),
-    webVersionCache: { type: 'remote', remotePath: WEB_VERSION_URL },
+    webVersionCache: { type: 'none' },
     userAgent: WA_UA,
     puppeteer: {
       headless: HEADLESS,
@@ -250,8 +250,12 @@ function initWhatsApp() {
   });
 
   waStatus.set('iniciando', null);
-  // Confere a versão fixa antes de subir; um 404 aqui vira crash no inject.
-  versaoFixaUsavel().then((ok) => { if (!ok) client.options.webVersionCache = { type: 'none' }; })
+  // PADRÃO: versão AO VIVO (type 'none'). Provado em produção: com o User-Agent
+  // certo a lib conecta ao vivo, e FIXAR versão (mesmo uma que existe) faz o
+  // inject travar. Só fixa se WA_WEB_VERSION_URL vier explícito no .env e responder 200.
+  (process.env.WA_WEB_VERSION_URL && !VERSAO_FIXA_DESLIGADA
+    ? versaoFixaUsavel().then((ok) => { if (ok) client.options.webVersionCache = { type: 'remote', remotePath: WEB_VERSION_URL }; })
+    : Promise.resolve())
     .catch(() => {})
     .then(() => client.initialize())
     .catch((e) => {
