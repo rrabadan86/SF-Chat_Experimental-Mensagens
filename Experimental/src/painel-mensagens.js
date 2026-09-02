@@ -2110,6 +2110,16 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   function fmtPausa(min){ min=parseInt(min,10)||0; if(min<60) return min+' min'; var h=min/60; var s=Number.isInteger(h)?String(h):h.toFixed(1).replace(/\\.0$/,''); return s+(h===1?' hora':' horas'); }
   function encerrada(c){ return !!(c && (c.enc || (c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS)))); }
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  // URLs viram links clicáveis (abrem em nova aba). Escapa o HTML primeiro e só
+  // então linca; tira a pontuação final (ex.: o ")" ou "." logo após o link) de
+  // dentro do href. Vale para links que a SoFIA manda e para os que a aluna envia.
+  function linkifica(s){
+    return escH(s).replace(/(https?:\\/\\/[^\\s<]+)/g, function(u){
+      var tail=''; var mm=u.match(/[.,)\\]!?;:]+$/);
+      if(mm){ tail=mm[0]; u=u.slice(0,u.length-tail.length); }
+      return '<a href="'+u+'" target="_blank" rel="noopener noreferrer" style="color:#1a73e8;text-decoration:underline;word-break:break-all">'+u+'</a>'+tail;
+    });
+  }
   function fmtHora(ts){ try{return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
   // Separador de dia na lista (chip "gruda no topo"): agrupa por dia de São Paulo.
   function diaKeySP(ts){ try{ return new Date(ts).toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'}); }catch(e){ return ''; } }
@@ -2161,7 +2171,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?(ehWpp?'#fff4e5':'#dff5e6'):(ehFup?'#fff4e5':'#e4efee'));
       var selo = ehFup ? ' <span style="display:inline-block;font-size:.6rem;font-weight:700;color:#b45309;background:#ffedd5;border-radius:6px;padding:1px 6px;margin-left:4px">↩︎ follow-up</span>' : '';
       var img = m.foto ? '<img src="/sofia/humano-foto?arq='+encodeURIComponent(m.foto)+'" alt="foto enviada" style="display:block;max-width:100%;max-height:220px;border-radius:9px;margin:'+(m.texto?'6px 0 0':'2px 0 0')+';cursor:pointer" onclick="window.open(this.src,\\'_blank\\')">' : '';
-      var corpoMsg = (m.texto?'<div style="white-space:pre-wrap">'+escH(m.texto)+'</div>':'') + img;
+      var corpoMsg = (m.texto?'<div style="white-space:pre-wrap">'+linkifica(m.texto)+'</div>':'') + img;
       return {em:(m.em||0), html: sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna, m.por, m.tipo))+' · '+fmtHora(m.em)+selo+'</div>'+corpoMsg+'</div></div>'};
     });
     // Marcadores de controle humano (assumiu/devolveu) intercalados por horário.
