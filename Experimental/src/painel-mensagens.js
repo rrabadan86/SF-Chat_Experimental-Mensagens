@@ -300,7 +300,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/comparecimento') return has('sofia_contatos') || has('sofia_config'); // agora mora na aba Tags
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas') return has('sofia_config');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/prompt/download') return has('sofia_config');
   return false;
 }
 // WhatsApp é dividido em sub-abas: Configuração, Agendamento, Express e Log.
@@ -3946,7 +3946,11 @@ function paginaSofia(aviso, erro) {
             <button type="button" class="reset" onclick="expandirTodas(false)" style="padding:6px 12px">▸ Recolher todas</button>
           </div>
           <div id="secoes">${cardsSecoes}</div>
-          <button type="button" class="reset" onclick="adicionarSecao()" style="margin:2px 0 0">➕ Nova seção</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:2px 0 0">
+            <button type="button" class="reset" onclick="adicionarSecao()">➕ Nova seção</button>
+            <a class="reset" href="/sofia/prompt/download" style="text-decoration:none;padding:8px 14px;display:inline-block">⬇️ Baixar prompt atual</a>
+            <span class="quando" style="margin:0">salva um .txt com o roteiro que está valendo agora — bom antes de mexer</span>
+          </div>
         </div>
       </details>
 
@@ -4231,7 +4235,7 @@ function paginaPerfis(aviso, erro, view) {
     'conversa.assumir': '🧑 Assumiu conversa', 'conversa.devolver': '🤖 Devolveu à SoFIA', 'conversa.encerrar': '🔒 Encerrou conversa', 'conversa.agendar': '📅 Agendou no EVO',
     'contato.bloquear': '🚫 Bloqueou contato', 'contato.desbloquear': '✅ Desbloqueou contato',
     'sofia.ligar': '▶️ Ligou a SoFIA', 'sofia.pausar': '⏸️ Pausou a SoFIA', 'sofia.reiniciar': '🔄 Reiniciou a SoFIA',
-    'sofia.desconectar': '📴 Desconectou WhatsApp da SoFIA', 'sofia.config': '⚙️ Salvou configuração/prompt', 'sofia.nao-responder': '🔕 Atualizou "não responder"', 'sofia.alunas': '🎓 Atualizou regras das alunas',
+    'sofia.desconectar': '📴 Desconectou WhatsApp da SoFIA', 'sofia.config': '⚙️ Salvou configuração/prompt', 'sofia.nao-responder': '🔕 Atualizou "não responder"', 'sofia.alunas': '🎓 Atualizou regras das alunas', 'sofia.prompt-download': '⬇️ Baixou o prompt',
     'robo.reiniciar': '🔄 Reiniciou o robô', 'robo.desconectar': '📴 Desconectou WhatsApp do robô',
     'perfil.criar': '👤 Criou usuário', 'perfil.excluir': '🗑️ Excluiu usuário', 'perfil.telas': '🔑 Mudou telas de acesso',
     'perfil.senha': '🔑 Redefiniu senha', 'perfil.email': '📧 Alterou e-mail', 'perfil.admin': '👑 Mudou administrador',
@@ -5491,6 +5495,24 @@ const server = http.createServer((req, res) => {
     });
   }
   // Lista "não responder": números que a SoFIA nunca responde sozinha (mas recebe e pode receber campanha).
+  // Baixa o prompt ATUAL (o arquivo que a SoFIA usa) como .txt — backup rápido.
+  if (req.method === 'GET' && url === '/sofia/prompt/download') {
+    try {
+      const arq = (sofia.ARQUIVOS && sofia.ARQUIVOS.prompt) || '';
+      const txt = require('fs').readFileSync(arq, 'utf8');
+      const hoje = hojeSP().replace(/-/g, '');
+      res.writeHead(200, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Disposition': `attachment; filename="sofia-prompt-${hoje}.txt"`,
+        'Cache-Control': 'no-store',
+      });
+      try { auditoria.registrar(sess.usuario, 'sofia.prompt-download', '', 'baixou o prompt'); } catch (_) {}
+      return res.end(txt);
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('Não consegui ler o prompt: ' + e.message);
+    }
+  }
   // Salva as regras da tag "alunas" (janela da recepção + número de aviso).
   if (req.method === 'POST' && url === '/sofia/alunas') {
     return lerCorpo(req, 1e5, corpo => {
