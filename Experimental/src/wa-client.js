@@ -34,7 +34,7 @@ const CHROMIUM_PATH = process.env.CHROMIUM_PATH || undefined;
 // página sobe sem os internos do WhatsApp Web e o Client.inject estoura em 30s.
 // Por isso conferimos a URL antes de usar. WA_WEB_VERSION_URL=off desliga o pin.
 const WEB_VERSION_URL = process.env.WA_WEB_VERSION_URL
-  || 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1015901307-alpha.html';
+  || 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1046618780-alpha.html';
 const VERSAO_FIXA_DESLIGADA = /^(off|none|nao|não|0)$/i.test(String(WEB_VERSION_URL).trim());
 
 // true = dá para usar a versão fixa. Um 404 é PIOR do que não fixar versão nenhuma.

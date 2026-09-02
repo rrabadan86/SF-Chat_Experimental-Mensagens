@@ -40,7 +40,7 @@ const HEADLESS = process.env.SOFIA_HEADLESS !== "false";
 // de reinício. Por isso conferimos a URL antes de usar (ver versaoFixaUsavel).
 // WA_WEB_VERSION_URL=off desliga o travamento de versão de vez.
 const WEB_VERSION_URL = process.env.WA_WEB_VERSION_URL
-  || "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1015901307-alpha.html";
+  || "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1046618780-alpha.html";
 const VERSAO_FIXA_DESLIGADA = /^(off|none|nao|não|0)$/i.test(String(WEB_VERSION_URL).trim());
 
 function setStatus(estado: string, qr = "") {
@@ -1890,30 +1890,74 @@ setStatus("iniciando");
 limparLoginSePedido(); // só apaga se um LOGOUT/Desconectar tiver deixado o bilhete
 log("iniciando a conexão do WhatsApp da Sofia...");
 armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia sozinho
-// A URL da versão fixa responde 200? Só confiamos nela se responder. Um 404
-// (arquivo removido do repositório) é pior do que não fixar versão nenhuma:
-// sem os internos da página o initialize morre em 30s, todas as vezes. Se a
-// consulta em si falhar (rede fora, DNS), mantemos a URL — o cache local ainda
-// pode servir, e derrubar o pin nessa hora não ajudaria em nada.
-async function versaoFixaUsavel(): Promise<boolean> {
-  if (VERSAO_FIXA_DESLIGADA) { log("versão do WhatsApp Web NÃO fixada (WA_WEB_VERSION_URL=off) — usando a que o WhatsApp servir."); return false; }
+// ── Versão do WhatsApp Web ──────────────────────────────────────────────────
+// O pin aponta para um arquivo de repositório de terceiros que PODE SUMIR (o
+// antigo virou 404 e derrubou a SoFIA num laço de reinício). Então: conferimos
+// a URL; se ela não existir mais, PROCURAMOS a versão mais nova publicada e
+// guardamos a escolha; se nem isso der, subimos sem pin — que é ruim, mas é
+// melhor do que um pin quebrado, com o qual o initialize morre em 30s sempre.
+const WA_VERSION_BASE = "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/";
+const WA_VERSION_API = "https://api.github.com/repos/wppconnect-team/wa-version/contents/html";
+const VERSAO_ESCOLHIDA_FILE = path.join(DIR, ".sofia-wa-version.txt");
+
+async function buscar(url: string, opts: any = {}, ms = 15000): Promise<any> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
+  finally { clearTimeout(t); }
+}
+async function existe(url: string): Promise<boolean> {
+  try { return (await buscar(url, { method: "HEAD" }, 12000)).ok; } catch { return false; }
+}
+
+// Pergunta ao repositório qual é a versão mais nova publicada. Ordena pelo número
+// (não pela ordem que a API devolve) e guarda a escolha, para não consultar a
+// cada boot — a rate limit da API do GitHub sem token é baixa.
+async function descobrirVersaoWa(): Promise<string> {
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 12000);
-    const r = await fetch(WEB_VERSION_URL, { method: "HEAD", signal: ctrl.signal });
-    clearTimeout(t);
-    if (r.ok) return true;
-    log(`⚠️  a versão fixa do WhatsApp Web respondeu ${r.status} (${WEB_VERSION_URL}) — vou subir SEM versão fixa. `
-      + `Se quiser fixar outra, ponha WA_WEB_VERSION_URL no .env com uma URL que exista.`);
-    return false;
-  } catch (e: any) {
-    log(`não consegui conferir a versão fixa (${e?.message || e}) — sigo com ela mesmo (o cache local pode servir).`);
-    return true;
+    const salvo = fs.readFileSync(VERSAO_ESCOLHIDA_FILE, "utf8").trim();
+    if (salvo && await existe(salvo)) return salvo;
+  } catch {}
+  try {
+    const r = await buscar(WA_VERSION_API, {}, 25000);
+    if (!r.ok) { log(`não consegui listar as versões do WhatsApp Web (HTTP ${r.status}).`); return ""; }
+    const lista: any[] = await r.json();
+    const peso = (n: string) => { const m = n.match(/^2\.(\d+)\.(\d+)/); return m ? Number(m[1]) * 1e13 + Number(m[2]) : 0; };
+    const nomes = (Array.isArray(lista) ? lista : [])
+      .map((x) => String((x && x.name) || ""))
+      .filter((n) => /^2\.\d+\.\d+.*\.html$/.test(n))
+      .sort((a, b) => peso(a) - peso(b));
+    const alvo = nomes[nomes.length - 1];
+    if (!alvo) { log("a lista de versões do WhatsApp Web veio vazia."); return ""; }
+    const url = WA_VERSION_BASE + alvo;
+    try { fs.writeFileSync(VERSAO_ESCOLHIDA_FILE, url, "utf8"); } catch {}
+    log(`versão do WhatsApp Web escolhida sozinha: ${alvo} (a fixada no código não existe mais).`);
+    return url;
+  } catch (e: any) { log(`não consegui descobrir uma versão do WhatsApp Web: ${e?.message || e}`); return ""; }
+}
+
+// Devolve a URL a usar, ou "" para subir sem pin.
+async function resolverVersaoFixa(): Promise<string> {
+  if (VERSAO_FIXA_DESLIGADA) { log("versão do WhatsApp Web NÃO fixada (WA_WEB_VERSION_URL=off)."); return ""; }
+  let r: any = null;
+  try { r = await buscar(WEB_VERSION_URL, { method: "HEAD" }, 12000); }
+  catch (e: any) {
+    // A consulta em si falhou (rede/DNS): mantemos o pin, porque o cache local
+    // ainda pode servir e tirá-lo agora não ajudaria em nada.
+    log(`não consegui conferir a versão fixa (${e?.message || e}) — sigo com ela mesmo.`);
+    return WEB_VERSION_URL;
   }
+  if (r.ok) return WEB_VERSION_URL;
+  log(`⚠️  a versão fixa do WhatsApp Web respondeu ${r.status} — procurando a mais nova publicada…`);
+  const nova = await descobrirVersaoWa();
+  if (nova) return nova;
+  log("nenhuma versão utilizável — subindo SEM versão fixa. Se travar, ponha WA_WEB_VERSION_URL no .env.");
+  return "";
 }
 
 (async () => {
-  if (!(await versaoFixaUsavel())) (client as any).options.webVersionCache = { type: "none" };
+  const versao = await resolverVersaoFixa();
+  (client as any).options.webVersionCache = versao ? { type: "remote", remotePath: versao } : { type: "none" };
   try {
     await client.initialize();
   } catch (e: any) {
