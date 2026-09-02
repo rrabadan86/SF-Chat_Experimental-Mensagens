@@ -1534,8 +1534,33 @@ function paginaInstagram(aviso, erro) {
         <p>As boas-vindas automáticas estão <b>desligadas</b>. Ligue só com o proxy e os cookies configurados (senão a conta pode ser bloqueada).</p></div>
       <div style="text-align:right;margin:-4px 0 0"><form method="POST" action="/instagram/toggle" style="display:inline"><input type="hidden" name="alvo" value="on"><button class="save" type="submit" style="padding:4px 13px;font-size:var(--fs-xs)" onclick="return confirm('Ligar o envio de boas-vindas no Instagram?')">▶️ Ligar Instagram</button></form></div>`;
 
+  // ── Card da integração OFICIAL (Graph API): comentário/DM → resposta ──────
+  const igOf = igApi.status();
+  const ofCfg = igApi.lerCfg();
+  const oficialCard = `
+    <div class="card" style="border-left:4px solid ${igOf.conta ? 'var(--ok)' : 'var(--cinza)'}">
+      <h2 style="margin:0 0 4px">🤖 Instagram oficial (API da Meta) <span class="badge">recomendado</span></h2>
+      <p class="quando" style="margin:0 0 10px">Responde sozinho quem <b>comenta uma palavra-chave</b> num post/reel ou manda <b>DM</b> — com o link do agendamento. Estável e sem risco de bloqueio (substitui o envio por cookie abaixo).</p>
+      ${igOf.conta
+        ? `<p class="quando" style="margin:0 0 12px;color:var(--ok);font-weight:600">✅ Conectado: <b>${esc(igOf.conta)}</b> · Página ${esc(igOf.pagina || '—')} · enviados hoje: <b>${igOf.enviadosHoje}</b></p>`
+        : `<p class="quando" style="margin:0 0 12px;color:var(--cinza)">⏳ Ainda não conectado — defina as variáveis <code>IG_*</code> no <code>.env</code> e reinicie o painel.${igOf.verifyDefinido ? '' : ' (falta <code>IG_VERIFY_TOKEN</code>)'}</p>`}
+      <form method="POST" action="/instagram/oficial/salvar">
+        <label class="chk"><input type="checkbox" name="enabled" ${ofCfg.enabled ? 'checked' : ''}> <b>Ligado</b> — responder automaticamente</label>
+        <label style="display:block;margin:14px 0 4px;font-weight:700;font-size:.85rem">Palavras-chave <span class="sub">— separadas por vírgula; deixe vazio para responder a qualquer comentário</span></label>
+        <input type="text" name="palavras" value="${esc((ofCfg.palavras || []).join(', '))}" style="width:100%" placeholder="eu, quero, experimental">
+        <label style="display:block;margin:14px 0 4px;font-weight:700;font-size:.85rem">Mensagem do DM <span class="sub">— use <code>{link}</code> onde entra o link do formulário</span></label>
+        <textarea name="mensagem" rows="5" style="width:100%" spellcheck="true">${esc(ofCfg.mensagem || '')}</textarea>
+        <label style="display:block;margin:14px 0 4px;font-weight:700;font-size:.85rem">Link do formulário <span class="sub">— para onde a lead é levada (agenda no EVO → SoFIA)</span></label>
+        <input type="text" name="link" value="${esc(ofCfg.link || '')}" style="width:100%" placeholder="https://sf-formularioexperimental.onrender.com/?origem=instagram">
+        <label class="chk" style="margin-top:12px"><input type="checkbox" name="responderDM" ${ofCfg.responderDM ? 'checked' : ''}> Também responder quem manda <b>DM direto</b> (janela de 24h)</label>
+        <div class="acts" style="margin-top:14px"><button type="submit" class="save">💾 Salvar Instagram oficial</button></div>
+      </form>
+    </div>`;
+
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    ${oficialCard}
+    <div class="sec-t" style="margin-top:22px">Envio antigo por cookie <small style="font-weight:600;color:var(--cinza)">(será desativado — use o oficial acima)</small></div>
     ${statusCard}
 
     <div class="card" style="border-left:4px solid ${sessCor}">
@@ -5681,7 +5706,8 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && url === '/instagram') {
     const q = req.url.split('?')[1] || '';
     let aviso = '', erro = false;
-    if (/(?:^|&)on=1/.test(q)) aviso = '📸 Instagram LIGADO. Vale no próximo disparo (07:00).';
+    if (/(?:^|&)oficial=1/.test(q)) aviso = '🤖 Instagram oficial salvo! Vale na hora — palavra-chave, mensagem e link atualizados.';
+    else if (/(?:^|&)on=1/.test(q)) aviso = '📸 Instagram LIGADO. Vale no próximo disparo (07:00).';
     else if (/(?:^|&)off=1/.test(q)) aviso = '⏸️ Instagram pausado. Nenhuma DM automática será enviada.';
     else if (/(?:^|&)lim=1/.test(q)) aviso = '🎯 Limite salvo. Vale já no próximo disparo — sem reiniciar.';
     else if (/(?:^|&)ck=\d/.test(q)) aviso = '🍪 Cookies importados (' + (q.match(/ck=(\d+)/) || [])[1] + '). A sessão do Instagram foi renovada — vale na próxima execução.';
@@ -5696,6 +5722,26 @@ const server = http.createServer((req, res) => {
       const alvo = new URLSearchParams(corpo).get('alvo');
       try { igcfg.definir(alvo === 'on'); } catch (_) {}
       res.writeHead(303, { Location: alvo === 'on' ? '/instagram?on=1' : '/instagram?off=1' }); res.end();
+    });
+  }
+  // Salva a config da integração OFICIAL (palavra-chave, mensagem, link, on/off).
+  if (req.method === 'POST' && url === '/instagram/oficial/salvar') {
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      const palavras = (p.get('palavras') || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      try {
+        igApi.gravarCfg({
+          enabled: p.get('enabled') === 'on',
+          responderDM: p.get('responderDM') === 'on',
+          palavras,
+          mensagem: (p.get('mensagem') || '').slice(0, 2000),
+          link: (p.get('link') || '').trim().slice(0, 500),
+        });
+        res.writeHead(303, { Location: '/instagram?oficial=1' }); res.end();
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(paginaInstagram('Erro ao salvar o Instagram oficial: ' + e.message, true));
+      }
     });
   }
   if (req.method === 'POST' && url === '/instagram/limite') {
