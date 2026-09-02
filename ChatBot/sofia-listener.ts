@@ -33,8 +33,15 @@ const STATUS_FILE = path.join(DIR, "sofia-wa-status.json");
 const AUTH_DIR = process.env.SOFIA_WA_AUTH || path.join(DIR, ".wwebjs_auth");
 const HEADLESS = process.env.SOFIA_HEADLESS !== "false";
 // Fixa uma versão conhecida do WhatsApp Web (evita travar em 99%). Igual ao robô.
+// ATENÇÃO: esse arquivo é de um repositório de terceiros e PODE SUMIR (já virou
+// 404). Enquanto o .wwebjs_cache local existe ninguém percebe; no dia em que o
+// cache é apagado, o download falha, a página sobe sem os internos do WhatsApp
+// Web e o Client.inject estoura em 30s — o processo morre e o pm2 entra em laço
+// de reinício. Por isso conferimos a URL antes de usar (ver versaoFixaUsavel).
+// WA_WEB_VERSION_URL=off desliga o travamento de versão de vez.
 const WEB_VERSION_URL = process.env.WA_WEB_VERSION_URL
   || "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1015901307-alpha.html";
+const VERSAO_FIXA_DESLIGADA = /^(off|none|nao|não|0)$/i.test(String(WEB_VERSION_URL).trim());
 
 function setStatus(estado: string, qr = "") {
   try { fs.writeFileSync(STATUS_FILE, JSON.stringify({ estado, qr, atualizadoEm: new Date().toISOString() }), "utf8"); } catch {}
@@ -1883,4 +1890,43 @@ setStatus("iniciando");
 limparLoginSePedido(); // só apaga se um LOGOUT/Desconectar tiver deixado o bilhete
 log("iniciando a conexão do WhatsApp da Sofia...");
 armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia sozinho
-client.initialize();
+// A URL da versão fixa responde 200? Só confiamos nela se responder. Um 404
+// (arquivo removido do repositório) é pior do que não fixar versão nenhuma:
+// sem os internos da página o initialize morre em 30s, todas as vezes. Se a
+// consulta em si falhar (rede fora, DNS), mantemos a URL — o cache local ainda
+// pode servir, e derrubar o pin nessa hora não ajudaria em nada.
+async function versaoFixaUsavel(): Promise<boolean> {
+  if (VERSAO_FIXA_DESLIGADA) { log("versão do WhatsApp Web NÃO fixada (WA_WEB_VERSION_URL=off) — usando a que o WhatsApp servir."); return false; }
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12000);
+    const r = await fetch(WEB_VERSION_URL, { method: "HEAD", signal: ctrl.signal });
+    clearTimeout(t);
+    if (r.ok) return true;
+    log(`⚠️  a versão fixa do WhatsApp Web respondeu ${r.status} (${WEB_VERSION_URL}) — vou subir SEM versão fixa. `
+      + `Se quiser fixar outra, ponha WA_WEB_VERSION_URL no .env com uma URL que exista.`);
+    return false;
+  } catch (e: any) {
+    log(`não consegui conferir a versão fixa (${e?.message || e}) — sigo com ela mesmo (o cache local pode servir).`);
+    return true;
+  }
+}
+
+(async () => {
+  if (!(await versaoFixaUsavel())) (client as any).options.webVersionCache = { type: "none" };
+  try {
+    await client.initialize();
+  } catch (e: any) {
+    // Sem este catch a rejeição sobe como unhandledRejection, o Node derruba o
+    // processo e o pm2 reinicia na hora — um laço de ~30s que nunca chega no QR.
+    log(`❌ falha ao iniciar o WhatsApp: ${e?.message || e}`);
+    setStatus("desconectado");
+    log("aguardando 20s antes de sair, para o pm2 não reiniciar em laço.");
+    setTimeout(() => process.exit(1), 20000);
+  }
+})();
+
+// Rede instável e páginas que somem geram rejeições soltas. Registrar em vez de
+// deixar o Node derrubar o processo evita que uma falha passageira vire um laço
+// de reinício — o watchdog continua cuidando do caso de travar de verdade.
+process.on("unhandledRejection", (e: any) => log("aviso: promessa rejeitada sem tratamento — " + (e?.message || e)));

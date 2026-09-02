@@ -29,8 +29,32 @@ const HEADLESS = process.env.WA_HEADLESS !== 'false';
 const CHROMIUM_PATH = process.env.CHROMIUM_PATH || undefined;
 // Fixa uma versão conhecida do WhatsApp Web (resolve o "travado em 99% / sem ready").
 // Se essa versão parar de funcionar, troque a URL pela variável WA_WEB_VERSION_URL no .env.
+// O arquivo é de um repositório de terceiros e PODE SUMIR (já virou 404). Enquanto
+// o wwebjs_cache local existe ninguém percebe; no dia em que o cache é apagado, a
+// página sobe sem os internos do WhatsApp Web e o Client.inject estoura em 30s.
+// Por isso conferimos a URL antes de usar. WA_WEB_VERSION_URL=off desliga o pin.
 const WEB_VERSION_URL = process.env.WA_WEB_VERSION_URL
   || 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1015901307-alpha.html';
+const VERSAO_FIXA_DESLIGADA = /^(off|none|nao|não|0)$/i.test(String(WEB_VERSION_URL).trim());
+
+// true = dá para usar a versão fixa. Um 404 é PIOR do que não fixar versão nenhuma.
+// Se a própria consulta falhar (rede fora), mantemos o pin — o cache local pode servir.
+async function versaoFixaUsavel() {
+  if (VERSAO_FIXA_DESLIGADA) { log('versão do WhatsApp Web NÃO fixada (WA_WEB_VERSION_URL=off).'); return false; }
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12000);
+    const r = await fetch(WEB_VERSION_URL, { method: 'HEAD', signal: ctrl.signal });
+    clearTimeout(t);
+    if (r.ok) return true;
+    log('⚠️  a versão fixa do WhatsApp Web respondeu ' + r.status + ' — subindo SEM versão fixa. '
+      + 'Para fixar outra, ponha WA_WEB_VERSION_URL no .env com uma URL que exista.');
+    return false;
+  } catch (e) {
+    log('não consegui conferir a versão fixa (' + (e && e.message) + ') — sigo com ela mesmo.');
+    return true;
+  }
+}
 
 let client = null;
 let pronto = false;
@@ -219,7 +243,11 @@ function initWhatsApp() {
   });
 
   waStatus.set('iniciando', null);
-  client.initialize().catch((e) => {
+  // Confere a versão fixa antes de subir; um 404 aqui vira crash no inject.
+  versaoFixaUsavel().then((ok) => { if (!ok) client.options.webVersionCache = { type: 'none' }; })
+    .catch(() => {})
+    .then(() => client.initialize())
+    .catch((e) => {
     const msg = (e && e.message) || String(e);
     if (/already running/i.test(msg)) {
       log('❌ Já existe uma sessão do WhatsApp aberta para este perfil.');
