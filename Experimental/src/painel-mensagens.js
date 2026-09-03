@@ -1062,7 +1062,7 @@ function paginaMensagens(aviso, erro) {
     <div id="waBanner">${blocoWaRobo()}</div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin:-4px 0 0">
       <form method="POST" action="/wa/reiniciar" onsubmit="return confirm('Reiniciar o robô agora?\\n\\nEle fica cerca de 1 minuto fora do ar enquanto reconecta o WhatsApp. Evite reiniciar bem em cima de um horário de disparo.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔄 Reiniciar robô</button></form>
-      <form method="POST" action="/wa/desconectar" onsubmit="return confirm('Desconectar o WhatsApp do robô?\\n\\nO robô para de enviar e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">Desconectar</button></form>
+      <form id="waBtnDesc" method="POST" action="/wa/desconectar" onsubmit="return confirm('Desconectar o WhatsApp do robô?\\n\\nO robô para de enviar e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="display:none" title="Só disponível quando o WhatsApp está conectado"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">Desconectar</button></form>
     </div>
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
@@ -1092,6 +1092,7 @@ ${scriptPreviewTeste()}
   function atualizaWa(){
     fetch('/wa/estado').then(function(r){return r.json();}).then(function(st){
       var el=document.getElementById('waBanner'); if(el) el.innerHTML=renderWa(st);
+      var d=document.getElementById('waBtnDesc'); if(d) d.style.display=(st&&st.estado==='conectado')?'inline':'none';
     }).catch(function(){});
   }
   atualizaWa(); setInterval(atualizaWa, 7000);
@@ -3788,7 +3789,7 @@ function paginaSofia(aviso, erro) {
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
         <form method="POST" action="/sofia/toggle" style="margin:0;display:inline"><button type="submit" class="${e.ativa ? 'reset' : 'save'}" style="padding:4px 11px;font-size:var(--fs-xs)">${e.ativa ? '⏸️ Pausar SoFIA' : '▶️ Ativar SoFIA'}</button></form>
         <form method="POST" action="/sofia/reiniciar" onsubmit="return confirm('Reiniciar a SoFIA agora?\\n\\nEla fica cerca de 1 minuto fora do ar enquanto reconecta o WhatsApp — sem perder as conversas. Passa a valer o que precisa de reinício (modelo de IA, transcrição).')" style="margin:0;display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔄 Reiniciar SoFIA</button></form>
-        <form method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="margin:0;display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">Desconectar</button></form>
+        <form id="sofiaBtnDesc" method="POST" action="/sofia/desconectar" onsubmit="return confirm('Desconectar o WhatsApp da SoFIA?\\n\\nA SoFIA para de responder e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="margin:0;display:none" title="Só disponível quando o WhatsApp está conectado"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">Desconectar</button></form>
       </div>
     </div>
 
@@ -4034,6 +4035,7 @@ function paginaSofia(aviso, erro) {
   function atualizaSofiaWa(){
     fetch('/sofia/estado',{cache:'no-store'}).then(function(r){return r.json();}).then(function(st){
       var el=document.getElementById('sofiaWa'); if(el) el.innerHTML=renderSofiaWa(st);
+      var d=document.getElementById('sofiaBtnDesc'); if(d) d.style.display=(st&&st.estado==='conectado')?'inline':'none';
     }).catch(function(){});
   }
   atualizaSofiaWa(); setInterval(atualizaSofiaWa, 5000);
