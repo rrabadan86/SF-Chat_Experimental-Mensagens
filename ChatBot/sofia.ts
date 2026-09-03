@@ -723,6 +723,46 @@ let _conversaDaVez: Conversa | null = null;
 // `telefone` é a CHAVE de memória/handoff (telefone real, ou o LID quando não dá
 // pra descobrir). `telefoneReal` é o número que vai ao EVO no agendamento (ou ""
 // quando não dá pra achar — nunca o LID). Para "@c.us" os dois são iguais.
+// Detecta a MENSAGEM DE SAUDAÇÃO/AUSÊNCIA automática do WhatsApp Business de
+// OUTRO negócio (ex.: "Você está falando com a equipe da Dra. X. Sou a assistente
+// e farei o primeiro atendimento. Nosso horário de funcionamento é..."). Sem isto,
+// a SoFIA tratava essa auto-resposta como uma lead nova e respondia com toda a
+// apresentação — falando com o robô do outro lado. Aqui ela reconhece o padrão e
+// fica calada (a mensagem ainda aparece no painel, para a equipe ver).
+// Cuidado com falso-positivo: uma lead PODE perguntar "qual o horário de vocês?".
+// Por isso só disparamos em frases que praticamente só uma auto-resposta de
+// empresa contém (a empresa se apresentando / avisando ausência) — nunca em uma
+// simples pergunta sobre horário. Pode ser desligado com SOFIA_DETECTAR_AUTOMATICA=0.
+function pareceMensagemAutomatica(texto: string): boolean {
+  if (String(process.env.SOFIA_DETECTAR_AUTOMATICA || "1") === "0") return false;
+  const t = String(texto || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")   // sem acento
+    .toLowerCase().replace(/\s+/g, " ").trim();
+  if (t.length < 25) return false; // "oi", "bom dia", "quero saber preço" = gente
+  // Frases que só uma AUTO-RESPOSTA de empresa costuma conter (empresa se
+  // apresentando ou avisando ausência). Qualquer uma já basta.
+  const fortes = [
+    "mensagem automatica", "resposta automatica", "atendimento automatico",
+    "e um atendimento automatico", "nao sao automaticas",
+    "assistente virtual", "sou a assistente", "sou o assistente",
+    "farei o primeiro atendimento", "fara o primeiro atendimento",
+    "voce esta falando com a equipe", "esta falando com a equipe",
+    "voce esta falando com o", "voce entrou em contato com",
+    "obrigada por entrar em contato", "obrigado por entrar em contato",
+    "agradecemos o seu contato", "agradecemos seu contato",
+    "recebemos a sua mensagem", "recebemos sua mensagem",
+    "retornaremos", "responderemos assim que", "responderemos o mais",
+    "retornaremos assim que", "em breve retornaremos", "responderemos em breve",
+    "assim que possivel entraremos", "fora do nosso horario", "fora do horario de",
+    "nosso horario de funcionamento e", "nosso horario de atendimento e",
+    "horario de funcionamento e de", "horario de atendimento e de",
+    "funcionamos de segunda", "atendemos de segunda",
+    "no momento estamos ausentes", "estamos ausentes no momento",
+    "nosso time respondera", "nossa equipe respondera",
+  ];
+  return fortes.some((f) => t.includes(f));
+}
+
 export async function responderComMemoria(telefone: string, mensagem: string, telefoneReal?: string): Promise<string> {
   _midiasDaVez = []; // zera as imagens desta resposta (o listener drena depois)
   // Interruptor geral: se estiver desligada, fica em silêncio (atendimento manual).
@@ -758,6 +798,13 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
   // Fora desse horário, segue o fluxo normal. (recepcaoAtendendo loga o motivo.)
   if (recepcaoAtendendo(telefone)) {
     registrarNaMemoria(telefone, "aluna", mensagem);
+    return "";
+  }
+  // MENSAGEM AUTOMÁTICA de OUTRO negócio (saudação/ausência do WhatsApp Business):
+  // a SoFIA não fala com o robô do outro lado. Anota (aparece no painel) e cala.
+  if (pareceMensagemAutomatica(mensagem)) {
+    registrarNaMemoria(telefone, "aluna", mensagem);
+    console.log(`🤖 ${telefone}: mensagem parece uma saudação/ausência automática de outro negócio — SoFIA não responde.`);
     return "";
   }
   const agora = Date.now();
