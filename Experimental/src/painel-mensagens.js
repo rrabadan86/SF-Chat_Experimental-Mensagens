@@ -4014,6 +4014,91 @@ function paginaSofia(aviso, erro) {
       </div>
       </details>
 
+      <details class="acc-sec">
+        <summary class="sec-t">📋 Regras de Negócio da SoFIA <small style="font-weight:400;color:var(--cinza)">— como ela decide o que fazer (só leitura)</small></summary>
+      <div class="card">
+        <p class="quando" style="margin:0 0 12px">Um resumo, em português claro, do que a SoFIA faz <b>sozinha</b> em cada situação. Nada aqui é editável — é só para consulta. O que dá para ajustar fica nas abas <b>Configuração</b>, <b>Conversas</b>, <b>Tags</b> e <b>Campanhas</b>.</p>
+
+        <div style="display:grid;gap:12px">
+          <div class="rn-bloco" style="border-left:3px solid var(--teal,#2a9d8f);padding:2px 0 2px 12px">
+            <div style="font-weight:800;font-size:.92rem;margin:0 0 4px">🔕 Quando ela NÃO responde (fica calada)</div>
+            <ul style="margin:0;padding-left:18px;line-height:1.55;color:var(--cinza)">
+              <li>Quando a SoFIA está <b>pausada</b> (botão ⏸️) — atendimento 100% manual.</li>
+              <li>Números na lista <b>"Não responder"</b>.</li>
+              <li>Conversa sob <b>controle humano</b> (interruptor na aba Conversas).</li>
+              <li>Logo depois de <b>você responder</b> pelo celular ou pelo painel — ela sai por alguns minutos e depois reassume sozinha.</li>
+              <li><b>Aluna dentro do horário da recepção</b> — quem atende é a recepcionista.</li>
+              <li><b>Saudação automática de outra empresa</b> (WhatsApp Business) — ela não conversa com o robô do outro lado.</li>
+            </ul>
+            <p class="quando" style="margin:5px 0 0">Em todos esses casos a mensagem <b>ainda aparece</b> nas Conversas, para a equipe ver.</p>
+          </div>
+
+          <div class="rn-bloco" style="border-left:3px solid var(--teal,#2a9d8f);padding:2px 0 2px 12px">
+            <div style="font-weight:800;font-size:.92rem;margin:0 0 4px">🧠 Memória e encerramento</div>
+            <ul style="margin:0;padding-left:18px;line-height:1.55;color:var(--cinza)">
+              <li>Depois de um tempo <b>sem falar</b>, a conversa "zera" e ela recomeça do zero (refaz a saudação).</li>
+              <li><b>Encerrar</b> a conversa (🔒) fecha na hora; a próxima mensagem começa uma conversa nova.</li>
+              <li>Se der uma <b>instabilidade</b>, a aluna recebe um "reenvie, por favor" — nunca um erro técnico.</li>
+            </ul>
+          </div>
+
+          <div class="rn-bloco" style="border-left:3px solid var(--teal,#2a9d8f);padding:2px 0 2px 12px">
+            <div style="font-weight:800;font-size:.92rem;margin:0 0 4px">💬 Follow-up (retomar quem sumiu)</div>
+            <ul style="margin:0;padding-left:18px;line-height:1.55;color:var(--cinza)">
+              <li>Só para quem <b>conversou e sumiu sem agendar</b>, e só dentro do horário que você definir.</li>
+              <li><b>Uma vez</b> por conversa — para de insistir se ela responder.</li>
+              <li>Não incomoda quem <b>já agendou</b> nem quem tem a tag <b>"Sem interesse"</b>.</li>
+            </ul>
+          </div>
+
+          <div class="rn-bloco" style="border-left:3px solid var(--teal,#2a9d8f);padding:2px 0 2px 12px">
+            <div style="font-weight:800;font-size:.92rem;margin:0 0 4px">📅 Agendamento da aula experimental</div>
+            <ul style="margin:0;padding-left:18px;line-height:1.55;color:var(--cinza)">
+              <li><b>Nunca confirma um horário</b> sem checar a vaga de verdade na grade.</li>
+              <li>Antecedência: dia útil <b>mín. 4h</b>; fim de semana só a partir de <b>segunda à tarde</b>.</li>
+              <li>Pede <b>nome completo e e-mail</b> antes de agendar.</li>
+              <li>Só diz "agendado" se o sistema <b>confirmar</b> de verdade; se der problema, manda falar com a secretária.</li>
+            </ul>
+          </div>
+
+          <div class="rn-bloco" style="border-left:3px solid var(--teal,#2a9d8f);padding:2px 0 2px 12px">
+            <div style="font-weight:800;font-size:.92rem;margin:0 0 4px">💲 Preço e informações</div>
+            <ul style="margin:0;padding-left:18px;line-height:1.55;color:var(--cinza)">
+              <li>Ao perguntarem preço, ela <b>sempre dá o valor de entrada primeiro</b> — nada de "varia/depende".</li>
+              <li><b>Nunca inventa</b>: o que não está no roteiro, ela diz que "a secretária confirma".</li>
+              <li>A <b>tabela de preços</b> vai sempre por imagem, nunca digitada.</li>
+              <li>Só fala do SlimFit e é <b>exclusivo para mulheres</b>.</li>
+            </ul>
+          </div>
+
+          <div class="rn-bloco" style="border-left:3px solid var(--teal,#2a9d8f);padding:2px 0 2px 12px">
+            <div style="font-weight:800;font-size:.92rem;margin:0 0 4px">🎓 Alunas contratadas</div>
+            <ul style="margin:0;padding-left:18px;line-height:1.55;color:var(--cinza)">
+              <li>Reconhece pela <b>etiqueta de aluna</b> e não oferece experimental nem preço para ela.</li>
+              <li><b>Remarca</b> só com um "sim" claro; regra de <b>1 aula por dia</b>.</li>
+              <li><b>Valores e cobrança</b> são sempre encaminhados para a recepção.</li>
+            </ul>
+          </div>
+
+          <div class="rn-bloco" style="border-left:3px solid var(--teal,#2a9d8f);padding:2px 0 2px 12px">
+            <div style="font-weight:800;font-size:.92rem;margin:0 0 4px">🏷️ Etiquetas e pedido de atendente</div>
+            <ul style="margin:0;padding-left:18px;line-height:1.55;color:var(--cinza)">
+              <li>Etiqueta sozinha por <b>palavra-chave</b>, <b>intenção da conversa</b> e <b>resposta a campanhas</b>.</li>
+              <li>Quando a aluna <b>pede uma pessoa/atendente</b>, avisa um WhatsApp e <b>pinta a conversa de vermelho</b> no painel.</li>
+            </ul>
+          </div>
+
+          <div class="rn-bloco" style="border-left:3px solid var(--teal,#2a9d8f);padding:2px 0 2px 12px">
+            <div style="font-weight:800;font-size:.92rem;margin:0 0 4px">📣 Campanhas</div>
+            <ul style="margin:0;padding-left:18px;line-height:1.55;color:var(--cinza)">
+              <li>Respeita o <b>intervalo entre envios</b> (padrão 120–180s) — inclusive no "Enviar agora".</li>
+              <li><b>Pausa sozinha</b> se der muitas falhas seguidas, para proteger o número.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      </details>
+
       <div class="hbar">
         <div class="acts">
           <button type="submit" class="save">💾 Salvar tudo</button>
