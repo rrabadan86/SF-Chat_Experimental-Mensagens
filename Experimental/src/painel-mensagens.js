@@ -3136,7 +3136,7 @@ function campListHTML(filtro = {}) {
       </div>
       <div class="ritmoBox-${esc(c.id)}" style="display:none;margin:8px 0 0;background:var(--bg);border:1px solid var(--linha);border-radius:10px;padding:10px 12px">
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
-          <div><label style="margin:0 0 3px;font-size:.72rem;font-weight:700;color:var(--cinza)">Entre envios (seg) ${avisoI('<b>Risco de suspensão.</b> Intervalo curto demais é o principal motivo de bloqueio do número. Mantenha <b>50 a 120s ou mais</b> para imitar o ritmo de uma pessoa e proteger a conta.')}</label><div style="display:flex;gap:6px;align-items:center"><input type="number" min="1" max="3600" value="${c.delayMinSeg}" id="rmin-${esc(c.id)}" style="width:72px"><span class="quando" style="margin:0">a</span><input type="number" min="1" max="3600" value="${c.delayMaxSeg}" id="rmax-${esc(c.id)}" style="width:72px"></div></div>
+          <div><label style="margin:0 0 3px;font-size:.72rem;font-weight:700;color:var(--cinza)">Entre envios (seg) ${avisoI('<b>Risco de suspensão.</b> Intervalo curto demais é o principal motivo de bloqueio do número. Mantenha <b>120 a 180s ou mais</b> para imitar o ritmo de uma pessoa e proteger a conta.')}</label><div style="display:flex;gap:6px;align-items:center"><input type="number" min="1" max="3600" value="${c.delayMinSeg}" id="rmin-${esc(c.id)}" style="width:72px"><span class="quando" style="margin:0">a</span><input type="number" min="1" max="3600" value="${c.delayMaxSeg}" id="rmax-${esc(c.id)}" style="width:72px"></div></div>
           <div><label style="margin:0 0 3px;font-size:.72rem;font-weight:700;color:var(--cinza)">Máx. por dia</label><input type="number" min="1" max="1000" value="${c.limiteDia}" id="rlim-${esc(c.id)}" style="width:84px"></div>
           <div><label style="margin:0 0 3px;font-size:.72rem;font-weight:700;color:var(--cinza)">Janela</label><div style="display:flex;gap:6px;align-items:center"><input type="time" value="${esc(c.janelaIni)}" id="rji-${esc(c.id)}" style="width:auto"><span class="quando" style="margin:0">às</span><input type="time" value="${esc(c.janelaFim)}" id="rjf-${esc(c.id)}" style="width:auto"></div></div>
           <button type="button" class="save" style="padding:6px 13px" onclick="salvarRitmo('${esc(c.id)}')">Salvar ritmo</button>
@@ -3370,13 +3370,13 @@ function paginaSofiaCampanhas(aviso, erro) {
         </div>
 
         <details class="cpf-acc">
-          <summary class="cpf-sum">Ritmo e limites ${avisoI('<b>Risco de suspensão do WhatsApp.</b> Enviar muitas mensagens, rápido demais ou para quem nunca te respondeu pode fazer o número ser bloqueado (24h ou até em definitivo). Para reduzir o risco: mantenha o intervalo alto (<b>50 a 120s ou mais</b>), um <b>máximo por dia baixo</b>, use as variações da IA e envie de preferência só para quem já falou com você.')} <span class="sub quando" style="margin:0">— já vem com um ritmo seguro; abra para ajustar</span></summary>
+          <summary class="cpf-sum">Ritmo e limites ${avisoI('<b>Risco de suspensão do WhatsApp.</b> Enviar muitas mensagens, rápido demais ou para quem nunca te respondeu pode fazer o número ser bloqueado (24h ou até em definitivo). Para reduzir o risco: mantenha o intervalo alto (<b>120 a 180s ou mais</b>), um <b>máximo por dia baixo</b>, use as variações da IA e envie de preferência só para quem já falou com você.')} <span class="sub quando" style="margin:0">— já vem com um ritmo seguro; abra para ajustar</span></summary>
           <div class="cpf-body">
           <div class="cpf-grid-lim">
             <div class="cpf-field"><label>Começar em</label><input type="date" id="cpIni" name="dataInicio" value="${esc(hojeSP())}" min="${esc(hojeSP())}" oninput="estCamp()"></div>
             <div class="cpf-field"><label>Máx. por dia</label><div class="cpf-range"><input type="number" id="cpMax" name="limiteDia" min="1" max="1000" value="40" oninput="estCamp()"><span class="cpf-suf">msg</span></div></div>
             <div class="cpf-field"><label>Horário de envio</label><div class="cpf-range"><input type="time" id="cpJi" name="janelaIni" value="09:00" oninput="estCamp()"><span class="cpf-suf">até</span><input type="time" id="cpJf" name="janelaFim" value="20:00" oninput="estCamp()"></div></div>
-            <div class="cpf-field"><label>Intervalo entre envios ${avisoI('<b>Não deixe muito curto.</b> Um intervalo baixo é o principal motivo de o WhatsApp bloquear o número. O padrão <b>50 a 120s</b> imita o tempo de digitação de uma pessoa e é bem mais seguro.')}</label><div class="cpf-range"><input type="number" id="cpDmin" name="delayMinSeg" min="1" max="3600" value="50" oninput="estCamp()"><span class="cpf-suf">a</span><input type="number" id="cpDmax" name="delayMaxSeg" min="1" max="3600" value="120" oninput="estCamp()"><span class="cpf-suf">s</span></div></div>
+            <div class="cpf-field"><label>Intervalo entre envios ${avisoI('<b>Não deixe muito curto.</b> Um intervalo baixo é o principal motivo de o WhatsApp bloquear o número. O padrão <b>120 a 180s</b> imita o tempo de digitação de uma pessoa e é bem mais seguro.')}</label><div class="cpf-range"><input type="number" id="cpDmin" name="delayMinSeg" min="1" max="3600" value="120" oninput="estCamp()"><span class="cpf-suf">a</span><input type="number" id="cpDmax" name="delayMaxSeg" min="1" max="3600" value="180" oninput="estCamp()"><span class="cpf-suf">s</span></div></div>
           </div>
           <div class="cpf-field" style="margin-top:14px">
             <label>Dias da semana <span class="sub">— só envia nos dias marcados</span></label>
@@ -5640,7 +5640,7 @@ const server = http.createServer((req, res) => {
           op: 'criar',
           campanha: {
             id, nome, tag, textoBase,
-            limiteDia: String(d.limiteDia || '40'), delayMinSeg: String(d.delayMinSeg || '50'), delayMaxSeg: String(d.delayMaxSeg || '120'),
+            limiteDia: String(d.limiteDia || '40'), delayMinSeg: String(d.delayMinSeg || '120'), delayMaxSeg: String(d.delayMaxSeg || '180'),
             janelaIni: String(d.janelaIni || '09:00'), janelaFim: String(d.janelaFim || '20:00'),
             dataInicio: String(d.dataInicio || hojeSP()),
             dias: Array.isArray(d.dias) ? d.dias.map(Number).filter(x => x >= 0 && x <= 6) : [],
