@@ -6113,6 +6113,9 @@ function processarFollowups() {
     try { if (sofia.estaEncerrada(chave, ultimoAluna)) continue; } catch (_) {} // encerrada à mão → não incomoda (mede pela última msg da aluna: despedida da SoFIA não reabre)
     if (agendaram.has(d)) continue;                          // já agendou
     try { const ct = contatosMap[contatos.normTel(chave)]; if (ct && (ct.tags || []).some(t => tagsAgendou.includes(t))) continue; } catch (_) {}
+    // Não reengaja quem já disse que não quer: contato com a tag "Sem interesse"
+    // (ex.: "FX - 0. Sem interesse") fica de fora do follow-up.
+    try { const ct = contatosMap[contatos.normTel(chave)]; if (ct && (ct.tags || []).some(t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '').includes('seminteresse'))) continue; } catch (_) {}
     // Chegou aqui = está no ponto de receber a retomada. Só falta o horário:
     if (!dentroDaJanela) { espera[chave] = cfg.janelaIni; continue; } // segura p/ o próximo horário permitido
     // REGISTRA "já enviei" ANTES de enfileirar e só envia se o registro GRAVOU.

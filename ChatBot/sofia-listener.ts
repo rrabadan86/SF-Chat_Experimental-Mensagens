@@ -23,7 +23,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
-import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirConversa, gerarFollowup, classificarIntencaoTags, agendarManual } from "./sofia";
+import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirConversa, gerarFollowup, classificarIntencaoTags, agendarManual, temTagSemInteresse } from "./sofia";
 
 // Pasta dos arquivos da Sofia. Por padrão, a pasta de trabalho (comportamento
 // atual). Se SOFIA_DIR estiver definida, usa ela — permite guardar prompt/estado
@@ -1346,6 +1346,11 @@ async function processarFollowups() {
     // Trava de segurança: nunca faz follow-up de bloqueado nem de quem está sob
     // controle humano (o painel já filtra, mas conferimos de novo aqui).
     if (estaBloqueado(tel)) { log(`follow-up de bloqueado (${tel}) — ignorado.`); continue; }
+    // Não reengaja quem já disse que não quer: contato com a tag "Sem interesse"
+    // (ex.: "FX - 0. Sem interesse") fica de fora do follow-up. Vale só aqui, no
+    // reengajamento automático — se ela mesma voltar a escrever, a SoFIA responde
+    // normalmente (isto NÃO entra no deveResponder).
+    if (temTagSemInteresse(tel)) { log(`follow-up de ${tel} pulado — contato marcado "sem interesse".`); continue; }
     // Respeita o "Pausar SoFIA" (estado global), o controle humano e o handoff
     // (você respondeu pelo celular): nada de follow-up automático nesses casos.
     if (!deveResponder(tel)) { log(`follow-up de ${tel} pulado — SoFIA pausada/controle humano/handoff.`); continue; }

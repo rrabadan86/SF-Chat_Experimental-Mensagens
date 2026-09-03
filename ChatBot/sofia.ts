@@ -1226,6 +1226,30 @@ function temTagAluna(telefone: string): boolean {
   return false;
 }
 
+// True quando o contato está marcado como "sem interesse" no painel. Usada para
+// NÃO disparar follow-up de reengajamento a quem já disse que não quer — a tag
+// vem escrita como "FX - 0. Sem interesse" (com prefixo de ordenação), então
+// comparamos por conteúdo normalizado (sem acento/pontuação) contendo
+// "seminteresse", em vez de igualdade exata de chave.
+export function temTagSemInteresse(telefone: string): boolean {
+  try {
+    const ult8 = String(telefone || "").replace(/\D/g, "").slice(-8);
+    if (!ult8) return false;
+    const bruto = JSON.parse(fs.readFileSync(CONTATOS_FILE, "utf8"));
+    const lista: any[] = Array.isArray(bruto) ? bruto : Object.values(bruto || {});
+    const norm = (v: any) => String(v || "")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase().replace(/[^a-z0-9]+/g, "");
+    for (const c of lista) {
+      const t = String(c?.tel || c?.telefone || "").replace(/\D/g, "");
+      if (t && t.endsWith(ult8)) {
+        return (c?.tags || []).some((x: any) => norm(x).includes("seminteresse"));
+      }
+    }
+  } catch { /* sem arquivo/contato = trata como não marcado */ }
+  return false;
+}
+
 // True quando a RECEPÇÃO está no expediente e o contato é aluna contratada —
 // nesse caso a Sofia não responde (quem atende é a recepcionista).
 // A janela pode virar a meia-noite (ex.: 17:00–07:00).
