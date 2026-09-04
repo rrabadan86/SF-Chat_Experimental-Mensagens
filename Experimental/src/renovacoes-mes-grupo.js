@@ -62,6 +62,18 @@ function formatarData(val) {
   if (isNaN(d)) return String(val);
   return fmtBR(d);
 }
+// Converte o vencimento (DD/MM/YYYY, ISO ou Date) numa Date "só dia" (00:00),
+// para dar pra comparar com o intervalo do mês-alvo. Retorna null se não parsear.
+function parseVenc(val) {
+  if (!val) return null;
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(String(val));
+  let d;
+  if (m) d = new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10));
+  else { d = new Date(val); }
+  if (isNaN(d)) return null;
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
 /** Monta o texto da mensagem (nome + dia/mês do vencimento), ordenado por data. */
 function montarMensagem(alunas, mesIndex, ano) {
@@ -264,19 +276,29 @@ async function buscarContratosDoPeriodo(inicio, fim) {
     }, inicio.getDate(), fim.getDate(), inicio.getMonth(), inicio.getFullYear());
     console.log(`   👉 ${resultadoFiltro}`);
 
-    // 4. Lê a lista filtrada (obter-clientes) — só nome + vencimento.
+    // 4. Lê a lista (obter-clientes) — só nome + vencimento.
+    //    IMPORTANTE: o segmento do EVO às vezes devolve contratos FORA do período
+    //    (o filtro de data do EVO não é 100% confiável). Então conferimos AQUI:
+    //    só entram os que vencem DENTRO do intervalo do mês-alvo [inicio, fim].
     await sleep(6000);
+    const ini0 = new Date(inicio); ini0.setHours(0, 0, 0, 0);
+    const fim0 = new Date(fim); fim0.setHours(0, 0, 0, 0);
     const vistos = new Set();
     const alunas = [];
+    let foraDoMes = 0, semData = 0;
     for (const c of clientesIntercept) {
       const id = String(c.idCliente ?? c.id ?? c.nome);
       if (vistos.has(id)) continue;
       vistos.add(id);
       const nome = String(c.nome || '').trim();
       if (!nome) continue;
-      alunas.push({ nome, vencimento: formatarData(c.dataVencimento) });
+      const venc = parseVenc(c.dataVencimento);
+      if (!venc) { semData++; continue; }                 // sem data legível → não arrisca
+      if (venc < ini0 || venc > fim0) { foraDoMes++; continue; } // fora do mês-alvo → descarta
+      alunas.push({ nome, vencimento: fmtBR(venc) });
     }
-    console.log(`📊 ${alunas.length} contrato(s) a vencer no período.`);
+    if (foraDoMes || semData) console.log(`   ↳ descartados: ${foraDoMes} fora do mês-alvo, ${semData} sem data.`);
+    console.log(`📊 ${alunas.length} contrato(s) a vencer no mês-alvo.`);
     return alunas;
   } catch (err) {
     console.error('❌ Erro ao ler contratos:', err.message);
