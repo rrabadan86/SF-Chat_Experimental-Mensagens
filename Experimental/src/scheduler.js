@@ -484,7 +484,7 @@ function iniciarRodarJobWatcher() {
     noShowAfternoon:   { nome: 'Faltas TARDE [manual]',       fn: () => require('./follow-up-no-show').runNoShowAfternoon() },
     aniversariantes:   { nome: 'Aniversariantes [manual]',    fn: () => require('./aniversariantes').runAniversariantes() },
     renovacao:         { nome: 'Renovação [manual]',          fn: () => require('./renovar-contratos').runRenovacao() },
-    renovacoesMesGrupo:{ nome: 'Contratos a vencer no mês [manual]', fn: () => require('./renovacoes-mes-grupo').runRenovacoesMesGrupo() },
+    renovacoesMesGrupo:{ nome: 'Contratos a vencer no mês [manual]', fn: (pedido) => require('./renovacoes-mes-grupo').runRenovacoesMesGrupo({ mes: pedido && pedido.mes }) },
   };
   const t = setInterval(() => {
     let pedido = null;
@@ -495,7 +495,7 @@ function iniciarRodarJobWatcher() {
     if (!alvo) { log(`▶️  pedido de job desconhecido: "${chave}" — ignorado. Opções: ${Object.keys(EXEC).join(', ')}`); return; }
     if (jobRunning) { log(`▶️  ${alvo.nome}: outro job em execução — tento de novo em 30s.`); setTimeout(() => { try { fs.writeFileSync(ARQ, JSON.stringify({ job: chave })); } catch (_) {} }, 30000); return; }
     log(`▶️  Rodando job manual: ${alvo.nome}`);
-    runJob(alvo.nome, alvo.fn).catch(err => logError(alvo.nome, err));
+    runJob(alvo.nome, () => alvo.fn(pedido)).catch(err => logError(alvo.nome, err));
   }, 4000);
   if (t.unref) t.unref();
   log('▶️  Watcher de "rodar job manual" ativo (a cada 4s).');

@@ -36,17 +36,16 @@ function agoraSP() {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
 }
 
-// Mês-alvo = o PRÓXIMO mês (ou --mes=N). Devolve { ano, mesIndex(0-11) }.
-function mesAlvo() {
+// Mês-alvo = o PRÓXIMO mês. Pode ser forçado por `forcarMes` (1-12, ex.: pedido
+// manual do painel) ou por --mes=N na linha de comando. Devolve { ano, mesIndex }.
+function mesAlvo(forcarMes) {
   const sp = agoraSP();
-  if (argMes) {
-    const n = parseInt(argMes, 10);
-    if (n >= 1 && n <= 12) {
-      const mesIndex = n - 1;
-      // Se o mês forçado é anterior ao mês atual, entende-se o ano que vem.
-      const ano = mesIndex < sp.getMonth() ? sp.getFullYear() + 1 : sp.getFullYear();
-      return { ano, mesIndex };
-    }
+  const n = parseInt(forcarMes != null ? forcarMes : argMes, 10);
+  if (n >= 1 && n <= 12) {
+    const mesIndex = n - 1;
+    // Se o mês forçado é anterior ao mês atual, entende-se o ano que vem.
+    const ano = mesIndex < sp.getMonth() ? sp.getFullYear() + 1 : sp.getFullYear();
+    return { ano, mesIndex };
   }
   const d = new Date(sp.getFullYear(), sp.getMonth() + 1, 1); // 1º dia do próximo mês
   return { ano: d.getFullYear(), mesIndex: d.getMonth() };
@@ -310,8 +309,8 @@ async function buscarContratosDoPeriodo(inicio, fim) {
   }
 }
 
-async function runRenovacoesMesGrupo() {
-  const { ano, mesIndex } = mesAlvo();
+async function runRenovacoesMesGrupo(opts = {}) {
+  const { ano, mesIndex } = mesAlvo(opts && opts.mes);
   const inicio = new Date(ano, mesIndex, 1);
   const fim = new Date(ano, mesIndex + 1, 0); // dia 0 do mês seguinte = último dia do mês-alvo
 
