@@ -43,8 +43,8 @@ const WEB_VERSION_URL = process.env.WA_WEB_VERSION_URL
   || "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1046618780-alpha.html";
 const VERSAO_FIXA_DESLIGADA = /^(off|none|nao|não|0)$/i.test(String(WEB_VERSION_URL).trim());
 
-function setStatus(estado: string, qr = "") {
-  try { fs.writeFileSync(STATUS_FILE, JSON.stringify({ estado, qr, atualizadoEm: new Date().toISOString() }), "utf8"); } catch {}
+function setStatus(estado: string, qr = "", codigo = "") {
+  try { fs.writeFileSync(STATUS_FILE, JSON.stringify({ estado, qr, codigo, atualizadoEm: new Date().toISOString() }), "utf8"); } catch {}
 }
 const log = (m: string) => console.log(`[sofia] ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} ${m}`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -214,6 +214,15 @@ const WA_UA = process.env.WA_USER_AGENT
 // nome distinto a cada um, eles coexistem como devices separados. Vazio = padrão
 // da lib (mantém o número A intocado).
 const WA_DEVICE_NAME = process.env.WA_DEVICE_NAME || "";
+
+// CÓDIGO DE PAREAMENTO (alternativa ao QR): quando o WhatsApp recusa o QR
+// ("Não foi possível conectar o dispositivo — tente novamente mais tarde"), dá
+// para conectar pelo número. Defina SOFIA_PAIR_NUMBER com o número PRÓPRIO da
+// SoFIA (só dígitos, com DDI, ex.: 5562999999999). Aí, em vez de QR, geramos um
+// código de 8 caracteres para você digitar no celular: WhatsApp → Aparelhos
+// conectados → Conectar um aparelho → "Conectar com número de telefone".
+const PAIR_NUMBER = (process.env.SOFIA_PAIR_NUMBER || "").replace(/\D/g, "");
+let ultimoCodigoEm = 0; // throttle: não pede um código novo a cada refresh do QR
 
 // Decide o cache de versão do WhatsApp Web JÁ NA CONSTRUÇÃO do cliente. Trocar
 // client.options.webVersionCache DEPOIS não pega nesta lib — ela lê o cache uma
@@ -500,6 +509,30 @@ client.on("qr", async (qr) => {
   // matar o processo (e trocar o QR) no meio da leitura. Ele é re-armado quando
   // a sessão autenticar (aí sim faz sentido cobrar o "PRONTA").
   if (bootTimer) { clearTimeout(bootTimer); bootTimer = null; }
+
+  // MODO CÓDIGO DE PAREAMENTO: se SOFIA_PAIR_NUMBER estiver definido, em vez de
+  // depender do QR (que o WhatsApp às vezes recusa), pedimos um código de 8
+  // caracteres para digitar no celular. O evento "qr" dispara a cada ~20s; só
+  // pedimos um código novo no máx. a cada 30s (evita rate-limit "tente mais tarde").
+  if (PAIR_NUMBER && typeof (client as any).requestPairingCode === "function") {
+    const agora = Date.now();
+    if (agora - ultimoCodigoEm > 30000) {
+      ultimoCodigoEm = agora;
+      try {
+        const bruto = String(await (client as any).requestPairingCode(PAIR_NUMBER)).toUpperCase().replace(/\s|-/g, "");
+        const fmt = bruto.length === 8 ? `${bruto.slice(0, 4)}-${bruto.slice(4)}` : bruto;
+        log(`🔑 CÓDIGO DE PAREAMENTO: ${fmt}  (número ${PAIR_NUMBER})`);
+        log(`   No celular da SoFIA: WhatsApp → Aparelhos conectados → Conectar um aparelho → "Conectar com número de telefone" → digite o código.`);
+        alertarQuedaQR();
+        setStatus("codigo", "", fmt);
+      } catch (e: any) {
+        log(`falha ao gerar código de pareamento (${e?.message || e}) — caindo para o QR.`);
+        try { const dataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 }); setStatus("qr", dataUrl); } catch { setStatus("qr", ""); }
+      }
+    }
+    return; // em modo código, não sobrescreve o status com o QR
+  }
+
   log("QR recebido — escaneie pelo painel (aba 🤖 Sofia) ou aqui no terminal:");
   alertarQuedaQR(); // push no celular (mesmo canal do robô) — sessão caiu, precisa reescanear
   try { qrcodeTerminal.generate(qr, { small: true }); } catch {}
