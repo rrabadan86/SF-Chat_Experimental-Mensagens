@@ -699,7 +699,11 @@ export function janelaSessaoMs(): number {
 // a esperar o tempo da sessão — só que na hora. Lido com cache por mtime.
 const ENCERRADAS_FILE = path.join(BASE_DIR, "sofia-encerradas.json");
 let _encMtime = -1;
-let _encMap: Record<string, number> = {};
+let _encMap: Record<string, any> = {};
+// O valor pode ser o instante (número, formato legado) OU um objeto { em, por }
+// (formato novo do painel, que registra QUEM encerrou). Sem tratar o objeto, o
+// Number(obj) virava NaN e o "encerrar" nunca reiniciava a conversa da SoFIA.
+function _encEm(v: any): number { return (v && typeof v === "object") ? (Number(v.em) || 0) : (Number(v) || 0); }
 function encerradaManualEm(chave: string): number {
   try {
     const st = fs.statSync(ENCERRADAS_FILE);
@@ -710,7 +714,7 @@ function encerradaManualEm(chave: string): number {
     }
   } catch { _encMtime = -1; _encMap = {}; }
   const d = String(chave || "").replace(/\D/g, "");
-  return Number(_encMap[chave] || (d && _encMap[d]) || 0) || 0;
+  return _encEm(_encMap[chave]) || (d ? _encEm(_encMap[d]) : 0) || 0;
 }
 
 // Contexto da conversa ATUAL, para a ferramenta solicitar_agendamento (que roda
