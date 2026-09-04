@@ -222,7 +222,12 @@ const WA_DEVICE_NAME = process.env.WA_DEVICE_NAME || "";
 // código de 8 caracteres para você digitar no celular: WhatsApp → Aparelhos
 // conectados → Conectar um aparelho → "Conectar com número de telefone".
 const PAIR_NUMBER = (process.env.SOFIA_PAIR_NUMBER || "").replace(/\D/g, "");
-let ultimoCodigoEm = 0; // throttle: não pede um código novo a cada refresh do QR
+let codigoPareamento = "";   // último código emitido (mantido estável p/ dar tempo de digitar)
+let codigoEm = 0;            // quando foi emitido
+let modoPareamento = false;  // enquanto true, NÃO reiniciamos por watchdog (esperando você digitar)
+// Reaproveita o MESMO código por alguns minutos: o evento "qr" dispara a cada
+// ~20s, mas trocar o código a cada refresh faz o que você digitou expirar.
+const CODIGO_VALIDADE_MS = parseInt(process.env.SOFIA_PAIR_TTL_MS || "180000", 10); // 3 min
 
 // Decide o cache de versão do WhatsApp Web JÁ NA CONSTRUÇÃO do cliente. Trocar
 // client.options.webVersionCache DEPOIS não pega nesta lib — ela lê o cache uma
@@ -512,23 +517,33 @@ client.on("qr", async (qr) => {
 
   // MODO CÓDIGO DE PAREAMENTO: se SOFIA_PAIR_NUMBER estiver definido, em vez de
   // depender do QR (que o WhatsApp às vezes recusa), pedimos um código de 8
-  // caracteres para digitar no celular. O evento "qr" dispara a cada ~20s; só
-  // pedimos um código novo no máx. a cada 30s (evita rate-limit "tente mais tarde").
+  // caracteres para digitar no celular. O evento "qr" dispara a cada ~20s, mas
+  // MANTEMOS o mesmo código por CODIGO_VALIDADE_MS (senão o que você digitou
+  // expira). E marcamos modoPareamento p/ o watchdog NÃO reiniciar enquanto você
+  // digita (esperar um humano digitar não é "travamento").
   if (PAIR_NUMBER && typeof (client as any).requestPairingCode === "function") {
+    modoPareamento = true;
     const agora = Date.now();
-    if (agora - ultimoCodigoEm > 30000) {
-      ultimoCodigoEm = agora;
-      try {
-        const bruto = String(await (client as any).requestPairingCode(PAIR_NUMBER)).toUpperCase().replace(/\s|-/g, "");
-        const fmt = bruto.length === 8 ? `${bruto.slice(0, 4)}-${bruto.slice(4)}` : bruto;
-        log(`🔑 CÓDIGO DE PAREAMENTO: ${fmt}  (número ${PAIR_NUMBER})`);
-        log(`   No celular da SoFIA: WhatsApp → Aparelhos conectados → Conectar um aparelho → "Conectar com número de telefone" → digite o código.`);
-        alertarQuedaQR();
-        setStatus("codigo", "", fmt);
-      } catch (e: any) {
-        log(`falha ao gerar código de pareamento (${e?.message || e}) — caindo para o QR.`);
-        try { const dataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 }); setStatus("qr", dataUrl); } catch { setStatus("qr", ""); }
-      }
+    // Mostramos os DOIS na tela: o código (para digitar) E o QR (para escanear).
+    // O QR é sempre o atual; o código é mantido estável por CODIGO_VALIDADE_MS.
+    let dataUrl = "";
+    try { dataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 }); } catch {}
+    if (codigoPareamento && (agora - codigoEm) < CODIGO_VALIDADE_MS) {
+      setStatus("codigo", dataUrl, codigoPareamento); // mesmo código + QR atualizado
+      return;
+    }
+    try {
+      const bruto = String(await (client as any).requestPairingCode(PAIR_NUMBER)).toUpperCase().replace(/\s|-/g, "");
+      const fmt = bruto.length === 8 ? `${bruto.slice(0, 4)}-${bruto.slice(4)}` : bruto;
+      codigoPareamento = fmt; codigoEm = agora;
+      log(`🔑 CÓDIGO DE PAREAMENTO: ${fmt}  (número ${PAIR_NUMBER}) — vale ~${Math.round(CODIGO_VALIDADE_MS / 60000)} min, digite com calma. (ou escaneie o QR)`);
+      log(`   No celular da SoFIA: WhatsApp → Aparelhos conectados → Conectar um aparelho → "Conectar com número de telefone" → digite o código.`);
+      alertarQuedaQR();
+      setStatus("codigo", dataUrl, fmt);
+    } catch (e: any) {
+      log(`falha ao gerar código de pareamento (${e?.message || e}) — caindo para o QR.`);
+      modoPareamento = false;
+      setStatus("qr", dataUrl);
     }
     return; // em modo código, não sobrescreve o status com o QR
   }
@@ -540,7 +555,7 @@ client.on("qr", async (qr) => {
   catch { setStatus("qr", ""); }
 });
 client.on("authenticated", () => { log("autenticada."); setStatus("iniciando"); armarWatchdogBoot(); });
-client.on("ready", () => { pronta = true; if (bootTimer) clearTimeout(bootTimer); gravarFails(0); log("PRONTA — respondendo as alunas."); setStatus("conectado"); });
+client.on("ready", () => { pronta = true; modoPareamento = false; codigoPareamento = ""; if (bootTimer) clearTimeout(bootTimer); gravarFails(0); log("PRONTA — respondendo as alunas."); setStatus("conectado"); });
 client.on("change_state", (s: string) => log("estado: " + s));
 client.on("disconnected", (m: any) => {
   pronta = false;
@@ -600,6 +615,7 @@ let pronta = false;
 let bootTimer: ReturnType<typeof setTimeout> | null = null;
 function armarWatchdogBoot() {
   if (BOOT_TIMEOUT_MS <= 0) return; // desligado por env
+  if (modoPareamento) return; // esperando você digitar o código — não é travamento, não reinicia
   if (bootTimer) clearTimeout(bootTimer);
   bootTimer = setTimeout(() => {
     if (pronta) return;

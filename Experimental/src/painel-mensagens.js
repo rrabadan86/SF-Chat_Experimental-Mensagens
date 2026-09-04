@@ -1958,10 +1958,12 @@ function blocoSofiaWa() {
     return `<div class="wa-card ok"><div class="wa-ic">🤖</div><h2>WhatsApp da SoFIA conectado</h2><p>A SoFIA está no ar e responde as alunas neste número.</p></div>`;
   }
   if (st.estado === 'codigo' && st.codigo) {
-    return `<div class="wa-card warn"><div class="wa-ic">🔑</div><h2>Código de pareamento da SoFIA</h2>
-      <p>No celular do número da SoFIA: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → <b>Conectar com número de telefone</b> → digite o código abaixo.</p>
-      <div style="font-family:ui-monospace,monospace;font-size:2rem;font-weight:800;letter-spacing:.18em;text-align:center;margin:10px 0;user-select:all">${esc(st.codigo)}</div>
-      <p class="wa-hint">O código expira em alguns minutos e se renova sozinho. Assim que conectar, vira “🤖 conectado”.</p></div>`;
+    return `<div class="wa-card warn"><div class="wa-ic">🔑</div><h2>Conectar a SoFIA</h2>
+      <p>No celular do número da SoFIA (WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b>), use <b>um</b> destes:</p>
+      <p style="margin:8px 0 2px"><b>1) Por código</b> — toque em <b>Conectar com número de telefone</b> e digite:</p>
+      <div style="font-family:ui-monospace,monospace;font-size:2rem;font-weight:800;letter-spacing:.18em;text-align:center;margin:6px 0;user-select:all">${esc(st.codigo)}</div>
+      ${st.qr ? `<p style="margin:10px 0 2px"><b>2) Por QR</b> — ou aponte a câmera para este código:</p><img class="qr" src="${esc(st.qr)}" alt="QR da SoFIA">` : ''}
+      <p class="wa-hint">O código vale alguns minutos e se renova sozinho. Assim que conectar, vira “🤖 conectado”.</p></div>`;
   }
   if (st.estado === 'qr' && st.qr) {
     return `<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR da SoFIA</h2>
@@ -4118,7 +4120,7 @@ function paginaSofia(aviso, erro) {
   function renderSofiaWa(st){
     var e = st && st.estado;
     if(e==='conectado') return '<div class="wa-card ok"><div class="wa-ic">🤖</div><h2>WhatsApp da SoFIA conectado</h2><p>A SoFIA está no ar e responde as alunas neste número.</p></div>';
-    if(e==='codigo' && st.codigo) return '<div class="wa-card warn"><div class="wa-ic">🔑</div><h2>Código de pareamento da SoFIA</h2><p>No celular do número da SoFIA: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → <b>Conectar com número de telefone</b> → digite o código abaixo.</p><div style="font-family:ui-monospace,monospace;font-size:2rem;font-weight:800;letter-spacing:.18em;text-align:center;margin:10px 0;user-select:all">'+st.codigo+'</div><p class="wa-hint">O código expira em alguns minutos e se renova sozinho. Assim que conectar, vira “🤖 conectado”.</p></div>';
+    if(e==='codigo' && st.codigo) return '<div class="wa-card warn"><div class="wa-ic">🔑</div><h2>Conectar a SoFIA</h2><p>No celular do número da SoFIA (WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b>), use <b>um</b> destes:</p><p style="margin:8px 0 2px"><b>1) Por código</b> — toque em <b>Conectar com número de telefone</b> e digite:</p><div style="font-family:ui-monospace,monospace;font-size:2rem;font-weight:800;letter-spacing:.18em;text-align:center;margin:6px 0;user-select:all">'+st.codigo+'</div>'+(st.qr?'<p style="margin:10px 0 2px"><b>2) Por QR</b> — ou aponte a câmera para este código:</p><img class="qr" src="'+st.qr+'" alt="QR da SoFIA">':'')+'<p class="wa-hint">O código vale alguns minutos e se renova sozinho. Assim que conectar, vira “🤖 conectado”.</p></div>';
     if(e==='qr' && st.qr) return '<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR da SoFIA</h2><p>Este é o WhatsApp <b>da SoFIA</b> (número próprio, diferente do robô de mensagens). No celular do número da SoFIA: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte para o código.</p><img class="qr" src="'+st.qr+'" alt="QR da SoFIA"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira “🤖 conectado”.</p></div>';
     if(e==='iniciando') return '<div class="wa-card"><div class="wa-ic">⏳</div><h2>Iniciando…</h2><p>Subindo a conexão da SoFIA. Se precisar de QR, ele aparece aqui.</p></div>';
     if(e==='desconectado') return '<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>A SoFIA caiu. Se aparecer um QR aqui, escaneie de novo.</p></div>';
