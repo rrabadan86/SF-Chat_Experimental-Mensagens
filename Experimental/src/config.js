@@ -80,6 +80,7 @@ const config = {
     aniversariantes:  '0 8 * * *',      // 08:00 todos os dias (parabéns nos grupos)
     planilhaAniv:     '0 14 * * *',     // 14:00 todos os dias (planilha de alunas + aniversários)
     aniversMesGrupo:  '30 5 28 * *',    // 05:30 todo dia 28 (lista de aniversariantes do mês no grupo da equipe)
+    renovacoesMesGrupo: '7 9 28 * *',   // 09:07 todo dia 28 (contratos a vencer no mês seguinte no grupo da equipe)
     presentesPend:    '45 6 * * 1',     // 06:45 toda segunda (presentes de tempo de casa pendentes no grupo)
     resumoSemana:     '30 16 * * 5',    // 16:30 toda sexta (resumo da semana no grupo da equipe)
     ausentes10:       '10 6 * * 1',     // 06:10 toda segunda (alunas ausentes >10 dias no grupo da equipe)

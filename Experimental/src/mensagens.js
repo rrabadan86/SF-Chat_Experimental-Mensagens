@@ -88,6 +88,13 @@ const CATALOGO = [
     padrao: '🎂 *Aniversariantes de {mes}* 🎉\n\n{lista}\n\nVamos celebrar cada uma delas! 💪❤️',
   },
   {
+    chave: 'renovacoes_mes',
+    titulo: 'Contratos a vencer no mês (grupo da equipe)',
+    quando: 'Enviada dia 28 às 09:07 no grupo da equipe: alunas cujo contrato vence no MÊS SEGUINTE. A lista (dia/mês — nome) é montada automaticamente e entra em {lista}. Se ninguém vence no mês, é enviado um aviso curto fixo.',
+    vars: [['mes', 'nome do mês-alvo (ex.: Outubro)'], ['lista', 'a lista dos contratos a vencer (dia/mês — nome) — mantenha o {lista} no texto']],
+    padrao: '📄 *Contratos a vencer em {mes}*\n\n{lista}\n\nBora cuidar das renovações com carinho! 💪❤️',
+  },
+  {
     chave: 'aniversario',
     foto: true,
     titulo: 'Aniversário (nos grupos)',
@@ -249,7 +256,7 @@ function removerFoto(chave) {
 // Todas as mensagens de WhatsApp aceitam foto (flyer), MENOS as text-only:
 //  • 'instagram' — DM do Instagram (canal diferente, tratado na aba Instagram);
 //  • 'ausentes'  — listagem de texto no grupo da equipe (enviada sem mídia).
-const SEM_FOTO = new Set(['instagram', 'ausentes', 'aniversariantes_mes']);
+const SEM_FOTO = new Set(['instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes']);
 function aceitaFoto(chave) { const m = CATALOGO.find(x => x.chave === chave); return !!(m && !SEM_FOTO.has(m.chave)); }
 function salvarFoto(chave, dataUrl) {
   if (!aceitaFoto(chave)) throw new Error('Esta mensagem não aceita foto.');

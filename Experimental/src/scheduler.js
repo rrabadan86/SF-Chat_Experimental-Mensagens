@@ -484,6 +484,7 @@ function iniciarRodarJobWatcher() {
     noShowAfternoon:   { nome: 'Faltas TARDE [manual]',       fn: () => require('./follow-up-no-show').runNoShowAfternoon() },
     aniversariantes:   { nome: 'Aniversariantes [manual]',    fn: () => require('./aniversariantes').runAniversariantes() },
     renovacao:         { nome: 'Renovação [manual]',          fn: () => require('./renovar-contratos').runRenovacao() },
+    renovacoesMesGrupo:{ nome: 'Contratos a vencer no mês [manual]', fn: () => require('./renovacoes-mes-grupo').runRenovacoesMesGrupo() },
   };
   const t = setInterval(() => {
     let pedido = null;
@@ -918,6 +919,24 @@ async function main() {
 
   log(`📅 Job ANIVERSARIANTES-MÊS agendado: ${config.schedule.aniversMesGrupo} (05:30 dia 28)`);
   console.log('   → Lista de aniversariantes do mês no grupo "SlimFit Equipe" (perfil das confirmações)');
+
+  // Schedule: 09:07 todo dia 28 → Contratos a vencer no MÊS SEGUINTE no grupo da equipe
+  cron.schedule(config.schedule.renovacoesMesGrupo, () => {
+    log('⏰ Cron disparado: Contratos a vencer no mês (grupo da equipe)');
+    if (jobRunning) { log('⚠️  Renovações-mês ignorado — outro job em execução'); return; }
+    jobRunning = true;
+    const start = new Date();
+    require('./renovacoes-mes-grupo').runRenovacoesMesGrupo()
+      .then(() => log('✅ Contratos a vencer no mês (grupo) concluído'))
+      .catch(err => logError('Contratos a vencer no mês (grupo)', err))
+      .finally(() => {
+        jobRunning = false;
+        log(`⏱️  Renovações-mês finalizado em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
+      });
+  }, { timezone: 'America/Sao_Paulo' });
+
+  log(`📅 Job RENOVAÇÕES-MÊS agendado: ${config.schedule.renovacoesMesGrupo} (09:07 dia 28)`);
+  console.log('   → Contratos a vencer no mês seguinte no grupo "SlimFit Equipe"');
 
   // Schedule: 06:45 toda segunda → Presentes de tempo de casa pendentes no grupo
   cron.schedule(config.schedule.presentesPend, () => {
