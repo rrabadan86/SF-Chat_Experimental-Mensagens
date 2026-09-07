@@ -503,6 +503,30 @@ const pendentesEco = new Map<string, number>();
 function incEco(jid: string) { pendentesEco.set(jid, (pendentesEco.get(jid) || 0) + 1); }
 function decEco(jid: string) { const n = (pendentesEco.get(jid) || 0) - 1; if (n > 0) pendentesEco.set(jid, n); else pendentesEco.delete(jid); }
 
+// Anti-duplicata do PATROCINADO (click-to-WhatsApp do Instagram/Facebook): a
+// mensagem do anúncio às vezes chega TAMBÉM como um message_create "fromMe" com o
+// MESMO texto que a lead acabou de enviar. Sem tratar, era tratada como "resposta
+// manual" e PAUSAVA a SoFIA (handoff) indevidamente. Guardamos o texto das últimas
+// mensagens RECEBIDAS por contato (~40s); se um fromMe repetir exatamente esse
+// texto para o mesmo contato nesse tempo, é o eco do anúncio — ignoramos.
+const ENTRADA_RECENTE_MS = 40000;
+const entradasRecentes = new Map<string, number>(); // `${chave}|${texto}` -> quando
+function marcarEntrada(chave: string, texto: string) {
+  const t = String(texto || "").trim();
+  if (!t) return;
+  entradasRecentes.set(`${chave}|${t}`, Date.now());
+  if (entradasRecentes.size > 300) { // limpeza preguiçosa
+    const corte = Date.now() - ENTRADA_RECENTE_MS;
+    for (const [k, em] of entradasRecentes) if (em < corte) entradasRecentes.delete(k);
+  }
+}
+function ecoDeEntrada(chave: string, texto: string): boolean {
+  const t = String(texto || "").trim();
+  if (!t) return false;
+  const em = entradasRecentes.get(`${chave}|${t}`);
+  return !!em && (Date.now() - em) < ENTRADA_RECENTE_MS;
+}
+
 async function enviar(to: string, conteudo: any, opts?: any) {
   incEco(to);
   try { return await client.sendMessage(to, conteudo, opts); }
@@ -1859,6 +1883,7 @@ async function processarTextoDaAluna(msg: any, texto: string, textoInbox?: strin
   // Contato bloqueado (como o "Bloquear" do WhatsApp): ignora por completo.
   if (estaBloqueado(chave, telefone, jidParaTel(msg.from))) { log(`mensagem de contato bloqueado (${chave}) — ignorada.`); return; }
   const nomeAluna = (msg._data && msg._data.notifyName) || "";
+  marcarEntrada(chave, texto); // registra p/ detectar o eco "fromMe" do patrocinado
   registrarInbox(chave, msg.from, nomeAluna, "aluna", textoInbox || texto); // painel ao vivo
   try { checarGatilhosAluna(chave, nomeAluna, texto); } catch (e: any) { log("gatilhos: " + (e?.message || e)); }
   agendarResposta(chave, msg.from, telefone, texto); // debounce + resposta
@@ -1936,6 +1961,10 @@ client.on("message", (msg: any) => {
   try {
     if (!msg.from || msg.from.endsWith("@g.us") || msg.from === "status@broadcast") return; // ignora grupos/status
     const texto = (msg.body || "").trim();
+    // Marca a entrada JÁ (sync, pelo jid cru) além da marcação por chave resolvida
+    // lá no processarTextoDaAluna — assim o eco do patrocinado é pego mesmo se o
+    // message_create "fromMe" chegar antes de a fila processar a mensagem.
+    if (texto) { try { marcarEntrada(jidParaTel(msg.from), texto); } catch {} }
     if (texto) { enfileirar(() => processarTextoDaAluna(msg, texto)); return; }
     // Sem texto: se for ÁUDIO e a transcrição estiver ligada, transcreve e trata
     // como se a aluna tivesse escrito. Senão, aviso educado pedindo texto.
@@ -1971,6 +2000,16 @@ async function tratarRespostaManual(msg: any, jid: string) {
     // só o cache em memória: depois de um restart ele está vazio e a conversa
     // entrava no painel com o LID cru no lugar do número.
     const { chave: tel } = await resolverTelDestino(msg, jid);
+    // Eco do PATROCINADO: se este "fromMe" repete o texto que a lead acabou de
+    // enviar, NÃO é resposta manual — é a duplicata do anúncio. Ignora (não pausa).
+    // Pequena espera para absorver a ordem de chegada dos eventos (o incoming pode
+    // ser processado logo depois). Conferimos por chave resolvida E pelo jid cru.
+    const corpo = msg.body || "";
+    await sleep(2500);
+    if (ecoDeEntrada(tel, corpo) || ecoDeEntrada(jidParaTel(jid), corpo)) {
+      log(`message_create de ${tel} ignorado — eco do patrocinado (mesmo texto recém-recebido), não pausa a SoFIA.`);
+      return;
+    }
     assumirConversa(tel);
     registrarNaMemoria(tel, "humano", msg.body || "");
     // tipo "wpp" = resposta manual DIRETO pelo celular da SoFIA (handoff). O painel
