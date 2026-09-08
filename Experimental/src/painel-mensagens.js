@@ -1045,9 +1045,16 @@ function paginaMensagens(aviso, erro) {
 
   // Mensagens que vão para GRUPOS do WhatsApp (o resto é individual, 1 para 1).
   // A do Instagram é editada na aba "📸 Instagram" (fica tudo do IG lá).
-  const MSGS_GRUPO = new Set(['ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'aniversario', 'aniversario_ex', 'circuito_convocacao', 'circuito_lembrete']);
+  const MSGS_GRUPO = new Set(['ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'aniversario', 'circuito_convocacao', 'circuito_lembrete']);
   const listaMsgs = mensagens.listar().filter(m => m.chave !== 'instagram');
-  const itensIndividuais = listaMsgs.filter(m => !MSGS_GRUPO.has(m.chave)).map(cardDe).join('\n');
+  // Individuais (1 p/ 1): "Aniversário — ex-alunas" (reativação, direto no WhatsApp)
+  // aparece no TOPO, acima de "Confirmação — aula de hoje".
+  const indiv = listaMsgs.filter(m => !MSGS_GRUPO.has(m.chave));
+  const indivOrdenado = [
+    ...indiv.filter(m => m.chave === 'aniversario_ex'),
+    ...indiv.filter(m => m.chave !== 'aniversario_ex'),
+  ];
+  const itensIndividuais = indivOrdenado.map(cardDe).join('\n');
   const itensGrupo = listaMsgs.filter(m => MSGS_GRUPO.has(m.chave)).map(cardDe).join('\n');
 
   // Seção final: jobs sem texto editável (só horário).
