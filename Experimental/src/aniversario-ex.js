@@ -152,6 +152,70 @@ async function definirStatusInativos(page) {
   return { ativosOff, inativosOn, achouCheckboxes: !!(st.ativos && st.inativos) };
 }
 
+// Tenta ABRIR o painel/menu de filtro de status (caso os checkboxes fiquem
+// escondidos atrás de um gatilho, como o filtro de mês). NÃO clica em checkbox
+// (não toggla nada) — só em gatilhos "Status/Situação/Filtro" ou ícone de funil.
+async function tentarAbrirPainelStatus(page) {
+  const abriu = await page.evaluate(() => {
+    const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const cand = Array.from(document.querySelectorAll('button, a, span, div, mat-icon, [class*="filter"], [class*="chip"], [role="button"]'));
+    for (const el of cand) {
+      if (el.offsetWidth <= 0 || el.offsetHeight <= 0) continue;
+      const t = norm(el.textContent);
+      const lbl = norm((el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title'))) || '');
+      const cls = (el.className || '') + '';
+      const ehGatilho =
+        /^status$|^situa|^filtros?$/.test(t) ||
+        /status|situa|filtro|filter/.test(lbl) ||
+        /filter|funnel|filtro/i.test(cls) && el.children.length === 0;
+      // não clica se o elemento for (ou contiver) um checkbox — evita togglar
+      const temCheckbox = el.querySelector && el.querySelector('input[type=checkbox]');
+      if (ehGatilho && !temCheckbox) {
+        (el.closest('button, [role="button"]') || el).click();
+        return true;
+      }
+    }
+    return false;
+  }).catch(() => false);
+  if (abriu) await sleep(1500);
+  return abriu;
+}
+
+// Diagnóstico: salva um print e lista tudo que parece filtro de status. Chamado
+// só quando não achamos os checkboxes — para depurar a estrutura real do EVO.
+async function dumpDiagnosticoStatus(page) {
+  try {
+    const arq = path.join(DATA_DIR, 'aniversario-ex-status-debug.png');
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    await page.screenshot({ path: arq, fullPage: true }).catch(() => {});
+    console.log(`   🖼️  Print salvo em: ${arq}`);
+  } catch (_) {}
+  try {
+    const info = await page.evaluate(() => {
+      const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+      const alvo = /^(ativos|inativos|colaboradores|visitantes)$/i;
+      const chave = /(status|situa|filtro|aplicar)/i;
+      const out = [];
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const t = norm(el.textContent);
+        if (!t || t.length > 40) continue;
+        if (alvo.test(t) || chave.test(t)) {
+          const vis = el.offsetWidth > 0 && el.offsetHeight > 0;
+          out.push(`${el.tagName.toLowerCase()}${vis ? '' : '(oculto)'}:"${t}"`);
+        }
+        if (out.length > 40) break;
+      }
+      const overlay = document.querySelector('.cdk-overlay-container');
+      return {
+        itens: out,
+        overlay: overlay ? norm(overlay.textContent).slice(0, 120) : '(sem overlay)',
+      };
+    });
+    console.log(`   🔬 Elementos de filtro no DOM: ${info.itens.join(' | ') || 'nenhum'}`);
+    console.log(`   🔬 Overlay: ${info.overlay}`);
+  } catch (_) {}
+}
+
 // ─── EVO: busca ex-alunas aniversariantes de HOJE ──────────
 async function buscarExAlunasHoje() {
   console.log('\n═══════════════════════════════════════════════════');
@@ -221,8 +285,15 @@ async function buscarExAlunasHoje() {
 
     // 3. TROCA o status para INATIVOS (trava de segurança abaixo).
     console.log('🏷️  Trocando o filtro de status para "Inativos"...');
-    const stat = await definirStatusInativos(page);
+    let stat = await definirStatusInativos(page);
     if (!stat.achouCheckboxes) {
+      // Os checkboxes podem estar atrás de um gatilho de filtro — tenta abrir e reler.
+      console.log('   ↪️  checkboxes não visíveis — tentando abrir o painel de filtro...');
+      const abriu = await tentarAbrirPainelStatus(page);
+      if (abriu) { console.log('   ↪️  gatilho de filtro clicado — relendo...'); stat = await definirStatusInativos(page); }
+    }
+    if (!stat.achouCheckboxes) {
+      await dumpDiagnosticoStatus(page);
       throw new Error('Não encontrei os checkboxes de status (Ativos/Inativos) — ABORTADO por segurança (não envio para não arriscar mandar às ativas).');
     }
     if (!stat.inativosOn || !stat.ativosOff) {
