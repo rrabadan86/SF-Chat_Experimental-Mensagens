@@ -1371,8 +1371,10 @@ function registrarAgendamento(telefone: string, nome: string, when: string) {
 // REAL para quem chamou — usado pela ferramenta solicitar_agendamento e pelo
 // fallback automático. A aluna manda "dia"/"hora" em linguagem natural OU já
 // vem "AAAA-MM-DD HH:MM"; o parse do Python resolve a data real.
-async function bookNoEvo(telefone: string, nome: string, email: string, when: string): Promise<ResultadoAgendamento> {
-  const corpo = { nome, email, telefone, when };
+async function bookNoEvo(telefone: string, nome: string, email: string, when: string, origem: string = ""): Promise<ResultadoAgendamento> {
+  // `origem` distingue a fonte do agendamento para o texto de confirmação:
+  // "express" = Cadastro Express (texto próprio); vazio = formulário/SoFIA.
+  const corpo = { nome, email, telefone, when, origem };
   let resp: any;
   try {
     resp = await comRetry(async () => {
@@ -1414,13 +1416,14 @@ async function enviarParaSeuSistema(telefone: string, resumo: ResumoAgendamento)
 
 // Agendamento MANUAL (atendente pelo painel): mesma rota do EVO que a SoFIA usa
 // (cadastra + marca). Devolve o resultado real para o painel mostrar.
-export async function agendarManual(telefone: string, nome: string, email: string, when: string): Promise<ResultadoAgendamento> {
+export async function agendarManual(telefone: string, nome: string, email: string, when: string, origem: string = ""): Promise<ResultadoAgendamento> {
   const tel = String(telefone || "").replace(/\D/g, "");
   if (!tel) return { erro: true, detalhe: "telefone inválido" };
-  // E-mail é OPCIONAL (cadastro express de balcão/telefone pode não ter): o EVO
-  // identifica a aluna pelo telefone. Só nome e data/horário são obrigatórios.
+  // E-mail agora é OBRIGATÓRIO: o EVO passou a exigi-lo no cadastro do prospect.
+  // O painel/rota já validam antes de enfileirar; reforçamos aqui por segurança.
   if (!String(nome || "").trim() || !String(when || "").trim()) return { erro: true, detalhe: "faltam nome ou data/horário" };
-  return bookNoEvo(tel, String(nome).trim(), String(email || "").trim(), String(when).trim());
+  // `origem` ("express" p/ Cadastro Express) segue até o outbox p/ escolher o texto.
+  return bookNoEvo(tel, String(nome).trim(), String(email || "").trim(), String(when).trim(), String(origem || "").trim());
 }
 
 // ══════════════════════════════════════════════════════════════════════════

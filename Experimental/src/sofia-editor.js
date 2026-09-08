@@ -392,14 +392,16 @@ function enfileirarResposta(chave, jid, texto, fotoArquivo, porNome) {
 
 // Agendamento MANUAL (atendente pelo painel): enfileira o pedido; o listener agenda
 // no EVO (mesma rota da SoFIA) e grava o resultado por id. Devolve o id p/ consulta.
-function enfileirarAgendamento({ chave, telefone, nome, email, when, por } = {}) {
+function enfileirarAgendamento({ chave, telefone, nome, email, when, por, origem } = {}) {
   const id = String(Date.now()) + Math.random().toString(16).slice(2, 8);
   const linha = JSON.stringify({
     id,
     chave: String(chave || '').replace(/\D/g, ''),
     telefone: String(telefone || chave || '').replace(/\D/g, ''),
     nome: String(nome || '').trim(), email: String(email || '').trim(),
-    when: String(when || '').trim(), por: String(por || '').trim(), em: Date.now(),
+    when: String(when || '').trim(), por: String(por || '').trim(),
+    // "express" = Cadastro Express (usa texto de confirmação próprio); vazio = agendar da conversa (texto padrão SoFIA/form).
+    origem: String(origem || '').trim(), em: Date.now(),
   }) + '\n';
   fs.appendFileSync(F.agendarInbox, linha, 'utf8');
   return id;

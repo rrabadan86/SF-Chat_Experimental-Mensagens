@@ -734,12 +734,19 @@ def api_book_sofia():
     email = (dados.get("email") or "").strip().lower()
     telefone = only_digits(dados.get("telefone"))
     when = (dados.get("when") or "").strip()   # "quinta-feira às 16:30" ou "2026-07-30 16:30"
+    # origem: "express" (Cadastro Express) ganha texto de confirmação próprio no
+    # bot do Studio; vazio = fluxo SoFIA/formulário (texto padrão). Vai junto na
+    # OUTBOX para o enviador escolher o modelo certo.
+    origem = (dados.get("origem") or "").strip().lower()
+    if origem != "express":
+        origem = ""
 
     # 2) Validação mínima (sem CPF/nascimento — fluxo leve do WhatsApp).
     if len(nome.split()) < 2:
         return jsonify({"ok": False, "erro": "nome incompleto"}), 400
+    # E-mail é OBRIGATÓRIO: o EVO passou a exigi-lo no cadastro do prospect.
     if not email or "@" not in email:
-        return jsonify({"ok": False, "erro": "email inválido"}), 400
+        return jsonify({"ok": False, "erro": "email obrigatório"}), 400
     if not when:
         return jsonify({"ok": False, "erro": "horário não informado"}), 400
 

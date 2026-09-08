@@ -97,12 +97,24 @@ function friendlyQuando(when) {
 // já veio pronto na fila (montado pelo formulário). Assim dá para editar a
 // confirmação no painel SEM mexer no formulário/Render — e sem risco: sem edição,
 // nada muda.
+// Cadastro Express tem TEXTO PRÓPRIO de confirmação (separado do formulário/Sofia).
+// A "origem" vem na linha do outbox: "express" → modelo próprio; vazio → padrão.
+function ehExpress(row) { return String(row && row.origem || '').toLowerCase() === 'express'; }
+// Qual FLYER/foto usar: o Express tem o seu; os demais usam o padrão.
+function chaveFotoDaConfirmacao(row) {
+  return ehExpress(row) ? 'confirmacao_experimental_express' : 'confirmacao_experimental';
+}
 function mensagemDaConfirmacao(row) {
   try {
     const mensagens = require('./mensagens');
+    const nome = String(row.name || '').trim().split(/\s+/)[0] || '';
+    // Express: SEMPRE o modelo próprio (override do painel OU padrão do express) —
+    // nunca o texto genérico da fila, para não repetir o texto do formulário/Sofia.
+    if (ehExpress(row)) {
+      return mensagens.render('confirmacao_experimental_express', { nome, quando: friendlyQuando(row.when) });
+    }
     const ov = mensagens.carregarOverrides();
     if (ov && ov.confirmacao_experimental && String(ov.confirmacao_experimental).trim()) {
-      const nome = String(row.name || '').trim().split(/\s+/)[0] || '';
       return mensagens.render('confirmacao_experimental', { nome, quando: friendlyQuando(row.when) });
     }
   } catch (_) { /* qualquer erro: cai no texto da fila */ }
@@ -247,7 +259,7 @@ async function enviarConfirmacoes(page) {
   for (const row of pendentes) {
     const k = chave(row);
     try {
-      await enviarUma(page, row.phone, mensagemDaConfirmacao(row), 'confirmacao_experimental');
+      await enviarUma(page, row.phone, mensagemDaConfirmacao(row), chaveFotoDaConfirmacao(row));
       enviados.add(k);
       salvarEnviados(enviados);
       if (falhas[k]) { delete falhas[k]; salvarFalhas(falhas); }
@@ -296,7 +308,7 @@ async function reenviarRetido({ chave: k, nome, telefone } = {}) {
   const item = retidos[alvo];
   const destino = normalizar(telefone || item.phone);
   const wa = require('./wa-client');
-  await wa.sendTexto(destino, mensagemDaConfirmacao(item), undefined, 'confirmacao_experimental');
+  await wa.sendTexto(destino, mensagemDaConfirmacao(item), undefined, chaveFotoDaConfirmacao(item));
   delete retidos[alvo]; salvarRetidos(retidos);
   const enviados = lerEnviados(); enviados.add(alvo); salvarEnviados(enviados);
   const falhas = lerFalhas(); if (falhas[alvo] != null) { delete falhas[alvo]; salvarFalhas(falhas); }

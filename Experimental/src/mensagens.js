@@ -46,6 +46,13 @@ const CATALOGO = [
     padrao: 'Oie, {nome}! 🎉 Tudo bem? Aqui é do *{studio}*.\n\nEstou mandando essa mensagem para informar que a sua aula experimental está confirmada para *{quando}*.\nQualquer dúvida que tiver, ou precisar remarcar a sua aula, pode me chamar por aqui.❤️\n\n*Endereço:* [ENDEREÇO DA UNIDADE]\n*Localização:* [LINK DO MAPA DA UNIDADE]\n\nSe possível, tente chegar 10 minutos antes para você conhecer o Studio e conversarmos! 💪\nMuito bem vinda ao #SlimFit - A Revolução do Treinamento Feminino! ❤️',
   },
   {
+    chave: 'confirmacao_experimental_express',
+    titulo: 'Confirmação — aula experimental (Cadastro Express)',
+    quando: 'Enviada só quando a aula é agendada pelo Cadastro Express (aba WhatsApp → Express). O formulário e a Sofia usam o texto de cima. Sem edição aqui, vale o texto padrão abaixo.',
+    vars: [['nome', 'primeiro nome da lead'], ['quando', 'dia e hora amigável, ex.: sexta-feira, 28/08 às 16:15']],
+    padrao: 'Oie, {nome}! 🎉 Tudo bem? Aqui é do *{studio}*.\n\nSua aula experimental ficou confirmada para *{quando}*.\nQualquer dúvida, ou se precisar remarcar, é só me chamar por aqui. ❤️\n\n*Endereço:* [ENDEREÇO DA UNIDADE]\n*Localização:* [LINK DO MAPA DA UNIDADE]\n\nChegue 10 minutinhos antes para conhecer o Studio com calma! 💪\nSeja muito bem-vinda ao #SlimFit - A Revolução do Treinamento Feminino! ❤️',
+  },
+  {
     chave: 'followup',
     titulo: 'Follow-up pós-aula (ainda não fechou)',
     quando: 'Enviada 10:30 / 16:00 para quem fez a experimental no dia anterior.',

@@ -1352,7 +1352,7 @@ function paginaExpress(aviso, erro) {
     if(!data||!hora){ exStatus('Escolha a data e o horário.','err'); return; }
     var when=data+' '+hora; // AAAA-MM-DD HH:MM (o EVO/form entende)
     exBtnOn(false); exStatus('⏳ Agendando no EVO…');
-    fetch('/sofia/agendar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:tel,nome:nome,email:email,when:when})})
+    fetch('/sofia/agendar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:tel,nome:nome,email:email,when:when,origem:'express'})})
       .then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok||!j.id){ exStatus('❌ '+exEsc((j&&j.erro)||'falha ao enviar'),'err'); exBtnOn(true); return; }
         var n=0;
@@ -5514,11 +5514,13 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       const chave = String(d.chave || '').replace(/\D/g, '');
       const nome = String(d.nome || '').trim(), email = String(d.email || '').trim(), when = String(d.when || '').trim();
+      // origem: "express" (Cadastro Express) → confirmação com texto próprio; vazio (agendar da conversa) → texto padrão SoFIA/form.
+      const origem = String(d.origem || '').trim().toLowerCase() === 'express' ? 'express' : '';
       if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
       if (!nome || !when) return res.end(JSON.stringify({ ok: false, erro: 'preencha nome e data/horário' }));
       if (!email || email.indexOf('@') < 1) return res.end(JSON.stringify({ ok: false, erro: 'e-mail é obrigatório (o EVO exige para cadastrar)' })); // o EVO passou a exigir e-mail no cadastro do prospect
       try {
-        const id = sofia.enfileirarAgendamento({ chave, telefone: chave, nome, email, when, por: quem });
+        const id = sofia.enfileirarAgendamento({ chave, telefone: chave, nome, email, when, por: quem, origem });
         try { auditoria.registrar(quem, 'conversa.agendar', chave, when); } catch (_) {}
         res.end(JSON.stringify({ ok: true, id }));
       } catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
