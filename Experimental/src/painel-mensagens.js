@@ -1295,7 +1295,7 @@ function paginaExpress(aviso, erro) {
         <input id="exNome" type="text" placeholder="Nome da aluna" autocomplete="off">
         <div style="display:flex;gap:14px;flex-wrap:wrap">
           <div style="flex:1 1 200px;min-width:0"><label>Telefone (WhatsApp)</label><input id="exTel" type="tel" inputmode="numeric" placeholder="(62) 99999-9999" maxlength="16"></div>
-          <div style="flex:1 1 200px;min-width:0"><label>E-mail <small style="font-weight:400;color:var(--cinza)">(opcional)</small></label><input id="exEmail" type="email" placeholder="email@exemplo.com" autocomplete="off"></div>
+          <div style="flex:1 1 200px;min-width:0"><label>E-mail <small style="font-weight:400;color:#c0392b">(obrigatório)</small></label><input id="exEmail" type="email" placeholder="email@exemplo.com" autocomplete="off" required></div>
         </div>
         <div style="display:flex;gap:14px;flex-wrap:wrap">
           <div style="flex:1 1 170px;min-width:0"><label>Data</label><input type="date" id="exData" value="${hoje}" min="${hoje}"></div>
@@ -1348,7 +1348,7 @@ function paginaExpress(aviso, erro) {
     var hora=(document.getElementById('exHora').value||'').trim();
     if(!nome){ exStatus('Preencha o nome.','err'); return; }
     if(tel.length<12){ exStatus('Telefone inválido — inclua o DDD.','err'); return; }
-    if(email&&email.indexOf('@')<1){ exStatus('E-mail inválido — deixe em branco ou corrija.','err'); return; } // e-mail é opcional
+    if(!email||email.indexOf('@')<1){ exStatus('E-mail é obrigatório — o EVO exige para cadastrar.','err'); return; } // o EVO passou a exigir e-mail
     if(!data||!hora){ exStatus('Escolha a data e o horário.','err'); return; }
     var when=data+' '+hora; // AAAA-MM-DD HH:MM (o EVO/form entende)
     exBtnOn(false); exStatus('⏳ Agendando no EVO…');
@@ -5515,7 +5515,8 @@ const server = http.createServer((req, res) => {
       const chave = String(d.chave || '').replace(/\D/g, '');
       const nome = String(d.nome || '').trim(), email = String(d.email || '').trim(), when = String(d.when || '').trim();
       if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
-      if (!nome || !when) return res.end(JSON.stringify({ ok: false, erro: 'preencha nome e data/horário' })); // e-mail é opcional (o EVO identifica pelo telefone)
+      if (!nome || !when) return res.end(JSON.stringify({ ok: false, erro: 'preencha nome e data/horário' }));
+      if (!email || email.indexOf('@') < 1) return res.end(JSON.stringify({ ok: false, erro: 'e-mail é obrigatório (o EVO exige para cadastrar)' })); // o EVO passou a exigir e-mail no cadastro do prospect
       try {
         const id = sofia.enfileirarAgendamento({ chave, telefone: chave, nome, email, when, por: quem });
         try { auditoria.registrar(quem, 'conversa.agendar', chave, when); } catch (_) {}
