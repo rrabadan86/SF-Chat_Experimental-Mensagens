@@ -56,6 +56,21 @@ function extrairDiaMesNascimento(valor) {
   return null;
 }
 
+// Extrai o CELULAR do JSON /dadosPessoais do EVO (o que o EVO carrega ao abrir a
+// ficha da pessoa). Prioriza contatos "celular"; ignora e-mail.
+function extrairTelefone(data) {
+  if (!data || !Array.isArray(data.telefones)) return null;
+  const ordenados = [...data.telefones].sort((a, b) =>
+    (/celular/i.test(a.descricaoTipoContato || '') ? 0 : 1) -
+    (/celular/i.test(b.descricaoTipoContato || '') ? 0 : 1));
+  for (const t of ordenados) {
+    if ((t.descricaoTipoContato || '').toLowerCase().includes('mail')) continue;
+    const num = String(t.descricao || t.telefone || t.numero || '').replace(/\D/g, '');
+    if (num.length >= 10 && num.length <= 11) return num;
+  }
+  return null;
+}
+
 // ─── Popup "Nova funcionalidade" do EVO ────────────────────
 async function fecharPopupNovaTela(page) {
   try {
@@ -282,6 +297,18 @@ async function buscarExAlunasHoje() {
   page.setDefaultTimeout(60000);
   page.setDefaultNavigationTimeout(60000);
 
+  // Captura a ficha /dadosPessoais que o EVO busca ao abrir CADA pessoa — é a
+  // fonte confiável do celular POR PESSOA (o texto da tela às vezes fica "grudado"
+  // no painel da pessoa anterior). Zeramos antes de cada clique e lemos o fresco.
+  let dadosPessoaisCapturado = null;
+  page.on('response', async (res) => {
+    try {
+      if (res.url().includes('/dadosPessoais') && res.status() === 200) {
+        dadosPessoaisCapturado = JSON.parse(await res.text());
+      }
+    } catch (_) {}
+  });
+
   try {
     // 1. Login
     console.log('🔐 Fazendo login no EVO...');
@@ -402,11 +429,19 @@ async function buscarExAlunasHoje() {
     const resultado = [];
     for (const item of doHoje) {
       console.log(`🔎 ${item.nome} (${item.nascimento})...`);
+      // Fecha o painel da pessoa anterior (Escape + botão X, se houver).
       await page.keyboard.press('Escape');
       await sleep(600);
-      await page.waitForFunction(() => !/celular/i.test(document.body.innerText || ''), { timeout: 5000 }).catch(() => {});
-      await sleep(500);
+      await page.evaluate(() => {
+        for (const el of document.querySelectorAll('button, [role="button"], mat-icon, span')) {
+          const t = (el.textContent || '').trim().toLowerCase();
+          const lbl = (el.getAttribute('aria-label') || '').toLowerCase();
+          if ((t === 'close' || t === '×' || t === '✕' || lbl.includes('fechar') || lbl.includes('close')) && el.offsetWidth > 0) { el.click(); return; }
+        }
+      });
+      await sleep(700);
 
+      dadosPessoaisCapturado = null; // zera para capturar a ficha DESTA pessoa
       const clicou = await page.evaluate((nome) => {
         const alvoTxt = nome.substring(0, 15);
         const links = document.querySelectorAll('table tbody tr a');
@@ -418,19 +453,27 @@ async function buscarExAlunasHoje() {
 
       let telefone = null;
       if (clicou) {
-        const doisNomes = item.nome.split(/\s+/).slice(0, 2).join(' ');
-        await page.waitForFunction((nm) => {
-          const t = document.body.innerText || '';
-          return t.includes(nm) && /celular/i.test(t);
-        }, { timeout: 10000 }, doisNomes).catch(() => {});
-        await sleep(1200);
-        const cel = await page.evaluate((nm) => {
-          const txt = document.body.innerText || '';
-          if (!txt.includes(nm)) return null;
-          const m = txt.match(/Celular\s*([\d][\d\s()+\-]{8,})/i);
-          return m ? m[1].replace(/\D/g, '') : null;
-        }, doisNomes);
-        if (cel && cel.length >= 10) telefone = cel;
+        // 1) Fonte confiável: a ficha /dadosPessoais que o EVO busca ao abrir a
+        //    pessoa (espera até ~9s a captura FRESCA desta pessoa).
+        for (let w = 0; w < 18 && !dadosPessoaisCapturado; w++) await sleep(500);
+        if (dadosPessoaisCapturado) telefone = extrairTelefone(dadosPessoaisCapturado);
+
+        // 2) Reserva: texto do painel (confere que é a ficha DESTA pessoa).
+        if (!telefone) {
+          const doisNomes = item.nome.split(/\s+/).slice(0, 2).join(' ');
+          await page.waitForFunction((nm) => {
+            const t = document.body.innerText || '';
+            return t.includes(nm) && /celular/i.test(t);
+          }, { timeout: 8000 }, doisNomes).catch(() => {});
+          await sleep(800);
+          const cel = await page.evaluate((nm) => {
+            const txt = document.body.innerText || '';
+            if (!txt.includes(nm)) return null;
+            const m = txt.match(/Celular\s*([\d][\d\s()+\-]{8,})/i);
+            return m ? m[1].replace(/\D/g, '') : null;
+          }, doisNomes);
+          if (cel && cel.length >= 10) telefone = cel;
+        }
       }
 
       resultado.push({
