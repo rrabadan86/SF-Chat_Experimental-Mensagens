@@ -1045,7 +1045,7 @@ function paginaMensagens(aviso, erro) {
 
   // Mensagens que vão para GRUPOS do WhatsApp (o resto é individual, 1 para 1).
   // A do Instagram é editada na aba "📸 Instagram" (fica tudo do IG lá).
-  const MSGS_GRUPO = new Set(['ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'aniversario', 'circuito_convocacao', 'circuito_lembrete']);
+  const MSGS_GRUPO = new Set(['ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'aniversario', 'aniversario_ex', 'circuito_convocacao', 'circuito_lembrete']);
   const listaMsgs = mensagens.listar().filter(m => m.chave !== 'instagram');
   const itensIndividuais = listaMsgs.filter(m => !MSGS_GRUPO.has(m.chave)).map(cardDe).join('\n');
   const itensGrupo = listaMsgs.filter(m => MSGS_GRUPO.has(m.chave)).map(cardDe).join('\n');
@@ -1431,6 +1431,7 @@ const HORARIOS_DA_MSG = {
   no_show:             [['noShowMorning', 'Manhã'], ['noShowAfternoon', 'Tarde']],
   renovacao:           [['renewal', '']],
   aniversario:         [['aniversariantes', '']],
+  aniversario_ex:      [['aniversarioEx', '']],
   instagram:           [['instagram', '']],
   circuito_convocacao: [['circuitoConvoca', '']],
   circuito_lembrete:   [['circuitoLembrete', '']],

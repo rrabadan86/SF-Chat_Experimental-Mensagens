@@ -110,6 +110,14 @@ const CATALOGO = [
     padrao: 'Hoje é aniversário da {aluna}! 🥳🎉\n\nMuitas felicidades, saúde e sucesso!!! Que este novo ciclo venha repleto de conquistas e alegria!! Aproveite o seu dia! ❤️',
   },
   {
+    chave: 'aniversario_ex',
+    foto: true,
+    titulo: 'Aniversário — ex-alunas (direto no WhatsApp)',
+    quando: 'Enviada no aniversário de quem JÁ foi aluna (status "Inativos" no EVO). Vai direto no WhatsApp da pessoa (reativação). {aluna} = primeiro nome.',
+    vars: [['aluna', 'primeiro nome da ex-aluna']],
+    padrao: 'Olá, {aluna}! Como você está?\n\nHoje, no seu aniversário, a saudade de ter você por aqui apertou ainda mais! 🥳\n\nEspero que o seu dia esteja cheio de comemoração e muita endorfina.\n\nMas lembre-se: nossas portas continuam abertas para quando quiser voltar e começar esse novo ciclo com foco total na sua saúde! 💓\n\nDesejo um feliz aniversário e um ano incrível para você! 💕',
+  },
+  {
     chave: 'instagram',
     titulo: 'Boas-vindas no Instagram (DM)',
     quando: 'Enviada às 07:00 para novas seguidoras (em teste).',

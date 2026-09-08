@@ -23,6 +23,7 @@ const CATALOGO = [
   { chave: 'noShowAfternoon',   titulo: 'Faltou / no-show (tarde)',     padrao: '30 19 * * 1-6' },
   { chave: 'renewal',           titulo: 'Renovação de contrato',        padrao: '30 14 * * *' },
   { chave: 'aniversariantes',   titulo: 'Aniversário (nos grupos)',     padrao: '0 8 * * *' },
+  { chave: 'aniversarioEx',     titulo: 'Aniversário — ex-alunas (direto)', padrao: '3 8 * * *' },
   { chave: 'instagram',         titulo: 'Boas-vindas no Instagram',     padrao: '0 7 * * *' },
   { chave: 'circuitoConvoca',   titulo: 'Circuito — convocatória',      padrao: '15 16 * * 3' },
   { chave: 'circuitoLembrete',  titulo: 'Circuito — lembrete',          padrao: '15 16 * * 5' },

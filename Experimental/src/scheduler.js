@@ -372,6 +372,14 @@ function checkMissedCrons() {
       executor: () => require('./aniversariantes').runAniversariantes(),
     },
     {
+      name: 'Aniversário — ex-alunas (direto)',
+      horario: '08:03',
+      cron: config.schedule.aniversarioEx,
+      scheduledMinutes: 8 * 60 + 3,
+      validDays: [0, 1, 2, 3, 4, 5, 6], // todos os dias
+      executor: () => require('./aniversario-ex').runAniversarioEx(),
+    },
+    {
       name: 'Planilha — alunas ativas & aniversários',
       horario: '14:00',
       cron: config.schedule.planilhaAniv,
@@ -483,6 +491,7 @@ function iniciarRodarJobWatcher() {
     noShowMorning:     { nome: 'Faltas MANHÃ [manual]',       fn: () => require('./follow-up-no-show').runNoShowMorning() },
     noShowAfternoon:   { nome: 'Faltas TARDE [manual]',       fn: () => require('./follow-up-no-show').runNoShowAfternoon() },
     aniversariantes:   { nome: 'Aniversariantes [manual]',    fn: () => require('./aniversariantes').runAniversariantes() },
+    aniversarioEx:     { nome: 'Aniversário ex-alunas [manual]', fn: () => require('./aniversario-ex').runAniversarioEx() },
     renovacao:         { nome: 'Renovação [manual]',          fn: () => require('./renovar-contratos').runRenovacao() },
     renovacoesMesGrupo:{ nome: 'Contratos a vencer no mês [manual]', fn: (pedido) => require('./renovacoes-mes-grupo').runRenovacoesMesGrupo({ mes: pedido && pedido.mes }) },
   };
@@ -883,6 +892,25 @@ async function main() {
 
   log(`📅 Job ANIVERSARIANTES agendado: ${config.schedule.aniversariantes} (08:00 todos os dias)`);
   console.log('   → Parabéns nos grupos em comum (perfil SlimFit)');
+
+  // Schedule: 08:03 todos os dias → Parabéns DIRETO para EX-ALUNAS (reativação)
+  cron.schedule(config.schedule.aniversarioEx, () => {
+    log('⏰ Cron disparado: Aniversário ex-alunas');
+    if (jobRunning) { log('⚠️  Aniversário ex-alunas ignorado — outro job em execução'); return; }
+    jobRunning = true;
+    atividade.setContexto('Aniversário ex-alunas');
+    const start = new Date();
+    require('./aniversario-ex').runAniversarioEx()
+      .then(() => log('✅ Aniversário ex-alunas concluído'))
+      .catch(err => logError('Aniversário ex-alunas', err))
+      .finally(() => {
+        jobRunning = false;
+        log(`⏱️  Aniversário ex-alunas finalizado em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
+      });
+  }, { timezone: 'America/Sao_Paulo' });
+
+  log(`📅 Job ANIVERSÁRIO EX-ALUNAS agendado: ${config.schedule.aniversarioEx} (08:03 todos os dias)`);
+  console.log('   → Parabéns direto no WhatsApp de quem já foi aluna (EVO status "Inativos")');
 
   // Schedule: 06:30 segunda → Planilha Google de alunas ativas + aniversários
   cron.schedule(config.schedule.planilhaAniv, () => {

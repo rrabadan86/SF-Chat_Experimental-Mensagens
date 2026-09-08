@@ -78,6 +78,7 @@ const config = {
     followupAfternoon:'0 16 * * 1-6',   // 16:00 seg-sáb (follow-up ontem tarde)
     instagram:        '0 7 * * *',      // 07:00 todos os dias (boas-vindas novos seguidores)
     aniversariantes:  '0 8 * * *',      // 08:00 todos os dias (parabéns nos grupos)
+    aniversarioEx:    '3 8 * * *',      // 08:03 todos os dias (parabéns direto p/ ex-alunas — reativação)
     planilhaAniv:     '0 14 * * *',     // 14:00 todos os dias (planilha de alunas + aniversários)
     aniversMesGrupo:  '30 5 28 * *',    // 05:30 todo dia 28 (lista de aniversariantes do mês no grupo da equipe)
     renovacoesMesGrupo: '7 9 28 * *',   // 09:07 todo dia 28 (contratos a vencer no mês seguinte no grupo da equipe)
