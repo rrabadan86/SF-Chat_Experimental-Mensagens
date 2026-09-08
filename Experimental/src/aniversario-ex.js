@@ -79,25 +79,54 @@ async function fecharPopupNovaTela(page) {
 // O EVO mostra checkboxes: Ativos, Inativos, Colaboradores, Visitantes.
 // Retorna { ativosOff, inativosOn } com o estado FINAL conferido.
 async function definirStatusInativos(page) {
-  // Lê o estado de um checkbox pelo rótulo (texto exato ao lado).
+  // Lê o estado dos checkboxes de status. Tolerante: normaliza espaços/nbsp e
+  // casa a PALAVRA INTEIRA (ex.: "ativos" NÃO casa dentro de "inativos"). Junta
+  // candidatos de várias formas (mat-checkbox, label, [role=checkbox], input+label)
+  // e devolve também um "diag" com tudo que achou, para depurar se algo mudar.
   const lerEstado = () => page.evaluate(() => {
-    function achar(rotulo) {
-      const els = Array.from(document.querySelectorAll('mat-checkbox, label, span, div, li'));
-      for (const el of els) {
-        const t = (el.textContent || '').trim();
-        if (t.toLowerCase() !== rotulo.toLowerCase()) continue;
-        if (el.offsetWidth <= 0 || el.offsetHeight <= 0) continue;
+    const norm = (s) => String(s || '').replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
+    const cands = [];
+    const push = (labelEl, boxEl) => {
+      const label = norm(labelEl && labelEl.textContent);
+      if (!label || label.length > 30) return;
+      const cont = boxEl || labelEl;
+      if (!cont || cont.offsetWidth <= 0 || cont.offsetHeight <= 0) return;
+      const inp = cont.querySelector && cont.querySelector('input[type=checkbox]');
+      let checked = inp ? inp.checked
+        : (cont.getAttribute && (cont.getAttribute('aria-checked') === 'true'))
+          || /(?:^|[ _-])(?:mat-checkbox-checked|mdc-checkbox--selected|checked)(?:$|[ _-])/.test((cont.className || '') + '');
+      const r = (cont.getBoundingClientRect ? cont : labelEl).getBoundingClientRect();
+      cands.push({ label, checked: !!checked, x: r.left + Math.min(16, r.width / 2), y: r.top + r.height / 2 });
+    };
+    // (a) mat-checkbox — o texto do rótulo fica dentro do próprio componente
+    document.querySelectorAll('mat-checkbox, [class*="checkbox"], [role="checkbox"]').forEach(el => push(el, el));
+    // (b) input[type=checkbox] + <label for> ou label ancestral
+    document.querySelectorAll('input[type=checkbox]').forEach(inp => {
+      let lbl = null;
+      if (inp.id) lbl = document.querySelector(`label[for="${inp.id}"]`);
+      if (!lbl) lbl = inp.closest('label');
+      const cont = inp.closest('mat-checkbox, label, [class*="checkbox"]') || (lbl || inp).parentElement || inp;
+      push(lbl || cont, cont);
+    });
+    // (c) labels/spans/divs soltos com texto exatamente igual à palavra
+    document.querySelectorAll('label, span, div, li').forEach(el => {
+      const t = norm(el.textContent);
+      if (/^(ativos|inativos|colaboradores|visitantes)$/i.test(t)) {
         const cont = el.closest('mat-checkbox, label, [class*="checkbox"]') || el;
-        const inp = cont.querySelector('input[type=checkbox]');
-        let checked = inp ? inp.checked
-          : (cont.getAttribute('aria-checked') === 'true'
-             || /mat-checkbox-checked|mdc-checkbox--selected/.test(cont.className || ''));
-        const r = cont.getBoundingClientRect();
-        return { checked: !!checked, x: r.left + Math.min(16, r.width / 2), y: r.top + r.height / 2 };
+        push(el, cont);
       }
+    });
+    const acharPalavra = (palavra) => {
+      const p = palavra.toLowerCase();
+      // casa quando o rótulo É a palavra (após normalizar)
+      for (const c of cands) if (c.label.toLowerCase() === p) return c;
       return null;
-    }
-    return { ativos: achar('Ativos'), inativos: achar('Inativos') };
+    };
+    return {
+      ativos: acharPalavra('Ativos'),
+      inativos: acharPalavra('Inativos'),
+      diag: cands.map(c => `${c.label}${c.checked ? '✓' : '·'}`),
+    };
   });
 
   // 1) Marca "Inativos" se estiver desmarcado.
@@ -119,6 +148,7 @@ async function definirStatusInativos(page) {
   const inativosOn = !!(st.inativos && st.inativos.checked);
   const ativosOff = !!(st.ativos && !st.ativos.checked);
   console.log(`   🏷️  Status → Ativos ${st.ativos ? (st.ativos.checked ? 'MARCADO' : 'desmarcado') : 'n/e'} · Inativos ${st.inativos ? (st.inativos.checked ? 'MARCADO' : 'desmarcado') : 'n/e'}`);
+  console.log(`   🔎 Checkboxes vistos: [${(st.diag || []).join(', ') || 'nenhum'}]`);
   return { ativosOff, inativosOn, achouCheckboxes: !!(st.ativos && st.inativos) };
 }
 
