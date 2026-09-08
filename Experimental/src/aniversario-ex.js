@@ -83,21 +83,37 @@ async function fecharPopupNovaTela(page) {
 // fechamos (Escape) para aplicar. O estado "marcado" é uma classe "checked" no
 // wrapper (o input pode estar 0x0), então lemos isso além de input.checked.
 async function abrirDropdownStatus(page) {
-  const ok = await page.evaluate(() => {
-    const N = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    const cands = Array.from(document.querySelectorAll('evo-filter-multiselect, mat-select, [class*="mat-select"], button, div, span'));
-    for (const el of cands) {
-      if (el.offsetWidth <= 0 || el.offsetHeight <= 0) continue;
-      if (N(el.textContent).includes('status de cliente')) {
-        const trig = el.querySelector('.mat-select-trigger, [class*="select-trigger"], mat-select-trigger, button') || el;
-        (trig.closest('button') || trig).click();
-        return true;
+  // Componentes Angular abrem melhor com clique por COORDENADA (mouse) do que
+  // com .click() no DOM. Confirma que ABRIU checando se o FL_INATIVOS (opção que
+  // só existe com o painel aberto) apareceu. Tenta algumas vezes.
+  const jaAberto = () => page.evaluate(() =>
+    !!document.querySelector('input[name="FL_INATIVOS"]')).catch(() => false);
+  if (await jaAberto()) return true;
+  for (let tent = 0; tent < 4; tent++) {
+    const coord = await page.evaluate(() => {
+      const N = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      // O gatilho é o evo-filter-multiselect / button "Status de cliente: Ativos".
+      const pref = Array.from(document.querySelectorAll('evo-filter-multiselect, button, mat-select, .mat-select-trigger, mat-select-trigger'));
+      let best = null;
+      for (const el of pref) {
+        if (el.offsetWidth <= 0 || el.offsetHeight <= 0) continue;
+        const t = N(el.textContent);
+        if (t.includes('status de cliente')) {
+          // prefere o menor elemento (o gatilho em si, não um contêiner grande)
+          if (!best || t.length < best.len) {
+            const r = el.getBoundingClientRect();
+            best = { x: r.left + r.width / 2, y: r.top + r.height / 2, len: t.length };
+          }
+        }
       }
-    }
-    return false;
-  }).catch(() => false);
-  if (ok) await sleep(1800);
-  return ok;
+      return best;
+    }).catch(() => null);
+    if (!coord) return false;
+    await page.mouse.click(coord.x, coord.y);
+    await sleep(1600);
+    if (await jaAberto()) return true;
+  }
+  return false;
 }
 
 // Lê/ajusta os checkboxes de status (com o dropdown ABERTO). acao:
@@ -153,21 +169,45 @@ async function definirStatusInativos(page) {
     return { achouCheckboxes: false, inativosOn: false, ativosOff: false };
   }
 
-  // Ajusta: Inativos ON, Ativos OFF (recarrega a segmentação ao mudar).
+  // Ajusta: Inativos ON, Ativos OFF.
   await opStatus(page, 'set');
-  await sleep(3500);
+  await sleep(1000);
 
-  // Reconfere com o dropdown ainda aberto (leitura autoritativa).
+  // Reconfere. Se o painel ainda está aberto, lê as opções (autoritativo). Se
+  // fechou (a segmentação pode recarregar ao mudar), confere pelo TEXTO do
+  // gatilho ("Status de cliente: Inativos").
   st = await opStatus(page, 'ler');
-  const inativosOn = !!st.inativosChecked;
-  const ativosOff = !st.ativosChecked;
-  console.log(`   🏷️  Status → Ativos ${st.ativosChecked ? 'MARCADO' : 'desmarcado'} · Inativos ${st.inativosChecked ? 'MARCADO' : 'desmarcado'}`);
+  let inativosOn, ativosOff;
+  if (st.inativosFound) {
+    inativosOn = !!st.inativosChecked;
+    ativosOff = !st.ativosChecked;
+    console.log(`   🏷️  Status → Ativos ${st.ativosChecked ? 'MARCADO' : 'desmarcado'} · Inativos ${st.inativosChecked ? 'MARCADO' : 'desmarcado'}`);
+  } else {
+    const trig = await lerTriggerStatus(page);
+    const semIna = trig.replace(/inativos/g, '');
+    inativosOn = /inativos/.test(trig);
+    ativosOff = !/ativos/.test(semIna);
+    console.log(`   🏷️  Status (via gatilho): "${trig}" → Inativos=${inativosOn} AtivosDesmarcado=${ativosOff}`);
+  }
 
   // Fecha o dropdown (aplica o filtro) e espera recarregar a tabela.
   await page.keyboard.press('Escape').catch(() => {});
   await sleep(4500);
 
   return { achouCheckboxes: true, inativosOn, ativosOff };
+}
+
+// Lê o texto do gatilho do filtro de status (ex.: "status de cliente: inativos").
+function lerTriggerStatus(page) {
+  return page.evaluate(() => {
+    const N = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    let best = '';
+    for (const el of document.querySelectorAll('evo-filter-multiselect, button, span, div')) {
+      const t = N(el.textContent);
+      if (t.includes('status de cliente') && (!best || t.length < best.length)) best = t;
+    }
+    return best;
+  }).catch(() => '');
 }
 
 // Diagnóstico: salva um print e lista tudo que parece filtro de status. Chamado
