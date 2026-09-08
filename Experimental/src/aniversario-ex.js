@@ -89,26 +89,47 @@ async function abrirDropdownStatus(page) {
   const jaAberto = () => page.evaluate(() =>
     !!document.querySelector('input[name="FL_INATIVOS"]')).catch(() => false);
   if (await jaAberto()) return true;
-  for (let tent = 0; tent < 4; tent++) {
+  for (let tent = 0; tent < 5; tent++) {
     const coord = await page.evaluate(() => {
       const N = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
-      // O gatilho é o evo-filter-multiselect / button "Status de cliente: Ativos".
-      const pref = Array.from(document.querySelectorAll('evo-filter-multiselect, button, mat-select, .mat-select-trigger, mat-select-trigger'));
+      // Ponto do primeiro ancestral COM TAMANHO (o próprio pode ser 0x0 por CSS).
+      const pontoVisivel = (el) => {
+        let n = el;
+        for (let i = 0; i < 5 && n; i++) {
+          const r = n.getBoundingClientRect ? n.getBoundingClientRect() : null;
+          if (r && r.width > 0 && r.height > 0) return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+          n = n.parentElement;
+        }
+        return null;
+      };
+      // 1) preferência: o componente do filtro de status (clicar nele abre)
+      for (const sel of ['evo-filter-multiselect', 'button', 'mat-select']) {
+        for (const el of document.querySelectorAll(sel)) {
+          if (N(el.textContent).includes('status de cliente')) {
+            const p = pontoVisivel(el);
+            if (p) return p;
+          }
+        }
+      }
+      // 2) o gatilho do mat-select cujo ancestral fala de "status de cliente"
+      for (const el of document.querySelectorAll('.mat-select-trigger, mat-select-trigger')) {
+        let a = el, ok = false;
+        for (let i = 0; i < 6 && a; i++) { if (N(a.textContent).includes('status de cliente')) { ok = true; break; } a = a.parentElement; }
+        if (ok) { const p = pontoVisivel(el); if (p) return p; }
+      }
+      // 3) qualquer span/div visível que mostre "status de cliente"
       let best = null;
-      for (const el of pref) {
+      for (const el of document.querySelectorAll('span, div, a')) {
         if (el.offsetWidth <= 0 || el.offsetHeight <= 0) continue;
         const t = N(el.textContent);
-        if (t.includes('status de cliente')) {
-          // prefere o menor elemento (o gatilho em si, não um contêiner grande)
-          if (!best || t.length < best.len) {
-            const r = el.getBoundingClientRect();
-            best = { x: r.left + r.width / 2, y: r.top + r.height / 2, len: t.length };
-          }
+        if (t.includes('status de cliente') && (!best || t.length < best.len)) {
+          const r = el.getBoundingClientRect();
+          best = { x: r.left + r.width / 2, y: r.top + r.height / 2, len: t.length };
         }
       }
       return best;
     }).catch(() => null);
-    if (!coord) return false;
+    if (!coord) { await sleep(1200); continue; }
     await page.mouse.click(coord.x, coord.y);
     await sleep(1600);
     if (await jaAberto()) return true;
