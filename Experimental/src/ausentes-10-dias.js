@@ -4,6 +4,7 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const fs = require('fs');
 const path = require('path');
 const config = require('./config');
+const { fecharPopupNovaTela } = require('./evo-popup');
 
 puppeteer.use(StealthPlugin());
 
@@ -358,10 +359,12 @@ async function coletarAusentes() {
 
   try {
     await login(page);
+    await fecharPopupNovaTela(page); // dispensa o popup "Nova funcionalidade" do EVO
 
     console.log('📂 Abrindo CRM > Faltantes...');
     await page.evaluate((h) => { location.hash = h; }, FALTANTES_HASH);
     await sleep(6000);
+    await fecharPopupNovaTela(page); // o popup reaparece ao navegar
 
     // A tela vive num iframe legado (evo3) que carrega devagar → espera por ele.
     let frame = await esperarFrameFaltantes(page, 45000);

@@ -2,6 +2,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env'
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const config = require('./config');
+const { fecharPopupNovaTela } = require('./evo-popup');
 puppeteer.use(StealthPlugin());
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -138,12 +139,14 @@ async function buscarContratosDoPeriodo(inicio, fim) {
     });
     await page.waitForFunction(() => window.location.hash.includes('/inicio/') || window.location.hash.includes('/app/'), { timeout: 30000 });
     await sleep(3000);
+    await fecharPopupNovaTela(page); // dispensa o popup "Nova funcionalidade" do EVO
     console.log('✅ Login OK\n');
 
     // 2. Segmentação → segmento "Vencimento de Contrato Seman..."
     console.log('📂 Navegando para Segmentação...');
     await page.evaluate(() => { window.location.hash = '#/app/slimfit/15/clientes/segmentacao/clientes'; });
     await sleep(5000);
+    await fecharPopupNovaTela(page); // o popup reaparece ao navegar
 
     const procurarMenu = () => page.evaluate(() => {
       for (const el of document.querySelectorAll('span, div, a, li, md-list-item')) {

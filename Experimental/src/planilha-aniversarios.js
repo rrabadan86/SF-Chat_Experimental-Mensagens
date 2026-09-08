@@ -16,6 +16,7 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 
 const config = require('./config');
+const { fecharPopupNovaTela } = require('./evo-popup');
 const { sincronizar } = require('./sheets-sync');
 
 const DRY = process.argv.includes('--dry');
@@ -83,12 +84,14 @@ async function buscarAlunasAniversario() {
     });
     await page.waitForFunction(() => location.hash.includes('/inicio/') || location.hash.includes('/app/'), { timeout: 30000 });
     await sleep(3000);
+    await fecharPopupNovaTela(page); // dispensa o popup "Nova funcionalidade" do EVO
     console.log('✅ Login OK\n');
 
     // 2. Segmentação → "Aniversariantes"
     console.log('📂 Abrindo Segmentação "Aniversariantes"...');
     await page.evaluate(() => { location.hash = '#/app/slimfit/15/clientes/segmentacao/clientes'; });
     await sleep(5000);
+    await fecharPopupNovaTela(page); // o popup reaparece ao navegar
     const tentarClicar = () => page.evaluate(() => {
       const els = document.querySelectorAll('a, li, span, div');
       for (const el of els) {
