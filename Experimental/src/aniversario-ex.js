@@ -5,9 +5,9 @@
 //
 // Como funciona:
 //   1) Loga no EVO e abre a Segmentação → "Aniversariantes".
-//   2) TROCA o filtro de status: DESMARCA "Ativos" e MARCA "Inativos".
-//      (Trava de segurança: se não confirmar Inativos marcado E Ativos desmarcado,
-//       ABORTA sem enviar nada — nunca manda para aluna ativa por engano.)
+//   2) Abre o dropdown "Status de cliente" e deixa SÓ "Inativos" marcado
+//      (desmarca "Ativos"). Trava de segurança: se não confirmar Inativos ON e
+//      Ativos OFF, ABORTA sem enviar (nunca manda para aluna ativa por engano).
 //   3) Lê a tabela, filtra quem faz aniversário HOJE e pega o celular de cada uma.
 //   4) Envia a mensagem editável "aniversario_ex" (com flyer opcional) direto.
 //
@@ -75,110 +75,99 @@ async function fecharPopupNovaTela(page) {
   } catch (_) { return false; }
 }
 
-// ─── Filtro de status: DESMARCA "Ativos", MARCA "Inativos" ──
-// O EVO mostra checkboxes: Ativos, Inativos, Colaboradores, Visitantes.
-// Retorna { ativosOff, inativosOn } com o estado FINAL conferido.
-async function definirStatusInativos(page) {
-  // Lê o estado dos checkboxes de status. Tolerante: normaliza espaços/nbsp e
-  // casa a PALAVRA INTEIRA (ex.: "ativos" NÃO casa dentro de "inativos"). Junta
-  // candidatos de várias formas (mat-checkbox, label, [role=checkbox], input+label)
-  // e devolve também um "diag" com tudo que achou, para depurar se algo mudar.
-  const lerEstado = () => page.evaluate(() => {
-    const norm = (s) => String(s || '').replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
-    const cands = [];
-    const push = (labelEl, boxEl) => {
-      const label = norm(labelEl && labelEl.textContent);
-      if (!label || label.length > 30) return;
-      const cont = boxEl || labelEl;
-      if (!cont || cont.offsetWidth <= 0 || cont.offsetHeight <= 0) return;
-      const inp = cont.querySelector && cont.querySelector('input[type=checkbox]');
-      let checked = inp ? inp.checked
-        : (cont.getAttribute && (cont.getAttribute('aria-checked') === 'true'))
-          || /(?:^|[ _-])(?:mat-checkbox-checked|mdc-checkbox--selected|checked)(?:$|[ _-])/.test((cont.className || '') + '');
-      const r = (cont.getBoundingClientRect ? cont : labelEl).getBoundingClientRect();
-      cands.push({ label, checked: !!checked, x: r.left + Math.min(16, r.width / 2), y: r.top + r.height / 2 });
-    };
-    // (a) mat-checkbox — o texto do rótulo fica dentro do próprio componente
-    document.querySelectorAll('mat-checkbox, [class*="checkbox"], [role="checkbox"]').forEach(el => push(el, el));
-    // (b) input[type=checkbox] + <label for> ou label ancestral
-    document.querySelectorAll('input[type=checkbox]').forEach(inp => {
-      let lbl = null;
-      if (inp.id) lbl = document.querySelector(`label[for="${inp.id}"]`);
-      if (!lbl) lbl = inp.closest('label');
-      const cont = inp.closest('mat-checkbox, label, [class*="checkbox"]') || (lbl || inp).parentElement || inp;
-      push(lbl || cont, cont);
-    });
-    // (c) labels/spans/divs soltos com texto exatamente igual à palavra
-    document.querySelectorAll('label, span, div, li').forEach(el => {
-      const t = norm(el.textContent);
-      if (/^(ativos|inativos|colaboradores|visitantes)$/i.test(t)) {
-        const cont = el.closest('mat-checkbox, label, [class*="checkbox"]') || el;
-        push(el, cont);
-      }
-    });
-    const acharPalavra = (palavra) => {
-      const p = palavra.toLowerCase();
-      // casa quando o rótulo É a palavra (após normalizar)
-      for (const c of cands) if (c.label.toLowerCase() === p) return c;
-      return null;
-    };
-    return {
-      ativos: acharPalavra('Ativos'),
-      inativos: acharPalavra('Inativos'),
-      diag: cands.map(c => `${c.label}${c.checked ? '✓' : '·'}`),
-    };
-  });
-
-  // 1) Marca "Inativos" se estiver desmarcado.
-  let st = await lerEstado();
-  if (st.inativos && !st.inativos.checked) {
-    await page.mouse.click(st.inativos.x, st.inativos.y);
-    await sleep(2500);
-  }
-  // 2) Desmarca "Ativos" se estiver marcado.
-  st = await lerEstado();
-  if (st.ativos && st.ativos.checked) {
-    await page.mouse.click(st.ativos.x, st.ativos.y);
-    await sleep(2500);
-  }
-  // Espera a segmentação recarregar com o novo filtro.
-  await sleep(4000);
-
-  st = await lerEstado();
-  const inativosOn = !!(st.inativos && st.inativos.checked);
-  const ativosOff = !!(st.ativos && !st.ativos.checked);
-  console.log(`   🏷️  Status → Ativos ${st.ativos ? (st.ativos.checked ? 'MARCADO' : 'desmarcado') : 'n/e'} · Inativos ${st.inativos ? (st.inativos.checked ? 'MARCADO' : 'desmarcado') : 'n/e'}`);
-  console.log(`   🔎 Checkboxes vistos: [${(st.diag || []).join(', ') || 'nenhum'}]`);
-  return { ativosOff, inativosOn, achouCheckboxes: !!(st.ativos && st.inativos) };
-}
-
-// Tenta ABRIR o painel/menu de filtro de status (caso os checkboxes fiquem
-// escondidos atrás de um gatilho, como o filtro de mês). NÃO clica em checkbox
-// (não toggla nada) — só em gatilhos "Status/Situação/Filtro" ou ícone de funil.
-async function tentarAbrirPainelStatus(page) {
-  const abriu = await page.evaluate(() => {
-    const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    const cand = Array.from(document.querySelectorAll('button, a, span, div, mat-icon, [class*="filter"], [class*="chip"], [role="button"]'));
-    for (const el of cand) {
+// ─── Filtro de status: deixa SÓ "Inativos" ─────────────────
+// O filtro é um DROPDOWN (evo-filter-multiselect / mat-select) com o gatilho
+// "Status de cliente: Ativos". As opções (inputs name=FL_ATIVOS / FL_INATIVOS /
+// FL_COLABORADORES / FL_VISITANTES) só existem no DOM com o dropdown ABERTO.
+// Abrimos, marcamos Inativos e desmarcamos Ativos, conferimos com ele aberto e
+// fechamos (Escape) para aplicar. O estado "marcado" é uma classe "checked" no
+// wrapper (o input pode estar 0x0), então lemos isso além de input.checked.
+async function abrirDropdownStatus(page) {
+  const ok = await page.evaluate(() => {
+    const N = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const cands = Array.from(document.querySelectorAll('evo-filter-multiselect, mat-select, [class*="mat-select"], button, div, span'));
+    for (const el of cands) {
       if (el.offsetWidth <= 0 || el.offsetHeight <= 0) continue;
-      const t = norm(el.textContent);
-      const lbl = norm((el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title'))) || '');
-      const cls = (el.className || '') + '';
-      const ehGatilho =
-        /^status$|^situa|^filtros?$/.test(t) ||
-        /status|situa|filtro|filter/.test(lbl) ||
-        /filter|funnel|filtro/i.test(cls) && el.children.length === 0;
-      // não clica se o elemento for (ou contiver) um checkbox — evita togglar
-      const temCheckbox = el.querySelector && el.querySelector('input[type=checkbox]');
-      if (ehGatilho && !temCheckbox) {
-        (el.closest('button, [role="button"]') || el).click();
+      if (N(el.textContent).includes('status de cliente')) {
+        const trig = el.querySelector('.mat-select-trigger, [class*="select-trigger"], mat-select-trigger, button') || el;
+        (trig.closest('button') || trig).click();
         return true;
       }
     }
     return false;
   }).catch(() => false);
-  if (abriu) await sleep(1500);
-  return abriu;
+  if (ok) await sleep(1800);
+  return ok;
+}
+
+// Lê/ajusta os checkboxes de status (com o dropdown ABERTO). acao:
+//   'ler'  → só devolve o estado; 'set' → ajusta Inativos ON / Ativos OFF.
+function opStatus(page, acao) {
+  return page.evaluate((acao) => {
+    const N = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+    const wrapChecked = (inp) => { let n = inp; for (let k = 0; k < 5 && n; k++) { if (/(?:^|\s)checked(?:\s|$)/.test(n.className || '')) return true; n = n.parentElement; } return false; };
+    function achar(name, word) {
+      let inp = document.querySelector(`input[name="${name}"][type="checkbox"]`);
+      if (inp) return { inp, alvo: inp };
+      // fallback por texto da opção
+      for (const opt of document.querySelectorAll('mat-option, [role="option"], label, li, span, div')) {
+        if (N(opt.textContent).toLowerCase() !== word) continue;
+        if (opt.offsetWidth <= 0 || opt.offsetHeight <= 0) continue;
+        const box = opt.querySelector('input[type=checkbox]');
+        return { inp: box || null, alvo: opt };
+      }
+      return null;
+    }
+    function estado(x) {
+      if (!x) return null;
+      if (x.inp) return x.inp.checked || wrapChecked(x.inp);
+      return /(?:^|\s)(?:mat-selected|selected|checked)(?:\s|$)/.test((x.alvo.className || '') + '');
+    }
+    const A = achar('FL_ATIVOS', 'ativos');
+    const I = achar('FL_INATIVOS', 'inativos');
+    const out = {
+      ativosFound: !!A, inativosFound: !!I,
+      ativosChecked: estado(A), inativosChecked: estado(I),
+    };
+    if (acao === 'set') {
+      // marca Inativos se preciso
+      if (I && !out.inativosChecked) { (I.inp || I.alvo).click(); out.clicouI = true; }
+      // desmarca Ativos se preciso
+      if (A && out.ativosChecked) { (A.inp || A.alvo).click(); out.clicouA = true; }
+    }
+    return out;
+  }, acao);
+}
+
+async function definirStatusInativos(page) {
+  const abriu = await abrirDropdownStatus(page);
+  if (!abriu) {
+    console.log('   ⚠️  não encontrei o gatilho "Status de cliente".');
+    return { achouCheckboxes: false, inativosOn: false, ativosOff: false };
+  }
+
+  // Confere que as opções apareceram.
+  let st = await opStatus(page, 'ler');
+  if (!st.ativosFound || !st.inativosFound) {
+    console.log(`   🔎 Opções no dropdown: Ativos=${st.ativosFound} Inativos=${st.inativosFound}`);
+    return { achouCheckboxes: false, inativosOn: false, ativosOff: false };
+  }
+
+  // Ajusta: Inativos ON, Ativos OFF (recarrega a segmentação ao mudar).
+  await opStatus(page, 'set');
+  await sleep(3500);
+
+  // Reconfere com o dropdown ainda aberto (leitura autoritativa).
+  st = await opStatus(page, 'ler');
+  const inativosOn = !!st.inativosChecked;
+  const ativosOff = !st.ativosChecked;
+  console.log(`   🏷️  Status → Ativos ${st.ativosChecked ? 'MARCADO' : 'desmarcado'} · Inativos ${st.inativosChecked ? 'MARCADO' : 'desmarcado'}`);
+
+  // Fecha o dropdown (aplica o filtro) e espera recarregar a tabela.
+  await page.keyboard.press('Escape').catch(() => {});
+  await sleep(4500);
+
+  return { achouCheckboxes: true, inativosOn, ativosOff };
 }
 
 // Diagnóstico: salva um print e lista tudo que parece filtro de status. Chamado
@@ -206,10 +195,7 @@ async function dumpDiagnosticoStatus(page) {
         if (out.length > 40) break;
       }
       const overlay = document.querySelector('.cdk-overlay-container');
-      return {
-        itens: out,
-        overlay: overlay ? norm(overlay.textContent).slice(0, 120) : '(sem overlay)',
-      };
+      return { itens: out, overlay: overlay ? norm(overlay.textContent).slice(0, 120) : '(sem overlay)' };
     });
     console.log(`   🔬 Elementos de filtro no DOM: ${info.itens.join(' | ') || 'nenhum'}`);
     console.log(`   🔬 Overlay: ${info.overlay}`);
@@ -283,20 +269,15 @@ async function buscarExAlunasHoje() {
     if (!segClicado) throw new Error('Segmento "Aniversariantes" não encontrado (procurei por 45s).');
     await sleep(6000);
 
-    // 3. TROCA o status para INATIVOS (trava de segurança abaixo).
-    console.log('🏷️  Trocando o filtro de status para "Inativos"...');
-    let stat = await definirStatusInativos(page);
-    if (!stat.achouCheckboxes) {
-      // Os checkboxes podem estar atrás de um gatilho de filtro — tenta abrir e reler.
-      console.log('   ↪️  checkboxes não visíveis — tentando abrir o painel de filtro...');
-      const abriu = await tentarAbrirPainelStatus(page);
-      if (abriu) { console.log('   ↪️  gatilho de filtro clicado — relendo...'); stat = await definirStatusInativos(page); }
-    }
+    // 3. Deixa SÓ "Inativos" no filtro de status (trava de segurança abaixo).
+    console.log('🏷️  Ajustando o filtro de status para "Inativos"...');
+    const stat = await definirStatusInativos(page);
     if (!stat.achouCheckboxes) {
       await dumpDiagnosticoStatus(page);
-      throw new Error('Não encontrei os checkboxes de status (Ativos/Inativos) — ABORTADO por segurança (não envio para não arriscar mandar às ativas).');
+      throw new Error('Não abri/achei o filtro de status (Ativos/Inativos) — ABORTADO por segurança (não envio para não arriscar mandar às ativas).');
     }
     if (!stat.inativosOn || !stat.ativosOff) {
+      await dumpDiagnosticoStatus(page);
       throw new Error(`Não consegui deixar SÓ "Inativos" marcado (inativos=${stat.inativosOn}, ativosDesmarcado=${stat.ativosOff}) — ABORTADO por segurança.`);
     }
     await sleep(2000);
@@ -332,7 +313,6 @@ async function buscarExAlunasHoje() {
       for (const l of linhas) if (l.nome && !vistos.has(l.nome)) vistos.set(l.nome, l.nascimento);
       console.log(`   📄 Página ${pagina}: ${linhas.length} linha(s) — acumulado ${vistos.size}`);
       if (vistos.size === antes && pagina > 1) break;
-      // avança a página (botão "próxima")
       const avancou = await page.evaluate(() => {
         const btns = Array.from(document.querySelectorAll('button, a, [role="button"]'));
         for (const b of btns) {
