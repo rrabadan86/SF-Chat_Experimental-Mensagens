@@ -58,6 +58,9 @@ EVO_TOKEN = _clean("EVO_TOKEN")
 # Filial (opcional; obrigatório apenas em chaves multi-filial).
 EVO_BRANCH_ID = _clean("EVO_BRANCH_ID")
 EVO_DDI = _clean("EVO_DDI", "55")
+# Sexo/genero fixado no cadastro do prospect. Studio exclusivo para MULHERES:
+# todo agendamento registra a pessoa como Feminino. Ajustavel por env.
+EVO_GENDER = _clean("EVO_GENDER", "F")
 EVO_TIMEOUT = int(_clean("EVO_TIMEOUT", "30"))
 
 # Padrões da aula experimental (usados quando não informados na chamada).
