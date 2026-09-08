@@ -68,6 +68,29 @@ function extrairDiaMesNascimento(valor) {
   return null;
 }
 
+// ─── Popup "Nova funcionalidade" do EVO ────────────────────
+// O EVO passou a mostrar um popup ("Uma nova tela já está disponível…") que
+// COBRE a tela antiga e impede o clique no segmento. A versão antiga continua
+// disponível "apenas para consulta", então clicamos em "Permanecer" para ficar
+// nela e o scraper seguir funcionando. Chamamos após o login e a navegação.
+async function fecharPopupNovaTela(page) {
+  try {
+    const fechou = await page.evaluate(() => {
+      const alvos = Array.from(document.querySelectorAll('button, a, span, div'));
+      for (const el of alvos) {
+        const t = (el.textContent || '').trim().toLowerCase();
+        if ((t === 'permanecer' || t === 'continuar na versão antiga' || t === 'agora não' || t === 'fechar') && el.offsetWidth > 0 && el.offsetHeight > 0) {
+          (el.closest('button') || el).click();
+          return true;
+        }
+      }
+      return false;
+    });
+    if (fechou) console.log('   ↪️  popup "Nova funcionalidade" fechado (Permanecer).');
+    return fechou;
+  } catch (_) { return false; }
+}
+
 // ─── EVO: busca aniversariantes e filtra os de HOJE ────────
 async function buscarAniversariantesHoje() {
   console.log('\n═══════════════════════════════════════════════════');
@@ -134,12 +157,14 @@ async function buscarAniversariantesHoje() {
     });
     await page.waitForFunction(() => location.hash.includes('/inicio/') || location.hash.includes('/app/'), { timeout: 30000 });
     await sleep(3000);
+    await fecharPopupNovaTela(page); // dispensa o popup "Nova funcionalidade" logo após o login
     console.log('✅ Login OK\n');
 
     // 2. Vai para Segmentação e clica em "Aniversariantes"
     console.log('📂 Navegando para Segmentação...');
     await page.evaluate(() => { location.hash = '#/app/slimfit/15/clientes/segmentacao/clientes'; });
     await sleep(5000);
+    await fecharPopupNovaTela(page); // o popup pode reaparecer ao navegar
 
     console.log('🔍 Clicando no segmento "Aniversariantes"...');
     const tentarClicar = () => page.evaluate(() => {
@@ -164,6 +189,7 @@ async function buscarAniversariantesHoje() {
     // Antes tentávamos UMA vez e o job morria; agora insistimos por até ~45s.
     let segClicado = false;
     for (let i = 0; i < 15 && !segClicado; i++) {
+      await fecharPopupNovaTela(page); // se o popup voltou, some com ele antes de clicar
       segClicado = await tentarClicar();
       if (!segClicado) await sleep(3000);
     }
