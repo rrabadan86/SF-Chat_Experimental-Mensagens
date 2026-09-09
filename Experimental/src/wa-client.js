@@ -24,6 +24,30 @@ const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-ef
 const atividade = require('./atividade'); // registro do que foi enviado (aba "Hoje")
 
 const AUTH_DIR = process.env.WA_AUTH_DIR || path.resolve(__dirname, '..', 'wwebjs_auth');
+
+// TRAVA DO CHROMIUM (SingletonLock/Cookie/Socket): dentro da pasta de sessão o
+// Chromium grava um "SingletonLock" com NOME-DA-MÁQUINA + PID de quem abriu o
+// perfil. Se o processo cair sem fechar limpo — OU se o HOSTNAME do VPS mudar —
+// o Chromium lê a trava, vê um nome de máquina diferente do atual e RECUSA abrir
+// ("profile appears to be in use ... on another computer"), com "Failed to launch
+// the browser process: Code: 21". Aí o robô fica preso em "Iniciando…" e nunca
+// conecta. Apagar a trava é seguro: NÃO é a sessão do WhatsApp (o login fica em
+// Default/); o Chromium recria a trava ao subir. Fazemos isso antes de iniciar o
+// cliente, então uma troca de nome do servidor (comum ao provisionar novas
+// unidades) ou uma queda suja se conserta sozinha, sem reescanear o QR.
+function limparTravaSingleton() {
+  const fs = require('fs');
+  try {
+    if (!fs.existsSync(AUTH_DIR)) return;
+    for (const nome of fs.readdirSync(AUTH_DIR)) {
+      if (!nome.startsWith('session')) continue;       // session ou session-<clientId>
+      const perfil = path.join(AUTH_DIR, nome);
+      for (const trava of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+        try { fs.rmSync(path.join(perfil, trava), { force: true }); } catch (_) {}
+      }
+    }
+  } catch (_) {}
+}
 // whatsapp-web.js roda bem headless; deixe WA_HEADLESS=false só se quiser com tela (xvfb).
 const HEADLESS = process.env.WA_HEADLESS !== 'false';
 const CHROMIUM_PATH = process.env.CHROMIUM_PATH || undefined;
@@ -184,6 +208,7 @@ function criarClient() {
  */
 function initWhatsApp() {
   if (initPromise) return initPromise;
+  limparTravaSingleton(); // remove trava velha do Chromium (queda suja OU troca de nome do host)
   client = criarClient();
   iniciarWatcherComando(); // escuta o pedido de "desconectar" vindo do painel
 

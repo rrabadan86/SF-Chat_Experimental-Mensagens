@@ -76,6 +76,17 @@ async function aplicarCookiesSalvos(page) {
 // Lança o Chromium do Puppeteer com o perfil dedicado do Instagram (Linux).
 async function launchInstagramChromium() {
   console.log(`🐧 Abrindo Chromium com perfil do Instagram (${IG_HEADLESS ? 'headless' : 'com tela'})${IG_PROXY ? ' via proxy ' + IG_PROXY : ''}...`);
+  // Trava velha do Chromium (SingletonLock/Cookie/Socket): guarda NOME-DA-MÁQUINA
+  // + PID de quem abriu o perfil. Após uma queda suja OU uma troca de HOSTNAME do
+  // VPS, o Chromium recusa abrir o perfil ("in use ... on another computer" →
+  // "Code: 21"). Apagar é seguro (não é a sessão; o Chromium recria) e conserta só.
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    for (const t of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+      try { fs.rmSync(path.join(IG_PROFILE_DIR, t), { force: true }); } catch (_) {}
+    }
+  } catch (_) {}
   const browser = await puppeteer.launch({
     headless: IG_HEADLESS ? 'new' : false,
     executablePath: process.env.CHROMIUM_PATH || undefined,

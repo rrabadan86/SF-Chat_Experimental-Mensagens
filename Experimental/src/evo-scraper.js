@@ -63,6 +63,17 @@ class EvoScraper {
     const headless = process.env.HEADLESS !== 'false';
     const userDataDir = process.env.EVO_PROFILE_DIR ||
       path.resolve(__dirname, '..', 'evo-chrome-data');
+    // Trava velha do Chromium (SingletonLock/Cookie/Socket): guarda NOME-DA-MÁQUINA
+    // + PID de quem abriu o perfil. Após uma queda suja OU uma troca de HOSTNAME do
+    // VPS, o Chromium vê nome diferente e recusa abrir ("in use ... on another
+    // computer" → "Failed to launch the browser process: Code: 21"). Apagar é seguro
+    // (não é a sessão/cookies; o Chromium recria ao subir) e conserta sozinho.
+    try {
+      const fs = require('fs');
+      for (const t of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+        try { fs.rmSync(path.join(userDataDir, t), { force: true }); } catch (_) {}
+      }
+    } catch (_) {}
     this.browser = await puppeteer.launch({
       headless,
       userDataDir,
