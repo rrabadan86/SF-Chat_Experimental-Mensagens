@@ -88,7 +88,8 @@ const config = {
     resumoDia:        '45 19 * * *',    // 19:45 todos os dias (resumo do dia das experimentais no grupo)
     noShowMorning:    '30 11 * * 1-6',  // 11:30 seg-sáb (faltas nas aulas da manhã → remarcar)
     noShowAfternoon:  '30 19 * * 1-6',  // 19:30 seg-sáb (faltas nas aulas da tarde/noite → remarcar)
-    slotsPush:        '*/10 * * * *',   // a cada 10 min, 24h (calcula a grade e envia ao formulário)
+    slotsPushDia:     '0 7-21 * * *',   // a cada 60 min, 07h-21h (grade fresca no horário de agendamento)
+    slotsPushNoite:   '0 22,1,4 * * *', // a cada ~3h de madrugada (22h, 01h, 04h) — alivia o pico do EVO
     circuitoConvoca:  '15 16 * * 3',    // 16:15 quarta (convocatória do Circuito de sábado, com a professora)
     circuitoLembrete: '15 16 * * 5',    // 16:15 sexta ("é amanhã!" no grupo Circuito Slim)
     agendadosManha:   '45 10 * * *',    // 10:45 todos os dias (envios agendados no painel — turno manhã)

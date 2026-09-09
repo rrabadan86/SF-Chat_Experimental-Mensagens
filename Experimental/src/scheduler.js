@@ -842,9 +842,23 @@ async function main() {
   // ENVIA pronta para o formulário (Render). Assim a aluna vê os horários na
   // hora, sem a Render calcular (lento). É leve e NÃO usa o navegador/WhatsApp,
   // então roda independente do jobRunning dos jobs pesados.
-  if (config.schedule.slotsPush) {
-    cron.schedule(config.schedule.slotsPush, runSlotsPush, { timezone: 'America/Sao_Paulo' });
-    log(`📅 Job GRADE→FORMULÁRIO agendado: ${config.schedule.slotsPush} (a cada 10 min, 24h)`);
+  // Duas cadências (boa prática da API do EVO: aliviar horário de pico e a madrugada):
+  //   • DIA 07h-21h → a cada 60 min (grade fresca na janela de agendamento)
+  //   • NOITE 22h-06h → a cada ~3h (poucas visitas; poupa chamadas ao EVO)
+  // O /api/book revalida a vaga na hora, então a grade não precisa ser minuto-a-minuto.
+  // (O Render é mantido acordado pela ponte de confirmações, que bate a cada 1 min.)
+  let _slotsAgendado = false;
+  if (config.schedule.slotsPushDia) {
+    cron.schedule(config.schedule.slotsPushDia, runSlotsPush, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job GRADE→FORMULÁRIO (dia) agendado: ${config.schedule.slotsPushDia} (a cada 60 min, 07h-21h)`);
+    _slotsAgendado = true;
+  }
+  if (config.schedule.slotsPushNoite) {
+    cron.schedule(config.schedule.slotsPushNoite, runSlotsPush, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job GRADE→FORMULÁRIO (noite) agendado: ${config.schedule.slotsPushNoite} (a cada ~3h, 22h-06h)`);
+    _slotsAgendado = true;
+  }
+  if (_slotsAgendado) {
     console.log('   → Calcula os horários e envia prontos ao formulário de agendamento');
     // Empurra uma vez já no start (após restart, o formulário fica pronto logo).
     setTimeout(runSlotsPush, 15000);
