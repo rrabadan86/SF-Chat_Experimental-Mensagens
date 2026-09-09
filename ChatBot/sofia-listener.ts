@@ -390,6 +390,50 @@ function lembrarLid(lid: string, tel: string) {
 function telLembradoDoLid(lid: string): string { return lidMap.get(lid) || ""; }
 function marcarLidSemTel(lid: string) { if (!lid || lidMap.has(lid) || lidSemTel.has(lid)) return; lidSemTel.add(lid); ultimoSemTelEm = Date.now(); persistirLid(); }
 
+// ── Reconciliação de conversas presas a um LID ───────────────────────────────
+// Conversas ANTIGAS podem ter ficado guardadas sob o LID cru (ID interno do
+// WhatsApp, ~15 dígitos) porque, na época, o robô não descobriu o telefone real —
+// e conversas paradas não re-tentam. No painel elas aparecem com o LID e "sem
+// tags" (o CRM guarda por TELEFONE). Aqui, já conectados, buscamos o telefone real
+// de cada LID preso e FUNDIMOS a conversa com a do telefone (lembrarLid chama
+// fundirConversaLid), então a tag do CRM volta a aparecer e a conversa vira única.
+// Heurística segura: chave só-dígitos com 14+ caracteres é um LID (telefone BR com
+// DDI tem no máx. 13), então nunca tocamos numa conversa de telefone real.
+let reconciliandoLids = false;
+async function reconciliarLidsDormentes() {
+  if (reconciliandoLids || !pronta) return;
+  reconciliandoLids = true;
+  try {
+    const alvos: string[] = [];
+    for (const k of inbox.keys()) { if (/^\d{14,}$/.test(k) && !lidMap.has(k)) alvos.push(k); }
+    if (alvos.length) {
+      log(`🔗 LIDs: ${alvos.length} conversa(s) presas a um LID — buscando o telefone real...`);
+      let unidas = 0;
+      for (const lid of alvos.slice(0, 60)) {
+        if (!pronta) break;
+        let tel = "";
+        try {
+          const c: any = await (client as any).getContactById(lid + "@lid");
+          const idSer: string = (c && c.id && c.id._serialized) || "";
+          if (idSer.endsWith("@c.us")) { const n = soDigitos(c.id.user); if (pareceTelefone(n) && n !== lid) tel = n; }
+          if (!tel) { const n2 = soDigitos(c && c.number); if (pareceTelefone(n2) && n2 !== lid) tel = n2; }
+        } catch {}
+        if (!tel) { try { tel = await telefoneDoLidPelaPagina(lid + "@lid", lid); } catch {} }
+        if (tel && pareceTelefone(tel) && tel !== lid) { lembrarLid(lid, tel); unidas++; } // aprende + funde a conversa
+        await sleep(1500); // não martela o WhatsApp
+      }
+      if (unidas) log(`🔗 LIDs: ${unidas} conversa(s) unida(s) ao telefone (a tag do CRM volta a aparecer no painel).`);
+    }
+  } catch (e: any) { log("aviso: reconciliação de LIDs falhou: " + (e?.message || e)); }
+  finally { reconciliandoLids = false; }
+}
+let reconAgendada = false;
+function agendarReconciliacaoLids() {
+  if (reconAgendada) return; reconAgendada = true;
+  setTimeout(() => { reconciliarLidsDormentes().catch(() => {}); }, 45000);            // uma vez, ~45s após conectar (Store já carregado)
+  setInterval(() => { reconciliarLidsDormentes().catch(() => {}); }, 3 * 3600 * 1000); // de leve, a cada 3h — pega as que ainda escaparem
+}
+
 // Chave de inbox para uma mensagem que NÓS iniciamos (campanha): usa a identidade
 // CANÔNICA resolvida no envio (a mesma em que a resposta da pessoa vai cair),
 // não o número cru do cadastro. Sem isso, o envio caía numa conversa e a resposta
@@ -579,7 +623,7 @@ client.on("qr", async (qr) => {
   catch { setStatus("qr", ""); }
 });
 client.on("authenticated", () => { log("autenticada."); setStatus("iniciando"); armarWatchdogBoot(); });
-client.on("ready", () => { pronta = true; modoPareamento = false; codigoPareamento = ""; if (bootTimer) clearTimeout(bootTimer); gravarFails(0); log("PRONTA — respondendo as alunas."); setStatus("conectado"); });
+client.on("ready", () => { pronta = true; modoPareamento = false; codigoPareamento = ""; if (bootTimer) clearTimeout(bootTimer); gravarFails(0); log("PRONTA — respondendo as alunas."); setStatus("conectado"); agendarReconciliacaoLids(); });
 client.on("change_state", (s: string) => log("estado: " + s));
 client.on("disconnected", (m: any) => {
   pronta = false;
