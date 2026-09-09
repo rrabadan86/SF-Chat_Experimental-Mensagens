@@ -660,6 +660,29 @@ function limparCacheWa() {
   try { fs.rmSync(path.join(DIR, ".wwebjs_cache"), { recursive: true, force: true }); } catch {}
 }
 
+// TRAVA DO CHROMIUM (SingletonLock/Cookie/Socket): dentro da pasta de sessão o
+// Chromium deixa um "SingletonLock" que guarda NOME-DA-MÁQUINA + PID de quem
+// abriu o perfil. Se o processo cair sem fechar limpo — OU se o HOSTNAME do VPS
+// mudar — o Chromium lê essa trava, vê um nome de máquina diferente do atual e
+// RECUSA abrir ("profile appears to be in use ... on another computer"), com
+// "Failed to launch the browser process: Code: 21". Aí a SoFIA trava em laço e
+// nunca chega no QR. Apagar a trava é seguro: ela NÃO é a sessão do WhatsApp (o
+// login fica em Default/); o Chromium recria a trava ao subir. Fazemos isso todo
+// boot, antes de iniciar o cliente, então uma troca de nome do servidor (comum ao
+// provisionar novas unidades) ou uma queda suja se conserta sozinha.
+function limparTravaSingleton() {
+  try {
+    if (!fs.existsSync(AUTH_DIR)) return;
+    for (const nome of fs.readdirSync(AUTH_DIR)) {
+      if (!nome.startsWith("session")) continue;     // session ou session-<clientId>
+      const perfil = path.join(AUTH_DIR, nome);
+      for (const trava of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) {
+        try { fs.rmSync(path.join(perfil, trava), { force: true }); } catch {}
+      }
+    }
+  } catch {}
+}
+
 // Depois de um LOGOUT a pasta de login guarda uma sessão MORTA. O whatsapp-web.js
 // tenta reusar essa sessão e trava em "iniciando" sem nunca emitir o QR — e o
 // watchdog não resolve, porque ele limpa só o cache, nunca o login. Então quando
@@ -2074,6 +2097,7 @@ carregarHistorico(); // recupera o histórico de interações (aba Contatos → 
 for (const [lid, tel] of lidMap) fundirConversaLid(lid, tel);
 setStatus("iniciando");
 limparLoginSePedido(); // só apaga se um LOGOUT/Desconectar tiver deixado o bilhete
+limparTravaSingleton(); // remove trava velha do Chromium (queda suja OU troca de nome do host)
 log("iniciando a conexão do WhatsApp da Sofia...");
 armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia sozinho
 (async () => {
