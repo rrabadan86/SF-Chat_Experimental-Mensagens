@@ -12,7 +12,7 @@ no VPS da Hostinger (Ubuntu 24.04). No final há também a seção do **`ChatBot
 > Mantenha este documento como memória do primeiro deploy.
 
 > **VPS deste tutorial**
-> - IP: `2.24.87.131` · Host: `srv1867807.hstgr.cloud`
+> - IP: `2.24.87.131` · Host: `sf.gyn.bueno` (Setor Bueno / Goiânia)
 > - SO: Ubuntu 24.04 LTS · 2 vCPU · 8 GB RAM · 100 GB disco
 > - Usuário: `root`
 
