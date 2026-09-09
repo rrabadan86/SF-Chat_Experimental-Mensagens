@@ -21,6 +21,30 @@ function normTel(t) {
   return d;
 }
 
+// Variantes do 9º dígito do celular BR: o mesmo número pode aparecer COM o 9
+// (55 + DDD + 9 + 8 dígitos = 13) ou SEM (55 + DDD + 8 = 12) — o WhatsApp (@c.us)
+// costuma usar a forma antiga sem o 9, e o CRM às vezes guarda com o 9. Devolve as
+// duas formas para casar o mesmo contato independentemente disso.
+function variantes9(t) {
+  const d = normTel(t); if (!d) return [];
+  const out = new Set([d]);
+  const m = /^55(\d{2})(\d+)$/.exec(d);
+  if (m) {
+    const ddd = m[1], resto = m[2];
+    if (resto.length === 9 && resto[0] === '9') out.add('55' + ddd + resto.slice(1)); // tira o 9
+    else if (resto.length === 8) out.add('55' + ddd + '9' + resto);                   // põe o 9
+  }
+  return [...out];
+}
+// Acha o contato existente por telefone, tolerante ao 9º dígito. Retorna
+// { chave, contato } (chave = como está guardado) ou null. `map` opcional evita
+// recarregar quando o chamador já tem a base em mãos.
+function acharPorTel(telefone, map) {
+  const m = map || carregar();
+  for (const v of variantes9(telefone)) if (m[v]) return { chave: v, contato: m[v] };
+  return null;
+}
+
 function carregar() {
   try { const o = JSON.parse(fs.readFileSync(ARQUIVO, 'utf8')); return (o && typeof o === 'object') ? o : {}; }
   catch (_) { return {}; }
@@ -420,7 +444,7 @@ function adicionar({ nome, telefone, tags, instrucoes }) {
 }
 
 module.exports = {
-  normTel, carregar, importarCSV, exportarCSV, setTags, listar, tagsDistintas, totalContatos,
+  normTel, variantes9, acharPorTel, carregar, importarCSV, exportarCSV, setTags, listar, tagsDistintas, totalContatos,
   remover, editarContato, renomearTag, excluirTag, existe, adicionar, ARQUIVO,
   tagConfig, definirTagConfig, tagsPorGatilho, criarTag, adicionarTag, removerTag, lerTagsConfig, GATILHOS,
   aplicarTagLote, contarFiltrados,

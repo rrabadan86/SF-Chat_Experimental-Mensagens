@@ -4518,7 +4518,7 @@ function paginaSofiaFunil(params) {
   let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {}
   let contatosMap = {}; try { contatosMap = contatos.carregar() || {}; } catch (_) {}
   const last8 = (k) => String(k).replace(/\D/g, '').slice(-8);
-  const temAgTag = (k) => { try { const c = contatosMap[contatos.normTel(k)]; if (!c) return false; const ts = c.tags || []; return agTags.some(t => ts.includes(t)); } catch (_) { return false; } };
+  const temAgTag = (k) => { try { const c = (contatos.acharPorTel(k, contatosMap) || {}).contato; if (!c) return false; const ts = c.tags || []; return agTags.some(t => ts.includes(t)); } catch (_) { return false; } };
   let convs = 0, agend = 0;
   for (const k in inbox) {
     const c = inbox[k] || {};
@@ -5364,8 +5364,13 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e5, corpo => {
       try {
         const d = JSON.parse(corpo || '{}');
-        const c = contatos.adicionar({ nome: d.nome, telefone: d.telefone }); // cria/atualiza (sem mexer nas tags)
-        contatos.setTags(d.telefone, d.tags || []);                            // DEFINE as tags (substitui)
+        // Resolve o telefone p/ o contato JÁ existente tolerando o 9º dígito — assim
+        // editar a tag por uma conversa (que pode vir sem o 9) NÃO cria um contato
+        // duplicado; edita o que já está no CRM (com o 9).
+        const achado = contatos.acharPorTel(d.telefone);
+        const telAlvo = achado ? achado.chave : d.telefone;
+        const c = contatos.adicionar({ nome: d.nome, telefone: telAlvo }); // cria/atualiza (sem mexer nas tags)
+        contatos.setTags(telAlvo, d.tags || []);                            // DEFINE as tags (substitui)
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, tel: c.tel }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
@@ -5376,7 +5381,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && url === '/sofia/conversas') {
     let obj = {};
     try { obj = sofia.conversas() || {}; } catch (_) {}
-    try { const cmap = contatos.carregar(); for (const k in obj) { const c = cmap[contatos.normTel(k)]; obj[k].salvo = !!c; obj[k].tagsContato = c ? (c.tags || []) : []; if (c && c.nome) obj[k].nome = c.nome; } } catch (_) {} // salvo? + tags + nome salvo do contato (prefere o editado ao do WhatsApp)
+    try { const cmap = contatos.carregar(); for (const k in obj) { const r = contatos.acharPorTel(k, cmap); const c = r ? r.contato : null; obj[k].salvo = !!c; obj[k].tagsContato = c ? (c.tags || []) : []; if (c && c.nome) obj[k].nome = c.nome; } } catch (_) {} // salvo? + tags + nome — casa o contato tolerando o 9º dígito (conversa @c.us às vezes vem sem o 9)
     let lockMin = 60; try { lockMin = sofia.lerHumanoLockMin(); } catch (_) {}
     try { const hum = sofia.lerHumano(); const lockMs = lockMin * 60000, agora = Date.now(); for (const k in obj) { const v = hum[k]; const isObj = v && typeof v === 'object'; const em = isObj ? (Number(v.em) || 0) : (Number(v) || 0); const ativo = em > 0 && (em + lockMs > agora); obj[k].humano = ativo; obj[k].humanoPor = ativo ? (isObj ? String(v.por || '') : '') : ''; obj[k].humanoEm = ativo ? em : 0; } } catch (_) {} // controle humano por conversa: quem assumiu + instante (a trava expira sozinha → SoFIA reassume)
     try { for (const k in obj) obj[k].bloq = sofia.estaBloqueado(k); } catch (_) {} // contato bloqueado?
@@ -6219,10 +6224,11 @@ function processarFollowups() {
     if (humano[chave]) continue;                             // sob controle humano
     try { if (sofia.estaEncerrada(chave, ultimoAluna)) continue; } catch (_) {} // encerrada à mão → não incomoda (mede pela última msg da aluna: despedida da SoFIA não reabre)
     if (agendaram.has(d)) continue;                          // já agendou
-    try { const ct = contatosMap[contatos.normTel(chave)]; if (ct && (ct.tags || []).some(t => tagsAgendou.includes(t))) continue; } catch (_) {}
+    // acharPorTel tolera o 9º dígito: a conversa pode vir sem o 9 e o CRM guardar com o 9.
+    try { const ct = (contatos.acharPorTel(chave, contatosMap) || {}).contato; if (ct && (ct.tags || []).some(t => tagsAgendou.includes(t))) continue; } catch (_) {}
     // Não reengaja quem já disse que não quer: contato com a tag "Sem interesse"
     // (ex.: "FX - 0. Sem interesse") fica de fora do follow-up.
-    try { const ct = contatosMap[contatos.normTel(chave)]; if (ct && (ct.tags || []).some(t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '').includes('seminteresse'))) continue; } catch (_) {}
+    try { const ct = (contatos.acharPorTel(chave, contatosMap) || {}).contato; if (ct && (ct.tags || []).some(t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '').includes('seminteresse'))) continue; } catch (_) {}
     // Chegou aqui = está no ponto de receber a retomada. Só falta o horário:
     if (!dentroDaJanela) { espera[chave] = cfg.janelaIni; continue; } // segura p/ o próximo horário permitido
     // REGISTRA "já enviei" ANTES de enfileirar e só envia se o registro GRAVOU.
