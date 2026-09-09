@@ -409,6 +409,7 @@ Deixe rodar até o próximo horário agendado (ver tabela abaixo) e confirme no
 | Sintoma | Causa provável | Solução |
 |---------|----------------|---------|
 | `Failed to launch the browser process` | Faltam libs do Chromium | Rode a Etapa 3 de novo |
+| `Code: 21` + `profile appears to be in use ... on another computer` / robô preso em "Iniciando…" | Trava velha do Chromium (`SingletonLock`) com o **nome antigo do host** — típico **depois de renomear o VPS** | O código já limpa sozinho no boot (a partir do commit da trava Singleton). Se o processo for anterior a isso: `pm2 stop <proc>` → `find /root -name "Singleton*" -delete` → `pm2 restart <proc> --update-env`. Não perde a sessão (não precisa reescanear o QR) |
 | `Running as root without --no-sandbox` | Chromium como root | Garanta `--no-sandbox` no launch (Etapa 6) |
 | Erros de `taskkill`/`msedge`/`edge://` | Código ainda em modo Windows | Aplique a Etapa 6 (modo Linux) |
 | QR não aparece / desconecta | Sessão nova de IP diferente | Reescaneie; use número dedicado |
