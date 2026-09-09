@@ -261,6 +261,35 @@ function montarPrompt(secoes) {
   }).join('\n\n').trim() + '\n';
 }
 
+// Blindagem contra DUPLICAÇÃO de seção. Sintoma: uma seção aparecia duas vezes
+// (a 1ª vazia). Causa: se o CORPO de uma seção contém uma linha começando com
+// "# " (ex.: colaram o próprio cabeçalho "# TÍTULO" dentro do texto, em vez de
+// só o conteúdo), o round-trip re-fatia isso numa seção nova. Aqui
+// reconstruímos o texto, re-fatiamos com o MESMO parser e FUNDIMOS seções
+// vizinhas de mesmo título (concatenando corpos, ignorando os vazios). Assim o
+// save é idempotente E se autocorrige: um único save já limpa duplicatas antigas.
+function _normTitulo(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+function normalizarSecoes(secoes) {
+  const texto = (secoes || []).map(s => {
+    const t = String(s.titulo || '').trim();
+    const c = String(s.corpo || '');
+    return (t ? '# ' + t + '\n' : '') + c;
+  }).join('\n');
+  const secs = parseSecoes(texto);
+  const out = [];
+  for (const s of secs) {
+    const prev = out[out.length - 1];
+    if (prev && _normTitulo(prev.titulo) === _normTitulo(s.titulo)) {
+      prev.corpo = [prev.corpo, s.corpo].filter(x => x && x.trim()).join('\n');
+    } else {
+      out.push({ titulo: s.titulo, corpo: s.corpo });
+    }
+  }
+  return out.filter(s => (s.titulo && s.titulo.trim()) || (s.corpo && s.corpo.trim()));
+}
+
 // Estado completo para a página.
 function estado() {
   return {
@@ -286,7 +315,7 @@ function estado() {
 
 // Salva tudo (com backup e validação mínima). Lança Error em caso de recusa.
 function salvar({ secoes, extracao, pausaMin, sessaoHoras, healthMin, agruparSeg, quieto, inboxDias, followup, modelos, transcricaoOn, midias, ritmo }) {
-  const promptMontado = montarPrompt(secoes || []);
+  const promptMontado = montarPrompt(normalizarSecoes(secoes || []));
   const ext = String(extracao || '').trim();
   if (promptMontado.trim().length < 50 || ext.length < 30) {
     throw new Error('Algum campo essencial ficou curto demais — confira e tente de novo.');
