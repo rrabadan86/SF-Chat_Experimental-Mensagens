@@ -4826,7 +4826,17 @@ const server = http.createServer((req, res) => {
     }
     if (req.method === 'POST') {
       return lerCorpo(req, 1e6, corpo => {
-        if (!igApi.assinaturaValida(corpo, req.headers['x-hub-signature-256'])) { res.writeHead(403, { 'Content-Type': 'text/plain' }); return res.end('bad signature'); }
+        // DEBUG TEMPORÁRIO: registra TODO webhook que chega, para diagnosticar por
+        // que o comentário "não aparece". Mostra tamanho, se a assinatura confere e
+        // o "object" (se vier "page" em vez de "instagram", o processar ignora). Pode
+        // remover depois que o recebimento estiver confirmado.
+        const assinOk = igApi.assinaturaValida(corpo, req.headers['x-hub-signature-256']);
+        let dbg = null; try { dbg = JSON.parse(corpo); } catch (_) {}
+        const resumo = dbg ? `object=${dbg.object} entradas=${Array.isArray(dbg.entry) ? dbg.entry.length : 0}`
+          + (dbg.entry && dbg.entry[0] ? ` changes=${(dbg.entry[0].changes || []).map(c => c.field).join(',') || '-'} messaging=${(dbg.entry[0].messaging || []).length}` : '')
+          : '(corpo não-JSON)';
+        console.log(`[ig-webhook] POST ${corpo.length}B assinatura=${assinOk ? 'ok' : 'INVALIDA'} ${resumo}`);
+        if (!assinOk) { res.writeHead(403, { 'Content-Type': 'text/plain' }); return res.end('bad signature'); }
         res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('EVENT_RECEIVED'); // responde rápido; processa depois
         let body = null; try { body = JSON.parse(corpo); } catch (_) { body = null; }
         if (body) igApi.processar(body).catch(e => console.log('[ig-api] processar:', e.message));
