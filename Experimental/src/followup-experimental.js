@@ -449,6 +449,13 @@ async function sendAudioFile(page, audioPath) {
  * Envia texto + áudio para um número.
  */
 async function sendFollowupMessage(page, phoneNumber, text, audioPath, chaveFoto) {
+  // Modo teste: `node src/followup-experimental.js --dry` monta tudo (lê o EVO,
+  // escolhe quem receberia, gera o texto) mas NÃO envia. O scheduler nunca passa
+  // --dry, então em produção continua enviando normalmente.
+  if (process.argv.includes('--dry')) {
+    console.log(`   🧪 [dry] enviaria follow-up para ${phoneNumber} — "${String(text).slice(0, 70).replace(/\s+/g, ' ')}…"`);
+    return true;
+  }
   // page ignorado (compat). Envia pelo cliente único: texto + áudio (como voz).
   {
     const wa = require('./wa-client');
