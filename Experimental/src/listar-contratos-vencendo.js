@@ -15,6 +15,7 @@ async function listarContratosVencendo() {
   // contratos no EVO.
   const browser = await puppeteer.launch({
     headless: 'new',
+    executablePath: process.env.CHROMIUM_PATH || undefined,  // Chromium do sistema (evita o do puppeteer sem libs)
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
