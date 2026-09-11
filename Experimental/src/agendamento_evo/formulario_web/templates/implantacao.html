@@ -229,6 +229,7 @@ cd SF-Chat_Experimental-Mensagens/Experimental</pre>
 <pre class="term-body">bash setup-novo-studio.sh --slug <b>lagosul</b> --studio <b>"Studio SlimFit Lago Sul"</b> \
   --evo-tenant <b>slimfitlagosul</b> --evo-branch <b>22</b> --install-deps</pre>
       </div>
+      <div class="tip">🔄 <b>Já instala com o código mais recente:</b> ao rodar, o script faz um <code>git pull --ff-only</code> sozinho (na branch que você clonou) para pegar as últimas correções — e, se o próprio script mudou, se <b>reexecuta</b> na versão nova. Se estiver offline ou a árvore estiver "suja", ele avisa e segue com o que já está clonado. Para instalar exatamente o que foi clonado, sem atualizar, use <code>--no-git-pull</code>. <b>Importante:</b> ele atualiza a <b>branch atual</b> — então clone/faça checkout da branch de deploy (ver passo 1) antes.</div>
       <p>O <code>--install-deps</code> instala <b>Node 20, git, Chromium, python3-venv,
         pm2 e tsx</b>; depois o script instala as dependências do projeto (Node +
         Python num venv), cria a pasta de dados (<code>SOFIA_DIR</code>) e gera
@@ -481,10 +482,11 @@ node -v   <span class="c"># deve mostrar v20.x</span></pre>
 <pre class="term-body">cd ~
 git clone https://github.com/rrabadan86/SF-Chat_Experimental-Mensagens.git
 cd SF-Chat_Experimental-Mensagens
-git checkout main            <span class="c"># versao estavel (tudo mesclado)</span>
+git checkout main            <span class="c"># branch de deploy (versao estavel, tudo mesclado)</span>
 cd Experimental
 npm install                  <span class="c"># baixa o Chromium do Puppeteer (uns minutos)</span></pre>
       </div>
+      <div class="tip">🔄 <b>O <code>setup-novo-studio.sh</code> já atualiza esta branch sozinho</b> (<code>git pull --ff-only</code>) ao rodar — então você instala sempre com as últimas correções. Faça o <code>checkout</code> da <b>mesma branch que roda em produção</b> (as unidades atuais foram atualizadas com <code>git pull</code> nessa branch): é ela que o script vai atualizar. Se preferir travar numa versão, use <code>--no-git-pull</code>.</div>
     </div>
 
     <div class="stepblock">
