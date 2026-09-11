@@ -71,6 +71,19 @@ async function preencher2FA(page, { timeoutMs = 8000 } = {}) {
   if (!secret) return false;                              // sem MFA configurado -> no-op
   const sel = await acharCampoCodigo(page, timeoutMs);
   if (!sel) return false;                                 // 2FA não pediu (dispositivo confiável)
+  // As telas de "código por e-mail" e "código do autenticador" têm o MESMO campo
+  // "Código". Só o TOTP (autenticador) o robô gera. Se o EVO caiu na tela de
+  // E-MAIL, NÃO digitamos um código errado: avisamos claramente. (Ler o e-mail é
+  // o plano B — só entra se você configurar o e-mail dedicado do robô.)
+  let ehEmail = false;
+  try {
+    ehEmail = await page.evaluate(() =>
+      /enviad[oa] (para|ao) .*e-?mail|verifique .*e-?mail|c[oó]digo .*e-?mail/i.test(document.body.innerText || ''));
+  } catch (_) {}
+  if (ehEmail) {
+    console.log('   ⚠️  O EVO pediu o código por E-MAIL (não pelo autenticador). O robô só gera o código do AUTENTICADOR (TOTP). Confira se o MFA do usuário do robô está no modo autenticador. (Ler e-mail é plano B, não ativo.)');
+    return false;
+  }
   const codigo = gerarTOTP(secret);
   if (!codigo) { console.log('   ⚠️  EVO_TOTP_SECRET inválido — não gerei o código do 2FA.'); return false; }
   console.log('   🔐 2FA do EVO detectado — digitando o código do autenticador…');
