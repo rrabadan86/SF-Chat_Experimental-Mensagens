@@ -482,11 +482,17 @@ node -v   <span class="c"># deve mostrar v20.x</span></pre>
 <pre class="term-body">cd ~
 git clone https://github.com/rrabadan86/SF-Chat_Experimental-Mensagens.git
 cd SF-Chat_Experimental-Mensagens
-git checkout main            <span class="c"># branch de deploy (versao estavel, tudo mesclado)</span>
+git checkout main            <span class="c"># branch de deploy de loja NOVA (estavel, tudo mesclado)</span>
 cd Experimental
 npm install                  <span class="c"># baixa o Chromium do Puppeteer (uns minutos)</span></pre>
       </div>
-      <div class="tip">🔄 <b>O <code>setup-novo-studio.sh</code> já atualiza esta branch sozinho</b> (<code>git pull --ff-only</code>) ao rodar — então você instala sempre com as últimas correções. Faça o <code>checkout</code> da <b>mesma branch que roda em produção</b> (as unidades atuais foram atualizadas com <code>git pull</code> nessa branch): é ela que o script vai atualizar. Se preferir travar numa versão, use <code>--no-git-pull</code>.</div>
+      <div class="tip">🔄 <b>O <code>setup-novo-studio.sh</code> já atualiza a branch sozinho</b> (<code>git pull --ff-only</code>) ao rodar — então a loja nova instala sempre com as últimas correções. Se preferir travar numa versão, use <code>--no-git-pull</code>.</div>
+      <div class="tip">🌿 <b>Qual branch usar (fluxo do projeto):</b>
+        <ul style="margin:6px 0 0">
+          <li><b>Loja nova →</b> use o <code>main</code> (acima). Ele recebe, de tempos em tempos, tudo o que foi validado em produção — então uma instalação do zero já nasce completa.</li>
+          <li><b>Unidades já no ar (ex.: Setor Bueno, Lago Sul) →</b> rodam a branch de trabalho <code>claude/slimfit-official-repo-q71zdd</code> e se atualizam com <code>git pull</code> nela. Mesmo código do <code>main</code>; não precisa migrar.</li>
+        </ul>
+        Em resumo: o desenvolvimento acontece na branch de trabalho e, quando amadurece, é mesclado no <code>main</code> (via Pull Request) para as lojas novas. As unidades existentes seguem na branch de trabalho normalmente.</div>
     </div>
 
     <div class="stepblock">
