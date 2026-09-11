@@ -793,6 +793,23 @@ function barraTeste() {
     <p class="quando" style="margin:6px 0 0">Usado pelos botões <b>Enviar teste</b>. Fica salvo só neste navegador. A prévia usa valores de exemplo (ex.: nome → <i>Maria</i>).</p>
   </div>`;
 }
+
+// Card "Código do EVO (2FA)" — plano B da autenticação em duas etapas do EVO.
+// Fica DISCRETO quando não há nada pendente; ACENDE quando o robô está tentando
+// entrar no EVO e o código veio por e-mail. A recepção digita o código aqui e o
+// robô o recebe (via arquivo compartilhado data/evo-2fa-codigo.json). O caminho
+// principal (autenticador/TOTP) é automático — este campo é só a rede de segurança.
+function card2FA() {
+  return `<div class="card" id="card2fa" style="border-left:4px solid #d7d2cb">
+    <div class="chead" style="margin-bottom:2px"><h2 style="font-size:.98rem">🔐 Código do EVO (2FA)</h2><span id="c2faSt" class="pill" style="margin-left:auto;font-size:var(--fs-xs)">nada pendente</span></div>
+    <p class="quando" id="c2faHint" style="margin:2px 0 8px">Só é usado quando o robô precisa entrar no EVO e o código vem por <b>e-mail</b>. Quando isso acontecer, aparece um aviso aqui (e no seu celular): pegue o código no e-mail do usuário do robô e digite abaixo. No dia a dia o robô resolve o 2FA sozinho (pelo autenticador) e este campo fica quieto.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="c2faInp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" maxlength="8" style="max-width:160px;letter-spacing:3px;font-size:1.15rem;text-align:center">
+      <button type="button" class="save" id="c2faBtn" onclick="enviar2FA()" style="padding:8px 18px">Enviar</button>
+      <span id="c2faMsg" class="quando" style="margin:0"></span>
+    </div>
+  </div>`;
+}
 // Script de pré-visualizar/enviar teste + inserir variável (compartilhado).
 function scriptPreviewTeste() {
   const exemplosJson = JSON.stringify(mensagens.exemplosCompletos()).replace(/</g, '\\u003c');
@@ -1073,6 +1090,7 @@ function paginaMensagens(aviso, erro) {
     </div>
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
+    ${card2FA()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
     <div class="sec-t">Mensagens individuais <small style="font-weight:600;color:var(--cinza)">(enviadas 1 para 1, direto para a aluna)</small></div>
     ${itensIndividuais}
@@ -1103,6 +1121,38 @@ ${scriptPreviewTeste()}
     }).catch(function(){});
   }
   atualizaWa(); setInterval(atualizaWa, 7000);
+
+  // ── Código do EVO (2FA) — plano B: acende quando o robô está esperando ──────
+  function pintar2fa(p){
+    var card=document.getElementById('card2fa'), st=document.getElementById('c2faSt'), hint=document.getElementById('c2faHint');
+    if(!card) return;
+    if(p && p.pedido){
+      card.style.borderLeftColor='#e05a2b'; card.style.background='#fff7f2';
+      st.textContent='⏳ o robô está esperando'; st.style.background='#ffd9c7'; st.style.color='#a12626';
+      hint.innerHTML='⚠️ <b>O robô está tentando entrar no EVO e precisa do código.</b> '+(p.motivo==='email'?'O EVO mandou por <b>e-mail</b> do usuário do robô — abra o e-mail, copie o código de 6 dígitos e digite abaixo.':'Digite o código de verificação do EVO abaixo.');
+      var inp=document.getElementById('c2faInp'); if(inp && document.activeElement!==inp){ try{inp.focus();}catch(_){}}
+    } else {
+      card.style.borderLeftColor='#d7d2cb'; card.style.background='';
+      st.textContent='nada pendente'; st.style.background=''; st.style.color='';
+      hint.innerHTML='Só é usado quando o robô precisa entrar no EVO e o código vem por <b>e-mail</b>. Quando isso acontecer, aparece um aviso aqui (e no seu celular): pegue o código no e-mail do usuário do robô e digite abaixo. No dia a dia o robô resolve o 2FA sozinho (pelo autenticador) e este campo fica quieto.';
+    }
+  }
+  function atualiza2fa(){ fetch('/wa/2fa/estado').then(function(r){return r.json();}).then(pintar2fa).catch(function(){}); }
+  async function enviar2FA(){
+    var inp=document.getElementById('c2faInp'), msg=document.getElementById('c2faMsg'), btn=document.getElementById('c2faBtn');
+    var cod=(inp.value||'').replace(/\D/g,'');
+    if(cod.length<4){ msg.textContent='Digite o código (4 a 8 dígitos).'; msg.style.color='#a12626'; inp.focus(); return; }
+    btn.disabled=true; msg.style.color=''; msg.textContent='Enviando ao robô…';
+    try{
+      var r=await fetch('/wa/2fa/codigo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo:cod})});
+      var d=await r.json();
+      if(d.ok){ msg.textContent='✅ Código enviado — o robô vai usar em instantes.'; msg.style.color='#1a7f37'; inp.value=''; }
+      else { msg.textContent='⚠️ '+(d.erro||'Falha ao enviar.'); msg.style.color='#a12626'; }
+    }catch(e){ msg.textContent='⚠️ '+(e.message||'Falha.'); msg.style.color='#a12626'; }
+    finally{ btn.disabled=false; }
+  }
+  window.enviar2FA=enviar2FA;
+  atualiza2fa(); setInterval(atualiza2fa, 5000);
 </script>`;
   return chrome({ tab: 'WhatsApp Mensagens', h1: 'WhatsApp — mensagens do robô', p: 'Conexão, texto e horário de cada envio no mesmo lugar.' }, 'msg', corpo);
 }
@@ -6074,6 +6124,42 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify({ estado: st.estado || '', qr: st.qr || '', atualizadoEm: st.atualizadoEm || '' }));
   }
+
+  // ── Código do EVO (2FA) — plano B (humano digita o código pelo painel) ──────
+  // Handshake por arquivo com o robô: o robô grava "evo-2fa-pedido.json" quando
+  // precisa de um código (ex.: o EVO mandou por e-mail) e lê "evo-2fa-codigo.json"
+  // que o painel grava aqui. Mesmos nomes usados em src/evo-totp.js.
+  if (url === '/wa/2fa/estado' || url === '/wa/2fa/codigo') {
+    const p = require('path');
+    const PEDIDO_2FA = p.join(__dirname, '..', 'data', 'evo-2fa-pedido.json');
+    const CODIGO_2FA = p.join(__dirname, '..', 'data', 'evo-2fa-codigo.json');
+    // Estado: há um pedido do robô AINDA válido (não expirado)?
+    if (req.method === 'GET' && url === '/wa/2fa/estado') {
+      let pedido = false, motivo = '';
+      try {
+        const o = JSON.parse(fs.readFileSync(PEDIDO_2FA, 'utf8'));
+        if (o && (!o.expiraEm || Date.now() < o.expiraEm)) { pedido = true; motivo = o.motivo || ''; }
+      } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ pedido, motivo }));
+    }
+    // Recebe o código digitado e grava para o robô ler.
+    if (req.method === 'POST' && url === '/wa/2fa/codigo') {
+      return lerCorpo(req, 1e4, (corpo) => {
+        let cod = '';
+        try { cod = String((JSON.parse(corpo) || {}).codigo || '').replace(/\D/g, ''); } catch (_) {}
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        if (cod.length < 4 || cod.length > 8) return res.end(JSON.stringify({ ok: false, erro: 'Código deve ter de 4 a 8 dígitos.' }));
+        try {
+          fs.mkdirSync(p.dirname(CODIGO_2FA), { recursive: true });
+          fs.writeFileSync(CODIGO_2FA, JSON.stringify({ codigo: cod, em: Date.now() }), 'utf8');
+        } catch (e) { return res.end(JSON.stringify({ ok: false, erro: 'Não consegui salvar o código.' })); }
+        try { auditoria.registrar(sess.usuario, 'evo.2fa', 'Código do EVO (2FA) enviado ao robô', ''); } catch (_) {}
+        return res.end(JSON.stringify({ ok: true }));
+      });
+    }
+  }
+
   // Desconectar o WhatsApp do robô (grava comando → o robô faz logout e reinicia → QR novo).
   if (req.method === 'POST' && url === '/wa/desconectar') {
     return lerCorpo(req, 1e5, () => {

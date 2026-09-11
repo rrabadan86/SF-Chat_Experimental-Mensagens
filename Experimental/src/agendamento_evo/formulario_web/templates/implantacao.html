@@ -536,6 +536,31 @@ scp google-sa.json root@<b>IP-DO-CLIENTE</b>:~/SF-Chat_Experimental-Mensagens/Ex
       </div>
       <div class="tip">Abra a planilha do cliente → <b>Compartilhar</b> → cole o <b>e-mail da conta de serviço</b> (está dentro do <code>google-sa.json</code>, campo <code>client_email</code>) como <b>Editor</b>. Sem isso, o robô lê mas não escreve.</div>
     </div>
+
+    <div class="stepblock">
+      <h3><span class="num">2.5</span> 2FA do EVO (autenticação em duas etapas)</h3>
+      <p>A partir de <b>30/10/2026</b> o EVO passa a <b>exigir 2FA no login</b>. Como o robô loga sozinho (e-mail + senha), ele precisa saber resolver esse segundo passo. Há duas frentes, nesta ordem — e <b>enquanto você não configurar nada, tudo continua igual</b> (o robô não tenta preencher 2FA).</p>
+      <div class="tip">💡 <b>Use um usuário do EVO exclusivo do robô</b> (de preferência com um <b>e-mail só dele</b>). Assim o 2FA do robô fica separado do seu acesso pessoal e ninguém precisa compartilhar caixa de e-mail.</div>
+
+      <p style="margin-top:12px"><b>Plano A (principal, automático) — AUTENTICADOR/TOTP.</b> É o que resolve tudo sozinho, inclusive os jobs de madrugada. No cadastro do MFA do usuário do robô, o EVO mostra um QR e, atrás dele, uma <b>chave secreta</b> (base32). Em vez de escanear com o celular, capture essa chave num app autenticador (<b>2FAS</b> ou <b>Aegis</b>) e cole no <code>.env</code>:</p>
+      <div class="term">
+        <div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">Experimental/.env</span></div>
+<pre class="term-body"><span class="c"># a "chave secreta" (base32) que aparece atras do QR do MFA</span>
+EVO_TOTP_SECRET=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX</pre>
+      </div>
+      <p>Reinicie o robô para valer: <code>pm2 restart SEU-SLUG-exp --update-env</code>. Pronto — o robô gera o código de 6 dígitos <b>offline</b> (o mesmo que o app mostraria) e digita sozinho quando o EVO pedir.</p>
+      <div class="tip">⚠️ A chave é um <b>segredo</b>: vai <b>direto no <code>.env</code></b> do servidor, <b>nunca</b> no chat, em e-mail ou no Git. Capture-a pelo app 2FAS/Aegis (ou <code>zbarimg</code> local) — <b>não</b> use sites aleatórios de "ler QR".</div>
+
+      <p style="margin-top:12px"><b>Plano B (rede de segurança, humano) — CÓDIGO PELO PAINEL.</b> Às vezes o EVO manda o código por <b>e-mail</b> em vez do autenticador (ex.: "dispositivo novo/suspeito"). Nesse caso o robô <b>não chuta</b> um código errado: ele <b>avisa no seu celular</b> (ntfy) e mostra um campo no painel, em <b>WhatsApp → Configuração</b> (logo abaixo do "Número para testes"): <b>🔐 Código do EVO (2FA)</b>. A recepção abre o e-mail do usuário do robô, copia o código e digita ali — o robô recebe e conclui o login.</p>
+      <div class="fieldnote">
+        <div class="fnh">Ajustes do plano B no <code>.env</code> (opcionais)</div>
+        <table>
+          <tr><td>EVO_2FA_PAINEL</td><td><code>true</code> liga o campo do painel <b>mesmo sem TOTP</b>. Com <code>EVO_TOTP_SECRET</code> preenchido, o plano B já vem ligado junto — não precisa desta linha.</td></tr>
+          <tr><td>EVO_2FA_ESPERA_MS</td><td>Quanto o robô espera alguém digitar no painel antes de desistir. Padrão <code>240000</code> (4 min).</td></tr>
+        </table>
+      </div>
+      <div class="tip">🌙 O campo do painel só ajuda quando <b>tem gente por perto</b> para digitar. Por isso o <b>autenticador (Plano A) é o principal</b>: os jobs automáticos de madrugada não têm quem digite o código — só o TOTP os resolve sozinho. Deixe o Plano A configurado e trate o Plano B como socorro.</div>
+    </div>
   </section>
 
   <!-- FASE 3 -->
