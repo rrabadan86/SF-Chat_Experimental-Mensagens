@@ -39,6 +39,20 @@ const auditoria = require('./auditoria');
 const config = require('./config'); // STUDIO_NOME etc.
 const https = require('https');
 
+// ── Nomes dos processos no PM2 (por unidade) ────────────────────────────────
+// Cada studio tem os seus: <slug>-exp, <slug>-painel, <slug>-sofia. O painel usa
+// esses nomes para reiniciar/consultar o robô e a SoFIA. Antes ficavam FIXOS como
+// "slimfit-exp"/"sofia-listener" (Setor Bueno) — aí, numa unidade nova (ex.: Lago
+// Sul = lagosul1-exp), o botão "Reiniciar robô" e o restart pós-salvar apontavam
+// para o processo ERRADO (o do Bueno) e falhavam. Agora vêm do .env:
+//   PM2_SLUG=lagosul1   → deriva lagosul1-exp / lagosul1-painel / lagosul1-sofia
+// ou, se precisar, os nomes exatos: PM2_APP_EXP / PM2_APP_PAINEL / PM2_APP_SOFIA.
+// Sem nada no .env, mantém os nomes legados do Bueno (nada muda lá).
+const _pm2Slug = (process.env.PM2_SLUG || '').trim();
+const PM2_EXP = (process.env.PM2_APP_EXP || (_pm2Slug ? _pm2Slug + '-exp' : 'slimfit-exp')).trim();
+const PM2_PAINEL = (process.env.PM2_APP_PAINEL || (_pm2Slug ? _pm2Slug + '-painel' : 'slimfit-painel')).trim();
+const PM2_SOFIA = (process.env.PM2_APP_SOFIA || (_pm2Slug ? _pm2Slug + '-sofia' : 'sofia-listener')).trim();
+
 // ── Cotação do dólar (US$ → R$) para mostrar o custo da IA em reais ──────────
 // Busca a cotação atual numa API pública (awesomeapi), com cache em memória +
 // arquivo e fallback. Não bloqueia a página: usa o valor em cache e atualiza
@@ -995,7 +1009,7 @@ function blocoWaRobo() {
   if (st.estado === 'desconectado') {
     return `<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>O robô está tentando reconectar sozinho. Se aparecer um QR aqui, escaneie.</p></div>`;
   }
-  return `<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>Confira se o robô (<code>slimfit-exp</code>) está rodando.</p></div>`;
+  return `<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>Confira se o robô (<code>${esc(PM2_EXP)}</code>) está rodando.</p></div>`;
 }
 
 // Sub-navegação da aba WhatsApp Mensagens: Configuração (mensagens/horários),
@@ -1112,7 +1126,7 @@ ${scriptPreviewTeste()}
     if(e==='qr' && st.qr) return '<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR para reconectar</h2><p>A sessão caiu. No <b>celular do Studio</b>: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte a câmera para o código.</p><img class="qr" src="'+st.qr+'" alt="QR do WhatsApp"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira ✅.</p></div>';
     if(e==='iniciando') return '<div class="wa-card"><div class="wa-ic">⏳</div><h2>Iniciando…</h2><p>O robô está subindo a conexão. Se precisar de QR, ele aparece aqui.</p></div>';
     if(e==='desconectado') return '<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>O robô está tentando reconectar sozinho. Se aparecer um QR aqui, escaneie.</p></div>';
-    return '<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>Confira se o robô (slimfit-exp) está rodando.</p></div>';
+    return '<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>Confira se o robô (${PM2_EXP}) está rodando.</p></div>';
   }
   function atualizaWa(){
     fetch('/wa/estado').then(function(r){return r.json();}).then(function(st){
@@ -1468,7 +1482,7 @@ function paginaWa() {
   } else if (st.estado === 'desconectado') {
     bloco = `<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>O robô está tentando reconectar sozinho. Se aparecer um QR aqui em instantes, escaneie; senão, a reconexão automática costuma resolver.</p></div>`;
   } else {
-    bloco = `<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>O robô ainda não gravou o estado. Verifique se o <code>slimfit-exp</code> está rodando (<code>pm2 status</code>).</p></div>`;
+    bloco = `<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>O robô ainda não gravou o estado. Verifique se o <code>${esc(PM2_EXP)}</code> está rodando (<code>pm2 status</code>).</p></div>`;
   }
   const reload = st.estado === 'conectado' ? '' : '<script>setTimeout(function(){location.reload()},6000)</script>';
   const corpo = `<div class="wrap">${bloco}<p class="wa-upd">Última atualização do robô: ${esc(quando)}</p></div>${reload}`;
@@ -3808,7 +3822,7 @@ function paginaSofia(aviso, erro) {
     const corpo = `<div class="wrap">
       ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
       <div class="card"><div class="chead"><h2>SoFIA não encontrada nesta máquina</h2></div>
-        <p class="quando">Não achei a pasta da SoFIA (<code>${esc(sofia.DIR)}</code>) ou o arquivo do prompt. Se a SoFIA roda em outra pasta/servidor, aponte com a variável <code>SOFIA_DIR</code> no <code>.env</code> do painel e reinicie: <code>pm2 restart slimfit-painel --update-env</code>.</p>
+        <p class="quando">Não achei a pasta da SoFIA (<code>${esc(sofia.DIR)}</code>) ou o arquivo do prompt. Se a SoFIA roda em outra pasta/servidor, aponte com a variável <code>SOFIA_DIR</code> no <code>.env</code> do painel e reinicie: <code>pm2 restart ${esc(PM2_PAINEL)} --update-env</code>.</p>
       </div></div>`;
     return chrome({ tab: 'SoFIA', h1: 'SoFIA', p: 'Prompt, configurações e conexão do chatbot.' }, 'sofia', corpo);
   }
@@ -3931,7 +3945,7 @@ function paginaSofia(aviso, erro) {
             <select name="modeloExtracao" style="width:100%;padding:9px">${e.modelosValidos.map(m => `<option value="${esc(m.id)}"${m.id === e.modelos.extracao ? ' selected' : ''}>${esc(m.rot)}</option>`).join('')}</select>
           </div>
         </div>
-        <p class="quando" style="margin:8px 0 0">Modelos maiores custam mais por conversa. A troca vale <b>após reiniciar a SoFIA</b> (<code>pm2 restart sofia-listener</code>).</p>
+        <p class="quando" style="margin:8px 0 0">Modelos maiores custam mais por conversa. A troca vale <b>após reiniciar a SoFIA</b> (<code>pm2 restart ${esc(PM2_SOFIA)}</code>).</p>
         <hr style="border:0;border-top:1px solid var(--linha);margin:14px 0 12px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="transcricaoOn" value="1"${e.transcricaoOn ? ' checked' : ''} style="width:auto;margin:0">
@@ -4182,7 +4196,7 @@ function paginaSofia(aviso, erro) {
     if(e==='qr' && st.qr) return '<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR da SoFIA</h2><p>Este é o WhatsApp <b>da SoFIA</b> (número próprio, diferente do robô de mensagens). No celular do número da SoFIA: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte para o código.</p><img class="qr" src="'+st.qr+'" alt="QR da SoFIA"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira “🤖 conectado”.</p></div>';
     if(e==='iniciando') return '<div class="wa-card"><div class="wa-ic">⏳</div><h2>Iniciando…</h2><p>Subindo a conexão da SoFIA. Se precisar de QR, ele aparece aqui.</p></div>';
     if(e==='desconectado') return '<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>A SoFIA caiu. Se aparecer um QR aqui, escaneie de novo.</p></div>';
-    return '<div class="wa-card"><div class="wa-ic">❔</div><h2>Conexão da SoFIA — sem informação</h2><p>O processo da SoFIA (sofia-listener) precisa estar rodando e publicando o estado.</p></div>';
+    return '<div class="wa-card"><div class="wa-ic">❔</div><h2>Conexão da SoFIA — sem informação</h2><p>O processo da SoFIA (${PM2_SOFIA}) precisa estar rodando e publicando o estado.</p></div>';
   }
   function atualizaSofiaWa(){
     fetch('/sofia/estado',{cache:'no-store'}).then(function(r){return r.json();}).then(function(st){
@@ -4755,7 +4769,7 @@ function paginaSaude(list) {
   const pillTxt = { ok: '🟢 OK', warn: '🟡 Atenção', erro: '🔴 Problema' };
 
   // Robô de mensagens (slimfit-exp) + WhatsApp do robô.
-  const pExp = proc('slimfit-exp');
+  const pExp = proc(PM2_EXP);
   const waR = (() => { try { return waStatus.get() || {}; } catch (_) { return {}; } })();
   const waRid = fmtIdadeSaude(waR.atualizadoEm);
   const waRcor = waR.estado === 'conectado' ? 'ok' : (waR.estado === 'qr' || waR.estado === 'desconectado') ? 'erro' : 'warn';
@@ -4766,7 +4780,7 @@ function paginaSaude(list) {
   ]);
 
   // SoFIA (sofia-listener) + WhatsApp da SoFIA.
-  const pSof = proc('sofia-listener');
+  const pSof = proc(PM2_SOFIA);
   const waS = (() => { try { return sofia.waStatus() || {}; } catch (_) { return {}; } })();
   const waSid = fmtIdadeSaude(waS.atualizadoEm);
   const waScor = waS.estado === 'conectado' ? 'ok' : (waS.estado === 'qr' || waS.estado === 'desconectado') ? 'erro' : 'warn';
@@ -5049,8 +5063,8 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horários salvos e robô reiniciado. Já valem.';
     else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. O robô vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
     else if (/(?:^|&)oksof=1/.test(q)) aviso = '🔄 Robô reiniciando… ele volta ao ar em ~1 minuto (o selo do WhatsApp acima mostra quando reconectar).';
-    else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar o robô pelo painel. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
-    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
+    else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar o robô pelo painel. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
+    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
     // Só a sub-aba permitida; se pediu uma sem acesso, cai na primeira permitida.
     // "Express" é a tela unificada (Express + Agendar mensagem); view=agendar cai nela.
     const podeMerged = podeMsgSub(sess, 'express') || podeMsgSub(sess, 'agendar');
@@ -5147,7 +5161,7 @@ const server = http.createServer((req, res) => {
     let aviso = '', erro = false;
     if (/(?:^|&)ok=1/.test(q)) aviso = 'Agendamento salvo! Será enviado no dia e turno escolhidos.';
     else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horários salvos e robô reiniciado. Já valem.';
-    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
+    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(paginaExpress(aviso, erro)); // /agendar (link antigo) → tela unificada Express
   }
@@ -5204,7 +5218,7 @@ const server = http.createServer((req, res) => {
         return res.end(voltar === '/agendar' ? paginaExpress(msg, true) : voltar === '/instagram' ? paginaInstagram(msg, true) : paginaMensagens(msg, true));
       }
       // Reinicia o robô para reagendar os jobs com os novos horários.
-      exec('pm2 restart slimfit-exp --update-env', { timeout: 25000 }, (err) => {
+      exec('pm2 restart ' + PM2_EXP + ' --update-env', { timeout: 25000 }, (err) => {
         res.writeHead(303, { Location: voltar + (err ? '?errh=1' : '?okh=1') }); res.end();
       });
     });
@@ -5263,12 +5277,12 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)lote=/.test(q)) aviso = `🏷️ ${(q.match(/lote=(\d+)/) || [])[1] || '0'} contato(s) atualizado(s) em lote.`;
     else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. A SoFIA vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
     else if (/(?:^|&)oksof=1/.test(q)) aviso = '🔄 SoFIA reiniciando… ela volta ao ar em ~1 minuto (o selo do WhatsApp acima mostra quando reconectar). Modelo e transcrição já valem.';
-    else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar a SoFIA pelo painel. Rode no servidor: pm2 restart sofia-listener'; erro = true; }
+    else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar a SoFIA pelo painel. Rode no servidor: pm2 restart ' + PM2_SOFIA; erro = true; }
     else if (/(?:^|&)okc=criada/.test(q)) aviso = '📣 Campanha criada! A IA está gerando as variações. Quando ficar “pronta”, clique em ▶️ Iniciar para começar o envio.';
     else if (/(?:^|&)okah=1/.test(q)) aviso = 'Aviso "precisa de humano" salvo.';
     else if (/(?:^|&)okalu=1/.test(q)) aviso = '🎓 Regras das alunas salvas! Valem na hora.';
     else if (/(?:^|&)oknr=\d+/.test(q)) aviso = '🔕 Lista de "não responder" salva (' + ((q.match(/oknr=(\d+)/) || [])[1] || '0') + ' número(s)).';
-    else if (/(?:^|&)okcmp=1/.test(q) && /(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Config salva, mas não consegui reiniciar o robô p/ aplicar o novo horário. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
+    else if (/(?:^|&)okcmp=1/.test(q) && /(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Config salva, mas não consegui reiniciar o robô p/ aplicar o novo horário. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
     else if (/(?:^|&)okcmp=1/.test(q)) aviso = 'Config de presença (troca de tags) salva.';
     else if (/(?:^|&)okc=ok/.test(q)) aviso = '✔️ Feito.';
     else if (/(?:^|&)errc=/.test(q)) { aviso = decodeURIComponent((q.match(/errc=([^&]*)/) || [])[1] || 'Erro na campanha.'); erro = true; }
@@ -5704,7 +5718,7 @@ const server = http.createServer((req, res) => {
         catch (_) { /* horário inválido → ignora, mantém o atual */ }
       }
       if (!mudouHora) { res.writeHead(303, { Location: '/sofia?view=tags&okcmp=1' }); return res.end(); }
-      exec('pm2 restart slimfit-exp --update-env', { timeout: 25000 }, (err) => {
+      exec('pm2 restart ' + PM2_EXP + ' --update-env', { timeout: 25000 }, (err) => {
         res.writeHead(303, { Location: '/sofia?view=tags&okcmp=1' + (err ? '&errh=1' : '') }); res.end();
       });
     });
@@ -5785,7 +5799,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url === '/sofia/reiniciar') {
     return lerCorpo(req, 1e5, () => {
       try { auditoria.registrar(sess.usuario, 'sofia.reiniciar', 'SoFIA', ''); } catch (_) {}
-      exec('pm2 restart sofia-listener --update-env', { timeout: 25000 }, (err) => {
+      exec('pm2 restart ' + PM2_SOFIA + ' --update-env', { timeout: 25000 }, (err) => {
         res.writeHead(303, { Location: '/sofia?' + (err ? 'errsof=1' : 'oksof=1') }); res.end();
       });
     });
@@ -6019,7 +6033,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)ck=\d/.test(q)) aviso = '🍪 Cookies importados (' + (q.match(/ck=(\d+)/) || [])[1] + '). A sessão do Instagram foi renovada — vale na próxima execução.';
     else if (/(?:^|&)ok=1/.test(q)) aviso = 'Mensagem salva! Já vale no próximo envio.';
     else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horário salvo e robô reiniciado. Já vale.';
-    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horário salvo, mas não consegui reiniciar o robô. Rode: pm2 restart slimfit-exp'; erro = true; }
+    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horário salvo, mas não consegui reiniciar o robô. Rode: pm2 restart ' + PM2_EXP; erro = true; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(paginaInstagram(aviso, erro));
   }
@@ -6175,8 +6189,8 @@ const server = http.createServer((req, res) => {
   // Reiniciar o robô (pm2 restart slimfit-exp) direto do painel, sem SSH.
   if (req.method === 'POST' && url === '/wa/reiniciar') {
     return lerCorpo(req, 1e5, () => {
-      try { auditoria.registrar(sess.usuario, 'robo.reiniciar', 'Robô (slimfit-exp)', ''); } catch (_) {}
-      exec('pm2 restart slimfit-exp --update-env', { timeout: 25000 }, (err) => {
+      try { auditoria.registrar(sess.usuario, 'robo.reiniciar', 'Robô (' + PM2_EXP + ')', ''); } catch (_) {}
+      exec('pm2 restart ' + PM2_EXP + ' --update-env', { timeout: 25000 }, (err) => {
         res.writeHead(303, { Location: '/?' + (err ? 'errsof=1' : 'oksof=1') }); res.end();
       });
     });

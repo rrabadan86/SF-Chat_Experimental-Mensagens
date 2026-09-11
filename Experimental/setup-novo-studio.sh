@@ -443,6 +443,9 @@ else
   cat > "$EXP_DIR/.env" <<EOF
 # ===== Identidade =====
 STUDIO_NOME=${STUDIO_NOME:-Studio SlimFit $SLUG}
+# Apelido usado nos nomes dos processos PM2 ($SLUG-exp/$SLUG-painel/$SLUG-sofia).
+# O painel usa isto p/ reiniciar/consultar o robô e a SoFIA DESTA unidade.
+PM2_SLUG=$SLUG
 
 # ===== Painel (HTTP interno; o HTTPS é do Caddy) =====
 PAINEL_PORT=$PAINEL_PORT

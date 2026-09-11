@@ -23,7 +23,32 @@ const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
 const atividade = require('./atividade'); // registro do que foi enviado (aba "Hoje")
 
-const AUTH_DIR = process.env.WA_AUTH_DIR || path.resolve(__dirname, '..', 'wwebjs_auth');
+// Pasta da SESSÃO do WhatsApp (LocalAuth). Precisa ser um caminho ESTÁVEL — se
+// mudar entre um boot e outro, o robô "esquece" o login e pede QR de novo.
+// Armadilha real (aconteceu ao migrar uma unidade): WA_AUTH_DIR=./.wwebjs_auth é
+// RELATIVO. Um caminho relativo é resolvido a partir do cwd do processo; o pm2
+// pode reiniciar o robô com um cwd DIFERENTE daquele em que o QR foi escaneado,
+// e aí ./.wwebjs_auth aponta para uma pasta VAZIA → cai o WhatsApp a cada
+// restart. Solução: ancorar caminhos relativos na pasta do Experimental (fixa,
+// derivada da localização deste arquivo), NUNCA no cwd. Absolutos passam direto.
+// E, se já existir uma sessão no caminho antigo (relativo ao cwd), continuamos
+// usando-a — assim ninguém precisa reescanear ao atualizar.
+const AUTH_DIR = (() => {
+  const base = path.resolve(__dirname, '..');            // .../Experimental
+  const env = (process.env.WA_AUTH_DIR || '').trim();
+  if (!env) return path.resolve(base, 'wwebjs_auth');
+  if (path.isAbsolute(env)) return env;
+  const ancorado = path.resolve(base, env);              // estável (não depende do cwd)
+  const relCwd = path.resolve(process.cwd(), env);       // comportamento antigo
+  if (ancorado !== relCwd) {
+    try {
+      const fs = require('fs');
+      const temSessao = (d) => fs.existsSync(d) && fs.readdirSync(d).some((n) => n.startsWith('session'));
+      if (!temSessao(ancorado) && temSessao(relCwd)) return relCwd; // preserva a sessão já existente
+    } catch (_) {}
+  }
+  return ancorado;
+})();
 
 // TRAVA DO CHROMIUM (SingletonLock/Cookie/Socket): dentro da pasta de sessão o
 // Chromium grava um "SingletonLock" com NOME-DA-MÁQUINA + PID de quem abriu o
