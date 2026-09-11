@@ -323,11 +323,19 @@ module.exports = { enviarConfirmacoes, enviarUma, contarPendentes, lerRetidos, r
 //   Uso:  node src/enviar_confirmacoes.js
 if (require.main === module) {
   (async () => {
-    const wa = require('./wa-client');
+    const DRY = process.argv.includes('--dry');
     const pendentes = contarPendentes();
     console.log(`[confirmacoes] ${pendentes} pendente(s) na fila.`);
     if (pendentes === 0) { console.log('Nada a enviar.'); process.exit(0); }
+    if (DRY) {
+      // Modo teste: NÃO conecta no WhatsApp e NÃO envia — só confirma que a fila
+      // está legível e quantas confirmações sairiam. (Evita conflito com o robô
+      // que já está conectado no lagosul1-exp.)
+      console.log(`🧪 Modo --dry: NADA foi enviado. ${pendentes} confirmação(ões) prontas para envio.`);
+      process.exit(0);
+    }
 
+    const wa = require('./wa-client');
     console.log('🐧 Conectando ao WhatsApp (sessão salva)...');
     await wa.initWhatsApp();
     // enviarUma ignora o "page" e envia pelo cliente único (whatsapp-web.js).

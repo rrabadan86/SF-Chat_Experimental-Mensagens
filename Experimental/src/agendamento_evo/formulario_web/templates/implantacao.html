@@ -229,6 +229,7 @@ cd SF-Chat_Experimental-Mensagens/Experimental</pre>
 <pre class="term-body">bash setup-novo-studio.sh --slug <b>lagosul</b> --studio <b>"Studio SlimFit Lago Sul"</b> \
   --evo-tenant <b>slimfitlagosul</b> --evo-branch <b>22</b> --install-deps</pre>
       </div>
+      <div class="tip">🔄 <b>Já instala com o código mais recente:</b> ao rodar, o script faz um <code>git pull --ff-only</code> sozinho (na branch que você clonou) para pegar as últimas correções — e, se o próprio script mudou, se <b>reexecuta</b> na versão nova. Se estiver offline ou a árvore estiver "suja", ele avisa e segue com o que já está clonado. Para instalar exatamente o que foi clonado, sem atualizar, use <code>--no-git-pull</code>. <b>Importante:</b> ele atualiza a <b>branch atual</b> — então clone/faça checkout da branch de deploy (ver passo 1) antes.</div>
       <p>O <code>--install-deps</code> instala <b>Node 20, git, Chromium, python3-venv,
         pm2 e tsx</b>; depois o script instala as dependências do projeto (Node +
         Python num venv), cria a pasta de dados (<code>SOFIA_DIR</code>) e gera
@@ -287,7 +288,8 @@ cd SF-Chat_Experimental-Mensagens/Experimental</pre>
       <h3><span class="num">6</span> Subir tudo — com HTTPS automático — e ler os QRs</h3>
       <div class="term">
         <div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">subir</span></div>
-<pre class="term-body">bash setup-novo-studio.sh --slug <b>lagosul</b> --start --domain <b>painel-lagosul.seu-dominio</b>
+<pre class="term-body">bash setup-novo-studio.sh --slug <b>lagosul</b> --evo-tenant slimfit --evo-branch <b>NN</b> \
+  --start --domain <b>painel-lagosul.duckdns.org</b> --install-deps
 pm2 startup            <span class="c"># sobe sozinho após reboot</span>
 
 <span class="c"># ler os QRs dos 2 WhatsApp da unidade</span>
@@ -298,6 +300,51 @@ pm2 logs <b>lagosul</b>-sofia  <span class="c"># WhatsApp da SoFIA</span></pre>
         <code>lagosul-sofia</code>) e o <code>--domain</code> gera o bloco do <b>Caddy</b>,
         liga o <b>HTTPS</b> e recarrega. Escaneie cada QR com o celular do número
         correspondente.</p>
+
+      <div class="call danger" style="margin-top:14px">
+        <div class="ic">!</div>
+        <div>
+          <h3>Armadilhas comuns (aprendidas numa instalação real)</h3>
+          <ul style="margin:6px 0 0;padding-left:18px;line-height:1.55">
+            <li><b>Painel não abre (<code>ERR_CONNECTION_TIMED_OUT</code>):</b> o HTTPS/Caddy só sobe com <code>--domain</code>, e o Caddy só é <b>instalado</b> com <code>--install-deps</code>. Se você rodou <code>--start</code> sozinho, os processos sobem mas <b>nada escuta em 80/443</b>. Rode com <code>--start --domain … --install-deps</code>. Confira: <code>ss -tlnp | grep -E ':80 |:443 '</code> (tem que aparecer o caddy).</li>
+            <li><b>DuckDNS apontando pro IP errado:</b> clicar em <b>“update ip”</b> pelo navegador grava o IP do <b>seu computador</b>, não o da VPS. Ponha o <b>IPv4 da VPS</b> no campo “current ip”. Atenção: <code>curl ifconfig.me</code> às vezes devolve <b>IPv6</b> — use <code>curl -s4 ifconfig.me</code> para pegar o IPv4. Confira com <code>getent hosts SEU-DOMINIO</code> (tem que dar o IP da VPS).</li>
+            <li><b>EVO: <code>--evo-ids</code> sem as flags</b> cai no padrão <code>slimfit/15</code> (Setor Bueno) e traz os ids/ caminhos da unidade <b>errada</b>. <b>Sempre</b> passe <code>--evo-tenant</code> e <code>--evo-branch</code> (da URL do EVO: <code>…/app/&lt;tenant&gt;/&lt;branch&gt;/…</code>).</li>
+            <li><b>Dois acessos ao EVO, não confunda:</b> <code>EVO_DNS</code>+<code>EVO_TOKEN</code> são a <b>API de integração</b> (DNS + Secret Key, Basic auth — <b>não</b> é o login do site); o <b>e-mail/senha do site</b> vão em <code>EVO_EMAIL</code>+<code>EVO_PASSWORD</code> (usados pelo navegador que lê grade/faltas).</li>
+            <li><b>Serviço da experimental:</b> o <b>id</b> vai em <code>EVO_SERVICE_ID</code> (o <b>nome</b> vai em <code>EVO_SERVICE</code>) — não misture. Na <b>Render</b>, o modelo vem com <code>EVO_SERVICE_ID=128</code> (Setor Bueno): <b>troque pelo id da sua unidade</b>.</li>
+            <li><b>Login do painel:</b> usuário <code>admin</code> + a senha gerada em <code>PAINEL_SENHA</code> (leia com <code>grep ^PAINEL_SENHA= Experimental/.env</code>; também apareceu no terminal ao rodar o <code>--start</code>).</li>
+            <li><b>Grade “Preparando os horários…” pra sempre:</b> a grade vem <b>do EVO</b> (você não monta à mão). Se não preenche: (1) confira o EVO na Render (<code>EVO_BRANCH_ID</code>/<code>EVO_SERVICE_ID</code>) ou (2) a unidade ainda <b>não tem a grade de experimental cadastrada no EVO</b>. Teste na VPS: <code>cd Experimental/src/agendamento_evo && python3 push_slots.py</code> — <code>0 horários</code> = falta grade no EVO.</li>
+            <li><b>Painel manda reiniciar “<code>slimfit-exp</code>” (o do Bueno):</b> os nomes dos processos no PM2 são <b>por unidade</b> (<code>&lt;slug&gt;-exp</code>/<code>&lt;slug&gt;-painel</code>/<code>&lt;slug&gt;-sofia</code>). Ponha <code>PM2_SLUG=&lt;slug&gt;</code> no <code>Experimental/.env</code> (o <code>--start</code> já grava isso nas instalações novas) e reinicie o painel: <code>pm2 restart &lt;slug&gt;-painel --update-env</code>. Sem isso, o botão “Reiniciar robô” e o restart pós-salvar apontam para o processo do <b>Setor Bueno</b> e falham.</li>
+            <li><b>WhatsApp cai a cada <code>pm2 restart</code>:</b> um restart <b>não</b> deveria pedir QR de novo — a sessão fica salva em <code>WA_AUTH_DIR</code>. Se cair, é porque o caminho era <b>relativo</b> e o pm2 subiu o processo de outro diretório (a sessão “sumia”). O código agora <b>ancora</b> caminhos relativos na pasta do Experimental; se ainda quiser blindar, use um caminho <b>absoluto</b> em <code>WA_AUTH_DIR</code>. Depois de escanear <b>uma vez</b>, os próximos restarts mantêm a conexão.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase" style="margin-top:26px"><span class="pn">Testar</span><h2>Validar os jobs sem enviar (unidade recém-migrada)</h2></div>
+    <div class="stepblock">
+      <p>Antes de divulgar, rode <b>cada job em modo seguro</b>: ele faz tudo — lê o EVO, escolhe quem receberia, monta o texto — mas <b>NÃO envia</b>. Todos aceitam <code>--dry</code> (ou já vêm em "simulação" por padrão).</p>
+      <div class="tip">⚠️ Antes, abra uma <b>janela de teste limpa</b>: <code>pm2 stop SEU-SLUG-exp</code> — assim os jobs manuais não disputam o <b>Chromium do EVO</b> com o agendador (a SoFIA e o painel seguem no ar). Rode <b>um job de cada vez</b>. Ao terminar, <code>pm2 start SEU-SLUG-exp</code>.</div>
+      <div class="term">
+        <div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">testar os jobs (não envia)</span></div>
+<pre class="term-body">cd ~/SF-Chat_Experimental-Mensagens/Experimental
+pm2 stop <b>SEU-SLUG</b>-exp        <span class="c"># janela de teste (SoFIA/painel seguem no ar)</span>
+
+node src/enviar_confirmacoes.js --dry                    <span class="c"># confirmação experimental</span>
+xvfb-run -a node src/followup-experimental.js --dry      <span class="c"># follow-up</span>
+xvfb-run -a node src/follow-up-no-show.js --dry          <span class="c"># faltas (no-show)</span>
+xvfb-run -a node src/aniversariantes.js                  <span class="c"># aniversário aluna (simulação)</span>
+xvfb-run -a node src/aniversario-ex.js                   <span class="c"># aniversário ex-alunas (simulação)</span>
+xvfb-run -a node src/aniversariantes-mes-grupo.js --dry  <span class="c"># equipe: aniversários do mês</span>
+xvfb-run -a node src/renovacoes-mes-grupo.js --dry       <span class="c"># equipe: renovações do mês</span>
+xvfb-run -a node src/renovar-contratos.js                <span class="c"># renovação (simulação)</span>
+xvfb-run -a node src/comparecimento.js --dry             <span class="c"># presença / troca de tags</span>
+xvfb-run -a node src/enviar-circuito.js --convocacao --dry <span class="c"># circuito</span>
+xvfb-run -a node src/ausentes-10-dias.js --dry           <span class="c"># ausentes 10 dias</span>
+xvfb-run -a node src/planilha-aniversarios.js --dry      <span class="c"># planilha de aniversários</span>
+
+pm2 start <b>SEU-SLUG</b>-exp       <span class="c"># volta ao normal</span></pre>
+      </div>
+      <div class="tip">Cada job imprime o que <b>faria</b> (quantos, para quem, prévia do texto) e termina com <code>🧪 Modo --dry: NADA foi enviado</code> (ou "simulação"). Erro de login do EVO num job → confira <code>EVO_EMAIL</code>/<code>EVO_PASSWORD</code> no <code>.env</code>. Para enviar de verdade, troque <code>--dry</code> por <code>--enviar</code>/<code>--run</code> conforme o job — ou deixe o agendador disparar no horário. Obs.: <code>suspensoes.js</code> mexe em contratos no EVO (não manda mensagem à aluna) — trate à parte.</div>
     </div>
 
     <div class="phase" style="margin-top:26px"><span class="pn">No final</span><h2>O que continua manual</h2></div>
@@ -435,10 +482,11 @@ node -v   <span class="c"># deve mostrar v20.x</span></pre>
 <pre class="term-body">cd ~
 git clone https://github.com/rrabadan86/SF-Chat_Experimental-Mensagens.git
 cd SF-Chat_Experimental-Mensagens
-git checkout main            <span class="c"># versao estavel (tudo mesclado)</span>
+git checkout main            <span class="c"># branch de deploy (versao estavel, tudo mesclado)</span>
 cd Experimental
 npm install                  <span class="c"># baixa o Chromium do Puppeteer (uns minutos)</span></pre>
       </div>
+      <div class="tip">🔄 <b>O <code>setup-novo-studio.sh</code> já atualiza esta branch sozinho</b> (<code>git pull --ff-only</code>) ao rodar — então você instala sempre com as últimas correções. Faça o <code>checkout</code> da <b>mesma branch que roda em produção</b> (as unidades atuais foram atualizadas com <code>git pull</code> nessa branch): é ela que o script vai atualizar. Se preferir travar numa versão, use <code>--no-git-pull</code>.</div>
     </div>
 
     <div class="stepblock">
@@ -491,6 +539,31 @@ scp *.ogg root@<b>IP-DO-CLIENTE</b>:~/SF-Chat_Experimental-Mensagens/Experimenta
 scp google-sa.json root@<b>IP-DO-CLIENTE</b>:~/SF-Chat_Experimental-Mensagens/Experimental/</pre>
       </div>
       <div class="tip">Abra a planilha do cliente → <b>Compartilhar</b> → cole o <b>e-mail da conta de serviço</b> (está dentro do <code>google-sa.json</code>, campo <code>client_email</code>) como <b>Editor</b>. Sem isso, o robô lê mas não escreve.</div>
+    </div>
+
+    <div class="stepblock">
+      <h3><span class="num">2.5</span> 2FA do EVO (autenticação em duas etapas)</h3>
+      <p>A partir de <b>30/10/2026</b> o EVO passa a <b>exigir 2FA no login</b>. Como o robô loga sozinho (e-mail + senha), ele precisa saber resolver esse segundo passo. Há duas frentes, nesta ordem — e <b>enquanto você não configurar nada, tudo continua igual</b> (o robô não tenta preencher 2FA).</p>
+      <div class="tip">💡 <b>Use um usuário do EVO exclusivo do robô</b> (de preferência com um <b>e-mail só dele</b>). Assim o 2FA do robô fica separado do seu acesso pessoal e ninguém precisa compartilhar caixa de e-mail.</div>
+
+      <p style="margin-top:12px"><b>Plano A (principal, automático) — AUTENTICADOR/TOTP.</b> É o que resolve tudo sozinho, inclusive os jobs de madrugada. No cadastro do MFA do usuário do robô, o EVO mostra um QR e, atrás dele, uma <b>chave secreta</b> (base32). Em vez de escanear com o celular, capture essa chave num app autenticador (<b>2FAS</b> ou <b>Aegis</b>) e cole no <code>.env</code>:</p>
+      <div class="term">
+        <div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">Experimental/.env</span></div>
+<pre class="term-body"><span class="c"># a "chave secreta" (base32) que aparece atras do QR do MFA</span>
+EVO_TOTP_SECRET=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX</pre>
+      </div>
+      <p>Reinicie o robô para valer: <code>pm2 restart SEU-SLUG-exp --update-env</code>. Pronto — o robô gera o código de 6 dígitos <b>offline</b> (o mesmo que o app mostraria) e digita sozinho quando o EVO pedir.</p>
+      <div class="tip">⚠️ A chave é um <b>segredo</b>: vai <b>direto no <code>.env</code></b> do servidor, <b>nunca</b> no chat, em e-mail ou no Git. Capture-a pelo app 2FAS/Aegis (ou <code>zbarimg</code> local) — <b>não</b> use sites aleatórios de "ler QR".</div>
+
+      <p style="margin-top:12px"><b>Plano B (rede de segurança, humano) — CÓDIGO PELO PAINEL.</b> Às vezes o EVO manda o código por <b>e-mail</b> em vez do autenticador (ex.: "dispositivo novo/suspeito"). Nesse caso o robô <b>não chuta</b> um código errado: ele <b>avisa no seu celular</b> (ntfy) e mostra um campo no painel, em <b>WhatsApp → Configuração</b> (logo abaixo do "Número para testes"): <b>🔐 Código do EVO (2FA)</b>. A recepção abre o e-mail do usuário do robô, copia o código e digita ali — o robô recebe e conclui o login.</p>
+      <div class="fieldnote">
+        <div class="fnh">Ajustes do plano B no <code>.env</code> (opcionais)</div>
+        <table>
+          <tr><td>EVO_2FA_PAINEL</td><td><code>true</code> liga o campo do painel <b>mesmo sem TOTP</b>. Com <code>EVO_TOTP_SECRET</code> preenchido, o plano B já vem ligado junto — não precisa desta linha.</td></tr>
+          <tr><td>EVO_2FA_ESPERA_MS</td><td>Quanto o robô espera alguém digitar no painel antes de desistir. Padrão <code>240000</code> (4 min).</td></tr>
+        </table>
+      </div>
+      <div class="tip">🌙 O campo do painel só ajuda quando <b>tem gente por perto</b> para digitar. Por isso o <b>autenticador (Plano A) é o principal</b>: os jobs automáticos de madrugada não têm quem digite o código — só o TOTP os resolve sozinho. Deixe o Plano A configurado e trate o Plano B como socorro.</div>
     </div>
   </section>
 
@@ -622,7 +695,7 @@ pm2 logs slimfit-exp --lines 50  <span class="c"># sem erros</span></pre>
           <tr><td>EVO_DNS</td><td>DNS do EVO da unidade (o <b>mesmo</b> valor do <code>.env</code> da VPS).</td></tr>
           <tr><td>EVO_TOKEN</td><td>Token da API do EVO da unidade.</td></tr>
           <tr><td>EVO_BRANCH_ID</td><td>Número da unidade no EVO.</td></tr>
-          <tr><td>EVO_ACTIVITY_ID / EVO_SERVICE_ID</td><td>Ids da aula experimental (da <b>Fase 3</b>, <code>--evo-ids</code>). Pode usar os nomes em <code>EVO_ACTIVITY</code> / <code>EVO_SERVICE</code>.</td></tr>
+          <tr><td>EVO_ACTIVITY_ID / EVO_SERVICE_ID</td><td>Ids da aula experimental (da <b>Fase 3</b>, <code>--evo-ids</code>). O <b>id</b> vai no campo <code>_ID</code>; o <b>nome</b> em <code>EVO_ACTIVITY</code>/<code>EVO_SERVICE</code> — <b>não misture</b> (id no campo de nome não casa). ⚠️ O modelo vem com <code>EVO_SERVICE_ID=128</code> (Setor Bueno): <b>troque pelo id da SUA unidade</b>.</td></tr>
         </table>
       </div>
       <div class="fieldnote">
@@ -636,6 +709,16 @@ pm2 logs slimfit-exp --lines 50  <span class="c"># sem erros</span></pre>
           <tr><td>PAINEL_URL</td><td>Endereço do <b>painel desta unidade</b> (o formulário redireciona para ele). <b>Sem definir</b>, aponta para o painel do <b>Setor Bueno</b>.</td></tr>
         </table>
       </div>
+      <div class="fieldnote">
+        <div class="fnh">Environment · Render — identidade da unidade na landing (opcional, mas recomendado)</div>
+        <table>
+          <tr><td>FORM_UNIDADE</td><td>Nome que aparece no título e no <b>“Unidade …”</b> da página (ex.: <code>Lago Sul</code>). <b>Sem definir</b>, mostra <b>Setor Bueno</b>.</td></tr>
+          <tr><td>FORM_ENDERECO</td><td>Endereço completo exibido na confirmação (ex.: <code>QI 5, Lago Sul, Brasília-DF</code>).</td></tr>
+          <tr><td>FORM_MAPS_URL</td><td>Link do <b>Google Maps</b> da unidade (o “📍 Ver no mapa”).</td></tr>
+          <tr><td>FORM_WHATSAPP</td><td>Número do botão flutuante <b>“Fale com a Sofia”</b> — só dígitos, com DDI (ex.: <code>5561999998888</code>).</td></tr>
+        </table>
+      </div>
+      <div class="tip">Essas quatro deixam o formulário com a <b>cara da unidade</b> sem tocar no código (o mesmo repo serve todas). Sem elas, a página cai no padrão <b>Setor Bueno</b> — então numa unidade nova, <b>preencha</b>.</div>
       <div class="call danger" style="margin-top:12px">
         <div class="ic">!</div>
         <div>
@@ -681,6 +764,7 @@ curl -sI https://<b>form-lagosul1</b>.onrender.com/api/book-sofia | head -1</pre
       <p>O plano <b>Free</b> "dorme" depois de <b>~15 min sem acesso</b> — a primeira aluna a abrir o link espera uns <b>30–50 s</b> o serviço acordar (as seguintes já são instantâneas). Isso não perde dado, mas atrapalha a primeira impressão. Duas saídas:</p>
       <ul class="chk">
         <li><span class="box">✓</span><span><b>Manter acordado de graça:</b> o robô <b>puxa as confirmações a cada minuto</b> — esse "toque" constante é o que mantém a Render acordada enquanto o robô está no ar (não é o envio da grade). A <b>grade de horários</b> é enviada numa cadência mais leve (boa prática da API do EVO): <b>a cada 60 min das 07h–21h</b> e <b>a cada ~3h de madrugada</b>. Como a grade vale por <b>4h</b> no formulário (<code>FORM_PUSH_TTL</code>) e o <code>/api/book</code> <b>revalida a vaga ao vivo</b> na hora de marcar, a aluna nunca vê "sem horário" por causa disso nem agenda em turma cheia.</span></li>
+        <li><span class="box">✓</span><span><b>Auto-recuperação após um deploy:</b> o disco da Render é <b>efêmero</b> — a cada deploy/reinício a grade enviada some, e sem isso o formulário ficaria <b>até 60 min</b> mostrando "sem horário" (ou "está demorando mais que o normal") até o próximo envio. O robô agora <b>confere a grade no formulário a cada 2 min</b> e, se ela sumiu, <b>reenvia na hora</b> — a janela vazia após um deploy cai para <b>~2 min</b>, sem ninguém precisar rodar nada. No log do <code>slimfit-exp</code> aparece <code>🩹 Grade do formulário sem a versão do VPS … reenviando na hora</code>.</span></li>
         <li><span class="box">✓</span><span><b>Plano pago (Starter, ~US$ 7/mês):</b> não dorme nunca e é o recomendado para uma unidade que já está vendendo. Troque em <b>Settings → Instance Type</b>.</span></li>
       </ul>
     </div>
@@ -757,6 +841,23 @@ IG_MAX_DIA=5</pre>
       </div>
       <div class="tip">Reinicie com <code>pm2 restart slimfit-exp</code>. Os cookies expiram com o tempo — quando isso acontecer, o alerta no ntfy avisa e é só reexportar. Depois de ter o painel (Fase 7), dá para <b>reimportar os cookies pela aba Instagram</b> (cola o JSON), sem scp nem SSH — e testar com um DM.</div>
       <div class="tip">Depois de instalado o painel (Fase 7), o <b>liga/desliga</b> e o <b>limite/dia</b> passam a ser ajustáveis na aba <b>Instagram</b> — sem mexer no <code>.env</code> nem reiniciar (fica em <code>data/instagram-config.json</code>; o <code>.env</code> vira só o padrão inicial).</div>
+
+      <h3 style="margin-top:28px"><span class="num">6.5</span> Instagram OFICIAL (Graph API da Meta) — recomendado</h3>
+      <p>A via <b>oficial</b> substitui a automação por cookie: quando alguém <b>comenta uma palavra-chave</b> num post/reel, <b>toca num Ice Breaker</b> ou <b>manda DM</b>, o app responde por <b>DM com o link do formulário</b>. É <b>estável e sem risco de bloqueio</b> (não usa senha/cookie/proxy) porque usa a API oficial e webhooks. O painel (aba <b>Instagram</b>) tem o card “Instagram oficial” com liga/desliga, palavras-chave, a mensagem do DM e os Ice Breakers.</p>
+      <div class="tip"><b>Pré-requisitos na Meta</b> (uma vez por unidade): (1) app com os produtos <b>Graph API do Instagram</b> + <b>Messenger</b>; (2) conta <b>profissional</b> do Instagram ligada a uma <b>Página</b> do Facebook; (3) <b>Verificação do Negócio</b> (Central de Segurança); (4) <b>App Review</b> — pedir <b>acesso avançado</b> do <code>instagram_manage_messages</code> (com justificativa + um screencast do fluxo) e então virar o app para <b>Ao vivo</b>. Sem esse acesso avançado, o envio de DM fica travado com o erro <code>(#3) ...capability</code> (funciona só em teste/roles).</div>
+      <p>No <code>.env</code>, preencha o bloco <b>Instagram OFICIAL</b> (todas as chaves <code>IG_*</code> ali documentadas) e, na Meta, configure o <b>webhook</b>:</p>
+      <div class="term">
+        <div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">.env + Webhook</span></div>
+<pre class="term-body">IG_APP_ID=...        IG_APP_SECRET=...     IG_PAGE_ID=...
+IG_PAGE_TOKEN=...    IG_VERIFY_TOKEN=<b>senha_que_voce_define</b>
+IG_FORM_URL=https://SEU-FORM.onrender.com
+
+<span class="c"># Na Meta → Webhook (produto Instagram/Messenger):</span>
+<span class="c">#   URL de retorno = https://SEU-PAINEL/ig/webhook</span>
+<span class="c">#   Token de verificação = o MESMO IG_VERIFY_TOKEN</span>
+<span class="c">#   Campos: comments, messages, messaging_postbacks</span></pre>
+      </div>
+      <div class="tip"><b>Conferir se ficou de pé</b> (sem SSH): a aba <b>Instagram</b> mostra <span style="color:var(--ok,#1a7f37)">✅ Conectado: @suaconta · Página …</span>. No servidor, <code>pm2 logs slimfit-painel | grep ig-api</code> mostra <code>[ig-api] pronto ✅ ...</code> no boot. Teste do webhook: abrir <code>https://SEU-PAINEL/ig/webhook</code> deve responder <code>forbidden</code> (é o esperado sem parâmetros — prova que está público). Enquanto o app estiver em <b>Desenvolvimento</b>, a Meta só entrega eventos de quem tem papel no app; com o app <b>Ao vivo</b> passa a valer para qualquer pessoa.</div>
     </div>
   </section>
 
@@ -995,6 +1096,7 @@ pm2 logs sofia-listener        <span class="c"># espere aparecer "PRONTA"</span>
       <h3><span class="num">9.5</span> Ajustar tudo pelo painel</h3>
       <p>Na aba <b>🤖 SoFIA</b> do painel (sub-aba <b>Configuração</b>) você edita o <b>roteiro</b> (o que ela fala), <b>liga/desliga</b>, e ajusta num grid: <b>tempo de sessão</b> (memória), <b>agrupar mensagens</b> (espera alguns segundos e responde tudo junto), <b>verificação de conexão</b> (health-check — reinicia sozinha se travar), <b>máx. de experimentais por turma</b>, <b>pausa</b> ao responder pelo celular, o <b>ritmo</b> de digitação e as <b>imagens</b> (grade/preços); e pode <b>desconectar</b> o WhatsApp dela por ali. As outras sub-abas: <b>Conversas</b> (ler/responder, assumir o controle, <b>bloquear</b> e <b>encerrar</b> — 🔒 fecha na hora, a Sofia recomeça do zero e o follow-up não incomoda), <b>Contatos</b> (CRM: importar e <b>exportar CSV</b>, etiquetar, <b>Interações</b> — histórico com resumo por atendimento — e <b>Automação por tag</b> — gatilhos que etiquetam e avisam sozinhos) e <b>Campanhas</b> (envio em massa por tag, com variações da IA, limites, foto e <code>{nome}</code>). Ainda na Configuração fica o aviso <b>“precisa de humano”</b> (avisa um número e destaca a conversa quando a aluna pede atendente). A <b>Presença da experimental</b> — um job semanal que <b>lê a presença no EVO e troca as tags</b> de quem estava como “agendou” (compareceu → “fez aula”, faltou → “sem presença”), com opção de <b>cadastrar quem veio por outro canal</b> para as campanhas e <b>dia/hora editáveis</b> — <b>agora fica na sub-aba Tags</b> (mudar o horário reinicia o <code>slimfit-exp</code> para reagendar). As sub-abas <b>Funil</b> (conversão: conversas → agendamentos) e <b>Custo IA</b> (gasto por período e <b>por conversa</b>, com alerta de gasto diário) completam a visão. O resto vale na hora, sem reiniciar.</p>
       <div class="tip">O roteiro e as imagens ficam em <code>ChatBot/sofia-prompt.txt</code>, <code>sofia-extracao.txt</code> e <code>sofia-midias.txt</code> — <b>editados pelo painel</b> e fora do Git (o conteúdo base fica nos <code>*.default.txt</code> versionados; se o arquivo vivo sumir, é recriado dele). Por isso o <code>git pull</code> nunca conflita com o que você editou no painel.</div>
+      <div class="tip"><b>Automação por tag — objeção de valor vs. sem interesse</b> (sub-aba <b>Tags</b>): configure as tags de IA para <b>não perder leads que recuam pelo preço</b>. Deixe <b>“FX - 0. Sem interesse”</b> com o <b>🔒 Encerrar a conversa</b> <b>marcado</b> (fecha e o follow-up para) e a instrução restrita a <b>desinteresse CLARO</b> (“não é pra mim”, “já treino em outro lugar”, “não me mande mais”) — <b>excluindo</b> objeção de preço. E tenha uma tag <b>aberta</b> (ex.: <b>“Preço”</b> ou <b>“Objeção de valor”</b>) com o <b>🔒 Encerrar DESmarcado</b> e a instrução: “recuou/adiou pelo PREÇO/VALOR (‘tá caro’, ‘não consigo assumir agora’, ‘vou pensar’, ‘depois entro em contato’) — não é desinteresse”. Assim a conversa <b>fica no funil</b> e o follow-up reengaja. O roteiro (<code>*.default.txt</code>) já vem com a <b>reancoragem em objeção de valor</b> nas seções PERSONALIZAÇÕES e FINALIZAÇÃO.</div>
       <div class="tip"><b>Arquivos de execução da SoFIA</b> (todos em <code>ChatBot/</code>, gitignored — só vivem na VPS): <code>sofia-conversas.json</code> (inbox), <code>sofia-historico.json</code> (interações), <code>sofia-humano.json</code> (controle humano), <code>campanhas.json</code>, e as pontes com o painel — <code>sofia-agendou.jsonl</code>/<code>sofia-eventos.jsonl</code>/<code>sofia-avisos.jsonl</code> (automações) e os ajustes <code>sofia-sessao-horas.txt</code>, <code>sofia-health-min.txt</code>, <code>sofia-agrupar-seg.txt</code>, <code>sofia-modelo.json</code> (modelo de IA), <code>sofia-transcricao.txt</code> (liga/desliga da transcrição), <code>sofia-followup-cfg.json</code> (follow-up), <code>sofia-bloqueios.json</code> (lista de bloqueio) e <code>sofia-encerradas.json</code> (conversas encerradas à mão — cadeado). Com <code>SOFIA_DIR</code> definido, todos esses vivem nessa pasta (ex.: <code>/root/sofia-data</code>), fora do repositório. As tags/automações, o log de agendamentos do formulário, os canais de origem e a config da <b>Presença da experimental</b> ficam no lado do painel, em <code>data/tags-config.json</code>, <code>data/bookings.json</code>, <code>data/origens.json</code> e <code>data/comparecimento.json</code>. Após um <code>git pull</code> que mexa na SoFIA, reinicie: <code>pm2 restart sofia-listener --update-env</code>.</div>
 
       <div class="tip">🆕 <b>Novidades recentes do painel</b> (já valem sem configurar nada — só <code>git pull</code> + reiniciar <code>painel</code>/<code>sofia-listener</code>):
@@ -1016,6 +1118,8 @@ pm2 logs sofia-listener        <span class="c"># espere aparecer "PRONTA"</span>
           <li>🎂 <b>Aniversário nos grupos mais resistente</b> (só <code>git pull</code>): os jobs que leem o EVO por dentro (aniversariantes, ausentes, renovações, planilha) agora <b>dispensam sozinhos</b> o popup “Nova funcionalidade” que o EVO passou a mostrar por cima das telas antigas — que antes travava a leitura.</li>
           <li>🏷️ <b>Tags certas nas Conversas</b> (reiniciar <code>sofia-listener</code> + <code>painel</code>): algumas conversas apareciam com um <b>número interno do WhatsApp (@lid)</b> e <b>“sem tags”</b>, mesmo com a tag certa em Contatos. A SoFIA agora <b>reconcilia</b> essas conversas com o telefone real (ao conectar e a cada 3h) e o painel <b>casa o contato tolerando o 9º dígito</b> (número com/sem o 9). Resultado: a tag aparece na conversa e no filtro, sem contato duplicado. A grade cheia é <b>consequência da metodologia</b> — nada foi perdido.</li>
           <li>🐢 <b>Grade de horários mais leve no EVO</b> (só <code>git pull</code> no VPS): o cálculo/envio da grade ao formulário passou de “a cada 10 min, 24h” para <b>a cada 60 min (07h–21h)</b> e <b>a cada ~3h de madrugada</b> — boa prática da API do EVO. A grade vale <b>4h</b> no formulário e a vaga é revalidada ao vivo no agendamento, então a aluna não vê “sem horário” por isso.</li>
+          <li>🩹 <b>Auto-recuperação da grade após deploy</b> (só <code>git pull</code> + reiniciar <code>slimfit-exp</code>): o disco da Render é efêmero e apaga a grade enviada a cada deploy — antes o formulário podia ficar <b>até 60 min</b> mostrando “sem horário” / “está demorando mais que o normal”. Agora o VPS <b>confere a grade a cada 2 min</b> e a <b>reenvia na hora</b> se ela sumiu, derrubando essa janela para <b>~2 min</b> sem ninguém precisar rodar nada.</li>
+          <li>🏷️ <b>Renomear o servidor sem travar</b> (só <code>git pull</code> + reiniciar): dá para trocar o <b>nome do host</b> da VPS (ex.: <code>sf.gyn.bueno</code>, <code>sf.bsb.asa-sul</code>) para identificar cada unidade. O Chromium guarda uma trava (<code>SingletonLock</code>) com o nome antigo da máquina e, ao renomear, recusava abrir (robô/SoFIA presos em “Iniciando…”). Agora <b>SoFIA, robô, EVO e Instagram limpam essa trava sozinhos no boot</b> — renomear virou seguro, sem reescanear QR. Útil ao provisionar cada unidade nova.</li>
         </ul>
       </div>
     </div>

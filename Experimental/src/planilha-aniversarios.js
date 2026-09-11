@@ -30,6 +30,7 @@ async function buscarAlunasAniversario() {
 
   const browser = await puppeteer.launch({
     headless: 'new',
+    executablePath: process.env.CHROMIUM_PATH || undefined,  // Chromium do sistema (evita o do puppeteer sem libs)
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--window-size=1366,900'],
     defaultViewport: { width: 1366, height: 900 },
   });

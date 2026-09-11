@@ -6,6 +6,10 @@
 #  modelos (gerando segredos aleatórios) e — na fase --start — sobe o PM2.
 #
 #  USO (rode DE DENTRO da pasta Experimental/, após o git clone):
+#    0) Ao rodar, o script JÁ ATUALIZA o código do Git sozinho (git pull --ff-only)
+#       para instalar com as correções mais recentes. Se o próprio script mudou,
+#       ele se reexecuta na versão nova. Desligue com --no-git-pull. (Best-effort:
+#       se estiver offline/árvore suja, ele avisa e segue com o que está clonado.)
 #    1) Preparação — instala tudo (sistema + deps) e monta os .env com segredos:
 #         bash setup-novo-studio.sh --slug lagosul --studio "Studio SlimFit Lago Sul" --install-deps
 #       (sem --install-deps, ele só instala as deps do projeto e assume que
@@ -20,7 +24,7 @@
 #
 #  FLAGS: --slug (obrigatório) · --studio "Nome" · --install-deps · --evo-ids
 #         --check · --domain <subdominio> · --port <n> · --evo-tenant <slug>
-#         --evo-branch <n> · --start
+#         --evo-branch <n> · --start · --no-git-pull (não atualizar do Git)
 #
 #  EVO POR UNIDADE: --evo-tenant e --evo-branch montam os caminhos que o robô usa
 #  para LER o EVO (grade, faltantes, suspensões). Ache os dois na URL do EVO da
@@ -50,6 +54,8 @@ PAINEL_PORT=""     # --port <n> porta do painel (default 8080; use outra p/ 2ª 
 EVO_TENANT=""      # --evo-tenant <slug> identificador da rede no EVO (na URL; ex.: slimfit)
 EVO_BRANCH=""      # --evo-branch <n> número da unidade no EVO (aparece no caminho; ex.: 15)
 CHECK=0            # --check valida os .env preenchidos (antes do --start)
+AUTO_PULL=1        # atualiza o repo do Git antes de preparar; --no-git-pull desliga
+ORIG_ARGS=("$@")   # guardado p/ reexecutar após a auto-atualização do Git
 while [ $# -gt 0 ]; do
   case "$1" in
     --slug)         SLUG="${2:-}"; shift 2 ;;
@@ -58,6 +64,7 @@ while [ $# -gt 0 ]; do
     --install-deps) INSTALL_DEPS=1; shift ;;
     --evo-ids)      EVO_IDS=1; shift ;;
     --check)        CHECK=1; shift ;;
+    --no-git-pull)  AUTO_PULL=0; shift ;;
     --domain)       DOMAIN="${2:-}"; shift 2 ;;
     --port)         PAINEL_PORT="${2:-}"; shift 2 ;;
     --evo-tenant)   EVO_TENANT="${2:-}"; shift 2 ;;
@@ -90,6 +97,33 @@ fi
 EXP_DIR="$(cd "$(dirname "$0")" && pwd)"     # .../Experimental
 REPO_DIR="$(cd "$EXP_DIR/.." && pwd)"        # raiz do repositório
 CHATBOT_DIR="$REPO_DIR/ChatBot"
+
+# ---- auto-atualização do Git (pega as correções mais recentes) ------------
+# Numa loja NOVA a gente quer instalar já com o código mais atual do GitHub.
+# Fazemos um "git pull --ff-only" ANTES de preparar. Best-effort: se não der
+# (offline, árvore suja, sem upstream), avisa e SEGUE com o que já está clonado
+# — nunca trava a instalação. Se o PRÓPRIO script mudou no pull, reexecuta com a
+# versão nova (o SETUP_JA_ATUALIZOU evita repetir o pull no reexec).
+# Desligue com --no-git-pull se quiser instalar exatamente o que está clonado.
+if [ "$AUTO_PULL" = "1" ] && [ "${SETUP_JA_ATUALIZOU:-}" != "1" ] \
+   && command -v git >/dev/null 2>&1 \
+   && git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  RAMO="$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
+  echo "🔄 Atualizando o código do Git (ramo: ${RAMO:-?})…"
+  ANTES="$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo x)"
+  if git -C "$REPO_DIR" pull --ff-only >/dev/null 2>&1; then
+    DEPOIS="$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo y)"
+    if [ "$ANTES" != "$DEPOIS" ]; then
+      echo "   ✔ código atualizado — reexecutando com a versão nova…"
+      exec env SETUP_JA_ATUALIZOU=1 bash "$0" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
+    fi
+    echo "   ✔ já estava na versão mais recente."
+  else
+    echo "   ⚠️  não consegui atualizar sozinho (offline, árvore suja ou sem upstream)."
+    echo "       Seguindo com o código já clonado. Para atualizar à mão:"
+    echo "       git -C \"$REPO_DIR\" pull --ff-only"
+  fi
+fi
 SOFIA_DIR="${SOFIA_DIR:-$HOME/sofia-data-$SLUG}"   # dados vivos, FORA do repo
 
 P_PAINEL="${SLUG}-painel"
@@ -443,6 +477,9 @@ else
   cat > "$EXP_DIR/.env" <<EOF
 # ===== Identidade =====
 STUDIO_NOME=${STUDIO_NOME:-Studio SlimFit $SLUG}
+# Apelido usado nos nomes dos processos PM2 ($SLUG-exp/$SLUG-painel/$SLUG-sofia).
+# O painel usa isto p/ reiniciar/consultar o robô e a SoFIA DESTA unidade.
+PM2_SLUG=$SLUG
 
 # ===== Painel (HTTP interno; o HTTPS é do Caddy) =====
 PAINEL_PORT=$PAINEL_PORT

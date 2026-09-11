@@ -263,9 +263,27 @@ def _valida(dados):
 
 
 # ================================= rotas =====================================
+# Identidade da unidade na landing do formulário — vem do .env/Render, então o
+# MESMO código serve qualquer unidade. Sem definir, cai no padrão Setor Bueno
+# (retrocompatível: a unidade original não muda). Placeholders %%...%% no index.html.
+def _index_html():
+    with open(os.path.join(BASE, "templates", "index.html"), encoding="utf-8") as f:
+        html = f.read()
+    subs = {
+        "%%UNIDADE%%": os.getenv("FORM_UNIDADE", "Setor Bueno"),
+        "%%ENDERECO%%": os.getenv("FORM_ENDERECO", "R. C-235, 846, Setor Bueno, Goiânia-GO, 74280-130."),
+        "%%MAPS%%": os.getenv("FORM_MAPS_URL", "https://goo.gl/maps/LFBZhkzbCZ5wJ99f6"),
+        "%%WA_FONE%%": (os.getenv("FORM_WHATSAPP", "") or "5562996847251").replace("+", "").replace(" ", ""),
+    }
+    for k, v in subs.items():
+        html = html.replace(k, v)
+    return html
+
+
 @app.get("/")
 def index():
-    resp = make_response(send_from_directory(os.path.join(BASE, "templates"), "index.html"))
+    resp = make_response(_index_html())
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
     if not _eh_bot(request.headers.get("User-Agent")):
         # Cookie por visitante (pessoa) — persiste 1 ano. Assim "pessoas" < "acessos"
         # (varios F5 da mesma pessoa contam como 1 pessoa).
@@ -604,26 +622,16 @@ def api_book():
     except Exception:
         app.logger.exception("Falha ao checar experimental existente (libero o agendamento)")
 
-    # revalida a vaga no momento do envio (regra do formulário: ocupation <= 7)
-    try:
-        slots = available_slots(evo=evo, days=FORM_DAYS, max_ocupacao=FORM_MAX_OCUPACAO)
-    except Exception as e:
-        app.logger.exception("Falha ao revalidar grade")
-        return jsonify({"ok": False, "erro": f"Erro ao consultar a agenda: {e}"}), 502
-
-    escolha = next((s for s in slots
-                    if str(s["idConfiguration"]) == str(id_config)
-                    and s["activityDate"] == activity_date), None)
-    if not escolha:
-        return jsonify({"ok": False, "erro": "Esse horário não está mais na grade. Atualize e escolha outro."}), 409
-    if not escolha["disponivel"]:
-        return jsonify({"ok": False, "erro": "Esse horário acabou de lotar. Escolha outro, por favor."}), 409
-
-    # cadastro + venda + matrícula no EVO
+    # cadastro + venda + matrícula no EVO. A vaga do horário escolhido é revalidada
+    # DENTRO do book_experimental (ele já busca a turma daquele horário e aplica o
+    # teto de ocupação via max_ocupacao) — bem mais rápido que recalcular a grade
+    # inteira aqui, que deixava o envio ~1 min. Se lotou/passou do teto/não existe
+    # mais, ele levanta TurmaLotadaError (tratado abaixo).
     try:
         res = book_experimental(
             name=limpo["nome"], when=activity_date, email=limpo["email"],
             phone=limpo["telefone"], document=limpo["cpf"], birthday=limpo["nascimento"],
+            max_ocupacao=FORM_MAX_OCUPACAO,
             evo=evo,
         )
     except TurmaLotadaError:

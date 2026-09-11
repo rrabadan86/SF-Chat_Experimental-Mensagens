@@ -23,7 +23,56 @@ const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
 const atividade = require('./atividade'); // registro do que foi enviado (aba "Hoje")
 
-const AUTH_DIR = process.env.WA_AUTH_DIR || path.resolve(__dirname, '..', 'wwebjs_auth');
+// Pasta da SESSÃO do WhatsApp (LocalAuth). Precisa ser um caminho ESTÁVEL — se
+// mudar entre um boot e outro, o robô "esquece" o login e pede QR de novo.
+// Armadilha real (aconteceu ao migrar uma unidade): WA_AUTH_DIR=./.wwebjs_auth é
+// RELATIVO. Um caminho relativo é resolvido a partir do cwd do processo; o pm2
+// pode reiniciar o robô com um cwd DIFERENTE daquele em que o QR foi escaneado,
+// e aí ./.wwebjs_auth aponta para uma pasta VAZIA → cai o WhatsApp a cada
+// restart. Solução: ancorar caminhos relativos na pasta do Experimental (fixa,
+// derivada da localização deste arquivo), NUNCA no cwd. Absolutos passam direto.
+// E, se já existir uma sessão no caminho antigo (relativo ao cwd), continuamos
+// usando-a — assim ninguém precisa reescanear ao atualizar.
+const AUTH_DIR = (() => {
+  const base = path.resolve(__dirname, '..');            // .../Experimental
+  const env = (process.env.WA_AUTH_DIR || '').trim();
+  if (!env) return path.resolve(base, 'wwebjs_auth');
+  if (path.isAbsolute(env)) return env;
+  const ancorado = path.resolve(base, env);              // estável (não depende do cwd)
+  const relCwd = path.resolve(process.cwd(), env);       // comportamento antigo
+  if (ancorado !== relCwd) {
+    try {
+      const fs = require('fs');
+      const temSessao = (d) => fs.existsSync(d) && fs.readdirSync(d).some((n) => n.startsWith('session'));
+      if (!temSessao(ancorado) && temSessao(relCwd)) return relCwd; // preserva a sessão já existente
+    } catch (_) {}
+  }
+  return ancorado;
+})();
+
+// TRAVA DO CHROMIUM (SingletonLock/Cookie/Socket): dentro da pasta de sessão o
+// Chromium grava um "SingletonLock" com NOME-DA-MÁQUINA + PID de quem abriu o
+// perfil. Se o processo cair sem fechar limpo — OU se o HOSTNAME do VPS mudar —
+// o Chromium lê a trava, vê um nome de máquina diferente do atual e RECUSA abrir
+// ("profile appears to be in use ... on another computer"), com "Failed to launch
+// the browser process: Code: 21". Aí o robô fica preso em "Iniciando…" e nunca
+// conecta. Apagar a trava é seguro: NÃO é a sessão do WhatsApp (o login fica em
+// Default/); o Chromium recria a trava ao subir. Fazemos isso antes de iniciar o
+// cliente, então uma troca de nome do servidor (comum ao provisionar novas
+// unidades) ou uma queda suja se conserta sozinha, sem reescanear o QR.
+function limparTravaSingleton() {
+  const fs = require('fs');
+  try {
+    if (!fs.existsSync(AUTH_DIR)) return;
+    for (const nome of fs.readdirSync(AUTH_DIR)) {
+      if (!nome.startsWith('session')) continue;       // session ou session-<clientId>
+      const perfil = path.join(AUTH_DIR, nome);
+      for (const trava of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+        try { fs.rmSync(path.join(perfil, trava), { force: true }); } catch (_) {}
+      }
+    }
+  } catch (_) {}
+}
 // whatsapp-web.js roda bem headless; deixe WA_HEADLESS=false só se quiser com tela (xvfb).
 const HEADLESS = process.env.WA_HEADLESS !== 'false';
 const CHROMIUM_PATH = process.env.CHROMIUM_PATH || undefined;
@@ -184,6 +233,7 @@ function criarClient() {
  */
 function initWhatsApp() {
   if (initPromise) return initPromise;
+  limparTravaSingleton(); // remove trava velha do Chromium (queda suja OU troca de nome do host)
   client = criarClient();
   iniciarWatcherComando(); // escuta o pedido de "desconectar" vindo do painel
 

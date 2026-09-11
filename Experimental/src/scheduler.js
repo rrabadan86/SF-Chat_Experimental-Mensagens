@@ -6,6 +6,7 @@ const keepAwake = require('./keep-awake');
 const { runFollowupMorning, runFollowupAfternoon } = require('./followup-experimental');
 const { runNoShowMorning, runNoShowAfternoon } = require('./follow-up-no-show');
 const { pullConfirmacoesNuvem } = require('./pull-confirmacoes-nuvem');
+const { estadoGradeNuvem } = require('./verificar-grade-nuvem');
 const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
 const atividade = require('./atividade'); // registro do que o robô fez (aba "Hoje")
 const igcfg = require('./instagram-config'); // liga/desliga o Instagram pelo painel
@@ -18,14 +19,19 @@ const LOG_DIR = path.resolve(__dirname, '..', 'logs');
 
 // Calcula a grade de horários (script Python, rápido no VPS) e a envia pronta ao
 // formulário na Render. Processo separado e leve — não usa o navegador/WhatsApp.
-function runSlotsPush() {
+let _slotsPushRunning = false; // evita dois push_slots.py ao mesmo tempo
+function runSlotsPush(motivo) {
+  if (_slotsPushRunning) return;            // já há um envio em andamento
+  _slotsPushRunning = true;
   const dir = path.resolve(__dirname, 'agendamento_evo');
   const script = path.join(dir, 'push_slots.py');
   const py = process.env.PYTHON_BIN || 'python3';
+  const tag = motivo ? ` (${motivo})` : '';
   execFile(py, [script], { cwd: dir, timeout: 120000 }, (err, stdout, stderr) => {
+    _slotsPushRunning = false;
     const out = (stdout || stderr || '').trim();
-    if (err) { logError('Grade→formulário (push_slots)', err); if (out) console.log('   ' + out); return; }
-    log('🗓️  ' + (out || 'grade enviada ao formulário'));
+    if (err) { logError('Grade→formulário (push_slots)' + tag, err); if (out) console.log('   ' + out); return; }
+    log('🗓️  ' + (out || 'grade enviada ao formulário') + tag);
   });
 }
 
@@ -1082,6 +1088,39 @@ async function main() {
 
   log('📡 Ponte de confirmações (nuvem) agendada: a cada 1 min');
   console.log('   → Puxa as marcações do formulário (Render) p/ confirmacoes_outbox.jsonl');
+
+  // ─── Auto-recuperação da grade do formulário ───────────────────────────────
+  // O Render free tem disco efêmero: a cada deploy/reinício, a grade EMPURRADA
+  // pelo VPS (slots_pushed.json) some, e até o próximo push agendado (60 min de
+  // dia) o form cai no cálculo local (lento) → aluna vê "sem horário".
+  // Aqui o VPS confere a cada 2 min se a grade está presente no form; se sumiu,
+  // reenvia NA HORA — fechando essa janela para ~2 min em vez de até 60.
+  let verificandoGrade = false;
+  let ultimaRecuperacao = 0;                 // p/ não reenviar em rajada
+  const RECUPERA_INTERVALO_MIN = 5 * 60 * 1000; // no máx. 1 recuperação a cada 5 min
+  const conferirGradeNuvem = async () => {
+    if (verificandoGrade) return;
+    verificandoGrade = true;
+    try {
+      const est = await estadoGradeNuvem();
+      // Só age quando o form RESPONDEU e está SEM a grade do VPS. Se o fetch
+      // falhou (cold start/queda), não empurra — o pinger acorda o Render e a
+      // próxima passada vê o estado real.
+      if (est.respondeu && !est.presente && !_slotsPushRunning
+          && (Date.now() - ultimaRecuperacao) > RECUPERA_INTERVALO_MIN) {
+        ultimaRecuperacao = Date.now();
+        log(`🩹 Grade do formulário sem a versão do VPS (fonte="${est.fonte || 'nenhuma'}") — reenviando na hora`);
+        runSlotsPush('auto-recuperação');
+      }
+    } catch (err) {
+      logError('Auto-recuperação da grade (nuvem)', err);
+    } finally {
+      verificandoGrade = false;
+    }
+  };
+  cron.schedule('*/2 * * * *', conferirGradeNuvem, { timezone: 'America/Sao_Paulo' });
+  setTimeout(conferirGradeNuvem, 40000); // uma verificação no boot (após estabilizar)
+  log('🩹 Auto-recuperação da grade do formulário agendada: a cada 2 min');
 
   // Indicadores do formulário (acessos/agendamentos) — puxa a cada 2 min e grava
   // em data/indicadores.json (aba Indicadores do painel). Best-effort, leve.

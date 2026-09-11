@@ -39,6 +39,20 @@ const auditoria = require('./auditoria');
 const config = require('./config'); // STUDIO_NOME etc.
 const https = require('https');
 
+// ── Nomes dos processos no PM2 (por unidade) ────────────────────────────────
+// Cada studio tem os seus: <slug>-exp, <slug>-painel, <slug>-sofia. O painel usa
+// esses nomes para reiniciar/consultar o robô e a SoFIA. Antes ficavam FIXOS como
+// "slimfit-exp"/"sofia-listener" (Setor Bueno) — aí, numa unidade nova (ex.: Lago
+// Sul = lagosul1-exp), o botão "Reiniciar robô" e o restart pós-salvar apontavam
+// para o processo ERRADO (o do Bueno) e falhavam. Agora vêm do .env:
+//   PM2_SLUG=lagosul1   → deriva lagosul1-exp / lagosul1-painel / lagosul1-sofia
+// ou, se precisar, os nomes exatos: PM2_APP_EXP / PM2_APP_PAINEL / PM2_APP_SOFIA.
+// Sem nada no .env, mantém os nomes legados do Bueno (nada muda lá).
+const _pm2Slug = (process.env.PM2_SLUG || '').trim();
+const PM2_EXP = (process.env.PM2_APP_EXP || (_pm2Slug ? _pm2Slug + '-exp' : 'slimfit-exp')).trim();
+const PM2_PAINEL = (process.env.PM2_APP_PAINEL || (_pm2Slug ? _pm2Slug + '-painel' : 'slimfit-painel')).trim();
+const PM2_SOFIA = (process.env.PM2_APP_SOFIA || (_pm2Slug ? _pm2Slug + '-sofia' : 'sofia-listener')).trim();
+
 // ── Cotação do dólar (US$ → R$) para mostrar o custo da IA em reais ──────────
 // Busca a cotação atual numa API pública (awesomeapi), com cache em memória +
 // arquivo e fallback. Não bloqueia a página: usa o valor em cache e atualiza
@@ -793,6 +807,23 @@ function barraTeste() {
     <p class="quando" style="margin:6px 0 0">Usado pelos botões <b>Enviar teste</b>. Fica salvo só neste navegador. A prévia usa valores de exemplo (ex.: nome → <i>Maria</i>).</p>
   </div>`;
 }
+
+// Card "Código do EVO (2FA)" — plano B da autenticação em duas etapas do EVO.
+// Fica DISCRETO quando não há nada pendente; ACENDE quando o robô está tentando
+// entrar no EVO e o código veio por e-mail. A recepção digita o código aqui e o
+// robô o recebe (via arquivo compartilhado data/evo-2fa-codigo.json). O caminho
+// principal (autenticador/TOTP) é automático — este campo é só a rede de segurança.
+function card2FA() {
+  return `<div class="card" id="card2fa" style="border-left:4px solid #d7d2cb">
+    <div class="chead" style="margin-bottom:2px"><h2 style="font-size:.98rem">🔐 Código do EVO (2FA)</h2><span id="c2faSt" class="pill" style="margin-left:auto;font-size:var(--fs-xs)">nada pendente</span></div>
+    <p class="quando" id="c2faHint" style="margin:2px 0 8px">Só é usado quando o robô precisa entrar no EVO e o código vem por <b>e-mail</b>. Quando isso acontecer, aparece um aviso aqui (e no seu celular): pegue o código no e-mail do usuário do robô e digite abaixo. No dia a dia o robô resolve o 2FA sozinho (pelo autenticador) e este campo fica quieto.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="c2faInp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" maxlength="8" style="max-width:160px;letter-spacing:3px;font-size:1.15rem;text-align:center">
+      <button type="button" class="save" id="c2faBtn" onclick="enviar2FA()" style="padding:8px 18px">Enviar</button>
+      <span id="c2faMsg" class="quando" style="margin:0"></span>
+    </div>
+  </div>`;
+}
 // Script de pré-visualizar/enviar teste + inserir variável (compartilhado).
 function scriptPreviewTeste() {
   const exemplosJson = JSON.stringify(mensagens.exemplosCompletos()).replace(/</g, '\\u003c');
@@ -978,7 +1009,7 @@ function blocoWaRobo() {
   if (st.estado === 'desconectado') {
     return `<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>O robô está tentando reconectar sozinho. Se aparecer um QR aqui, escaneie.</p></div>`;
   }
-  return `<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>Confira se o robô (<code>slimfit-exp</code>) está rodando.</p></div>`;
+  return `<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>Confira se o robô (<code>${esc(PM2_EXP)}</code>) está rodando.</p></div>`;
 }
 
 // Sub-navegação da aba WhatsApp Mensagens: Configuração (mensagens/horários),
@@ -1073,6 +1104,7 @@ function paginaMensagens(aviso, erro) {
     </div>
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
+    ${card2FA()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
     <div class="sec-t">Mensagens individuais <small style="font-weight:600;color:var(--cinza)">(enviadas 1 para 1, direto para a aluna)</small></div>
     ${itensIndividuais}
@@ -1094,7 +1126,7 @@ ${scriptPreviewTeste()}
     if(e==='qr' && st.qr) return '<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR para reconectar</h2><p>A sessão caiu. No <b>celular do Studio</b>: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte a câmera para o código.</p><img class="qr" src="'+st.qr+'" alt="QR do WhatsApp"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira ✅.</p></div>';
     if(e==='iniciando') return '<div class="wa-card"><div class="wa-ic">⏳</div><h2>Iniciando…</h2><p>O robô está subindo a conexão. Se precisar de QR, ele aparece aqui.</p></div>';
     if(e==='desconectado') return '<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>O robô está tentando reconectar sozinho. Se aparecer um QR aqui, escaneie.</p></div>';
-    return '<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>Confira se o robô (slimfit-exp) está rodando.</p></div>';
+    return '<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>Confira se o robô (${PM2_EXP}) está rodando.</p></div>';
   }
   function atualizaWa(){
     fetch('/wa/estado').then(function(r){return r.json();}).then(function(st){
@@ -1103,6 +1135,38 @@ ${scriptPreviewTeste()}
     }).catch(function(){});
   }
   atualizaWa(); setInterval(atualizaWa, 7000);
+
+  // ── Código do EVO (2FA) — plano B: acende quando o robô está esperando ──────
+  function pintar2fa(p){
+    var card=document.getElementById('card2fa'), st=document.getElementById('c2faSt'), hint=document.getElementById('c2faHint');
+    if(!card) return;
+    if(p && p.pedido){
+      card.style.borderLeftColor='#e05a2b'; card.style.background='#fff7f2';
+      st.textContent='⏳ o robô está esperando'; st.style.background='#ffd9c7'; st.style.color='#a12626';
+      hint.innerHTML='⚠️ <b>O robô está tentando entrar no EVO e precisa do código.</b> '+(p.motivo==='email'?'O EVO mandou por <b>e-mail</b> do usuário do robô — abra o e-mail, copie o código de 6 dígitos e digite abaixo.':'Digite o código de verificação do EVO abaixo.');
+      var inp=document.getElementById('c2faInp'); if(inp && document.activeElement!==inp){ try{inp.focus();}catch(_){}}
+    } else {
+      card.style.borderLeftColor='#d7d2cb'; card.style.background='';
+      st.textContent='nada pendente'; st.style.background=''; st.style.color='';
+      hint.innerHTML='Só é usado quando o robô precisa entrar no EVO e o código vem por <b>e-mail</b>. Quando isso acontecer, aparece um aviso aqui (e no seu celular): pegue o código no e-mail do usuário do robô e digite abaixo. No dia a dia o robô resolve o 2FA sozinho (pelo autenticador) e este campo fica quieto.';
+    }
+  }
+  function atualiza2fa(){ fetch('/wa/2fa/estado').then(function(r){return r.json();}).then(pintar2fa).catch(function(){}); }
+  async function enviar2FA(){
+    var inp=document.getElementById('c2faInp'), msg=document.getElementById('c2faMsg'), btn=document.getElementById('c2faBtn');
+    var cod=(inp.value||'').replace(/\D/g,'');
+    if(cod.length<4){ msg.textContent='Digite o código (4 a 8 dígitos).'; msg.style.color='#a12626'; inp.focus(); return; }
+    btn.disabled=true; msg.style.color=''; msg.textContent='Enviando ao robô…';
+    try{
+      var r=await fetch('/wa/2fa/codigo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo:cod})});
+      var d=await r.json();
+      if(d.ok){ msg.textContent='✅ Código enviado — o robô vai usar em instantes.'; msg.style.color='#1a7f37'; inp.value=''; }
+      else { msg.textContent='⚠️ '+(d.erro||'Falha ao enviar.'); msg.style.color='#a12626'; }
+    }catch(e){ msg.textContent='⚠️ '+(e.message||'Falha.'); msg.style.color='#a12626'; }
+    finally{ btn.disabled=false; }
+  }
+  window.enviar2FA=enviar2FA;
+  atualiza2fa(); setInterval(atualiza2fa, 5000);
 </script>`;
   return chrome({ tab: 'WhatsApp Mensagens', h1: 'WhatsApp — mensagens do robô', p: 'Conexão, texto e horário de cada envio no mesmo lugar.' }, 'msg', corpo);
 }
@@ -1418,7 +1482,7 @@ function paginaWa() {
   } else if (st.estado === 'desconectado') {
     bloco = `<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>O robô está tentando reconectar sozinho. Se aparecer um QR aqui em instantes, escaneie; senão, a reconexão automática costuma resolver.</p></div>`;
   } else {
-    bloco = `<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>O robô ainda não gravou o estado. Verifique se o <code>slimfit-exp</code> está rodando (<code>pm2 status</code>).</p></div>`;
+    bloco = `<div class="wa-card"><div class="wa-ic">❔</div><h2>Sem informação ainda</h2><p>O robô ainda não gravou o estado. Verifique se o <code>${esc(PM2_EXP)}</code> está rodando (<code>pm2 status</code>).</p></div>`;
   }
   const reload = st.estado === 'conectado' ? '' : '<script>setTimeout(function(){location.reload()},6000)</script>';
   const corpo = `<div class="wrap">${bloco}<p class="wa-upd">Última atualização do robô: ${esc(quando)}</p></div>${reload}`;
@@ -3758,7 +3822,7 @@ function paginaSofia(aviso, erro) {
     const corpo = `<div class="wrap">
       ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
       <div class="card"><div class="chead"><h2>SoFIA não encontrada nesta máquina</h2></div>
-        <p class="quando">Não achei a pasta da SoFIA (<code>${esc(sofia.DIR)}</code>) ou o arquivo do prompt. Se a SoFIA roda em outra pasta/servidor, aponte com a variável <code>SOFIA_DIR</code> no <code>.env</code> do painel e reinicie: <code>pm2 restart slimfit-painel --update-env</code>.</p>
+        <p class="quando">Não achei a pasta da SoFIA (<code>${esc(sofia.DIR)}</code>) ou o arquivo do prompt. Se a SoFIA roda em outra pasta/servidor, aponte com a variável <code>SOFIA_DIR</code> no <code>.env</code> do painel e reinicie: <code>pm2 restart ${esc(PM2_PAINEL)} --update-env</code>.</p>
       </div></div>`;
     return chrome({ tab: 'SoFIA', h1: 'SoFIA', p: 'Prompt, configurações e conexão do chatbot.' }, 'sofia', corpo);
   }
@@ -3881,7 +3945,7 @@ function paginaSofia(aviso, erro) {
             <select name="modeloExtracao" style="width:100%;padding:9px">${e.modelosValidos.map(m => `<option value="${esc(m.id)}"${m.id === e.modelos.extracao ? ' selected' : ''}>${esc(m.rot)}</option>`).join('')}</select>
           </div>
         </div>
-        <p class="quando" style="margin:8px 0 0">Modelos maiores custam mais por conversa. A troca vale <b>após reiniciar a SoFIA</b> (<code>pm2 restart sofia-listener</code>).</p>
+        <p class="quando" style="margin:8px 0 0">Modelos maiores custam mais por conversa. A troca vale <b>após reiniciar a SoFIA</b> (<code>pm2 restart ${esc(PM2_SOFIA)}</code>).</p>
         <hr style="border:0;border-top:1px solid var(--linha);margin:14px 0 12px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" name="transcricaoOn" value="1"${e.transcricaoOn ? ' checked' : ''} style="width:auto;margin:0">
@@ -4132,7 +4196,7 @@ function paginaSofia(aviso, erro) {
     if(e==='qr' && st.qr) return '<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR da SoFIA</h2><p>Este é o WhatsApp <b>da SoFIA</b> (número próprio, diferente do robô de mensagens). No celular do número da SoFIA: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte para o código.</p><img class="qr" src="'+st.qr+'" alt="QR da SoFIA"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira “🤖 conectado”.</p></div>';
     if(e==='iniciando') return '<div class="wa-card"><div class="wa-ic">⏳</div><h2>Iniciando…</h2><p>Subindo a conexão da SoFIA. Se precisar de QR, ele aparece aqui.</p></div>';
     if(e==='desconectado') return '<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>A SoFIA caiu. Se aparecer um QR aqui, escaneie de novo.</p></div>';
-    return '<div class="wa-card"><div class="wa-ic">❔</div><h2>Conexão da SoFIA — sem informação</h2><p>O processo da SoFIA (sofia-listener) precisa estar rodando e publicando o estado.</p></div>';
+    return '<div class="wa-card"><div class="wa-ic">❔</div><h2>Conexão da SoFIA — sem informação</h2><p>O processo da SoFIA (${PM2_SOFIA}) precisa estar rodando e publicando o estado.</p></div>';
   }
   function atualizaSofiaWa(){
     fetch('/sofia/estado',{cache:'no-store'}).then(function(r){return r.json();}).then(function(st){
@@ -4705,7 +4769,7 @@ function paginaSaude(list) {
   const pillTxt = { ok: '🟢 OK', warn: '🟡 Atenção', erro: '🔴 Problema' };
 
   // Robô de mensagens (slimfit-exp) + WhatsApp do robô.
-  const pExp = proc('slimfit-exp');
+  const pExp = proc(PM2_EXP);
   const waR = (() => { try { return waStatus.get() || {}; } catch (_) { return {}; } })();
   const waRid = fmtIdadeSaude(waR.atualizadoEm);
   const waRcor = waR.estado === 'conectado' ? 'ok' : (waR.estado === 'qr' || waR.estado === 'desconectado') ? 'erro' : 'warn';
@@ -4716,7 +4780,7 @@ function paginaSaude(list) {
   ]);
 
   // SoFIA (sofia-listener) + WhatsApp da SoFIA.
-  const pSof = proc('sofia-listener');
+  const pSof = proc(PM2_SOFIA);
   const waS = (() => { try { return sofia.waStatus() || {}; } catch (_) { return {}; } })();
   const waSid = fmtIdadeSaude(waS.atualizadoEm);
   const waScor = waS.estado === 'conectado' ? 'ok' : (waS.estado === 'qr' || waS.estado === 'desconectado') ? 'erro' : 'warn';
@@ -4826,7 +4890,17 @@ const server = http.createServer((req, res) => {
     }
     if (req.method === 'POST') {
       return lerCorpo(req, 1e6, corpo => {
-        if (!igApi.assinaturaValida(corpo, req.headers['x-hub-signature-256'])) { res.writeHead(403, { 'Content-Type': 'text/plain' }); return res.end('bad signature'); }
+        // DEBUG TEMPORÁRIO: registra TODO webhook que chega, para diagnosticar por
+        // que o comentário "não aparece". Mostra tamanho, se a assinatura confere e
+        // o "object" (se vier "page" em vez de "instagram", o processar ignora). Pode
+        // remover depois que o recebimento estiver confirmado.
+        const assinOk = igApi.assinaturaValida(corpo, req.headers['x-hub-signature-256']);
+        let dbg = null; try { dbg = JSON.parse(corpo); } catch (_) {}
+        const resumo = dbg ? `object=${dbg.object} entradas=${Array.isArray(dbg.entry) ? dbg.entry.length : 0}`
+          + (dbg.entry && dbg.entry[0] ? ` changes=${(dbg.entry[0].changes || []).map(c => c.field).join(',') || '-'} messaging=${(dbg.entry[0].messaging || []).length}` : '')
+          : '(corpo não-JSON)';
+        console.log(`[ig-webhook] POST ${corpo.length}B assinatura=${assinOk ? 'ok' : 'INVALIDA'} ${resumo}`);
+        if (!assinOk) { res.writeHead(403, { 'Content-Type': 'text/plain' }); return res.end('bad signature'); }
         res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('EVENT_RECEIVED'); // responde rápido; processa depois
         let body = null; try { body = JSON.parse(corpo); } catch (_) { body = null; }
         if (body) igApi.processar(body).catch(e => console.log('[ig-api] processar:', e.message));
@@ -4989,8 +5063,8 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horários salvos e robô reiniciado. Já valem.';
     else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. O robô vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
     else if (/(?:^|&)oksof=1/.test(q)) aviso = '🔄 Robô reiniciando… ele volta ao ar em ~1 minuto (o selo do WhatsApp acima mostra quando reconectar).';
-    else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar o robô pelo painel. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
-    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
+    else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar o robô pelo painel. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
+    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
     // Só a sub-aba permitida; se pediu uma sem acesso, cai na primeira permitida.
     // "Express" é a tela unificada (Express + Agendar mensagem); view=agendar cai nela.
     const podeMerged = podeMsgSub(sess, 'express') || podeMsgSub(sess, 'agendar');
@@ -5087,7 +5161,7 @@ const server = http.createServer((req, res) => {
     let aviso = '', erro = false;
     if (/(?:^|&)ok=1/.test(q)) aviso = 'Agendamento salvo! Será enviado no dia e turno escolhidos.';
     else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horários salvos e robô reiniciado. Já valem.';
-    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
+    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(paginaExpress(aviso, erro)); // /agendar (link antigo) → tela unificada Express
   }
@@ -5144,7 +5218,7 @@ const server = http.createServer((req, res) => {
         return res.end(voltar === '/agendar' ? paginaExpress(msg, true) : voltar === '/instagram' ? paginaInstagram(msg, true) : paginaMensagens(msg, true));
       }
       // Reinicia o robô para reagendar os jobs com os novos horários.
-      exec('pm2 restart slimfit-exp --update-env', { timeout: 25000 }, (err) => {
+      exec('pm2 restart ' + PM2_EXP + ' --update-env', { timeout: 25000 }, (err) => {
         res.writeHead(303, { Location: voltar + (err ? '?errh=1' : '?okh=1') }); res.end();
       });
     });
@@ -5203,12 +5277,12 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)lote=/.test(q)) aviso = `🏷️ ${(q.match(/lote=(\d+)/) || [])[1] || '0'} contato(s) atualizado(s) em lote.`;
     else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. A SoFIA vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
     else if (/(?:^|&)oksof=1/.test(q)) aviso = '🔄 SoFIA reiniciando… ela volta ao ar em ~1 minuto (o selo do WhatsApp acima mostra quando reconectar). Modelo e transcrição já valem.';
-    else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar a SoFIA pelo painel. Rode no servidor: pm2 restart sofia-listener'; erro = true; }
+    else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar a SoFIA pelo painel. Rode no servidor: pm2 restart ' + PM2_SOFIA; erro = true; }
     else if (/(?:^|&)okc=criada/.test(q)) aviso = '📣 Campanha criada! A IA está gerando as variações. Quando ficar “pronta”, clique em ▶️ Iniciar para começar o envio.';
     else if (/(?:^|&)okah=1/.test(q)) aviso = 'Aviso "precisa de humano" salvo.';
     else if (/(?:^|&)okalu=1/.test(q)) aviso = '🎓 Regras das alunas salvas! Valem na hora.';
     else if (/(?:^|&)oknr=\d+/.test(q)) aviso = '🔕 Lista de "não responder" salva (' + ((q.match(/oknr=(\d+)/) || [])[1] || '0') + ' número(s)).';
-    else if (/(?:^|&)okcmp=1/.test(q) && /(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Config salva, mas não consegui reiniciar o robô p/ aplicar o novo horário. Rode no servidor: pm2 restart slimfit-exp'; erro = true; }
+    else if (/(?:^|&)okcmp=1/.test(q) && /(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Config salva, mas não consegui reiniciar o robô p/ aplicar o novo horário. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
     else if (/(?:^|&)okcmp=1/.test(q)) aviso = 'Config de presença (troca de tags) salva.';
     else if (/(?:^|&)okc=ok/.test(q)) aviso = '✔️ Feito.';
     else if (/(?:^|&)errc=/.test(q)) { aviso = decodeURIComponent((q.match(/errc=([^&]*)/) || [])[1] || 'Erro na campanha.'); erro = true; }
@@ -5644,7 +5718,7 @@ const server = http.createServer((req, res) => {
         catch (_) { /* horário inválido → ignora, mantém o atual */ }
       }
       if (!mudouHora) { res.writeHead(303, { Location: '/sofia?view=tags&okcmp=1' }); return res.end(); }
-      exec('pm2 restart slimfit-exp --update-env', { timeout: 25000 }, (err) => {
+      exec('pm2 restart ' + PM2_EXP + ' --update-env', { timeout: 25000 }, (err) => {
         res.writeHead(303, { Location: '/sofia?view=tags&okcmp=1' + (err ? '&errh=1' : '') }); res.end();
       });
     });
@@ -5725,7 +5799,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url === '/sofia/reiniciar') {
     return lerCorpo(req, 1e5, () => {
       try { auditoria.registrar(sess.usuario, 'sofia.reiniciar', 'SoFIA', ''); } catch (_) {}
-      exec('pm2 restart sofia-listener --update-env', { timeout: 25000 }, (err) => {
+      exec('pm2 restart ' + PM2_SOFIA + ' --update-env', { timeout: 25000 }, (err) => {
         res.writeHead(303, { Location: '/sofia?' + (err ? 'errsof=1' : 'oksof=1') }); res.end();
       });
     });
@@ -5959,7 +6033,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)ck=\d/.test(q)) aviso = '🍪 Cookies importados (' + (q.match(/ck=(\d+)/) || [])[1] + '). A sessão do Instagram foi renovada — vale na próxima execução.';
     else if (/(?:^|&)ok=1/.test(q)) aviso = 'Mensagem salva! Já vale no próximo envio.';
     else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horário salvo e robô reiniciado. Já vale.';
-    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horário salvo, mas não consegui reiniciar o robô. Rode: pm2 restart slimfit-exp'; erro = true; }
+    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horário salvo, mas não consegui reiniciar o robô. Rode: pm2 restart ' + PM2_EXP; erro = true; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(paginaInstagram(aviso, erro));
   }
@@ -6064,6 +6138,42 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify({ estado: st.estado || '', qr: st.qr || '', atualizadoEm: st.atualizadoEm || '' }));
   }
+
+  // ── Código do EVO (2FA) — plano B (humano digita o código pelo painel) ──────
+  // Handshake por arquivo com o robô: o robô grava "evo-2fa-pedido.json" quando
+  // precisa de um código (ex.: o EVO mandou por e-mail) e lê "evo-2fa-codigo.json"
+  // que o painel grava aqui. Mesmos nomes usados em src/evo-totp.js.
+  if (url === '/wa/2fa/estado' || url === '/wa/2fa/codigo') {
+    const p = require('path');
+    const PEDIDO_2FA = p.join(__dirname, '..', 'data', 'evo-2fa-pedido.json');
+    const CODIGO_2FA = p.join(__dirname, '..', 'data', 'evo-2fa-codigo.json');
+    // Estado: há um pedido do robô AINDA válido (não expirado)?
+    if (req.method === 'GET' && url === '/wa/2fa/estado') {
+      let pedido = false, motivo = '';
+      try {
+        const o = JSON.parse(fs.readFileSync(PEDIDO_2FA, 'utf8'));
+        if (o && (!o.expiraEm || Date.now() < o.expiraEm)) { pedido = true; motivo = o.motivo || ''; }
+      } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ pedido, motivo }));
+    }
+    // Recebe o código digitado e grava para o robô ler.
+    if (req.method === 'POST' && url === '/wa/2fa/codigo') {
+      return lerCorpo(req, 1e4, (corpo) => {
+        let cod = '';
+        try { cod = String((JSON.parse(corpo) || {}).codigo || '').replace(/\D/g, ''); } catch (_) {}
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        if (cod.length < 4 || cod.length > 8) return res.end(JSON.stringify({ ok: false, erro: 'Código deve ter de 4 a 8 dígitos.' }));
+        try {
+          fs.mkdirSync(p.dirname(CODIGO_2FA), { recursive: true });
+          fs.writeFileSync(CODIGO_2FA, JSON.stringify({ codigo: cod, em: Date.now() }), 'utf8');
+        } catch (e) { return res.end(JSON.stringify({ ok: false, erro: 'Não consegui salvar o código.' })); }
+        try { auditoria.registrar(sess.usuario, 'evo.2fa', 'Código do EVO (2FA) enviado ao robô', ''); } catch (_) {}
+        return res.end(JSON.stringify({ ok: true }));
+      });
+    }
+  }
+
   // Desconectar o WhatsApp do robô (grava comando → o robô faz logout e reinicia → QR novo).
   if (req.method === 'POST' && url === '/wa/desconectar') {
     return lerCorpo(req, 1e5, () => {
@@ -6079,8 +6189,8 @@ const server = http.createServer((req, res) => {
   // Reiniciar o robô (pm2 restart slimfit-exp) direto do painel, sem SSH.
   if (req.method === 'POST' && url === '/wa/reiniciar') {
     return lerCorpo(req, 1e5, () => {
-      try { auditoria.registrar(sess.usuario, 'robo.reiniciar', 'Robô (slimfit-exp)', ''); } catch (_) {}
-      exec('pm2 restart slimfit-exp --update-env', { timeout: 25000 }, (err) => {
+      try { auditoria.registrar(sess.usuario, 'robo.reiniciar', 'Robô (' + PM2_EXP + ')', ''); } catch (_) {}
+      exec('pm2 restart ' + PM2_EXP + ' --update-env', { timeout: 25000 }, (err) => {
         res.writeHead(303, { Location: '/?' + (err ? 'errsof=1' : 'oksof=1') }); res.end();
       });
     });

@@ -1,6 +1,7 @@
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const config = require('./config');
+const { preencher2FA } = require('./evo-totp'); // MFA do EVO (autenticador/TOTP)
 
 // Ativa o plugin stealth para evitar detecção Cloudflare
 puppeteer.use(StealthPlugin());
@@ -63,6 +64,17 @@ class EvoScraper {
     const headless = process.env.HEADLESS !== 'false';
     const userDataDir = process.env.EVO_PROFILE_DIR ||
       path.resolve(__dirname, '..', 'evo-chrome-data');
+    // Trava velha do Chromium (SingletonLock/Cookie/Socket): guarda NOME-DA-MÁQUINA
+    // + PID de quem abriu o perfil. Após uma queda suja OU uma troca de HOSTNAME do
+    // VPS, o Chromium vê nome diferente e recusa abrir ("in use ... on another
+    // computer" → "Failed to launch the browser process: Code: 21"). Apagar é seguro
+    // (não é a sessão/cookies; o Chromium recria ao subir) e conserta sozinho.
+    try {
+      const fs = require('fs');
+      for (const t of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+        try { fs.rmSync(path.join(userDataDir, t), { force: true }); } catch (_) {}
+      }
+    } catch (_) {}
     this.browser = await puppeteer.launch({
       headless,
       userDataDir,
@@ -226,6 +238,11 @@ class EvoScraper {
     }
 
     console.log('⏳ Aguardando login...');
+
+    // MFA do EVO (a partir de 30/10/2026): se a tela do autenticador (2FA)
+    // aparecer, digita o código gerado do EVO_TOTP_SECRET e confirma. No-op se
+    // não houver segredo/MFA — então unidades sem MFA seguem iguais.
+    try { await preencher2FA(this.page); } catch (_) {}
 
     // Aguarda navegação para dashboard
     await this.page.waitForFunction(
