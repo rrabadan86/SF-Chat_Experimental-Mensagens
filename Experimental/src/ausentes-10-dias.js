@@ -34,7 +34,7 @@ puppeteer.use(StealthPlugin());
 const GRUPO = require('./grupos').equipe();
 // Rota do CRM > Faltantes (legado "evo3", normalmente dentro de um iframe).
 const FALTANTES_HASH = process.env.EVO_FALTANTES_HASH
-  || '#/app/slimfit/15/evo3/-CRM-Faltantes-Faltantes';
+  || `${config.evo.appBase}/evo3/-CRM-Faltantes-Faltantes`;
 
 const DRY = process.argv.includes('--dry');
 // --diag: despeja o TEXTO COMPLETO do painel de cada aluna em data/ausentes-diag.txt

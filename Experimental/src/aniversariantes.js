@@ -162,7 +162,7 @@ async function buscarAniversariantesHoje() {
 
     // 2. Vai para Segmentação e clica em "Aniversariantes"
     console.log('📂 Navegando para Segmentação...');
-    await page.evaluate(() => { location.hash = '#/app/slimfit/15/clientes/segmentacao/clientes'; });
+    await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
     await sleep(5000);
     await fecharPopupNovaTela(page); // o popup pode reaparecer ao navegar
 

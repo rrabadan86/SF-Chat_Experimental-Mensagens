@@ -17,7 +17,7 @@ puppeteer.use(StealthPlugin());
 //  Saída: data/suspensoes-filtro.txt  +  data/susp-filtro-*.png
 // ═══════════════════════════════════════════════════════════════════════════
 
-const SUSP_HASH = process.env.EVO_SUSPENSOES_HASH || '#/app/slimfit/15/gerencial/suspensoes';
+const SUSP_HASH = process.env.EVO_SUSPENSOES_HASH || `${config.evo.appBase}/gerencial/suspensoes`;
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
 const OUT = path.join(DATA_DIR, 'suspensoes-filtro.txt');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));

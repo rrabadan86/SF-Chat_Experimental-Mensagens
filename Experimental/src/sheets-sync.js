@@ -29,8 +29,11 @@ const path = require('path');
 const CABECALHO = ['ID EVO', 'Nome', 'Aniversário (dd/mm)', 'Ativa?', 'Atualizado em'];
 
 function getConfig() {
-  const spreadsheetId = process.env.SHEETS_ID || '1vTNQSEh9bT23_HhyKMdysM3tzrWc14y3xFnjtgVK95U';
-  const keyFile = process.env.GOOGLE_SA_KEY || 'C:\\SlimfitBot\\service-account.json';
+  // SEM default de planilha: cada unidade define SHEETS_ID no .env. (Antes havia
+  // aqui o ID da planilha do Setor Bueno — uma unidade sem SHEETS_ID acabava
+  // gravando NA PLANILHA DO BUENO. Agora, sem SHEETS_ID, a sincronização é pulada.)
+  const spreadsheetId = process.env.SHEETS_ID || '';
+  const keyFile = process.env.GOOGLE_SA_KEY || './google-sa.json';
   const aba = process.env.SHEETS_ABA || 'Aniversarios';
   return { spreadsheetId, keyFile, aba };
 }
@@ -82,6 +85,7 @@ async function garantirAba(sheets, spreadsheetId, aba) {
  */
 async function sincronizar(alunas) {
   const { spreadsheetId, keyFile, aba } = getConfig();
+  if (!spreadsheetId) { console.log('⏭️  SHEETS_ID não configurado — planilha desativada nesta unidade (pulando).'); return; }
   const sheets = await getSheetsClient(keyFile);
 
   console.log(`\n📗 Sincronizando com Google Sheets (aba "${aba}")...`);
@@ -172,6 +176,7 @@ async function sincronizar(alunas) {
  */
 async function lerValores(rangeA1) {
   const { spreadsheetId, keyFile, aba } = getConfig();
+  if (!spreadsheetId) return []; // SHEETS_ID não configurado nesta unidade
   const sheets = await getSheetsClient(keyFile);
   const range = rangeA1.includes('!') ? rangeA1 : `${aba}!${rangeA1}`;
   const resp = await sheets.spreadsheets.values.get({
