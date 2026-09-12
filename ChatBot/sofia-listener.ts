@@ -432,6 +432,8 @@ function agendarReconciliacaoLids() {
   if (reconAgendada) return; reconAgendada = true;
   setTimeout(() => { reconciliarLidsDormentes().catch(() => {}); }, 45000);            // uma vez, ~45s após conectar (Store já carregado)
   setInterval(() => { reconciliarLidsDormentes().catch(() => {}); }, 3 * 3600 * 1000); // de leve, a cada 3h — pega as que ainda escaparem
+  setTimeout(() => { try { reconciliar9Duplicados(); } catch {} }, 8000);              // funde dupes do 9º dígito logo no boot (não depende do WhatsApp)
+  setInterval(() => { try { reconciliar9Duplicados(); } catch {} }, 3 * 3600 * 1000);  // e de leve, a cada 3h
 }
 
 // Chave de inbox para uma mensagem que NÓS iniciamos (campanha): usa a identidade
@@ -843,6 +845,7 @@ function agendarSalvarInbox() { if (inboxTimer) return; inboxTimer = setTimeout(
 function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMsg["autor"], texto: string, foto?: string, porNome?: string, tipo?: InboxMsg["tipo"]) {
   const t = String(texto || "").trim();
   if (!t && !foto) return;                         // nada de texto e nada de foto → ignora
+  chave = chaveInboxExistente(chave);              // casa a variante do 9º dígito já existente (não duplica o card)
   let c = inbox.get(chave);
   if (!c) { c = { jid: jid || "", nome: nome || "", ultimaEm: 0, msgs: [] }; inbox.set(chave, c); }
   if (jid) c.jid = jid;
@@ -1051,7 +1054,8 @@ function agendarSalvarHistorico() { if (histTimer) return; histTimer = setTimeou
 // com o LID cru como chave (ex.: "101047745941681" no painel), juntamos tudo na
 // conversa do TELEFONE e apagamos a órfã. Assim o painel volta a mostrar sempre
 // o número — inclusive para o que ficou registrado antes de sabermos quem era.
-function fundirConversaLid(lid: string, tel: string) {
+function fundirConversas(origem: string, destino: string, rotulo: string) {
+  const lid = origem, tel = destino;   // aliases: reaproveita a fusão (inbox + histórico) já validada
   try {
     if (!lid || !tel || lid === tel) return;
 
@@ -1085,8 +1089,64 @@ function fundirConversaLid(lid: string, tel: string) {
       agendarSalvarHistorico();
     }
 
-    if (velha || hVelho) log(`conversa do LID ${lid} unida ao telefone ${tel} — o painel passa a mostrar o número.`);
-  } catch (e: any) { log("aviso: não consegui unir a conversa do LID " + lid + ": " + (e?.message || e)); }
+    if (velha || hVelho) log(`conversa ${origem} unida a ${destino} (${rotulo}) — o painel unifica o card.`);
+  } catch (e: any) { log(`aviso: não consegui unir a conversa ${origem}→${destino} (${rotulo}): ` + (e?.message || e)); }
+}
+// Mantém o nome antigo para o caminho do LID (mesmo comportamento de antes).
+function fundirConversaLid(lid: string, tel: string) { fundirConversas(lid, tel, "LID " + lid); }
+
+// ── 9º dígito dos celulares BR (o mesmo número com/sem o 9) ──────────────────
+// O WhatsApp (@c.us) às vezes usa a forma ANTIGA sem o 9 e o cadastro/EVO guarda
+// COM o 9 — aí a mesma pessoa vira DOIS cards nas Conversas. Estas funções casam
+// as duas formas: 55 + DDD + 9 + 8 díg. (13) ⇄ 55 + DDD + 8 díg. (12). Só mexem
+// em chaves que PARECEM telefone BR (12–13 díg. com DDI 55); LIDs (14+) ficam de
+// fora (têm a própria reconciliação) e números diferentes nunca se cruzam.
+function ehTelefoneBR(k: string): boolean { return /^55\d{10,11}$/.test(k); }
+function variantes9Tel(tel: string): string[] {
+  const d = String(tel || "").replace(/\D/g, "");
+  const out = new Set<string>(); if (!d) return [];
+  out.add(d);
+  const m = /^55(\d{2})(\d+)$/.exec(d);
+  if (m) {
+    const ddd = m[1], resto = m[2];
+    if (resto.length === 9 && resto[0] === "9") out.add("55" + ddd + resto.slice(1)); // tira o 9
+    else if (resto.length === 8) out.add("55" + ddd + "9" + resto);                    // põe o 9
+  }
+  return [...out];
+}
+// Se já existe uma conversa numa das variantes do 9, devolve ESSA chave (para o
+// inbound cair no card certo); senão devolve a própria. Evita criar card novo.
+function chaveInboxExistente(chave: string): string {
+  if (!ehTelefoneBR(chave) || inbox.has(chave)) return chave;
+  for (const v of variantes9Tel(chave)) if (v !== chave && inbox.has(v)) return v;
+  return chave;
+}
+// Entre duas variantes, escolhe [origem, destino]: mantém a forma COM o 9 (13
+// díg., a "correta" e a que o cadastro/EVO usam); no empate, a mais recente.
+function escolherOrigemDestino(a: string, b: string): [string, string] {
+  const com9 = /^55\d{2}9\d{8}$/;
+  if (com9.test(a) && !com9.test(b)) return [b, a];
+  if (com9.test(b) && !com9.test(a)) return [a, b];
+  const ua = inbox.get(a)?.ultimaEm || 0, ub = inbox.get(b)?.ultimaEm || 0;
+  return ub >= ua ? [a, b] : [b, a];
+}
+// Varre a inbox e funde pares "mesmo número com/sem 9" num card só. Síncrono e
+// seguro (não fala com o WhatsApp): pode rodar no boot e periodicamente.
+function reconciliar9Duplicados() {
+  try {
+    const chaves = [...inbox.keys()].filter(ehTelefoneBR);
+    const feitos = new Set<string>(); let unidas = 0;
+    for (const k of chaves) {
+      if (feitos.has(k)) continue;
+      for (const v of variantes9Tel(k)) {
+        if (v === k || !inbox.has(v) || feitos.has(v)) continue;
+        const [origem, destino] = escolherOrigemDestino(k, v);
+        fundirConversas(origem, destino, "9º dígito");
+        feitos.add(origem); feitos.add(destino); unidas++;
+      }
+    }
+    if (unidas) log(`🔗 9º dígito: ${unidas} par(es) de conversa unidos (mesmo número com/sem o 9).`);
+  } catch (e: any) { log("aviso: reconciliação do 9º dígito falhou: " + (e?.message || e)); }
 }
 
 function registrarSessao(chave: string, nome: string, autor: string, texto: string, em: number) {
@@ -2092,6 +2152,7 @@ process.on("SIGTERM", sair);
 
 carregarInbox(); // recupera as conversas já registradas (o painel mostra na aba Conversas)
 carregarHistorico(); // recupera o histórico de interações (aba Contatos → Interações)
+reconciliar9Duplicados(); // funde já no boot os cards duplicados do 9º dígito (não depende do WhatsApp)
 // Conserta o que ficou salvo com o LID cru como chave antes de sabermos o número:
 // para cada LID que já aprendemos, une a conversa órfã na do telefone.
 for (const [lid, tel] of lidMap) fundirConversaLid(lid, tel);
