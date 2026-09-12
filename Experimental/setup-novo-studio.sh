@@ -620,6 +620,17 @@ NTFY_URL=https://ntfy.sh
 # TRANSCRICAO_API_KEY=
 # TRANSCRICAO_URL=https://api.groq.com/openai/v1/audio/transcriptions
 # TRANSCRICAO_MODELO=whisper-large-v3-turbo
+
+# ===== WhatsApp / navegador da SoFIA =====
+# USA O CHROMIUM DO SISTEMA. O empacotado do puppeteer (~/.cache/puppeteer) quebra
+# por falta de libs (ex.: libnspr4.so → "Code: 127") e a SoFIA fica em loop de
+# reconexão. Aponte para o mesmo Chromium do robô.
+CHROMIUM_PATH=${CHROMIUM:-/usr/bin/chromium-browser}
+WA_HEADLESS=true
+
+# ===== CRM de contatos (tags de aluna) — arquivo do painel (Experimental/data) =====
+# Sem isto a SoFIA avisa "contatos.json NÃO ENCONTRADO" e as tags não funcionam.
+CONTATOS_FILE=$EXP_DIR/data/contatos.json
 EOF
 fi
 
