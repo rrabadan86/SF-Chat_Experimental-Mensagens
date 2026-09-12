@@ -145,7 +145,7 @@ async function buscarContratosDoPeriodo(inicio, fim) {
 
     // 2. Segmentação → segmento "Vencimento de Contrato Seman..."
     console.log('📂 Navegando para Segmentação...');
-    await page.evaluate(() => { window.location.hash = '#/app/slimfit/15/clientes/segmentacao/clientes'; });
+    await page.evaluate((h) => { window.location.hash = h; }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
     await sleep(5000);
     await fecharPopupNovaTela(page); // o popup reaparece ao navegar
 

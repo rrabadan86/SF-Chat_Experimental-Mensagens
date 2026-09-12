@@ -482,11 +482,17 @@ node -v   <span class="c"># deve mostrar v20.x</span></pre>
 <pre class="term-body">cd ~
 git clone https://github.com/rrabadan86/SF-Chat_Experimental-Mensagens.git
 cd SF-Chat_Experimental-Mensagens
-git checkout main            <span class="c"># branch de deploy (versao estavel, tudo mesclado)</span>
+git checkout main            <span class="c"># branch de deploy de loja NOVA (estavel, tudo mesclado)</span>
 cd Experimental
 npm install                  <span class="c"># baixa o Chromium do Puppeteer (uns minutos)</span></pre>
       </div>
-      <div class="tip">🔄 <b>O <code>setup-novo-studio.sh</code> já atualiza esta branch sozinho</b> (<code>git pull --ff-only</code>) ao rodar — então você instala sempre com as últimas correções. Faça o <code>checkout</code> da <b>mesma branch que roda em produção</b> (as unidades atuais foram atualizadas com <code>git pull</code> nessa branch): é ela que o script vai atualizar. Se preferir travar numa versão, use <code>--no-git-pull</code>.</div>
+      <div class="tip">🔄 <b>O <code>setup-novo-studio.sh</code> já atualiza a branch sozinho</b> (<code>git pull --ff-only</code>) ao rodar — então a loja nova instala sempre com as últimas correções. Se preferir travar numa versão, use <code>--no-git-pull</code>.</div>
+      <div class="tip">🌿 <b>Qual branch usar (fluxo do projeto):</b>
+        <ul style="margin:6px 0 0">
+          <li><b>Loja nova →</b> use o <code>main</code> (acima). Ele recebe, de tempos em tempos, tudo o que foi validado em produção — então uma instalação do zero já nasce completa.</li>
+          <li><b>Unidades já no ar (ex.: Setor Bueno, Lago Sul) →</b> rodam a branch de trabalho <code>claude/slimfit-official-repo-q71zdd</code> e se atualizam com <code>git pull</code> nela. Mesmo código do <code>main</code>; não precisa migrar.</li>
+        </ul>
+        Em resumo: o desenvolvimento acontece na branch de trabalho e, quando amadurece, é mesclado no <code>main</code> (via Pull Request) para as lojas novas. As unidades existentes seguem na branch de trabalho normalmente.</div>
     </div>
 
     <div class="stepblock">
@@ -1120,6 +1126,7 @@ pm2 logs sofia-listener        <span class="c"># espere aparecer "PRONTA"</span>
           <li>🐢 <b>Grade de horários mais leve no EVO</b> (só <code>git pull</code> no VPS): o cálculo/envio da grade ao formulário passou de “a cada 10 min, 24h” para <b>a cada 60 min (07h–21h)</b> e <b>a cada ~3h de madrugada</b> — boa prática da API do EVO. A grade vale <b>4h</b> no formulário e a vaga é revalidada ao vivo no agendamento, então a aluna não vê “sem horário” por isso.</li>
           <li>🩹 <b>Auto-recuperação da grade após deploy</b> (só <code>git pull</code> + reiniciar <code>slimfit-exp</code>): o disco da Render é efêmero e apaga a grade enviada a cada deploy — antes o formulário podia ficar <b>até 60 min</b> mostrando “sem horário” / “está demorando mais que o normal”. Agora o VPS <b>confere a grade a cada 2 min</b> e a <b>reenvia na hora</b> se ela sumiu, derrubando essa janela para <b>~2 min</b> sem ninguém precisar rodar nada.</li>
           <li>🏷️ <b>Renomear o servidor sem travar</b> (só <code>git pull</code> + reiniciar): dá para trocar o <b>nome do host</b> da VPS (ex.: <code>sf.gyn.bueno</code>, <code>sf.bsb.asa-sul</code>) para identificar cada unidade. O Chromium guarda uma trava (<code>SingletonLock</code>) com o nome antigo da máquina e, ao renomear, recusava abrir (robô/SoFIA presos em “Iniciando…”). Agora <b>SoFIA, robô, EVO e Instagram limpam essa trava sozinhos no boot</b> — renomear virou seguro, sem reescanear QR. Útil ao provisionar cada unidade nova.</li>
+          <li>🔗 <b>Fim dos contatos duplicados pelo 9º dígito</b> (só <code>git pull</code> + reiniciar a SoFIA): o mesmo número aparecia como <b>dois contatos</b> nas Conversas — um <b>com</b> o 9 (ex.: 61 <b>9</b>9222-0710) e outro <b>sem</b> (61 9222-0710), porque o WhatsApp às vezes usa a forma antiga e o cadastro/EVO a nova. Agora a SoFIA <b>reconhece as duas formas como a mesma pessoa</b>: <b>funde os cards já duplicados</b> (no boot e a cada 3h) e faz toda mensagem nova <b>cair no card certo</b>, sem criar outro. Junta as mensagens em ordem e mantém as tags. (O CRM de Contatos já tratava isso.)</li>
         </ul>
       </div>
     </div>

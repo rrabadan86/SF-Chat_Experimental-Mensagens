@@ -51,9 +51,9 @@ async function listarContratosVencendo() {
     console.log('✅ Login OK\n');
 
     console.log('📂 Navegando para Segmentação...');
-    await page.evaluate(() => {
-      window.location.hash = '#/app/slimfit/15/clientes/segmentacao/clientes';
-    });
+    await page.evaluate((h) => {
+      window.location.hash = h;
+    }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
     await sleep(5000);
     await page.screenshot({ path: 'debug-segmentacao.png' });
 

@@ -74,7 +74,7 @@ function lerEstado() {
 // ─── Lê PROFESSORA + HORÁRIO do Circuito de sábado na Grade > Horários ─────
 async function buscarCircuito(scraper) {
   const base = scraper.appOrigin || config.evo.url;
-  const url = `${base}/#/app/slimfit/15/grade/horarios`;
+  const url = `${base}/${config.evo.appBase}/grade/horarios`;
   await scraper.page.goto(url, { waitUntil: 'networkidle2' });
   await scraper.sleep(5000);
   if (await scraper.isOnLoginPage()) {

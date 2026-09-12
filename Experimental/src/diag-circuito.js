@@ -18,7 +18,7 @@ const config = require('./config');
     await scraper.login();
 
     const base = scraper.appOrigin || config.evo.url;
-    const url = `${base}/#/app/slimfit/15/grade/horarios`;
+    const url = `${base}/${config.evo.appBase}/grade/horarios`;
     console.log('🌐 Abrindo Grade > Horários...');
     await scraper.page.goto(url, { waitUntil: 'networkidle2' });
     await scraper.sleep(5000);

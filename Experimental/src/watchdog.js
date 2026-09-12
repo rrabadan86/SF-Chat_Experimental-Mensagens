@@ -20,7 +20,14 @@ const notif = require('./notificar');
 const waStatus = require('./wa-status');
 
 const ESTADO_FILE = path.resolve(__dirname, '..', 'data', 'watchdog-estado.json');
-const PROCESSOS = (process.env.WATCHDOG_PROCS || 'slimfit-exp,slimfit-painel').split(',').map(s => s.trim()).filter(Boolean);
+// Nomes dos processos PM2 a vigiar — por unidade. Deriva de PM2_SLUG (<slug>-exp,
+// <slug>-painel); sem slug, mantém os nomes legados do Setor Bueno. Antes eram
+// FIXOS 'slimfit-exp,slimfit-painel' → numa unidade nova (ex.: lagosul1) o
+// watchdog vigiava processos que não existiam e o robô ficava sem "conserto".
+const _wdSlug = (process.env.PM2_SLUG || '').trim();
+const PROC_EXP = (process.env.PM2_APP_EXP || (_wdSlug ? _wdSlug + '-exp' : 'slimfit-exp')).trim();
+const PROC_PAINEL = (process.env.PM2_APP_PAINEL || (_wdSlug ? _wdSlug + '-painel' : 'slimfit-painel')).trim();
+const PROCESSOS = (process.env.WATCHDOG_PROCS || `${PROC_EXP},${PROC_PAINEL}`).split(',').map(s => s.trim()).filter(Boolean);
 const WA_MAX_MIN = parseInt(process.env.WATCHDOG_WA_MIN || '30', 10); // WhatsApp caído por mais que isso → alerta
 const PM2_BIN = process.env.PM2_BIN || 'pm2';
 
@@ -68,7 +75,7 @@ async function detectar() {
   }
 
   // Só checa o WhatsApp se o robô estiver online (senão o problema já é o processo).
-  const exp = list.find(x => x && x.name === 'slimfit-exp');
+  const exp = list.find(x => x && x.name === PROC_EXP);
   if (exp && exp.pm2_env && exp.pm2_env.status === 'online') {
     const st = waStatus.get() || {};
     if (st.estado === 'desconectado' || st.estado === 'qr') {

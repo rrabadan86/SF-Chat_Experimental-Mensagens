@@ -110,6 +110,7 @@ let pronto = false;
 let initPromise = null;
 let keepAliveTimer = null;
 let comandoTimer = null;
+let qrAvisado = false;   // 1 alerta por episódio de QR (o WhatsApp emite 'qr' a cada ~20s → não floodar o ntfy)
 
 function log(msg) { console.log(`[wa] ${msg}`); }
 
@@ -250,17 +251,23 @@ function initWhatsApp() {
         .catch(() => waStatus.set('qr', null));
       // ALERTA CRÍTICO: com a sessão salva, o QR NÃO deveria aparecer. Se apareceu,
       // a sessão caiu e o bot está PARADO até alguém escanear o QR (no painel ou servidor).
-      notif.alertar(
-        'WhatsApp CAIU — precisa de QR',
-        'A sessao do WhatsApp expirou. Abra o painel (aba WhatsApp) e escaneie o QR, ou rode no servidor: pm2 logs slimfit-exp. Ate la, NENHUMA mensagem sai.',
-        { prioridade: 'urgent', tags: 'rotating_light', forcar: true },
-      );
+      // UMA vez por episódio: o 'qr' repete a cada ~20s; com forcar+repetição o ntfy
+      // bloqueava (HTTP 429). O flag zera quando reconecta (marcarPronto).
+      if (!qrAvisado) {
+        qrAvisado = true;
+        notif.alertar(
+          'WhatsApp CAIU — precisa de QR',
+          'A sessao do WhatsApp expirou. Abra o painel (aba WhatsApp) e escaneie o QR. Ate la, NENHUMA mensagem sai.',
+          { prioridade: 'urgent', tags: 'rotating_light' },
+        );
+      }
     });
     let resolvido = false;
     const marcarPronto = (via) => {
       if (resolvido) return;
       resolvido = true;
       pronto = true;
+      qrAvisado = false;   // reconectou: rearma o alerta p/ a próxima queda
       waStatus.set('conectado', null);
       log(`✅ WhatsApp PRONTO (${via}) — pode disparar.`);
       iniciarKeepAlive();
@@ -292,6 +299,17 @@ function initWhatsApp() {
       pronto = false;
       waStatus.set('desconectado', null);
       log('⚠️  Desconectado: ' + motivo);
+      // LOGOUT = o WhatsApp ENCERROU a sessão (não foi só uma queda) e apagou a
+      // sessão salva → vai pedir QR de novo. Causa quase sempre EXTERNA: o número
+      // aberto em outro lugar (WhatsApp Web no PC) ou o aparelho removido em
+      // "Aparelhos conectados". Avisa UMA vez (anti-spam), com a dica certa.
+      if (String(motivo).toUpperCase().includes('LOGOUT')) {
+        notif.alertar(
+          'WhatsApp DESLOGADO (logout)',
+          'O WhatsApp encerrou a sessao do robo e apagou o login salvo — por isso vai pedir QR. Causa comum: o MESMO numero aberto em outro lugar (WhatsApp Web/Desktop no PC) ou o aparelho removido em Aparelhos conectados. Use um numero DEDICADO ao robo e reconecte pelo painel.',
+          { prioridade: 'urgent', tags: 'rotating_light' },
+        );
+      }
     });
 
     setTimeout(() => {

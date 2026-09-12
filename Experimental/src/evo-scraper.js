@@ -1218,7 +1218,7 @@ class EvoScraper {
     const path = require('path');
     const DATA_DIR = path.resolve(__dirname, '..', 'data');
     const base = this.appOrigin || config.evo.url;
-    const url = `${base}/#/app/slimfit/15/grade/horarios`;
+    const url = `${base}/${config.evo.appBase}/grade/horarios`;
 
     console.log('\n═══════════════════════════════════════');
     console.log(`🗓️  Reposições do dia (${dataStr}) — Grade > Horários`);
@@ -1415,7 +1415,7 @@ class EvoScraper {
     const path = require('path');
     const DATA_DIR = path.resolve(__dirname, '..', 'data');
     const base = this.appOrigin || config.evo.url;
-    const url = `${base}/#/app/slimfit/15/evo3/-Gerencial-Gerencial-Index-VENDAS`;
+    const url = `${base}/${config.evo.appBase}/evo3/-Gerencial-Gerencial-Index-VENDAS`;
 
     console.log('\n═══════════════════════════════════════');
     console.log(`💳 Contratos fechados no dia (${dataStr}) — Gerencial > Vendas`);
@@ -1621,7 +1621,7 @@ class EvoScraper {
     const path = require('path');
     const DATA_DIR = path.resolve(__dirname, '..', 'data');
     const base = this.appOrigin || config.evo.url;
-    const url = `${base}/#/app/slimfit/15/evo3/-Gerencial-Gerencial-Index-CANCELAMENTOS`;
+    const url = `${base}/${config.evo.appBase}/evo3/-Gerencial-Gerencial-Index-CANCELAMENTOS`;
 
     console.log('\n═══════════════════════════════════════');
     console.log(`✂️  Rescisões do dia (${dataStr}) — Gerencial > Cancelamentos`);

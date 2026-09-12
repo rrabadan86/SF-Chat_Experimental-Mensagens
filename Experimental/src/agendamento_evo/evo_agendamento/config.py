@@ -156,7 +156,7 @@ ZEE_CONFIRM_TEMPLATE = os.getenv(
 )
 
 # =========== Alerta ao Studio (turma lotada / inexistente) — vai pela ZEE (996847251 -> Studio) ===========
-ZEE_STUDIO_PHONE = _clean("ZEE_STUDIO_PHONE", "5562985508065")  # destino do alerta (recepção)
+ZEE_STUDIO_PHONE = _clean("ZEE_STUDIO_PHONE", "")  # destino do alerta (recepção) — SEM default; cada unidade põe o seu no .env
 ZEE_STUDIO_NAME = _clean("ZEE_STUDIO_NAME", "Studio")
 # Placeholders: {name} {phone} {turma} {alternatives}
 ZEE_ALERT_LOTADA = os.getenv(

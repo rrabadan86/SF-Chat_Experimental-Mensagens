@@ -22,7 +22,7 @@ puppeteer.use(StealthPlugin());
 // ═══════════════════════════════════════════════════════════════════════════
 
 const SUSP_HASH = process.env.EVO_SUSPENSOES_HASH
-  || '#/app/slimfit/15/gerencial/suspensoes';
+  || `${config.evo.appBase}/gerencial/suspensoes`;
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
 const OUT = path.join(DATA_DIR, 'suspensoes-diag.txt');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));

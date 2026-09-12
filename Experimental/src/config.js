@@ -104,6 +104,18 @@ const config = {
   },
 };
 
+// BASE do app EVO (#/app/<tenant>/<branch>) desta unidade, derivada do
+// experimentalPath (que já vem com o tenant/branch certos do .env). Os jobs que
+// navegam POR DENTRO do EVO (segmentação, grade, faltantes, suspensões) devem
+// montar as URLs a partir daqui — NUNCA fixar "slimfit/15" (isso era o Setor
+// Bueno e fazia as outras unidades lerem os dados dele).
+(function () {
+  const m = /#\/app\/([^/]+)\/([^/]+)/.exec(config.evo.experimentalPath || '');
+  config.evo.tenant = m ? m[1] : 'slimfit';
+  config.evo.branch = m ? m[2] : '15';
+  config.evo.appBase = `#/app/${config.evo.tenant}/${config.evo.branch}`;
+})();
+
 // Aplica os horários editados no painel (data/horarios.json) por cima dos
 // padrões acima. Só afeta as chaves editáveis (as demais ficam intactas).
 try {
