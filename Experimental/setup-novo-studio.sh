@@ -378,10 +378,13 @@ if [ "$START" = "1" ]; then
   # o EVO (Angular) é instável em headless puro, então rodamos com HEADLESS=false.
   chmod +x "$EXP_DIR/scheduler-vps.sh" 2>/dev/null || true
   pm2 delete "$P_EXP" >/dev/null 2>&1 || true
-  ( cd "$EXP_DIR" && pm2 start ./scheduler-vps.sh --name "$P_EXP" --interpreter bash --time )
+  # --kill-timeout 15000: dá 15s para o robô fechar o WhatsApp (client.destroy)
+  # ANTES do pm2 mandar SIGKILL. Sem isso (padrão 1,6s) o Chromium é morto no meio
+  # do fechamento e a sessão do WhatsApp não é gravada → pede QR a cada restart.
+  ( cd "$EXP_DIR" && pm2 start ./scheduler-vps.sh --name "$P_EXP" --interpreter bash --time --kill-timeout 15000 )
   # SoFIA (chatbot no WhatsApp) — roda o script "listener" do package.json (tsx)
   pm2 delete "$P_SOFIA" >/dev/null 2>&1 || true
-  ( cd "$CHATBOT_DIR" && pm2 start npm --name "$P_SOFIA" --time -- run listener )
+  ( cd "$CHATBOT_DIR" && pm2 start npm --name "$P_SOFIA" --time --kill-timeout 15000 -- run listener )
 
   pm2 save
 
