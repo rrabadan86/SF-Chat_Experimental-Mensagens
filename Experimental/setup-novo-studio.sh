@@ -483,6 +483,10 @@ STUDIO_NOME=${STUDIO_NOME:-Studio SlimFit $SLUG}
 # Apelido usado nos nomes dos processos PM2 ($SLUG-exp/$SLUG-painel/$SLUG-sofia).
 # O painel usa isto p/ reiniciar/consultar o robô e a SoFIA DESTA unidade.
 PM2_SLUG=$SLUG
+# Envios que ESTA unidade NÃO usa (o robô não agenda; o painel mostra "desativado").
+# Chaves: presentes, circuito_convocacao, circuito_lembrete (ou "circuito" = os dois).
+# Ex.: JOBS_OFF=presentes,circuito_convocacao,circuito_lembrete
+JOBS_OFF=
 
 # ===== Painel (HTTP interno; o HTTPS é do Caddy) =====
 PAINEL_PORT=$PAINEL_PORT
