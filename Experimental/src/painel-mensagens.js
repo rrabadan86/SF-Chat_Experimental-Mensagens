@@ -1110,6 +1110,15 @@ function paginaMensagens(aviso, erro) {
     ${itensIndividuais}
     <div class="sec-t">Mensagens em grupo <small style="font-weight:600;color:var(--cinza)">(enviadas nos grupos do WhatsApp)</small></div>
     ${cardGrupos()}
+    ${(() => {
+      const offs = config.jobsDesativadosLabels();
+      if (!offs.length) return '';
+      return `<div class="card" style="border-left:4px solid #b0a99f;background:#faf7f2">
+        <div class="chead" style="margin:0"><h2 style="font-size:.98rem">🚫 Envios desativados nesta unidade</h2></div>
+        <p class="quando" style="margin:6px 0 0">Estes envios estão <b>desligados</b> por configuração (<code>JOBS_OFF</code> no <code>.env</code>) e <b>não são disparados</b> aqui:</p>
+        <ul style="margin:6px 0 0;padding-left:20px">${offs.map(l => `<li>${esc(l)}</li>`).join('')}</ul>
+      </div>`;
+    })()}
     ${itensGrupo}
     <div class="sec-t">Outros envios em grupo <small style="font-weight:600;color:var(--cinza)">(automáticos, sem texto editável)</small></div>
     ${outros}
