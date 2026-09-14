@@ -373,8 +373,43 @@ pm2 start <b>SEU-SLUG</b>-exp       <span class="c"># volta ao normal</span></pr
       (2 lojas = 4 WhatsApps). Em regime normal cabe em 8&nbsp;GB; para os picos, faça os
       2 ajustes abaixo.</p>
 
+    <div class="tip">💡 <b>Regra de ouro:</b> a loja 2 é uma instalação <b>completa e nova</b>, igual à
+      loja 1 — só que num <b>clone separado</b> e com <code>--slug</code>, <code>--port</code>,
+      <code>--domain</code>, branch do EVO, tokens e QRs <b>próprios</b>. <b>Nada</b> é reaproveitado
+      da loja 1. Siga os mesmos comandos abaixo (é o mesmo fluxo do topo da página, só trocando os valores).</div>
+
     <div class="stepblock">
-      <h3><span class="num">A</span> Adicionar swap (rede de segurança de memória)</h3>
+      <h3><span class="num">A</span> Comandos da 2ª loja (na mesma VPS)</h3>
+      <p>Sequência completa. Troque <code>lagosul2</code> pelo apelido, <code>NN</code> pelo
+        <b>branch do EVO da loja 2</b> (veja na URL do EVO: <code>…/app/slimfit/<b>NN</b>/…</code>)
+        e o subdomínio pelo seu.</p>
+      <div class="term">
+        <div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">VPS · root</span></div>
+<pre class="term-body"><span class="c"># 1) Clone SEPARADO — repare no nome da pasta diferente ao final</span>
+git clone https://github.com/rrabadan86/SF-Chat_Experimental-Mensagens.git <b>slimfit-lagosul2</b>
+cd <b>slimfit-lagosul2</b>/Experimental
+
+<span class="c"># 2) Monta os .env com segredos aleatórios (slug + porta PRÓPRIOS; branch do EVO da loja 2)</span>
+<span class="c">#    NÃO precisa --install-deps de novo (Node/Chromium/pm2 já estão no servidor da loja 1)</span>
+bash setup-novo-studio.sh --slug <b>lagosul2</b> --studio <b>"Studio SlimFit Lago Sul 2"</b> \
+  --evo-tenant slimfit --evo-branch <b>NN</b> --port <b>8081</b>
+
+<span class="c"># 3) Preencha os segredos DA LOJA 2 direto no arquivo (tokens ÚNICOS, NTFY_TOPIC próprio,</span>
+<span class="c">#    e JOBS_OFF / EVO_TOTP_SECRET se for o caso). Nunca reaproveite os da loja 1.</span>
+nano .env
+
+<span class="c"># 4) Sobe os processos + HTTPS no subdomínio PRÓPRIO (cria lagosul2-exp/-painel/-sofia)</span>
+bash setup-novo-studio.sh --slug <b>lagosul2</b> --start --domain <b>painel-lagosul2.SEU-DOMINIO</b>
+
+<span class="c"># 5) Escaneie os 2 QRs da loja 2 (robô e SoFIA), cada um no número certo</span>
+pm2 logs <b>lagosul2</b>-exp</pre>
+      </div>
+      <div class="tip">A porta padrão é <b>8080</b> (loja 1). A loja 2 <b>precisa</b> de outra
+        (<code>--port 8081</code>), senão os dois painéis brigam pela mesma porta.</div>
+    </div>
+
+    <div class="stepblock">
+      <h3><span class="num">B</span> Adicionar swap (rede de segurança de memória)</h3>
       <p><b>Uma vez só, no servidor</b> (não é por loja). Cria 4&nbsp;GB de swap para segurar picos de memória:</p>
       <div class="term">
         <div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">VPS · root · uma vez</span></div>
@@ -388,7 +423,7 @@ free -h                                                       <span class="c"># 
     </div>
 
     <div class="stepblock">
-      <h3><span class="num">B</span> Escalonar os horários da 2ª loja</h3>
+      <h3><span class="num">C</span> Escalonar os horários da 2ª loja</h3>
       <p>Para as duas lojas não rasparem o EVO nem dispararem ao mesmo tempo, dê um
         <b>desencontro de alguns minutos</b> nos horários da loja 2 (no painel dela: aba
         <b>WhatsApp → Configuração</b>, e a hora do comparecimento em <b>SoFIA → Configuração</b>).
@@ -397,7 +432,7 @@ free -h                                                       <span class="c"># 
     </div>
 
     <div class="stepblock">
-      <h3><span class="num">C</span> Checklist da 2ª loja (o que muda em relação à 1ª)</h3>
+      <h3><span class="num">D</span> Checklist da 2ª loja (o que muda em relação à 1ª)</h3>
       <ul class="chk">
         <li><span class="box">✓</span><span><b>Clone separado</b> (ex.: <code>~/slimfit-lagosul2</code>) — não reaproveite o da loja 1.</span></li>
         <li><span class="box">✓</span><span><b><code>--slug</code> diferente</b> (ex.: <code>lagosul2</code>) → processos <code>lagosul2-painel/-exp/-sofia</code>.</span></li>
