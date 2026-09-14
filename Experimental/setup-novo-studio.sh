@@ -401,6 +401,8 @@ if [ "$START" = "1" ]; then
   echo "   • Leia os QRs dos 2 WhatsApp:  pm2 logs $P_EXP   e   pm2 logs $P_SOFIA"
   [ -n "$DOMAIN" ] || echo "   • Configure o HTTPS: rode com --domain <subdominio> (gera + liga o Caddy)."
   echo "   • pm2 startup   (para subir sozinho após reboot do VPS)"
+  echo "   • Acompanhe os envios em tempo real no painel: WhatsApp → Log"
+  echo "       (cada linha tem '+ ver tudo' para abrir a mensagem inteira que foi enviada)."
   exit 0
 fi
 
