@@ -56,14 +56,14 @@ const CATALOGO = [
     chave: 'followup',
     titulo: 'Follow-up pós-aula (ainda não fechou)',
     quando: 'Enviada 10:30 / 16:00 para quem fez a experimental no dia anterior.',
-    vars: [['professora', 'nome da professora']],
+    vars: [['nome', 'primeiro nome da aluna'], ['professora', 'nome da professora']],
     padrao: 'Oie! Tudo bem?\n\nSegue áudio que a professora {professora} fez sobre a sua aula experimental! =)\n\nSei que a primeira aula sempre é mais difícil, principalmente por ser uma metodologia nova!\n\nMas agora que você já deu o primeiro passo 👏, o que acha de vir para mais uma aula e darmos andamento da sua matrícula?\n\nTe aguardo!!! 🥰',
   },
   {
     chave: 'followup_aluna',
     titulo: 'Follow-up pós-aula (já virou aluna)',
     quando: 'Mesmo horário do follow-up, mas para quem já fechou contrato.',
-    vars: [['professora', 'nome da professora']],
+    vars: [['nome', 'primeiro nome da aluna'], ['professora', 'nome da professora']],
     padrao: 'Oie! Tudo bem?\n\nQue alegria ter você com a gente! 🥰\n\nSegue um áudio que a professora {professora} preparou sobre a sua aula!\n\nSeja muito bem-vinda ao SlimFit! 💪\n\nEstamos muito felizes com a sua decisão. Qualquer dúvida que tiver sobre o APP pode me acionar!\n\nConte conosco! ❤️',
   },
   {
@@ -76,8 +76,8 @@ const CATALOGO = [
   {
     chave: 'renovacao',
     titulo: 'Renovação de contrato',
-    quando: 'Enviada às 14:30 para quem vence em exatos 7 dias.',
-    vars: [['nome', 'primeiro nome da aluna'], ['data', 'data de vencimento']],
+    quando: 'Enviada às 14:30 para quem vence dentro do prazo configurado (RENOVACAO_DIAS_ANTES no .env, padrão 7 dias).',
+    vars: [['nome', 'primeiro nome da aluna'], ['data', 'data de vencimento'], ['contrato', 'nome do plano/contrato da aluna (ex.: COPA SLIM 2026 - C.C. - GRUPO 1)']],
     padrao: 'Oi, {nome}! Tudo bem? 😊\nQue alegria ter você no SlimFit! 🥳\nEstou enviando essa mensagem para avisar que o seu plano vence no dia {data}. A gente ia adorar continuar com você firme nos treinos! ❤️\nPodemos dar andamento na renovação? Prefere manter o mesmo plano ou aumentar a frequência? 💪\nQualquer dúvida, é só me chamar! 😉',
   },
   {
@@ -228,6 +228,7 @@ const EXEMPLOS = {
   aluna: 'Maria',
   hora: '09h45',
   quando: 'sexta-feira, 28/08 às 16:15',
+  contrato: 'COPA SLIM 2026 - C.C. - GRUPO 1',
 };
 function exemplosCompletos() {
   return Object.assign(globais(), EXEMPLOS);

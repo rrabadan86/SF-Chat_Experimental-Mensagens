@@ -487,6 +487,8 @@ PM2_SLUG=$SLUG
 # Chaves: presentes, circuito_convocacao, circuito_lembrete (ou "circuito" = os dois).
 # Ex.: JOBS_OFF=presentes,circuito_convocacao,circuito_lembrete
 JOBS_OFF=
+# Dias ANTES do vencimento para avisar a renovação (padrão 7; ex.: 30):
+# RENOVACAO_DIAS_ANTES=7
 
 # ===== Painel (HTTP interno; o HTTPS é do Caddy) =====
 PAINEL_PORT=$PAINEL_PORT

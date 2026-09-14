@@ -55,13 +55,13 @@ const config = {
   messagesTomorrow: (nome, horario, aula = {}) => mensagens.render('confirmacao_amanha', { nome, horario, professora: aula.professor || '', data: aula.date || '' }),
 
   // Mensagem de follow-up pós aula experimental — para quem AINDA NÃO fechou
-  messageFollowup: (nomeProfessora) => mensagens.render('followup', { professora: nomeProfessora }),
+  messageFollowup: (nomeProfessora, nome) => mensagens.render('followup', { professora: nomeProfessora, nome: nome || '' }),
 
   // Mensagem de no-show (faltou na aula experimental) — convida a remarcar
   messageNoShow: (nome, horario) => mensagens.render('no_show', { nome, horario: horario ? ` (${horario})` : '' }),
 
   // Mensagem de follow-up para quem JÁ VIROU ALUNA (contrato preenchido)
-  messageFollowupAluna: (nomeProfessora) => mensagens.render('followup_aluna', { professora: nomeProfessora }),
+  messageFollowupAluna: (nomeProfessora, nome) => mensagens.render('followup_aluna', { professora: nomeProfessora, nome: nome || '' }),
 
   // Áudios de follow-up (pasta e mapeamento professora → arquivo)
   audio: {

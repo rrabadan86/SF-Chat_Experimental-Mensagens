@@ -46,9 +46,12 @@ function dataAlvoD7() {
     return alvo;
   }
 
-  // Se não digitou nada (ou se for o robô rodando sozinho), segue a regra normal de Hoje + 7
+  // Quantos dias ANTES do vencimento avisar. Padrão 7; editável por unidade no
+  // .env (RENOVACAO_DIAS_ANTES=30). O segmento do EVO já traz o mês inteiro, então
+  // dá para usar 30 sem mexer no segmento. Avisa quem vence EXATAMENTE nesse dia.
+  const dias = parseInt(process.env.RENOVACAO_DIAS_ANTES || '7', 10) || 7;
   const alvo = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
-  alvo.setDate(alvo.getDate() + 7);
+  alvo.setDate(alvo.getDate() + dias);
   alvo.setHours(0, 0, 0, 0);
   return alvo;
 }
@@ -66,8 +69,8 @@ function venceEmExatos7Dias(dateStr) {
 }
 
 const mensagens = require('./mensagens');
-function buildMessage(primeiroNome, dataVencimento) {
-  return mensagens.render('renovacao', { nome: primeiroNome, data: dataVencimento });
+function buildMessage(primeiroNome, dataVencimento, contrato) {
+  return mensagens.render('renovacao', { nome: primeiroNome, data: dataVencimento, contrato: contrato || '' });
 }
 
 /**
@@ -575,7 +578,7 @@ async function enviarWhatsApp(clientes) {
   const resultados = { enviadas: 0, falhas: 0, puladas: 0 };
   for (const cliente of clientes) {
     if (!cliente.telefone) { console.log(`⏭️  ${cliente.nome}: sem telefone`); resultados.puladas++; continue; }
-    const mensagem = buildMessage(cliente.primeiroNome, cliente.vencimento);
+    const mensagem = buildMessage(cliente.primeiroNome, cliente.vencimento, cliente.contrato);
     let numero = cliente.telefone.replace(/\D/g, '');
     if (!numero.startsWith('55')) numero = '55' + numero;
     console.log(`📨 Enviando para ${cliente.nome} (${numero})...`);
