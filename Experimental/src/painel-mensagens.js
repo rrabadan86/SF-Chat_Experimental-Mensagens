@@ -1552,12 +1552,30 @@ function paginaHoje(dia) {
   const lista = evs.map(e => {
     const ic = e.ok ? '✅' : '⚠️';
     const who = e.grupo ? esc(e.destino || 'grupo') : esc(fmtTel(e.destino));
-    const pv = e.erro ? `<span style="color:#a12626">${esc(e.erro)}</span>` : esc(e.preview || (e.midia ? '📎 mídia' : ''));
+    const pvText = e.preview || (e.midia ? '📎 mídia' : '');
+    // Se guardamos a mensagem inteira e ela é maior que a prévia, mostra "+ ver tudo".
+    const full = (e.texto && e.texto.replace(/\s+/g, ' ').trim().length > pvText.length) ? e.texto : '';
+    let pvNode;
+    if (e.erro) {
+      pvNode = `<span class="pv"><span style="color:#a12626">${esc(e.erro)}</span></span>`;
+    } else if (full) {
+      pvNode = `<details class="pvmore"><summary>${esc(pvText)} <span class="mais">＋ ver tudo</span></summary><div class="tudo">${esc(full)}</div></details>`;
+    } else {
+      pvNode = `<span class="pv">${esc(pvText)}</span>`;
+    }
     return `<div class="ev"><span class="h">${esc(e.quando)}</span><span class="ic">${ic}</span>
-      <div class="d"><span class="who">${who}</span> <span class="ctx">· ${esc(e.contexto)}</span><span class="pv">${pv}</span></div></div>`;
+      <div class="d"><span class="who">${who}</span> <span class="ctx">· ${esc(e.contexto)}</span>${pvNode}</div></div>`;
   }).join('');
 
   const corpo = `<div class="wrap">
+    <style>
+      .pvmore{margin-top:2px}
+      .pvmore summary{cursor:pointer;list-style:none;color:var(--texto,#333)}
+      .pvmore summary::-webkit-details-marker{display:none}
+      .pvmore .mais{color:var(--teal);font-weight:700;font-size:.82rem;white-space:nowrap}
+      .pvmore[open] summary .mais{opacity:.55}
+      .pvmore .tudo{white-space:pre-wrap;word-break:break-word;margin-top:6px;padding:8px 10px;border:1px solid var(--linha);border-radius:8px;font-size:.9rem;line-height:1.45}
+    </style>
     ${subnavMensagens('hoje')}
     <div class="datesel">
       <form method="GET" action="/hoje" class="datesel" style="margin:0">
