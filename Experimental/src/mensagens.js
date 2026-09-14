@@ -76,8 +76,8 @@ const CATALOGO = [
   {
     chave: 'renovacao',
     titulo: 'Renovação de contrato',
-    quando: 'Enviada às 14:30 para quem vence em exatos 7 dias.',
-    vars: [['nome', 'primeiro nome da aluna'], ['data', 'data de vencimento']],
+    quando: 'Enviada às 14:30 para quem vence dentro do prazo configurado (RENOVACAO_DIAS_ANTES no .env, padrão 7 dias).',
+    vars: [['nome', 'primeiro nome da aluna'], ['data', 'data de vencimento'], ['contrato', 'nome do plano/contrato da aluna (ex.: COPA SLIM 2026 - C.C. - GRUPO 1)']],
     padrao: 'Oi, {nome}! Tudo bem? 😊\nQue alegria ter você no SlimFit! 🥳\nEstou enviando essa mensagem para avisar que o seu plano vence no dia {data}. A gente ia adorar continuar com você firme nos treinos! ❤️\nPodemos dar andamento na renovação? Prefere manter o mesmo plano ou aumentar a frequência? 💪\nQualquer dúvida, é só me chamar! 😉',
   },
   {
@@ -228,6 +228,7 @@ const EXEMPLOS = {
   aluna: 'Maria',
   hora: '09h45',
   quando: 'sexta-feira, 28/08 às 16:15',
+  contrato: 'COPA SLIM 2026 - C.C. - GRUPO 1',
 };
 function exemplosCompletos() {
   return Object.assign(globais(), EXEMPLOS);

@@ -69,8 +69,8 @@ function venceEmExatos7Dias(dateStr) {
 }
 
 const mensagens = require('./mensagens');
-function buildMessage(primeiroNome, dataVencimento) {
-  return mensagens.render('renovacao', { nome: primeiroNome, data: dataVencimento });
+function buildMessage(primeiroNome, dataVencimento, contrato) {
+  return mensagens.render('renovacao', { nome: primeiroNome, data: dataVencimento, contrato: contrato || '' });
 }
 
 /**
@@ -578,7 +578,7 @@ async function enviarWhatsApp(clientes) {
   const resultados = { enviadas: 0, falhas: 0, puladas: 0 };
   for (const cliente of clientes) {
     if (!cliente.telefone) { console.log(`⏭️  ${cliente.nome}: sem telefone`); resultados.puladas++; continue; }
-    const mensagem = buildMessage(cliente.primeiroNome, cliente.vencimento);
+    const mensagem = buildMessage(cliente.primeiroNome, cliente.vencimento, cliente.contrato);
     let numero = cliente.telefone.replace(/\D/g, '');
     if (!numero.startsWith('55')) numero = '55' + numero;
     console.log(`📨 Enviando para ${cliente.nome} (${numero})...`);
