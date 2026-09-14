@@ -52,6 +52,9 @@ function registrar(ev) {
       ok: ev.ok !== false,
       erro: ev.erro ? String(ev.erro).slice(0, 160) : '',
       preview: String(ev.preview || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+      // Mensagem COMPLETA (preserva quebras de linha) para o painel expandir com "+".
+      // Cap generoso: mensagens de WhatsApp raramente passam disso.
+      texto: String(ev.preview || '').trim().slice(0, 2000),
     });
     salvar(arr);
   } catch (_) { /* registro nunca derruba o envio */ }
