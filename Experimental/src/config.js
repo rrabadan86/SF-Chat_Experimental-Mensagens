@@ -129,4 +129,28 @@ try {
 // define o seu, então os logs mostram o nome certo — nada de "Bueno" fixo.
 config.STUDIO_NOME = STUDIO_NOME;
 
+// ===== Jobs DESLIGADOS por unidade (.env: JOBS_OFF=chave1,chave2) =============
+// Algumas unidades não usam certos envios (ex.: o Lago Sul não faz Circuito nem
+// "Presentes de tempo de casa"). Liste as chaves em JOBS_OFF para o robô NÃO
+// agendar esses jobs e o painel mostrar que estão desativados. Chaves aceitas:
+//   presentes · circuito_convocacao · circuito_lembrete  (ou "circuito" = os dois)
+const _JOBS_LABEL = {
+  presentes:           'Presentes de tempo de casa (grupo)',
+  circuito_convocacao: 'Circuito — convocatória (quarta)',
+  circuito_lembrete:   'Circuito — lembrete (sexta)',
+};
+config.jobsOff = new Set(
+  String(process.env.JOBS_OFF || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
+);
+// true = o job DEVE rodar; false = desligado nesta unidade.
+config.jobAtivo = (chave) => {
+  const k = String(chave || '').toLowerCase();
+  if (config.jobsOff.has(k)) return false;
+  // atalho "circuito" desliga os dois do Circuito de uma vez
+  if ((k === 'circuito_convocacao' || k === 'circuito_lembrete') && config.jobsOff.has('circuito')) return false;
+  return true;
+};
+// Rótulos amigáveis dos jobs desligados — o painel usa para avisar na tela.
+config.jobsDesativadosLabels = () => Object.keys(_JOBS_LABEL).filter(k => !config.jobAtivo(k)).map(k => _JOBS_LABEL[k]);
+
 module.exports = config;

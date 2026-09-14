@@ -378,10 +378,13 @@ if [ "$START" = "1" ]; then
   # o EVO (Angular) é instável em headless puro, então rodamos com HEADLESS=false.
   chmod +x "$EXP_DIR/scheduler-vps.sh" 2>/dev/null || true
   pm2 delete "$P_EXP" >/dev/null 2>&1 || true
-  ( cd "$EXP_DIR" && pm2 start ./scheduler-vps.sh --name "$P_EXP" --interpreter bash --time )
+  # --kill-timeout 15000: dá 15s para o robô fechar o WhatsApp (client.destroy)
+  # ANTES do pm2 mandar SIGKILL. Sem isso (padrão 1,6s) o Chromium é morto no meio
+  # do fechamento e a sessão do WhatsApp não é gravada → pede QR a cada restart.
+  ( cd "$EXP_DIR" && pm2 start ./scheduler-vps.sh --name "$P_EXP" --interpreter bash --time --kill-timeout 15000 )
   # SoFIA (chatbot no WhatsApp) — roda o script "listener" do package.json (tsx)
   pm2 delete "$P_SOFIA" >/dev/null 2>&1 || true
-  ( cd "$CHATBOT_DIR" && pm2 start npm --name "$P_SOFIA" --time -- run listener )
+  ( cd "$CHATBOT_DIR" && pm2 start npm --name "$P_SOFIA" --time --kill-timeout 15000 -- run listener )
 
   pm2 save
 
@@ -480,6 +483,10 @@ STUDIO_NOME=${STUDIO_NOME:-Studio SlimFit $SLUG}
 # Apelido usado nos nomes dos processos PM2 ($SLUG-exp/$SLUG-painel/$SLUG-sofia).
 # O painel usa isto p/ reiniciar/consultar o robô e a SoFIA DESTA unidade.
 PM2_SLUG=$SLUG
+# Envios que ESTA unidade NÃO usa (o robô não agenda; o painel mostra "desativado").
+# Chaves: presentes, circuito_convocacao, circuito_lembrete (ou "circuito" = os dois).
+# Ex.: JOBS_OFF=presentes,circuito_convocacao,circuito_lembrete
+JOBS_OFF=
 
 # ===== Painel (HTTP interno; o HTTPS é do Caddy) =====
 PAINEL_PORT=$PAINEL_PORT
@@ -617,6 +624,17 @@ NTFY_URL=https://ntfy.sh
 # TRANSCRICAO_API_KEY=
 # TRANSCRICAO_URL=https://api.groq.com/openai/v1/audio/transcriptions
 # TRANSCRICAO_MODELO=whisper-large-v3-turbo
+
+# ===== WhatsApp / navegador da SoFIA =====
+# USA O CHROMIUM DO SISTEMA. O empacotado do puppeteer (~/.cache/puppeteer) quebra
+# por falta de libs (ex.: libnspr4.so → "Code: 127") e a SoFIA fica em loop de
+# reconexão. Aponte para o mesmo Chromium do robô.
+CHROMIUM_PATH=${CHROMIUM:-/usr/bin/chromium-browser}
+WA_HEADLESS=true
+
+# ===== CRM de contatos (tags de aluna) — arquivo do painel (Experimental/data) =====
+# Sem isto a SoFIA avisa "contatos.json NÃO ENCONTRADO" e as tags não funcionam.
+CONTATOS_FILE=$EXP_DIR/data/contatos.json
 EOF
 fi
 

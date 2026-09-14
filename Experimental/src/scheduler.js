@@ -500,6 +500,9 @@ function iniciarRodarJobWatcher() {
     aniversarioEx:     { nome: 'Aniversário ex-alunas [manual]', fn: () => require('./aniversario-ex').runAniversarioEx() },
     renovacao:         { nome: 'Renovação [manual]',          fn: () => require('./renovar-contratos').runRenovacao() },
     renovacoesMesGrupo:{ nome: 'Contratos a vencer no mês [manual]', fn: (pedido) => require('./renovacoes-mes-grupo').runRenovacoesMesGrupo({ mes: pedido && pedido.mes }) },
+    resumoDia:         { nome: 'Resumo do dia [manual]',        fn: () => require('./resumo-dia').runResumoDia() },
+    ausentes:          { nome: 'Ausentes 10 dias [manual]',     fn: () => require('./ausentes-10-dias').runAusentes10Dias() },
+    planilha:          { nome: 'Planilha de aniversários [manual]', fn: () => require('./planilha-aniversarios').runPlanilhaAniversarios() },
   };
   const t = setInterval(() => {
     let pedido = null;
@@ -783,7 +786,9 @@ async function main() {
 
   // Schedule: 16:15 quarta → Convocatória do Circuito (busca a professora de
   // sábado na Grade > Horários e posta no grupo "Circuito Slim").
-  if (config.schedule.circuitoConvoca) {
+  if (!config.jobAtivo('circuito_convocacao')) {
+    log('📅 Job CIRCUITO (convocatória) DESATIVADO nesta unidade (JOBS_OFF).');
+  } else if (config.schedule.circuitoConvoca) {
     cron.schedule(config.schedule.circuitoConvoca, () => {
       log('⏰ Cron disparado: Circuito — convocatória');
       agendarCircuitoConvocacao();
@@ -794,7 +799,9 @@ async function main() {
 
   // Schedule: 16:15 sexta → Lembrete "É amanhã!" no grupo "Circuito Slim".
   // Só posta no grupo (não usa o EVO), então roda independente do jobRunning.
-  if (config.schedule.circuitoLembrete) {
+  if (!config.jobAtivo('circuito_lembrete')) {
+    log('📅 Job CIRCUITO (lembrete) DESATIVADO nesta unidade (JOBS_OFF).');
+  } else if (config.schedule.circuitoLembrete) {
     cron.schedule(config.schedule.circuitoLembrete, () => {
       log('⏰ Cron disparado: Circuito — lembrete');
       atividade.setContexto('Circuito — lembrete');
@@ -987,22 +994,26 @@ async function main() {
   console.log('   → Contratos a vencer no mês seguinte no grupo "SlimFit Equipe"');
 
   // Schedule: 06:45 toda segunda → Presentes de tempo de casa pendentes no grupo
-  cron.schedule(config.schedule.presentesPend, () => {
-    log('⏰ Cron disparado: Presentes pendentes (grupo da equipe)');
-    if (jobRunning) { log('⚠️  Presentes pendentes ignorado — outro job em execução'); return; }
-    jobRunning = true;
-    const start = new Date();
-    require('./presentes-pendentes-grupo').runPresentesPendentes()
-      .then(() => log('✅ Presentes pendentes concluído'))
-      .catch(err => logError('Presentes pendentes', err))
-      .finally(() => {
-        jobRunning = false;
-        log(`⏱️  Presentes pendentes finalizado em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
-      });
-  }, { timezone: 'America/Sao_Paulo' });
+  if (!config.jobAtivo('presentes')) {
+    log('📅 Job PRESENTES DESATIVADO nesta unidade (JOBS_OFF).');
+  } else {
+    cron.schedule(config.schedule.presentesPend, () => {
+      log('⏰ Cron disparado: Presentes pendentes (grupo da equipe)');
+      if (jobRunning) { log('⚠️  Presentes pendentes ignorado — outro job em execução'); return; }
+      jobRunning = true;
+      const start = new Date();
+      require('./presentes-pendentes-grupo').runPresentesPendentes()
+        .then(() => log('✅ Presentes pendentes concluído'))
+        .catch(err => logError('Presentes pendentes', err))
+        .finally(() => {
+          jobRunning = false;
+          log(`⏱️  Presentes pendentes finalizado em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
+        });
+    }, { timezone: 'America/Sao_Paulo' });
 
-  log(`📅 Job PRESENTES agendado: ${config.schedule.presentesPend} (06:45 segunda)`);
-  console.log('   → Presentes de tempo de casa pendentes no grupo "SlimFit Equipe"');
+    log(`📅 Job PRESENTES agendado: ${config.schedule.presentesPend} (06:45 segunda)`);
+    console.log('   → Presentes de tempo de casa pendentes no grupo "SlimFit Equipe"');
+  }
 
   // Schedule: 16:30 toda sexta → Resumo da semana no grupo da equipe
   cron.schedule(config.schedule.resumoSemana, () => {
