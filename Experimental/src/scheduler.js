@@ -500,6 +500,7 @@ function iniciarRodarJobWatcher() {
     aniversarioEx:     { nome: 'Aniversário ex-alunas [manual]', fn: () => require('./aniversario-ex').runAniversarioEx() },
     renovacao:         { nome: 'Renovação [manual]',          fn: () => require('./renovar-contratos').runRenovacao() },
     renovacoesMesGrupo:{ nome: 'Contratos a vencer no mês [manual]', fn: (pedido) => require('./renovacoes-mes-grupo').runRenovacoesMesGrupo({ mes: pedido && pedido.mes }) },
+    resumoDia:         { nome: 'Resumo do dia [manual]',        fn: () => require('./resumo-dia').runResumoDia() },
   };
   const t = setInterval(() => {
     let pedido = null;
