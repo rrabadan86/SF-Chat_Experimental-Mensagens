@@ -83,6 +83,7 @@ async function buscarAlunasAniversario() {
       }
       document.querySelector('button[type="submit"], button.primary')?.click();
     });
+    try { await require('./evo-totp').preencher2FA(page); } catch (_) {} // MFA do EVO (30/10/2026)
     await page.waitForFunction(() => location.hash.includes('/inicio/') || location.hash.includes('/app/'), { timeout: 30000 });
     await sleep(3000);
     await fecharPopupNovaTela(page); // dispensa o popup "Nova funcionalidade" do EVO
