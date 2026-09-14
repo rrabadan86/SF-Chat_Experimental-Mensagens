@@ -501,6 +501,8 @@ function iniciarRodarJobWatcher() {
     renovacao:         { nome: 'Renovação [manual]',          fn: () => require('./renovar-contratos').runRenovacao() },
     renovacoesMesGrupo:{ nome: 'Contratos a vencer no mês [manual]', fn: (pedido) => require('./renovacoes-mes-grupo').runRenovacoesMesGrupo({ mes: pedido && pedido.mes }) },
     resumoDia:         { nome: 'Resumo do dia [manual]',        fn: () => require('./resumo-dia').runResumoDia() },
+    ausentes:          { nome: 'Ausentes 10 dias [manual]',     fn: () => require('./ausentes-10-dias').runAusentes10Dias() },
+    planilha:          { nome: 'Planilha de aniversários [manual]', fn: () => require('./planilha-aniversarios').runPlanilhaAniversarios() },
   };
   const t = setInterval(() => {
     let pedido = null;
