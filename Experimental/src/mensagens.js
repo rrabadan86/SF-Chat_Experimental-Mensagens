@@ -56,14 +56,14 @@ const CATALOGO = [
     chave: 'followup',
     titulo: 'Follow-up pós-aula (ainda não fechou)',
     quando: 'Enviada 10:30 / 16:00 para quem fez a experimental no dia anterior.',
-    vars: [['professora', 'nome da professora']],
+    vars: [['nome', 'primeiro nome da aluna'], ['professora', 'nome da professora']],
     padrao: 'Oie! Tudo bem?\n\nSegue áudio que a professora {professora} fez sobre a sua aula experimental! =)\n\nSei que a primeira aula sempre é mais difícil, principalmente por ser uma metodologia nova!\n\nMas agora que você já deu o primeiro passo 👏, o que acha de vir para mais uma aula e darmos andamento da sua matrícula?\n\nTe aguardo!!! 🥰',
   },
   {
     chave: 'followup_aluna',
     titulo: 'Follow-up pós-aula (já virou aluna)',
     quando: 'Mesmo horário do follow-up, mas para quem já fechou contrato.',
-    vars: [['professora', 'nome da professora']],
+    vars: [['nome', 'primeiro nome da aluna'], ['professora', 'nome da professora']],
     padrao: 'Oie! Tudo bem?\n\nQue alegria ter você com a gente! 🥰\n\nSegue um áudio que a professora {professora} preparou sobre a sua aula!\n\nSeja muito bem-vinda ao SlimFit! 💪\n\nEstamos muito felizes com a sua decisão. Qualquer dúvida que tiver sobre o APP pode me acionar!\n\nConte conosco! ❤️',
   },
   {

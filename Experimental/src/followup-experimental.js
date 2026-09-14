@@ -617,10 +617,11 @@ async function runFollowup(periodoFiltro, dataOverride = null) {
       }
 
       const nomeProfessora = (aluno.professor || '').trim().split(/\s+/)[0] || 'a professora';
+      const primeiroNome = (aluno.name || '').trim().split(/\s+/)[0] || '';
       // Mensagem diferente se a experimental JÁ virou aluna (contrato preenchido)
       const texto = aluno.virouAluna
-        ? config.messageFollowupAluna(nomeProfessora)
-        : config.messageFollowup(nomeProfessora);
+        ? config.messageFollowupAluna(nomeProfessora, primeiroNome)
+        : config.messageFollowup(nomeProfessora, primeiroNome);
       const audioPath = getAudioPath(aluno.professor);
 
       console.log(`\n📨 Enviando para ${aluno.name} (${aluno.phone})` +
@@ -677,7 +678,8 @@ async function runTeste(numero, professorKey = 'taynara', vezes = 1) {
 
   const audioPath = getAudioPath(professorKey);
   const texto = config.messageFollowup(
-    professorKey.charAt(0).toUpperCase() + professorKey.slice(1)
+    professorKey.charAt(0).toUpperCase() + professorKey.slice(1),
+    'Maria'
   );
 
   console.log(`   Número: ${numero}`);
