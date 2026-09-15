@@ -3871,14 +3871,18 @@ function paginaSofia(aviso, erro) {
   const refreshSeg = lerRefreshSeg(); // atualização automática da aba Conversas (segundos)
   let avh = { on: false, numero: '' }; try { avh = sofia.lerAvisoHumano(); } catch (_) {}
   let naoResp = []; try { naoResp = sofia.lerNaoResponder(); } catch (_) {} // números que a SoFIA nunca responde sozinha
-  let alu = { ativo: true, janelaIni: '05:45', janelaFim: '16:30', recepcaoNumero: '', tag: 'alunas' };
+  let alu = { ativo: true, janelaIni: '05:45', janelaFim: '16:30', recepcaoNumero: '', tag: 'alunas', tags: ['alunas'] };
   try { alu = sofia.lerAlunas(); } catch (_) {}
-  // Etiquetas que existem de verdade no CRM, para o Studio ESCOLHER qual marca
-  // "aluna contratada" (antes era fixo em "alunas" e não casava com "0. Aluna").
+  // Etiquetas que existem de verdade no CRM, para o Studio MARCAR quais a SoFIA
+  // NÃO deve responder (aluna, ex-aluna, etc.). Antes era uma tag só; virou lista.
   let tagsAlu = [];
   try { tagsAlu = contatos.tagsDistintas().map(t => t.tag); } catch (_) {}
-  const tagAtual = String(alu.tag || 'alunas');
-  if (!tagsAlu.some(t => t.toLowerCase() === tagAtual.toLowerCase())) tagsAlu = [tagAtual].concat(tagsAlu);
+  const tagsSel = (Array.isArray(alu.tags) && alu.tags.length) ? alu.tags : [String(alu.tag || 'alunas')];
+  // Garante que toda tag JÁ SELECIONADA apareça na lista, mesmo que não exista
+  // mais no CRM (senão sumiria do painel e o Studio não conseguiria desmarcá-la).
+  for (const t of tagsSel) { if (!tagsAlu.some(x => x.toLowerCase() === String(t).toLowerCase())) tagsAlu = [t].concat(tagsAlu); }
+  const selLower = new Set(tagsSel.map(t => String(t).trim().toLowerCase()));
+  const tagsTxt = tagsSel.map(t => esc(t)).join(', ') || 'alunas';
   // Cada seção é um card recolhível (começa MINIMIZADA — só o título aparece) e
   // reordenável (↑ ↓). A ordem no DOM = ordem salva no prompt. O textarea, mesmo
   // recolhido (display:none), continua sendo enviado no POST.
@@ -3944,13 +3948,13 @@ function paginaSofia(aviso, erro) {
     <details class="acc-sec">
       <summary class="sec-t" style="cursor:pointer;padding:4px 0">🎓 Alunas contratadas <small style="font-weight:400;color:var(--cinza)">— horário da recepção e aviso de atendimento</small></summary>
       <div class="card">
-        <p class="quando" style="margin:0 0 12px">Regras para quem tem a tag <b>${esc(alu.tag || 'alunas')}</b> (aluna já contratada, não é lead). <b>Dentro do horário da recepção</b> a SoFIA fica <b>calada</b> para elas — quem responde é a recepcionista. <b>Fora desse horário</b>, a SoFIA cobre (remarcação, dúvidas). Se a aluna pedir remarcação e <b>não houver reposição disponível</b>, a SoFIA avisa a aluna e manda um WhatsApp para o número abaixo.</p>
+        <p class="quando" style="margin:0 0 12px">Regras para quem tem <b>qualquer uma</b> das etiquetas marcadas abaixo (${tagsTxt}) — quem já é <b>aluna/ex-aluna</b>, não é lead. <b>Dentro do horário da recepção</b> a SoFIA fica <b>calada</b> para essas pessoas — quem responde é a recepcionista. <b>Fora desse horário</b>, a SoFIA cobre (remarcação, dúvidas). Se a aluna pedir remarcação e <b>não houver reposição disponível</b>, a SoFIA avisa a aluna e manda um WhatsApp para o número abaixo. <small>Dica: para a SoFIA <b>nunca</b> responder essas etiquetas (24h), use a janela <b>00:02 às 00:01</b>.</small></p>
         <form method="POST" action="/sofia/alunas">
-          <label class="chk"><input type="checkbox" name="ativo"${alu.ativo ? ' checked' : ''}> <b>Ligado</b> — aplicar estas regras para a tag escolhida abaixo</label>
+          <label class="chk"><input type="checkbox" name="ativo"${alu.ativo ? ' checked' : ''}> <b>Ligado</b> — aplicar estas regras para as etiquetas marcadas abaixo</label>
           <div class="cfg-grid" style="margin-top:14px">
-            <div>
-              <label>Etiqueta das alunas ${infoI('Qual etiqueta do CRM marca <b>aluna já contratada</b>. A SoFIA compara sem ligar para acento, maiúscula, numeração ou plural — <b>0. Aluna</b>, <b>Aluna</b> e <b>alunas</b> valem a mesma coisa.')}</label>
-              <div class="cfg-in"><select name="tag" style="width:100%">${tagsAlu.map(t => `<option value="${esc(t)}"${t.toLowerCase() === tagAtual.toLowerCase() ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
+            <div style="grid-column:1 / -1">
+              <label>Etiquetas que a SoFIA NÃO responde ${infoI('Marque as etiquetas do CRM de quem <b>não é lead</b> (aluna, ex-aluna…). A SoFIA fica calada para quem tem <b>qualquer uma</b> delas, no horário da recepção. Compara sem ligar para acento, maiúscula, numeração ou plural — <b>0. Aluna</b>, <b>Aluna</b> e <b>alunas</b> valem a mesma coisa.')}</label>
+              <div class="cfg-in" style="flex-direction:column;align-items:flex-start;gap:6px;max-height:200px;overflow:auto;padding:8px 10px">${tagsAlu.length ? tagsAlu.map(t => `<label class="chk" style="margin:0;font-weight:500"><input type="checkbox" name="tags" value="${esc(t)}"${selLower.has(String(t).trim().toLowerCase()) ? ' checked' : ''}> ${esc(t)}</label>`).join('') : '<span class="quando" style="margin:0">Nenhuma etiqueta encontrada no CRM (a sincronização de contatos precisa estar ativa).</span>'}</div>
             </div>
             <div>
               <label>Horário da recepção ${infoI('Nesse intervalo a SoFIA <b>não responde</b> quem tem a tag de aluna — a recepcionista atende. Fora dele, a SoFIA assume. Pode virar a meia-noite (ex.: 17:00 às 07:00).')}</label>
@@ -5862,7 +5866,7 @@ const server = http.createServer((req, res) => {
           ativo: p.get('ativo') === 'on',
           janelaIni: p.get('janelaIni'), janelaFim: p.get('janelaFim'),
           recepcaoNumero: p.get('recepcaoNumero') || '',
-          tag: p.get('tag') || undefined,
+          tags: p.getAll('tags'),
         });
         auditoria.registrar(sess.usuario, 'sofia.alunas', '', 'regras das alunas');
       } catch (_) {}

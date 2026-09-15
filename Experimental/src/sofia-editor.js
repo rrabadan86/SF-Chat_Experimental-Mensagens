@@ -645,22 +645,42 @@ function gravarNaoResponder(texto) {
 // "alunas" (quem responde é a recepcionista). Fora dessa janela, a Sofia cobre.
 // "recepcaoNumero" recebe o aviso quando a aluna precisa de atendimento humano
 // (ex.: pediu remarcação e não tem reposição disponível).
-const ALUNAS_PADRAO = { ativo: true, janelaIni: '05:45', janelaFim: '16:30', recepcaoNumero: '', tag: 'alunas' };
+const ALUNAS_PADRAO = { ativo: true, janelaIni: '05:45', janelaFim: '16:30', recepcaoNumero: '', tag: 'alunas', tags: ['alunas'] };
 function lerAlunas() {
-  try { const o = JSON.parse(ler(F.alunas)); return Object.assign({}, ALUNAS_PADRAO, (o && typeof o === 'object') ? o : {}); }
-  catch (_) { return Object.assign({}, ALUNAS_PADRAO); }
+  let o = {};
+  try { const p = JSON.parse(ler(F.alunas)); if (p && typeof p === 'object') o = p; } catch (_) {}
+  const cfg = Object.assign({}, ALUNAS_PADRAO, o);
+  // Compatibilidade: versões antigas gravavam só "tag" (uma). Agora usamos uma
+  // LISTA "tags". Sem "tags", deriva da "tag" antiga; com "tags", ela manda.
+  let tags = Array.isArray(o.tags) ? o.tags.map(t => String(t || '').trim()).filter(Boolean) : [];
+  if (!tags.length) tags = [String(cfg.tag || 'alunas').trim() || 'alunas'];
+  cfg.tags = Array.from(new Set(tags));
+  cfg.tag = cfg.tags[0]; // espelho p/ leitores antigos
+  return cfg;
 }
 function gravarAlunas(patch) {
   const hhmm = v => (/^\d{1,2}:\d{2}$/.test(String(v || '').trim()) ? String(v).trim().padStart(5, '0') : null);
   const at = lerAlunas();
+  // Lista de tags que a SoFIA NÃO responde. Aceita array (patch.tags) ou, para
+  // compatibilidade, uma única (patch.tag).
+  let tags = at.tags;
+  if (patch.tags !== undefined) {
+    const arr = Array.isArray(patch.tags) ? patch.tags : [patch.tags];
+    tags = Array.from(new Set(arr.map(t => String(t || '').trim()).filter(Boolean)));
+  } else if (patch.tag !== undefined) {
+    const one = String(patch.tag || '').trim();
+    tags = one ? [one] : at.tags;
+  }
+  if (!tags.length) tags = ['alunas'];
   const novo = Object.assign({}, at, {
     ativo: patch.ativo !== undefined ? !!patch.ativo : at.ativo,
     janelaIni: hhmm(patch.janelaIni) || at.janelaIni,
     janelaFim: hhmm(patch.janelaFim) || at.janelaFim,
     recepcaoNumero: patch.recepcaoNumero !== undefined ? String(patch.recepcaoNumero || '').replace(/\D/g, '') : at.recepcaoNumero,
-    // Guarda a tag COMO O STUDIO ESCREVEU (ex.: "0. Aluna") — quem compara
+    // Guarda as tags COMO O STUDIO ESCREVEU (ex.: "0. Aluna") — quem compara
     // (sofia.ts) normaliza acento, numeração e plural, então a grafia não importa.
-    tag: String(patch.tag !== undefined ? patch.tag : (at.tag || 'alunas')).trim() || 'alunas',
+    tags,
+    tag: tags[0], // espelho p/ leitores antigos (sofia.ts prefere "tags")
     atualizadoEm: new Date().toISOString(),
   });
   gravarArquivo(F.alunas, JSON.stringify(novo, null, 2));

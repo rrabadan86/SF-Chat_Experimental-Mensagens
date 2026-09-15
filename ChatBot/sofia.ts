@@ -1212,9 +1212,19 @@ const AGENDOU_FILE = path.join(BASE_DIR, "sofia-agendou.jsonl");
 // Lê as regras da tag "alunas" (janela da recepção + número de aviso), gravadas
 // pelo painel em sofia-alunas.json. Sem o arquivo, usa os padrões.
 const ALUNAS_FILE = path.join(BASE_DIR, "sofia-alunas.json");
-function lerAlunasCfg(): { ativo: boolean; janelaIni: string; janelaFim: string; recepcaoNumero: string; tag: string } {
-  const padrao = { ativo: true, janelaIni: "05:45", janelaFim: "16:30", recepcaoNumero: "", tag: "alunas" };
-  try { return { ...padrao, ...JSON.parse(fs.readFileSync(ALUNAS_FILE, "utf8")) }; } catch { return padrao; }
+function lerAlunasCfg(): { ativo: boolean; janelaIni: string; janelaFim: string; recepcaoNumero: string; tag: string; tags: string[] } {
+  const padrao = { ativo: true, janelaIni: "05:45", janelaFim: "16:30", recepcaoNumero: "", tag: "alunas", tags: ["alunas"] };
+  try {
+    const o = JSON.parse(fs.readFileSync(ALUNAS_FILE, "utf8")) || {};
+    const cfg = { ...padrao, ...o };
+    // Compat: config antiga tinha só "tag" (uma). Agora é uma LISTA "tags"
+    // (aluna, ex-aluna, …). Sem "tags", deriva da "tag"; com "tags", ela manda.
+    let tags = Array.isArray(o.tags) ? o.tags.map((t: any) => String(t || "").trim()).filter(Boolean) : [];
+    if (!tags.length) tags = [String(cfg.tag || "alunas").trim() || "alunas"];
+    cfg.tags = tags;
+    cfg.tag = tags[0];
+    return cfg;
+  } catch { return padrao; }
 }
 
 // Avisa a recepção quando a SoFIA não consegue resolver sozinha (ex.: a aluna
@@ -1261,8 +1271,10 @@ function chaveTag(v: any): string {
 
 function temTagAluna(telefone: string): boolean {
   try {
-    const alvo = chaveTag(lerAlunasCfg().tag || "alunas");
-    if (!alvo) return false;
+    const cfg = lerAlunasCfg();
+    const fonte = (cfg.tags && cfg.tags.length) ? cfg.tags : [cfg.tag || "alunas"];
+    const alvos = new Set(fonte.map((t) => chaveTag(t)).filter(Boolean));
+    if (!alvos.size) return false;
     const ult8 = String(telefone || "").replace(/\D/g, "").slice(-8);
     if (!ult8) return false;
     const bruto = JSON.parse(fs.readFileSync(CONTATOS_FILE, "utf8"));
@@ -1270,7 +1282,8 @@ function temTagAluna(telefone: string): boolean {
     for (const c of lista) {
       const t = String(c?.tel || c?.telefone || "").replace(/\D/g, "");
       if (t && t.endsWith(ult8)) {
-        return (c?.tags || []).some((x: any) => chaveTag(x) === alvo);
+        // barra se o contato tem QUALQUER uma das etiquetas configuradas
+        return (c?.tags || []).some((x: any) => alvos.has(chaveTag(x)));
       }
     }
   } catch { /* sem arquivo/contato = não é aluna */ }
@@ -1332,7 +1345,7 @@ function recepcaoAtendendo(telefone: string): boolean {
     const cfg = lerAlunasCfg();
     if (!cfg.ativo) { console.log(`(recepção) ${telefone}: regra desligada — SoFIA responde.`); return false; }
     const ehAluna = temTagAluna(telefone);
-    if (!ehAluna) { console.log(`(recepção) ${telefone}: NÃO reconhecida como aluna (tag alvo="${cfg.tag}") — SoFIA responde.`); return false; }
+    if (!ehAluna) { console.log(`(recepção) ${telefone}: NÃO reconhecida (tags alvo="${(cfg.tags || [cfg.tag]).join(", ")}") — SoFIA responde.`); return false; }
     const agora = new Date().toLocaleTimeString("pt-BR", {
       timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false,
     });
