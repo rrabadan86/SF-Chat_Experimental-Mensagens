@@ -107,6 +107,9 @@ const CATALOGO = [
     titulo: 'Aniversário (nos grupos)',
     quando: 'Enviada às 08:00. A aniversariante é @marcada onde está {aluna}.',
     vars: [['aluna', 'a @menção da aniversariante — mantenha o {aluna} no texto'], ['nome', 'primeiro nome da aniversariante (texto normal, sem marcar)']],
+    // No preview/teste o {aluna} representa a @menção → mostramos "@Maria"
+    // (assim não fica "Maria Maria"; no envio real vira a marcação de verdade).
+    exemplos: { aluna: '@Maria' },
     padrao: 'Hoje é aniversário da {aluna}! 🥳🎉\n\nMuitas felicidades, saúde e sucesso!!! Que este novo ciclo venha repleto de conquistas e alegria!! Aproveite o seu dia! ❤️',
   },
   {
@@ -233,6 +236,19 @@ const EXEMPLOS = {
 function exemplosCompletos() {
   return Object.assign(globais(), EXEMPLOS);
 }
+// Exemplos por MENSAGEM (override do EXEMPLOS global). Ex.: em 'aniversario' o
+// {aluna} é uma @menção → no preview/teste mostramos "@Maria" (e não "Maria").
+function exemplosDe(chave) {
+  const item = (CATALOGO || []).find(m => m.chave === chave);
+  return Object.assign({}, EXEMPLOS, (item && item.exemplos) || {});
+}
+// Mapa { chave: {overrides} } só das mensagens que têm exemplo próprio — o painel
+// injeta no preview client-side.
+function exemplosPorChave() {
+  const o = {};
+  for (const m of (CATALOGO || [])) if (m.exemplos) o[m.chave] = m.exemplos;
+  return o;
+}
 // Substitui {marcadores} num TEXTO qualquer (não só numa chave do catálogo).
 // Usado pelo envio de teste, que manda o texto que está na tela.
 function renderTexto(texto, vars = {}) {
@@ -308,5 +324,5 @@ function listar() {
 module.exports = {
   render, renderTexto, partes, texto, salvarOverride, listar, carregarOverrides,
   fotoPath, fotoNome, salvarFoto, removerFoto, aceitaFoto, FOTOS_DIR,
-  CATALOGO, PADROES, EXEMPLOS, exemplosCompletos, ARQUIVO,
+  CATALOGO, PADROES, EXEMPLOS, exemplosCompletos, exemplosDe, exemplosPorChave, ARQUIVO,
 };
