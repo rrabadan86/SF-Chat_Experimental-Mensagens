@@ -6493,8 +6493,72 @@ function reconciliarTagHumano() {
     for (const t of tags) { try { contatos.removerTag(k, t); } catch (_) {} } // voltou p/ SoFIA → remove
   }
 }
+// ── Cadastro Express: agenda no EVO SEM depender da SoFIA ────────────────────
+// O Express enfileira o pedido; aqui (no painel, sempre no ar) consumimos a fila e
+// fazemos o MESMO POST que a SoFIA fazia (/api/book-sofia no formulário). Assim o
+// Express funciona IGUAL ao formulário, mesmo com a SoFIA desligada. A captura da
+// fila é atômica, então convive com a SoFIA (ex.: Bueno) sem agendar em dobro.
+let _bookCfgCache = null;
+function bookConfig() {
+  if (_bookCfgCache) return _bookCfgCache;
+  let token = (process.env.SOFIA_TOKEN || '').trim();
+  let url = (process.env.SOFIA_BOOK_URL || '').trim();
+  if (!token || !url) {
+    try {
+      const p = path.resolve(__dirname, '..', '..', 'ChatBot', '.env');
+      const txt = fs.readFileSync(p, 'utf8');
+      const pega = (k) => { const m = new RegExp('^' + k + '=(.*)$', 'm').exec(txt); return m ? m[1].trim().replace(/^["']|["']$/g, '') : ''; };
+      if (!token) token = pega('SOFIA_TOKEN');
+      if (!url) url = pega('SOFIA_BOOK_URL');
+    } catch (_) {}
+  }
+  if (!url) { const f = (process.env.FORM_CLOUD_URL || '').trim().replace(/\/+$/, ''); if (f) url = f + '/api/book-sofia'; }
+  _bookCfgCache = { token, url };
+  return _bookCfgCache;
+}
+let _bookInFlight = false;
+async function processarExpressInbox() {
+  if (_bookInFlight) return;
+  let pend = [];
+  try { pend = sofia.consumirAgendarInbox(); } catch (_) { return; }
+  if (!pend.length) return;
+  _bookInFlight = true;
+  try {
+    const { token, url } = bookConfig();
+    for (const op of pend) {
+      const id = String((op && op.id) || '');
+      if (!id) continue;
+      const telefone = String(op.telefone || op.chave || '').replace(/\D/g, '');
+      const nome = String(op.nome || '').trim();
+      try {
+        if (!url || !token) throw new Error('SOFIA_BOOK_URL/SOFIA_TOKEN ausentes (confira o ChatBot/.env)');
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Sofia-Token': token },
+          body: JSON.stringify({ nome, email: String(op.email || '').trim(), telefone, when: String(op.when || '').trim(), origem: String(op.origem || '').trim() }),
+          signal: AbortSignal.timeout(55000),
+        });
+        const data = await r.json().catch(() => ({}));
+        let res;
+        if (r.ok && data && data.ok) {
+          res = { ok: true, when: data.when || op.when };
+          try { sofia.registrarAgendou({ telefone, nome, when: res.when }); } catch (_) {}
+        } else if (r.status === 409) {
+          res = { lotada: true, alternativas: Array.isArray(data.alternativas) ? data.alternativas.filter(Boolean) : [] };
+        } else {
+          res = { erro: true, detalhe: (data && (data.erro || data.detalhe)) || ('HTTP ' + r.status) };
+        }
+        sofia.gravarAgendarResultId(id, res);
+      } catch (e) {
+        sofia.gravarAgendarResultId(id, { erro: true, detalhe: (e && e.message) || 'falha de rede' });
+      }
+    }
+  } finally { _bookInFlight = false; }
+}
+
 publicarRegras();
 try {
+  setInterval(() => { processarExpressInbox().catch(() => {}); }, 1500);
   setInterval(() => { try { processarAgendamentos(); } catch (_) {} try { processarEventos(); } catch (_) {} try { reconciliarTagHumano(); } catch (_) {} try { publicarRegras(); } catch (_) {} }, 4000);
   // Follow-up: cadência mais lenta (as leads esfriam em horas, não em segundos).
   setInterval(() => { try { processarFollowups(); } catch (_) {} }, 120000);

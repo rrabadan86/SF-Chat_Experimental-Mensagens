@@ -439,6 +439,39 @@ function lerAgendamentoResult(id) {
   try { const o = JSON.parse(fs.readFileSync(F.agendarResult, 'utf8')); return (o && typeof o === 'object') ? (o[id] || null) : null; }
   catch (_) { return null; }
 }
+// Consome (lê e apaga) os PEDIDOS de agendamento manual do Cadastro Express.
+// Captura ATÔMICA (rename): se a SoFIA também estiver rodando, só um dos dois
+// processa cada pedido — nunca agenda em dobro. Devolve um array de ops.
+function consumirAgendarInbox() {
+  let tam = 0;
+  try { tam = fs.statSync(F.agendarInbox).size; } catch (_) { return []; }
+  if (!tam) return [];
+  const tmp = F.agendarInbox + '.' + Date.now() + '.proc';
+  let linhas = [];
+  try { fs.renameSync(F.agendarInbox, tmp); linhas = fs.readFileSync(tmp, 'utf8').split('\n').map(l => l.trim()).filter(Boolean); fs.rmSync(tmp, { force: true }); }
+  catch (_) { return []; }
+  const out = [];
+  for (const l of linhas) { try { out.push(JSON.parse(l)); } catch (_) {} }
+  return out;
+}
+// Grava o resultado do agendamento por id (o painel consulta via lerAgendamentoResult).
+// Mantém só os ~200 mais recentes para o arquivo não crescer.
+function gravarAgendarResultId(id, res) {
+  let mapa = {};
+  try { const o = JSON.parse(fs.readFileSync(F.agendarResult, 'utf8')); if (o && typeof o === 'object') mapa = o; } catch (_) {}
+  mapa[String(id)] = Object.assign({}, res, { em: Date.now() });
+  const ids = Object.keys(mapa).sort((a, b) => ((mapa[a] && mapa[a].em) || 0) - ((mapa[b] && mapa[b].em) || 0));
+  while (ids.length > 200) { delete mapa[ids.shift()]; }
+  try { fs.writeFileSync(F.agendarResult, JSON.stringify(mapa), 'utf8'); } catch (_) {}
+}
+// Registra um agendamento concluído no feed que o painel consome p/ aplicar a tag
+// "agendou" (mesmo arquivo que a SoFIA usa). Best-effort.
+function registrarAgendou({ telefone, nome, when } = {}) {
+  try {
+    const linha = JSON.stringify({ telefone: String(telefone || '').replace(/\D/g, ''), nome: String(nome || '').trim(), when: String(when || '').trim(), em: Date.now() }) + '\n';
+    fs.appendFileSync(F.agendou, linha, 'utf8');
+  } catch (_) {}
+}
 
 // Salva a foto anexada numa resposta manual (dataURL base64) em
 // ChatBot/humano-fotos/<timestamp>.<ext> e devolve o caminho absoluto. O listener,
@@ -930,6 +963,6 @@ module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, enfileirarAgendamento, lerAgendamentoResult, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerHumanoLog, lerBloqueios, estaBloqueado, setBloqueio, lerNaoResponder, gravarNaoResponder, estaNaoResponder, lerAlunas, gravarAlunas, dentroJanelaRecepcao, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, enfileirarAgendamento, lerAgendamentoResult, consumirAgendarInbox, gravarAgendarResultId, registrarAgendou, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerHumanoLog, lerBloqueios, estaBloqueado, setBloqueio, lerNaoResponder, gravarNaoResponder, estaNaoResponder, lerAlunas, gravarAlunas, dentroJanelaRecepcao, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, lerRascunhoCampanha, lerLidStats, salvarFotoCampanha, DIR, ARQUIVOS: F,
 };
