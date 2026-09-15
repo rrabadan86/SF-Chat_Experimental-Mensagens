@@ -26,21 +26,36 @@ const contatos = require('./contatos');
 const ARQ = path.resolve(__dirname, '..', 'data', 'comparecimento.json');
 const PADRAO = {
   on: false,
-  tagAgendou: 'FX - 3. Agendou Aula Exp',
+  tagAgendou: 'FX - 3. Agendou Aula Exp',        // espelho (compat) — 1ª da lista
+  tagsAgendou: ['FX - 3. Agendou Aula Exp'],      // LISTA de tags de origem ("agendou")
   tagCompareceu: 'FX - 5. Fez Aula Experimental',
   tagFaltou: 'FX - 2. Encerrado com Agendamento sem Presença',
   numeroRelatorio: '',
   criarNovos: false, // cadastrar na SoFIA quem fez experimental e não existe (p/ campanhas)
 };
 
+// Normaliza a lista de tags de "agendou": aceita a LISTA nova (tagsAgendou) e,
+// para compatibilidade, a única antiga (tagAgendou).
+function tagsAgendouDe(o) {
+  let ta = Array.isArray(o && o.tagsAgendou) ? o.tagsAgendou.map(t => String(t || '').trim()).filter(Boolean) : [];
+  if (!ta.length) { const one = String((o && o.tagAgendou) || PADRAO.tagAgendou).trim(); ta = [one || PADRAO.tagAgendou]; }
+  return Array.from(new Set(ta));
+}
+
 function ler() {
-  try { const o = JSON.parse(fs.readFileSync(ARQ, 'utf8')); return { ...PADRAO, ...(o && typeof o === 'object' ? o : {}) }; }
-  catch (_) { return { ...PADRAO }; }
+  let o = {};
+  try { const p = JSON.parse(fs.readFileSync(ARQ, 'utf8')); if (p && typeof p === 'object') o = p; } catch (_) {}
+  const cfg = { ...PADRAO, ...o };
+  cfg.tagsAgendou = tagsAgendouDe(o);
+  cfg.tagAgendou = cfg.tagsAgendou[0]; // espelho p/ leitores antigos
+  return cfg;
 }
 function gravar(cfg) {
+  const tags = tagsAgendouDe(cfg);
   const o = {
     on: !!cfg.on,
-    tagAgendou: String(cfg.tagAgendou || '').trim() || PADRAO.tagAgendou,
+    tagsAgendou: tags,
+    tagAgendou: tags[0], // espelho (compat)
     tagCompareceu: String(cfg.tagCompareceu || '').trim() || PADRAO.tagCompareceu,
     tagFaltou: String(cfg.tagFaltou || '').trim() || PADRAO.tagFaltou,
     numeroRelatorio: String(cfg.numeroRelatorio || '').replace(/\D/g, ''),
@@ -110,19 +125,23 @@ async function rodar({ dry = false } = {}) {
   const cfg = ler();
   const resumo = { compareceu: [], faltou: [], semTag: [], dry: !!dry, em: Date.now() };
 
-  // Contatos que estão com a tag "Agendou" → é neles que vamos mexer.
+  // Uma OU MAIS tags de origem ("agendou") — é em quem tem qualquer uma delas
+  // que vamos mexer.
+  const origem = (cfg.tagsAgendou && cfg.tagsAgendou.length) ? cfg.tagsAgendou : [cfg.tagAgendou];
+
+  // Contatos que estão com alguma tag de "Agendou" → é neles que vamos mexer.
   let mapa; // last8 -> { tel, nome, tags }
   try {
     const todos = contatos.carregar() || {};
     mapa = {};
     for (const tel in todos) {
       const c = todos[tel];
-      if ((c.tags || []).includes(cfg.tagAgendou)) mapa[last8(tel)] = { tel, nome: c.nome || '', tags: c.tags || [] };
+      if ((c.tags || []).some(tg => origem.includes(tg))) mapa[last8(tel)] = { tel, nome: c.nome || '', tags: c.tags || [] };
     }
   } catch (e) { resumo.erro = 'não consegui ler os contatos: ' + (e && e.message); return resumo; }
 
   const nAguardando = Object.keys(mapa).length;
-  if (!nAguardando) { resumo.aviso = `Nenhum contato com a tag "${cfg.tagAgendou}".`; return resumo; }
+  if (!nAguardando) { resumo.aviso = `Nenhum contato com as tags de "agendou" (${origem.join(', ')}).`; return resumo; }
 
   // Coleta a presença da semana no EVO (com 3 tentativas de sessão).
   let semana = [];
@@ -158,7 +177,7 @@ async function rodar({ dry = false } = {}) {
         // Já rastreado como "agendou" na SoFIA → transição de tag.
         jaMexido.add(chave); acao = 'transicao';
         const item = { nome: alvo.nome || a.nome, telefone: alvo.tel, data: a.data };
-        if (!dry) { try { contatos.removerTag(alvo.tel, cfg.tagAgendou); contatos.adicionarTag(alvo.tel, alvo.nome || a.nome, destino); } catch (e) { console.log(`   ⚠️  troca de tag falhou (${alvo.tel}): ${e && e.message}`); } }
+        if (!dry) { try { for (const tg of origem) contatos.removerTag(alvo.tel, tg); contatos.adicionarTag(alvo.tel, alvo.nome || a.nome, destino); } catch (e) { console.log(`   ⚠️  troca de tag falhou (${alvo.tel}): ${e && e.message}`); } }
         (a.veredito === 'compareceu' ? resumo.compareceu : resumo.faltou).push(item);
       } else if (cfg.criarNovos && a.telefone) {
         // Não está na SoFIA (ou sem a tag) → cadastra + tag do resultado (p/ campanha).
