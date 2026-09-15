@@ -544,6 +544,9 @@ SOFIA_DIR=$SOFIA_DIR
 
 # ===== Formulário (Render) desta unidade =====
 FORM_CLOUD_URL=https://SEU-FORM.onrender.com
+# DUAS lojas no MESMO VPS? Escalone o minuto do envio da grade p/ não estourarem
+# juntas o limite de 40 req/min do EVO. Ex.: loja 1 = 0, loja 2 = 30. (Só 1 loja: deixe 0.)
+# FORM_SLOTS_MINUTO=0
 # Token que o robô ENVIA a grade ao formulário (mesmo valor no form: FORM_SLOTS_TOKEN):
 FORM_SLOTS_TOKEN=$TOK_FORM
 # Token que o robô PUXA agendamentos/confirmações/indicadores do formulário

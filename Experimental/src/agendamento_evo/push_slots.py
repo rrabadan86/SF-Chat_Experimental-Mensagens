@@ -42,7 +42,9 @@ def main():
             f"{FORM_URL}/api/slots/push",
             params={"token": TOKEN},
             json={"slots": slots, "days": DAYS, "maxOcupacao": MAXOC},
-            timeout=30,
+            # 60s: o formulário free da Render pode estar "dormindo" e o cold start
+            # leva até ~50s; 30s dava ReadTimeout e a grade não era entregue.
+            timeout=60,
         )
     except requests.RequestException as e:
         print(f"push_slots: falha ao enviar ({type(e).__name__}: {e})")

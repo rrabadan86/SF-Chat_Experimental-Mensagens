@@ -874,7 +874,9 @@ async function main() {
   if (_slotsAgendado) {
     console.log('   → Calcula os horários e envia prontos ao formulário de agendamento');
     // Empurra uma vez já no start (após restart, o formulário fica pronto logo).
-    setTimeout(runSlotsPush, 15000);
+    // + escalona pelo FORM_SLOTS_MINUTO (em segundos) p/ 2 lojas no mesmo VPS não
+    //   dispararem o boot push no mesmo instante (evita 429 no EVO).
+    setTimeout(runSlotsPush, 15000 + (config.formSlotsMinuto || 0) * 1000);
   }
 
   // Schedule: 07:00 todos os dias → Boas-vindas a novos seguidores do Instagram.
@@ -1130,7 +1132,7 @@ async function main() {
     }
   };
   cron.schedule('*/2 * * * *', conferirGradeNuvem, { timezone: 'America/Sao_Paulo' });
-  setTimeout(conferirGradeNuvem, 40000); // uma verificação no boot (após estabilizar)
+  setTimeout(conferirGradeNuvem, 40000 + (config.formSlotsMinuto || 0) * 1000); // 1 verificação no boot (escalonada)
   log('🩹 Auto-recuperação da grade do formulário agendada: a cada 2 min');
 
   // Indicadores do formulário (acessos/agendamentos) — puxa a cada 2 min e grava
