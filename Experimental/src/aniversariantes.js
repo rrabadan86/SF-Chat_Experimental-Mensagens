@@ -20,6 +20,19 @@ puppeteer.use(StealthPlugin());
 const { antes: MSG_PREFIXO, depois: MSG_SUFIXO } =
   require('./mensagens').partes('aniversario', {}, 'aluna');
 
+// O {nome} (primeiro nome da aniversariante) é texto normal e varia por pessoa,
+// então é resolvido AQUI no envio (o render do módulo deixa {nome} literal). O
+// {aluna} continua sendo a @menção nativa inserida ENTRE o prefixo e o sufixo.
+function partesPara(primeiroNome) {
+  const n = (primeiroNome || '').trim();
+  const sub = (s) => {
+    let r = String(s || '').split('{nome}').join(n);
+    if (!n) r = r.replace(/ {2,}/g, ' '); // sem nome: evita espaço duplo
+    return r;
+  };
+  return { prefixo: sub(MSG_PREFIXO), sufixo: sub(MSG_SUFIXO) };
+}
+
 // WhatsApp: perfil DEDICADO do bot (pasta isolada), porta 9226 (mesmo do follow-up)
 const CDP_URL = 'http://127.0.0.1:9226';
 const IS_LINUX = process.platform === 'linux';
@@ -509,6 +522,8 @@ async function enviarParabensNoGrupo(page, nomeGrupo, phone, nomePessoa) {
   // Estratégia: digita @ + consulta, DETECTA o popup com a pessoa, e seleciona
   // pelo TECLADO (Enter escolhe o item destacado). Depois CONFERE no campo.
   const primeiroNome = (nomePessoa || '').trim().split(/\s+/)[0] || '';
+  // Prefixo/sufixo já com o {nome} desta aniversariante resolvido.
+  const { prefixo: pfxPessoa, sufixo: sfxPessoa } = partesPara(primeiroNome);
 
   async function limparCampo() {
     await page.keyboard.down('Control'); await page.keyboard.press('KeyA'); await page.keyboard.up('Control');
@@ -527,7 +542,7 @@ async function enviarParabensNoGrupo(page, nomeGrupo, phone, nomePessoa) {
   // Uma tentativa: monta prefixo + @consulta, detecta popup, seleciona e confere.
   async function tentar(consulta, criterio) {
     await limparCampo();
-    await page.keyboard.type(MSG_PREFIXO, { delay: 15 });
+    await page.keyboard.type(pfxPessoa, { delay: 15 });
     await page.keyboard.type('@', { delay: 20 });
     await sleep(400);
     await page.keyboard.type(consulta, { delay: 45 });
@@ -565,7 +580,7 @@ async function enviarParabensNoGrupo(page, nomeGrupo, phone, nomePessoa) {
     if (/@?\s*todos\b/i.test(txt)) return false;
     // Sucesso se o nome (critério) entrou no campo; por número, se sobrou algo além do prefixo
     if (critLc) return txt.toLowerCase().includes(critLc);
-    return txt.replace(MSG_PREFIXO, '').replace(/@/g, '').trim().length > 0;
+    return txt.replace(pfxPessoa, '').replace(/@/g, '').trim().length > 0;
   }
 
   let marcou = false;
@@ -587,7 +602,7 @@ async function enviarParabensNoGrupo(page, nomeGrupo, phone, nomePessoa) {
   }
 
   // O campo já tem: prefixo + @Marcação. Agora adiciona o sufixo e envia.
-  await page.keyboard.type(MSG_SUFIXO, { delay: 15 });
+  await page.keyboard.type(sfxPessoa, { delay: 15 });
   await sleep(600);
   await page.keyboard.press('Enter');
   await sleep(3000);
@@ -626,7 +641,8 @@ async function testeGrupo(nomeGrupo, numeroMarcar, nomePessoa) {
   // 2) Envia com @marcação (o que o job de aniversário usa).
   try {
     console.log('📨 [2/2] Enviando com @marcação...');
-    await wa.sendGrupoComMencao(gid, MSG_PREFIXO, MSG_SUFIXO, numeroMarcar);
+    const { prefixo: pfxT, sufixo: sfxT } = partesPara((nomePessoa || '').trim().split(/\s+/)[0]);
+    await wa.sendGrupoComMencao(gid, pfxT, sfxT, numeroMarcar);
     console.log('\n✅ Teste com marcação enviado! Confira o grupo.');
   } catch (e) {
     console.log(`\n⚠️  Não consegui enviar com marcação: ${e && e.message}`);
@@ -691,8 +707,9 @@ async function main() {
           // Monta: MSG_PREFIXO + @<aniversariante> + MSG_SUFIXO (menção nativa).
           // Com foto (flyer) opcional definida no painel.
           const fotoAniv = require('./mensagens').fotoPath('aniversario');
-          if (fotoAniv) await wa.sendGrupoMidiaComMencao(g.id, fotoAniv, MSG_PREFIXO, MSG_SUFIXO, aniv.telefone);
-          else await wa.sendGrupoComMencao(g.id, MSG_PREFIXO, MSG_SUFIXO, aniv.telefone);
+          const { prefixo: pfxP, sufixo: sfxP } = partesPara(aniv.primeiroNome);
+          if (fotoAniv) await wa.sendGrupoMidiaComMencao(g.id, fotoAniv, pfxP, sfxP, aniv.telefone);
+          else await wa.sendGrupoComMencao(g.id, pfxP, sfxP, aniv.telefone);
           ok = true;
           console.log(`      ✅ Enviado no grupo "${rotulo}"`);
         } catch (e) { console.log(`      ❌ Erro: ${e.message}`); }
