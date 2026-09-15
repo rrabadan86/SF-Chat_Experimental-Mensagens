@@ -174,6 +174,10 @@ install_system_deps() {
   # validada roda o robô com tela virtual (HEADLESS=false + xvfb-run). Sem isso os
   # jobs diários do EVO (faltantes, suspensões, presença, renovação) podem falhar.
   _sudo apt-get install -y xvfb || echo "   ⚠️  não instalei o Xvfb — instale à mão: apt install -y xvfb (o robô precisa dele p/ ler o EVO)."
+  # cron: agenda o backup diário dos dados (data/ → backups/*.tar.gz). Sem ele a
+  # pasta data/ (edições do painel) fica sem cópia de segurança.
+  _sudo apt-get install -y cron 2>/dev/null || true
+  _sudo systemctl enable --now cron 2>/dev/null || _sudo service cron start 2>/dev/null || true
   # Chromium: nome do pacote varia entre distros
   _sudo apt-get install -y chromium-browser 2>/dev/null || _sudo apt-get install -y chromium || \
     echo "   ⚠️  não instalei o Chromium automaticamente — ajuste CHROMIUM_PATH no .env depois."
@@ -373,7 +377,7 @@ if [ "$START" = "1" ]; then
   # Painel (porta do .env; Caddy faz o HTTPS por cima)
   pm2 delete "$P_PAINEL" >/dev/null 2>&1 || true
   ( cd "$EXP_DIR" && pm2 start src/painel-mensagens.js --name "$P_PAINEL" --time )
-  # Agendador do robô (confirmações, follow-ups, push_slots, backup). Sobe pelo
+  # Agendador do robô (confirmações, follow-ups, push_slots). Sobe pelo
   # wrapper scheduler-vps.sh, que embrulha o node em xvfb-run (tela virtual) —
   # o EVO (Angular) é instável em headless puro, então rodamos com HEADLESS=false.
   chmod +x "$EXP_DIR/scheduler-vps.sh" 2>/dev/null || true
@@ -388,6 +392,31 @@ if [ "$START" = "1" ]; then
 
   pm2 save
 
+  # ── Backup diário dos dados (cron) ─────────────────────────────────────────
+  # A pasta data/ (edições do painel: mensagens, horários, fotos, config) só existe
+  # nesta VPS e NÃO vai para o Git. Agenda um backup diário (03:10) que compacta
+  # data/ em backups/*.tar.gz (mantém as últimas BACKUP_MANTER cópias). É idempotente
+  # e POR UNIDADE (marca "# sf-backup:<slug>"), então duas lojas no mesmo VPS convivem.
+  if command -v crontab >/dev/null 2>&1; then
+    mkdir -p "$EXP_DIR/logs"
+    NODE_BIN="$(command -v node || echo /usr/bin/node)"
+    MARCA="# sf-backup:$SLUG"
+    if crontab -l 2>/dev/null | grep -Fq "$MARCA"; then
+      echo "   ✔ cron de backup já configurado para '$SLUG'."
+    else
+      LINHA="10 3 * * * cd $EXP_DIR && $NODE_BIN src/backup-dados.js >> $EXP_DIR/logs/backup.log 2>&1 $MARCA"
+      if ( crontab -l 2>/dev/null; echo "$LINHA" ) | crontab -; then
+        echo "   ✔ backup diário dos dados agendado (03:10) no cron."
+      else
+        echo "   ⚠️  não consegui agendar o cron do backup — agende à mão (ver runbook)."
+      fi
+    fi
+    # Primeiro backup imediato (best-effort): a pasta backups/ já nasce com 1 cópia.
+    ( cd "$EXP_DIR" && "$NODE_BIN" src/backup-dados.js >/dev/null 2>&1 ) && echo "   ✔ primeiro backup gerado em backups/." || true
+  else
+    echo "   ⚠️  crontab não encontrado — backup diário NÃO agendado. Instale o cron e agende: 10 3 * * * cd $EXP_DIR && node src/backup-dados.js >> logs/backup.log 2>&1"
+  fi
+
   # HTTPS automático (best-effort) quando passaram --domain
   if [ -n "$DOMAIN" ]; then wire_caddy "$DOMAIN"; fi
 
@@ -401,6 +430,7 @@ if [ "$START" = "1" ]; then
   echo "   • Leia os QRs dos 2 WhatsApp:  pm2 logs $P_EXP   e   pm2 logs $P_SOFIA"
   [ -n "$DOMAIN" ] || echo "   • Configure o HTTPS: rode com --domain <subdominio> (gera + liga o Caddy)."
   echo "   • pm2 startup   (para subir sozinho após reboot do VPS)"
+  echo "   • Backup diário dos dados já agendado (03:10) — confira em Saúde → Servidor."
   echo "   • Acompanhe os envios em tempo real no painel: WhatsApp → Log"
   echo "       (cada linha tem '+ ver tudo' para abrir a mensagem inteira que foi enviada)."
   exit 0
