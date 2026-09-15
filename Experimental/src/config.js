@@ -7,6 +7,15 @@ const mensagens = require('./mensagens');
 // seu no .env (STUDIO_NOME); o padrão mantém a unidade original funcionando igual.
 const STUDIO_NOME = process.env.STUDIO_NOME || 'Studio SlimFit';
 
+// Minuto (0-59) em que ESTA unidade envia a grade ao formulário. Serve para
+// ESCALONAR duas lojas no mesmo VPS (mesma conta EVO): cada uma empurra a grade
+// num minuto diferente e elas NÃO estouram juntas o limite de 40 req/min do EVO.
+// Padrão 0. Ex.: lagosul1 FORM_SLOTS_MINUTO=0 · lagosul2 FORM_SLOTS_MINUTO=30.
+const FORM_SLOTS_MINUTO = (() => {
+  const m = parseInt(process.env.FORM_SLOTS_MINUTO || '0', 10);
+  return (Number.isFinite(m) && m >= 0 && m <= 59) ? m : 0;
+})();
+
 // Mapa professora → arquivo de áudio (pós-aula). O padrão é o da unidade original.
 // Cada franquia pode sobrescrever no .env com AUDIO_MAP (um JSON), ex.:
 //   AUDIO_MAP={"ana":"A-Ana-Pos","carla":"A-Carla-Pos"}
@@ -88,8 +97,8 @@ const config = {
     resumoDia:        '45 19 * * *',    // 19:45 todos os dias (resumo do dia das experimentais no grupo)
     noShowMorning:    '30 11 * * 1-6',  // 11:30 seg-sáb (faltas nas aulas da manhã → remarcar)
     noShowAfternoon:  '30 19 * * 1-6',  // 19:30 seg-sáb (faltas nas aulas da tarde/noite → remarcar)
-    slotsPushDia:     '0 7-21 * * *',   // a cada 60 min, 07h-21h (grade fresca no horário de agendamento)
-    slotsPushNoite:   '0 22,1,4 * * *', // a cada ~3h de madrugada (22h, 01h, 04h) — alivia o pico do EVO
+    slotsPushDia:     `${FORM_SLOTS_MINUTO} 7-21 * * *`,   // a cada 60 min, 07h-21h (grade fresca; minuto escalonável p/ 2 lojas)
+    slotsPushNoite:   `${FORM_SLOTS_MINUTO} 22,1,4 * * *`, // a cada ~3h de madrugada (22h, 01h, 04h) — alivia o pico do EVO
     circuitoConvoca:  '15 16 * * 3',    // 16:15 quarta (convocatória do Circuito de sábado, com a professora)
     circuitoLembrete: '15 16 * * 5',    // 16:15 sexta ("é amanhã!" no grupo Circuito Slim)
     agendadosManha:   '45 10 * * *',    // 10:45 todos os dias (envios agendados no painel — turno manhã)
@@ -128,6 +137,7 @@ try {
 // Nome do Studio (para banners/logs). Vem do .env (STUDIO_NOME); cada unidade
 // define o seu, então os logs mostram o nome certo — nada de "Bueno" fixo.
 config.STUDIO_NOME = STUDIO_NOME;
+config.formSlotsMinuto = FORM_SLOTS_MINUTO;
 
 // ===== Jobs DESLIGADOS por unidade (.env: JOBS_OFF=chave1,chave2) =============
 // Algumas unidades não usam certos envios (ex.: o Lago Sul não faz Circuito nem
