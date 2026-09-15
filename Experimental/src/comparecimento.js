@@ -232,7 +232,7 @@ if (require.main === module) {
   const cfg = ler();
   rodar({ dry }).then(r => {
     console.log('\n──────── DIAGNÓSTICO ────────');
-    console.log(`Contatos com a tag "${cfg.tagAgendou}" (é só nesses que o job age): ${r.mapaSize != null ? r.mapaSize : (r.aviso || 0)}`);
+    console.log(`Contatos com alguma tag de "agendou" [${(cfg.tagsAgendou || [cfg.tagAgendou]).join(' | ')}] (é só nesses que o job age): ${r.mapaSize != null ? r.mapaSize : (r.aviso || 0)}`);
     console.log(`Aulas com presença/falta lidas no EVO na semana: ${(r.evo || []).length}`);
     if (r.evo && r.evo.length) {
       const rotAcao = { transicao: 'troca de tag ✅', cadastrado: 'cadastrado 🆕', ignorado: 'ignorado —' };
