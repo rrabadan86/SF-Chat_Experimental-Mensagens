@@ -827,8 +827,10 @@ function card2FA() {
 // Script de pré-visualizar/enviar teste + inserir variável (compartilhado).
 function scriptPreviewTeste() {
   const exemplosJson = JSON.stringify(mensagens.exemplosCompletos()).replace(/</g, '\\u003c');
+  const exemplosChaveJson = JSON.stringify(mensagens.exemplosPorChave()).replace(/</g, '\\u003c');
   return `<script>
   var EXEMPLOS = ${exemplosJson};
+  var EXEMPLOS_CHAVE = ${exemplosChaveJson};
   function inserirVar(el, token){
     var ta = el.closest('form').querySelector('textarea');
     if(!ta) return;
@@ -838,11 +840,16 @@ function scriptPreviewTeste() {
     ta.focus(); ta.selectionStart = ta.selectionEnd = s + token.length;
   }
   function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function renderEx(txt){ for(var k in EXEMPLOS){ txt = txt.split('{'+k+'}').join(EXEMPLOS[k]); } return txt; }
+  function renderEx(txt, chave){
+    var ex = EXEMPLOS;
+    if(chave && EXEMPLOS_CHAVE[chave]){ ex = {}; for(var g in EXEMPLOS) ex[g]=EXEMPLOS[g]; for(var o in EXEMPLOS_CHAVE[chave]) ex[o]=EXEMPLOS_CHAVE[chave][o]; }
+    for(var k in ex){ txt = txt.split('{'+k+'}').join(ex[k]); } return txt;
+  }
+  function cardChave(card){ var i = card.querySelector('input[name="chave"]'); return i ? i.value : ''; }
   function previewMsg(btn){
     var card = btn.closest('.card'); var ta = card.querySelector('textarea'); var b = card.querySelector('.prev');
     b.style.display='block';
-    b.innerHTML = '<div class="prev-t">👁 Como a pessoa vê (valores de exemplo):</div><div class="prev-b">'+escHtml(renderEx(ta.value))+'</div>';
+    b.innerHTML = '<div class="prev-t">👁 Como a pessoa vê (valores de exemplo):</div><div class="prev-b">'+escHtml(renderEx(ta.value, cardChave(card)))+'</div>';
   }
   function soDigTeste(s){ return (s||'').replace(/\\D/g,''); }
   var _tt = document.getElementById('telTeste');
@@ -864,9 +871,9 @@ function scriptPreviewTeste() {
     // Se "Enviar com foto" está marcado, manda a chave da mensagem p/ o robô anexar o flyer salvo.
     var chaveInp = card.querySelector('input[name="chave"]');
     var comFoto = !!(card.querySelector('.mfChk') && card.querySelector('.mfChk').checked);
-    var chaveFoto = (comFoto && chaveInp) ? chaveInp.value : '';
+    var chaveMsg = chaveInp ? chaveInp.value : '';
     try{
-      var r = await fetch('/teste/enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:tel, texto:ta.value, chave:chaveFoto})});
+      var r = await fetch('/teste/enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:tel, texto:ta.value, chave:chaveMsg, comFoto:comFoto})});
       var d = await r.json();
       if(!d.ok){ b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(d.erro||'Não foi possível enviar.')+'</div>'; btn.disabled=false; return; }
       var tries=0;
@@ -5167,8 +5174,11 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e6, corpo => {
       try {
         const d = JSON.parse(corpo || '{}');
-        const textoFinal = mensagens.renderTexto(d.texto || '', mensagens.EXEMPLOS);
-        const id = teste.solicitar({ telefone: d.telefone, texto: textoFinal, chaveFoto: d.chave || '' });
+        // Exemplos por mensagem (ex.: {aluna} = "@Maria" no aniversário). d.chave é
+        // sempre a chave da mensagem; a foto só entra se d.comFoto estiver marcado.
+        const textoFinal = mensagens.renderTexto(d.texto || '', mensagens.exemplosDe(d.chave));
+        const chaveFoto = d.comFoto ? (d.chave || '') : (d.chaveFoto || '');
+        const id = teste.solicitar({ telefone: d.telefone, texto: textoFinal, chaveFoto });
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, id }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
