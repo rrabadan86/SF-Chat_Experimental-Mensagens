@@ -106,7 +106,7 @@ const CATALOGO = [
     foto: true,
     titulo: 'Aniversário (nos grupos)',
     quando: 'Enviada às 08:00. A aniversariante é @marcada onde está {aluna}.',
-    vars: [['aluna', 'a @menção da aniversariante — mantenha o {aluna} no texto']],
+    vars: [['aluna', 'a @menção da aniversariante — mantenha o {aluna} no texto'], ['nome', 'primeiro nome da aniversariante (texto normal, sem marcar)']],
     padrao: 'Hoje é aniversário da {aluna}! 🥳🎉\n\nMuitas felicidades, saúde e sucesso!!! Que este novo ciclo venha repleto de conquistas e alegria!! Aproveite o seu dia! ❤️',
   },
   {
