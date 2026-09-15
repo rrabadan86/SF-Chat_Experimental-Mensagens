@@ -848,8 +848,14 @@ function scriptPreviewTeste() {
   function cardChave(card){ var i = card.querySelector('input[name="chave"]'); return i ? i.value : ''; }
   function previewMsg(btn){
     var card = btn.closest('.card'); var ta = card.querySelector('textarea'); var b = card.querySelector('.prev');
+    // Flyer: se a mensagem tem foto E o "Enviar com foto" está marcado, mostra o flyer no preview.
+    var chk = card.querySelector('.mfChk'); var thumb = card.querySelector('.mfThumb');
+    var imgHtml = '';
+    if(chk && chk.checked && thumb && thumb.getAttribute('src')){
+      imgHtml = '<img src="'+thumb.getAttribute('src')+'" alt="flyer" style="max-width:200px;border-radius:9px;display:block;margin:0 0 8px">';
+    }
     b.style.display='block';
-    b.innerHTML = '<div class="prev-t">👁 Como a pessoa vê (valores de exemplo):</div><div class="prev-b">'+escHtml(renderEx(ta.value, cardChave(card)))+'</div>';
+    b.innerHTML = '<div class="prev-t">👁 Como a pessoa vê (valores de exemplo):</div><div class="prev-b">'+imgHtml+escHtml(renderEx(ta.value, cardChave(card)))+'</div>';
   }
   function soDigTeste(s){ return (s||'').replace(/\\D/g,''); }
   var _tt = document.getElementById('telTeste');
@@ -4781,7 +4787,7 @@ function fmtIdadeSaude(ts) {
   if (min < 1440) return { txt: 'há ' + Math.round(min / 60) + 'h', min };
   return { txt: 'há ' + Math.round(min / 1440) + ' dia' + (min < 2880 ? '' : 's'), min };
 }
-function paginaSaude(list) {
+function paginaSaude(list, extra = {}) {
   const proc = (n) => {
     if (!Array.isArray(list)) return null;
     const p = list.find(x => x && x.name === n);
@@ -4841,8 +4847,17 @@ function paginaSaude(list) {
   // acesso registrado como sinal de vida do fluxo.
   let ultAcesso = null; try { const rr = indicadores.resumo(0); ultAcesso = rr.ultimoAcesso || null; } catch (_) {}
   const fId = fmtIdadeSaude(ultAcesso);
-  const cardForm = card('Formulário de agendamento', 'ok', '🟢 Publicado', [
+  // Grade viva no formulário (checada com timeout curto na rota /saude).
+  const grade = extra.grade || null;
+  const gradeLinha = !grade ? '<span class="sd-muted">Grade: não verificada nesta carga.</span>'
+    : grade.timeout ? '<span class="sd-muted">Grade: não deu para verificar agora (o formulário pode estar “dormindo” no Render).</span>'
+      : grade.presente ? '✅ Grade do VPS <b>presente</b> no formulário.'
+        : grade.respondeu ? `⚠️ Formulário respondeu, mas <b>sem a grade do VPS</b> (fonte: ${esc(grade.fonte || 'nenhuma')}) — o VPS reenvia sozinho em até 2 min.`
+          : '<span class="sd-muted">Grade: o formulário não respondeu.</span>';
+  const corForm = (grade && grade.respondeu && !grade.presente) ? 'warn' : 'ok';
+  const cardForm = card('Formulário de agendamento', corForm, corForm === 'warn' ? '🟡 Atenção' : '🟢 Publicado', [
     'Hospedado no Render (deploy automático pelo GitHub).',
+    gradeLinha,
     ultAcesso ? `Último acesso registrado <b>${fId.txt}</b>.` : '<span class="sd-muted">ainda sem acessos registrados no período.</span>',
     '<span class="sd-muted">Obs.: o status do servidor do Render é consultado no painel do Render, não aqui.</span>',
   ]);
@@ -4861,10 +4876,42 @@ function paginaSaude(list) {
     '<span class="sd-muted">A SoFIA já lê e envia com o formato LID; aqui é só o termômetro dessa transição.</span>',
   ]);
 
+  // ── EVO — login / 2FA ────────────────────────────────────────────────────
+  const totp = !!(process.env.EVO_TOTP_SECRET || '').trim();
+  const painelFb = String(process.env.EVO_2FA_PAINEL || '').toLowerCase() === 'true' || totp;
+  let pend2fa = false; try { pend2fa = fs.existsSync(require('./evo-totp').PEDIDO_FILE); } catch (_) {}
+  const corEvo = pend2fa ? 'erro' : 'ok';
+  const cardEvo = card('EVO — login / 2FA', corEvo, pend2fa ? '🔴 Ação necessária' : (totp ? '🟢 Automático' : (painelFb ? '🟡 Manual' : '🟢 OK')), [
+    pend2fa
+      ? '⚠️ <b>O robô está pedindo o código do EVO</b> — abra <b>WhatsApp → Configuração</b> e informe o código que chegou por e-mail.'
+      : totp ? '2FA <b>automático</b> (autenticador/TOTP) configurado — o robô resolve sozinho, inclusive nos jobs de madrugada.'
+        : painelFb ? '2FA <b>pelo painel</b> (sem autenticador): quando o EVO pedir, informe o código em WhatsApp → Configuração.'
+          : '2FA <b>não configurado</b> — ok se o EVO desta unidade ainda não exige MFA.',
+  ]);
+
+  // ── Servidor (disco + backup) ────────────────────────────────────────────
+  let disco = null;
+  try { const st = fs.statfsSync(path.resolve(__dirname, '..')); const free = st.bavail * st.bsize, tot = st.blocks * st.bsize; if (tot > 0) disco = { pct: free / tot, freeGB: free / 1e9 }; } catch (_) {}
+  let bkp = null;
+  try {
+    const dir = path.resolve(__dirname, '..', 'backups');
+    const arr = fs.readdirSync(dir).filter(f => f.endsWith('.tar.gz')).map(f => ({ f, m: fs.statSync(path.join(dir, f)).mtimeMs })).sort((a, b) => b.m - a.m);
+    if (arr.length) bkp = { quando: arr[0].m, n: arr.length };
+  } catch (_) {}
+  const discoCor = !disco ? 'warn' : (disco.pct < 0.10 ? 'erro' : disco.pct < 0.20 ? 'warn' : 'ok');
+  const diasBkp = bkp ? (Date.now() - bkp.quando) / 86400000 : Infinity;
+  const bkpCor = !bkp ? 'warn' : (diasBkp > 2 ? 'warn' : 'ok');
+  const corServ = pior(discoCor, bkpCor);
+  const bId = bkp ? fmtIdadeSaude(bkp.quando) : null;
+  const cardServ = card('Servidor', corServ, pillTxt[corServ], [
+    disco ? `💾 Disco livre: <b>${(disco.pct * 100).toFixed(0)}%</b> (${disco.freeGB.toFixed(1)} GB)${disco.pct < 0.20 ? ' — <b>atenção</b>, libere espaço (caches/backups antigos).' : '.'}` : '<span class="sd-muted">💾 Não consegui medir o disco.</span>',
+    bkp ? `🗄️ Último backup dos dados <b>${bId.txt}</b> (${bkp.n} cópia${bkp.n === 1 ? '' : 's'} guardada${bkp.n === 1 ? '' : 's'}).${diasBkp > 2 ? ' <b>Faz mais de 2 dias</b> — confira o cron do backup.' : ''}` : '<span class="sd-muted">🗄️ Sem backup em <code>backups/</code> — configure o cron do <code>backup-dados.js</code>.</span>',
+  ]);
+
   const corpo = `<div class="wrap">
     <div class="sec-t">Saúde do sistema</div>
     <p class="quando" style="margin:0 0 14px">Estado de cada parte da automação num lugar só. Atualiza a cada visita a esta página.</p>
-    <div class="sd-grid">${cardExp}${cardSof}${cardIg}${cardForm}${cardLid}</div>
+    <div class="sd-grid">${cardExp}${cardSof}${cardEvo}${cardIg}${cardForm}${cardServ}${cardLid}</div>
     <p class="quando" style="text-align:center;margin-top:14px"><a href="/saude" style="color:var(--teal-esc);font-weight:600;text-decoration:none">↻ Atualizar</a></p>
   </div>`;
   return chrome({ tab: 'Saúde', h1: 'Saúde', p: 'Estado de robô, SoFIA, painel, Instagram e formulário.' }, 'saude', corpo);
@@ -5270,10 +5317,16 @@ const server = http.createServer((req, res) => {
   }
   // Saúde do sistema (admin) — consulta o PM2 (assíncrono) e renderiza os selos.
   if (req.method === 'GET' && url === '/saude') {
-    return exec('pm2 jlist', { timeout: 15000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) => {
+    return exec('pm2 jlist', { timeout: 15000, maxBuffer: 16 * 1024 * 1024 }, async (err, stdout) => {
       let list = null; try { list = JSON.parse(stdout); } catch (_) {}
+      // Grade: checagem viva com timeout curto (o form free do Render pode "dormir").
+      let grade = null;
+      try {
+        const chk = require('./verificar-grade-nuvem').estadoGradeNuvem();
+        grade = await Promise.race([chk, new Promise(r => setTimeout(() => r({ timeout: true }), 4000))]);
+      } catch (_) { grade = { erro: true }; }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(paginaSaude(list));
+      res.end(paginaSaude(list, { grade }));
     });
   }
   // Criar / excluir canal de origem (gerador de links).
