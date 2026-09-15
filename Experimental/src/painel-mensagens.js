@@ -4879,7 +4879,16 @@ function paginaSaude(list, extra = {}) {
   // ── EVO — login / 2FA ────────────────────────────────────────────────────
   const totp = !!(process.env.EVO_TOTP_SECRET || '').trim();
   const painelFb = String(process.env.EVO_2FA_PAINEL || '').toLowerCase() === 'true' || totp;
-  let pend2fa = false; try { pend2fa = fs.existsSync(require('./evo-totp').PEDIDO_FILE); } catch (_) {}
+  // Só é "código pendente" se o robô está esperando AGORA: o pedido tem uma janela
+  // (expiraEm). Arquivo velho/expirado é resquício (ex.: teste antigo) → não alarma.
+  let pend2fa = false;
+  try {
+    const evott = require('./evo-totp');
+    if (fs.existsSync(evott.PEDIDO_FILE)) {
+      const ped = JSON.parse(fs.readFileSync(evott.PEDIDO_FILE, 'utf8'));
+      pend2fa = !!(ped && ped.expiraEm && ped.expiraEm > Date.now());
+    }
+  } catch (_) {}
   const corEvo = pend2fa ? 'erro' : 'ok';
   const cardEvo = card('EVO — login / 2FA', corEvo, pend2fa ? '🔴 Ação necessária' : (totp ? '🟢 Automático' : (painelFb ? '🟡 Manual' : '🟢 OK')), [
     pend2fa
