@@ -26,25 +26,58 @@ const contatos = require('./contatos');
 const ARQ = path.resolve(__dirname, '..', 'data', 'comparecimento.json');
 const PADRAO = {
   on: false,
-  tagAgendou: 'FX - 3. Agendou Aula Exp',
+  tagAgendou: 'FX - 3. Agendou Aula Exp',        // espelho (compat) — 1ª da lista
+  tagsAgendou: ['FX - 3. Agendou Aula Exp'],      // LISTA de tags de origem ("agendou")
   tagCompareceu: 'FX - 5. Fez Aula Experimental',
   tagFaltou: 'FX - 2. Encerrado com Agendamento sem Presença',
   numeroRelatorio: '',
   criarNovos: false, // cadastrar na SoFIA quem fez experimental e não existe (p/ campanhas)
+  diasJanela: 7,     // quantos dias para trás ler a presença no EVO (1-31)
+  intervaloHoras: 0, // 0 = roda só no horário fixo; N = repete a cada N horas (2=12x/dia, 8=3x/dia)
 };
 
+// Quantos dias para trás olhar (1-31). Padrão 7. Rodar diário? use 2. Semanal? 7.
+function clampDias(v) {
+  const n = parseInt(v, 10);
+  return (Number.isFinite(n) && n >= 1 && n <= 31) ? n : 7;
+}
+
+// Repetir a cada N horas (0 = desligado; 1-24). Ex.: 8 = 3x/dia, 6 = 4x/dia.
+function clampIntervalo(v) {
+  const n = parseInt(v, 10);
+  return (Number.isFinite(n) && n >= 1 && n <= 24) ? n : 0;
+}
+
+// Normaliza a lista de tags de "agendou": aceita a LISTA nova (tagsAgendou) e,
+// para compatibilidade, a única antiga (tagAgendou).
+function tagsAgendouDe(o) {
+  let ta = Array.isArray(o && o.tagsAgendou) ? o.tagsAgendou.map(t => String(t || '').trim()).filter(Boolean) : [];
+  if (!ta.length) { const one = String((o && o.tagAgendou) || PADRAO.tagAgendou).trim(); ta = [one || PADRAO.tagAgendou]; }
+  return Array.from(new Set(ta));
+}
+
 function ler() {
-  try { const o = JSON.parse(fs.readFileSync(ARQ, 'utf8')); return { ...PADRAO, ...(o && typeof o === 'object' ? o : {}) }; }
-  catch (_) { return { ...PADRAO }; }
+  let o = {};
+  try { const p = JSON.parse(fs.readFileSync(ARQ, 'utf8')); if (p && typeof p === 'object') o = p; } catch (_) {}
+  const cfg = { ...PADRAO, ...o };
+  cfg.tagsAgendou = tagsAgendouDe(o);
+  cfg.tagAgendou = cfg.tagsAgendou[0]; // espelho p/ leitores antigos
+  cfg.diasJanela = clampDias(o.diasJanela != null ? o.diasJanela : cfg.diasJanela);
+  cfg.intervaloHoras = clampIntervalo(o.intervaloHoras != null ? o.intervaloHoras : cfg.intervaloHoras);
+  return cfg;
 }
 function gravar(cfg) {
+  const tags = tagsAgendouDe(cfg);
   const o = {
     on: !!cfg.on,
-    tagAgendou: String(cfg.tagAgendou || '').trim() || PADRAO.tagAgendou,
+    tagsAgendou: tags,
+    tagAgendou: tags[0], // espelho (compat)
     tagCompareceu: String(cfg.tagCompareceu || '').trim() || PADRAO.tagCompareceu,
     tagFaltou: String(cfg.tagFaltou || '').trim() || PADRAO.tagFaltou,
     numeroRelatorio: String(cfg.numeroRelatorio || '').replace(/\D/g, ''),
     criarNovos: !!cfg.criarNovos,
+    diasJanela: clampDias(cfg.diasJanela),
+    intervaloHoras: clampIntervalo(cfg.intervaloHoras),
   };
   try { fs.mkdirSync(path.dirname(ARQ), { recursive: true }); } catch (_) {}
   fs.writeFileSync(ARQ, JSON.stringify(o, null, 2), 'utf8');
@@ -78,8 +111,8 @@ function veredito(status) {
  * Coleta a presença/falta das aulas experimentais dos últimos 7 dias no EVO.
  * Devolve [{ nome, telefone, data, status, veredito }]. Best-effort por dia.
  */
-async function coletarSemana(scraper) {
-  const datas = ultimasDatas(7);
+async function coletarSemana(scraper, n) {
+  const datas = ultimasDatas(clampDias(n));
   const coletado = [];
   try { await scraper.navigateToExperimental(); } catch (_) {}
   for (const data of datas) {
@@ -110,19 +143,23 @@ async function rodar({ dry = false } = {}) {
   const cfg = ler();
   const resumo = { compareceu: [], faltou: [], semTag: [], dry: !!dry, em: Date.now() };
 
-  // Contatos que estão com a tag "Agendou" → é neles que vamos mexer.
+  // Uma OU MAIS tags de origem ("agendou") — é em quem tem qualquer uma delas
+  // que vamos mexer.
+  const origem = (cfg.tagsAgendou && cfg.tagsAgendou.length) ? cfg.tagsAgendou : [cfg.tagAgendou];
+
+  // Contatos que estão com alguma tag de "Agendou" → é neles que vamos mexer.
   let mapa; // last8 -> { tel, nome, tags }
   try {
     const todos = contatos.carregar() || {};
     mapa = {};
     for (const tel in todos) {
       const c = todos[tel];
-      if ((c.tags || []).includes(cfg.tagAgendou)) mapa[last8(tel)] = { tel, nome: c.nome || '', tags: c.tags || [] };
+      if ((c.tags || []).some(tg => origem.includes(tg))) mapa[last8(tel)] = { tel, nome: c.nome || '', tags: c.tags || [] };
     }
   } catch (e) { resumo.erro = 'não consegui ler os contatos: ' + (e && e.message); return resumo; }
 
   const nAguardando = Object.keys(mapa).length;
-  if (!nAguardando) { resumo.aviso = `Nenhum contato com a tag "${cfg.tagAgendou}".`; return resumo; }
+  if (!nAguardando) { resumo.aviso = `Nenhum contato com as tags de "agendou" (${origem.join(', ')}).`; return resumo; }
 
   // Coleta a presença da semana no EVO (com 3 tentativas de sessão).
   let semana = [];
@@ -132,7 +169,7 @@ async function rodar({ dry = false } = {}) {
     try {
       await scraper.init();
       await scraper.login();
-      semana = await coletarSemana(scraper);
+      semana = await coletarSemana(scraper, cfg.diasJanela);
       ultimoErro = null;
       break;
     } catch (e) {
@@ -158,7 +195,7 @@ async function rodar({ dry = false } = {}) {
         // Já rastreado como "agendou" na SoFIA → transição de tag.
         jaMexido.add(chave); acao = 'transicao';
         const item = { nome: alvo.nome || a.nome, telefone: alvo.tel, data: a.data };
-        if (!dry) { try { contatos.removerTag(alvo.tel, cfg.tagAgendou); contatos.adicionarTag(alvo.tel, alvo.nome || a.nome, destino); } catch (e) { console.log(`   ⚠️  troca de tag falhou (${alvo.tel}): ${e && e.message}`); } }
+        if (!dry) { try { for (const tg of origem) contatos.removerTag(alvo.tel, tg); contatos.adicionarTag(alvo.tel, alvo.nome || a.nome, destino); } catch (e) { console.log(`   ⚠️  troca de tag falhou (${alvo.tel}): ${e && e.message}`); } }
         (a.veredito === 'compareceu' ? resumo.compareceu : resumo.faltou).push(item);
       } else if (cfg.criarNovos && a.telefone) {
         // Não está na SoFIA (ou sem a tag) → cadastra + tag do resultado (p/ campanha).
@@ -180,12 +217,16 @@ async function rodar({ dry = false } = {}) {
 
 function textoRelatorio(r, cfg) {
   const linhas = [];
-  linhas.push(`📋 *Presença da experimental (semana)*${r.dry ? ' — SIMULAÇÃO' : ''}`);
+  const jan = (cfg && cfg.diasJanela) ? `${cfg.diasJanela} dia${cfg.diasJanela > 1 ? 's' : ''}` : 'semana';
+  linhas.push(`📋 *Presença da experimental (${jan})*${r.dry ? ' — SIMULAÇÃO' : ''}`);
+  // Lista nome + telefone de cada pessoa (com a data quando houver veredito).
+  const lista = (arr) => { for (const x of (arr || []).slice(0, 40)) linhas.push(`   • ${x.nome || 's/ nome'}${x.telefone ? ' · ' + x.telefone : ''}${x.data ? ' (' + x.data + ')' : ''}`); };
   linhas.push(`✅ Compareceram: ${r.compareceu.length}`);
-  for (const x of r.compareceu.slice(0, 40)) linhas.push(`   • ${x.nome || x.telefone} (${x.data})`);
+  lista(r.compareceu);
   linhas.push(`❌ Faltaram: ${r.faltou.length}`);
-  for (const x of r.faltou.slice(0, 40)) linhas.push(`   • ${x.nome || x.telefone} (${x.data})`);
+  lista(r.faltou);
   linhas.push(`⏳ Ainda sem veredito: ${r.semTag.length}`);
+  lista(r.semTag);
   if (r.novos && r.novos.length) linhas.push(`🆕 Cadastrados novos (não passaram pela SoFIA): ${r.novos.length}`);
   if (r.erro) linhas.push(`⚠️ ${r.erro}`);
   return linhas.join('\n');
@@ -213,7 +254,7 @@ if (require.main === module) {
   const cfg = ler();
   rodar({ dry }).then(r => {
     console.log('\n──────── DIAGNÓSTICO ────────');
-    console.log(`Contatos com a tag "${cfg.tagAgendou}" (é só nesses que o job age): ${r.mapaSize != null ? r.mapaSize : (r.aviso || 0)}`);
+    console.log(`Contatos com alguma tag de "agendou" [${(cfg.tagsAgendou || [cfg.tagAgendou]).join(' | ')}] (é só nesses que o job age): ${r.mapaSize != null ? r.mapaSize : (r.aviso || 0)}`);
     console.log(`Aulas com presença/falta lidas no EVO na semana: ${(r.evo || []).length}`);
     if (r.evo && r.evo.length) {
       const rotAcao = { transicao: 'troca de tag ✅', cadastrado: 'cadastrado 🆕', ignorado: 'ignorado —' };

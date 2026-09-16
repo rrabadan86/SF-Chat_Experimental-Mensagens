@@ -89,9 +89,15 @@ setInterval(() => atualizarCotacao().catch(() => {}), COTACAO_TTL);
 // Config do job de comparecimento (lida/gravada direto do JSON — NÃO requerer
 // comparecimento.js aqui, para não carregar o puppeteer/EVO no painel).
 const COMP_CFG_FILE = path.resolve(__dirname, '..', 'data', 'comparecimento.json');
-const COMP_PADRAO = { on: false, tagAgendou: 'FX - 3. Agendou Aula Exp', tagCompareceu: 'FX - 5. Fez Aula Experimental', tagFaltou: 'FX - 2. Encerrado com Agendamento sem Presença', numeroRelatorio: '', criarNovos: false };
-function lerCompCfg() { try { const o = JSON.parse(fs.readFileSync(COMP_CFG_FILE, 'utf8')); return { ...COMP_PADRAO, ...(o && typeof o === 'object' ? o : {}) }; } catch (_) { return { ...COMP_PADRAO }; } }
-function gravarCompCfg(c) { const o = { on: !!c.on, tagAgendou: String(c.tagAgendou || '').trim() || COMP_PADRAO.tagAgendou, tagCompareceu: String(c.tagCompareceu || '').trim() || COMP_PADRAO.tagCompareceu, tagFaltou: String(c.tagFaltou || '').trim() || COMP_PADRAO.tagFaltou, numeroRelatorio: String(c.numeroRelatorio || '').replace(/\D/g, ''), criarNovos: !!c.criarNovos }; try { fs.mkdirSync(path.dirname(COMP_CFG_FILE), { recursive: true }); } catch (_) {} fs.writeFileSync(COMP_CFG_FILE, JSON.stringify(o, null, 2)); return o; }
+const COMP_PADRAO = { on: false, tagAgendou: 'FX - 3. Agendou Aula Exp', tagsAgendou: ['FX - 3. Agendou Aula Exp'], tagCompareceu: 'FX - 5. Fez Aula Experimental', tagFaltou: 'FX - 2. Encerrado com Agendamento sem Presença', numeroRelatorio: '', criarNovos: false, diasJanela: 7, intervaloHoras: 0 };
+// Normaliza a lista de tags de "agendou" (aceita a lista nova ou a única antiga).
+function compTagsAgendou(o) { let ta = Array.isArray(o && o.tagsAgendou) ? o.tagsAgendou.map(t => String(t || '').trim()).filter(Boolean) : []; if (!ta.length) { const one = String((o && o.tagAgendou) || COMP_PADRAO.tagAgendou).trim(); ta = [one || COMP_PADRAO.tagAgendou]; } return Array.from(new Set(ta)); }
+// Janela de dias para trás (1-31). Padrão 7.
+function compDias(v) { const n = parseInt(v, 10); return (Number.isFinite(n) && n >= 1 && n <= 31) ? n : 7; }
+// Repetir a cada N horas (0 = desligado; 1-24).
+function compIntervalo(v) { const n = parseInt(v, 10); return (Number.isFinite(n) && n >= 1 && n <= 24) ? n : 0; }
+function lerCompCfg() { let o = {}; try { const p = JSON.parse(fs.readFileSync(COMP_CFG_FILE, 'utf8')); if (p && typeof p === 'object') o = p; } catch (_) {} const cfg = { ...COMP_PADRAO, ...o }; cfg.tagsAgendou = compTagsAgendou(o); cfg.tagAgendou = cfg.tagsAgendou[0]; cfg.diasJanela = compDias(o.diasJanela != null ? o.diasJanela : cfg.diasJanela); cfg.intervaloHoras = compIntervalo(o.intervaloHoras != null ? o.intervaloHoras : cfg.intervaloHoras); return cfg; }
+function gravarCompCfg(c) { const tags = compTagsAgendou(c); const o = { on: !!c.on, tagsAgendou: tags, tagAgendou: tags[0], tagCompareceu: String(c.tagCompareceu || '').trim() || COMP_PADRAO.tagCompareceu, tagFaltou: String(c.tagFaltou || '').trim() || COMP_PADRAO.tagFaltou, numeroRelatorio: String(c.numeroRelatorio || '').replace(/\D/g, ''), criarNovos: !!c.criarNovos, diasJanela: compDias(c.diasJanela), intervaloHoras: compIntervalo(c.intervaloHoras) }; try { fs.mkdirSync(path.dirname(COMP_CFG_FILE), { recursive: true }); } catch (_) {} fs.writeFileSync(COMP_CFG_FILE, JSON.stringify(o, null, 2)); return o; }
 
 // Limite de aulas experimentais por turma — editável na aba SoFIA → Configuração.
 // Gravado em data/sofia-exp-limite.txt; o cálculo da grade (Python) lê este arquivo.
@@ -3280,6 +3286,8 @@ function paginaSofiaTags(aviso, erro) {
   const cmpHoraBloco = cmpH ? `<div class="hsec"><div class="hsec-t">Quando roda ${cmpH.editado ? '<span class="badge-ed">alterado</span>' : ''}</div>${blocoHorario(cmpH, '', 'formCmp')}</div>` : '';
   const cmpTags = tags.map(t => t.tag);
   const cmpSel = (val) => { const opts = ['<option value="">— escolha —</option>'].concat(cmpTags.map(t => `<option value="${esc(t)}"${t === val ? ' selected' : ''}>${esc(t)}</option>`)); if (val && !cmpTags.includes(val)) opts.push(`<option value="${esc(val)}" selected>${esc(val)} (atual)</option>`); return opts.join(''); };
+  // Lista de checkboxes p/ escolher VÁRIAS tags de origem ("agendou").
+  const cmpChecks = (sel) => { const arr = Array.isArray(sel) ? sel : (sel ? [sel] : []); const selL = new Set(arr.map(x => String(x).trim().toLowerCase())); let opts = cmpTags.slice(); for (const s of arr) { if (!opts.some(x => x.toLowerCase() === String(s).toLowerCase())) opts = [s].concat(opts); } return opts.length ? opts.map(t => `<label class="chk" style="margin:0;font-weight:500"><input type="checkbox" name="tagsAgendou" value="${esc(t)}"${selL.has(String(t).trim().toLowerCase()) ? ' checked' : ''}> ${esc(t)}</label>`).join('') : '<span class="quando" style="margin:0">Nenhuma tag no CRM ainda.</span>'; };
   const lista = tags.length
     ? tags.map((t, i) => { const cfg = contatos.tagConfig(t.tag); const on = (cfg.gatilho || cfg.remove.length); return `<div class="tagrow">
       <form method="POST" action="/sofia/contatos/tag">
@@ -3308,15 +3316,22 @@ function paginaSofiaTags(aviso, erro) {
         <p class="quando" style="margin:0 0 12px">No <b>dia/horário definidos abaixo</b>, o robô lê a <b>presença/falta</b> das aulas experimentais no <b>EVO</b> e troca as tags de quem estava com a tag de <b>agendou</b>: quem <b>compareceu</b> vira "fez aula" e quem <b>faltou</b> vira "encerrado sem presença". As outras tags (manuais) não são tocadas.</p>
         <form method="POST" action="/sofia/comparecimento" id="formCmp">
           <label class="chk" style="margin:0 0 12px"><input type="checkbox" name="on" value="1"${cmp.on ? ' checked' : ''}> Ligado</label>
+          <div style="margin-bottom:12px">
+            <label style="margin:0 0 4px">Tags de "agendou" (origem) <small style="font-weight:400;color:var(--cinza)">— pode marcar <b>várias</b>; o robô age em quem tem <b>qualquer uma</b> delas</small></label>
+            <div class="cfg-in" style="flex-direction:column;align-items:flex-start;gap:6px;max-height:180px;overflow:auto;padding:8px 10px">${cmpChecks(cmp.tagsAgendou)}</div>
+          </div>
           <div style="display:flex;gap:16px;flex-wrap:wrap">
-            <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Tag de "agendou" (origem)</label><select name="tagAgendou">${cmpSel(cmp.tagAgendou)}</select></div>
             <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Compareceu → vira</label><select name="tagCompareceu">${cmpSel(cmp.tagCompareceu)}</select></div>
             <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Faltou → vira</label><select name="tagFaltou">${cmpSel(cmp.tagFaltou)}</select></div>
           </div>
           <label class="chk" style="margin:14px 0 0"><input type="checkbox" name="criarNovos" value="1"${cmp.criarNovos ? ' checked' : ''}> Cadastrar na SoFIA quem fez a experimental e ainda não existe <small style="font-weight:400;color:var(--cinza)">(entrou por outro canal — assim pode receber campanhas)</small></label>
+          <label style="margin:14px 0 4px">Olhar quantos dias para trás ${infoI('Quantos dias de presença o robô lê no EVO a cada rodada. Se roda <b>todo dia</b>, 2 já basta (menos consulta ao EVO). Se roda <b>1x/semana</b>, use 7. (1 a 31)')}</label>
+          <div style="display:flex;align-items:center;gap:8px"><input type="number" name="diasJanela" min="1" max="31" value="${esc(cmp.diasJanela)}" style="max-width:90px"><span class="quando" style="margin:0">dia(s) — dica: diário → 2 · semanal → 7</span></div>
           <label style="margin:14px 0 4px">Número que recebe o relatório <small style="font-weight:400;color:var(--cinza)">(opcional — resumo do que foi trocado)</small></label>
           <input type="tel" name="numeroRelatorio" value="${esc(cmp.numeroRelatorio)}" placeholder="Ex.: 62998887777" style="max-width:220px">
           ${cmpHoraBloco}
+          <label style="margin:14px 0 4px">Repetir várias vezes ao dia ${infoI('0 = roda só no horário acima. Se quiser <b>mais de uma vez por dia</b>, ponha de quantas em quantas horas: <b>8</b> = 3x/dia · <b>6</b> = 4x/dia · <b>4</b> = 6x/dia · <b>2</b> = 12x/dia. Mantém o minuto e os dias do horário acima.')}</label>
+          <div style="display:flex;align-items:center;gap:8px"><span class="quando" style="margin:0">a cada</span><input type="number" name="intervaloHoras" min="0" max="24" value="${esc(cmp.intervaloHoras)}" style="max-width:80px"><span class="quando" style="margin:0">horas — <b>0 = só no horário acima</b>; 8 = 3x/dia; 6 = 4x/dia</span></div>
           <div class="acts" style="margin-top:14px"><button type="submit" class="save">Salvar</button></div>
         </form>
         <p class="quando" style="margin:12px 0 0">🧪 Para <b>testar antes</b> sem alterar nada (só mostra o que faria), rode na VPS, em <code>~/SF-Chat_Experimental-Mensagens/Experimental</code>: <code>HEADLESS=true node src/comparecimento.js --dry</code>. Se o EVO bloquear o modo sem tela, use <code>xvfb-run -a node src/comparecimento.js --dry</code>. Trocar <code>--dry</code> por <code>--run</code> executa de verdade. (O robô agendado não precisa disso — já roda com tela virtual.)</p>
@@ -3871,14 +3886,18 @@ function paginaSofia(aviso, erro) {
   const refreshSeg = lerRefreshSeg(); // atualização automática da aba Conversas (segundos)
   let avh = { on: false, numero: '' }; try { avh = sofia.lerAvisoHumano(); } catch (_) {}
   let naoResp = []; try { naoResp = sofia.lerNaoResponder(); } catch (_) {} // números que a SoFIA nunca responde sozinha
-  let alu = { ativo: true, janelaIni: '05:45', janelaFim: '16:30', recepcaoNumero: '', tag: 'alunas' };
+  let alu = { ativo: true, janelaIni: '05:45', janelaFim: '16:30', recepcaoNumero: '', tag: 'alunas', tags: ['alunas'] };
   try { alu = sofia.lerAlunas(); } catch (_) {}
-  // Etiquetas que existem de verdade no CRM, para o Studio ESCOLHER qual marca
-  // "aluna contratada" (antes era fixo em "alunas" e não casava com "0. Aluna").
+  // Etiquetas que existem de verdade no CRM, para o Studio MARCAR quais a SoFIA
+  // NÃO deve responder (aluna, ex-aluna, etc.). Antes era uma tag só; virou lista.
   let tagsAlu = [];
   try { tagsAlu = contatos.tagsDistintas().map(t => t.tag); } catch (_) {}
-  const tagAtual = String(alu.tag || 'alunas');
-  if (!tagsAlu.some(t => t.toLowerCase() === tagAtual.toLowerCase())) tagsAlu = [tagAtual].concat(tagsAlu);
+  const tagsSel = (Array.isArray(alu.tags) && alu.tags.length) ? alu.tags : [String(alu.tag || 'alunas')];
+  // Garante que toda tag JÁ SELECIONADA apareça na lista, mesmo que não exista
+  // mais no CRM (senão sumiria do painel e o Studio não conseguiria desmarcá-la).
+  for (const t of tagsSel) { if (!tagsAlu.some(x => x.toLowerCase() === String(t).toLowerCase())) tagsAlu = [t].concat(tagsAlu); }
+  const selLower = new Set(tagsSel.map(t => String(t).trim().toLowerCase()));
+  const tagsTxt = tagsSel.map(t => esc(t)).join(', ') || 'alunas';
   // Cada seção é um card recolhível (começa MINIMIZADA — só o título aparece) e
   // reordenável (↑ ↓). A ordem no DOM = ordem salva no prompt. O textarea, mesmo
   // recolhido (display:none), continua sendo enviado no POST.
@@ -3944,13 +3963,13 @@ function paginaSofia(aviso, erro) {
     <details class="acc-sec">
       <summary class="sec-t" style="cursor:pointer;padding:4px 0">🎓 Alunas contratadas <small style="font-weight:400;color:var(--cinza)">— horário da recepção e aviso de atendimento</small></summary>
       <div class="card">
-        <p class="quando" style="margin:0 0 12px">Regras para quem tem a tag <b>${esc(alu.tag || 'alunas')}</b> (aluna já contratada, não é lead). <b>Dentro do horário da recepção</b> a SoFIA fica <b>calada</b> para elas — quem responde é a recepcionista. <b>Fora desse horário</b>, a SoFIA cobre (remarcação, dúvidas). Se a aluna pedir remarcação e <b>não houver reposição disponível</b>, a SoFIA avisa a aluna e manda um WhatsApp para o número abaixo.</p>
+        <p class="quando" style="margin:0 0 12px">Regras para quem tem <b>qualquer uma</b> das etiquetas marcadas abaixo (${tagsTxt}) — quem já é <b>aluna/ex-aluna</b>, não é lead. <b>Dentro do horário da recepção</b> a SoFIA fica <b>calada</b> para essas pessoas — quem responde é a recepcionista. <b>Fora desse horário</b>, a SoFIA cobre (remarcação, dúvidas). Se a aluna pedir remarcação e <b>não houver reposição disponível</b>, a SoFIA avisa a aluna e manda um WhatsApp para o número abaixo. <small>Dica: para a SoFIA <b>nunca</b> responder essas etiquetas (24h), use a janela <b>00:02 às 00:01</b>.</small></p>
         <form method="POST" action="/sofia/alunas">
-          <label class="chk"><input type="checkbox" name="ativo"${alu.ativo ? ' checked' : ''}> <b>Ligado</b> — aplicar estas regras para a tag escolhida abaixo</label>
+          <label class="chk"><input type="checkbox" name="ativo"${alu.ativo ? ' checked' : ''}> <b>Ligado</b> — aplicar estas regras para as etiquetas marcadas abaixo</label>
           <div class="cfg-grid" style="margin-top:14px">
-            <div>
-              <label>Etiqueta das alunas ${infoI('Qual etiqueta do CRM marca <b>aluna já contratada</b>. A SoFIA compara sem ligar para acento, maiúscula, numeração ou plural — <b>0. Aluna</b>, <b>Aluna</b> e <b>alunas</b> valem a mesma coisa.')}</label>
-              <div class="cfg-in"><select name="tag" style="width:100%">${tagsAlu.map(t => `<option value="${esc(t)}"${t.toLowerCase() === tagAtual.toLowerCase() ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
+            <div style="grid-column:1 / -1">
+              <label>Etiquetas que a SoFIA NÃO responde ${infoI('Marque as etiquetas do CRM de quem <b>não é lead</b> (aluna, ex-aluna…). A SoFIA fica calada para quem tem <b>qualquer uma</b> delas, no horário da recepção. Compara sem ligar para acento, maiúscula, numeração ou plural — <b>0. Aluna</b>, <b>Aluna</b> e <b>alunas</b> valem a mesma coisa.')}</label>
+              <div class="cfg-in" style="flex-direction:column;align-items:flex-start;gap:6px;max-height:200px;overflow:auto;padding:8px 10px">${tagsAlu.length ? tagsAlu.map(t => `<label class="chk" style="margin:0;font-weight:500"><input type="checkbox" name="tags" value="${esc(t)}"${selLower.has(String(t).trim().toLowerCase()) ? ' checked' : ''}> ${esc(t)}</label>`).join('') : '<span class="quando" style="margin:0">Nenhuma etiqueta encontrada no CRM (a sincronização de contatos precisa estar ativa).</span>'}</div>
             </div>
             <div>
               <label>Horário da recepção ${infoI('Nesse intervalo a SoFIA <b>não responde</b> quem tem a tag de aluna — a recepcionista atende. Fora dele, a SoFIA assume. Pode virar a meia-noite (ex.: 17:00 às 07:00).')}</label>
@@ -5806,9 +5825,11 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url === '/sofia/comparecimento') {
     return lerCorpo(req, 1e4, corpo => {
       const p = new URLSearchParams(corpo);
-      try { gravarCompCfg({ on: p.get('on') === '1', tagAgendou: p.get('tagAgendou') || '', tagCompareceu: p.get('tagCompareceu') || '', tagFaltou: p.get('tagFaltou') || '', numeroRelatorio: p.get('numeroRelatorio') || '', criarNovos: p.get('criarNovos') === '1' }); } catch (_) {}
-      // Dia/hora que o job roda (mesmo cofre dos horários do robô). Se mudou, salva
-      // e reinicia o robô p/ reagendar; senão, redireciona direto (sem reiniciar).
+      let intervaloAntes = 0; try { intervaloAntes = lerCompCfg().intervaloHoras; } catch (_) {}
+      try { gravarCompCfg({ on: p.get('on') === '1', tagsAgendou: p.getAll('tagsAgendou'), tagCompareceu: p.get('tagCompareceu') || '', tagFaltou: p.get('tagFaltou') || '', numeroRelatorio: p.get('numeroRelatorio') || '', criarNovos: p.get('criarNovos') === '1', diasJanela: p.get('diasJanela'), intervaloHoras: p.get('intervaloHoras') }); } catch (_) {}
+      const intervaloMudou = compIntervalo(p.get('intervaloHoras')) !== intervaloAntes;
+      // Dia/hora que o job roda (mesmo cofre dos horários do robô). Se mudou (hora
+      // OU intervalo), salva e reinicia o robô p/ reagendar; senão, sem reiniciar.
       const hora = p.get('hora_comparecimento');
       const dias = p.getAll('dias_comparecimento').map(Number);
       let mudouHora = false;
@@ -5816,7 +5837,7 @@ const server = http.createServer((req, res) => {
         try { const novo = horarios.build(hora, dias); mudouHora = (novo !== horarios.cronDe('comparecimento')); horarios.salvar('comparecimento', hora, dias); }
         catch (_) { /* horário inválido → ignora, mantém o atual */ }
       }
-      if (!mudouHora) { res.writeHead(303, { Location: '/sofia?view=tags&okcmp=1' }); return res.end(); }
+      if (!mudouHora && !intervaloMudou) { res.writeHead(303, { Location: '/sofia?view=tags&okcmp=1' }); return res.end(); }
       exec('pm2 restart ' + PM2_EXP + ' --update-env', { timeout: 25000 }, (err) => {
         res.writeHead(303, { Location: '/sofia?view=tags&okcmp=1' + (err ? '&errh=1' : '') }); res.end();
       });
@@ -5862,7 +5883,7 @@ const server = http.createServer((req, res) => {
           ativo: p.get('ativo') === 'on',
           janelaIni: p.get('janelaIni'), janelaFim: p.get('janelaFim'),
           recepcaoNumero: p.get('recepcaoNumero') || '',
-          tag: p.get('tag') || undefined,
+          tags: p.getAll('tags'),
         });
         auditoria.registrar(sess.usuario, 'sofia.alunas', '', 'regras das alunas');
       } catch (_) {}
