@@ -2161,9 +2161,12 @@ async function tratarRespostaManual(msg: any, jid: string) {
       return;
     }
     // Boas-vindas AUTOMÁTICA do anúncio (texto configurado no painel): sai do
-    // número mas não é resposta humana — não pausa a SoFIA.
+    // número mas não é resposta humana — não pausa a SoFIA. E dispara o gatilho
+    // 'anuncio' (etiqueta o lead como veio do anúncio, ex.: "0. Patrocinado").
     if (ehMsgAnuncio(corpo)) {
-      log(`message_create de ${tel} ignorado — boas-vindas automática do anúncio (não pausa a SoFIA).`);
+      const regAnuncio = lerRegras().anuncio || [];
+      for (const r of regAnuncio) if (!jaDisparou(tel, "anuncio", r.tag)) emitirAcao(tel, "", r, "anuncio");
+      log(`message_create de ${tel} ignorado — boas-vindas do anúncio (não pausa a SoFIA)${regAnuncio.length ? ` + gatilho 'anuncio'` : ""}.`);
       return;
     }
     assumirConversa(tel);

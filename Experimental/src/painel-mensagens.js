@@ -2883,6 +2883,7 @@ function paginaSofiaContatos(aviso, erro, params) {
         <option value="humano">🙋 você assumir a conversa (controle humano)</option>
         <option value="encerrou">🔒 a conversa encerrar sem agendamento</option>
         <option value="campanha">💬 a aluna responder a uma campanha</option>
+        <option value="anuncio">📣 o lead vier de um anúncio (patrocinado)</option>
       </select>
       <div id="tgPalBox" style="margin-top:14px;display:none">
         <label>Palavras-chave <span class="sub" style="font-weight:400;color:var(--cinza)">— separadas por vírgula (ex.: cancelar, valor, reclamação, endereço)</span></label>
@@ -3355,6 +3356,7 @@ function paginaSofiaTags(aviso, erro) {
         <option value="humano">🙋 você assumir a conversa (controle humano)</option>
         <option value="encerrou">🔒 a conversa encerrar sem agendamento</option>
         <option value="campanha">💬 a aluna responder a uma campanha</option>
+        <option value="anuncio">📣 o lead vier de um anúncio (patrocinado)</option>
       </select>
       <div id="tgPalBox" style="margin-top:14px;display:none">
         <label>Palavras-chave <span class="sub" style="font-weight:400;color:var(--cinza)">— separadas por vírgula (ex.: cancelar, valor, reclamação, endereço)</span></label>
