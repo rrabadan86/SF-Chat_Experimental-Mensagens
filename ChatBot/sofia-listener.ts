@@ -158,7 +158,11 @@ async function soltarImagem(to: string, imagemUrl: string, chaveRegistro?: strin
   try {
     await mostrarDigitando(to);
     await sleep(900);
-    const media = await MessageMedia.fromUrl(imagemUrl, { unsafeMime: true });
+    // Aceita URL (http/https) OU arquivo LOCAL no VPS (upload do painel). O painel
+    // grava a imagem em SOFIA_DIR/midias e guarda o caminho — aqui anexamos direto.
+    const media = /^https?:\/\//i.test(imagemUrl)
+      ? await MessageMedia.fromUrl(imagemUrl, { unsafeMime: true })
+      : MessageMedia.fromFilePath(imagemUrl);
     await enviar(to, media);
     if (chaveRegistro) registrarInbox(chaveRegistro, to, "", "sofia", "🖼️ (imagem enviada)"); // aparece no painel
   } catch (e: any) { log("falha ao enviar imagem: " + (e?.message || e)); }

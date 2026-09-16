@@ -214,6 +214,34 @@ function gravarMidias(m) {
     + 'precos_link=' + (m.precos_link || '') + '\n';
   gravarArquivo(F.midias, txt);
 }
+// Salva a imagem (dataURL base64 vinda do painel) em SOFIA_DIR/midias/<campo>.<ext>,
+// SUBSTITUINDO a anterior (1 arquivo por campo), e grava o caminho no campo — a
+// SoFIA anexa esse arquivo direto no WhatsApp (não precisa de URL pública).
+function salvarMidiaImagem(campo, dataUrl) {
+  const CAMPOS = ['precos_imagem', 'grade_imagem'];
+  if (!CAMPOS.includes(campo)) throw new Error('Campo de imagem inválido.');
+  const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(String(dataUrl || '').replace(/\s/g, ''));
+  if (!m) throw new Error('Imagem inválida (envie um arquivo de imagem).');
+  let ext = (m[1].split('/')[1] || 'jpg').toLowerCase().replace('jpeg', 'jpg');
+  if (!/^[a-z0-9]+$/.test(ext)) ext = 'jpg';
+  const dir = path.join(DIR, 'midias');
+  try { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
+  // remove versões anteriores desse campo (qualquer extensão) → substitui de verdade
+  try { for (const f of fs.readdirSync(dir)) { if (f.startsWith(campo + '.')) { try { fs.unlinkSync(path.join(dir, f)); } catch (_) {} } } } catch (_) {}
+  const arq = path.join(dir, campo + '.' + ext);
+  fs.writeFileSync(arq, Buffer.from(m[2], 'base64'));
+  const mid = lerMidias(); mid[campo] = arq; gravarMidias(mid);   // persiste já (sem depender do "Salvar")
+  return arq;
+}
+// Caminho do arquivo local atual de um campo (para o preview). '' se o valor for
+// uma URL colada (não um arquivo) ou não existir.
+function caminhoMidiaLocal(campo) {
+  try {
+    const v = (lerMidias()[campo] || '').trim();
+    if (v && !/^https?:\/\//i.test(v) && fs.existsSync(v)) return v;
+  } catch (_) {}
+  return '';
+}
 
 // ── ritmo ("jeito humano": velocidade de digitação e pausas) ────────────────
 function inteiro(v, padrao) { const n = parseInt(v, 10); return Number.isFinite(n) ? n : padrao; }
@@ -984,5 +1012,5 @@ module.exports = {
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
   conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, enfileirarAgendamento, lerAgendamentoResult, consumirAgendarInbox, gravarAgendarResultId, registrarAgendou, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerHumanoLog, lerBloqueios, estaBloqueado, setBloqueio, lerNaoResponder, gravarNaoResponder, estaNaoResponder, lerAlunas, gravarAlunas, dentroJanelaRecepcao, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
-  lerCampanhas, opCampanha, lerRascunhoCampanha, lerLidStats, salvarFotoCampanha, DIR, ARQUIVOS: F,
+  lerCampanhas, opCampanha, lerRascunhoCampanha, lerLidStats, salvarFotoCampanha, salvarMidiaImagem, caminhoMidiaLocal, DIR, ARQUIVOS: F,
 };
