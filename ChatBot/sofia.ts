@@ -177,16 +177,19 @@ function lerMidias(): Record<string, string> {
     return {};
   }
 }
-const _mid = lerMidias();
-const MIDIAS = {
-  // Sem imagem definida (arquivo vivo / env vazios) a Sofia simplesmente não
-  // envia a imagem — nada de imagem de outra unidade. Defina grade/preços no
-  // painel (SoFIA → Configuração) ou por MIDIA_*.
-  grade_imagem: _mid.grade_imagem || process.env.MIDIA_GRADE_IMG || "",
-  grade_link: _mid.grade_link || process.env.MIDIA_GRADE_LINK || "",
-  precos_imagem: _mid.precos_imagem || process.env.MIDIA_PRECOS_IMG || "",
-  precos_link: _mid.precos_link || process.env.MIDIA_PRECOS_LINK || "",
-};
+// Lê as imagens/links FRESCOS a cada envio — assim trocar a imagem ou o link no
+// painel passa a valer SEM reiniciar a SoFIA (igual ao prompt, que já é relido).
+// Sem imagem definida (arquivo vivo / env vazios) a Sofia simplesmente não envia
+// a imagem — nada de imagem de outra unidade.
+function midiasAtuais() {
+  const _mid = lerMidias();
+  return {
+    grade_imagem: _mid.grade_imagem || process.env.MIDIA_GRADE_IMG || "",
+    grade_link: _mid.grade_link || process.env.MIDIA_GRADE_LINK || "",
+    precos_imagem: _mid.precos_imagem || process.env.MIDIA_PRECOS_IMG || "",
+    precos_link: _mid.precos_link || process.env.MIDIA_PRECOS_LINK || "",
+  };
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // 2) GRADE DE HORÁRIOS EM QUE HÁ AULA (0=domingo ... 6=sábado)
@@ -288,8 +291,9 @@ const enviarMidia = tool(
   "Envia uma imagem para a usuária. 'grade' = grade de horários; 'precos' = tabela de preços 2026.",
   { tipo: z.enum(["grade", "precos"]).describe("Qual imagem enviar") },
   async ({ tipo }) => {
-    const url = tipo === "grade" ? MIDIAS.grade_imagem : MIDIAS.precos_imagem;
-    const link = tipo === "grade" ? MIDIAS.grade_link : MIDIAS.precos_link;
+    const M = midiasAtuais();
+    const url = tipo === "grade" ? M.grade_imagem : M.precos_imagem;
+    const link = tipo === "grade" ? M.grade_link : M.precos_link;
     if (url) _midiasDaVez.push({ imagem: url, link }); // o listener envia a foto logo após a bolha que cita o link
     console.log(`🖼️  [ENVIAR IMAGEM] ${tipo}: ${url}`);
     return { content: [{ type: "text", text: `Imagem "${tipo}" enviada. Link: ${link}` }] };
