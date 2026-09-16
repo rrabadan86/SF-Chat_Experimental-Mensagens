@@ -4171,7 +4171,14 @@ function paginaSofia(aviso, erro) {
             fetch('/sofia/midia-upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({campo:campo,dataUrl:rd.result})})
               .then(function(r){return r.json();})
               .then(function(j){
-                if(j && j.ok){ var mi=document.getElementById('mi_'+campo); if(mi) mi.value=j.path; if(st) st.textContent='✅ imagem anexada'; var t=document.getElementById('mt_'+campo); if(t){ t.style.display='block'; t.src='/sofia/midia?campo='+campo+'&t='+Date.now(); } }
+                if(j && j.ok){
+                  var mi=document.getElementById('mi_'+campo); if(mi) mi.value=j.path;
+                  var t=document.getElementById('mt_'+campo); if(t){ t.style.display='block'; t.src='/sofia/midia?campo='+campo+'&t='+Date.now(); }
+                  // preenche o campo de LINK (Drive) com a URL pública da própria imagem
+                  var msg='✅ imagem anexada';
+                  if(j.publicUrl){ var campoLink=campo.replace('_imagem','_link'); var li=document.querySelector('input[name="'+campoLink+'"]'); if(li){ li.value=j.publicUrl; msg+=' · 🔗 link público preenchido (clique em Salvar para confirmar)'; } }
+                  if(st) st.textContent=msg;
+                }
                 else { if(st) st.textContent='❌ '+((j&&j.erro)||'falhou'); }
               })
               .catch(function(e){ if(st) st.textContent='❌ '+e; });
@@ -5018,6 +5025,18 @@ const server = http.createServer((req, res) => {
   // Páginas legais públicas (o Google lê ao publicar o app OAuth).
   if (url === '/privacidade') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(paginaPrivacidade()); }
   if (url === '/termos') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(paginaTermos()); }
+  // Imagem PÚBLICA (preços/grade) — o link que a SoFIA manda pra aluna ABRIR pelo
+  // WhatsApp (sem login). Só serve os campos conhecidos (precos_imagem/grade_imagem),
+  // pelo caminho salvo pelo próprio painel — sem risco de path traversal.
+  if (url === '/midia-publica' || url.startsWith('/midia-publica?')) {
+    const campo = new URLSearchParams(req.url.split('?')[1] || '').get('c') || '';
+    let caminho = ''; try { caminho = sofia.caminhoMidiaLocal(campo); } catch (_) {}
+    if (!caminho || !fs.existsSync(caminho)) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('imagem não encontrada'); }
+    const ext = caminho.split('.').pop().toLowerCase();
+    const tipo = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
+    res.writeHead(200, { 'Content-Type': tipo, 'Cache-Control': 'public, max-age=300' });
+    return fs.createReadStream(caminho).pipe(res);
+  }
   // ── Webhook OFICIAL do Instagram (público — a Meta chama sem login) ────────
   // GET = verificação (devolve o hub.challenge). POST = eventos (comentário/DM),
   // com assinatura conferida pelo APP_SECRET antes de processar.
@@ -5786,9 +5805,13 @@ const server = http.createServer((req, res) => {
       let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       try {
-        const arq = sofia.salvarMidiaImagem(String(d.campo || ''), String(d.dataUrl || ''));
-        try { auditoria.registrar(sess.usuario, 'sofia.config', '', 'imagem ' + String(d.campo || '')); } catch (_) {}
-        res.end(JSON.stringify({ ok: true, path: arq }));
+        const campo = String(d.campo || '');
+        const arq = sofia.salvarMidiaImagem(campo, String(d.dataUrl || ''));
+        try { auditoria.registrar(sess.usuario, 'sofia.config', '', 'imagem ' + campo); } catch (_) {}
+        // URL pública (link que a SoFIA pode mandar pra aluna abrir). Montada a
+        // partir do host do request (o mesmo domínio público do painel via Caddy).
+        const publicUrl = baseUrl(req) + '/midia-publica?c=' + encodeURIComponent(campo);
+        res.end(JSON.stringify({ ok: true, path: arq, publicUrl }));
       } catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
   }
