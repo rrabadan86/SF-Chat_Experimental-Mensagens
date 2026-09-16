@@ -217,12 +217,16 @@ async function rodar({ dry = false } = {}) {
 
 function textoRelatorio(r, cfg) {
   const linhas = [];
-  linhas.push(`📋 *Presença da experimental (semana)*${r.dry ? ' — SIMULAÇÃO' : ''}`);
+  const jan = (cfg && cfg.diasJanela) ? `${cfg.diasJanela} dia${cfg.diasJanela > 1 ? 's' : ''}` : 'semana';
+  linhas.push(`📋 *Presença da experimental (${jan})*${r.dry ? ' — SIMULAÇÃO' : ''}`);
+  // Lista nome + telefone de cada pessoa (com a data quando houver veredito).
+  const lista = (arr) => { for (const x of (arr || []).slice(0, 40)) linhas.push(`   • ${x.nome || 's/ nome'}${x.telefone ? ' · ' + x.telefone : ''}${x.data ? ' (' + x.data + ')' : ''}`); };
   linhas.push(`✅ Compareceram: ${r.compareceu.length}`);
-  for (const x of r.compareceu.slice(0, 40)) linhas.push(`   • ${x.nome || x.telefone} (${x.data})`);
+  lista(r.compareceu);
   linhas.push(`❌ Faltaram: ${r.faltou.length}`);
-  for (const x of r.faltou.slice(0, 40)) linhas.push(`   • ${x.nome || x.telefone} (${x.data})`);
+  lista(r.faltou);
   linhas.push(`⏳ Ainda sem veredito: ${r.semTag.length}`);
+  lista(r.semTag);
   if (r.novos && r.novos.length) linhas.push(`🆕 Cadastrados novos (não passaram pela SoFIA): ${r.novos.length}`);
   if (r.erro) linhas.push(`⚠️ ${r.erro}`);
   return linhas.join('\n');
