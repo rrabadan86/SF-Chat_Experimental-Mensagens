@@ -321,6 +321,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/comparecimento') return has('sofia_contatos') || has('sofia_config'); // agora mora na aba Tags
   if (url === '/sofia/midia-upload' || url === '/sofia/midia') return has('sofia_config'); // upload/preview das imagens (preços/grade)
+  if (url === '/sofia/msgs-anuncio') return has('sofia_config'); // boas-vindas do anúncio que não pausam a SoFIA
   if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/prompt/download') return has('sofia_config');
   return false;
 }
@@ -3887,6 +3888,7 @@ function paginaSofia(aviso, erro) {
   const refreshSeg = lerRefreshSeg(); // atualização automática da aba Conversas (segundos)
   let avh = { on: false, numero: '' }; try { avh = sofia.lerAvisoHumano(); } catch (_) {}
   let naoResp = []; try { naoResp = sofia.lerNaoResponder(); } catch (_) {} // números que a SoFIA nunca responde sozinha
+  let msgsAnuncioTxt = ''; try { msgsAnuncioTxt = sofia.lerMsgsAnuncioTexto(); } catch (_) {} // boas-vindas do anúncio que não pausam a SoFIA
   let alu = { ativo: true, janelaIni: '05:45', janelaFim: '16:30', recepcaoNumero: '', tag: 'alunas', tags: ['alunas'] };
   try { alu = sofia.lerAlunas(); } catch (_) {}
   // Etiquetas que existem de verdade no CRM, para o Studio MARCAR quais a SoFIA
@@ -3967,6 +3969,17 @@ function paginaSofia(aviso, erro) {
         <form method="POST" action="/sofia/nao-responder">
           <textarea name="numeros" rows="6" spellcheck="false" placeholder="Ex.:&#10;62998887777&#10;11991234567" style="font-size:.9rem;font-family:ui-monospace,monospace">${esc(naoResp.join('\n'))}</textarea>
           <div class="acts" style="margin-top:12px;align-items:center"><button type="submit" class="save">Salvar lista</button><span class="quando" style="margin:0 0 0 10px">${naoResp.length} número(s) na lista</span></div>
+        </form>
+      </div>
+    </details>
+
+    <details class="acc-sec">
+      <summary class="sec-t" style="cursor:pointer;padding:4px 0">📣 Boas-vindas do anúncio (não pausar a SoFIA) <small style="font-weight:400;color:var(--cinza)">— cole a saudação automática do Patrocinado</small></summary>
+      <div class="card">
+        <p class="quando" style="margin:0 0 12px">Quando um lead vem de um <b>anúncio (click-to-WhatsApp)</b>, o próprio anúncio manda uma <b>mensagem de boas-vindas automática</b> do número. Como ela "sai" do número da SoFIA, sem isto a SoFIA achava que <b>um humano respondeu</b> e se <b>pausava por engano</b>. Cole aqui o <b>texto exato</b> dessa boas-vindas (uma por linha, se tiver mais de um anúncio) — a SoFIA vai <b>ignorá-la</b> e responder o lead normalmente. <small>(Compara sem ligar para acento, maiúscula ou pontuação.)</small></p>
+        <form method="POST" action="/sofia/msgs-anuncio">
+          <textarea name="msgs" rows="4" spellcheck="false" placeholder="Ex.:&#10;Olá, o treino no Studio Slim Fit combina força e cardio! Quer agendar uma aula experimental gratuita?" style="font-size:.9rem">${esc(msgsAnuncioTxt)}</textarea>
+          <div class="acts" style="margin-top:12px"><button type="submit" class="save">Salvar</button></div>
         </form>
       </div>
     </details>
@@ -5436,6 +5449,7 @@ const server = http.createServer((req, res) => {
     const q = req.url.split('?')[1] || '';
     let aviso = '', erro = false;
     if (/(?:^|&)ok=1/.test(q)) aviso = 'Salvo! As próximas conversas já usam estas configurações.';
+    else if (/(?:^|&)okma=\d+/.test(q)) aviso = '📣 Boas-vindas do anúncio salvas (' + ((q.match(/okma=(\d+)/) || [])[1] || '0') + ') — a SoFIA não se pausa mais com elas.';
     else if (/(?:^|&)on=1/.test(q)) aviso = '🟢 SoFIA ativada — voltou a responder as alunas.';
     else if (/(?:^|&)off=1/.test(q)) aviso = '⏸️ SoFIA pausada — atenda manualmente pelo WhatsApp.';
     else if (/(?:^|&)rest=1/.test(q)) aviso = 'Restaurado para a versão anterior.';
@@ -5973,6 +5987,16 @@ const server = http.createServer((req, res) => {
       try { lista = sofia.gravarNaoResponder(p.get('numeros') || ''); } catch (_) {}
       try { auditoria.registrar(sess.usuario, 'sofia.nao-responder', '', lista.length + ' número(s)'); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?oknr=' + lista.length }); res.end();
+    });
+  }
+  // Salvar as boas-vindas do anúncio (que não devem pausar a SoFIA).
+  if (req.method === 'POST' && url === '/sofia/msgs-anuncio') {
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      let lista = [];
+      try { lista = sofia.gravarMsgsAnuncio(p.get('msgs') || ''); } catch (_) {}
+      try { auditoria.registrar(sess.usuario, 'sofia.config', '', 'boas-vindas do anúncio (' + lista.length + ')'); } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?view=config&okma=' + lista.length }); res.end();
     });
   }
   // Salvar o limite de alerta de gasto diário (Custo IA).

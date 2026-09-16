@@ -1304,6 +1304,25 @@ function jaDisparouReadOnly(chave: string, motivo: string, tag: string): boolean
 function normTxt(s: string): string {
   return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
+// Normaliza p/ comparar mensagens: sem acento, sem pontuação, espaços colapsados.
+function normMsg(s: string): string {
+  return normTxt(s).replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+// A mensagem é uma BOAS-VINDAS AUTOMÁTICA do anúncio (patrocinado)? Essas saem do
+// número da SoFIA e não devem ser tratadas como "resposta manual" (senão a SoFIA
+// se pausa por engano). Textos configurados no painel → sofia-msgs-anuncio.txt.
+function ehMsgAnuncio(texto: string): boolean {
+  try {
+    const t = normMsg(texto);
+    if (!t) return false;
+    const raw = fs.readFileSync(path.join(DIR, "sofia-msgs-anuncio.txt"), "utf8");
+    for (const linha of raw.split("\n")) {
+      const l = normMsg(linha);
+      if (l && l === t) return true;
+    }
+  } catch { /* sem arquivo = nada a ignorar */ }
+  return false;
+}
 // Chamado no fim do handler da aluna: checa palavra-chave e "respondeu campanha".
 function checarGatilhosAluna(chave: string, nome: string, texto: string) {
   const rs = lerRegras();
@@ -2139,6 +2158,12 @@ async function tratarRespostaManual(msg: any, jid: string) {
     await sleep(2500);
     if (ecoDeEntrada(tel, corpo) || ecoDeEntrada(jidParaTel(jid), corpo)) {
       log(`message_create de ${tel} ignorado — eco do patrocinado (mesmo texto recém-recebido), não pausa a SoFIA.`);
+      return;
+    }
+    // Boas-vindas AUTOMÁTICA do anúncio (texto configurado no painel): sai do
+    // número mas não é resposta humana — não pausa a SoFIA.
+    if (ehMsgAnuncio(corpo)) {
+      log(`message_create de ${tel} ignorado — boas-vindas automática do anúncio (não pausa a SoFIA).`);
       return;
     }
     assumirConversa(tel);
