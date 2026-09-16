@@ -32,7 +32,14 @@ const PADRAO = {
   tagFaltou: 'FX - 2. Encerrado com Agendamento sem Presença',
   numeroRelatorio: '',
   criarNovos: false, // cadastrar na SoFIA quem fez experimental e não existe (p/ campanhas)
+  diasJanela: 7,     // quantos dias para trás ler a presença no EVO (1-31)
 };
+
+// Quantos dias para trás olhar (1-31). Padrão 7. Rodar diário? use 2. Semanal? 7.
+function clampDias(v) {
+  const n = parseInt(v, 10);
+  return (Number.isFinite(n) && n >= 1 && n <= 31) ? n : 7;
+}
 
 // Normaliza a lista de tags de "agendou": aceita a LISTA nova (tagsAgendou) e,
 // para compatibilidade, a única antiga (tagAgendou).
@@ -48,6 +55,7 @@ function ler() {
   const cfg = { ...PADRAO, ...o };
   cfg.tagsAgendou = tagsAgendouDe(o);
   cfg.tagAgendou = cfg.tagsAgendou[0]; // espelho p/ leitores antigos
+  cfg.diasJanela = clampDias(o.diasJanela != null ? o.diasJanela : cfg.diasJanela);
   return cfg;
 }
 function gravar(cfg) {
@@ -60,6 +68,7 @@ function gravar(cfg) {
     tagFaltou: String(cfg.tagFaltou || '').trim() || PADRAO.tagFaltou,
     numeroRelatorio: String(cfg.numeroRelatorio || '').replace(/\D/g, ''),
     criarNovos: !!cfg.criarNovos,
+    diasJanela: clampDias(cfg.diasJanela),
   };
   try { fs.mkdirSync(path.dirname(ARQ), { recursive: true }); } catch (_) {}
   fs.writeFileSync(ARQ, JSON.stringify(o, null, 2), 'utf8');
@@ -93,8 +102,8 @@ function veredito(status) {
  * Coleta a presença/falta das aulas experimentais dos últimos 7 dias no EVO.
  * Devolve [{ nome, telefone, data, status, veredito }]. Best-effort por dia.
  */
-async function coletarSemana(scraper) {
-  const datas = ultimasDatas(7);
+async function coletarSemana(scraper, n) {
+  const datas = ultimasDatas(clampDias(n));
   const coletado = [];
   try { await scraper.navigateToExperimental(); } catch (_) {}
   for (const data of datas) {
@@ -151,7 +160,7 @@ async function rodar({ dry = false } = {}) {
     try {
       await scraper.init();
       await scraper.login();
-      semana = await coletarSemana(scraper);
+      semana = await coletarSemana(scraper, cfg.diasJanela);
       ultimoErro = null;
       break;
     } catch (e) {

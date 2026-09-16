@@ -89,11 +89,13 @@ setInterval(() => atualizarCotacao().catch(() => {}), COTACAO_TTL);
 // Config do job de comparecimento (lida/gravada direto do JSON — NÃO requerer
 // comparecimento.js aqui, para não carregar o puppeteer/EVO no painel).
 const COMP_CFG_FILE = path.resolve(__dirname, '..', 'data', 'comparecimento.json');
-const COMP_PADRAO = { on: false, tagAgendou: 'FX - 3. Agendou Aula Exp', tagsAgendou: ['FX - 3. Agendou Aula Exp'], tagCompareceu: 'FX - 5. Fez Aula Experimental', tagFaltou: 'FX - 2. Encerrado com Agendamento sem Presença', numeroRelatorio: '', criarNovos: false };
+const COMP_PADRAO = { on: false, tagAgendou: 'FX - 3. Agendou Aula Exp', tagsAgendou: ['FX - 3. Agendou Aula Exp'], tagCompareceu: 'FX - 5. Fez Aula Experimental', tagFaltou: 'FX - 2. Encerrado com Agendamento sem Presença', numeroRelatorio: '', criarNovos: false, diasJanela: 7 };
 // Normaliza a lista de tags de "agendou" (aceita a lista nova ou a única antiga).
 function compTagsAgendou(o) { let ta = Array.isArray(o && o.tagsAgendou) ? o.tagsAgendou.map(t => String(t || '').trim()).filter(Boolean) : []; if (!ta.length) { const one = String((o && o.tagAgendou) || COMP_PADRAO.tagAgendou).trim(); ta = [one || COMP_PADRAO.tagAgendou]; } return Array.from(new Set(ta)); }
-function lerCompCfg() { let o = {}; try { const p = JSON.parse(fs.readFileSync(COMP_CFG_FILE, 'utf8')); if (p && typeof p === 'object') o = p; } catch (_) {} const cfg = { ...COMP_PADRAO, ...o }; cfg.tagsAgendou = compTagsAgendou(o); cfg.tagAgendou = cfg.tagsAgendou[0]; return cfg; }
-function gravarCompCfg(c) { const tags = compTagsAgendou(c); const o = { on: !!c.on, tagsAgendou: tags, tagAgendou: tags[0], tagCompareceu: String(c.tagCompareceu || '').trim() || COMP_PADRAO.tagCompareceu, tagFaltou: String(c.tagFaltou || '').trim() || COMP_PADRAO.tagFaltou, numeroRelatorio: String(c.numeroRelatorio || '').replace(/\D/g, ''), criarNovos: !!c.criarNovos }; try { fs.mkdirSync(path.dirname(COMP_CFG_FILE), { recursive: true }); } catch (_) {} fs.writeFileSync(COMP_CFG_FILE, JSON.stringify(o, null, 2)); return o; }
+// Janela de dias para trás (1-31). Padrão 7.
+function compDias(v) { const n = parseInt(v, 10); return (Number.isFinite(n) && n >= 1 && n <= 31) ? n : 7; }
+function lerCompCfg() { let o = {}; try { const p = JSON.parse(fs.readFileSync(COMP_CFG_FILE, 'utf8')); if (p && typeof p === 'object') o = p; } catch (_) {} const cfg = { ...COMP_PADRAO, ...o }; cfg.tagsAgendou = compTagsAgendou(o); cfg.tagAgendou = cfg.tagsAgendou[0]; cfg.diasJanela = compDias(o.diasJanela != null ? o.diasJanela : cfg.diasJanela); return cfg; }
+function gravarCompCfg(c) { const tags = compTagsAgendou(c); const o = { on: !!c.on, tagsAgendou: tags, tagAgendou: tags[0], tagCompareceu: String(c.tagCompareceu || '').trim() || COMP_PADRAO.tagCompareceu, tagFaltou: String(c.tagFaltou || '').trim() || COMP_PADRAO.tagFaltou, numeroRelatorio: String(c.numeroRelatorio || '').replace(/\D/g, ''), criarNovos: !!c.criarNovos, diasJanela: compDias(c.diasJanela) }; try { fs.mkdirSync(path.dirname(COMP_CFG_FILE), { recursive: true }); } catch (_) {} fs.writeFileSync(COMP_CFG_FILE, JSON.stringify(o, null, 2)); return o; }
 
 // Limite de aulas experimentais por turma — editável na aba SoFIA → Configuração.
 // Gravado em data/sofia-exp-limite.txt; o cálculo da grade (Python) lê este arquivo.
@@ -3321,6 +3323,8 @@ function paginaSofiaTags(aviso, erro) {
             <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Faltou → vira</label><select name="tagFaltou">${cmpSel(cmp.tagFaltou)}</select></div>
           </div>
           <label class="chk" style="margin:14px 0 0"><input type="checkbox" name="criarNovos" value="1"${cmp.criarNovos ? ' checked' : ''}> Cadastrar na SoFIA quem fez a experimental e ainda não existe <small style="font-weight:400;color:var(--cinza)">(entrou por outro canal — assim pode receber campanhas)</small></label>
+          <label style="margin:14px 0 4px">Olhar quantos dias para trás ${infoI('Quantos dias de presença o robô lê no EVO a cada rodada. Se roda <b>todo dia</b>, 2 já basta (menos consulta ao EVO). Se roda <b>1x/semana</b>, use 7. (1 a 31)')}</label>
+          <div style="display:flex;align-items:center;gap:8px"><input type="number" name="diasJanela" min="1" max="31" value="${esc(cmp.diasJanela)}" style="max-width:90px"><span class="quando" style="margin:0">dia(s) — dica: diário → 2 · semanal → 7</span></div>
           <label style="margin:14px 0 4px">Número que recebe o relatório <small style="font-weight:400;color:var(--cinza)">(opcional — resumo do que foi trocado)</small></label>
           <input type="tel" name="numeroRelatorio" value="${esc(cmp.numeroRelatorio)}" placeholder="Ex.: 62998887777" style="max-width:220px">
           ${cmpHoraBloco}
@@ -5817,7 +5821,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url === '/sofia/comparecimento') {
     return lerCorpo(req, 1e4, corpo => {
       const p = new URLSearchParams(corpo);
-      try { gravarCompCfg({ on: p.get('on') === '1', tagsAgendou: p.getAll('tagsAgendou'), tagCompareceu: p.get('tagCompareceu') || '', tagFaltou: p.get('tagFaltou') || '', numeroRelatorio: p.get('numeroRelatorio') || '', criarNovos: p.get('criarNovos') === '1' }); } catch (_) {}
+      try { gravarCompCfg({ on: p.get('on') === '1', tagsAgendou: p.getAll('tagsAgendou'), tagCompareceu: p.get('tagCompareceu') || '', tagFaltou: p.get('tagFaltou') || '', numeroRelatorio: p.get('numeroRelatorio') || '', criarNovos: p.get('criarNovos') === '1', diasJanela: p.get('diasJanela') }); } catch (_) {}
       // Dia/hora que o job roda (mesmo cofre dos horários do robô). Se mudou, salva
       // e reinicia o robô p/ reagendar; senão, redireciona direto (sem reiniciar).
       const hora = p.get('hora_comparecimento');
