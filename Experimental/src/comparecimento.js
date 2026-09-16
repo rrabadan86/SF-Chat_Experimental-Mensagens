@@ -33,12 +33,19 @@ const PADRAO = {
   numeroRelatorio: '',
   criarNovos: false, // cadastrar na SoFIA quem fez experimental e não existe (p/ campanhas)
   diasJanela: 7,     // quantos dias para trás ler a presença no EVO (1-31)
+  intervaloHoras: 0, // 0 = roda só no horário fixo; N = repete a cada N horas (2=12x/dia, 8=3x/dia)
 };
 
 // Quantos dias para trás olhar (1-31). Padrão 7. Rodar diário? use 2. Semanal? 7.
 function clampDias(v) {
   const n = parseInt(v, 10);
   return (Number.isFinite(n) && n >= 1 && n <= 31) ? n : 7;
+}
+
+// Repetir a cada N horas (0 = desligado; 1-24). Ex.: 8 = 3x/dia, 6 = 4x/dia.
+function clampIntervalo(v) {
+  const n = parseInt(v, 10);
+  return (Number.isFinite(n) && n >= 1 && n <= 24) ? n : 0;
 }
 
 // Normaliza a lista de tags de "agendou": aceita a LISTA nova (tagsAgendou) e,
@@ -56,6 +63,7 @@ function ler() {
   cfg.tagsAgendou = tagsAgendouDe(o);
   cfg.tagAgendou = cfg.tagsAgendou[0]; // espelho p/ leitores antigos
   cfg.diasJanela = clampDias(o.diasJanela != null ? o.diasJanela : cfg.diasJanela);
+  cfg.intervaloHoras = clampIntervalo(o.intervaloHoras != null ? o.intervaloHoras : cfg.intervaloHoras);
   return cfg;
 }
 function gravar(cfg) {
@@ -69,6 +77,7 @@ function gravar(cfg) {
     numeroRelatorio: String(cfg.numeroRelatorio || '').replace(/\D/g, ''),
     criarNovos: !!cfg.criarNovos,
     diasJanela: clampDias(cfg.diasJanela),
+    intervaloHoras: clampIntervalo(cfg.intervaloHoras),
   };
   try { fs.mkdirSync(path.dirname(ARQ), { recursive: true }); } catch (_) {}
   fs.writeFileSync(ARQ, JSON.stringify(o, null, 2), 'utf8');

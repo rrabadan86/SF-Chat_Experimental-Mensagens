@@ -817,7 +817,7 @@ async function main() {
   // no EVO e troca as tags (Agendou → Fez aula / Sem presença). Usa o EVO, então
   // respeita o mutex jobRunning. Só age se estiver ligado na config.
   if (config.schedule.comparecimento) {
-    cron.schedule(config.schedule.comparecimento, async () => {
+    const comparecimentoRunner = async () => {
       log('⏰ Cron disparado: Presença da experimental (troca de tags)');
       if (jobRunning) { log('⚠️  Comparecimento ignorado — outro job em execução'); return; }
       jobRunning = true;
@@ -828,8 +828,18 @@ async function main() {
         log('✅ Comparecimento processado');
       } catch (err) { logError('Comparecimento', err); }
       finally { jobRunning = false; }
-    }, { timezone: 'America/Sao_Paulo' });
-    log(`📅 Job PRESENÇA (troca de tags) agendado: ${config.schedule.comparecimento} (sáb 16:00)`);
+    };
+    // Intervalo opcional: rodar a cada N horas (N=8 → 3x/dia). Reaproveita o
+    // minuto e os dias do horário configurado, trocando a HORA por "*/N".
+    let intervalo = 0;
+    try { intervalo = require('./comparecimento').ler().intervaloHoras || 0; } catch (_) {}
+    let cronExpr = config.schedule.comparecimento;
+    if (intervalo >= 1 && intervalo <= 24) {
+      const p = String(cronExpr).trim().split(/\s+/);         // [M, H, dom, mon, DOW]
+      if (p.length === 5) { p[1] = `*/${intervalo}`; cronExpr = p.join(' '); }
+    }
+    cron.schedule(cronExpr, comparecimentoRunner, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job PRESENÇA (troca de tags) agendado: ${cronExpr}${intervalo ? ` (a cada ${intervalo}h)` : ''}`);
   }
 
   // Schedule: 10:45 (manhã) e 15:45 (tarde) → dispara os ENVIOS AGENDADOS no

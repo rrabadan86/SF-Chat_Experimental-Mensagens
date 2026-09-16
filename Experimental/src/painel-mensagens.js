@@ -89,13 +89,15 @@ setInterval(() => atualizarCotacao().catch(() => {}), COTACAO_TTL);
 // Config do job de comparecimento (lida/gravada direto do JSON — NÃO requerer
 // comparecimento.js aqui, para não carregar o puppeteer/EVO no painel).
 const COMP_CFG_FILE = path.resolve(__dirname, '..', 'data', 'comparecimento.json');
-const COMP_PADRAO = { on: false, tagAgendou: 'FX - 3. Agendou Aula Exp', tagsAgendou: ['FX - 3. Agendou Aula Exp'], tagCompareceu: 'FX - 5. Fez Aula Experimental', tagFaltou: 'FX - 2. Encerrado com Agendamento sem Presença', numeroRelatorio: '', criarNovos: false, diasJanela: 7 };
+const COMP_PADRAO = { on: false, tagAgendou: 'FX - 3. Agendou Aula Exp', tagsAgendou: ['FX - 3. Agendou Aula Exp'], tagCompareceu: 'FX - 5. Fez Aula Experimental', tagFaltou: 'FX - 2. Encerrado com Agendamento sem Presença', numeroRelatorio: '', criarNovos: false, diasJanela: 7, intervaloHoras: 0 };
 // Normaliza a lista de tags de "agendou" (aceita a lista nova ou a única antiga).
 function compTagsAgendou(o) { let ta = Array.isArray(o && o.tagsAgendou) ? o.tagsAgendou.map(t => String(t || '').trim()).filter(Boolean) : []; if (!ta.length) { const one = String((o && o.tagAgendou) || COMP_PADRAO.tagAgendou).trim(); ta = [one || COMP_PADRAO.tagAgendou]; } return Array.from(new Set(ta)); }
 // Janela de dias para trás (1-31). Padrão 7.
 function compDias(v) { const n = parseInt(v, 10); return (Number.isFinite(n) && n >= 1 && n <= 31) ? n : 7; }
-function lerCompCfg() { let o = {}; try { const p = JSON.parse(fs.readFileSync(COMP_CFG_FILE, 'utf8')); if (p && typeof p === 'object') o = p; } catch (_) {} const cfg = { ...COMP_PADRAO, ...o }; cfg.tagsAgendou = compTagsAgendou(o); cfg.tagAgendou = cfg.tagsAgendou[0]; cfg.diasJanela = compDias(o.diasJanela != null ? o.diasJanela : cfg.diasJanela); return cfg; }
-function gravarCompCfg(c) { const tags = compTagsAgendou(c); const o = { on: !!c.on, tagsAgendou: tags, tagAgendou: tags[0], tagCompareceu: String(c.tagCompareceu || '').trim() || COMP_PADRAO.tagCompareceu, tagFaltou: String(c.tagFaltou || '').trim() || COMP_PADRAO.tagFaltou, numeroRelatorio: String(c.numeroRelatorio || '').replace(/\D/g, ''), criarNovos: !!c.criarNovos, diasJanela: compDias(c.diasJanela) }; try { fs.mkdirSync(path.dirname(COMP_CFG_FILE), { recursive: true }); } catch (_) {} fs.writeFileSync(COMP_CFG_FILE, JSON.stringify(o, null, 2)); return o; }
+// Repetir a cada N horas (0 = desligado; 1-24).
+function compIntervalo(v) { const n = parseInt(v, 10); return (Number.isFinite(n) && n >= 1 && n <= 24) ? n : 0; }
+function lerCompCfg() { let o = {}; try { const p = JSON.parse(fs.readFileSync(COMP_CFG_FILE, 'utf8')); if (p && typeof p === 'object') o = p; } catch (_) {} const cfg = { ...COMP_PADRAO, ...o }; cfg.tagsAgendou = compTagsAgendou(o); cfg.tagAgendou = cfg.tagsAgendou[0]; cfg.diasJanela = compDias(o.diasJanela != null ? o.diasJanela : cfg.diasJanela); cfg.intervaloHoras = compIntervalo(o.intervaloHoras != null ? o.intervaloHoras : cfg.intervaloHoras); return cfg; }
+function gravarCompCfg(c) { const tags = compTagsAgendou(c); const o = { on: !!c.on, tagsAgendou: tags, tagAgendou: tags[0], tagCompareceu: String(c.tagCompareceu || '').trim() || COMP_PADRAO.tagCompareceu, tagFaltou: String(c.tagFaltou || '').trim() || COMP_PADRAO.tagFaltou, numeroRelatorio: String(c.numeroRelatorio || '').replace(/\D/g, ''), criarNovos: !!c.criarNovos, diasJanela: compDias(c.diasJanela), intervaloHoras: compIntervalo(c.intervaloHoras) }; try { fs.mkdirSync(path.dirname(COMP_CFG_FILE), { recursive: true }); } catch (_) {} fs.writeFileSync(COMP_CFG_FILE, JSON.stringify(o, null, 2)); return o; }
 
 // Limite de aulas experimentais por turma — editável na aba SoFIA → Configuração.
 // Gravado em data/sofia-exp-limite.txt; o cálculo da grade (Python) lê este arquivo.
@@ -3328,6 +3330,8 @@ function paginaSofiaTags(aviso, erro) {
           <label style="margin:14px 0 4px">Número que recebe o relatório <small style="font-weight:400;color:var(--cinza)">(opcional — resumo do que foi trocado)</small></label>
           <input type="tel" name="numeroRelatorio" value="${esc(cmp.numeroRelatorio)}" placeholder="Ex.: 62998887777" style="max-width:220px">
           ${cmpHoraBloco}
+          <label style="margin:14px 0 4px">Repetir várias vezes ao dia ${infoI('0 = roda só no horário acima. Se quiser <b>mais de uma vez por dia</b>, ponha de quantas em quantas horas: <b>8</b> = 3x/dia · <b>6</b> = 4x/dia · <b>4</b> = 6x/dia · <b>2</b> = 12x/dia. Mantém o minuto e os dias do horário acima.')}</label>
+          <div style="display:flex;align-items:center;gap:8px"><span class="quando" style="margin:0">a cada</span><input type="number" name="intervaloHoras" min="0" max="24" value="${esc(cmp.intervaloHoras)}" style="max-width:80px"><span class="quando" style="margin:0">horas — <b>0 = só no horário acima</b>; 8 = 3x/dia; 6 = 4x/dia</span></div>
           <div class="acts" style="margin-top:14px"><button type="submit" class="save">Salvar</button></div>
         </form>
         <p class="quando" style="margin:12px 0 0">🧪 Para <b>testar antes</b> sem alterar nada (só mostra o que faria), rode na VPS, em <code>~/SF-Chat_Experimental-Mensagens/Experimental</code>: <code>HEADLESS=true node src/comparecimento.js --dry</code>. Se o EVO bloquear o modo sem tela, use <code>xvfb-run -a node src/comparecimento.js --dry</code>. Trocar <code>--dry</code> por <code>--run</code> executa de verdade. (O robô agendado não precisa disso — já roda com tela virtual.)</p>
@@ -5821,9 +5825,11 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url === '/sofia/comparecimento') {
     return lerCorpo(req, 1e4, corpo => {
       const p = new URLSearchParams(corpo);
-      try { gravarCompCfg({ on: p.get('on') === '1', tagsAgendou: p.getAll('tagsAgendou'), tagCompareceu: p.get('tagCompareceu') || '', tagFaltou: p.get('tagFaltou') || '', numeroRelatorio: p.get('numeroRelatorio') || '', criarNovos: p.get('criarNovos') === '1', diasJanela: p.get('diasJanela') }); } catch (_) {}
-      // Dia/hora que o job roda (mesmo cofre dos horários do robô). Se mudou, salva
-      // e reinicia o robô p/ reagendar; senão, redireciona direto (sem reiniciar).
+      let intervaloAntes = 0; try { intervaloAntes = lerCompCfg().intervaloHoras; } catch (_) {}
+      try { gravarCompCfg({ on: p.get('on') === '1', tagsAgendou: p.getAll('tagsAgendou'), tagCompareceu: p.get('tagCompareceu') || '', tagFaltou: p.get('tagFaltou') || '', numeroRelatorio: p.get('numeroRelatorio') || '', criarNovos: p.get('criarNovos') === '1', diasJanela: p.get('diasJanela'), intervaloHoras: p.get('intervaloHoras') }); } catch (_) {}
+      const intervaloMudou = compIntervalo(p.get('intervaloHoras')) !== intervaloAntes;
+      // Dia/hora que o job roda (mesmo cofre dos horários do robô). Se mudou (hora
+      // OU intervalo), salva e reinicia o robô p/ reagendar; senão, sem reiniciar.
       const hora = p.get('hora_comparecimento');
       const dias = p.getAll('dias_comparecimento').map(Number);
       let mudouHora = false;
@@ -5831,7 +5837,7 @@ const server = http.createServer((req, res) => {
         try { const novo = horarios.build(hora, dias); mudouHora = (novo !== horarios.cronDe('comparecimento')); horarios.salvar('comparecimento', hora, dias); }
         catch (_) { /* horário inválido → ignora, mantém o atual */ }
       }
-      if (!mudouHora) { res.writeHead(303, { Location: '/sofia?view=tags&okcmp=1' }); return res.end(); }
+      if (!mudouHora && !intervaloMudou) { res.writeHead(303, { Location: '/sofia?view=tags&okcmp=1' }); return res.end(); }
       exec('pm2 restart ' + PM2_EXP + ' --update-env', { timeout: 25000 }, (err) => {
         res.writeHead(303, { Location: '/sofia?view=tags&okcmp=1' + (err ? '&errh=1' : '') }); res.end();
       });
