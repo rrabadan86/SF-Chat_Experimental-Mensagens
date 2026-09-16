@@ -1207,8 +1207,8 @@ async function fecharSessao(chave: string, sess: Sessao) {
 // esperar o tempo da sessão. Lido com cache por mtime.
 const ENCERRADAS_FILE = path.join(DIR, "sofia-encerradas.json");
 let _encMtime = -1;
-let _encMap: Record<string, number> = {};
-function lerEncerradas(): Record<string, number> {
+let _encMap: Record<string, any> = {};
+function lerEncerradas(): Record<string, any> {
   try {
     const st = fs.statSync(ENCERRADAS_FILE);
     if (st.mtimeMs !== _encMtime) {
@@ -1219,6 +1219,11 @@ function lerEncerradas(): Record<string, number> {
   } catch { _encMtime = -1; _encMap = {}; }
   return _encMap;
 }
+// O valor pode ser o instante (número, formato legado) OU um objeto { em, por }
+// (formato novo do painel, que registra QUEM encerrou). Sem tratar o objeto, o
+// Number(obj) virava NaN e o encerramento MANUAL nunca fechava a sessão aqui —
+// então o gatilho 'encerrou' só disparava pelo tempo (12h), nunca na hora.
+function _encEm(v: any): number { return (v && typeof v === "object") ? (Number(v.em) || 0) : (Number(v) || 0); }
 
 // Fecha sessões paradas há mais que a janela (assim a interação encerra e ganha
 // resumo mesmo que a aluna nunca mais escreva) OU encerradas à mão pelo painel.
@@ -1231,7 +1236,7 @@ function varrerSessoes() {
     const ult = h.sessoes[h.sessoes.length - 1];
     if (!ult || ult.status !== "ativa") continue;
     const d = String(chave).replace(/\D/g, "");
-    const fechadaManual = Number(enc[chave] || (d && enc[d]) || 0) >= ult.fimEm;
+    const fechadaManual = (_encEm(enc[chave]) || (d ? _encEm(enc[d]) : 0)) >= ult.fimEm;
     if (fechadaManual || agora - ult.fimEm > janela) void fecharSessao(chave, ult);
   }
 }
