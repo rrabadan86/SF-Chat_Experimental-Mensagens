@@ -56,6 +56,7 @@ const F = {
   custoLimite: path.join(DIR, 'sofia-custo-limite.txt'), // alerta de gasto diário (US$; 0 = sem alerta) — painel
   avisoHumano: path.join(DIR, 'sofia-avisohumano.json'), // avisar nº quando a aluna pedir humano — painel escreve, sofia.ts lê
   atencao: path.join(DIR, 'sofia-atencao.json'), // conversas que pediram humano — sofia.ts marca, painel pinta/filtra e limpa
+  msgsAnuncio: path.join(DIR, 'sofia-msgs-anuncio.txt'), // boas-vindas automáticas do anúncio (patrocinado) — a SoFIA NÃO se pausa ao vê-las. Painel escreve, listener lê.
 };
 
 // Padrões do "jeito humano" (mesmos do listener). O painel edita e o listener lê
@@ -241,6 +242,20 @@ function caminhoMidiaLocal(campo) {
     if (v && !/^https?:\/\//i.test(v) && fs.existsSync(v)) return v;
   } catch (_) {}
   return '';
+}
+
+// ── Boas-vindas automáticas do anúncio (patrocinado) ────────────────────────
+// Textos que o próprio anúncio (click-to-WhatsApp) envia como saudação. Como
+// saem do número da SoFIA, ela achava que "um humano respondeu" e se pausava.
+// Guardamos os textos aqui (um por linha); o listener ignora esses ao decidir
+// se foi resposta manual. Painel escreve; listener lê.
+function lerMsgsAnuncioTexto() {
+  try { return ler(F.msgsAnuncio) || ''; } catch (_) { return ''; }
+}
+function gravarMsgsAnuncio(texto) {
+  const linhas = String(texto || '').split('\n').map(l => l.trim()).filter(Boolean);
+  gravarArquivo(F.msgsAnuncio, linhas.join('\n') + (linhas.length ? '\n' : ''));
+  return linhas;
 }
 
 // ── ritmo ("jeito humano": velocidade de digitação e pausas) ────────────────
@@ -1012,5 +1027,5 @@ module.exports = {
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
   conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, enfileirarAgendamento, lerAgendamentoResult, consumirAgendarInbox, gravarAgendarResultId, registrarAgendou, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerHumanoLog, lerBloqueios, estaBloqueado, setBloqueio, lerNaoResponder, gravarNaoResponder, estaNaoResponder, lerAlunas, gravarAlunas, dentroJanelaRecepcao, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
-  lerCampanhas, opCampanha, lerRascunhoCampanha, lerLidStats, salvarFotoCampanha, salvarMidiaImagem, caminhoMidiaLocal, DIR, ARQUIVOS: F,
+  lerCampanhas, opCampanha, lerRascunhoCampanha, lerLidStats, salvarFotoCampanha, salvarMidiaImagem, caminhoMidiaLocal, lerMsgsAnuncioTexto, gravarMsgsAnuncio, DIR, ARQUIVOS: F,
 };
