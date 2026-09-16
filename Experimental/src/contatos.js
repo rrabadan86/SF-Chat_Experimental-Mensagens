@@ -66,14 +66,20 @@ function limparTags(v) {
 function upsert(map, { nome, telefone, tags, instrucoes }) {
   const tel = normTel(telefone);
   if (!tel) return null;
-  const c = map[tel] || { tel, nome: '', tags: [], instrucoes: '', criadoEm: Date.now() };
+  // Reaproveita um contato JÁ existente em qualquer variante do 9º dígito
+  // (55DDD9XXXX vs 55DDDXXXX) em vez de criar uma duplicata. Sem isto, importar o
+  // mesmo número nas duas formas gerava dois cadastros com tags desencontradas.
+  let chave = tel;
+  const achado = acharPorTel(tel, map);
+  if (achado) chave = achado.chave;
+  const c = map[chave] || { tel: chave, nome: '', tags: [], instrucoes: '', criadoEm: Date.now() };
   const nm = String(nome == null ? '' : nome).trim();
   if (nm) c.nome = nm;
   const ins = String(instrucoes == null ? '' : instrucoes).trim();
   if (ins && ins !== '-') c.instrucoes = ins;
   for (const t of limparTags(tags)) if (!c.tags.includes(t)) c.tags.push(t);
   c.atualizadoEm = Date.now();
-  map[tel] = c;
+  map[chave] = c;
   return c;
 }
 
