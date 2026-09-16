@@ -1236,7 +1236,13 @@ function varrerSessoes() {
     const ult = h.sessoes[h.sessoes.length - 1];
     if (!ult || ult.status !== "ativa") continue;
     const d = String(chave).replace(/\D/g, "");
-    const fechadaManual = (_encEm(enc[chave]) || (d ? _encEm(enc[d]) : 0)) >= ult.fimEm;
+    // Compara com inicioEm (não fimEm): "esta sessão foi encerrada à mão depois
+    // de começar". Usar fimEm quebrava quando a última mensagem era da PRÓPRIA
+    // SoFIA (a despedida estende o fimEm p/ depois do clique de encerrar). Um
+    // registro de encerramento ANTIGO fica < inicioEm de uma sessão nova, então
+    // não fecha conversa nova por engano.
+    const encEm = _encEm(enc[chave]) || (d ? _encEm(enc[d]) : 0);
+    const fechadaManual = encEm >= ult.inicioEm;
     if (fechadaManual || agora - ult.fimEm > janela) void fecharSessao(chave, ult);
   }
 }
