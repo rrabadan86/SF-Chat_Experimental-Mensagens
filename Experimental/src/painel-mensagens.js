@@ -320,6 +320,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/comparecimento') return has('sofia_contatos') || has('sofia_config'); // agora mora na aba Tags
+  if (url === '/sofia/midia-upload' || url === '/sofia/midia') return has('sofia_config'); // upload/preview das imagens (preços/grade)
   if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/prompt/download') return has('sofia_config');
   return false;
 }
@@ -3917,6 +3918,16 @@ function paginaSofia(aviso, erro) {
   const cardsSecoes = e.secoes.map(s => cardSecao(s.titulo, s.corpo)).join('');
 
   const inpMidia = (nome, valor, rot) => `<label>${rot}</label><input type="text" name="${nome}" value="${esc(valor)}" style="font-family:ui-monospace,monospace;font-size:.86rem">`;
+  // Campo de IMAGEM (a SoFIA anexa no WhatsApp): aceita colar URL OU anexar arquivo
+  // (o upload salva no VPS e preenche o campo). Mostra miniatura do que está publicado.
+  const inpMidiaImg = (nome, valor, rot) => `<label>${rot}</label>
+    <input type="text" name="${nome}" id="mi_${nome}" value="${esc(valor)}" placeholder="cole uma URL ou anexe um arquivo abaixo" style="font-family:ui-monospace,monospace;font-size:.86rem">
+    <div style="display:flex;align-items:center;gap:10px;margin:6px 0 2px">
+      <input type="file" accept="image/*" id="mf_${nome}" style="display:none" onchange="subirMidia('${nome}', this)">
+      <button type="button" class="reset" onclick="document.getElementById('mf_${nome}').click()" style="padding:6px 12px;flex:none">📎 Anexar / Trocar imagem</button>
+      <span class="quando" id="ms_${nome}" style="margin:0"></span>
+    </div>
+    <img id="mt_${nome}" src="/sofia/midia?campo=${nome}&t=${Date.now()}" alt="" onerror="this.style.display='none'" style="max-width:220px;max-height:160px;border-radius:8px;border:1px solid #ddd;display:block;margin:4px 0 10px">`;
 
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
@@ -4144,12 +4155,38 @@ function paginaSofia(aviso, erro) {
       </details>
 
       <details class="acc-sec">
-        <summary class="sec-t">Imagens <small style="font-weight:400;color:var(--cinza)">— troque as URLs quando atualizar a grade/preços</small></summary>
+        <summary class="sec-t">Imagens <small style="font-weight:400;color:var(--cinza)">— anexe a imagem (a SoFIA envia no WhatsApp) e cole o link do Drive</small></summary>
       <div class="card">
-        ${inpMidia('precos_imagem', e.midias.precos_imagem, 'Imagem da TABELA DE PREÇOS (URL)')}
+        <p class="quando" style="margin:0 0 12px">A <b>Imagem</b> é o arquivo que a SoFIA <b>anexa na conversa</b> (foto). O <b>Link (Drive)</b> é a URL que ela manda em texto pra aluna abrir. Em cada imagem você pode <b>colar uma URL</b> ou <b>anexar um arquivo</b> (o anexo substitui o anterior).</p>
+        ${inpMidiaImg('precos_imagem', e.midias.precos_imagem, 'Imagem da TABELA DE PREÇOS')}
         ${inpMidia('precos_link', e.midias.precos_link, 'Link (Google Drive) da tabela de preços')}
-        ${inpMidia('grade_imagem', e.midias.grade_imagem, 'Imagem da GRADE DE HORÁRIOS (URL)')}
+        ${inpMidiaImg('grade_imagem', e.midias.grade_imagem, 'Imagem da GRADE DE HORÁRIOS')}
         ${inpMidia('grade_link', e.midias.grade_link, 'Link (Google Drive) da grade')}
+        <script>
+        function subirMidia(campo, input){
+          var f = input.files && input.files[0]; if(!f) return;
+          var st = document.getElementById('ms_'+campo); if(st) st.textContent='enviando…';
+          var rd = new FileReader();
+          rd.onload = function(){
+            fetch('/sofia/midia-upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({campo:campo,dataUrl:rd.result})})
+              .then(function(r){return r.json();})
+              .then(function(j){
+                if(j && j.ok){
+                  var mi=document.getElementById('mi_'+campo); if(mi) mi.value=j.path;
+                  var t=document.getElementById('mt_'+campo); if(t){ t.style.display='block'; t.src='/sofia/midia?campo='+campo+'&t='+Date.now(); }
+                  // preenche o campo de LINK (Drive) com a URL pública da própria imagem
+                  var msg='✅ imagem anexada';
+                  if(j.publicUrl){ var campoLink=campo.replace('_imagem','_link'); var li=document.querySelector('input[name="'+campoLink+'"]'); if(li){ li.value=j.publicUrl; msg+=' · 🔗 link público preenchido (clique em Salvar para confirmar)'; } }
+                  if(st) st.textContent=msg;
+                }
+                else { if(st) st.textContent='❌ '+((j&&j.erro)||'falhou'); }
+              })
+              .catch(function(e){ if(st) st.textContent='❌ '+e; });
+            input.value='';
+          };
+          rd.readAsDataURL(f);
+        }
+        </script>
       </div>
       </details>
 
@@ -4988,6 +5025,18 @@ const server = http.createServer((req, res) => {
   // Páginas legais públicas (o Google lê ao publicar o app OAuth).
   if (url === '/privacidade') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(paginaPrivacidade()); }
   if (url === '/termos') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(paginaTermos()); }
+  // Imagem PÚBLICA (preços/grade) — o link que a SoFIA manda pra aluna ABRIR pelo
+  // WhatsApp (sem login). Só serve os campos conhecidos (precos_imagem/grade_imagem),
+  // pelo caminho salvo pelo próprio painel — sem risco de path traversal.
+  if (url === '/midia-publica' || url.startsWith('/midia-publica?')) {
+    const campo = new URLSearchParams(req.url.split('?')[1] || '').get('c') || '';
+    let caminho = ''; try { caminho = sofia.caminhoMidiaLocal(campo); } catch (_) {}
+    if (!caminho || !fs.existsSync(caminho)) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('imagem não encontrada'); }
+    const ext = caminho.split('.').pop().toLowerCase();
+    const tipo = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
+    res.writeHead(200, { 'Content-Type': tipo, 'Cache-Control': 'public, max-age=300' });
+    return fs.createReadStream(caminho).pipe(res);
+  }
   // ── Webhook OFICIAL do Instagram (público — a Meta chama sem login) ────────
   // GET = verificação (devolve o hub.challenge). POST = eventos (comentário/DM),
   // com assinatura conferida pelo APP_SECRET antes de processar.
@@ -5747,6 +5796,33 @@ const server = http.createServer((req, res) => {
     const ext = arq.split('.').pop().toLowerCase();
     const tipo = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
     res.writeHead(200, { 'Content-Type': tipo, 'Cache-Control': 'private, max-age=86400' });
+    return fs.createReadStream(caminho).pipe(res);
+  }
+  // Upload da imagem (preços/grade) que a SoFIA ANEXA no WhatsApp. Recebe a imagem
+  // em base64, salva no VPS (substitui a anterior) e devolve o caminho.
+  if (req.method === 'POST' && url === '/sofia/midia-upload') {
+    return lerCorpo(req, 12e6, corpo => { // cabe a imagem em base64
+      let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      try {
+        const campo = String(d.campo || '');
+        const arq = sofia.salvarMidiaImagem(campo, String(d.dataUrl || ''));
+        try { auditoria.registrar(sess.usuario, 'sofia.config', '', 'imagem ' + campo); } catch (_) {}
+        // URL pública (link que a SoFIA pode mandar pra aluna abrir). Montada a
+        // partir do host do request (o mesmo domínio público do painel via Caddy).
+        const publicUrl = baseUrl(req) + '/midia-publica?c=' + encodeURIComponent(campo);
+        res.end(JSON.stringify({ ok: true, path: arq, publicUrl }));
+      } catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
+    });
+  }
+  // Serve a imagem local atual de um campo (para a miniatura no painel).
+  if (req.method === 'GET' && url === '/sofia/midia') {
+    const campo = new URLSearchParams(req.url.split('?')[1] || '').get('campo') || '';
+    let caminho = ''; try { caminho = sofia.caminhoMidiaLocal(campo); } catch (_) {}
+    if (!caminho || !fs.existsSync(caminho)) { res.writeHead(404); return res.end('sem imagem'); }
+    const ext = caminho.split('.').pop().toLowerCase();
+    const tipo = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
+    res.writeHead(200, { 'Content-Type': tipo, 'Cache-Control': 'no-store' });
     return fs.createReadStream(caminho).pipe(res);
   }
   if (req.method === 'POST' && url === '/sofia/salvar') {
