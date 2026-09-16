@@ -220,7 +220,7 @@ function salvarTagsConfig(map) {
 // Gatilhos possíveis: '' (nenhum) | 'agendou' | 'novo' | 'palavra' | 'ia' | 'humano' | 'encerrou' | 'campanha'.
 //  • 'palavra' → casa por palavra-chave (contém), detectado no listener sem IA.
 //  • 'ia'      → a SoFIA lê a conversa e decide pela INTENÇÃO descrita em `instrucao`.
-const GATILHOS = ['agendou', 'novo', 'palavra', 'ia', 'humano', 'encerrou', 'campanha'];
+const GATILHOS = ['agendou', 'novo', 'palavra', 'ia', 'humano', 'encerrou', 'campanha', 'anuncio'];
 function normCfg(c) {
   c = c || {};
   // compat: config antiga só tinha autoAgendou.
