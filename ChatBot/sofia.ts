@@ -1115,7 +1115,11 @@ export async function gerarFollowup(
     .join("\n")
     .slice(0, 6000);
   const instr = (instrucao || "").trim() ||
-    "Pergunte, de forma leve, se ela ainda tem interesse em conhecer o Studio e retome o convite para a aula experimental gratuita.";
+    "Escreva de forma elegante e madura — o público são mulheres exigentes e de alto padrão; nada de gírias, diminutivos ou tom infantil. " +
+    "Retome o ponto onde a conversa parou: se já havia um dia/horário sendo tratado, proponha com naturalidade dar andamento ao agendamento naquele horário; " +
+    "se não havia horário definido, faça um convite cordial para a aula experimental gratuita. " +
+    "Reforce, com sobriedade e sem exageros, a confiança de que ela vai gostar da metodologia e dos treinos do SlimFit — um toque de valor, sem superlativos batidos nem promessas absolutas. " +
+    "Feche de forma acolhedora, à disposição para qualquer dúvida.";
   // Saudação certa pelo horário LOCAL (São Paulo): o follow-up costuma cair num
   // dia/horário diferente do da conversa (a trava da janela empurra p/ o dia
   // seguinte), então abrir com "Bom dia/Boa tarde/Boa noite" + nome soa natural.
