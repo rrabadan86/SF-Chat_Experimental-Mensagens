@@ -1593,7 +1593,8 @@ async function processarFollowups() {
         // Contexto: as últimas mensagens dessa conversa no inbox.
         const c = inbox.get(tel);
         const linhasConv = c ? c.msgs.slice(-14).map((m) => ({ autor: m.autor, texto: m.texto })) : [];
-        const msg = (await gerarFollowup(linhasConv, String(ent?.instrucao || ""))).trim();
+        const nomeLead = c ? c.nome || "" : "";
+        const msg = (await gerarFollowup(linhasConv, String(ent?.instrucao || ""), { nome: nomeLead })).trim();
         if (!msg) { log(`follow-up de ${tel}: IA não gerou mensagem — pulado.`); return; }
         const alvo = await resolverIdEnvio(tel);
         registrarNaMemoria(tel, "sofia", msg);
