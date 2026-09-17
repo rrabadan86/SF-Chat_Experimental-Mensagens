@@ -4228,7 +4228,7 @@ function paginaSofia(aviso, erro) {
             <div style="font-weight:800;font-size:.92rem;margin:0 0 4px">🧠 Memória e encerramento</div>
             <ul style="margin:0;padding-left:18px;line-height:1.55;color:var(--cinza)">
               <li>Depois de um tempo <b>sem falar</b>, a conversa "zera" e ela recomeça do zero (refaz a saudação).</li>
-              <li><b>Encerrar</b> a conversa (🔒) fecha na hora; a próxima mensagem começa uma conversa nova.</li>
+              <li><b>Encerrar</b> a conversa (🔒) fecha na hora e já aplica a <b>automação de tag de encerramento</b> (se configurada, ex.: "Encerrado sem agendamento"); a próxima mensagem começa uma conversa nova.</li>
               <li>Se der uma <b>instabilidade</b>, a aluna recebe um "reenvie, por favor" — nunca um erro técnico.</li>
             </ul>
           </div>
@@ -4237,6 +4237,7 @@ function paginaSofia(aviso, erro) {
             <div style="font-weight:800;font-size:.92rem;margin:0 0 4px">💬 Follow-up (retomar quem sumiu)</div>
             <ul style="margin:0;padding-left:18px;line-height:1.55;color:var(--cinza)">
               <li>Só para quem <b>conversou e sumiu sem agendar</b>, e só dentro do horário que você definir.</li>
+              <li>Abre com uma <b>saudação pelo horário</b> (Bom dia/Boa tarde/Boa noite) e o <b>nome</b> da lead — como costuma cair em outro dia, fica natural.</li>
               <li><b>Uma vez</b> por conversa — para de insistir se ela responder.</li>
               <li>Não incomoda quem <b>já agendou</b> nem quem tem a tag <b>"Sem interesse"</b>.</li>
             </ul>
@@ -4245,7 +4246,9 @@ function paginaSofia(aviso, erro) {
           <div class="rn-bloco" style="border-left:3px solid var(--teal,#2a9d8f);padding:2px 0 2px 12px">
             <div style="font-weight:800;font-size:.92rem;margin:0 0 4px">📅 Agendamento da aula experimental</div>
             <ul style="margin:0;padding-left:18px;line-height:1.55;color:var(--cinza)">
+              <li>No começo do agendamento, <b>envia a grade de horários</b> como referência (uma vez) e pergunta a preferência.</li>
               <li><b>Nunca confirma um horário</b> sem checar a vaga de verdade na grade.</li>
+              <li>Só oferece horários <b>com vaga</b> — deixa claro que é a "disponibilidade" do dia; a imagem mostra tudo, mas a vaga real vem do sistema na hora.</li>
               <li>Antecedência: dia útil <b>mín. 4h</b>; fim de semana só a partir de <b>segunda à tarde</b>.</li>
               <li>Pede <b>nome completo e e-mail</b> antes de agendar.</li>
               <li>Só diz "agendado" se o sistema <b>confirmar</b> de verdade; se der problema, manda falar com a secretária.</li>
