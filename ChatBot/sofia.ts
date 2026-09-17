@@ -1108,13 +1108,28 @@ export async function classificarIntencaoTags(
 export async function gerarFollowup(
   linhas: { autor: string; texto: string }[],
   instrucao: string,
+  opts?: { nome?: string },
 ): Promise<string> {
   const texto = (linhas || [])
     .map((l) => `${l.autor === "aluna" ? "Aluna" : l.autor === "humano" ? "Atendente" : "SoFIA"}: ${l.texto}`)
     .join("\n")
     .slice(0, 6000);
   const instr = (instrucao || "").trim() ||
-    "Pergunte, de forma leve, se ela ainda tem interesse em conhecer o Studio e retome o convite para a aula experimental gratuita.";
+    "Escreva de forma elegante e madura — o público são mulheres exigentes e de alto padrão; nada de gírias, diminutivos ou tom infantil. " +
+    "Retome o ponto onde a conversa parou: se já havia um dia/horário sendo tratado, proponha com naturalidade dar andamento ao agendamento naquele horário; " +
+    "se não havia horário definido, faça um convite cordial para a aula experimental gratuita. " +
+    "Reforce, com sobriedade e sem exageros, a confiança de que ela vai gostar da metodologia e dos treinos do SlimFit — um toque de valor, sem superlativos batidos nem promessas absolutas. " +
+    "Feche de forma acolhedora, à disposição para qualquer dúvida.";
+  // Saudação certa pelo horário LOCAL (São Paulo): o follow-up costuma cair num
+  // dia/horário diferente do da conversa (a trava da janela empurra p/ o dia
+  // seguinte), então abrir com "Bom dia/Boa tarde/Boa noite" + nome soa natural.
+  let saudacao = "Olá";
+  try {
+    const h = Number(new Intl.DateTimeFormat("pt-BR", { hour: "numeric", hour12: false, timeZone: "America/Sao_Paulo" }).format(new Date()));
+    saudacao = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+  } catch {}
+  const primeiroNome = String(opts?.nome || "").trim().split(/\s+/)[0] || "";
+  const exemploSaud = primeiroNome ? `${saudacao}, ${primeiroNome}! Tudo bem?` : `${saudacao}! Tudo bem?`;
   try {
     const resp = await comRetry(() =>
       anthropic.messages.create({
@@ -1123,13 +1138,16 @@ export async function gerarFollowup(
         system:
           "Você é a SoFIA, atendente virtual do SlimFit (Studio de treinamento para mulheres). " +
           "Uma lead conversou com você e parou de responder SEM agendar a aula experimental. " +
-          "Escreva UMA única mensagem de WhatsApp para retomar a conversa, BEM CURTA (1 a 2 frases, " +
-          "no máximo 2 linhas), leve e natural — como uma amiga, não robótica. EVITE formalidade e " +
-          "frases longas: nada de 'estou à disposição', 'ficarei feliz em' ou 'assim que tiver um dia " +
-          "e horário de sua preferência'. No máximo 1 emoji. Use o contexto da conversa " +
-          "abaixo para ser específica quando fizer sentido. Não invente informações, não repita algo " +
-          "que você já disse igual, não seja insistente. Português do Brasil. Responda APENAS com o " +
-          "texto da mensagem, sem aspas, sem explicação.\n\nOrientação do Studio: " + instr,
+          "Escreva UMA única mensagem de WhatsApp para retomar a conversa, curta (2 a 3 frases, " +
+          "no máximo 3 linhas), elegante e acolhedora — madura, nunca robótica nem infantil. " +
+          "COMECE com uma saudação cordial pelo primeiro nome dela, adequada ao período de agora " +
+          `(ex.: "${exemploSaud}"), porque pode ter se passado um tempo desde a última conversa. ` +
+          "Depois retome o ponto onde a conversa parou. EVITE formalidade e frases longas: nada de " +
+          "'estou à disposição', 'ficarei feliz em' ou 'assim que tiver um dia e horário de sua " +
+          "preferência'. No máximo 1 emoji e no máximo 1 ponto de exclamação. Use o contexto da " +
+          "conversa abaixo para ser específica quando fizer sentido. Não invente informações, não " +
+          "repita algo que você já disse igual, não seja insistente. Português do Brasil. Responda " +
+          "APENAS com o texto da mensagem, sem aspas, sem explicação.\n\nOrientação do Studio: " + instr,
         messages: [{ role: "user", content: `Conversa até aqui:\n\n${texto || "(sem histórico registrado)"}\n\nEscreva a mensagem de retomada:` }],
       }),
     );
