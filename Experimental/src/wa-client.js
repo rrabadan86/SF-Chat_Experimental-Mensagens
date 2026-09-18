@@ -441,6 +441,29 @@ async function garantirChat(id) {
   } catch (e) { return 'evaluate-erro:' + ((e && e.message) || e); }
 }
 
+// Envia TEXTO direto pelo helper interno do whatsapp-web.js (window.WWebJS),
+// contornando o client.sendMessage — que passou a estourar o erro do getter
+// memoizado ao enviar para "@lid". O getChat (que já funciona, ver garantirChat)
+// devolve o modelo da conversa e o WWebJS.sendMessage manda a partir dele.
+async function sendRawTexto(id, texto) {
+  const page = client.pupPage;
+  if (!page) throw new Error('página do WhatsApp indisponível');
+  const res = await page.evaluate(async (chatId, body) => {
+    try {
+      if (!(window.WWebJS && window.WWebJS.getChat && window.WWebJS.sendMessage)) {
+        return { ok: false, erro: 'sem WWebJS.getChat/sendMessage' };
+      }
+      const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
+      if (!chat) return { ok: false, erro: 'chat nulo' };
+      const msg = await window.WWebJS.sendMessage(chat, body, {});
+      const mid = msg && msg.id ? (msg.id._serialized || msg.id.id || String(msg.id)) : null;
+      return { ok: true, id: mid };
+    } catch (e) { return { ok: false, erro: String((e && e.message) || e) }; }
+  }, id, texto);
+  if (!res || !res.ok) throw new Error('envio cru (WWebJS) falhou: ' + (res && res.erro));
+  return res;
+}
+
 // Envia texto para uma pessoa. `chaveFoto` (opcional): se houver uma foto (flyer)
 // salva no painel para essa mensagem, ela é enviada JUNTO, com o texto como
 // legenda. Sem foto salva, envia só o texto — comportamento idêntico ao antigo.
@@ -453,10 +476,17 @@ async function sendTexto(telefone, texto, contexto, chaveFoto) {
     try { const gc = await garantirChat(id); log(`garantirChat(${id}) → ${gc}`); } catch (_) {}
     let r;
     if (fotoPath) {
-      const media = MessageMedia.fromFilePath(fotoPath); // flyer com o texto como legenda
-      r = await comRetry(() => client.sendMessage(id, media, { caption: texto || undefined }));
+      try {
+        const media = MessageMedia.fromFilePath(fotoPath); // flyer com o texto como legenda
+        r = await comRetry(() => client.sendMessage(id, media, { caption: texto || undefined }));
+      } catch (eMedia) {
+        // WhatsApp Web quebrado p/ mídia via client.sendMessage → garante ao menos
+        // o texto pelo caminho cru (WWebJS), pra confirmação não deixar de sair.
+        log(`envio com foto falhou (${eMedia && eMedia.message}) — mandando só o texto via WWebJS.`);
+        r = await comRetry(() => sendRawTexto(id, texto));
+      }
     } else {
-      r = await comRetry(() => client.sendMessage(id, texto));
+      r = await comRetry(() => sendRawTexto(id, texto));
     }
     atividade.registrar({ destino: telefone, preview: (fotoPath ? '📎 ' : '') + texto, midia: !!fotoPath, ok: true, contexto });
     return r;
@@ -544,8 +574,7 @@ async function sendGrupo(nomeGrupo, texto, contexto) {
   try {
     const g = await acharGrupo(nomeGrupo);
     if (!g) throw new Error('Grupo não encontrado: ' + nomeGrupo);
-    try { const gc = await garantirChat(g.id); log(`garantirChat(${g.id}) → ${gc}`); } catch (_) {}
-    const r = await comRetry(() => client.sendMessage(g.id, texto));
+    const r = await comRetry(() => sendRawTexto(g.id, texto));
     atividade.registrar({ destino: nomeGrupo, preview: texto, grupo: true, ok: true, contexto });
     return r;
   } catch (e) {
