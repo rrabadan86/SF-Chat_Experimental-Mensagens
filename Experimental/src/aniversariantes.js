@@ -708,8 +708,8 @@ async function main() {
           // Com foto (flyer) opcional definida no painel.
           const fotoAniv = require('./mensagens').fotoPath('aniversario');
           const { prefixo: pfxP, sufixo: sfxP } = partesPara(aniv.primeiroNome);
-          if (fotoAniv) await wa.sendGrupoMidiaComMencao(g.id, fotoAniv, pfxP, sfxP, aniv.telefone);
-          else await wa.sendGrupoComMencao(g.id, pfxP, sfxP, aniv.telefone);
+          if (fotoAniv) await wa.sendGrupoMidiaComMencao(g.id, fotoAniv, pfxP, sfxP, aniv.telefone, aniv.primeiroNome);
+          else await wa.sendGrupoComMencao(g.id, pfxP, sfxP, aniv.telefone, aniv.primeiroNome);
           ok = true;
           console.log(`      ✅ Enviado no grupo "${rotulo}"`);
         } catch (e) { console.log(`      ❌ Erro: ${e.message}`); }

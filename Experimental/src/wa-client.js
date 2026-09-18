@@ -616,7 +616,7 @@ async function getCommonGroups(telefone) {
  * e passa a menção nativa (o número tem que estar no texto E em mentions).
  * Envia direto por client.sendMessage(groupId, ...) — sem getChatById.
  */
-async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMencionado) {
+async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMencionado, nomeExibicao) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
 
   let mid;
@@ -632,8 +632,18 @@ async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMenc
     atividade.registrar({ destino: 'grupo', preview: texto, grupo: true, ok: true });
     return r;
   } catch (e) {
-    atividade.registrar({ destino: 'grupo', preview: texto, grupo: true, ok: false, erro: e && e.message });
-    throw new Error('sendMessage(mention): ' + (e && e.message));
+    // WhatsApp Web quebrado p/ menção via client.sendMessage → manda o texto SEM a
+    // @marcação (com o nome no lugar) pelo caminho cru (WWebJS), pro parabéns sair.
+    const fb = `${textoAntes || ''}${nomeExibicao || ''}${textoDepois || ''}`.trim();
+    try {
+      const r2 = await comRetry(() => sendRawTexto(groupId, fb));
+      log(`menção falhou (${e && e.message}) — enviei o texto sem marcação no grupo.`);
+      atividade.registrar({ destino: 'grupo', preview: fb, grupo: true, ok: true });
+      return r2;
+    } catch (e2) {
+      atividade.registrar({ destino: 'grupo', preview: texto, grupo: true, ok: false, erro: e && e.message });
+      throw new Error('sendMessage(mention): ' + (e && e.message));
+    }
   }
 }
 
@@ -654,7 +664,7 @@ async function sendGrupoMidia(nomeGrupo, caminho, legenda, contexto) {
 }
 
 /** Envia uma FOTO num grupo com a legenda MARCANDO (@) uma pessoa. */
-async function sendGrupoMidiaComMencao(groupId, caminho, textoAntes, textoDepois, telefoneMencionado) {
+async function sendGrupoMidiaComMencao(groupId, caminho, textoAntes, textoDepois, telefoneMencionado, nomeExibicao) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
   let mid;
   try { mid = await resolverId(telefoneMencionado); }
@@ -667,8 +677,18 @@ async function sendGrupoMidiaComMencao(groupId, caminho, textoAntes, textoDepois
     atividade.registrar({ destino: 'grupo', preview: legenda, grupo: true, midia: true, ok: true });
     return r;
   } catch (e) {
-    atividade.registrar({ destino: 'grupo', preview: legenda, grupo: true, midia: true, ok: false, erro: e && e.message });
-    throw new Error('sendMessage(midiaMencao): ' + (e && e.message));
+    // Bug do WhatsApp Web (imagem+menção) → cai pra TEXTO (sem imagem, sem marcação),
+    // com o nome no lugar da @, pelo caminho cru (WWebJS). O parabéns sai mesmo assim.
+    const fb = `${textoAntes || ''}${nomeExibicao || ''}${textoDepois || ''}`.trim();
+    try {
+      const r2 = await comRetry(() => sendRawTexto(groupId, fb));
+      log(`mídia+menção falhou (${e && e.message}) — enviei só o texto no grupo.`);
+      atividade.registrar({ destino: 'grupo', preview: fb, grupo: true, ok: true });
+      return r2;
+    } catch (e2) {
+      atividade.registrar({ destino: 'grupo', preview: legenda, grupo: true, midia: true, ok: false, erro: e && e.message });
+      throw new Error('sendMessage(midiaMencao): ' + (e && e.message));
+    }
   }
 }
 
