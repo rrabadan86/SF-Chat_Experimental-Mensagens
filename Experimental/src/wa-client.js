@@ -484,40 +484,6 @@ async function sendRawTexto(id, texto) {
   return res;
 }
 
-// Envia MÍDIA (imagem/foto) + legenda direto pelo WWebJS, contornando o
-// client.sendMessage quebrado. `media` é um MessageMedia ({mimetype,data,filename}).
-// A imagem já vem em base64 no MessageMedia; passamos como attachment e o WWebJS
-// processa e envia a partir do modelo da conversa (getChat usa find, que funciona).
-async function sendRawMidia(id, media, legenda) {
-  const page = client.pupPage;
-  if (!page) throw new Error('página do WhatsApp indisponível');
-  const att = { mimetype: media && media.mimetype, data: media && media.data, filename: (media && media.filename) || 'file' };
-  if (!att.data) throw new Error('mídia sem dados (base64)');
-  const res = await page.evaluate(async (chatId, body, attachment) => {
-    try {
-      if (!(window.WWebJS && window.WWebJS.getChat && window.WWebJS.sendMessage)) {
-        return { ok: false, erro: 'sem WWebJS.getChat/sendMessage' };
-      }
-      const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
-      if (!chat) return { ok: false, erro: 'chat nulo' };
-      // A imagem precisa ser PROCESSADA antes (senão o WWebJS ignora e manda só o
-      // texto). processMediaData transforma {mimetype,data,filename} no anexo real.
-      if (!window.WWebJS.processMediaData) return { ok: false, erro: 'sem processMediaData' };
-      let prep;
-      try {
-        prep = await window.WWebJS.processMediaData(attachment, { forceVoice: false, forceDocument: false, forceGif: false });
-      } catch (ep) { return { ok: false, erro: 'processMediaData: ' + String((ep && ep.message) || ep) }; }
-      if (!prep) return { ok: false, erro: 'processMediaData vazio' };
-      const options = { attachment: prep, caption: body || undefined, type: prep.type || 'image' };
-      const msg = await window.WWebJS.sendMessage(chat, body || '', options);
-      const mid = msg && msg.id ? (msg.id._serialized || msg.id.id || String(msg.id)) : null;
-      return { ok: true, id: mid, tipo: prep.type || null };
-    } catch (e) { return { ok: false, erro: String((e && e.message) || e) }; }
-  }, id, legenda || '', att);
-  if (!res || !res.ok) throw new Error('mídia crua (WWebJS) falhou: ' + (res && res.erro));
-  return res;
-}
-
 // Monta o texto de fallback SEM a @marcação: junta o antes + depois e limpa o
 // espaço/pontuação que sobra onde estava o @ (o nome já aparece na mensagem).
 function semMencao(textoAntes, textoDepois) {
@@ -829,39 +795,10 @@ async function destroy() {
   } catch (_) { /* ignore */ }
 }
 
-// EXPERIMENTO: envia a IMAGEM sozinha (sem legenda) e DEPOIS o texto, como duas
-// mensagens. Aquece a conversa com garantirChat antes. Tenta a imagem primeiro
-// pelo método normal (client.sendMessage) e, se falhar, pelo cru (WWebJS). O
-// texto vai sempre pelo caminho confiável. Loga cada etapa para diagnóstico.
-async function enviarFotoDepoisTexto(telefone, caminhoFoto, texto, contexto) {
-  if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
-  const id = await resolverId(telefone);
-  try { const gc = await garantirChat(id); log(`garantirChat(${id}) → ${gc}`); } catch (_) {}
-  const media = MessageMedia.fromFilePath(caminhoFoto);
-  let via = 'nenhum';
-  // 1) imagem SOZINHA (sem legenda)
-  try {
-    await comRetry(() => client.sendMessage(id, media));
-    via = 'client.sendMessage'; log('imagem (sozinha) enviada via client.sendMessage.');
-  } catch (e1) {
-    log(`imagem via client.sendMessage falhou (${e1 && e1.message}) — tentando crua (WWebJS).`);
-    try { await comRetry(() => sendRawMidia(id, media, '')); via = 'WWebJS'; log('imagem (sozinha) enviada via WWebJS (retornou ok).'); }
-    catch (e2) { log(`imagem crua também falhou (${e2 && e2.message}).`); }
-  }
-  // pequena pausa pra imagem assentar antes do texto
-  await new Promise((r) => setTimeout(r, 1500));
-  // 2) texto (sempre pelo caminho confiável)
-  await comRetry(() => sendRawTexto(id, texto));
-  log(`texto enviado. imagem via: ${via}`);
-  atividade.registrar({ destino: telefone, preview: '📎(sep)+' + texto, midia: via !== 'nenhum', ok: true, contexto });
-  return { imagemVia: via };
-}
-
 module.exports = {
   initWhatsApp, isReady, getClient,
   sendTexto, sendMidia, sendGrupo, acharGrupo, listarGrupos,
   getCommonGroups, sendGrupoComMencao, sendGrupoMidia, sendGrupoMidiaComMencao,
-  enviarFotoDepoisTexto,
   iniciarKeepAlive, destroy, toChatId, MessageMedia,
 };
 
