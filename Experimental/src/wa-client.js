@@ -464,6 +464,41 @@ async function sendRawTexto(id, texto) {
   return res;
 }
 
+// Envia MÍDIA (imagem/foto) + legenda direto pelo WWebJS, contornando o
+// client.sendMessage quebrado. `media` é um MessageMedia ({mimetype,data,filename}).
+// A imagem já vem em base64 no MessageMedia; passamos como attachment e o WWebJS
+// processa e envia a partir do modelo da conversa (getChat usa find, que funciona).
+async function sendRawMidia(id, media, legenda) {
+  const page = client.pupPage;
+  if (!page) throw new Error('página do WhatsApp indisponível');
+  const att = { mimetype: media && media.mimetype, data: media && media.data, filename: (media && media.filename) || 'file' };
+  if (!att.data) throw new Error('mídia sem dados (base64)');
+  const res = await page.evaluate(async (chatId, body, attachment) => {
+    try {
+      if (!(window.WWebJS && window.WWebJS.getChat && window.WWebJS.sendMessage)) {
+        return { ok: false, erro: 'sem WWebJS.getChat/sendMessage' };
+      }
+      const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
+      if (!chat) return { ok: false, erro: 'chat nulo' };
+      const options = { attachment: attachment, caption: body || undefined };
+      const msg = await window.WWebJS.sendMessage(chat, body || '', options);
+      const mid = msg && msg.id ? (msg.id._serialized || msg.id.id || String(msg.id)) : null;
+      return { ok: true, id: mid };
+    } catch (e) { return { ok: false, erro: String((e && e.message) || e) }; }
+  }, id, legenda || '', att);
+  if (!res || !res.ok) throw new Error('mídia crua (WWebJS) falhou: ' + (res && res.erro));
+  return res;
+}
+
+// Monta o texto de fallback SEM a @marcação: junta o antes + depois e limpa o
+// espaço/pontuação que sobra onde estava o @ (o nome já aparece na mensagem).
+function semMencao(textoAntes, textoDepois) {
+  return `${textoAntes || ''}${textoDepois || ''}`
+    .replace(/\s+([,!?.:;])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 // Envia texto para uma pessoa. `chaveFoto` (opcional): se houver uma foto (flyer)
 // salva no painel para essa mensagem, ela é enviada JUNTO, com o texto como
 // legenda. Sem foto salva, envia só o texto — comportamento idêntico ao antigo.
@@ -476,14 +511,18 @@ async function sendTexto(telefone, texto, contexto, chaveFoto) {
     try { const gc = await garantirChat(id); log(`garantirChat(${id}) → ${gc}`); } catch (_) {}
     let r;
     if (fotoPath) {
+      const media = MessageMedia.fromFilePath(fotoPath); // flyer com o texto como legenda
       try {
-        const media = MessageMedia.fromFilePath(fotoPath); // flyer com o texto como legenda
         r = await comRetry(() => client.sendMessage(id, media, { caption: texto || undefined }));
       } catch (eMedia) {
-        // WhatsApp Web quebrado p/ mídia via client.sendMessage → garante ao menos
-        // o texto pelo caminho cru (WWebJS), pra confirmação não deixar de sair.
-        log(`envio com foto falhou (${eMedia && eMedia.message}) — mandando só o texto via WWebJS.`);
-        r = await comRetry(() => sendRawTexto(id, texto));
+        // 1) tenta a IMAGEM crua (WWebJS); 2) se falhar, ao menos o texto.
+        try {
+          log(`foto via sendMessage falhou (${eMedia && eMedia.message}) — tentando imagem crua (WWebJS).`);
+          r = await comRetry(() => sendRawMidia(id, media, texto));
+        } catch (eRaw) {
+          log(`imagem crua falhou (${eRaw && eRaw.message}) — mandando só o texto.`);
+          r = await comRetry(() => sendRawTexto(id, texto));
+        }
       }
     } else {
       r = await comRetry(() => sendRawTexto(id, texto));
@@ -513,11 +552,19 @@ async function sendMidia(telefone, urlOuCaminho, { legenda = '', comoVoz = false
       media.mimetype = 'audio/ogg; codecs=opus';
     }
     const id = await resolverId(telefone);
-    try { const gc = await garantirChat(id); log(`garantirChat(${id}) → ${gc}`); } catch (_) {}
-    const r = await comRetry(() => client.sendMessage(id, media, {
-      caption: legenda || undefined,
-      sendAudioAsVoice: comoVoz || undefined,
-    }));
+    let r;
+    try {
+      r = await comRetry(() => client.sendMessage(id, media, {
+        caption: legenda || undefined,
+        sendAudioAsVoice: comoVoz || undefined,
+      }));
+    } catch (eMedia) {
+      // Contorno do bug do WhatsApp Web para mídia. Áudio-de-voz não é coberto
+      // pelo envio cru (precisa do PTT) — nesse caso, propaga o erro.
+      if (comoVoz) throw eMedia;
+      log(`mídia via sendMessage falhou (${eMedia && eMedia.message}) — tentando mídia crua (WWebJS).`);
+      r = await comRetry(() => sendRawMidia(id, media, legenda || ''));
+    }
     atividade.registrar({ destino: telefone, preview: legenda || (comoVoz ? '🎤 áudio' : '📎 mídia'), midia: true, ok: true, contexto });
     return r;
   } catch (e) {
@@ -633,8 +680,8 @@ async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMenc
     return r;
   } catch (e) {
     // WhatsApp Web quebrado p/ menção via client.sendMessage → manda o texto SEM a
-    // @marcação (com o nome no lugar) pelo caminho cru (WWebJS), pro parabéns sair.
-    const fb = `${textoAntes || ''}${nomeExibicao || ''}${textoDepois || ''}`.trim();
+    // @marcação (apenas remove o @; o nome já aparece na mensagem) pelo caminho cru.
+    const fb = semMencao(textoAntes, textoDepois);
     try {
       const r2 = await comRetry(() => sendRawTexto(groupId, fb));
       log(`menção falhou (${e && e.message}) — enviei o texto sem marcação no grupo.`);
@@ -654,7 +701,13 @@ async function sendGrupoMidia(nomeGrupo, caminho, legenda, contexto) {
     const g = await acharGrupo(nomeGrupo);
     if (!g) throw new Error('Grupo não encontrado: ' + nomeGrupo);
     const media = MessageMedia.fromFilePath(caminho);
-    const r = await comRetry(() => client.sendMessage(g.id, media, { caption: legenda || undefined }));
+    let r;
+    try {
+      r = await comRetry(() => client.sendMessage(g.id, media, { caption: legenda || undefined }));
+    } catch (eMedia) {
+      log(`foto no grupo via sendMessage falhou (${eMedia && eMedia.message}) — tentando imagem crua (WWebJS).`);
+      r = await comRetry(() => sendRawMidia(g.id, media, legenda || ''));
+    }
     atividade.registrar({ destino: nomeGrupo, preview: legenda || '📎 foto', grupo: true, midia: true, ok: true, contexto });
     return r;
   } catch (e) {
@@ -677,17 +730,25 @@ async function sendGrupoMidiaComMencao(groupId, caminho, textoAntes, textoDepois
     atividade.registrar({ destino: 'grupo', preview: legenda, grupo: true, midia: true, ok: true });
     return r;
   } catch (e) {
-    // Bug do WhatsApp Web (imagem+menção) → cai pra TEXTO (sem imagem, sem marcação),
-    // com o nome no lugar da @, pelo caminho cru (WWebJS). O parabéns sai mesmo assim.
-    const fb = `${textoAntes || ''}${nomeExibicao || ''}${textoDepois || ''}`.trim();
+    // Bug do WhatsApp Web (imagem+menção). Sem a @marcação (o nome já aparece):
+    // 1) tenta IMAGEM crua + legenda sem @ (WWebJS); 2) se falhar, só o texto.
+    const fb = semMencao(textoAntes, textoDepois);
     try {
-      const r2 = await comRetry(() => sendRawTexto(groupId, fb));
-      log(`mídia+menção falhou (${e && e.message}) — enviei só o texto no grupo.`);
-      atividade.registrar({ destino: 'grupo', preview: fb, grupo: true, ok: true });
+      const media = MessageMedia.fromFilePath(caminho);
+      const r2 = await comRetry(() => sendRawMidia(groupId, media, fb));
+      log(`mídia+menção falhou (${e && e.message}) — enviei a imagem sem marcação (crua).`);
+      atividade.registrar({ destino: 'grupo', preview: fb, grupo: true, midia: true, ok: true });
       return r2;
-    } catch (e2) {
-      atividade.registrar({ destino: 'grupo', preview: legenda, grupo: true, midia: true, ok: false, erro: e && e.message });
-      throw new Error('sendMessage(midiaMencao): ' + (e && e.message));
+    } catch (eRaw) {
+      try {
+        const r3 = await comRetry(() => sendRawTexto(groupId, fb));
+        log(`imagem crua falhou (${eRaw && eRaw.message}) — enviei só o texto no grupo.`);
+        atividade.registrar({ destino: 'grupo', preview: fb, grupo: true, ok: true });
+        return r3;
+      } catch (e2) {
+        atividade.registrar({ destino: 'grupo', preview: legenda, grupo: true, midia: true, ok: false, erro: e && e.message });
+        throw new Error('sendMessage(midiaMencao): ' + (e && e.message));
+      }
     }
   }
 }
