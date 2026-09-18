@@ -2329,8 +2329,13 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       return {em:(m.em||0), html: sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna, m.por, m.tipo))+' · '+fmtHora(m.em)+selo+'</div>'+corpoMsg+'</div></div>'};
     });
     // Marcadores de controle humano (assumiu/devolveu) intercalados por horário.
+    var MOTIVO_TAG={ia:'🧠 intenção detectada pela SoFIA', palavra:'🔑 palavra-chave', campanha:'💬 respondeu campanha', novo:'🆕 novo contato', encerrou:'🔒 encerramento sem agendamento', agendou:'📅 agendou', humano:'🙋 atendimento humano'};
     function evtDivisor(e){
       var quem=e.por?escH(e.por):'';
+      if(e.acao==='tag'){
+        var mot=MOTIVO_TAG[e.motivo]||'automação';
+        return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#e3d5ef"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#6b3fa0;background:#f2eaf9;border-radius:999px;padding:2px 11px">🏷️ Tag aplicada: "'+escH(e.tag)+'" · '+mot+' · '+soHora(e.em)+'</span><span style="flex:1;height:1px;background:#e3d5ef"></span></div>';
+      }
       if(e.acao==='assumir') return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cdeadd"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#1f7a4d;background:#e7f6ec;border-radius:999px;padding:2px 11px">🙋 Conversa assumida por '+(quem||'atendente')+'</span><span style="flex:1;height:1px;background:#cdeadd"></span></div>';
       // Fim do prazo de pausa da resposta manual pelo celular (computado por horário).
       if(e.acao==='wpp-fim'){
@@ -2351,7 +2356,8 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var endEm=(mw.em||0)+PAUSA_MIN*60000;
       pauseEvts.push({em:endEm, acao:'wpp-fim', ativo:(endEm>Date.now())});
     }
-    var evts=(c.humanoLog||[]).concat(pauseEvts).slice().sort(function(a,b){return (a.em||0)-(b.em||0);});
+    var tagEvts=(c.tagLog||[]).map(function(t){return {em:(t.em||0), acao:'tag', tag:t.tag, motivo:t.motivo};});
+    var evts=(c.humanoLog||[]).concat(pauseEvts).concat(tagEvts).slice().sort(function(a,b){return (a.em||0)-(b.em||0);});
     var out=[], ei=0;
     for(var mi=0; mi<itensMsg.length; mi++){
       while(ei<evts.length && (evts[ei].em||0) <= itensMsg[mi].em){ out.push(evtDivisor(evts[ei])); ei++; }
@@ -5662,6 +5668,7 @@ const server = http.createServer((req, res) => {
     try { for (const k in obj) obj[k].enc = sofia.estaEncerrada(k, sofia.ultimaAlunaEm(obj[k])); } catch (_) {} // encerrada à mão (cadeado)? — mede pela última msg DA ALUNA, para a despedida da SoFIA depois do fechamento não reabrir
     try { const em = sofia.lerEncerradas() || {}; for (const k in obj) { const v = em[k]; const isObj = v && typeof v === 'object'; obj[k].encEm = isObj ? (Number(v.em) || 0) : (Number(v) || 0); obj[k].encPor = isObj ? String(v.por || '') : ''; } } catch (_) {} // instante + autor do encerramento manual (p/ a divisória)
     try { const hl = sofia.lerHumanoLog() || {}; for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].humanoLog = hl[l8] || []; } } catch (_) {} // histórico assumiu/devolveu (para o timeline)
+    try { const tl = sofia.lerTagLog() || {}; for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].tagLog = tl[l8] || []; } } catch (_) {} // histórico de tags aplicadas por automação (para o timeline)
     try { for (const k in obj) obj[k].fuEspera = fuEsperando[k] || ''; } catch (_) {} // follow-up pronto, segurando pelo horário?
     try { const at = sofia.lerAtencao() || {}; const a8 = {}; for (const kk in at) a8[String(kk).replace(/\D/g, '').slice(-8)] = 1; for (const k in obj) obj[k].atencao = !!(at[k] || a8[String(k).replace(/\D/g, '').slice(-8)]); } catch (_) {} // pediu atendimento humano?
     try { const agSet = new Set((fuLerJson(FU_AGENDOU_FILE, []) || []).map(x => String(x).replace(/\D/g, '').slice(-8))); let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {} for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].agendou = agSet.has(l8) || (obj[k].tagsContato || []).some(t => agTags.includes(t)); } } catch (_) {} // agendou aula experimental? (mesma lógica do follow-up)
@@ -6489,6 +6496,9 @@ function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra }) {
   const tel = String(telefone || '').replace(/\D/g, '');
   if (!tel || !tag) return;
   try { contatos.adicionarTag(tel, nome || '', tag); } catch (_) {}
+  // Marca no timeline da conversa o momento exato em que a tag foi aplicada pela
+  // automação (igual aos marcadores de assumir/encerrar) — ajuda a diagnosticar.
+  try { sofia.registrarTagLog(tel, tag, motivo); } catch (_) {}
   // Tag configurada para encerrar a conversa (ex.: "Sem interesse") → fecha (🔒)
   // como o cadeado do painel: o follow-up para de incomodar e a SoFIA recomeça
   // do zero se a aluna voltar a escrever. Usa a mesma chave que o feed/inbox usa.
