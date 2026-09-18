@@ -229,12 +229,32 @@ function criarClient() {
   });
 }
 
+// Limpa o cache de versão do WhatsApp Web (.wwebjs_cache) SÓ quando estamos em
+// `off` (sem versão fixa). Motivo: uma versão fixa velha pode ficar quebrada no
+// cache e travar a conexão (Client.inject 30s) — em `off` limpamos para pegar a
+// versão ao vivo, limpo, a cada boot. TRAVA IMPORTANTE: se há versão fixa (ex.:
+// lagosul, que roda numa versão antiga BOA guardada no cache), NÃO limpamos —
+// limpar ali derrubaria a versão que mantém aquele robô funcionando.
+function limparCacheVersaoSeOff() {
+  if (!VERSAO_FIXA_DESLIGADA) return; // versão fixa (lagosul) → preserva o cache
+  const fs = require('fs');
+  const dirs = new Set([
+    path.resolve(__dirname, '..', '.wwebjs_cache'),
+    path.resolve(process.cwd(), '.wwebjs_cache'),
+  ]);
+  for (const d of dirs) {
+    try { fs.rmSync(d, { recursive: true, force: true }); log(`cache de versão limpo no start (off): ${d}`); }
+    catch (_) {}
+  }
+}
+
 /**
  * Inicializa o cliente (idempotente). Resolve quando o WhatsApp está PRONTO.
  */
 function initWhatsApp() {
   if (initPromise) return initPromise;
   limparTravaSingleton(); // remove trava velha do Chromium (queda suja OU troca de nome do host)
+  limparCacheVersaoSeOff(); // em `off`: começa limpo (Bueno). Com versão fixa (lagosul): não toca.
   client = criarClient();
   iniciarWatcherComando(); // escuta o pedido de "desconectar" vindo do painel
 
