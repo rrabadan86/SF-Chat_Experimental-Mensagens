@@ -2373,9 +2373,12 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     var btnInt='<button type="button" onclick="abrirInteracoes(selecionada)" class="reset" title="Interações" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">📊</button>';
     var btnAgendar='<button type="button" onclick="toggleAgendar()" class="'+(agAberto?'save':'reset')+'" title="Agendar aula experimental no EVO (cadastra + marca, igual a SoFIA)" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">📅</button>';
     var encM=!!c.enc; // encerrada AGORA (cadeado à mão / automático por tag)
-    // Encerrar é de mão única: 🔒 fecha. Já fechada → cadeado fechado desabilitado
-    // (só indica o estado). A aluna voltando a escrever reabre a conversa sozinho.
-    var btnEnc='<button type="button" '+(encM?'disabled':'onclick="encerrarConversa()"')+' class="reset" title="'+(encM?'Conversa encerrada (a aluna voltando reabre sozinho — a SoFIA recomeça do zero)':'Encerrar conversa agora (cadeado — a SoFIA recomeça do zero)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(encM?';opacity:.5;cursor:not-allowed':'')+'">🔒</button>';
+    // Botão alternador: 🔒 encerra (a SoFIA recomeça do zero se a aluna voltar) ·
+    // 🔓 reabre (tira o cadeado, a SoFIA volta a responder). A aluna voltando a
+    // escrever também reabre sozinho — o 🔓 serve para reabrir na hora, sem esperar.
+    var btnEnc = encM
+      ? '<button type="button" onclick="reabrirConversa()" class="reset" title="Reabrir esta conversa (tira o cadeado 🔒 — a SoFIA volta a responder)" style="padding:5px 10px;font-size:.9rem;white-space:nowrap;color:#1c8f52">🔓</button>'
+      : '<button type="button" onclick="encerrarConversa()" class="reset" title="Encerrar conversa agora (cadeado — a SoFIA recomeça do zero)" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">🔒</button>';
     var bloq=!!c.bloq;
     var btnBloq='<button type="button" onclick="bloquearConversa()" class="reset" title="'+(bloq?'Desbloquear contato':'Bloquear contato (a SoFIA ignora)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(bloq?';color:#1c8f52':'')+'">'+(bloq?'✅':'🚫')+'</button>';
     var selo=bloq?'<span title="Contato bloqueado" style="background:#fdeaea;color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700;margin-left:6px">🚫 bloqueado</span>':'';
@@ -2483,10 +2486,18 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   }
   function encerrarConversa(){
     var k=selecionada; if(!k) return;
-    var c=ultimoData[k]||{}; if(c.enc) return; // já encerrada — mão única
+    var c=ultimoData[k]||{}; if(c.enc) return; // já encerrada
     if(!confirm('Encerrar esta conversa agora?\\n\\nAparece o cadeado 🔒, a SoFIA recomeça do zero se a aluna voltar a escrever e o follow-up deixa de incomodar este contato.')) return;
     fetch('/sofia/conversas/encerrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k})})
       .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].enc=true; ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); } else { alert(j.erro||'Não consegui encerrar a conversa.'); } })
+      .catch(function(){ alert('Erro de rede.'); });
+  }
+  function reabrirConversa(){
+    var k=selecionada; if(!k) return;
+    var c=ultimoData[k]||{}; if(!c.enc) return; // não está encerrada
+    if(!confirm('Reabrir esta conversa?\\n\\nTira o cadeado 🔒 e a SoFIA volta a responder normalmente este contato.')) return;
+    fetch('/sofia/conversas/encerrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,ativo:false})})
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k]){ ultimoData[k].enc=false; ultimoData[k].encEm=0; ultimoData[k].encPor=''; } ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); } else { alert(j.erro||'Não consegui reabrir a conversa.'); } })
       .catch(function(){ alert('Erro de rede.'); });
   }
   function msgKey(ev){ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); enviarMsg(); } }
