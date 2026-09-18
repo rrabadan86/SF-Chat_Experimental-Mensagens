@@ -2912,7 +2912,7 @@ function paginaSofiaContatos(aviso, erro, params) {
       </div>
       <div id="tgIaBox" style="margin-top:14px;display:none">
         <label>Instrução <span class="sub" style="font-weight:400;color:var(--cinza)">— descreva a intenção, em português (ex.: quando a aluna perguntar sobre preço, valores ou planos)</span></label>
-        <textarea id="tgInstrucao" rows="3" maxlength="300" placeholder="Ex.: quando a aluna perguntar sobre preço, valores, mensalidade ou planos." style="width:100%;resize:vertical"></textarea>
+        <textarea id="tgInstrucao" rows="6" maxlength="2000" placeholder="Ex.: quando a aluna perguntar sobre preço, valores, mensalidade ou planos." style="width:100%;resize:vertical"></textarea>
         <p class="quando" style="margin:6px 0 0">A SoFIA <b>lê a conversa</b> e aplica a tag quando entende essa intenção — mesmo sem a palavra exata. Dispara <b>uma vez por conversa</b>. Usa a IA (custo pequeno por mensagem).</p>
       </div>
       <div id="tgCampBox" style="margin-top:14px;display:none">
@@ -3385,7 +3385,7 @@ function paginaSofiaTags(aviso, erro) {
       </div>
       <div id="tgIaBox" style="margin-top:14px;display:none">
         <label>Instrução <span class="sub" style="font-weight:400;color:var(--cinza)">— descreva a intenção, em português (ex.: quando a aluna perguntar sobre preço, valores ou planos)</span></label>
-        <textarea id="tgInstrucao" rows="3" maxlength="300" placeholder="Ex.: quando a aluna perguntar sobre preço, valores, mensalidade ou planos." style="width:100%;resize:vertical"></textarea>
+        <textarea id="tgInstrucao" rows="6" maxlength="2000" placeholder="Ex.: quando a aluna perguntar sobre preço, valores, mensalidade ou planos." style="width:100%;resize:vertical"></textarea>
         <p class="quando" style="margin:6px 0 0">A SoFIA <b>lê a conversa</b> e aplica a tag quando entende essa intenção — mesmo sem a palavra exata. Dispara <b>uma vez por conversa</b>. Usa a IA (custo pequeno por mensagem).</p>
       </div>
       <div id="tgCampBox" style="margin-top:14px;display:none">

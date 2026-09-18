@@ -235,7 +235,7 @@ function normCfg(c) {
   remove = remove.map(s => String(s).trim()).filter(Boolean);
   // Instrução em linguagem natural para o gatilho 'ia' (ex.: "quando a aluna
   // perguntar sobre preço, valores ou planos"). Limitada para não inflar o prompt.
-  const instrucao = String(c.instrucao || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  const instrucao = String(c.instrucao || '').replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim().slice(0, 2000);
   // Gatilho 'campanha': id da campanha à qual a regra está amarrada. Vazio = qualquer
   // campanha (comportamento antigo). Com id, a tag só é aplicada a quem respondeu
   // ÀQUELA campanha — não a quem respondeu qualquer outra (ou um teste antigo).
