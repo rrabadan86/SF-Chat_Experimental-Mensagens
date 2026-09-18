@@ -6451,6 +6451,28 @@ const AUTO_ROTULO = {
   encerrou: '🔒 Atendimento encerrado sem agendamento',
   campanha: '💬 Aluna respondeu a uma campanha',
 };
+// A conversa está EM ANDAMENTO agora? (a lead escreveu há menos que a janela de
+// sessão). Uma automação NUNCA deve force-fechar (🔒) uma conversa viva: o
+// encerramento legítimo por tempo ('encerrou') só ocorre depois da janela inteira
+// sem mensagem da lead, então ele nunca cai neste guarda; já um classificador por
+// IA que marque "Encerrado sem agendamento" no meio de um atendimento (a lead
+// acabou de escrever) é barrado aqui — antes derrubava a conversa e resetava a
+// memória da SoFIA. Casa a chave pelos últimos 8 dígitos (variações do 9º dígito).
+function _conversaEmAndamento(tel) {
+  try {
+    const alvo = String(tel || '').replace(/\D/g, '').slice(-8);
+    if (!alvo) return false;
+    let janelaMs = 12 * 3600 * 1000;
+    try { const h = Number(sofia.lerSessaoHoras()); if (Number.isFinite(h) && h > 0) janelaMs = h * 3600 * 1000; } catch (_) {}
+    const convs = sofia.conversas();
+    for (const k of Object.keys(convs)) {
+      if (String(k).replace(/\D/g, '').slice(-8) !== alvo) continue;
+      const ua = Number(sofia.ultimaAlunaEm(convs[k])) || 0;
+      if (ua && (Date.now() - ua) < janelaMs) return true;
+    }
+  } catch (_) {}
+  return false;
+}
 // Aplica UMA tag a um contato e (se configurado) enfileira o aviso por WhatsApp.
 function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra }) {
   const tel = String(telefone || '').replace(/\D/g, '');
@@ -6459,7 +6481,9 @@ function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra }) {
   // Tag configurada para encerrar a conversa (ex.: "Sem interesse") → fecha (🔒)
   // como o cadeado do painel: o follow-up para de incomodar e a SoFIA recomeça
   // do zero se a aluna voltar a escrever. Usa a mesma chave que o feed/inbox usa.
-  try { if (contatos.tagConfig(tag).encerrar) { try { sofia.setAtencao(tel, false); } catch (_) {} sofia.setEncerrada(tel, true, 'SoFIA'); } } catch (_) {}
+  // Guarda: nunca force-fecha uma conversa que está EM ANDAMENTO (evita o bug de
+  // marcar "Encerrado sem agendamento" no meio do atendimento e derrubar a conversa).
+  try { if (contatos.tagConfig(tag).encerrar && !_conversaEmAndamento(tel)) { try { sofia.setAtencao(tel, false); } catch (_) {} sofia.setEncerrada(tel, true, 'SoFIA'); } } catch (_) {}
   if (avisarWpp) {
     const cab = AUTO_ROTULO[motivo] || '🔔 Automação da SoFIA';
     const texto = `${cab}\n👤 ${nome || '(sem nome)'}\n📱 ${fmtTelAviso(tel)}${extra ? `\n${extra}` : ''}\n🏷️ ${tag}`;
