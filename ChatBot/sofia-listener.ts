@@ -819,7 +819,7 @@ function retencaoMs(): number {
   const d = Number.isFinite(_retDias) && _retDias >= 0 ? _retDias : 365;
   return d > 0 ? d * 24 * 3600 * 1000 : Number.POSITIVE_INFINITY;
 }
-type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string; tipo?: "followup" | "wpp" };
+type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string; tipo?: "followup" | "wpp"; citacao?: string };
 type InboxConversa = { jid: string; nome: string; ultimaEm: number; msgs: InboxMsg[] };
 const inbox = new Map<string, InboxConversa>();
 let inboxTimer: ReturnType<typeof setTimeout> | null = null;
@@ -847,7 +847,7 @@ function salvarInbox() {
   try { fs.writeFileSync(CONVERSAS_FILE, JSON.stringify(obj), "utf8"); } catch {}
 }
 function agendarSalvarInbox() { if (inboxTimer) return; inboxTimer = setTimeout(() => { inboxTimer = null; salvarInbox(); }, 1500); }
-function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMsg["autor"], texto: string, foto?: string, porNome?: string, tipo?: InboxMsg["tipo"]) {
+function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMsg["autor"], texto: string, foto?: string, porNome?: string, tipo?: InboxMsg["tipo"], citacao?: string) {
   const t = String(texto || "").trim();
   if (!t && !foto) return;                         // nada de texto e nada de foto → ignora
   chave = chaveInboxExistente(chave);              // casa a variante do 9º dígito já existente (não duplica o card)
@@ -860,6 +860,8 @@ function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMs
   if (foto) msg.foto = foto;                        // nome do arquivo em humano-fotos/ (o painel serve)
   if (porNome) msg.por = String(porNome);           // atendente que escreveu (bolha "humano") — atribuição/segurança
   if (tipo) msg.tipo = tipo;                        // "followup" → o painel mostra um selo na bolha
+  const cit = String(citacao || "").trim();
+  if (cit) msg.citacao = cit.length > 400 ? cit.slice(0, 400) + "…" : cit; // mensagem citada (responder do WhatsApp)
   c.msgs.push(msg);
   if (c.msgs.length > INBOX_MAX_MSGS) c.msgs.splice(0, c.msgs.length - INBOX_MAX_MSGS);
   c.ultimaEm = em;
@@ -2039,6 +2041,26 @@ async function transcreverAudio(msg: any): Promise<string> {
   return String(j?.text || "").trim();
 }
 
+// Extrai o texto da mensagem CITADA (quando a aluna usa o "responder" do
+// WhatsApp). Preferimos o dado já embutido (msg._data.quotedMsg) — é síncrono e
+// não dispara a serialização pesada que às vezes quebra nesta versão da lib. Se
+// a mensagem citada não tem corpo (foto/áudio/etc.), descrevemos pelo tipo.
+function extrairCitacao(msg: any): string {
+  try {
+    const q = msg && msg._data && msg._data.quotedMsg;
+    if (!q) return "";
+    const corpo = String(q.body || q.caption || "").trim();
+    if (corpo) return corpo;
+    const t = String(q.type || "").toLowerCase();
+    if (t === "image") return "📷 (foto)";
+    if (t === "video") return "🎥 (vídeo)";
+    if (t === "audio" || t === "ptt") return "🎤 (áudio)";
+    if (t === "document") return "📄 (documento)";
+    if (t === "sticker") return "🌟 (figurinha)";
+    return "";
+  } catch { return ""; }
+}
+
 // Processa uma mensagem de TEXTO da aluna (mesmo caminho para texto e para o
 // áudio transcrito). textoInbox permite mostrar "🎤 ..." no painel.
 async function processarTextoDaAluna(msg: any, texto: string, textoInbox?: string) {
@@ -2046,8 +2068,9 @@ async function processarTextoDaAluna(msg: any, texto: string, textoInbox?: strin
   // Contato bloqueado (como o "Bloquear" do WhatsApp): ignora por completo.
   if (estaBloqueado(chave, telefone, jidParaTel(msg.from))) { log(`mensagem de contato bloqueado (${chave}) — ignorada.`); return; }
   const nomeAluna = (msg._data && msg._data.notifyName) || "";
+  const citacao = extrairCitacao(msg); // mensagem citada (responder do WhatsApp) → aparece no painel
   marcarEntrada(chave, texto); // registra p/ detectar o eco "fromMe" do patrocinado
-  registrarInbox(chave, msg.from, nomeAluna, "aluna", textoInbox || texto); // painel ao vivo
+  registrarInbox(chave, msg.from, nomeAluna, "aluna", textoInbox || texto, undefined, undefined, undefined, citacao); // painel ao vivo
   try { checarGatilhosAluna(chave, nomeAluna, texto); } catch (e: any) { log("gatilhos: " + (e?.message || e)); }
   agendarResposta(chave, msg.from, telefone, texto); // debounce + resposta
 }
