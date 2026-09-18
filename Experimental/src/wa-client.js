@@ -399,6 +399,48 @@ async function resolverId(telefone) {
   return n + '@c.us';                 // só instabilidade → deixa o envio tentar
 }
 
+// CONTORNO (set/2026): o WhatsApp Web mudou e o client.sendMessage passou a
+// estourar "Data passed to getter must include an id property (it's how we
+// memoize) but got undefined" ao enviar para uma conversa que ainda NÃO está
+// carregada no store (número novo, confirmação, campanha, grupo pouco usado).
+// O sendMessage resolve a conversa por Chat.get (só PROCURA e voltou undefined);
+// aqui pré-criamos a conversa com Chat.find (que CRIA o modelo) antes de enviar,
+// pela página, igual o listarGrupos já faz com window.require. Best-effort e com
+// diagnóstico: nunca derruba o envio; se der certo, o sendMessage seguinte acha
+// a conversa e manda normal. Devolve uma string curta pro log entender o que rolou.
+async function garantirChat(id) {
+  const page = client.pupPage;
+  if (!page) return 'sem-page';
+  try {
+    return await page.evaluate(async (chatId) => {
+      const req = (n) => { try { return window.require(n); } catch (e) { return null; } };
+      // 1) helper pronto do whatsapp-web.js (usa Chat.find por baixo) — mais estável
+      if (window.WWebJS && window.WWebJS.getChat) {
+        try { await window.WWebJS.getChat(chatId, { getAsModel: false }); return 'ok:WWebJS.getChat'; }
+        catch (e) { /* cai pro manual */ var e1 = String((e && e.message) || e); }
+      }
+      // 2) manual: WidFactory + Chat.find
+      const WidF = req('WAWebWidFactory') || req('WAWebWid');
+      const Coll = (function () {
+        const m = req('WAWebCollections'); if (m && m.Chat) return m.Chat;
+        const d = req('WAWebChatCollection'); if (d && d.ChatCollection) return d.ChatCollection;
+        return null;
+      })();
+      const diag = { wwebjs: !!(window.WWebJS && window.WWebJS.getChat), widF: !!WidF, coll: !!Coll, find: !!(Coll && Coll.find) };
+      if (WidF && Coll && Coll.find) {
+        try {
+          const wid = WidF.createWid ? WidF.createWid(chatId)
+            : (WidF.createWidFromWidLike ? WidF.createWidFromWidLike(chatId) : null);
+          if (!wid) return 'diag:sem-createWid ' + JSON.stringify(diag);
+          await Coll.find(wid);
+          return 'ok:find';
+        } catch (e) { return 'erro:find:' + String((e && e.message) || e); }
+      }
+      return 'diag:' + JSON.stringify(diag);
+    }, id);
+  } catch (e) { return 'evaluate-erro:' + ((e && e.message) || e); }
+}
+
 // Envia texto para uma pessoa. `chaveFoto` (opcional): se houver uma foto (flyer)
 // salva no painel para essa mensagem, ela é enviada JUNTO, com o texto como
 // legenda. Sem foto salva, envia só o texto — comportamento idêntico ao antigo.
@@ -408,6 +450,7 @@ async function sendTexto(telefone, texto, contexto, chaveFoto) {
   if (chaveFoto) { try { fotoPath = require('./mensagens').fotoPath(chaveFoto); } catch (_) {} }
   try {
     const id = await resolverId(telefone);
+    try { const gc = await garantirChat(id); log(`garantirChat(${id}) → ${gc}`); } catch (_) {}
     let r;
     if (fotoPath) {
       const media = MessageMedia.fromFilePath(fotoPath); // flyer com o texto como legenda
@@ -440,6 +483,7 @@ async function sendMidia(telefone, urlOuCaminho, { legenda = '', comoVoz = false
       media.mimetype = 'audio/ogg; codecs=opus';
     }
     const id = await resolverId(telefone);
+    try { const gc = await garantirChat(id); log(`garantirChat(${id}) → ${gc}`); } catch (_) {}
     const r = await comRetry(() => client.sendMessage(id, media, {
       caption: legenda || undefined,
       sendAudioAsVoice: comoVoz || undefined,
@@ -500,6 +544,7 @@ async function sendGrupo(nomeGrupo, texto, contexto) {
   try {
     const g = await acharGrupo(nomeGrupo);
     if (!g) throw new Error('Grupo não encontrado: ' + nomeGrupo);
+    try { const gc = await garantirChat(g.id); log(`garantirChat(${g.id}) → ${gc}`); } catch (_) {}
     const r = await comRetry(() => client.sendMessage(g.id, texto));
     atividade.registrar({ destino: nomeGrupo, preview: texto, grupo: true, ok: true, contexto });
     return r;
