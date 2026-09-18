@@ -480,10 +480,18 @@ async function sendRawMidia(id, media, legenda) {
       }
       const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
       if (!chat) return { ok: false, erro: 'chat nulo' };
-      const options = { attachment: attachment, caption: body || undefined };
+      // A imagem precisa ser PROCESSADA antes (senão o WWebJS ignora e manda só o
+      // texto). processMediaData transforma {mimetype,data,filename} no anexo real.
+      if (!window.WWebJS.processMediaData) return { ok: false, erro: 'sem processMediaData' };
+      let prep;
+      try {
+        prep = await window.WWebJS.processMediaData(attachment, { forceVoice: false, forceDocument: false, forceGif: false });
+      } catch (ep) { return { ok: false, erro: 'processMediaData: ' + String((ep && ep.message) || ep) }; }
+      if (!prep) return { ok: false, erro: 'processMediaData vazio' };
+      const options = { attachment: prep, caption: body || undefined, type: prep.type || 'image' };
       const msg = await window.WWebJS.sendMessage(chat, body || '', options);
       const mid = msg && msg.id ? (msg.id._serialized || msg.id.id || String(msg.id)) : null;
-      return { ok: true, id: mid };
+      return { ok: true, id: mid, tipo: prep.type || null };
     } catch (e) { return { ok: false, erro: String((e && e.message) || e) }; }
   }, id, legenda || '', att);
   if (!res || !res.ok) throw new Error('mídia crua (WWebJS) falhou: ' + (res && res.erro));
