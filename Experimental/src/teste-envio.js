@@ -1,58 +1,46 @@
-/**
- * teste-envio.js — PONTE entre o painel e o robô para "enviar teste".
- *
- * O painel (processo separado) NÃO tem a sessão do WhatsApp — quem envia é o
- * robô (slimfit-exp). Então o painel grava um pedido em data/teste-envio.json e
- * o robô, que fica de olho nesse arquivo (ver scheduler: iniciarTesteWatcher),
- * envia e escreve o resultado de volta. O painel consulta pelo id.
- *
- * Guardamos só os últimos pedidos (o arquivo não cresce).
- */
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
+// teste-envio.js — Envia um TEXTO + IMAGEM (flyer) para um número, para validar
+// o contorno de envio de mídia (WWebJS) sem incomodar grupos/alunas reais.
+//
+// IMPORTANTE: compartilha a conexão com o robô. Pare antes:
+//   pm2 stop slimfit-exp  →  (rode este script)  →  pm2 start slimfit-exp
+//
+// Uso:
+//   xvfb-run -a node src/teste-envio.js --para=5562999999999
+//   xvfb-run -a node src/teste-envio.js --para=5562999999999 --foto=aniversario
+//   xvfb-run -a node src/teste-envio.js --para=5562999999999 --sem-foto   (só texto)
+try { require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') }); } catch (_) {}
 
-const ARQUIVO = path.resolve(__dirname, '..', 'data', 'teste-envio.json');
-const MAX = 20;
-
-function carregar() {
-  try { const o = JSON.parse(fs.readFileSync(ARQUIVO, 'utf8')); return Array.isArray(o) ? o : []; }
-  catch (_) { return []; }
-}
-function salvar(arr) {
-  const dir = path.dirname(ARQUIVO);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(ARQUIVO, JSON.stringify(arr.slice(-MAX), null, 2), 'utf8');
+function arg(nome) {
+  const a = process.argv.find((x) => x.startsWith(`--${nome}=`));
+  return a ? a.split('=').slice(1).join('=') : '';
 }
 
-// Painel: cria um pedido de teste. Retorna o id para consulta.
-function solicitar({ telefone, texto, chaveFoto }) {
-  const tel = String(telefone || '').replace(/\D/g, '');
-  if (tel.length < 10) throw new Error('Número inválido (informe DDD + número).');
-  if (!String(texto || '').trim()) throw new Error('Mensagem vazia.');
-  const arr = carregar();
-  const id = crypto.randomBytes(6).toString('hex');
-  // chaveFoto (opcional): se a mensagem tem flyer salvo, o robô envia junto (mesma
-  // foto e comportamento do envio real). Sem ela, envia só o texto.
-  arr.push({ id, telefone: tel, texto: String(texto), chaveFoto: String(chaveFoto || ''), status: 'pendente', erro: '', criadoEm: new Date().toISOString() });
-  salvar(arr);
-  return id;
-}
+(async () => {
+  const para = arg('para');
+  if (!para) { console.error('uso: node src/teste-envio.js --para=5562...'); process.exit(1); }
+  const semFoto = process.argv.includes('--sem-foto');
+  const chaveFoto = semFoto ? '' : (arg('foto') || 'aniversario'); // usa o flyer de aniversário por padrão
 
-function ler(id) { return carregar().find(p => p.id === id) || null; }
+  // Confere se a imagem existe (só avisa; segue como texto se não houver).
+  let temFoto = false;
+  if (chaveFoto) {
+    try { const p = require('./mensagens').fotoPath(chaveFoto); temFoto = !!p; if (!p) console.log(`⚠️  Sem imagem salva na chave "${chaveFoto}" — vai só o texto.`); }
+    catch (_) {}
+  }
 
-// Robô: pega o pedido pendente mais antigo (ou null).
-function proximoPendente() { return carregar().find(p => p.status === 'pendente') || null; }
-
-// Marca o resultado de um pedido.
-function marcar(id, status, erro) {
-  const arr = carregar();
-  const p = arr.find(x => x.id === id);
-  if (!p) return;
-  p.status = status;
-  p.erro = erro || '';
-  p.processadoEm = new Date().toISOString();
-  salvar(arr);
-}
-
-module.exports = { solicitar, ler, proximoPendente, marcar, carregar, ARQUIVO };
+  const wa = require('./wa-client');
+  console.log('🐧 Conectando ao WhatsApp (sessão salva)…');
+  await wa.initWhatsApp();
+  try {
+    const texto = '🧪 *Teste SlimFit* — validando o envio de *texto + imagem* pelo robô.\n\n'
+      + 'Se você recebeu este texto *com a imagem (flyer) junto*, o contorno de mídia está funcionando. '
+      + 'Se veio *só o texto*, a imagem ainda depende do patch. 💛';
+    await wa.sendTexto(para, texto, 'teste', chaveFoto || undefined);
+    console.log(`✅ Enviado para ${para} — confira no WhatsApp se veio ${temFoto ? 'COM a imagem' : '(só texto)'}.`);
+  } catch (e) {
+    console.error('❌ Falhou:', (e && e.message) || e);
+  } finally {
+    await wa.destroy();
+  }
+  process.exit(0);
+})().catch((e) => { console.error('❌', (e && e.message) || e); process.exit(1); });
