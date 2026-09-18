@@ -829,10 +829,39 @@ async function destroy() {
   } catch (_) { /* ignore */ }
 }
 
+// EXPERIMENTO: envia a IMAGEM sozinha (sem legenda) e DEPOIS o texto, como duas
+// mensagens. Aquece a conversa com garantirChat antes. Tenta a imagem primeiro
+// pelo método normal (client.sendMessage) e, se falhar, pelo cru (WWebJS). O
+// texto vai sempre pelo caminho confiável. Loga cada etapa para diagnóstico.
+async function enviarFotoDepoisTexto(telefone, caminhoFoto, texto, contexto) {
+  if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
+  const id = await resolverId(telefone);
+  try { const gc = await garantirChat(id); log(`garantirChat(${id}) → ${gc}`); } catch (_) {}
+  const media = MessageMedia.fromFilePath(caminhoFoto);
+  let via = 'nenhum';
+  // 1) imagem SOZINHA (sem legenda)
+  try {
+    await comRetry(() => client.sendMessage(id, media));
+    via = 'client.sendMessage'; log('imagem (sozinha) enviada via client.sendMessage.');
+  } catch (e1) {
+    log(`imagem via client.sendMessage falhou (${e1 && e1.message}) — tentando crua (WWebJS).`);
+    try { await comRetry(() => sendRawMidia(id, media, '')); via = 'WWebJS'; log('imagem (sozinha) enviada via WWebJS (retornou ok).'); }
+    catch (e2) { log(`imagem crua também falhou (${e2 && e2.message}).`); }
+  }
+  // pequena pausa pra imagem assentar antes do texto
+  await new Promise((r) => setTimeout(r, 1500));
+  // 2) texto (sempre pelo caminho confiável)
+  await comRetry(() => sendRawTexto(id, texto));
+  log(`texto enviado. imagem via: ${via}`);
+  atividade.registrar({ destino: telefone, preview: '📎(sep)+' + texto, midia: via !== 'nenhum', ok: true, contexto });
+  return { imagemVia: via };
+}
+
 module.exports = {
   initWhatsApp, isReady, getClient,
   sendTexto, sendMidia, sendGrupo, acharGrupo, listarGrupos,
   getCommonGroups, sendGrupoComMencao, sendGrupoMidia, sendGrupoMidiaComMencao,
+  enviarFotoDepoisTexto,
   iniciarKeepAlive, destroy, toChatId, MessageMedia,
 };
 
