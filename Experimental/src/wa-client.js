@@ -236,7 +236,8 @@ function criarClient() {
 // lagosul, que roda numa versão antiga BOA guardada no cache), NÃO limpamos —
 // limpar ali derrubaria a versão que mantém aquele robô funcionando.
 function limparCacheVersaoSeOff() {
-  if (!VERSAO_FIXA_DESLIGADA) return; // versão fixa (lagosul) → preserva o cache
+  if (process.env.WA_WEB_VERSION_FILE) return; // versão fixa por arquivo → preserva o cache
+  if (!VERSAO_FIXA_DESLIGADA) return; // versão fixa por URL → preserva o cache
   const fs = require('fs');
   const dirs = new Set([
     path.resolve(__dirname, '..', '.wwebjs_cache'),
@@ -244,6 +245,36 @@ function limparCacheVersaoSeOff() {
   ]);
   for (const d of dirs) {
     try { fs.rmSync(d, { recursive: true, force: true }); log(`cache de versão limpo no start (off): ${d}`); }
+    catch (_) {}
+  }
+}
+
+// Decide a versão do WhatsApp Web a usar, ANTES do initialize:
+//  1) WA_WEB_VERSION_FILE (arquivo .html local) → type 'local' + webVersion (a
+//     forma robusta p/ fixar uma versão que sumiu do repositório, ex.: o cache
+//     bom copiado do lagosul). O nome do arquivo é a versão (2.3000.XXXX.html).
+//  2) WA_WEB_VERSION_URL (URL do .html) → type 'remote', só se responder 200.
+//  3) senão: versão AO VIVO (type 'none', o padrão já setado no criarClient).
+async function resolverVersaoFixa(client) {
+  const fs = require('fs');
+  const file = process.env.WA_WEB_VERSION_FILE;
+  if (file) {
+    try {
+      if (fs.existsSync(file)) {
+        const versao = path.basename(file).replace(/\.html$/i, '');
+        const cacheDir = path.resolve(__dirname, '..', '.wwebjs_cache');
+        if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+        try { fs.copyFileSync(file, path.join(cacheDir, versao + '.html')); } catch (_) {}
+        client.options.webVersionCache = { type: 'local', path: cacheDir };
+        client.options.webVersion = versao;
+        log(`WhatsApp Web: versão fixa por ARQUIVO ${versao} (${file})`);
+        return;
+      }
+      log(`WA_WEB_VERSION_FILE aponta para arquivo inexistente (${file}) — seguindo com URL/ao vivo.`);
+    } catch (e) { log('WA_WEB_VERSION_FILE falhou: ' + ((e && e.message) || e)); }
+  }
+  if (process.env.WA_WEB_VERSION_URL && !VERSAO_FIXA_DESLIGADA) {
+    try { const ok = await versaoFixaUsavel(); if (ok) client.options.webVersionCache = { type: 'remote', remotePath: WEB_VERSION_URL }; }
     catch (_) {}
   }
 }
@@ -338,12 +369,11 @@ function initWhatsApp() {
   });
 
   waStatus.set('iniciando', null);
-  // PADRÃO: versão AO VIVO (type 'none'). Provado em produção: com o User-Agent
-  // certo a lib conecta ao vivo, e FIXAR versão (mesmo uma que existe) faz o
-  // inject travar. Só fixa se WA_WEB_VERSION_URL vier explícito no .env e responder 200.
-  (process.env.WA_WEB_VERSION_URL && !VERSAO_FIXA_DESLIGADA
-    ? versaoFixaUsavel().then((ok) => { if (ok) client.options.webVersionCache = { type: 'remote', remotePath: WEB_VERSION_URL }; })
-    : Promise.resolve())
+  // PADRÃO: versão AO VIVO (type 'none'). Mas dá pra FIXAR uma versão:
+  //  1) WA_WEB_VERSION_FILE = caminho de um .html (ex.: o cache bom copiado do
+  //     lagosul). É a forma robusta quando a versão sumiu do repositório.
+  //  2) WA_WEB_VERSION_URL = URL de um .html (repositório wa-version).
+  resolverVersaoFixa(client)
     .catch(() => {})
     .then(() => client.initialize())
     .catch((e) => {
