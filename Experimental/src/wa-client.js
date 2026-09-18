@@ -19,6 +19,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env'
 const path = require('path');
 const qrcodeTerminal = require('qrcode-terminal');
 const waStatus = require('./wa-status');
+require('./patch-wwebjs'); // aplica no boot o fix do envio de mídia (bug __x_id do WhatsApp Web 2026)
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
 const atividade = require('./atividade'); // registro do que foi enviado (aba "Hoje")

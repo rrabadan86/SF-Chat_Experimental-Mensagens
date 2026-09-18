@@ -17,6 +17,7 @@
  *   npx tsx sofia-listener.ts        (ou: pm2 start npm --name sofia-listener -- run listener)
  */
 import "dotenv/config";
+import "./patch-wwebjs.js"; // aplica no boot o fix do envio de mídia (bug __x_id do WhatsApp Web 2026)
 import { Client, LocalAuth, MessageMedia } from "whatsapp-web.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
