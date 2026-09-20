@@ -917,28 +917,31 @@ function lerHumanoLog() {
 // Histórico de TAGS aplicadas por automação por conversa — mostrado no timeline
 // (marca o momento exato em que a SoFIA/automação etiquetou o contato, para
 // diagnosticar depois). Uma linha JSON por evento; o painel lê os últimos por chave.
-function registrarTagLog(chave, tag, motivo, em) {
+// motivo = origem da automação ('ia','palavra','campanha','novo','encerrou'...)
+// ou 'manual' quando um atendente trocou à mão (aí `por` = usuário, `acao` =
+// 'add' | 'remove'). A automação sempre adiciona (acao='add', por='').
+function registrarTagLog(chave, tag, motivo, por, acao, em) {
   try {
     const d = String(chave || '').replace(/\D/g, '');
     const t = String(tag || '').trim();
     if (!d || !t) return;
-    fs.appendFileSync(F.tagLog, JSON.stringify({ chave: d, tag: t, motivo: String(motivo || '').trim(), em: Number(em) || Date.now() }) + '\n', 'utf8');
+    fs.appendFileSync(F.tagLog, JSON.stringify({ chave: d, tag: t, motivo: String(motivo || '').trim(), por: String(por || '').trim(), acao: (acao === 'remove' ? 'remove' : 'add'), em: Number(em) || Date.now() }) + '\n', 'utf8');
   } catch (_) { /* best-effort */ }
 }
-// Devolve os últimos eventos por conversa: { <chave-8díg>: [ {tag,motivo,em}, ... ] }.
+// Devolve os últimos eventos por conversa: { <chave-8díg>: [ {tag,motivo,por,acao,em}, ... ] }.
 function lerTagLog() {
   const mapa = {};
   let linhas = [];
   try { linhas = fs.readFileSync(F.tagLog, 'utf8').split('\n'); } catch (_) { return mapa; }
-  if (linhas.length > 6000) linhas = linhas.slice(-6000); // performance
+  if (linhas.length > 8000) linhas = linhas.slice(-8000); // performance
   for (const l of linhas) {
     const s = l.trim(); if (!s) continue;
     let o; try { o = JSON.parse(s); } catch (_) { continue; }
     const k8 = String(o.chave || '').replace(/\D/g, '').slice(-8);
     if (!k8) continue;
-    (mapa[k8] = mapa[k8] || []).push({ tag: o.tag || '', motivo: o.motivo || '', em: Number(o.em) || 0 });
+    (mapa[k8] = mapa[k8] || []).push({ tag: o.tag || '', motivo: o.motivo || '', por: o.por || '', acao: (o.acao === 'remove' ? 'remove' : 'add'), em: Number(o.em) || 0 });
   }
-  for (const k in mapa) mapa[k] = mapa[k].slice(-20); // no máx 20 eventos por conversa
+  for (const k in mapa) mapa[k] = mapa[k].slice(-30); // no máx 30 eventos por conversa
   return mapa;
 }
 

@@ -339,7 +339,7 @@ function aplicarTagLote({ q = '', tag = '', bloq = '', bloqueados = [], tels = n
     alvos = filtrarContatos(Object.values(map), { q, tag, bloq, bloqueados });
   }
   const agora = Date.now();
-  let n = 0;
+  const mudados = []; // telefones efetivamente alterados (p/ o timeline registrar quem mexeu)
   for (const c of alvos) {
     const antes = (c.tags || []).slice();
     const set = new Set(antes);
@@ -349,10 +349,10 @@ function aplicarTagLote({ q = '', tag = '', bloq = '', bloqueados = [], tels = n
     let novo = add ? tagsAposRegras([...set]) : [...set];
     const mudou = novo.length !== antes.length || novo.some(t => !antes.includes(t));
     c.tags = novo;
-    if (mudou) { c.atualizadoEm = agora; n++; }
+    if (mudou) { c.atualizadoEm = agora; mudados.push(normTel(c.tel)); }
   }
-  if (n) salvar(map);
-  return n;
+  if (mudados.length) salvar(map);
+  return mudados;
 }
 // Quantos contatos casam com o filtro atual (para o painel mostrar o total no
 // botão de "aplicar a N contatos", sem paginar).

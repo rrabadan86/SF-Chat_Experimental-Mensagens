@@ -2333,8 +2333,14 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     function evtDivisor(e){
       var quem=e.por?escH(e.por):'';
       if(e.acao==='tag'){
-        var mot=MOTIVO_TAG[e.motivo]||'automação';
-        return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#e3d5ef"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#6b3fa0;background:#f2eaf9;border-radius:999px;padding:2px 11px">🏷️ Tag aplicada: "'+escH(e.tag)+'" · '+mot+' · '+soHora(e.em)+'</span><span style="flex:1;height:1px;background:#e3d5ef"></span></div>';
+        var manual=(e.motivo==='manual');
+        var rem=(e.tacao==='remove');
+        var verbo= rem ? 'Tag removida' : (manual ? 'Tag adicionada' : 'Tag aplicada');
+        var suf = manual ? (e.por?(' por '+escH(e.por)):' à mão') : (' · '+(MOTIVO_TAG[e.motivo]||'automação'));
+        var cor = rem ? '#a15a5a' : '#6b3fa0';    // remoção em tom avermelhado, aplicação em roxo
+        var bg  = rem ? '#f7ecec' : '#f2eaf9';
+        var ln  = rem ? '#e6cfcf' : '#e3d5ef';
+        return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:'+ln+'"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:'+cor+';background:'+bg+';border-radius:999px;padding:2px 11px">🏷️ '+verbo+': "'+escH(e.tag)+'"'+suf+' · '+soHora(e.em)+'</span><span style="flex:1;height:1px;background:'+ln+'"></span></div>';
       }
       if(e.acao==='assumir') return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cdeadd"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#1f7a4d;background:#e7f6ec;border-radius:999px;padding:2px 11px">🙋 Conversa assumida por '+(quem||'atendente')+'</span><span style="flex:1;height:1px;background:#cdeadd"></span></div>';
       // Fim do prazo de pausa da resposta manual pelo celular (computado por horário).
@@ -2356,7 +2362,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var endEm=(mw.em||0)+PAUSA_MIN*60000;
       pauseEvts.push({em:endEm, acao:'wpp-fim', ativo:(endEm>Date.now())});
     }
-    var tagEvts=(c.tagLog||[]).map(function(t){return {em:(t.em||0), acao:'tag', tag:t.tag, motivo:t.motivo};});
+    var tagEvts=(c.tagLog||[]).map(function(t){return {em:(t.em||0), acao:'tag', tag:t.tag, motivo:t.motivo, por:t.por, tacao:t.acao};});
     var evts=(c.humanoLog||[]).concat(pauseEvts).concat(tagEvts).slice().sort(function(a,b){return (a.em||0)-(b.em||0);});
     var out=[], ei=0;
     for(var mi=0; mi<itensMsg.length; mi++){
@@ -5593,6 +5599,7 @@ const server = http.createServer((req, res) => {
   }
   // Alterar tags EM LOTE: adiciona/remove uma tag em todos os contatos do filtro.
   if (req.method === 'POST' && url === '/sofia/contatos/lote') {
+    const quem = (sess && sess.usuario) ? sess.usuario : ''; // captura o usuário AGORA (fora do callback)
     return lerCorpo(req, 1e5, corpo => {
       const p = new URLSearchParams(corpo);
       const back = new URLSearchParams(); back.set('view', 'contatos');
@@ -5602,11 +5609,14 @@ const server = http.createServer((req, res) => {
       try {
         let bloqueados = []; try { bloqueados = sofia.lerBloqueios(); } catch (_) {}
         const tels = String(p.get('tels') || '').split(',').map(s => s.trim()).filter(Boolean);
-        const n = contatos.aplicarTagLote({
+        const add = p.get('add') || '', rm = p.get('rm') || '';
+        const mudados = contatos.aplicarTagLote({
           q: p.get('q') || '', tag: p.get('tag_filtro') || '', bloq: p.get('bloq') || '', bloqueados,
-          tels: tels.length ? tels : null, add: p.get('add') || '', rm: p.get('rm') || '',
+          tels: tels.length ? tels : null, add, rm,
         });
-        back.set('lote', String(n));
+        // Marca no timeline de cada conversa alterada (quem mexeu à mão).
+        try { for (const t of (mudados || [])) { if (add) sofia.registrarTagLog(t, add, 'manual', quem, 'add'); if (rm) sofia.registrarTagLog(t, rm, 'manual', quem, 'remove'); } } catch (_) {}
+        back.set('lote', String((mudados || []).length));
       } catch (e) {
         back.set('errc', e.message || 'Erro no lote.');
       }
@@ -5641,6 +5651,7 @@ const server = http.createServer((req, res) => {
   // Salvar/atualizar um contato direto de uma conversa (cria se novo) e DEFINE as
   // tags exatamente como vieram (permite adicionar e remover no cabeçalho do chat).
   if (req.method === 'POST' && url === '/sofia/contatos/salvar-novo') {
+    const quem = (sess && sess.usuario) ? sess.usuario : ''; // captura o usuário AGORA (fora do callback)
     return lerCorpo(req, 1e5, corpo => {
       try {
         const d = JSON.parse(corpo || '{}');
@@ -5649,8 +5660,18 @@ const server = http.createServer((req, res) => {
         // duplicado; edita o que já está no CRM (com o 9).
         const achado = contatos.acharPorTel(d.telefone);
         const telAlvo = achado ? achado.chave : d.telefone;
+        const tagsAntes = (achado && achado.contato && Array.isArray(achado.contato.tags)) ? achado.contato.tags.slice() : [];
         const c = contatos.adicionar({ nome: d.nome, telefone: telAlvo }); // cria/atualiza (sem mexer nas tags)
         contatos.setTags(telAlvo, d.tags || []);                            // DEFINE as tags (substitui)
+        // Marca no timeline o que MUDOU (add/remove), com quem fez — comparando o
+        // conjunto ANTES x o conjunto FINAL de fato gravado (após regras de funil).
+        try {
+          const depoisR = contatos.acharPorTel(telAlvo);
+          const tagsDepois = (depoisR && depoisR.contato && Array.isArray(depoisR.contato.tags)) ? depoisR.contato.tags : [];
+          const antesSet = new Set(tagsAntes), depoisSet = new Set(tagsDepois);
+          for (const t of tagsDepois) if (!antesSet.has(t)) sofia.registrarTagLog(telAlvo, t, 'manual', quem, 'add');
+          for (const t of tagsAntes) if (!depoisSet.has(t)) sofia.registrarTagLog(telAlvo, t, 'manual', quem, 'remove');
+        } catch (_) {}
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, tel: c.tel }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
