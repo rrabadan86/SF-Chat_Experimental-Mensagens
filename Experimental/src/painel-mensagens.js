@@ -2282,7 +2282,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   // Rótulo de quem enviou. Para "humano", mostra o NOME do atendente que escreveu
   // (segurança: saber quem falou). Cai em "Atendente" se a mensagem for antiga/sem
   // autor (ex.: resposta enviada direto do celular do Studio).
-  function autorRot(a, nomeAluna, por, tipo){ return a==='aluna'?(nomeAluna||'Aluna'):(a==='humano'?(tipo==='wpp'?'📱 Direto pelo WhatsApp':(por?('🧑 '+por):'Atendente')):'SoFIA'); }
+  function autorRot(a, nomeAluna, por, tipo){ if(tipo==='anuncio') return '📣 Boas-vindas do anúncio'; return a==='aluna'?(nomeAluna||'Aluna'):(a==='humano'?(tipo==='wpp'?'📱 Direto pelo WhatsApp':(por?('🧑 '+por):'Atendente')):'SoFIA'); }
   function fmtTel(k){ var d=String(k||'').replace(/\\D/g,''); if(/^55\\d{10,11}$/.test(d)){ var ddd=d.slice(2,4), r=d.slice(4); return '+55 ('+ddd+') '+(r.length===9?r.slice(0,5)+'-'+r.slice(5):r.slice(0,4)+'-'+r.slice(4)); } return k; }
   // Só a hora (o dia já aparece no separador de dia da lista).
   function soHora(ts){ try{ return new Date(ts).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
@@ -2319,8 +2319,10 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       if(ehWpp){ var pv=i>0?msgs[i-1]:null; if(!(pv && pv.autor==='humano' && pv.tipo==='wpp')) sep+=wppDivisor(); }
       var mine = (m.autor!=='aluna');
       var ehFup = (m.tipo==='followup');
-      var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?(ehWpp?'#fff4e5':'#dff5e6'):(ehFup?'#fff4e5':'#e4efee'));
-      var selo = ehFup ? ' <span style="display:inline-block;font-size:.6rem;font-weight:700;color:#b45309;background:#ffedd5;border-radius:6px;padding:1px 6px;margin-left:4px">↩︎ follow-up</span>' : '';
+      var ehAnuncio = (m.tipo==='anuncio');
+      var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?(ehWpp?'#fff4e5':'#dff5e6'):(ehAnuncio?'#eaf1fb':(ehFup?'#fff4e5':'#e4efee')));
+      var selo = ehFup ? ' <span style="display:inline-block;font-size:.6rem;font-weight:700;color:#b45309;background:#ffedd5;border-radius:6px;padding:1px 6px;margin-left:4px">↩︎ follow-up</span>'
+               : (ehAnuncio ? ' <span style="display:inline-block;font-size:.6rem;font-weight:700;color:#1d4e89;background:#dceafc;border-radius:6px;padding:1px 6px;margin-left:4px">📣 anúncio</span>' : '');
       var img = m.foto ? '<img src="/sofia/humano-foto?arq='+encodeURIComponent(m.foto)+'" alt="foto enviada" style="display:block;max-width:100%;max-height:220px;border-radius:9px;margin:'+(m.texto?'6px 0 0':'2px 0 0')+';cursor:pointer" onclick="window.open(this.src,\\'_blank\\')">' : '';
       // Mensagem citada (quando ela usa o "responder" do WhatsApp): mostra um
       // bloco de citação acima do texto, como o próprio WhatsApp faz.
@@ -6535,7 +6537,7 @@ function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra }) {
 // Publica as regras que o LISTENER precisa (só os gatilhos dele).
 function publicarRegras() {
   try {
-    const regras = { novo: [], palavra: [], ia: [], campanha: [], encerrou: [] };
+    const regras = { novo: [], palavra: [], ia: [], campanha: [], encerrou: [], anuncio: [] };
     for (const g of Object.keys(regras)) {
       for (const r of contatos.tagsPorGatilho(g)) {
         if (g === 'palavra') regras[g].push({ tag: r.tag, avisarWpp: r.avisarWpp, palavras: r.palavras });

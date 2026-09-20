@@ -819,7 +819,7 @@ function retencaoMs(): number {
   const d = Number.isFinite(_retDias) && _retDias >= 0 ? _retDias : 365;
   return d > 0 ? d * 24 * 3600 * 1000 : Number.POSITIVE_INFINITY;
 }
-type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string; tipo?: "followup" | "wpp"; citacao?: string };
+type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string; tipo?: "followup" | "wpp" | "anuncio"; citacao?: string };
 type InboxConversa = { jid: string; nome: string; ultimaEm: number; msgs: InboxMsg[] };
 const inbox = new Map<string, InboxConversa>();
 let inboxTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2310,9 +2310,12 @@ async function tratarRespostaManual(msg: any, jid: string) {
     // número mas não é resposta humana — não pausa a SoFIA. E dispara o gatilho
     // 'anuncio' (etiqueta o lead como veio do anúncio, ex.: "0. Patrocinado").
     if (ehMsgAnuncio(corpo)) {
+      // Mostra a boas-vindas do anúncio no painel (contexto: veio de um anúncio),
+      // marcada como tipo "anuncio". Não pausa a SoFIA e não abre sessão (é fromMe).
+      try { registrarInbox(tel, jid, "", "sofia", corpo, undefined, undefined, "anuncio"); } catch {}
       const regAnuncio = lerRegras().anuncio || [];
       for (const r of regAnuncio) if (!jaDisparou(tel, "anuncio", r.tag)) emitirAcao(tel, "", r, "anuncio");
-      log(`message_create de ${tel} ignorado — boas-vindas do anúncio (não pausa a SoFIA)${regAnuncio.length ? ` + gatilho 'anuncio'` : ""}.`);
+      log(`message_create de ${tel} — boas-vindas do anúncio (registrada no painel, não pausa a SoFIA)${regAnuncio.length ? ` + gatilho 'anuncio'` : ""}.`);
       return;
     }
     assumirConversa(tel);
