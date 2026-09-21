@@ -2282,7 +2282,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   // Rótulo de quem enviou. Para "humano", mostra o NOME do atendente que escreveu
   // (segurança: saber quem falou). Cai em "Atendente" se a mensagem for antiga/sem
   // autor (ex.: resposta enviada direto do celular do Studio).
-  function autorRot(a, nomeAluna, por, tipo){ return a==='aluna'?(nomeAluna||'Aluna'):(a==='humano'?(tipo==='wpp'?'📱 Direto pelo WhatsApp':(por?('🧑 '+por):'Atendente')):'SoFIA'); }
+  function autorRot(a, nomeAluna, por, tipo){ if(tipo==='anuncio') return '📣 Boas-vindas do anúncio'; return a==='aluna'?(nomeAluna||'Aluna'):(a==='humano'?(tipo==='wpp'?'📱 Direto pelo WhatsApp':(por?('🧑 '+por):'Atendente')):'SoFIA'); }
   function fmtTel(k){ var d=String(k||'').replace(/\\D/g,''); if(/^55\\d{10,11}$/.test(d)){ var ddd=d.slice(2,4), r=d.slice(4); return '+55 ('+ddd+') '+(r.length===9?r.slice(0,5)+'-'+r.slice(5):r.slice(0,4)+'-'+r.slice(4)); } return k; }
   // Só a hora (o dia já aparece no separador de dia da lista).
   function soHora(ts){ try{ return new Date(ts).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
@@ -2319,15 +2319,31 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       if(ehWpp){ var pv=i>0?msgs[i-1]:null; if(!(pv && pv.autor==='humano' && pv.tipo==='wpp')) sep+=wppDivisor(); }
       var mine = (m.autor!=='aluna');
       var ehFup = (m.tipo==='followup');
-      var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?(ehWpp?'#fff4e5':'#dff5e6'):(ehFup?'#fff4e5':'#e4efee'));
-      var selo = ehFup ? ' <span style="display:inline-block;font-size:.6rem;font-weight:700;color:#b45309;background:#ffedd5;border-radius:6px;padding:1px 6px;margin-left:4px">↩︎ follow-up</span>' : '';
+      var ehAnuncio = (m.tipo==='anuncio');
+      var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?(ehWpp?'#fff4e5':'#dff5e6'):(ehAnuncio?'#eaf1fb':(ehFup?'#fff4e5':'#e4efee')));
+      var selo = ehFup ? ' <span style="display:inline-block;font-size:.6rem;font-weight:700;color:#b45309;background:#ffedd5;border-radius:6px;padding:1px 6px;margin-left:4px">↩︎ follow-up</span>'
+               : (ehAnuncio ? ' <span style="display:inline-block;font-size:.6rem;font-weight:700;color:#1d4e89;background:#dceafc;border-radius:6px;padding:1px 6px;margin-left:4px">📣 anúncio</span>' : '');
       var img = m.foto ? '<img src="/sofia/humano-foto?arq='+encodeURIComponent(m.foto)+'" alt="foto enviada" style="display:block;max-width:100%;max-height:220px;border-radius:9px;margin:'+(m.texto?'6px 0 0':'2px 0 0')+';cursor:pointer" onclick="window.open(this.src,\\'_blank\\')">' : '';
-      var corpoMsg = (m.texto?'<div style="white-space:pre-wrap">'+linkifica(m.texto)+'</div>':'') + img;
+      // Mensagem citada (quando ela usa o "responder" do WhatsApp): mostra um
+      // bloco de citação acima do texto, como o próprio WhatsApp faz.
+      var cit = m.citacao ? '<div style="border-left:3px solid #25a06b;background:rgba(0,0,0,.05);border-radius:6px;padding:4px 8px;margin:0 0 5px;font-size:.8rem;color:#555;white-space:pre-wrap;overflow-wrap:anywhere"><span style="font-size:.62rem;font-weight:700;color:#25a06b;display:block;margin-bottom:1px">↩︎ em resposta a</span>'+escH(m.citacao)+'</div>' : '';
+      var corpoMsg = cit + (m.texto?'<div style="white-space:pre-wrap">'+linkifica(m.texto)+'</div>':'') + img;
       return {em:(m.em||0), html: sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna, m.por, m.tipo))+' · '+fmtHora(m.em)+selo+'</div>'+corpoMsg+'</div></div>'};
     });
     // Marcadores de controle humano (assumiu/devolveu) intercalados por horário.
+    var MOTIVO_TAG={ia:'🧠 intenção detectada pela SoFIA', palavra:'🔑 palavra-chave', campanha:'💬 respondeu campanha', novo:'🆕 novo contato', encerrou:'🔒 encerramento sem agendamento', agendou:'📅 agendou', humano:'🙋 atendimento humano'};
     function evtDivisor(e){
       var quem=e.por?escH(e.por):'';
+      if(e.acao==='tag'){
+        var manual=(e.motivo==='manual');
+        var rem=(e.tacao==='remove');
+        var verbo= rem ? 'Tag removida' : (manual ? 'Tag adicionada' : 'Tag aplicada');
+        var suf = manual ? (e.por?(' por '+escH(e.por)):' à mão') : (' · '+(MOTIVO_TAG[e.motivo]||'automação'));
+        var cor = rem ? '#a15a5a' : '#6b3fa0';    // remoção em tom avermelhado, aplicação em roxo
+        var bg  = rem ? '#f7ecec' : '#f2eaf9';
+        var ln  = rem ? '#e6cfcf' : '#e3d5ef';
+        return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:'+ln+'"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:'+cor+';background:'+bg+';border-radius:999px;padding:2px 11px">🏷️ '+verbo+': "'+escH(e.tag)+'"'+suf+' · '+soHora(e.em)+'</span><span style="flex:1;height:1px;background:'+ln+'"></span></div>';
+      }
       if(e.acao==='assumir') return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cdeadd"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#1f7a4d;background:#e7f6ec;border-radius:999px;padding:2px 11px">🙋 Conversa assumida por '+(quem||'atendente')+'</span><span style="flex:1;height:1px;background:#cdeadd"></span></div>';
       // Fim do prazo de pausa da resposta manual pelo celular (computado por horário).
       if(e.acao==='wpp-fim'){
@@ -2348,7 +2364,8 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var endEm=(mw.em||0)+PAUSA_MIN*60000;
       pauseEvts.push({em:endEm, acao:'wpp-fim', ativo:(endEm>Date.now())});
     }
-    var evts=(c.humanoLog||[]).concat(pauseEvts).slice().sort(function(a,b){return (a.em||0)-(b.em||0);});
+    var tagEvts=(c.tagLog||[]).map(function(t){return {em:(t.em||0), acao:'tag', tag:t.tag, motivo:t.motivo, por:t.por, tacao:t.acao};});
+    var evts=(c.humanoLog||[]).concat(pauseEvts).concat(tagEvts).slice().sort(function(a,b){return (a.em||0)-(b.em||0);});
     var out=[], ei=0;
     for(var mi=0; mi<itensMsg.length; mi++){
       while(ei<evts.length && (evts[ei].em||0) <= itensMsg[mi].em){ out.push(evtDivisor(evts[ei])); ei++; }
@@ -2370,9 +2387,12 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     var btnInt='<button type="button" onclick="abrirInteracoes(selecionada)" class="reset" title="Interações" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">📊</button>';
     var btnAgendar='<button type="button" onclick="toggleAgendar()" class="'+(agAberto?'save':'reset')+'" title="Agendar aula experimental no EVO (cadastra + marca, igual a SoFIA)" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">📅</button>';
     var encM=!!c.enc; // encerrada AGORA (cadeado à mão / automático por tag)
-    // Encerrar é de mão única: 🔒 fecha. Já fechada → cadeado fechado desabilitado
-    // (só indica o estado). A aluna voltando a escrever reabre a conversa sozinho.
-    var btnEnc='<button type="button" '+(encM?'disabled':'onclick="encerrarConversa()"')+' class="reset" title="'+(encM?'Conversa encerrada (a aluna voltando reabre sozinho — a SoFIA recomeça do zero)':'Encerrar conversa agora (cadeado — a SoFIA recomeça do zero)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(encM?';opacity:.5;cursor:not-allowed':'')+'">🔒</button>';
+    // Botão alternador: 🔒 encerra (a SoFIA recomeça do zero se a aluna voltar) ·
+    // 🔓 reabre (tira o cadeado, a SoFIA volta a responder). A aluna voltando a
+    // escrever também reabre sozinho — o 🔓 serve para reabrir na hora, sem esperar.
+    var btnEnc = encM
+      ? '<button type="button" onclick="reabrirConversa()" class="reset" title="Reabrir esta conversa (tira o cadeado 🔒 — a SoFIA volta a responder)" style="padding:5px 10px;font-size:.9rem;white-space:nowrap;color:#1c8f52">🔓</button>'
+      : '<button type="button" onclick="encerrarConversa()" class="reset" title="Encerrar conversa agora (cadeado — a SoFIA recomeça do zero)" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">🔒</button>';
     var bloq=!!c.bloq;
     var btnBloq='<button type="button" onclick="bloquearConversa()" class="reset" title="'+(bloq?'Desbloquear contato':'Bloquear contato (a SoFIA ignora)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(bloq?';color:#1c8f52':'')+'">'+(bloq?'✅':'🚫')+'</button>';
     var selo=bloq?'<span title="Contato bloqueado" style="background:#fdeaea;color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700;margin-left:6px">🚫 bloqueado</span>':'';
@@ -2480,10 +2500,18 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   }
   function encerrarConversa(){
     var k=selecionada; if(!k) return;
-    var c=ultimoData[k]||{}; if(c.enc) return; // já encerrada — mão única
+    var c=ultimoData[k]||{}; if(c.enc) return; // já encerrada
     if(!confirm('Encerrar esta conversa agora?\\n\\nAparece o cadeado 🔒, a SoFIA recomeça do zero se a aluna voltar a escrever e o follow-up deixa de incomodar este contato.')) return;
     fetch('/sofia/conversas/encerrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k})})
       .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].enc=true; ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); } else { alert(j.erro||'Não consegui encerrar a conversa.'); } })
+      .catch(function(){ alert('Erro de rede.'); });
+  }
+  function reabrirConversa(){
+    var k=selecionada; if(!k) return;
+    var c=ultimoData[k]||{}; if(!c.enc) return; // não está encerrada
+    if(!confirm('Reabrir esta conversa?\\n\\nTira o cadeado 🔒 e a SoFIA volta a responder normalmente este contato.')) return;
+    fetch('/sofia/conversas/encerrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,ativo:false})})
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k]){ ultimoData[k].enc=false; ultimoData[k].encEm=0; ultimoData[k].encPor=''; } ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); } else { alert(j.erro||'Não consegui reabrir a conversa.'); } })
       .catch(function(){ alert('Erro de rede.'); });
   }
   function msgKey(ev){ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); enviarMsg(); } }
@@ -2892,7 +2920,7 @@ function paginaSofiaContatos(aviso, erro, params) {
       </div>
       <div id="tgIaBox" style="margin-top:14px;display:none">
         <label>Instrução <span class="sub" style="font-weight:400;color:var(--cinza)">— descreva a intenção, em português (ex.: quando a aluna perguntar sobre preço, valores ou planos)</span></label>
-        <textarea id="tgInstrucao" rows="3" maxlength="300" placeholder="Ex.: quando a aluna perguntar sobre preço, valores, mensalidade ou planos." style="width:100%;resize:vertical"></textarea>
+        <textarea id="tgInstrucao" rows="6" maxlength="2000" placeholder="Ex.: quando a aluna perguntar sobre preço, valores, mensalidade ou planos." style="width:100%;resize:vertical"></textarea>
         <p class="quando" style="margin:6px 0 0">A SoFIA <b>lê a conversa</b> e aplica a tag quando entende essa intenção — mesmo sem a palavra exata. Dispara <b>uma vez por conversa</b>. Usa a IA (custo pequeno por mensagem).</p>
       </div>
       <div id="tgCampBox" style="margin-top:14px;display:none">
@@ -3365,7 +3393,7 @@ function paginaSofiaTags(aviso, erro) {
       </div>
       <div id="tgIaBox" style="margin-top:14px;display:none">
         <label>Instrução <span class="sub" style="font-weight:400;color:var(--cinza)">— descreva a intenção, em português (ex.: quando a aluna perguntar sobre preço, valores ou planos)</span></label>
-        <textarea id="tgInstrucao" rows="3" maxlength="300" placeholder="Ex.: quando a aluna perguntar sobre preço, valores, mensalidade ou planos." style="width:100%;resize:vertical"></textarea>
+        <textarea id="tgInstrucao" rows="6" maxlength="2000" placeholder="Ex.: quando a aluna perguntar sobre preço, valores, mensalidade ou planos." style="width:100%;resize:vertical"></textarea>
         <p class="quando" style="margin:6px 0 0">A SoFIA <b>lê a conversa</b> e aplica a tag quando entende essa intenção — mesmo sem a palavra exata. Dispara <b>uma vez por conversa</b>. Usa a IA (custo pequeno por mensagem).</p>
       </div>
       <div id="tgCampBox" style="margin-top:14px;display:none">
@@ -5573,6 +5601,7 @@ const server = http.createServer((req, res) => {
   }
   // Alterar tags EM LOTE: adiciona/remove uma tag em todos os contatos do filtro.
   if (req.method === 'POST' && url === '/sofia/contatos/lote') {
+    const quem = (sess && sess.usuario) ? sess.usuario : ''; // captura o usuário AGORA (fora do callback)
     return lerCorpo(req, 1e5, corpo => {
       const p = new URLSearchParams(corpo);
       const back = new URLSearchParams(); back.set('view', 'contatos');
@@ -5582,11 +5611,14 @@ const server = http.createServer((req, res) => {
       try {
         let bloqueados = []; try { bloqueados = sofia.lerBloqueios(); } catch (_) {}
         const tels = String(p.get('tels') || '').split(',').map(s => s.trim()).filter(Boolean);
-        const n = contatos.aplicarTagLote({
+        const add = p.get('add') || '', rm = p.get('rm') || '';
+        const mudados = contatos.aplicarTagLote({
           q: p.get('q') || '', tag: p.get('tag_filtro') || '', bloq: p.get('bloq') || '', bloqueados,
-          tels: tels.length ? tels : null, add: p.get('add') || '', rm: p.get('rm') || '',
+          tels: tels.length ? tels : null, add, rm,
         });
-        back.set('lote', String(n));
+        // Marca no timeline de cada conversa alterada (quem mexeu à mão).
+        try { for (const t of (mudados || [])) { if (add) sofia.registrarTagLog(t, add, 'manual', quem, 'add'); if (rm) sofia.registrarTagLog(t, rm, 'manual', quem, 'remove'); } } catch (_) {}
+        back.set('lote', String((mudados || []).length));
       } catch (e) {
         back.set('errc', e.message || 'Erro no lote.');
       }
@@ -5621,6 +5653,7 @@ const server = http.createServer((req, res) => {
   // Salvar/atualizar um contato direto de uma conversa (cria se novo) e DEFINE as
   // tags exatamente como vieram (permite adicionar e remover no cabeçalho do chat).
   if (req.method === 'POST' && url === '/sofia/contatos/salvar-novo') {
+    const quem = (sess && sess.usuario) ? sess.usuario : ''; // captura o usuário AGORA (fora do callback)
     return lerCorpo(req, 1e5, corpo => {
       try {
         const d = JSON.parse(corpo || '{}');
@@ -5629,8 +5662,18 @@ const server = http.createServer((req, res) => {
         // duplicado; edita o que já está no CRM (com o 9).
         const achado = contatos.acharPorTel(d.telefone);
         const telAlvo = achado ? achado.chave : d.telefone;
+        const tagsAntes = (achado && achado.contato && Array.isArray(achado.contato.tags)) ? achado.contato.tags.slice() : [];
         const c = contatos.adicionar({ nome: d.nome, telefone: telAlvo }); // cria/atualiza (sem mexer nas tags)
         contatos.setTags(telAlvo, d.tags || []);                            // DEFINE as tags (substitui)
+        // Marca no timeline o que MUDOU (add/remove), com quem fez — comparando o
+        // conjunto ANTES x o conjunto FINAL de fato gravado (após regras de funil).
+        try {
+          const depoisR = contatos.acharPorTel(telAlvo);
+          const tagsDepois = (depoisR && depoisR.contato && Array.isArray(depoisR.contato.tags)) ? depoisR.contato.tags : [];
+          const antesSet = new Set(tagsAntes), depoisSet = new Set(tagsDepois);
+          for (const t of tagsDepois) if (!antesSet.has(t)) sofia.registrarTagLog(telAlvo, t, 'manual', quem, 'add');
+          for (const t of tagsAntes) if (!depoisSet.has(t)) sofia.registrarTagLog(telAlvo, t, 'manual', quem, 'remove');
+        } catch (_) {}
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, tel: c.tel }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
@@ -5648,6 +5691,7 @@ const server = http.createServer((req, res) => {
     try { for (const k in obj) obj[k].enc = sofia.estaEncerrada(k, sofia.ultimaAlunaEm(obj[k])); } catch (_) {} // encerrada à mão (cadeado)? — mede pela última msg DA ALUNA, para a despedida da SoFIA depois do fechamento não reabrir
     try { const em = sofia.lerEncerradas() || {}; for (const k in obj) { const v = em[k]; const isObj = v && typeof v === 'object'; obj[k].encEm = isObj ? (Number(v.em) || 0) : (Number(v) || 0); obj[k].encPor = isObj ? String(v.por || '') : ''; } } catch (_) {} // instante + autor do encerramento manual (p/ a divisória)
     try { const hl = sofia.lerHumanoLog() || {}; for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].humanoLog = hl[l8] || []; } } catch (_) {} // histórico assumiu/devolveu (para o timeline)
+    try { const tl = sofia.lerTagLog() || {}; for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].tagLog = tl[l8] || []; } } catch (_) {} // histórico de tags aplicadas por automação (para o timeline)
     try { for (const k in obj) obj[k].fuEspera = fuEsperando[k] || ''; } catch (_) {} // follow-up pronto, segurando pelo horário?
     try { const at = sofia.lerAtencao() || {}; const a8 = {}; for (const kk in at) a8[String(kk).replace(/\D/g, '').slice(-8)] = 1; for (const k in obj) obj[k].atencao = !!(at[k] || a8[String(k).replace(/\D/g, '').slice(-8)]); } catch (_) {} // pediu atendimento humano?
     try { const agSet = new Set((fuLerJson(FU_AGENDOU_FILE, []) || []).map(x => String(x).replace(/\D/g, '').slice(-8))); let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {} for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].agendou = agSet.has(l8) || (obj[k].tagsContato || []).some(t => agTags.includes(t)); } } catch (_) {} // agendou aula experimental? (mesma lógica do follow-up)
@@ -6448,15 +6492,42 @@ const AUTO_ROTULO = {
   encerrou: '🔒 Atendimento encerrado sem agendamento',
   campanha: '💬 Aluna respondeu a uma campanha',
 };
+// A conversa está EM ANDAMENTO agora? (a lead escreveu há menos que a janela de
+// sessão). Uma automação NUNCA deve force-fechar (🔒) uma conversa viva: o
+// encerramento legítimo por tempo ('encerrou') só ocorre depois da janela inteira
+// sem mensagem da lead, então ele nunca cai neste guarda; já um classificador por
+// IA que marque "Encerrado sem agendamento" no meio de um atendimento (a lead
+// acabou de escrever) é barrado aqui — antes derrubava a conversa e resetava a
+// memória da SoFIA. Casa a chave pelos últimos 8 dígitos (variações do 9º dígito).
+function _conversaEmAndamento(tel) {
+  try {
+    const alvo = String(tel || '').replace(/\D/g, '').slice(-8);
+    if (!alvo) return false;
+    let janelaMs = 12 * 3600 * 1000;
+    try { const h = Number(sofia.lerSessaoHoras()); if (Number.isFinite(h) && h > 0) janelaMs = h * 3600 * 1000; } catch (_) {}
+    const convs = sofia.conversas();
+    for (const k of Object.keys(convs)) {
+      if (String(k).replace(/\D/g, '').slice(-8) !== alvo) continue;
+      const ua = Number(sofia.ultimaAlunaEm(convs[k])) || 0;
+      if (ua && (Date.now() - ua) < janelaMs) return true;
+    }
+  } catch (_) {}
+  return false;
+}
 // Aplica UMA tag a um contato e (se configurado) enfileira o aviso por WhatsApp.
 function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra }) {
   const tel = String(telefone || '').replace(/\D/g, '');
   if (!tel || !tag) return;
   try { contatos.adicionarTag(tel, nome || '', tag); } catch (_) {}
+  // Marca no timeline da conversa o momento exato em que a tag foi aplicada pela
+  // automação (igual aos marcadores de assumir/encerrar) — ajuda a diagnosticar.
+  try { sofia.registrarTagLog(tel, tag, motivo); } catch (_) {}
   // Tag configurada para encerrar a conversa (ex.: "Sem interesse") → fecha (🔒)
   // como o cadeado do painel: o follow-up para de incomodar e a SoFIA recomeça
   // do zero se a aluna voltar a escrever. Usa a mesma chave que o feed/inbox usa.
-  try { if (contatos.tagConfig(tag).encerrar) { try { sofia.setAtencao(tel, false); } catch (_) {} sofia.setEncerrada(tel, true, 'SoFIA'); } } catch (_) {}
+  // Guarda: nunca force-fecha uma conversa que está EM ANDAMENTO (evita o bug de
+  // marcar "Encerrado sem agendamento" no meio do atendimento e derrubar a conversa).
+  try { if (contatos.tagConfig(tag).encerrar && !_conversaEmAndamento(tel)) { try { sofia.setAtencao(tel, false); } catch (_) {} sofia.setEncerrada(tel, true, 'SoFIA'); } } catch (_) {}
   if (avisarWpp) {
     const cab = AUTO_ROTULO[motivo] || '🔔 Automação da SoFIA';
     const texto = `${cab}\n👤 ${nome || '(sem nome)'}\n📱 ${fmtTelAviso(tel)}${extra ? `\n${extra}` : ''}\n🏷️ ${tag}`;
@@ -6466,7 +6537,7 @@ function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra }) {
 // Publica as regras que o LISTENER precisa (só os gatilhos dele).
 function publicarRegras() {
   try {
-    const regras = { novo: [], palavra: [], ia: [], campanha: [], encerrou: [] };
+    const regras = { novo: [], palavra: [], ia: [], campanha: [], encerrou: [], anuncio: [] };
     for (const g of Object.keys(regras)) {
       for (const r of contatos.tagsPorGatilho(g)) {
         if (g === 'palavra') regras[g].push({ tag: r.tag, avisarWpp: r.avisarWpp, palavras: r.palavras });

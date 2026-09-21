@@ -17,6 +17,7 @@
  *   npx tsx sofia-listener.ts        (ou: pm2 start npm --name sofia-listener -- run listener)
  */
 import "dotenv/config";
+import "./patch-wwebjs.js"; // aplica no boot o fix do envio de mídia (bug __x_id do WhatsApp Web 2026)
 import { Client, LocalAuth, MessageMedia } from "whatsapp-web.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -629,7 +630,7 @@ client.on("qr", async (qr) => {
   catch { setStatus("qr", ""); }
 });
 client.on("authenticated", () => { log("autenticada."); setStatus("iniciando"); armarWatchdogBoot(); });
-client.on("ready", () => { pronta = true; modoPareamento = false; codigoPareamento = ""; if (bootTimer) clearTimeout(bootTimer); gravarFails(0); log("PRONTA — respondendo as alunas."); setStatus("conectado"); agendarReconciliacaoLids(); });
+client.on("ready", () => { pronta = true; modoPareamento = false; codigoPareamento = ""; if (bootTimer) clearTimeout(bootTimer); gravarFails(0); log("PRONTA — respondendo as alunas."); setStatus("conectado"); agendarReconciliacaoLids(); agendarCatchup(); });
 client.on("change_state", (s: string) => log("estado: " + s));
 client.on("disconnected", (m: any) => {
   pronta = false;
@@ -818,7 +819,7 @@ function retencaoMs(): number {
   const d = Number.isFinite(_retDias) && _retDias >= 0 ? _retDias : 365;
   return d > 0 ? d * 24 * 3600 * 1000 : Number.POSITIVE_INFINITY;
 }
-type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string; tipo?: "followup" | "wpp" };
+type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string; tipo?: "followup" | "wpp" | "anuncio"; citacao?: string };
 type InboxConversa = { jid: string; nome: string; ultimaEm: number; msgs: InboxMsg[] };
 const inbox = new Map<string, InboxConversa>();
 let inboxTimer: ReturnType<typeof setTimeout> | null = null;
@@ -846,7 +847,7 @@ function salvarInbox() {
   try { fs.writeFileSync(CONVERSAS_FILE, JSON.stringify(obj), "utf8"); } catch {}
 }
 function agendarSalvarInbox() { if (inboxTimer) return; inboxTimer = setTimeout(() => { inboxTimer = null; salvarInbox(); }, 1500); }
-function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMsg["autor"], texto: string, foto?: string, porNome?: string, tipo?: InboxMsg["tipo"]) {
+function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMsg["autor"], texto: string, foto?: string, porNome?: string, tipo?: InboxMsg["tipo"], citacao?: string) {
   const t = String(texto || "").trim();
   if (!t && !foto) return;                         // nada de texto e nada de foto → ignora
   chave = chaveInboxExistente(chave);              // casa a variante do 9º dígito já existente (não duplica o card)
@@ -859,6 +860,8 @@ function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMs
   if (foto) msg.foto = foto;                        // nome do arquivo em humano-fotos/ (o painel serve)
   if (porNome) msg.por = String(porNome);           // atendente que escreveu (bolha "humano") — atribuição/segurança
   if (tipo) msg.tipo = tipo;                        // "followup" → o painel mostra um selo na bolha
+  const cit = String(citacao || "").trim();
+  if (cit) msg.citacao = cit.length > 400 ? cit.slice(0, 400) + "…" : cit; // mensagem citada (responder do WhatsApp)
   c.msgs.push(msg);
   if (c.msgs.length > INBOX_MAX_MSGS) c.msgs.splice(0, c.msgs.length - INBOX_MAX_MSGS);
   c.ultimaEm = em;
@@ -969,6 +972,116 @@ async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
   if (r) log(`import: carregador de histórico = ${r.loaderVia || "(nenhum encontrado)"}${r.loaderDiag ? " · diag=" + JSON.stringify(r.loaderDiag) : ""}`);
   if (r && r.erro) throw new Error(r.erro + (r.diag ? " Diag: " + JSON.stringify(r.diag) : ""));
   return (r && r.chats) || [];
+}
+// ── Rede de segurança: mensagens perdidas em REINÍCIO ────────────────────────
+//    O whatsapp-web.js só dispara "message" ENQUANTO conectado. Se a SoFIA está
+//    reiniciando (deploy/crash) na hora exata em que a lead escreve, o evento não
+//    acontece e, ao reconectar, a lib NÃO relê o que entrou durante a queda — a
+//    mensagem se perde e a lead fica sem resposta. Aqui, quando a SoFIA fica
+//    PRONTA, varremos as conversas com mensagem não-lida RECENTE e reprocessamos
+//    as que ficaram sem resposta, pelo MESMO caminho de uma mensagem ao vivo.
+//    Anti-duplicidade: só reprocessa mensagens mais NOVAS que a última já
+//    registrada na inbox daquele contato — o que já foi tratado (ao vivo ou num
+//    catch-up anterior) já está na inbox e é ignorado. Janela curta (padrão 30
+//    min) para não responder mensagens antigas depois de uma queda longa.
+function catchupMin(): number {
+  const n = parseInt(process.env.SOFIA_CATCHUP_MIN || "", 10);
+  return Number.isFinite(n) ? n : 30; // 0 = desligado
+}
+let catchupRodando = false;
+async function lerNaoLidasRecentes(janelaMs: number): Promise<Array<{ jid: string; name: string; pend: Array<{ msgId: string; body: string; ts: number; tipo: string }> }>> {
+  const page: any = (client as any).pupPage;
+  if (!page) return [];
+  // Código em STRING (evita o helper __name do esbuild, inexistente no navegador).
+  const code = "(function(JAN, AGORA){\n"
+    + "  var W = window;\n"
+    + "  function req(n){ try { return W.require ? W.require(n) : null; } catch(e){ return null; } }\n"
+    + "  function getChatColl(){\n"
+    + "    try { if (W.Store && W.Store.Chat && W.Store.Chat.getModelsArray) return W.Store.Chat; } catch(e){}\n"
+    + "    var m = req('WAWebCollections');\n"
+    + "    if (m){ if (m.Chat && m.Chat.getModelsArray) return m.Chat; if (m.default && m.default.Chat && m.default.Chat.getModelsArray) return m.default.Chat; }\n"
+    + "    var d = req('WAWebChatCollection');\n"
+    + "    if (d){ if (d.ChatCollection && d.ChatCollection.getModelsArray) return d.ChatCollection; if (d.getModelsArray) return d; if (d.default && d.default.getModelsArray) return d.default; }\n"
+    + "    return null;\n"
+    + "  }\n"
+    + "  var Chat = getChatColl();\n"
+    + "  if(!Chat) return { erro:'sem colecao Chat' };\n"
+    + "  var arr = Chat.getModelsArray(); var out=[];\n"
+    + "  for (var j=0;j<arr.length;j++){\n"
+    + "    try {\n"
+    + "      var c=arr[j]; var idObj=c&&c.id;\n"
+    + "      var jid = idObj ? (idObj._serialized || (idObj.user ? idObj.user+'@'+(idObj.server||'') : '')) : '';\n"
+    + "      if(!jid) continue;\n"
+    + "      if (jid.indexOf('@c.us')<0 && jid.indexOf('@lid')<0) continue;\n"   // só pessoa (sem grupo/status)
+    + "      var models=[]; try { models = (c.msgs && c.msgs.getModelsArray) ? c.msgs.getModelsArray() : ((c.msgs&&c.msgs._models)||[]); } catch(e){ models=[]; }\n"
+    + "      if(!models.length) continue;\n"
+    + "      var pend=[];\n"                            // run de mensagens do FIM que são da lead (fromMe=false)
+    + "      for (var k=models.length-1;k>=0;k--){\n"
+    + "        var m=models[k]; if (!m) break;\n"
+    + "        if (m.id && m.id.fromMe) break;\n"       // achou uma nossa → já foi respondido daqui pra trás
+    + "        var t=(m.t||m.timestamp)||0; if(!t) break;\n"
+    + "        if ((AGORA - t*1000) > JAN) break;\n"    // saiu da janela → para
+    + "        var body=(m.body||m.caption||'')||'';\n"
+    + "        var mid=(m.id&&(m.id._serialized||''))||'';\n"
+    + "        pend.push({ msgId: mid, body: body, ts: t, tipo: (m.type||'') });\n"
+    + "        if (pend.length>=15) break;\n"
+    + "      }\n"
+    + "      if(!pend.length) continue;\n"
+    + "      pend.reverse();\n"                          // mais antiga → mais nova
+    + "      var name = (c && (c.formattedTitle || c.name || (c.contact && (c.contact.pushname||c.contact.name||c.contact.formattedName||c.contact.verifiedName)))) || '';\n"
+    + "      out.push({ jid: jid, name: name, pend: pend });\n"
+    + "    } catch(e){}\n"
+    + "  }\n"
+    + "  return { chats: out };\n"
+    + "})(" + janelaMs + "," + Date.now() + ")";
+  const r: any = await page.evaluate(code).catch(() => null);
+  if (r && r.erro) { log("catch-up: " + r.erro); return []; }
+  return (r && r.chats) || [];
+}
+async function varrerNaoLidasNoBoot() {
+  const min = catchupMin();
+  if (min <= 0) return;               // desligado por config
+  if (catchupRodando || !pronta) return;
+  catchupRodando = true;
+  try {
+    const chats = await lerNaoLidasRecentes(min * 60 * 1000);
+    if (!chats.length) { log(`catch-up: nenhuma conversa com mensagem não-lida recente (janela ${min}min).`); return; }
+    let recuperadas = 0;
+    for (const ch of chats) {
+      try {
+        const jid = String(ch.jid || "");
+        if (!jid) continue;
+        // chave estável p/ casar com a inbox (cache evita chamar getContact no @lid).
+        let chave = jidParaTel(jid);
+        try { const rt = await resolverTel({ from: jid }); if (rt && rt.chave) chave = rt.chave; } catch {}
+        const conv = inbox.get(chaveInboxExistente(chave));
+        const ultEm = conv && conv.msgs.length ? conv.msgs[conv.msgs.length - 1].em : 0;
+        // só o que é MAIS NOVO que a última mensagem já registrada (dedup natural).
+        const novas = (ch.pend || []).filter((m) => String(m.body || "").trim() && (m.ts * 1000) > ultEm + 1500);
+        if (!novas.length) continue;
+        log(`catch-up: ${chave} tem ${novas.length} mensagem(ns) sem resposta (perdidas em reinício) — reprocessando.`);
+        for (const m of novas) {
+          const texto = String(m.body || "").trim();
+          let realMsg: any = null;
+          try { if (m.msgId) realMsg = await (client as any).getMessageById(m.msgId); } catch {}
+          const msg: any = realMsg || { from: jid, body: texto, type: m.tipo || "chat", id: { _serialized: m.msgId }, _data: { notifyName: ch.name || "" }, fromMe: false, timestamp: m.ts };
+          if (!msg.from) msg.from = jid;
+          try { marcarEntrada(jidParaTel(jid), texto); } catch {}
+          await processarTextoDaAluna(msg, texto); // mesmo caminho da mensagem ao vivo (respeita pausa/humano/bloqueio)
+          recuperadas++;
+        }
+      } catch (e: any) { log("catch-up (conversa): " + (e?.message || e)); }
+    }
+    if (recuperadas) log(`catch-up: ${recuperadas} mensagem(ns) recuperada(s) e enfileirada(s) para resposta.`);
+    else log("catch-up: nada a recuperar (tudo já respondido).");
+  } catch (e: any) { log("catch-up: " + (e?.message || e)); }
+  finally { catchupRodando = false; }
+}
+function agendarCatchup() {
+  if (catchupMin() <= 0) return;
+  const d = parseInt(process.env.SOFIA_CATCHUP_DELAY_MS || "", 10);
+  const delay = Number.isFinite(d) ? d : 15000; // dá tempo do Store hidratar após o "ready"
+  setTimeout(() => { void varrerNaoLidasNoBoot(); }, delay);
 }
 async function importarHistorico(porChat: number) {
   if (importando) return;
@@ -2038,6 +2151,26 @@ async function transcreverAudio(msg: any): Promise<string> {
   return String(j?.text || "").trim();
 }
 
+// Extrai o texto da mensagem CITADA (quando a aluna usa o "responder" do
+// WhatsApp). Preferimos o dado já embutido (msg._data.quotedMsg) — é síncrono e
+// não dispara a serialização pesada que às vezes quebra nesta versão da lib. Se
+// a mensagem citada não tem corpo (foto/áudio/etc.), descrevemos pelo tipo.
+function extrairCitacao(msg: any): string {
+  try {
+    const q = msg && msg._data && msg._data.quotedMsg;
+    if (!q) return "";
+    const corpo = String(q.body || q.caption || "").trim();
+    if (corpo) return corpo;
+    const t = String(q.type || "").toLowerCase();
+    if (t === "image") return "📷 (foto)";
+    if (t === "video") return "🎥 (vídeo)";
+    if (t === "audio" || t === "ptt") return "🎤 (áudio)";
+    if (t === "document") return "📄 (documento)";
+    if (t === "sticker") return "🌟 (figurinha)";
+    return "";
+  } catch { return ""; }
+}
+
 // Processa uma mensagem de TEXTO da aluna (mesmo caminho para texto e para o
 // áudio transcrito). textoInbox permite mostrar "🎤 ..." no painel.
 async function processarTextoDaAluna(msg: any, texto: string, textoInbox?: string) {
@@ -2045,8 +2178,9 @@ async function processarTextoDaAluna(msg: any, texto: string, textoInbox?: strin
   // Contato bloqueado (como o "Bloquear" do WhatsApp): ignora por completo.
   if (estaBloqueado(chave, telefone, jidParaTel(msg.from))) { log(`mensagem de contato bloqueado (${chave}) — ignorada.`); return; }
   const nomeAluna = (msg._data && msg._data.notifyName) || "";
+  const citacao = extrairCitacao(msg); // mensagem citada (responder do WhatsApp) → aparece no painel
   marcarEntrada(chave, texto); // registra p/ detectar o eco "fromMe" do patrocinado
-  registrarInbox(chave, msg.from, nomeAluna, "aluna", textoInbox || texto); // painel ao vivo
+  registrarInbox(chave, msg.from, nomeAluna, "aluna", textoInbox || texto, undefined, undefined, undefined, citacao); // painel ao vivo
   try { checarGatilhosAluna(chave, nomeAluna, texto); } catch (e: any) { log("gatilhos: " + (e?.message || e)); }
   agendarResposta(chave, msg.from, telefone, texto); // debounce + resposta
 }
@@ -2176,9 +2310,12 @@ async function tratarRespostaManual(msg: any, jid: string) {
     // número mas não é resposta humana — não pausa a SoFIA. E dispara o gatilho
     // 'anuncio' (etiqueta o lead como veio do anúncio, ex.: "0. Patrocinado").
     if (ehMsgAnuncio(corpo)) {
+      // Mostra a boas-vindas do anúncio no painel (contexto: veio de um anúncio),
+      // marcada como tipo "anuncio". Não pausa a SoFIA e não abre sessão (é fromMe).
+      try { registrarInbox(tel, jid, "", "sofia", corpo, undefined, undefined, "anuncio"); } catch {}
       const regAnuncio = lerRegras().anuncio || [];
       for (const r of regAnuncio) if (!jaDisparou(tel, "anuncio", r.tag)) emitirAcao(tel, "", r, "anuncio");
-      log(`message_create de ${tel} ignorado — boas-vindas do anúncio (não pausa a SoFIA)${regAnuncio.length ? ` + gatilho 'anuncio'` : ""}.`);
+      log(`message_create de ${tel} — boas-vindas do anúncio (registrada no painel, não pausa a SoFIA)${regAnuncio.length ? ` + gatilho 'anuncio'` : ""}.`);
       return;
     }
     assumirConversa(tel);

@@ -19,6 +19,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env'
 const path = require('path');
 const qrcodeTerminal = require('qrcode-terminal');
 const waStatus = require('./wa-status');
+require('./patch-wwebjs'); // aplica no boot o fix do envio de mídia (bug __x_id do WhatsApp Web 2026)
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
 const atividade = require('./atividade'); // registro do que foi enviado (aba "Hoje")
@@ -229,12 +230,63 @@ function criarClient() {
   });
 }
 
+// Limpa o cache de versão do WhatsApp Web (.wwebjs_cache) SÓ quando estamos em
+// `off` (sem versão fixa). Motivo: uma versão fixa velha pode ficar quebrada no
+// cache e travar a conexão (Client.inject 30s) — em `off` limpamos para pegar a
+// versão ao vivo, limpo, a cada boot. TRAVA IMPORTANTE: se há versão fixa (ex.:
+// lagosul, que roda numa versão antiga BOA guardada no cache), NÃO limpamos —
+// limpar ali derrubaria a versão que mantém aquele robô funcionando.
+function limparCacheVersaoSeOff() {
+  if (process.env.WA_WEB_VERSION_FILE) return; // versão fixa por arquivo → preserva o cache
+  if (!VERSAO_FIXA_DESLIGADA) return; // versão fixa por URL → preserva o cache
+  const fs = require('fs');
+  const dirs = new Set([
+    path.resolve(__dirname, '..', '.wwebjs_cache'),
+    path.resolve(process.cwd(), '.wwebjs_cache'),
+  ]);
+  for (const d of dirs) {
+    try { fs.rmSync(d, { recursive: true, force: true }); log(`cache de versão limpo no start (off): ${d}`); }
+    catch (_) {}
+  }
+}
+
+// Decide a versão do WhatsApp Web a usar, ANTES do initialize:
+//  1) WA_WEB_VERSION_FILE (arquivo .html local) → type 'local' + webVersion (a
+//     forma robusta p/ fixar uma versão que sumiu do repositório, ex.: o cache
+//     bom copiado do lagosul). O nome do arquivo é a versão (2.3000.XXXX.html).
+//  2) WA_WEB_VERSION_URL (URL do .html) → type 'remote', só se responder 200.
+//  3) senão: versão AO VIVO (type 'none', o padrão já setado no criarClient).
+async function resolverVersaoFixa(client) {
+  const fs = require('fs');
+  const file = process.env.WA_WEB_VERSION_FILE;
+  if (file) {
+    try {
+      if (fs.existsSync(file)) {
+        const versao = path.basename(file).replace(/\.html$/i, '');
+        const cacheDir = path.resolve(__dirname, '..', '.wwebjs_cache');
+        if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+        try { fs.copyFileSync(file, path.join(cacheDir, versao + '.html')); } catch (_) {}
+        client.options.webVersionCache = { type: 'local', path: cacheDir };
+        client.options.webVersion = versao;
+        log(`WhatsApp Web: versão fixa por ARQUIVO ${versao} (${file})`);
+        return;
+      }
+      log(`WA_WEB_VERSION_FILE aponta para arquivo inexistente (${file}) — seguindo com URL/ao vivo.`);
+    } catch (e) { log('WA_WEB_VERSION_FILE falhou: ' + ((e && e.message) || e)); }
+  }
+  if (process.env.WA_WEB_VERSION_URL && !VERSAO_FIXA_DESLIGADA) {
+    try { const ok = await versaoFixaUsavel(); if (ok) client.options.webVersionCache = { type: 'remote', remotePath: WEB_VERSION_URL }; }
+    catch (_) {}
+  }
+}
+
 /**
  * Inicializa o cliente (idempotente). Resolve quando o WhatsApp está PRONTO.
  */
 function initWhatsApp() {
   if (initPromise) return initPromise;
   limparTravaSingleton(); // remove trava velha do Chromium (queda suja OU troca de nome do host)
+  limparCacheVersaoSeOff(); // em `off`: começa limpo (Bueno). Com versão fixa (lagosul): não toca.
   client = criarClient();
   iniciarWatcherComando(); // escuta o pedido de "desconectar" vindo do painel
 
@@ -318,12 +370,11 @@ function initWhatsApp() {
   });
 
   waStatus.set('iniciando', null);
-  // PADRÃO: versão AO VIVO (type 'none'). Provado em produção: com o User-Agent
-  // certo a lib conecta ao vivo, e FIXAR versão (mesmo uma que existe) faz o
-  // inject travar. Só fixa se WA_WEB_VERSION_URL vier explícito no .env e responder 200.
-  (process.env.WA_WEB_VERSION_URL && !VERSAO_FIXA_DESLIGADA
-    ? versaoFixaUsavel().then((ok) => { if (ok) client.options.webVersionCache = { type: 'remote', remotePath: WEB_VERSION_URL }; })
-    : Promise.resolve())
+  // PADRÃO: versão AO VIVO (type 'none'). Mas dá pra FIXAR uma versão:
+  //  1) WA_WEB_VERSION_FILE = caminho de um .html (ex.: o cache bom copiado do
+  //     lagosul). É a forma robusta quando a versão sumiu do repositório.
+  //  2) WA_WEB_VERSION_URL = URL de um .html (repositório wa-version).
+  resolverVersaoFixa(client)
     .catch(() => {})
     .then(() => client.initialize())
     .catch((e) => {
@@ -399,6 +450,80 @@ async function resolverId(telefone) {
   return n + '@c.us';                 // só instabilidade → deixa o envio tentar
 }
 
+// CONTORNO (set/2026): o WhatsApp Web mudou e o client.sendMessage passou a
+// estourar "Data passed to getter must include an id property (it's how we
+// memoize) but got undefined" ao enviar para uma conversa que ainda NÃO está
+// carregada no store (número novo, confirmação, campanha, grupo pouco usado).
+// O sendMessage resolve a conversa por Chat.get (só PROCURA e voltou undefined);
+// aqui pré-criamos a conversa com Chat.find (que CRIA o modelo) antes de enviar,
+// pela página, igual o listarGrupos já faz com window.require. Best-effort e com
+// diagnóstico: nunca derruba o envio; se der certo, o sendMessage seguinte acha
+// a conversa e manda normal. Devolve uma string curta pro log entender o que rolou.
+async function garantirChat(id) {
+  const page = client.pupPage;
+  if (!page) return 'sem-page';
+  try {
+    return await page.evaluate(async (chatId) => {
+      const req = (n) => { try { return window.require(n); } catch (e) { return null; } };
+      // 1) helper pronto do whatsapp-web.js (usa Chat.find por baixo) — mais estável
+      if (window.WWebJS && window.WWebJS.getChat) {
+        try { await window.WWebJS.getChat(chatId, { getAsModel: false }); return 'ok:WWebJS.getChat'; }
+        catch (e) { /* cai pro manual */ var e1 = String((e && e.message) || e); }
+      }
+      // 2) manual: WidFactory + Chat.find
+      const WidF = req('WAWebWidFactory') || req('WAWebWid');
+      const Coll = (function () {
+        const m = req('WAWebCollections'); if (m && m.Chat) return m.Chat;
+        const d = req('WAWebChatCollection'); if (d && d.ChatCollection) return d.ChatCollection;
+        return null;
+      })();
+      const diag = { wwebjs: !!(window.WWebJS && window.WWebJS.getChat), widF: !!WidF, coll: !!Coll, find: !!(Coll && Coll.find) };
+      if (WidF && Coll && Coll.find) {
+        try {
+          const wid = WidF.createWid ? WidF.createWid(chatId)
+            : (WidF.createWidFromWidLike ? WidF.createWidFromWidLike(chatId) : null);
+          if (!wid) return 'diag:sem-createWid ' + JSON.stringify(diag);
+          await Coll.find(wid);
+          return 'ok:find';
+        } catch (e) { return 'erro:find:' + String((e && e.message) || e); }
+      }
+      return 'diag:' + JSON.stringify(diag);
+    }, id);
+  } catch (e) { return 'evaluate-erro:' + ((e && e.message) || e); }
+}
+
+// Envia TEXTO direto pelo helper interno do whatsapp-web.js (window.WWebJS),
+// contornando o client.sendMessage — que passou a estourar o erro do getter
+// memoizado ao enviar para "@lid". O getChat (que já funciona, ver garantirChat)
+// devolve o modelo da conversa e o WWebJS.sendMessage manda a partir dele.
+async function sendRawTexto(id, texto) {
+  const page = client.pupPage;
+  if (!page) throw new Error('página do WhatsApp indisponível');
+  const res = await page.evaluate(async (chatId, body) => {
+    try {
+      if (!(window.WWebJS && window.WWebJS.getChat && window.WWebJS.sendMessage)) {
+        return { ok: false, erro: 'sem WWebJS.getChat/sendMessage' };
+      }
+      const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
+      if (!chat) return { ok: false, erro: 'chat nulo' };
+      const msg = await window.WWebJS.sendMessage(chat, body, {});
+      const mid = msg && msg.id ? (msg.id._serialized || msg.id.id || String(msg.id)) : null;
+      return { ok: true, id: mid };
+    } catch (e) { return { ok: false, erro: String((e && e.message) || e) }; }
+  }, id, texto);
+  if (!res || !res.ok) throw new Error('envio cru (WWebJS) falhou: ' + (res && res.erro));
+  return res;
+}
+
+// Monta o texto de fallback SEM a @marcação: junta o antes + depois e limpa o
+// espaço/pontuação que sobra onde estava o @ (o nome já aparece na mensagem).
+function semMencao(textoAntes, textoDepois) {
+  return `${textoAntes || ''}${textoDepois || ''}`
+    .replace(/\s+([,!?.:;])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 // Envia texto para uma pessoa. `chaveFoto` (opcional): se houver uma foto (flyer)
 // salva no painel para essa mensagem, ela é enviada JUNTO, com o texto como
 // legenda. Sem foto salva, envia só o texto — comportamento idêntico ao antigo.
@@ -408,12 +533,20 @@ async function sendTexto(telefone, texto, contexto, chaveFoto) {
   if (chaveFoto) { try { fotoPath = require('./mensagens').fotoPath(chaveFoto); } catch (_) {} }
   try {
     const id = await resolverId(telefone);
+    try { const gc = await garantirChat(id); log(`garantirChat(${id}) → ${gc}`); } catch (_) {}
     let r;
     if (fotoPath) {
       const media = MessageMedia.fromFilePath(fotoPath); // flyer com o texto como legenda
-      r = await comRetry(() => client.sendMessage(id, media, { caption: texto || undefined }));
+      try {
+        r = await comRetry(() => client.sendMessage(id, media, { caption: texto || undefined }));
+      } catch (eMedia) {
+        // WhatsApp Web quebrado p/ mídia (o envio cru "aceita" mas NÃO entrega) →
+        // manda o texto, que é o caminho confiável, pra confirmação não se perder.
+        log(`foto via sendMessage falhou (${eMedia && eMedia.message}) — mandando só o texto (mídia indisponível no bug atual).`);
+        r = await comRetry(() => sendRawTexto(id, texto));
+      }
     } else {
-      r = await comRetry(() => client.sendMessage(id, texto));
+      r = await comRetry(() => sendRawTexto(id, texto));
     }
     atividade.registrar({ destino: telefone, preview: (fotoPath ? '📎 ' : '') + texto, midia: !!fotoPath, ok: true, contexto });
     return r;
@@ -440,10 +573,19 @@ async function sendMidia(telefone, urlOuCaminho, { legenda = '', comoVoz = false
       media.mimetype = 'audio/ogg; codecs=opus';
     }
     const id = await resolverId(telefone);
-    const r = await comRetry(() => client.sendMessage(id, media, {
-      caption: legenda || undefined,
-      sendAudioAsVoice: comoVoz || undefined,
-    }));
+    let r;
+    try {
+      r = await comRetry(() => client.sendMessage(id, media, {
+        caption: legenda || undefined,
+        sendAudioAsVoice: comoVoz || undefined,
+      }));
+    } catch (eMedia) {
+      // Mídia via WhatsApp Web quebrada. Voz ou mídia sem legenda não dá pra
+      // degradar em texto → propaga. Com legenda, manda o texto (confiável).
+      if (comoVoz || !legenda) throw eMedia;
+      log(`mídia via sendMessage falhou (${eMedia && eMedia.message}) — mandando só a legenda em texto (mídia indisponível no bug atual).`);
+      r = await comRetry(() => sendRawTexto(id, legenda));
+    }
     atividade.registrar({ destino: telefone, preview: legenda || (comoVoz ? '🎤 áudio' : '📎 mídia'), midia: true, ok: true, contexto });
     return r;
   } catch (e) {
@@ -500,7 +642,7 @@ async function sendGrupo(nomeGrupo, texto, contexto) {
   try {
     const g = await acharGrupo(nomeGrupo);
     if (!g) throw new Error('Grupo não encontrado: ' + nomeGrupo);
-    const r = await comRetry(() => client.sendMessage(g.id, texto));
+    const r = await comRetry(() => sendRawTexto(g.id, texto));
     atividade.registrar({ destino: nomeGrupo, preview: texto, grupo: true, ok: true, contexto });
     return r;
   } catch (e) {
@@ -542,7 +684,7 @@ async function getCommonGroups(telefone) {
  * e passa a menção nativa (o número tem que estar no texto E em mentions).
  * Envia direto por client.sendMessage(groupId, ...) — sem getChatById.
  */
-async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMencionado) {
+async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMencionado, nomeExibicao) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
 
   let mid;
@@ -558,8 +700,18 @@ async function sendGrupoComMencao(groupId, textoAntes, textoDepois, telefoneMenc
     atividade.registrar({ destino: 'grupo', preview: texto, grupo: true, ok: true });
     return r;
   } catch (e) {
-    atividade.registrar({ destino: 'grupo', preview: texto, grupo: true, ok: false, erro: e && e.message });
-    throw new Error('sendMessage(mention): ' + (e && e.message));
+    // WhatsApp Web quebrado p/ menção via client.sendMessage → manda o texto SEM a
+    // @marcação (apenas remove o @; o nome já aparece na mensagem) pelo caminho cru.
+    const fb = semMencao(textoAntes, textoDepois);
+    try {
+      const r2 = await comRetry(() => sendRawTexto(groupId, fb));
+      log(`menção falhou (${e && e.message}) — enviei o texto sem marcação no grupo.`);
+      atividade.registrar({ destino: 'grupo', preview: fb, grupo: true, ok: true });
+      return r2;
+    } catch (e2) {
+      atividade.registrar({ destino: 'grupo', preview: texto, grupo: true, ok: false, erro: e && e.message });
+      throw new Error('sendMessage(mention): ' + (e && e.message));
+    }
   }
 }
 
@@ -570,7 +722,14 @@ async function sendGrupoMidia(nomeGrupo, caminho, legenda, contexto) {
     const g = await acharGrupo(nomeGrupo);
     if (!g) throw new Error('Grupo não encontrado: ' + nomeGrupo);
     const media = MessageMedia.fromFilePath(caminho);
-    const r = await comRetry(() => client.sendMessage(g.id, media, { caption: legenda || undefined }));
+    let r;
+    try {
+      r = await comRetry(() => client.sendMessage(g.id, media, { caption: legenda || undefined }));
+    } catch (eMedia) {
+      if (!legenda) throw eMedia; // foto sem legenda: não há texto pra degradar
+      log(`foto no grupo via sendMessage falhou (${eMedia && eMedia.message}) — mandando só a legenda em texto (mídia indisponível no bug atual).`);
+      r = await comRetry(() => sendRawTexto(g.id, legenda));
+    }
     atividade.registrar({ destino: nomeGrupo, preview: legenda || '📎 foto', grupo: true, midia: true, ok: true, contexto });
     return r;
   } catch (e) {
@@ -580,7 +739,7 @@ async function sendGrupoMidia(nomeGrupo, caminho, legenda, contexto) {
 }
 
 /** Envia uma FOTO num grupo com a legenda MARCANDO (@) uma pessoa. */
-async function sendGrupoMidiaComMencao(groupId, caminho, textoAntes, textoDepois, telefoneMencionado) {
+async function sendGrupoMidiaComMencao(groupId, caminho, textoAntes, textoDepois, telefoneMencionado, nomeExibicao) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
   let mid;
   try { mid = await resolverId(telefoneMencionado); }
@@ -593,8 +752,20 @@ async function sendGrupoMidiaComMencao(groupId, caminho, textoAntes, textoDepois
     atividade.registrar({ destino: 'grupo', preview: legenda, grupo: true, midia: true, ok: true });
     return r;
   } catch (e) {
-    atividade.registrar({ destino: 'grupo', preview: legenda, grupo: true, midia: true, ok: false, erro: e && e.message });
-    throw new Error('sendMessage(midiaMencao): ' + (e && e.message));
+    // Bug do WhatsApp Web (imagem+menção). Sem a @marcação (o nome já aparece):
+    // 1) tenta IMAGEM crua + legenda sem @ (WWebJS); 2) se falhar, só o texto.
+    // Sem a @marcação (o nome já aparece) e sem a imagem (o envio cru de mídia não
+    // entrega no bug atual): manda o texto, que é o caminho confiável.
+    const fb = semMencao(textoAntes, textoDepois);
+    try {
+      const r2 = await comRetry(() => sendRawTexto(groupId, fb));
+      log(`mídia+menção falhou (${e && e.message}) — enviei só o texto no grupo (mídia indisponível no bug atual).`);
+      atividade.registrar({ destino: 'grupo', preview: fb, grupo: true, ok: true });
+      return r2;
+    } catch (e2) {
+      atividade.registrar({ destino: 'grupo', preview: legenda, grupo: true, midia: true, ok: false, erro: e && e.message });
+      throw new Error('sendMessage(midiaMencao): ' + (e && e.message));
+    }
   }
 }
 

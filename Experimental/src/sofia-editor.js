@@ -40,6 +40,7 @@ const F = {
   humano: path.join(DIR, 'sofia-humano.json'), // conversas sob controle humano (Sofia não responde) — lido pela Sofia
   humanoLock: path.join(DIR, 'sofia-humano-lock.txt'), // minutos que uma conversa assumida fica travada p/ outros atendentes (e a Sofia fora) — painel escreve, sofia.ts lê
   humanoLog: path.join(DIR, 'sofia-humano-log.jsonl'), // histórico de assumir/devolver por conversa — mostrado no timeline do painel
+  tagLog: path.join(DIR, 'sofia-tag-log.jsonl'), // histórico de tags aplicadas por automação (novo/palavra/ia/campanha/encerrou) — mostrado no timeline
   bloqueios: path.join(DIR, 'sofia-bloqueios.json'), // números bloqueados (Sofia ignora) — painel escreve, listener lê
   alunas: path.join(DIR, 'sofia-alunas.json'), // regras da tag 'alunas' (janela da recepcao + numero de aviso) — painel escreve, sofia.ts/listener leem
   naoResponder: path.join(DIR, 'sofia-nao-responder.json'), // números que a Sofia NUNCA responde sozinha (mas recebe e pode receber campanha) — painel escreve, sofia.ts lê
@@ -913,6 +914,36 @@ function lerHumanoLog() {
   for (const k in mapa) mapa[k] = mapa[k].slice(-12); // no máx 12 eventos por conversa
   return mapa;
 }
+// Histórico de TAGS aplicadas por automação por conversa — mostrado no timeline
+// (marca o momento exato em que a SoFIA/automação etiquetou o contato, para
+// diagnosticar depois). Uma linha JSON por evento; o painel lê os últimos por chave.
+// motivo = origem da automação ('ia','palavra','campanha','novo','encerrou'...)
+// ou 'manual' quando um atendente trocou à mão (aí `por` = usuário, `acao` =
+// 'add' | 'remove'). A automação sempre adiciona (acao='add', por='').
+function registrarTagLog(chave, tag, motivo, por, acao, em) {
+  try {
+    const d = String(chave || '').replace(/\D/g, '');
+    const t = String(tag || '').trim();
+    if (!d || !t) return;
+    fs.appendFileSync(F.tagLog, JSON.stringify({ chave: d, tag: t, motivo: String(motivo || '').trim(), por: String(por || '').trim(), acao: (acao === 'remove' ? 'remove' : 'add'), em: Number(em) || Date.now() }) + '\n', 'utf8');
+  } catch (_) { /* best-effort */ }
+}
+// Devolve os últimos eventos por conversa: { <chave-8díg>: [ {tag,motivo,por,acao,em}, ... ] }.
+function lerTagLog() {
+  const mapa = {};
+  let linhas = [];
+  try { linhas = fs.readFileSync(F.tagLog, 'utf8').split('\n'); } catch (_) { return mapa; }
+  if (linhas.length > 8000) linhas = linhas.slice(-8000); // performance
+  for (const l of linhas) {
+    const s = l.trim(); if (!s) continue;
+    let o; try { o = JSON.parse(s); } catch (_) { continue; }
+    const k8 = String(o.chave || '').replace(/\D/g, '').slice(-8);
+    if (!k8) continue;
+    (mapa[k8] = mapa[k8] || []).push({ tag: o.tag || '', motivo: o.motivo || '', por: o.por || '', acao: (o.acao === 'remove' ? 'remove' : 'add'), em: Number(o.em) || 0 });
+  }
+  for (const k in mapa) mapa[k] = mapa[k].slice(-30); // no máx 30 eventos por conversa
+  return mapa;
+}
 
 // ── Custo da IA ─────────────────────────────────────────────────────────────
 function lerCustoLimite() {
@@ -1026,6 +1057,6 @@ module.exports = {
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
-  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, enfileirarAgendamento, lerAgendamentoResult, consumirAgendarInbox, gravarAgendarResultId, registrarAgendou, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerHumanoLog, lerBloqueios, estaBloqueado, setBloqueio, lerNaoResponder, gravarNaoResponder, estaNaoResponder, lerAlunas, gravarAlunas, dentroJanelaRecepcao, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
+  conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, enfileirarAgendamento, lerAgendamentoResult, consumirAgendarInbox, gravarAgendarResultId, registrarAgendou, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerHumanoLog, registrarTagLog, lerTagLog, lerBloqueios, estaBloqueado, setBloqueio, lerNaoResponder, gravarNaoResponder, estaNaoResponder, lerAlunas, gravarAlunas, dentroJanelaRecepcao, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
   lerCampanhas, opCampanha, lerRascunhoCampanha, lerLidStats, salvarFotoCampanha, salvarMidiaImagem, caminhoMidiaLocal, lerMsgsAnuncioTexto, gravarMsgsAnuncio, DIR, ARQUIVOS: F,
 };
