@@ -33,6 +33,7 @@ const PADRAO = {
   numeroRelatorio: '',
   criarNovos: false, // cadastrar na SoFIA quem fez experimental e não existe (p/ campanhas)
   diasJanela: 7,     // quantos dias para trás ler a presença no EVO (1-31)
+  diasFrente: 7,     // quantos dias para FRENTE ler p/ detectar REMARCAÇÃO (0 = desliga a guarda)
   intervaloHoras: 0, // 0 = roda só no horário fixo; N = repete a cada N horas (2=12x/dia, 8=3x/dia)
 };
 
@@ -46,6 +47,12 @@ function clampDias(v) {
 function clampIntervalo(v) {
   const n = parseInt(v, 10);
   return (Number.isFinite(n) && n >= 1 && n <= 24) ? n : 0;
+}
+
+// Dias para FRENTE p/ detectar remarcação (0 = desliga a guarda; 1-31).
+function clampFrente(v) {
+  const n = parseInt(v, 10);
+  return (Number.isFinite(n) && n >= 0 && n <= 31) ? n : 7;
 }
 
 // Normaliza a lista de tags de "agendou": aceita a LISTA nova (tagsAgendou) e,
@@ -63,6 +70,7 @@ function ler() {
   cfg.tagsAgendou = tagsAgendouDe(o);
   cfg.tagAgendou = cfg.tagsAgendou[0]; // espelho p/ leitores antigos
   cfg.diasJanela = clampDias(o.diasJanela != null ? o.diasJanela : cfg.diasJanela);
+  cfg.diasFrente = clampFrente(o.diasFrente != null ? o.diasFrente : cfg.diasFrente);
   cfg.intervaloHoras = clampIntervalo(o.intervaloHoras != null ? o.intervaloHoras : cfg.intervaloHoras);
   return cfg;
 }
@@ -77,6 +85,7 @@ function gravar(cfg) {
     numeroRelatorio: String(cfg.numeroRelatorio || '').replace(/\D/g, ''),
     criarNovos: !!cfg.criarNovos,
     diasJanela: clampDias(cfg.diasJanela),
+    diasFrente: clampFrente(cfg.diasFrente),
     intervaloHoras: clampIntervalo(cfg.intervaloHoras),
   };
   try { fs.mkdirSync(path.dirname(ARQ), { recursive: true }); } catch (_) {}
@@ -111,6 +120,24 @@ function veredito(status) {
   return '';
 }
 
+// True se o status indica uma experimental FUTURA ainda ATIVA (agendada/confirmada/
+// pendente) — sinal de que a lead foi REMARCADA (tem reposição marcada).
+function ehAgendada(status) {
+  const s = norm(status);
+  return s.includes('agendad') || s.includes('confirmad') || s.includes('pendente');
+}
+
+// Datas dos PRÓXIMOS N dias (amanhã em diante), no formato do EVO (DD/MM/YYYY).
+function proximasDatas(n) {
+  const out = [];
+  for (let i = 1; i <= n; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    out.push(`${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`);
+  }
+  return out;
+}
+
 /**
  * Coleta a presença/falta das aulas experimentais dos últimos 7 dias no EVO.
  * Devolve [{ nome, telefone, data, status, veredito }]. Best-effort por dia.
@@ -137,6 +164,37 @@ async function coletarSemana(scraper, n) {
     }
   }
   return coletado;
+}
+
+/**
+ * GUARDA DA REMARCAÇÃO: lê os PRÓXIMOS `n` dias e devolve o conjunto de telefones
+ * (last8) que têm uma experimental FUTURA ativa (agendada/confirmada). São leads
+ * que foram REMARCADAS — não devem ser marcadas "sem presença" pela aula antiga.
+ * Best-effort: qualquer falha devolve o que deu (nunca derruba o job).
+ */
+async function coletarFuturas(scraper, n) {
+  const set = new Set();
+  const dias = clampFrente(n);
+  if (!dias) return set; // 0 = guarda desligada
+  const datas = proximasDatas(dias);
+  try { await scraper.navigateToExperimental(); } catch (_) {}
+  for (const data of datas) {
+    try {
+      await scraper.changeDateFilter(data);
+      await sleep(2500);
+      const aulas = await scraper.extractClassList();
+      const ativas = (aulas || []).filter(a => a && a.name && ehAgendada(a.status));
+      if (!ativas.length) continue;
+      const enriquecidas = await scraper.enrichWithPhones(ativas);
+      for (const a of enriquecidas) {
+        const k = last8(String(a.phone || '').replace(/\D/g, ''));
+        if (k) set.add(k);
+      }
+    } catch (e) {
+      console.log(`   ⚠️  dia futuro ${data} falhou: ${e && e.message}`);
+    }
+  }
+  return set;
 }
 
 /**
@@ -167,6 +225,7 @@ async function rodar({ dry = false } = {}) {
 
   // Coleta a presença da semana no EVO (com 3 tentativas de sessão).
   let semana = [];
+  let futurasAtivas = new Set();   // telefones (last8) com experimental FUTURA ativa = remarcados
   let ultimoErro = null;
   for (let t = 1; t <= 3; t++) {
     const scraper = new EvoScraper();
@@ -174,6 +233,8 @@ async function rodar({ dry = false } = {}) {
       await scraper.init();
       await scraper.login();
       semana = await coletarSemana(scraper, cfg.diasJanela);
+      // Guarda da remarcação (best-effort: nunca derruba o job).
+      try { futurasAtivas = await coletarFuturas(scraper, cfg.diasFrente); } catch (_) { futurasAtivas = new Set(); }
       ultimoErro = null;
       break;
     } catch (e) {
@@ -197,9 +258,19 @@ async function rodar({ dry = false } = {}) {
   });
 
   const jaMexido = new Set();
+  const resumo_remarcadas = [];
   for (const a of semana) {
     const chave = last8(a.telefone);
     const alvo = chave ? mapa[chave] : null;
+    // GUARDA DA REMARCAÇÃO: se a lead faltou na aula ANTIGA mas tem uma experimental
+    // FUTURA ativa (foi remarcada), NÃO marca "sem presença" — mantém "agendou" até
+    // ela comparecer (ou faltar de novo) na aula nova.
+    if (a.veredito === 'faltou' && chave && !jaMexido.has(chave) && futurasAtivas.has(chave)) {
+      jaMexido.add(chave);
+      resumo_remarcadas.push({ nome: (alvo && alvo.nome) || a.nome, telefone: (alvo && alvo.tel) || a.telefone });
+      resumo.evo.push({ nome: a.nome, status: a.status, veredito: a.veredito, telefone: a.telefone, data: a.data, bateu: !!alvo, acao: 'remarcada' });
+      continue;
+    }
     const destino = a.veredito === 'compareceu' ? cfg.tagCompareceu : cfg.tagFaltou;
     let acao = 'ignorado';
     if (chave && !jaMexido.has(chave)) {
@@ -224,6 +295,7 @@ async function rodar({ dry = false } = {}) {
   // ou não achei no EVO) — fica como está.
   for (const k in mapa) if (!jaMexido.has(k)) resumo.semTag.push({ nome: mapa[k].nome, telefone: mapa[k].tel });
 
+  resumo.remarcadas = resumo_remarcadas;   // faltou na antiga, mas tem aula futura → mantida "agendou"
   return resumo;
 }
 
@@ -239,6 +311,10 @@ function textoRelatorio(r, cfg) {
   lista(r.faltou);
   linhas.push(`⏳ Ainda sem veredito: ${r.semTag.length}`);
   lista(r.semTag);
+  if (r.remarcadas && r.remarcadas.length) {
+    linhas.push(`🔁 Remarcadas (faltou na antiga, mas tem aula futura — mantidas "agendou"): ${r.remarcadas.length}`);
+    lista(r.remarcadas);
+  }
   if (r.novos && r.novos.length) linhas.push(`🆕 Cadastrados novos (não passaram pela SoFIA): ${r.novos.length}`);
   if (r.erro) linhas.push(`⚠️ ${r.erro}`);
   return linhas.join('\n');
