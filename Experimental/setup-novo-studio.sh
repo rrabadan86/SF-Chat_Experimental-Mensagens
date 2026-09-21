@@ -51,6 +51,7 @@ INSTALL_DEPS=0     # --install-deps instala Node/pm2/tsx/chromium/python (apt)
 EVO_IDS=0          # --evo-ids descobre os ids da aula no EVO (precisa do .env)
 DOMAIN=""          # --domain <subdominio> gera + liga o Caddy (HTTPS) no --start
 PAINEL_PORT=""     # --port <n> porta do painel (default 8080; use outra p/ 2ª loja)
+FORM_PORT=""       # --form-port <n> porta do formulário (default = porta do painel + 10)
 EVO_TENANT=""      # --evo-tenant <slug> identificador da rede no EVO (na URL; ex.: slimfit)
 EVO_BRANCH=""      # --evo-branch <n> número da unidade no EVO (aparece no caminho; ex.: 15)
 CHECK=0            # --check valida os .env preenchidos (antes do --start)
@@ -67,6 +68,7 @@ while [ $# -gt 0 ]; do
     --no-git-pull)  AUTO_PULL=0; shift ;;
     --domain)       DOMAIN="${2:-}"; shift 2 ;;
     --port)         PAINEL_PORT="${2:-}"; shift 2 ;;
+    --form-port)    FORM_PORT="${2:-}"; shift 2 ;;
     --evo-tenant)   EVO_TENANT="${2:-}"; shift 2 ;;
     --evo-branch)   EVO_BRANCH="${2:-}"; shift 2 ;;
     -h|--help)
@@ -80,6 +82,8 @@ echo "$SLUG" | grep -qE '^[a-z0-9][a-z0-9-]{1,30}$' \
   || { echo "❌ --slug deve ser minúsculo, sem espaço/acento (ex.: lagosul)"; exit 1; }
 [ -n "$PAINEL_PORT" ] || PAINEL_PORT=8080
 echo "$PAINEL_PORT" | grep -qE '^[0-9]{2,5}$' || { echo "❌ --port deve ser um número (ex.: --port 8081)"; exit 1; }
+[ -n "$FORM_PORT" ] || FORM_PORT=$((PAINEL_PORT + 10))   # form na porta do painel + 10 (8080→8090)
+echo "$FORM_PORT" | grep -qE '^[0-9]{2,5}$' || { echo "❌ --form-port deve ser um número (ex.: --form-port 8090)"; exit 1; }
 
 # EVO: identificador da rede (tenant) e número da unidade (branch). O robô loga no
 # EVO pelo NAVEGADOR e lê a grade/faltantes/suspensões nesses caminhos — que embutem
@@ -126,17 +130,25 @@ if [ "$AUTO_PULL" = "1" ] && [ "${SETUP_JA_ATUALIZOU:-}" != "1" ] \
 fi
 SOFIA_DIR="${SOFIA_DIR:-$HOME/sofia-data-$SLUG}"   # dados vivos, FORA do repo
 
+# Formulário (roda no PRÓPRIO VPS, sob /agendamentoexperimental) — repo separado,
+# clonado numa pasta por unidade. O painel serve a subpasta via Caddy (ver wire_caddy).
+FORM_REPO_URL="${FORM_REPO_URL:-https://github.com/rrabadan86/sf-formularioexperimental.git}"
+FORM_DIR="${FORM_DIR:-$HOME/sf-form-$SLUG}"
+FORM_PREFIX="/agendamentoexperimental"
+
 P_PAINEL="${SLUG}-painel"
 P_EXP="${SLUG}-exp"
 P_SOFIA="${SLUG}-sofia"
+P_FORM="${SLUG}-form"
 
 echo "──────────────────────────────────────────────────────────"
 echo "  Studio: ${STUDIO_NOME:-($SLUG)}"
 echo "  Repo:      $REPO_DIR"
 echo "  SOFIA_DIR: $SOFIA_DIR"
 echo "  Painel:    porta $PAINEL_PORT"
+echo "  Formulário:porta $FORM_PORT · $FORM_DIR (sob $FORM_PREFIX)"
 echo "  EVO:       tenant=$EVO_TENANT · branch=$EVO_BRANCH"
-echo "  Processos: $P_PAINEL · $P_EXP · $P_SOFIA"
+echo "  Processos: $P_PAINEL · $P_EXP · $P_SOFIA · $P_FORM"
 echo "──────────────────────────────────────────────────────────"
 
 # gera um segredo aleatório (openssl, senão node)
@@ -191,10 +203,22 @@ install_system_deps() {
 wire_caddy() {
   local dom="$1"
   local porta; porta="$(grep -E '^PAINEL_PORT=' "$EXP_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+  [ -n "$porta" ] || porta="$PAINEL_PORT"
   [ -n "$porta" ] || porta=8080
   local snippet="$EXP_DIR/caddy-$SLUG.caddy"
-  printf '%s {\n    reverse_proxy 127.0.0.1:%s\n}\n' "$dom" "$porta" > "$snippet"
-  echo "📝 Bloco do Caddy gerado em: $snippet"
+  # Bloco com a SUBPASTA do formulário (handle_path, com X-Forwarded-Prefix p/ os
+  # links absolutos) + o catch-all do painel. Assim o form e o painel dividem o
+  # mesmo domínio: <dom>/agendamentoexperimental → form ; resto → painel.
+  {
+    printf '%s {\n' "$dom"
+    printf '    handle_path %s* {\n' "$FORM_PREFIX"
+    printf '        reverse_proxy 127.0.0.1:%s {\n' "$FORM_PORT"
+    printf '            header_up X-Forwarded-Prefix %s\n' "$FORM_PREFIX"
+    printf '        }\n    }\n'
+    printf '    handle {\n        reverse_proxy 127.0.0.1:%s\n    }\n' "$porta"
+    printf '}\n'
+  } > "$snippet"
+  echo "📝 Bloco do Caddy (form na subpasta + painel) gerado em: $snippet"
   # instala o Caddy se pedimos --install-deps e ele não existe
   if [ "$INSTALL_DEPS" = "1" ] && ! command -v caddy >/dev/null 2>&1; then
     echo "   ⬇️  instalando Caddy…"
@@ -390,6 +414,53 @@ if [ "$START" = "1" ]; then
   pm2 delete "$P_SOFIA" >/dev/null 2>&1 || true
   ( cd "$CHATBOT_DIR" && pm2 start npm --name "$P_SOFIA" --time --kill-timeout 15000 -- run listener )
 
+  # Formulário (gunicorn, sob /agendamentoexperimental). O .env dele é montado a
+  # partir do Experimental/.env já preenchido (EVO + tokens) + ChatBot/.env
+  # (SOFIA_TOKEN) — sem digitar o EVO duas vezes. Só cria se ainda não existir.
+  if [ -d "$FORM_DIR" ] && [ -x "$FORM_DIR/.venv/bin/gunicorn" ]; then
+    if [ ! -f "$FORM_DIR/.env" ]; then
+      echo "📝 Criando o .env do formulário ($FORM_DIR/.env) a partir do Experimental/.env…"
+      {
+        echo "# ===== Formulário — gerado pelo setup a partir do Experimental/.env ====="
+        echo "EVO_BASE_URL=$(envget EVO_BASE_URL "$EXP_DIR/.env")"
+        echo "EVO_DNS=$(envget EVO_DNS "$EXP_DIR/.env")"
+        echo "EVO_TOKEN=$(envget EVO_TOKEN "$EXP_DIR/.env")"
+        echo "EVO_BRANCH_ID=$(envget EVO_BRANCH_ID "$EXP_DIR/.env")"
+        echo "EVO_ACTIVITY=$(envget EVO_ACTIVITY "$EXP_DIR/.env")"
+        echo "EVO_SERVICE=$(envget EVO_SERVICE "$EXP_DIR/.env")"
+        echo "EVO_ACTIVITY_ID=$(envget EVO_ACTIVITY_ID "$EXP_DIR/.env")"
+        echo "EVO_SERVICE_ID=$(envget EVO_SERVICE_ID "$EXP_DIR/.env")"
+        echo "FORM_SLOTS_TOKEN=$(envget FORM_SLOTS_TOKEN "$EXP_DIR/.env")"
+        echo "FORM_OUTBOX_TOKEN=$(envget FORM_OUTBOX_TOKEN "$EXP_DIR/.env")"
+        echo "SOFIA_TOKEN=$(envget SOFIA_TOKEN "$CHATBOT_DIR/.env")"
+        echo "FORM_URL_PREFIX=$FORM_PREFIX"
+        echo "FORM_UNIDADE=$(envget STUDIO_NOME "$EXP_DIR/.env")"
+        echo "ZEE_STUDIO_PHONE=$(envget ZEE_STUDIO_PHONE "$EXP_DIR/.env")"
+        [ -n "$DOMAIN" ] && echo "PAINEL_URL=https://$DOMAIN"
+        echo "# Identidade da landing (preencha p/ a página não cair no Setor Bueno):"
+        echo "# FORM_ENDERECO="
+        echo "# FORM_MAPS_URL="
+        echo "# FORM_WHATSAPP="
+      } > "$FORM_DIR/.env"
+      chmod 600 "$FORM_DIR/.env" 2>/dev/null || true
+      echo "   ✔ .env do form criado (confira FORM_ENDERECO/FORM_MAPS_URL/FORM_WHATSAPP na landing)."
+    else
+      echo "⏭️  $FORM_DIR/.env já existe — mantido."
+    fi
+    pm2 delete "$P_FORM" >/dev/null 2>&1 || true
+    ( cd "$FORM_DIR" && pm2 start .venv/bin/gunicorn --name "$P_FORM" --time -- \
+        formulario_web.app:app --workers 1 --threads 8 --timeout 120 --bind "127.0.0.1:$FORM_PORT" )
+    # Se veio --domain, aponta o robô e a SoFIA para a subpasta (fecha a automação).
+    if [ -n "$DOMAIN" ]; then
+      FURL="https://$DOMAIN$FORM_PREFIX"
+      sed -i "s#^FORM_CLOUD_URL=.*#FORM_CLOUD_URL=$FURL#" "$EXP_DIR/.env" 2>/dev/null || true
+      sed -i "s#^SOFIA_BOOK_URL=.*#SOFIA_BOOK_URL=$FURL/api/book-sofia#" "$CHATBOT_DIR/.env" 2>/dev/null || true
+      echo "   ✔ FORM_CLOUD_URL/SOFIA_BOOK_URL apontados para $FURL"
+    fi
+  else
+    echo "   ⚠️  formulário não instalado ($FORM_DIR sem venv/gunicorn) — rode a preparação de novo ou a Fase 5 à mão."
+  fi
+
   pm2 save
 
   # ── Backup diário dos dados (cron) ─────────────────────────────────────────
@@ -494,6 +565,33 @@ else
   echo "   ⚠️  python3 não encontrado — o agendamento (push_slots) não vai rodar."
 fi
 
+# ---- Formulário (repo separado) — clona + venv (o .env é montado no --start) ----
+# O form roda no PRÓPRIO VPS sob /agendamentoexperimental (ver Fase 5 do /implantacao).
+# Aqui só clonamos e preparamos o venv; o .env dele é gerado no --start a partir do
+# Experimental/.env já preenchido (evita digitar o EVO duas vezes).
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$FORM_DIR/.git" ]; then
+    echo "⏭️  Formulário já clonado em $FORM_DIR — atualizando (git pull)…"
+    ( cd "$FORM_DIR" && git pull --ff-only >/dev/null 2>&1 ) || echo "   ⚠️  não atualizei o form (siga com o que está)."
+  else
+    echo "📥 Clonando o formulário em $FORM_DIR…"
+    git clone --depth 1 "$FORM_REPO_URL" "$FORM_DIR" || echo "   ⚠️  falha ao clonar o form ($FORM_REPO_URL) — clone à mão (Fase 5)."
+  fi
+  if [ -f "$FORM_DIR/requirements.txt" ] && command -v python3 >/dev/null 2>&1; then
+    echo "🐍 Instalando dependências do formulário (venv)…"
+    if python3 -m venv "$FORM_DIR/.venv" 2>/dev/null && [ -x "$FORM_DIR/.venv/bin/pip" ]; then
+      "$FORM_DIR/.venv/bin/pip" install -q --upgrade pip >/dev/null 2>&1 || true
+      "$FORM_DIR/.venv/bin/pip" install -q -r "$FORM_DIR/requirements.txt" \
+        || echo "   ⚠️  falha nas deps do form — rode à mão: $FORM_DIR/.venv/bin/pip install -r $FORM_DIR/requirements.txt"
+      "$FORM_DIR/.venv/bin/pip" install -q gunicorn >/dev/null 2>&1 || true
+    else
+      echo "   ⚠️  não consegui criar o venv do form (instale 'python3-venv')."
+    fi
+  fi
+else
+  echo "   ⚠️  git não encontrado — não clonei o formulário (faça a Fase 5 à mão)."
+fi
+
 # gera segredos uma vez só (reaproveitados nos dois .env quando fizer sentido)
 SEG_PAINEL="$(segredo)"
 TOK_FORM="$(segredo)"
@@ -572,6 +670,10 @@ EVO_SERVICE=
 EVO_URL=https://$EVO_TENANT.w12app.com.br
 EVO_EMAIL=
 EVO_PASSWORD=
+# 2FA do EVO (se a unidade tiver autenticador ligado): cole aqui o SEGREDO do
+# autenticador (base32) que o robô usa p/ gerar o código sozinho nos jobs. Sem 2FA,
+# deixe vazio. Também dá p/ digitar o código pelo painel (Saúde) — ver Fase 2.5.
+EVO_TOTP_SECRET=
 EVO_LOGIN_PATH="#/acesso/$EVO_TENANT/autenticacao"
 EVO_EXPERIMENTAL_PATH="#/app/$EVO_TENANT/$EVO_BRANCH/gerencial/aula-experimental"
 EVO_SUSPENSOES_HASH="#/app/$EVO_TENANT/$EVO_BRANCH/gerencial/suspensoes"
@@ -594,7 +696,7 @@ CIRCUITO_GRUPO=
 ZEE_STUDIO_PHONE=
 
 # ===== Vigia externo (watchdog) — processos DESTA unidade (nomes já corretos) =====
-WATCHDOG_PROCS=$P_EXP,$P_PAINEL,$P_SOFIA
+WATCHDOG_PROCS=$P_EXP,$P_PAINEL,$P_SOFIA,$P_FORM
 
 # ===== Planilha de aniversários (opcional) — [POR STUDIO se for usar] =====
 # GOOGLE_SA_KEY=$EXP_DIR/service-account.json
