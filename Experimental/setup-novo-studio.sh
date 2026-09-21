@@ -279,7 +279,7 @@ run_check() {
   req PAINEL_SENHA          "$EENV" "sem senha do painel ninguém entra."
   req PAINEL_SESSAO_SEGREDO "$EENV" "sem ele as sessões de login não assinam."
   req SOFIA_DIR             "$EENV" "sem a pasta de dados o painel não lê as conversas."
-  naoplaceholder FORM_CLOUD_URL "$EENV" "SEU-FORM.onrender.com"
+  naoplaceholder FORM_CLOUD_URL "$EENV" "SEU-PAINEL"
   req FORM_SLOTS_TOKEN      "$EENV" "sem ele o robô não envia a grade ao formulário."
   req FORM_OUTBOX_TOKEN     "$EENV" "sem ele o robô não puxa agendamentos/confirmações do form."
   echo "  · EVO (API — agendar):"
@@ -298,7 +298,7 @@ run_check() {
   req ANTHROPIC_API_KEY     "$CENV" "sem a chave da IA a SoFIA não responde."
   req SOFIA_DIR             "$CENV" "a SoFIA grava as conversas aqui."
   req SOFIA_TOKEN           "$CENV" "sem ele o formulário recusa o agendamento da SoFIA."
-  naoplaceholder SOFIA_BOOK_URL "$CENV" "SEU-FORM.onrender.com"
+  naoplaceholder SOFIA_BOOK_URL "$CENV" "SEU-PAINEL"
 
   # 2) consistências entre os dois arquivos
   echo "▸ Consistência entre os dois .env:"
@@ -425,7 +425,7 @@ if [ "$START" = "1" ]; then
   echo "   • ⚠️  TEXTOS PADRÃO são da unidade original (Setor Bueno) — troque ANTES de divulgar:"
   echo "        1) roteiro + imagens da SoFIA (painel: SoFIA → Configuração)"
   echo "        2) mensagens do robô no WhatsApp — confirmação/follow-up (painel: WhatsApp → Configuração)"
-  echo "        3) confirmação do formulário (ZEE_CONFIRM_TEMPLATE na Render)"
+  echo "        3) confirmação do formulário (ZEE_CONFIRM_TEMPLATE no .env do formulário no VPS)"
   echo "        Sem isso, a aluna recebe o endereço e os contatos do Setor Bueno."
   echo "   • Leia os QRs dos 2 WhatsApp:  pm2 logs $P_EXP   e   pm2 logs $P_SOFIA"
   [ -n "$DOMAIN" ] || echo "   • Configure o HTTPS: rode com --domain <subdominio> (gera + liga o Caddy)."
@@ -542,8 +542,11 @@ PAINEL_SESSAO_SEGREDO=$SEG_PAINEL
 # ===== Onde vivem os dados da SoFIA (prompt/estado/pontes) =====
 SOFIA_DIR=$SOFIA_DIR
 
-# ===== Formulário (Render) desta unidade =====
-FORM_CLOUD_URL=https://SEU-FORM.onrender.com
+# ===== Formulário (no próprio VPS, sob /agendamentoexperimental) desta unidade =====
+# O formulário roda neste VPS (ver Fase 5 do /implantacao) e é servido sob a
+# subpasta /agendamentoexperimental do domínio do painel. Troque SEU-PAINEL pelo
+# domínio do painel desta unidade (o mesmo do --domain).
+FORM_CLOUD_URL=https://SEU-PAINEL/agendamentoexperimental
 # DUAS lojas no MESMO VPS? Escalone o minuto do envio da grade p/ não estourarem
 # juntas o limite de 40 req/min do EVO. Ex.: loja 1 = 0, loja 2 = 30. (Só 1 loja: deixe 0.)
 # FORM_SLOTS_MINUTO=0
@@ -640,7 +643,7 @@ ANTHROPIC_API_KEY=
 SOFIA_DIR=$SOFIA_DIR
 
 # ===== Formulário desta unidade (a SoFIA agenda por aqui) =====
-SOFIA_BOOK_URL=https://SEU-FORM.onrender.com/api/book-sofia
+SOFIA_BOOK_URL=https://SEU-PAINEL/agendamentoexperimental/api/book-sofia
 # Token que a SoFIA envia ao formulário (o MESMO valor no formulário):
 SOFIA_TOKEN=$TOK_SOFIA
 
@@ -683,8 +686,9 @@ echo "                          (confira EVO_URL e os *_PATH/*_HASH: tenant=$EVO
 echo "                          GRUPO_EQUIPE (nome EXATO do grupo da equipe no WhatsApp — ou defina no painel)"
 echo "   • $CHATBOT_DIR/.env  → ANTHROPIC_API_KEY, SOFIA_BOOK_URL"
 echo "   • Confira que SOFIA_DIR é IGUAL nos dois arquivos."
-echo "   • No formulário (Render): use os MESMOS TRÊS tokens — FORM_SLOTS_TOKEN,"
-echo "     FORM_OUTBOX_TOKEN e SOFIA_TOKEN (os valores gerados estão nos .env acima)."
+echo "   • No .env do formulário no VPS (~/sf-form-<slug>, sob /agendamentoexperimental):"
+echo "     use os MESMOS TRÊS tokens — FORM_SLOTS_TOKEN, FORM_OUTBOX_TOKEN e SOFIA_TOKEN"
+echo "     (os valores gerados estão nos .env acima). Ver Fase 5 do /implantacao."
 echo
 echo "   Segredos gerados (guarde a senha do painel):"
 echo "     PAINEL_SENHA (sugerida) = $SENHA_SUGERIDA"
