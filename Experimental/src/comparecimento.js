@@ -100,10 +100,14 @@ function ultimasDatas(n) {
 }
 
 // Classifica o status do EVO em 'compareceu' | 'faltou' | '' (sem veredito).
+// (norm já deixa minúsculo e sem acento.)
 function veredito(status) {
   const s = norm(status);
-  if (s === 'presenca' || s === 'presença' || s === 'realizado') return 'compareceu';
-  if (s === 'falta') return 'faltou';
+  if (!s) return '';
+  if (s.includes('presen') || s.includes('realizad')) return 'compareceu';
+  // O Studio marca as ausências como "Falta Justificada"/"Justificada" (não "Falta"
+  // pura). Conta como FALTOU: falta, falta justificada, justificada, ausente.
+  if (s.includes('falta') || s.includes('justificad') || s.includes('ausent')) return 'faltou';
   return '';
 }
 
@@ -183,6 +187,14 @@ async function rodar({ dry = false } = {}) {
   resumo.mapaSize = nAguardando;         // quantos contatos estão com a tag de "agendou"
   resumo.evo = [];                       // diagnóstico: cada aula lida no EVO + a ação
   resumo.novos = [];                     // contatos cadastrados a partir do EVO (modo criarNovos)
+
+  // Se a MESMA pessoa tem mais de um registro na janela (ex.: uma REMARCAÇÃO deixa
+  // "Falta Justificada" na aula ANTIGA e presença na aula NOVA), a PRESENÇA prevalece:
+  // ordena compareceu primeiro, e o jaMexido (1x por telefone) pega o veredito certo.
+  semana.sort((a, b) => {
+    const rank = v => (v === 'compareceu' ? 0 : v === 'faltou' ? 1 : 2);
+    return rank(a.veredito) - rank(b.veredito);
+  });
 
   const jaMexido = new Set();
   for (const a of semana) {
