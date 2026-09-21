@@ -772,9 +772,15 @@ class EvoScraper {
         const statusValues = ['presença', 'presenca', 'falta', 'confirmado', 'cancelado', 'pendente', 'agendado', 'realizado'];
         let status = '';
         for (const text of cellTexts) {
-          const lower = (text || '').trim().toLowerCase();
-          if (statusValues.includes(lower)) {
-            status = text.trim();
+          const t = (text || '').trim();
+          const lower = t.toLowerCase();
+          // whitelist exata OU começa com um termo de status — pega também as
+          // ausências JUSTIFICADAS ("Falta Justificada", "Justificada", "Ausente",
+          // "Ausente Justificado"), que é como o Studio marca quem não veio.
+          // Tamanho curto (<=30) evita capturar nome/contrato por engano.
+          if (statusValues.includes(lower) ||
+              (t.length <= 30 && /^(presen[çc]a|falta|ausente|justificad|confirmad|cancelad|pendente|agendad|realizad)/.test(lower))) {
+            status = t;
             break;
           }
         }
