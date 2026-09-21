@@ -521,12 +521,44 @@ const desmarcarExperimental = tool(
   },
 );
 
+// REMARCA a experimental de uma LEAD em UMA ÚNICA chamada: desmarca a antiga E
+// matricula na nova turma de uma vez. Use ISTO no lugar de desmarcar+solicitar_agendamento
+// quando a lead já disse o novo dia/horário — assim não corre o risco de desmarcar e
+// esquecer de agendar a nova. O prospect já existe no EVO, então NÃO pede nome/e-mail.
+const remarcarExperimental = tool(
+  "remarcar_experimental",
+  "REMARCA a aula experimental de uma LEAD em UMA ÚNICA chamada (desmarca a antiga E já agenda a nova). " +
+    "USE ISTO (em vez de desmarcar_experimental + solicitar_agendamento) assim que você souber o NOVO dia/horário " +
+    "que tem vaga (confirmado no consultar_vaga=true). O telefone é o da conversa atual e o nome/e-mail dela já " +
+    "estão no cadastro — NÃO peça de novo. A ordem é segura: matricula a nova primeiro; só cancela a antiga se a nova der certo. " +
+    "Aja pelo retorno: ok=true e remarcado=true => remarcou com sucesso (confirme com carinho o novo dia/horário); " +
+    "motivo=turma_nova_nao_encontrada ou falha_ao_marcar_nova => a nova turma não deu (ofereça outro horário com vaga, a antiga continua de pé); " +
+    "motivo=sem_experimental_ativa_no_dia_antigo => não achei aula ativa no dia antigo (confirme a data original com a lead).",
+  {
+    data_antiga: z.string().describe("Data da aula ATUAL dela (a que será desmarcada), AAAA-MM-DD"),
+    horario_antigo: z.string().optional().describe("Horário da aula atual (HH:MM), se souber"),
+    data_nova: z.string().describe("Data da NOVA aula, AAAA-MM-DD"),
+    horario_novo: z.string().describe("Horário da NOVA aula (HH:MM), com vaga confirmada no consultar_vaga"),
+  },
+  async ({ data_antiga, horario_antigo, data_nova, horario_novo }) => {
+    console.log("📋 [SOFIA VAI REMARCAR EXPERIMENTAL]", {
+      tel: _telefoneDaVez, data_antiga, horario_antigo, data_nova, horario_novo,
+    });
+    const r = await apiAluna("/api/remarcar-experimental", {
+      telefone: _telefoneDaVez || "",
+      data_antiga, horario_antigo: horario_antigo || "",
+      data_nova, horario_novo, simular: false,
+    });
+    return json(r);
+  },
+);
+
 const servidor = createSdkMcpServer({
   name: "slimfit",
   version: "1.0.0",
   tools: [enviarMidia, verificarDisponibilidade, consultarVaga, solicitarAgendamento,
          consultarAgendaAluna, consultarContratoAluna, turmasDoDia, remarcarAula,
-         desmarcarExperimental],
+         desmarcarExperimental, remarcarExperimental],
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -693,6 +725,7 @@ const options: ClaudeAgentOptions = {
     "mcp__slimfit__turmas_do_dia",
     "mcp__slimfit__remarcar_aula",
     "mcp__slimfit__desmarcar_experimental",
+    "mcp__slimfit__remarcar_experimental",
   ],
   permissionMode: "default",
 };
