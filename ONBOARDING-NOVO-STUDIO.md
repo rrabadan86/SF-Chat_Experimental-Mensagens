@@ -18,7 +18,7 @@ Tempo estimado por studio: **~30–40 min** (fora a espera de propagação de DN
 | EVO (DNS + Secret Key / token) | do studio novo | `EVO_DNS`, `EVO_TOKEN` |
 | Chave da IA (Anthropic) | sua ou do studio | `ANTHROPIC_API_KEY` (tem custo por conversa) |
 | 2 números de WhatsApp | do studio novo | leem o **QR** no primeiro boot |
-| Formulário (deploy na Render) | um novo deploy | URL + tokens próprios |
+| Formulário (no próprio VPS, sob `/agendamentoexperimental`) | clone + processo próprio | porta + tokens próprios |
 | Domínio/subdomínio do painel | seu DNS (ex.: DuckDNS) | HTTPS via Caddy |
 
 ---
@@ -63,13 +63,26 @@ Mostra os serviços/atividades de aula experimental com seus **ids** — copie p
 `EVO_SERVICE_ID` / `EVO_ACTIVITY_ID` no `.env` (ou use os nomes em `EVO_SERVICE` /
 `EVO_ACTIVITY`).
 
-### 5) Formulário (Render)
-Faça um novo deploy do repositório do formulário para este studio e configure,
-no ambiente da Render, **os mesmos tokens** que estão nos `.env` do VPS:
+### 5) Formulário (no próprio VPS, sob `/agendamentoexperimental`)
+O formulário roda **neste mesmo VPS** e é servido sob a subpasta
+`/agendamentoexperimental` do domínio do painel (via Caddy). Clone o repo do
+formulário numa pasta própria, crie o `.env` dele e suba com gunicorn no PM2 —
+o passo a passo completo está na **Fase 5** do `/implantacao`. No `.env` do
+formulário use **os mesmos tokens** que estão nos `.env` do VPS:
 
 - `FORM_SLOTS_TOKEN` = igual ao do `Experimental/.env` (push da grade).
+- `FORM_OUTBOX_TOKEN` = igual ao do `Experimental/.env` (puxar confirmações).
 - `SOFIA_TOKEN` = igual ao do `ChatBot/.env` (agendamento pela SoFIA).
+- `FORM_URL_PREFIX=/agendamentoexperimental` (servir sob a subpasta).
 - O EVO do formulário aponta para o EVO **do novo studio**.
+
+```bash
+cd ~ && git clone https://github.com/rrabadan86/sf-formularioexperimental.git sf-form-lagosul1
+cd sf-form-lagosul1 && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+# crie o .env (ver Fase 5) e suba:
+pm2 start .venv/bin/gunicorn --name lagosul1-form --time -- \
+    formulario_web.app:app --workers 1 --threads 8 --timeout 120 --bind 127.0.0.1:8090
+```
 
 ### 6) Subir tudo — com HTTPS automático
 ```bash
