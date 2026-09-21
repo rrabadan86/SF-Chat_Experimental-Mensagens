@@ -10,7 +10,7 @@
 // antes disso E mantém o Render acordado.
 //
 // Variáveis de ambiente (mesmas do bridge Python):
-//   FORM_CLOUD_URL       = https://sf-formularioexperimental.onrender.com
+//   FORM_CLOUD_URL       = https://SEU-PAINEL.duckdns.org/agendamentoexperimental
 //   FORM_OUTBOX_TOKEN    = <o MESMO token configurado no Render>
 //   STUDIO_OUTBOX_FILE   = C:\AntiGravity\Experimental\src\agendamento_evo\confirmacoes_outbox.jsonl
 //   FORM_PULL_STATE      = (opcional) caminho do web_puxados.json

@@ -13,7 +13,7 @@
 // 60 min que existiria após um deploy.
 //
 // Variáveis de ambiente:
-//   FORM_CLOUD_URL = https://sf-formularioexperimental.onrender.com
+//   FORM_CLOUD_URL = https://SEU-PAINEL.duckdns.org/agendamentoexperimental
 
 const CLOUD_URL = (process.env.FORM_CLOUD_URL || '')
   .replace(/\/+$/, '');

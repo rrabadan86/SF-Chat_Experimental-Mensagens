@@ -4,7 +4,7 @@
  * ~2 min pelo scheduler. Best-effort: nunca derruba nada.
  *
  * Reaproveita a mesma config da ponte de confirmações:
- *   FORM_CLOUD_URL     = https://sf-formularioexperimental.onrender.com
+ *   FORM_CLOUD_URL     = https://SEU-PAINEL.duckdns.org/agendamentoexperimental
  *   FORM_OUTBOX_TOKEN  = <o MESMO token do Render>
  */
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
