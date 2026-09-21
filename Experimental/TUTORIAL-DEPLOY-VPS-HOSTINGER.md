@@ -6,9 +6,9 @@ no VPS da Hostinger (Ubuntu 24.04). No final há também a seção do **`ChatBot
 
 > 📌 **Este arquivo é o registro da migração ORIGINAL** (unidade Setor Bueno).
 > Para **instalar o robô numa franquia nova**, use o **runbook** genérico e
-> pronto-pra-franquia em **`/implantacao`** do formulário
-> (`https://sf-formularioexperimental.onrender.com/implantacao`). Ele já parte do
-> `.env.example` e das variáveis por unidade (`STUDIO_NOME`, `AUDIO_MAP`, etc.).
+> pronto-pra-franquia em **`/implantacao`** do formulário — agora servido pelo
+> próprio VPS sob a subpasta (ex.: `https://SEU-PAINEL.duckdns.org/agendamentoexperimental/implantacao`).
+> Ele já parte do `.env.example` e das variáveis por unidade (`STUDIO_NOME`, `AUDIO_MAP`, etc.).
 > Mantenha este documento como memória do primeiro deploy.
 
 > **VPS deste tutorial**

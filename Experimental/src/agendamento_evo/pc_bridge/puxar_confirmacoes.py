@@ -15,7 +15,7 @@ Como rodar: deixe este script rodando de forma CONTÍNUA (uma vez, no início do
 Windows) — NÃO precisa mais agendar no Agendador de Tarefas a cada X minutos.
 
 Configuração (variáveis de ambiente OU edite os padrões abaixo):
-  FORM_CLOUD_URL          = https://SEU-APP.onrender.com
+  FORM_CLOUD_URL          = https://SEU-PAINEL.duckdns.org/agendamentoexperimental
   FORM_OUTBOX_TOKEN       = <mesmo token configurado no Render>
   STUDIO_OUTBOX_FILE      = C:\\AntiGravity\\Experimental\\src\\agendamento_evo\\confirmacoes_outbox.jsonl
   FORM_PULL_LOOP_SECONDS  = 60   (0 = roda só uma vez, comportamento antigo)
@@ -26,7 +26,7 @@ import time
 
 import requests
 
-CLOUD_URL = os.getenv("FORM_CLOUD_URL", "https://SEU-APP.onrender.com").rstrip("/")
+CLOUD_URL = os.getenv("FORM_CLOUD_URL", "https://SEU-PAINEL.duckdns.org/agendamentoexperimental").rstrip("/")
 TOKEN = os.getenv("FORM_OUTBOX_TOKEN", "")
 LOCAL_OUTBOX = os.getenv(
     "STUDIO_OUTBOX_FILE",

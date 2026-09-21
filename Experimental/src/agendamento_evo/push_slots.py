@@ -9,7 +9,7 @@ Agendado pelo scheduler do robô (5h da manhã + a cada poucos minutos no horár
 comercial). Também pode rodar à mão:  python3 push_slots.py
 
 Variáveis de ambiente usadas (do mesmo .env do robô):
-  FORM_CLOUD_URL     -> URL do formulário (ex.: https://sf-formularioexperimental.onrender.com)
+  FORM_CLOUD_URL     -> URL do formulário (ex.: https://SEU-PAINEL.duckdns.org/agendamentoexperimental)
   FORM_SLOTS_TOKEN   -> token secreto (o MESMO valor no VPS e na Render)
   FORM_DAYS          -> janela de dias (padrão 10)
   FORM_MAX_OCUPACAO  -> ocupação máxima p/ "disponível" (padrão 7)

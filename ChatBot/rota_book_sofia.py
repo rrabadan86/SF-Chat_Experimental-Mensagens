@@ -11,7 +11,7 @@
 #     As variáveis do EVO (EVO_DNS, EVO_TOKEN, EVO_SERVICE_ID, etc.) já existem,
 #     pois o formulário já agenda — esta rota reaproveita exatamente as mesmas.
 #
-#  A Sofia (Node) vai chamar:  POST https://SEU-APP.onrender.com/api/book-sofia
+#  A Sofia (Node) vai chamar:  POST https://SEU-PAINEL.duckdns.org/agendamentoexperimental/api/book-sofia
 #  com header  X-Sofia-Token: <mesma senha>  e corpo JSON:
 #     { "nome": "...", "email": "...", "telefone": "...", "when": "quinta-feira às 16:30" }
 # ═══════════════════════════════════════════════════════════════════════════

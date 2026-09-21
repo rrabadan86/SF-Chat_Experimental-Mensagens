@@ -4,6 +4,14 @@ Página web (link para o anúncio) onde a oportunidade preenche os dados, escolh
 um horário com vaga e o sistema **agenda sozinho no EVO** e dispara a confirmação
 pelo WhatsApp do Studio.
 
+> ⚠️ **MODELO ANTIGO (Render + ponte no PC).** Este documento descreve o deploy
+> original do formulário na **Render** com a confirmação puxada por um PC.
+> **Não é mais o recomendado.** Hoje o formulário roda **no próprio VPS**, sob a
+> subpasta `/agendamentoexperimental` (atrás do Caddy), e a confirmação sai do
+> próprio VPS. O passo a passo atual está na **Fase 5** do `/implantacao`
+> (`https://SEU-PAINEL.duckdns.org/agendamentoexperimental/implantacao`).
+> Mantido aqui apenas como referência histórica.
+
 ## Como funciona (visão geral)
 
 ```

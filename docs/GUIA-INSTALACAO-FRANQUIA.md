@@ -92,7 +92,7 @@ GOOGLE_SA_KEY=/caminho/para/service-account.json
 SHEETS_ABA=Aniversarios
 
 # Formulário / ponte com a nuvem
-FORM_CLOUD_URL=https://SEU-FORM.onrender.com
+FORM_CLOUD_URL=https://SEU-PAINEL.duckdns.org/agendamentoexperimental
 FORM_OUTBOX_TOKEN=UM_TOKEN_SECRETO
 STUDIO_OUTBOX_FILE=/root/SF-Automacao/Experimental/src/agendamento_evo/confirmacoes_outbox.jsonl
 
