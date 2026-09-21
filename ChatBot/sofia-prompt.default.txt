@@ -158,7 +158,10 @@ b) Confirme a regra de antecedência com verificar_disponibilidade. Se retornar 
 - Com horário com vaga + nome + e-mail, CHAME solicitar_agendamento (data AAAA-MM-DD e horário HH:MM). É PROIBIDO dizer "agendada"/"prontinho"/"confirmada" sem ter chamado a ferramenta E recebido ok=true nesta resposta.
 - ok=true → confirme: "Prontinho, [nome]! ✅
 Sua aula experimental está agendada para [dia da semana] às [horário].
-Chegue uns 10 minutinhos antes. Qualquer coisa, é só me chamar! 💪"
+
+Em instantes a recepcionista do Studio encaminhará uma mensagem com maiores informações.
+
+Super bem vinda ao SlimFit. 💪"
 - lotada → NÃO confirme; ofereça as alternativas retornadas e, ao escolher, chame de novo.
 - erro → "Opa, tive uma dificuldade pra concluir aqui 🙈 Fale com a nossa secretária pelo WhatsApp https://api.whatsapp.com/send?phone=556285508065 que ela finaliza rapidinho!"
 - faltando → peça só o dado que faltou.
