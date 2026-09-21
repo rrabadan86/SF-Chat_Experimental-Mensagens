@@ -1701,7 +1701,7 @@ function paginaInstagram(aviso, erro) {
         <label style="display:block;margin:14px 0 4px;font-weight:700;font-size:.85rem">Mensagem do DM <span class="sub">— use <code>{link}</code> onde entra o link do formulário</span></label>
         <textarea name="mensagem" rows="5" style="width:100%" spellcheck="true">${esc(ofCfg.mensagem || '')}</textarea>
         <label style="display:block;margin:14px 0 4px;font-weight:700;font-size:.85rem">Link do formulário <span class="sub">— para onde a lead é levada (agenda no EVO → SoFIA)</span></label>
-        <input type="text" name="link" value="${esc(ofCfg.link || '')}" style="width:100%" placeholder="https://sf-formularioexperimental.onrender.com/?origem=instagram">
+        <input type="text" name="link" value="${esc(ofCfg.link || '')}" style="width:100%" placeholder="https://SEU-PAINEL.duckdns.org/agendamentoexperimental/?origem=instagram">
         <label class="chk" style="margin-top:12px"><input type="checkbox" name="responderDM" ${ofCfg.responderDM ? 'checked' : ''}> Também responder quem manda <b>DM direto</b> (janela de 24h)</label>
         <div style="margin-top:16px;border-top:1px dashed var(--linha);padding-top:12px">
           <label style="display:block;font-weight:700;font-size:.85rem;margin-bottom:2px">🎉 Botões de boas-vindas (Ice Breakers)</label>
@@ -1888,7 +1888,7 @@ function paginaIndicadores(dias, aviso) {
     : '<div class="vazio">Sem acessos no período.</div>';
 
   // Gerador de links por origem: um link etiquetado por canal + botão "Copiar".
-  const FORM_BASE = (process.env.FORM_CLOUD_URL || 'https://sf-formularioexperimental.onrender.com').replace(/\/+$/, '');
+  const FORM_BASE = (process.env.FORM_CLOUD_URL || '').replace(/\/+$/, '');
   let CANAIS = []; try { CANAIS = origens.listar(); } catch (_) {}
   // Casa os contadores já registrados (r.porOrigem) com cada canal, sem diferenciar maiúsculas.
   const origMap = {};
@@ -5816,7 +5816,7 @@ const server = http.createServer((req, res) => {
   // Agendamento MANUAL no EVO (atendente pelo painel) — enfileira; o listener agenda.
   // Grade de horários disponíveis (proxy do formulário) — popula o combobox do Express.
   if (req.method === 'GET' && url === '/agendar/slots') {
-    const FORM_BASE = (process.env.FORM_CLOUD_URL || 'https://sf-formularioexperimental.onrender.com').replace(/\/+$/, '');
+    const FORM_BASE = (process.env.FORM_CLOUD_URL || '').replace(/\/+$/, '');
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 12000);
     return fetch(FORM_BASE + '/api/slots?days=10', { signal: ctrl.signal })

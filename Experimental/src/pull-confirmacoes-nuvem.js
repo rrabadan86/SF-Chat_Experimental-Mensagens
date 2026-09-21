@@ -19,7 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
 
-const CLOUD_URL = (process.env.FORM_CLOUD_URL || 'https://sf-formularioexperimental.onrender.com')
+const CLOUD_URL = (process.env.FORM_CLOUD_URL || '')
   .replace(/\/+$/, '');
 const TOKEN = process.env.FORM_OUTBOX_TOKEN || '';
 const LOCAL_OUTBOX = process.env.STUDIO_OUTBOX_FILE

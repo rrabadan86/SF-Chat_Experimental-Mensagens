@@ -245,7 +245,7 @@ function proximaSegundaTarde(ref: Date) {
 // data(AAAA-MM-DD) -> lista de slots { time, activityDate, disponivel, freeSpots }.
 // Devolve null se a rede/serviço falhar — aí o chamador usa o fallback local.
 async function buscarSlots(): Promise<Record<string, any[]> | null> {
-  const base = process.env.SOFIA_BOOK_URL || "https://sf-formularioexperimental.onrender.com/api/book-sofia";
+  const base = process.env.SOFIA_BOOK_URL || "";
   const slotsUrl = process.env.SOFIA_SLOTS_URL || base.replace(/\/api\/book-sofia\/?$/, "/api/slots");
   try {
     const r = await comRetry(async () => {
@@ -1270,7 +1270,7 @@ async function verificarEDispararAgendamento(telefone: string, conversa: Convers
 
 // URL e token do seu serviço Python (o formulário que já roda no Render).
 // Padrão = seu form no Render. Sobrescreva com:  set SOFIA_BOOK_URL=...
-const SOFIA_BOOK_URL = process.env.SOFIA_BOOK_URL || "https://sf-formularioexperimental.onrender.com/api/book-sofia";
+const SOFIA_BOOK_URL = process.env.SOFIA_BOOK_URL || "";
 const SOFIA_TOKEN = process.env.SOFIA_TOKEN || "";
 // Base do formulário (mesmo serviço do book-sofia) — usada pelas ferramentas de ALUNA.
 const SOFIA_API_BASE = SOFIA_BOOK_URL.replace(/\/api\/book-sofia\/?$/, "");
