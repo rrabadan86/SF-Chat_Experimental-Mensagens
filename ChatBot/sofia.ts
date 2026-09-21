@@ -496,11 +496,37 @@ const remarcarAula = tool(
   },
 );
 
+// Desmarca a aula experimental de uma LEAD (idProspect) que avisou que não pode
+// comparecer — marca "falta justificada" no EVO, o que LIBERA a vaga na grade.
+// Diferente do remarcar_aula (que é para ALUNA contratada, idMember).
+const desmarcarExperimental = tool(
+  "desmarcar_experimental",
+  "DESMARCA a aula experimental de uma LEAD que avisou que não pode comparecer (libera a vaga na grade). " +
+    "Use quando a lead que JÁ agendou a experimental disser que não vai poder ir ou pedir para remarcar. " +
+    "O telefone é o da conversa atual (não precisa informar). Depois de desmarcar, ofereça a PRÓXIMA data " +
+    "com vaga no MESMO horário que ela tinha (use consultar_vaga nos próximos dias). " +
+    "Aja pelo retorno: ok=true e cancelado=true => desmarcou (siga oferecendo o novo horário); " +
+    "motivo=prospect_nao_encontrado ou sem_experimental_ativa_nesse_dia => não havia aula ativa nesse dia " +
+    "(confirme a data com a lead, com gentileza).",
+  {
+    data: z.string().describe("Data da aula que ela tinha, no formato AAAA-MM-DD"),
+    horario: z.string().optional().describe("Horário da aula (HH:MM), se você souber"),
+  },
+  async ({ data, horario }) => {
+    console.log("📋 [SOFIA VAI DESMARCAR EXPERIMENTAL]", { tel: _telefoneDaVez, data, horario });
+    const r = await apiAluna("/api/desmarcar-experimental", {
+      telefone: _telefoneDaVez || "", data, horario: horario || "", simular: false,
+    });
+    return json(r);
+  },
+);
+
 const servidor = createSdkMcpServer({
   name: "slimfit",
   version: "1.0.0",
   tools: [enviarMidia, verificarDisponibilidade, consultarVaga, solicitarAgendamento,
-         consultarAgendaAluna, consultarContratoAluna, turmasDoDia, remarcarAula],
+         consultarAgendaAluna, consultarContratoAluna, turmasDoDia, remarcarAula,
+         desmarcarExperimental],
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -666,6 +692,7 @@ const options: ClaudeAgentOptions = {
     "mcp__slimfit__consultar_contrato_aluna",
     "mcp__slimfit__turmas_do_dia",
     "mcp__slimfit__remarcar_aula",
+    "mcp__slimfit__desmarcar_experimental",
   ],
   permissionMode: "default",
 };
