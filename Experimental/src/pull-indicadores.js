@@ -10,7 +10,7 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
 const indicadores = require('./indicadores');
 
-const CLOUD_URL = (process.env.FORM_CLOUD_URL || 'https://sf-formularioexperimental.onrender.com').replace(/\/+$/, '');
+const CLOUD_URL = (process.env.FORM_CLOUD_URL || '').replace(/\/+$/, '');
 const TOKEN = process.env.FORM_OUTBOX_TOKEN || '';
 
 async function pullIndicadores() {

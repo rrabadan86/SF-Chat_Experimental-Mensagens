@@ -15,7 +15,7 @@
 // Variáveis de ambiente:
 //   FORM_CLOUD_URL = https://sf-formularioexperimental.onrender.com
 
-const CLOUD_URL = (process.env.FORM_CLOUD_URL || 'https://sf-formularioexperimental.onrender.com')
+const CLOUD_URL = (process.env.FORM_CLOUD_URL || '')
   .replace(/\/+$/, '');
 
 /**
