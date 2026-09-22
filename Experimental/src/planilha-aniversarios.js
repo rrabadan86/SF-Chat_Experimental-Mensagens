@@ -150,6 +150,22 @@ async function buscarAlunasAniversario() {
     let totalEsperado = await lerTotalResultados(page);
     console.log(`   🔢 EVO informa ${totalEsperado || '?'} resultado(s) na segmentação.`);
     let paginasSemNovos = 0;
+    // Espera a TABELA renderizar antes de ler a 1ª página. Sem isso, numa carga
+    // lenta do EVO o script lia 0/1 linha (timing) e a planilha era "zerada".
+    // Aguarda até ~20s por pelo menos 5 nomes-link; se estourar, segue (a trava
+    // de leitura baixa pega o caso ruim sem escrever nada).
+    try {
+      await page.waitForFunction(() => {
+        let n = 0;
+        for (const a of document.querySelectorAll('a')) {
+          const t = (a.textContent || '').replace(/\s+/g, ' ').trim();
+          if (t.length >= 3 && !/\d/.test(t) && /[A-Za-zÀ-ÿ]{3,}/.test(t)
+              && !/(search|pular|conte|skip|menu|dashboard|clientes|todos|oportunidades|modelos|faltantes)/i.test(t)) n++;
+          if (n >= 5) return true;
+        }
+        return false;
+      }, { timeout: 20000, polling: 500 });
+    } catch (_) { console.log('   ⏳ Tabela demorou a renderizar (20s) — seguindo; a trava de leitura protege.'); }
     for (let pagina = 1; pagina <= 80; pagina++) {
       await sleep(800);
       const linhas = await lerTabelaDom(page);
