@@ -52,7 +52,10 @@ async function buscarAlunasAniversario() {
     const s = String(nascRaw);
     let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) aniv = `${m[3]}/${m[2]}`;
     if (!aniv) { m = s.match(/(\d{2})\/(\d{2})\/\d{2,4}/); if (m) aniv = `${m[1]}/${m[2]}`; }
-    return id ? { id, nome, aniversario: aniv } : null;
+    // contrato do plano (ex.: "SLIMFIT 2X FIXA...", "COPA SLIM..."). Vem VAZIO para
+    // quem tem só serviço (ex.: Circuito) — é o sinal usado para excluir.
+    const contrato = String(r.contrato ?? '').replace(/\s+/g, ' ').trim();
+    return id ? { id, nome, aniversario: aniv, contrato } : null;
   };
   await page.setRequestInterception(true);
   page.on('request', req => req.continue());
@@ -61,28 +64,6 @@ async function buscarAlunasAniversario() {
       if (res.url().includes('obter-clientes') && res.status() === 200) {
         const data = JSON.parse(await res.text());
         const lista = data.retorno || data.data || [];
-        // DIAGNÓSTICO: varre TODOS os snapshots. Mostra as chaves uma vez, e para
-        // a Renata OU qualquer registro com "circuito" faz dump dos campos de
-        // contrato — para eu ver onde/como o Circuito aparece e filtrar certo.
-        try {
-          global.__planVistos = global.__planVistos || new Set();
-          if (!global.__planKeys && lista.length) { global.__planKeys = true; console.log('   🔬 Chaves:', JSON.stringify(Object.keys(lista[0]))); }
-          const campos = ['nome', 'contrato', 'idContrato', 'tipoContrato', 'categoriaContratos', 'servicos', 'atividades', 'grupoAtividade', 'statusContrato'];
-          let amostra = global.__planAmostra || 0;
-          for (const r of lista) {
-            const nm = String(r.nome || r.nomeCompleto || '').toLowerCase();
-            const bruto = JSON.stringify(r);
-            const alvo = nm.includes('renata moreira') || /circuito/i.test(bruto);
-            const idc = String(r.idCliente ?? r.nome ?? '');
-            if ((alvo || amostra < 2) && !global.__planVistos.has(idc)) {
-              global.__planVistos.add(idc);
-              if (!alvo) amostra++;
-              const o = {}; for (const k of campos) o[k] = r[k];
-              console.log(`   🔬 ${alvo ? 'ALVO' : 'amostra'}:`, JSON.stringify(o));
-            }
-          }
-          global.__planAmostra = amostra;
-        } catch (_) {}
         const recs = lista.map(parseRec).filter(Boolean);
         if (recs.length) snapshots.push(recs);
       }
@@ -238,9 +219,17 @@ async function buscarAlunasAniversario() {
     //    juntamos todos os registros de todos os snapshots num mapa id→nome
     //    (ter ids extras não atrapalha — só consultamos os 81 do DOM).
     const nomeLimpoPorId = new Map();
+    // Sinais de contrato por id: quem está na API mas NUNCA teve um contrato de
+    // plano de verdade (vazio) ou só "Circuito" é serviço-only → será excluído.
+    const idsNaApi = new Set(), idsPlanoReal = new Set();
     for (const snap of snapshots) {
       for (const r of snap) {
         if (r.id && r.nome && !nomeLimpoPorId.has(r.id)) nomeLimpoPorId.set(r.id, r.nome);
+        if (r.id) {
+          idsNaApi.add(r.id);
+          const c = String(r.contrato || '');
+          if (c.trim() && !/circuito/i.test(c)) idsPlanoReal.add(r.id);
+        }
       }
     }
     console.log(`   🧩 Dicionário de nomes da API: ${nomeLimpoPorId.size} registro(s).`);
@@ -274,7 +263,20 @@ async function buscarAlunasAniversario() {
       } catch (_) { /* alerta é opcional */ }
       return [];
     }
-    return alunas;
+    // Exclui quem tem SÓ Circuito / sem contrato de plano (na API sem contrato
+    // real). Só exclui quando o id ESTÁ na API e nunca teve plano real — nunca
+    // remove por falta de dado (id fora da API é mantido).
+    const alunasFinal = alunas.filter(a => !(idsNaApi.has(a.id) && !idsPlanoReal.has(a.id)));
+    const excluidas = alunas.length - alunasFinal.length;
+    // Salvaguarda: se excluiria demais (>30%), é sinal de que a API não trouxe os
+    // contratos nessa rodada — mantém todas (não filtra), para não sumir com meia
+    // planilha por um dado incompleto.
+    if (excluidas > alunas.length * 0.3) {
+      console.log(`   ⚠️  O filtro de Circuito excluiria ${excluidas} de ${alunas.length} — a API não trouxe os contratos direito. Mantendo TODAS (sem filtrar).`);
+      return alunas;
+    }
+    if (excluidas) console.log(`   🚫 ${excluidas} excluída(s) por ter só Circuito / sem contrato de plano.`);
+    return alunasFinal;
   } finally {
     await browser.close().catch(() => {});
   }
