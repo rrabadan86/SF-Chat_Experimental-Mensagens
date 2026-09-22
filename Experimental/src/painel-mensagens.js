@@ -4170,6 +4170,20 @@ function paginaSofia(aviso, erro) {
           <textarea name="followupInstrucao" rows="3" maxlength="1000" placeholder="Ex.: Pergunte se ela ainda tem interesse e retome o convite para a aula experimental gratuita, de forma calorosa." style="width:100%;resize:vertical">${esc(e.followup.instrucao)}</textarea>
           <p class="quando" style="margin:6px 0 0">A IA escreve a mensagem no tom da SoFIA, usando o contexto da conversa + essa orientação.</p>
         </div>
+        <div style="margin-top:14px">
+          <label>Não enviar follow-up para estas tags ${infoI('Marque as etiquetas do CRM cujos contatos <b>não</b> devem receber a retomada. Um contato com <b>qualquer uma</b> delas fica de fora. Útil para quem <b>já agendou</b> (ex.: <b>FX - 3. Agendou Aula Exp</b>) ou já foi <b>encerrado</b> no funil (ex.: <b>FX - 2. Encerrado com Agendamento sem Presença</b>). Compara sem ligar para acento/maiúscula/pontuação. Quem tem <b>"Sem interesse"</b> já é pulado sozinho.')}</label>
+          ${(function () {
+            let fuTags = []; try { fuTags = contatos.tagsDistintas().map(t => t.tag); } catch (_) {}
+            const sel = Array.isArray(e.followup.tagsExcluir) ? e.followup.tagsExcluir : [];
+            for (const t of sel) { if (!fuTags.some(x => x.toLowerCase() === String(t).toLowerCase())) fuTags = [t].concat(fuTags); }
+            const selL = new Set(sel.map(t => String(t).trim().toLowerCase()));
+            return '<div class="cfg-in" style="flex-direction:column;align-items:flex-start;gap:6px;max-height:180px;overflow:auto;padding:8px 10px">'
+              + (fuTags.length
+                  ? fuTags.map(t => `<label class="chk" style="margin:0;font-weight:500"><input type="checkbox" name="followupTagExcl" value="${esc(t)}"${selL.has(String(t).trim().toLowerCase()) ? ' checked' : ''}> ${esc(t)}</label>`).join('')
+                  : '<span class="quando" style="margin:0">Nenhuma etiqueta no CRM ainda.</span>')
+              + '</div>';
+          })()}
+        </div>
       </div>
 
       </details>
@@ -5912,7 +5926,7 @@ const server = http.createServer((req, res) => {
           agruparSeg: p.get('agruparSeg') != null ? p.get('agruparSeg') : '7',
           quieto: { horas: p.get('quietoHoras') || '24', dias: p.get('quietoDias') || '4' },
           inboxDias: p.get('inboxDias') != null ? p.get('inboxDias') : '365',
-          followup: { on: p.get('followupOn') === '1', horas: p.get('followupHoras') || '24', instrucao: p.get('followupInstrucao') || '', janelaIni: p.get('followupJanIni') || '08:00', janelaFim: p.get('followupJanFim') || '19:00' },
+          followup: { on: p.get('followupOn') === '1', horas: p.get('followupHoras') || '24', instrucao: p.get('followupInstrucao') || '', janelaIni: p.get('followupJanIni') || '08:00', janelaFim: p.get('followupJanFim') || '19:00', tagsExcluir: (typeof p.getAll === 'function' ? p.getAll('followupTagExcl') : []) },
           modelos: { conversa: p.get('modeloConversa') || '', extracao: p.get('modeloExtracao') || '' },
           transcricaoOn: p.get('transcricaoOn') === '1',
           midias: {
@@ -6613,6 +6627,11 @@ function processarFollowups() {
   const agendaram = new Set((fuLerJson(FU_AGENDOU_FILE, []) || []).map(x => String(x).replace(/\D/g, '')));
   let tagsAgendou = []; try { tagsAgendou = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {}
   let contatosMap = {}; try { contatosMap = contatos.carregar() || {}; } catch (_) {}
+  // Tags que o painel configurou para NÃO receber follow-up (ex.: "Agendou Aula
+  // Exp", "Encerrado ..."). Normaliza (sem acento/maiúscula/pontuação) para casar
+  // "FX - 3. Agendou Aula Exp" com pequenas variações de escrita.
+  const _normTag = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const fuExcluir = new Set((cfg.tagsExcluir || []).map(_normTag).filter(Boolean));
   const feito = fuLerJson(FU_FEITO_FILE, {}) || {};
   const espera = {}; // leads prontos, mas segurados pelo horário (recalculado agora)
   for (const chave of Object.keys(inbox)) {
@@ -6635,6 +6654,8 @@ function processarFollowups() {
     // Não reengaja quem já disse que não quer: contato com a tag "Sem interesse"
     // (ex.: "FX - 0. Sem interesse") fica de fora do follow-up.
     try { const ct = (contatos.acharPorTel(chave, contatosMap) || {}).contato; if (ct && (ct.tags || []).some(t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '').includes('seminteresse'))) continue; } catch (_) {}
+    // Tags excluídas pelo painel (ex.: "FX - 3. Agendou Aula Exp", "Encerrado ...").
+    if (fuExcluir.size) { try { const ct = (contatos.acharPorTel(chave, contatosMap) || {}).contato; if (ct && (ct.tags || []).some(t => fuExcluir.has(_normTag(t)))) continue; } catch (_) {} }
     // Chegou aqui = está no ponto de receber a retomada. Só falta o horário:
     if (!dentroDaJanela) { espera[chave] = cfg.janelaIni; continue; } // segura p/ o próximo horário permitido
     // REGISTRA "já enviei" ANTES de enfileirar e só envia se o registro GRAVOU.
