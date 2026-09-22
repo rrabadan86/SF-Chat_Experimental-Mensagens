@@ -119,6 +119,9 @@ async function sincronizar(alunas) {
   const idsAtuais = new Set(alunas.map(a => String(a.id)));
   const hoje = hojeBR();
 
+  // Quantas linhas estavam "Sim" ANTES — base da trava de segurança lá embaixo.
+  const ativasAntes = matriz.filter(r => r[0] && r[3] === 'Sim').length;
+
   let novas = 0, atualizadas = 0, inativadas = 0;
 
   // 3. Upsert por ID — atualiza no lugar OU adiciona no final.
@@ -151,6 +154,24 @@ async function sincronizar(alunas) {
       inativadas++;
     }
   });
+
+  // 4b. TRAVA DE SEGURANÇA: uma leitura ruim do EVO (IDs trocados, snapshot
+  //     errado, filtro/segmentação diferente) faria a MAIORIA das alunas virar
+  //     "Não" de uma vez — o que nunca acontece de verdade. Nesse caso NÃO
+  //     escreve (preserva a planilha) e alerta. Assim, um soluço do EVO não
+  //     "zera" a coluna Ativa. Só trava com base razoável (>= 10 ativas).
+  if (ativasAntes >= 10 && inativadas > ativasAntes * 0.5) {
+    console.log(`   ⛔ ABORTADO: a sincronização inativaria ${inativadas} de ${ativasAntes} alunas ativas (leitura do EVO suspeita — IDs não bateram). Planilha NÃO foi alterada.`);
+    try {
+      require('./notificar').alertar(
+        'Planilha NAO sincronizada',
+        `Leitura do EVO suspeita: ${inativadas} de ${ativasAntes} alunas seriam inativadas e ${novas} entrariam como novas. `
+        + `A planilha foi PRESERVADA. Confira o filtro/segmentacao "Aniversariantes" (status Ativos) no EVO e rode de novo.`,
+        { prioridade: 'high', tags: 'warning', forcar: true },
+      );
+    } catch (_) { /* alerta é opcional */ }
+    return { novas: 0, atualizadas: 0, inativadas: 0, total: matriz.length, abortado: true };
+  }
 
   // 5. Reescreve APENAS A:E, na MESMA ordem de linhas (existentes no lugar,
   //    novas no fim). Como nenhuma linha existente mudou de índice, a coluna
