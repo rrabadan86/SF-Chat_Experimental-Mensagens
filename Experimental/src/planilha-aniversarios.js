@@ -61,6 +61,20 @@ async function buscarAlunasAniversario() {
       if (res.url().includes('obter-clientes') && res.status() === 200) {
         const data = JSON.parse(await res.text());
         const lista = data.retorno || data.data || [];
+        // DIAGNÓSTICO (uma vez): mostra as chaves de um registro e procura em quais
+        // campos aparece "circuito" — para achar onde mora o contrato/plano.
+        if (!global.__planDiag && lista.length) {
+          global.__planDiag = true;
+          try { console.log('   🔬 Chaves do registro obter-clientes:', JSON.stringify(Object.keys(lista[0]))); } catch (_) {}
+          try {
+            for (const r of lista) {
+              for (const k of Object.keys(r)) {
+                const v = r[k];
+                if (typeof v === 'string' && /circuito/i.test(v)) console.log(`   🔬 "circuito" no campo "${k}": "${v}" (cliente: ${r.nome || r.nomeCompleto || r.idCliente})`);
+              }
+            }
+          } catch (_) {}
+        }
         const recs = lista.map(parseRec).filter(Boolean);
         if (recs.length) snapshots.push(recs);
       }
