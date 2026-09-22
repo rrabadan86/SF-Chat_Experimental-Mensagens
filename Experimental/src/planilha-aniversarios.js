@@ -153,23 +153,33 @@ async function buscarAlunasAniversario() {
     for (let pagina = 1; pagina <= 80; pagina++) {
       await sleep(800);
       const linhas = await lerTabelaDom(page);
-      if (pagina === 1 && linhas.length === 0) {
+      if (pagina === 1 && linhas.length <= 2) {
         const diag = await page.evaluate(() => {
-          const conta = (sel) => document.querySelectorAll(sel).length;
+          const conta = (sel) => { try { return document.querySelectorAll(sel).length; } catch (_) { return -1; } };
           const amostra = [];
-          const cand = document.querySelectorAll('tr, [role="row"], [class*="row"]');
+          const cand = document.querySelectorAll('tr, [role="row"], [class*="row"], mat-row');
           for (let i = 0; i < Math.min(cand.length, 4); i++) {
-            amostra.push((cand[i].innerText || '').replace(/\s+/g, ' ').trim().substring(0, 80));
+            amostra.push((cand[i].innerText || '').replace(/\s+/g, ' ').trim().substring(0, 90));
+          }
+          // Amostra dos LINKS (o leitor usa <a> como nome): ajuda a ver se os nomes
+          // ainda são links ou mudaram de elemento.
+          const links = [];
+          for (const a of document.querySelectorAll('a')) {
+            const t = (a.textContent || '').replace(/\s+/g, ' ').trim();
+            if (t && t.length >= 3 && !/\d/.test(t)) links.push(t.substring(0, 40));
+            if (links.length >= 12) break;
           }
           return {
             'table tr': conta('table tr'),
             'tr[role=row]': conta('tr[role="row"]'),
             '[class*=row]': conta('[class*="row"]'),
             'mat-row': conta('mat-row'),
-            amostra,
+            'a (total)': conta('a'),
+            linksAmostra: links,
+            rowsAmostra: amostra,
           };
         });
-        console.log('   🔎 DIAGNÓSTICO (0 linhas na pág.1):', JSON.stringify(diag));
+        console.log('   🔎 DIAGNÓSTICO (poucas linhas na pág.1):', JSON.stringify(diag));
       }
       const antes = domMap.size;
       for (const l of linhas) if (l.id && l.nome) domMap.set(l.id, l);
@@ -344,7 +354,7 @@ async function lerTabelaDom(page) {
     const nomeValido = (nome) => {
       if (!nome || nome.length < 3) return false;
       if (/\d/.test(nome)) return false;                              // nome não tem números
-      if (/(search|traffic|keyboard|arrow|unidade\s*atual|person_add|pesquis|menu|toolbar|dashboard)/i.test(nome)) return false;
+      if (/(search|traffic|keyboard|arrow|unidade\s*atual|person_add|pesquis|menu|toolbar|dashboard|pular|conte[úu]do|skip)/i.test(nome)) return false;
       return /[A-Za-zÀ-ÿ]{3,}/.test(nome);
     };
 
