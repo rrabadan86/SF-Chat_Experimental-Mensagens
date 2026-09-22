@@ -1701,6 +1701,20 @@ async function processarFollowups() {
     // Respeita o "Pausar SoFIA" (estado global), o controle humano e o handoff
     // (você respondeu pelo celular): nada de follow-up automático nesses casos.
     if (!deveResponder(tel)) { log(`follow-up de ${tel} pulado — SoFIA pausada/controle humano/handoff.`); continue; }
+    // Blindagem do cadeado: o painel já pula conversa encerrada à mão ao enfileirar,
+    // mas entre enfileirar e enviar (segundos) você pode ter encerrado. Reconfere
+    // AQUI, na hora do envio, medindo pela última msg DA ALUNA (a despedida da
+    // própria SoFIA não reabre). Conversa fechada → não incomoda.
+    {
+      const dTel = tel.replace(/\D/g, "");
+      const conv = inbox.get(tel) || (dTel ? inbox.get(dTel) : undefined);
+      let ultAluna = 0;
+      if (conv) for (const m of conv.msgs) if (m.autor === "aluna" && m.em > ultAluna) ultAluna = m.em;
+      const enc = lerEncerradas();
+      let encEm = _encEm(enc[tel]) || (dTel ? _encEm(enc[dTel]) : 0);
+      if (!encEm && dTel) { const a8 = dTel.slice(-8); for (const k of Object.keys(enc)) { if (String(k).replace(/\D/g, "").slice(-8) === a8) { const e2 = _encEm(enc[k]); if (e2 > encEm) encEm = e2; } } }
+      if (encEm && encEm >= ultAluna) { log(`follow-up de ${tel} pulado — conversa encerrada à mão (cadeado).`); continue; }
+    }
     enfileirar(async () => {
       try {
         // Contexto: as últimas mensagens dessa conversa no inbox.

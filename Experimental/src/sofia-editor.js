@@ -843,9 +843,13 @@ function lerFollowupCfg() {
     // Instante em que foi LIGADO. O detector só considera leads cuja última
     // mensagem veio DEPOIS disso ("só daqui pra frente" — ignora o acúmulo).
     ligadoEm: isFinite(ligadoEm) && ligadoEm > 0 ? ligadoEm : 0,
+    // Tags do CRM que NÃO recebem follow-up (ex.: "FX - 3. Agendou Aula Exp",
+    // "FX - 2. Encerrado com Agendamento sem Presença"). Um contato com QUALQUER
+    // uma delas fica de fora da retomada automática. Configurável no painel.
+    tagsExcluir: Array.isArray(o.tagsExcluir) ? o.tagsExcluir.map(t => String(t || '').trim()).filter(Boolean) : [],
   };
 }
-function gravarFollowupCfg({ on, horas, instrucao, janelaIni, janelaFim }) {
+function gravarFollowupCfg({ on, horas, instrucao, janelaIni, janelaFim, tagsExcluir }) {
   const h = Math.max(0.25, Math.min(720, parseFloat(horas) || 24)); // 15 min a 30 dias
   const atual = lerFollowupCfg();
   // Marca o corte "daqui pra frente" só na TRANSIÇÃO desligado→ligado; se já
@@ -853,7 +857,10 @@ function gravarFollowupCfg({ on, horas, instrucao, janelaIni, janelaFim }) {
   let ligadoEm = atual.ligadoEm;
   if (on && !atual.on) ligadoEm = Date.now();
   if (!on) ligadoEm = 0;
-  const cfg = { on: !!on, horas: h, instrucao: String(instrucao || '').trim() || FOLLOWUP_INSTRUCAO_PADRAO, janelaIni: _hhmm(janelaIni, '08:00'), janelaFim: _hhmm(janelaFim, '19:00'), ligadoEm };
+  const tex = Array.isArray(tagsExcluir)
+    ? [...new Set(tagsExcluir.map(t => String(t || '').trim()).filter(Boolean))]
+    : (tagsExcluir === undefined ? atual.tagsExcluir : []); // undefined = mantém o que já estava
+  const cfg = { on: !!on, horas: h, instrucao: String(instrucao || '').trim() || FOLLOWUP_INSTRUCAO_PADRAO, janelaIni: _hhmm(janelaIni, '08:00'), janelaFim: _hhmm(janelaFim, '19:00'), ligadoEm, tagsExcluir: tex };
   gravarArquivo(F.followupCfg, JSON.stringify(cfg));
   return cfg;
 }
