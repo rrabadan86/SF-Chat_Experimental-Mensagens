@@ -61,20 +61,28 @@ async function buscarAlunasAniversario() {
       if (res.url().includes('obter-clientes') && res.status() === 200) {
         const data = JSON.parse(await res.text());
         const lista = data.retorno || data.data || [];
-        // DIAGNÓSTICO (uma vez): mostra as chaves de um registro e procura em quais
-        // campos aparece "circuito" — para achar onde mora o contrato/plano.
-        if (!global.__planDiag && lista.length) {
-          global.__planDiag = true;
-          try { console.log('   🔬 Chaves do registro obter-clientes:', JSON.stringify(Object.keys(lista[0]))); } catch (_) {}
-          try {
-            for (const r of lista) {
-              for (const k of Object.keys(r)) {
-                const v = r[k];
-                if (typeof v === 'string' && /circuito/i.test(v)) console.log(`   🔬 "circuito" no campo "${k}": "${v}" (cliente: ${r.nome || r.nomeCompleto || r.idCliente})`);
-              }
+        // DIAGNÓSTICO: varre TODOS os snapshots. Mostra as chaves uma vez, e para
+        // a Renata OU qualquer registro com "circuito" faz dump dos campos de
+        // contrato — para eu ver onde/como o Circuito aparece e filtrar certo.
+        try {
+          global.__planVistos = global.__planVistos || new Set();
+          if (!global.__planKeys && lista.length) { global.__planKeys = true; console.log('   🔬 Chaves:', JSON.stringify(Object.keys(lista[0]))); }
+          const campos = ['nome', 'contrato', 'idContrato', 'tipoContrato', 'categoriaContratos', 'servicos', 'atividades', 'grupoAtividade', 'statusContrato'];
+          let amostra = global.__planAmostra || 0;
+          for (const r of lista) {
+            const nm = String(r.nome || r.nomeCompleto || '').toLowerCase();
+            const bruto = JSON.stringify(r);
+            const alvo = nm.includes('renata moreira') || /circuito/i.test(bruto);
+            const idc = String(r.idCliente ?? r.nome ?? '');
+            if ((alvo || amostra < 2) && !global.__planVistos.has(idc)) {
+              global.__planVistos.add(idc);
+              if (!alvo) amostra++;
+              const o = {}; for (const k of campos) o[k] = r[k];
+              console.log(`   🔬 ${alvo ? 'ALVO' : 'amostra'}:`, JSON.stringify(o));
             }
-          } catch (_) {}
-        }
+          }
+          global.__planAmostra = amostra;
+        } catch (_) {}
         const recs = lista.map(parseRec).filter(Boolean);
         if (recs.length) snapshots.push(recs);
       }
