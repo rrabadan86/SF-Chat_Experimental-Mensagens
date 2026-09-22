@@ -1441,7 +1441,10 @@ function paginaExpress(aviso, erro) {
   }
   document.getElementById('exData').addEventListener('change',exPreencherHoras);
   exCarregarSlots();
-  function exAgendar(){
+  function exDupSobrescrever(){ exAgendar('sobrescrever'); }
+  function exDupNovo(){ exAgendar('novo'); }
+  function exAgendar(acaoDup){
+    acaoDup=(acaoDup==='sobrescrever'||acaoDup==='novo')?acaoDup:'';
     var nome=(document.getElementById('exNome').value||'').trim();
     var tel=exNormTel(document.getElementById('exTel').value||'');
     var email=(document.getElementById('exEmail').value||'').trim();
@@ -1452,8 +1455,9 @@ function paginaExpress(aviso, erro) {
     if(!email||email.indexOf('@')<1){ exStatus('E-mail é obrigatório — o EVO exige para cadastrar.','err'); return; } // o EVO passou a exigir e-mail
     if(!data||!hora){ exStatus('Escolha a data e o horário.','err'); return; }
     var when=data+' '+hora; // AAAA-MM-DD HH:MM (o EVO/form entende)
-    exBtnOn(false); exStatus('⏳ Agendando no EVO…');
-    fetch('/sofia/agendar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:tel,nome:nome,email:email,when:when,origem:'express'})})
+    exBtnOn(false);
+    exStatus(acaoDup==='novo'?'⏳ Criando um cadastro novo…':(acaoDup==='sobrescrever'?'⏳ Atualizando o cadastro existente…':'⏳ Agendando no EVO…'));
+    fetch('/sofia/agendar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:tel,nome:nome,email:email,when:when,origem:'express',acao_duplicado:acaoDup})})
       .then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok||!j.id){ exStatus('❌ '+exEsc((j&&j.erro)||'falha ao enviar'),'err'); exBtnOn(true); return; }
         var n=0;
@@ -1464,10 +1468,20 @@ function paginaExpress(aviso, erro) {
             if(!res){ if(n>40){ exStatus('⏳ Ainda processando… confira em instantes.'); exBtnOn(true); return; } setTimeout(poll,1500); return; }
             exBtnOn(true);
             if(res.ok){
-              exStatus('✅ Agendada no EVO para <b>'+exEsc(res.when||when)+'</b>! A confirmação foi para a fila do WhatsApp.');
+              exStatus('✅ Agendada no EVO para <b>'+exEsc(res.when||when)+'</b>! A confirmação foi para a fila do WhatsApp.'+(res.aviso?'<br><small>⚠️ '+exEsc(res.aviso)+'</small>':''));
               document.getElementById('exNome').value=''; document.getElementById('exTel').value='';
               document.getElementById('exEmail').value=''; document.getElementById('exHora').value=''; exCarregarSlots();
               document.getElementById('exNome').focus();
+            }
+            else if(res.duplicado){
+              var ex=res.existente||{};
+              var quem=exEsc(ex.nome||'(sem nome)');
+              var contato=ex.telefone?(' · '+exEsc(String(ex.telefone))):(ex.email?(' · '+exEsc(String(ex.email))):'');
+              exStatus('⚠️ Já existe um cadastro com este e-mail/telefone em nome de <b>'+quem+'</b>'+contato+'.<br>É a <b>mesma pessoa</b> (atualizar) ou <b>outra pessoa</b> — ex.: mãe e filha (criar novo)?'
+                +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
+                +'<button type="button" class="save" style="width:auto;padding:9px 14px" onclick="exDupSobrescrever()">Mesma pessoa — atualizar</button>'
+                +'<button type="button" class="save" style="width:auto;padding:9px 14px;background:#8a6100" onclick="exDupNovo()">Outra pessoa — criar novo</button>'
+                +'</div>','err');
             }
             else if(res.lotada){ exStatus('⚠️ Turma cheia nesse horário. Alternativas: '+exEsc((res.alternativas||[]).join('  ·  ')||'—'),'err'); }
             else { exStatus('❌ Não consegui agendar: '+exEsc(res.detalhe||'erro no EVO'),'err'); }
@@ -5847,11 +5861,14 @@ const server = http.createServer((req, res) => {
       const nome = String(d.nome || '').trim(), email = String(d.email || '').trim(), when = String(d.when || '').trim();
       // origem: "express" (Cadastro Express) → confirmação com texto próprio; vazio (agendar da conversa) → texto padrão SoFIA/form.
       const origem = String(d.origem || '').trim().toLowerCase() === 'express' ? 'express' : '';
+      // decisão diante de cadastro de outra pessoa com o mesmo contato (mãe x filha).
+      const ad = String(d.acao_duplicado || '').trim().toLowerCase();
+      const acaoDuplicado = (ad === 'sobrescrever' || ad === 'novo') ? ad : '';
       if (!chave) return res.end(JSON.stringify({ ok: false, erro: 'sem conversa' }));
       if (!nome || !when) return res.end(JSON.stringify({ ok: false, erro: 'preencha nome e data/horário' }));
       if (!email || email.indexOf('@') < 1) return res.end(JSON.stringify({ ok: false, erro: 'e-mail é obrigatório (o EVO exige para cadastrar)' })); // o EVO passou a exigir e-mail no cadastro do prospect
       try {
-        const id = sofia.enfileirarAgendamento({ chave, telefone: chave, nome, email, when, por: quem, origem });
+        const id = sofia.enfileirarAgendamento({ chave, telefone: chave, nome, email, when, por: quem, origem, acaoDuplicado });
         try { auditoria.registrar(quem, 'conversa.agendar', chave, when); } catch (_) {}
         res.end(JSON.stringify({ ok: true, id }));
       } catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
@@ -6753,14 +6770,19 @@ async function processarExpressInbox() {
         const r = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Sofia-Token': token },
-          body: JSON.stringify({ nome, email: String(op.email || '').trim(), telefone, when: String(op.when || '').trim(), origem: String(op.origem || '').trim() }),
+          body: JSON.stringify({ nome, email: String(op.email || '').trim(), telefone, when: String(op.when || '').trim(), origem: String(op.origem || '').trim(), acao_duplicado: String(op.acaoDuplicado || '').trim() }),
           signal: AbortSignal.timeout(55000),
         });
         const data = await r.json().catch(() => ({}));
         let res;
         if (r.ok && data && data.ok) {
           res = { ok: true, when: data.when || op.when };
+          if (data.aviso) res.aviso = String(data.aviso);   // ex.: EVO não separou (mesmo e-mail)
           try { sofia.registrarAgendou({ telefone, nome, when: res.when }); } catch (_) {}
+        } else if (r.status === 409 && data && data.motivo === 'cadastro_existente' && data.existente) {
+          // Cadastro de OUTRA pessoa com o mesmo e-mail/telefone (mãe x filha):
+          // a tela decide sobrescrever ou criar novo, e reenvia com acao_duplicado.
+          res = { duplicado: true, existente: data.existente };
         } else if (r.status === 409) {
           res = { lotada: true, alternativas: Array.isArray(data.alternativas) ? data.alternativas.filter(Boolean) : [] };
         } else {
