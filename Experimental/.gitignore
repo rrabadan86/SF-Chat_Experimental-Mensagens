@@ -75,3 +75,15 @@ data/grupos.json
 # Instagram oficial (Graph API) — token e config por VPS, NUNCA versionar
 data/instagram-api-token.json
 data/instagram-api-config.json
+
+# Rastreadores de "JÁ ENVIEI" — estado VIVO por VPS. NUNCA versionar: se entram
+# no git, um git pull/reset sobrescreve o marcador local e o robô reenvia tudo
+# de novo (confirmações, aniversários, DMs do Instagram). Ficam só na VPS.
+data/aniversariantes-envios.json
+data/instagram-enviados.json
+# Fila de confirmações e seus marcadores (enviados/falhas/retidas) + backups
+src/agendamento_evo/confirmacoes_outbox.jsonl
+src/agendamento_evo/confirmacoes_outbox_enviados.json
+src/agendamento_evo/confirmacoes_outbox_falhas.json
+src/agendamento_evo/confirmacoes_outbox_retidas.json
+src/agendamento_evo/confirmacoes_outbox_enviados.json.bak-*
