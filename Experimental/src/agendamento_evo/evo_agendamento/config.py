@@ -97,6 +97,21 @@ def max_experimentais():
         pass
     return EVO_MAX_EXPERIMENTAIS
 
+# Antecedência mínima (em horas) para agendar a experimental em DIA ÚTIL. O painel
+# grava em Experimental/data/sofia-antecedencia-horas.txt e a grade (available_slots)
+# esconde os horários dentro dessa janela. Padrão 4h (mesma regra que a SoFIA usa).
+ANTECEDENCIA_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "sofia-antecedencia-horas.txt")
+ANTECEDENCIA_PADRAO = 4.0
+def antecedencia_horas():
+    try:
+        with open(ANTECEDENCIA_FILE, encoding="utf-8") as f:
+            n = float((f.read() or "").strip().replace(",", "."))
+            if n >= 0:
+                return n
+    except (OSError, ValueError):
+        pass
+    return ANTECEDENCIA_PADRAO
+
 # Cache da grade do formulário (available_slots), em segundos. Evita refazer
 # dezenas de chamadas ao EVO a cada visita/refresh do formulário (o que estourava
 # o limite de 40 req/min → HTTP 429). 0 = desliga o cache.
