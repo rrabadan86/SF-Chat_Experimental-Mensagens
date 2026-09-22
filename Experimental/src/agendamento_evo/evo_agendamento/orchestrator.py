@@ -369,6 +369,30 @@ def _exp_cached(evo, id_configuration, dt, branch_id=None):
     return n
 
 
+def _antecedencia_ok(alvo, agora):
+    """Regra de antecedência da experimental (mesma da SoFIA):
+    - DIA ÚTIL (dentro da janela da semana): precisa de >= N horas de antecedência
+      (N = config.antecedencia_horas(), padrão 4h, editável no painel).
+    - FIM DE SEMANA / fora da janela: só a partir da próxima segunda à tarde (14h).
+    dia_agora usa a convenção do JS (0=domingo) para casar com a SoFIA."""
+    dia_agora = (agora.weekday() + 1) % 7
+    minutos_agora = agora.hour * 60 + agora.minute
+    em_janela_semana = (
+        (2 <= dia_agora <= 4)
+        or (dia_agora == 1 and minutos_agora > 7 * 60)          # seg após 07:00
+        or (dia_agora == 5 and minutos_agora <= 17 * 60 + 30)   # sex até 17:30
+    )
+    if em_janela_semana:
+        horas = (alvo - agora).total_seconds() / 3600.0
+        return horas >= config.antecedencia_horas()
+    d = agora
+    while True:
+        d = d + timedelta(days=1)
+        if (d.weekday() + 1) % 7 == 1:  # próxima segunda-feira
+            break
+    return alvo >= d.replace(hour=14, minute=0, second=0, microsecond=0)
+
+
 def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_id=None,
                     max_ocupacao=7, now=None, use_cache=True):
     """Grade da aula experimental nos próximos `days` dias (padrão 10).
@@ -409,6 +433,10 @@ def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_i
                 continue
             dt = session_start_datetime(s)
             if dt is None or dt < now or dt >= fim:
+                continue
+            # Antecedência mínima (editável no painel): esconde horários "em cima
+            # da hora" (dia útil) ou de fim de semana antes de segunda à tarde.
+            if not _antecedencia_ok(dt, now):
                 continue
             key = (s.get("idConfiguration"), dt.isoformat())
             if key in vistos:

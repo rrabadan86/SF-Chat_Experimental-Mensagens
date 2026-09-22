@@ -241,6 +241,19 @@ function proximaSegundaTarde(ref: Date) {
   return d;
 }
 
+// Antecedência mínima (em horas) para agendar em DIA ÚTIL. Editável no painel
+// (SoFIA → Configuração → Memória e operação), que grava em
+// Experimental/data/sofia-antecedencia-horas.txt. O listener roda com cwd no
+// ChatBot, então o arquivo fica em ../Experimental/data. Sem arquivo → 4h.
+const ANTEC_FILE = path.join(process.cwd(), "..", "Experimental", "data", "sofia-antecedencia-horas.txt");
+function antecedenciaHoras(): number {
+  try {
+    const n = parseFloat(String(fs.readFileSync(ANTEC_FILE, "utf-8")).trim().replace(",", "."));
+    if (isFinite(n) && n >= 0) return n;
+  } catch { /* sem arquivo → padrão */ }
+  return 4;
+}
+
 // Busca a grade REAL do EVO (via /api/slots que o formulário expõe): mapa
 // data(AAAA-MM-DD) -> lista de slots { time, activityDate, disponivel, freeSpots }.
 // Devolve null se a rede/serviço falhar — aí o chamador usa o fallback local.
@@ -340,9 +353,10 @@ const verificarDisponibilidade = tool(
       (diaAgora === 5 && minutosAgora <= paraMinutos("17:30"));
 
     if (emJanelaSemana) {
+      const minH = antecedenciaHoras();
       const horas = (alvo.getTime() - agora.getTime()) / 3_600_000;
-      if (horas < 4)
-        return json({ valido: false, motivo: "Em dias úteis é preciso pelo menos 4h de antecedência.", opcoes_do_dia: slots ?? [] });
+      if (horas < minH)
+        return json({ valido: false, motivo: `Em dias úteis é preciso pelo menos ${minH}h de antecedência.`, opcoes_do_dia: slots ?? [] });
     } else {
       const segundaTarde = proximaSegundaTarde(agora);
       if (alvo < segundaTarde)

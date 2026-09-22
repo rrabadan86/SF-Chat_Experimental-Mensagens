@@ -111,6 +111,19 @@ function gravarExpLimite(n) {
   return true;
 }
 
+// Antecedência mínima (horas) para agendar a experimental em DIA ÚTIL — editável
+// na aba SoFIA → Configuração. Gravado em data/sofia-antecedencia-horas.txt; a
+// grade (Python) e a SoFIA (verificar_disponibilidade) leem este arquivo.
+const ANTEC_FILE = path.join(__dirname, '..', 'data', 'sofia-antecedencia-horas.txt');
+function lerAntecedenciaHoras() { try { const n = parseFloat(String(fs.readFileSync(ANTEC_FILE, 'utf8')).trim().replace(',', '.')); return (Number.isFinite(n) && n >= 0) ? n : null; } catch (_) { return null; } }
+function gravarAntecedenciaHoras(n) {
+  const v = parseFloat(String(n).replace(',', '.'));
+  if (!Number.isFinite(v) || v < 0 || v > 168) return false; // teto de 7 dias
+  try { fs.mkdirSync(path.dirname(ANTEC_FILE), { recursive: true }); } catch (_) {}
+  fs.writeFileSync(ANTEC_FILE, String(v), 'utf8');
+  return true;
+}
+
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
 // Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
 // (reverse_proxy localhost:8080) ou por um túnel SSH — nunca direto da internet.
@@ -4142,6 +4155,10 @@ function paginaSofia(aviso, erro) {
             <div class="cfg-in"><input type="number" name="expLimite" min="0" max="50" step="1" value="${lerExpLimite() == null ? 2 : lerExpLimite()}"><span class="suf">por turma (0 = sem limite)</span></div>
           </div>
           <div>
+            <label>Antecedência mínima da experimental${infoI('Em <b>dia útil</b>, a experimental só pode ser marcada com pelo menos este número de <b>horas de antecedência</b> — os horários "em cima da hora" <b>somem da grade</b> (formulário, Cadastro Express e SoFIA) e a SoFIA recusa se pedirem. No <b>fim de semana</b> a regra é fixa: só a partir de <b>segunda-feira à tarde</b>. Padrão: 4 horas. Vale por unidade; a grade aplica na próxima atualização.')}</label>
+            <div class="cfg-in"><input type="number" name="antecedenciaHoras" min="0" max="168" step="1" value="${lerAntecedenciaHoras() == null ? 4 : lerAntecedenciaHoras()}"><span class="suf">horas antes (dia útil)</span></div>
+          </div>
+          <div>
             <label>Trava de atendimento humano${infoI('Quando um atendente clica em <b>assumir</b> (🧑) uma conversa, ela fica <b>travada só para ele</b> por este tempo — os outros veem cadeado 🔒 e não conseguem escrever (evita dois atendentes na mesma conversa). Cada mensagem enviada <b>renova</b> a trava. Passado o tempo <b>sem atividade</b>, a trava libera e a <b>SoFIA reassume sozinha</b> a conversa. Padrão: 60 minutos. Vale na hora.')}</label>
             <div class="cfg-in"><input type="number" name="humanoLockMin" min="1" max="1440" step="1" value="${(function(){try{return sofia.lerHumanoLockMin();}catch(_){return 60;}})()}"><span class="suf">min</span></div>
           </div>
@@ -5960,6 +5977,7 @@ const server = http.createServer((req, res) => {
           },
         });
         try { const el = p.get('expLimite'); if (el != null && el !== '') gravarExpLimite(el); } catch (_) {}
+        try { const ah = p.get('antecedenciaHoras'); if (ah != null && ah !== '') gravarAntecedenciaHoras(ah); } catch (_) {}
         try { const lm = p.get('humanoLockMin'); if (lm != null && lm !== '') sofia.gravarHumanoLockMin(lm); } catch (_) {}
         try { const rf = p.get('refreshSeg'); if (rf != null && rf !== '') gravarRefreshSeg(rf); } catch (_) {}
         try { auditoria.registrar(sess.usuario, 'sofia.config', 'Configuração/prompt da SoFIA', 'modelo: ' + (p.get('modeloConversa') || '—')); } catch (_) {}
