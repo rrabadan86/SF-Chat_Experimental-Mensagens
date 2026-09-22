@@ -210,6 +210,22 @@ async function buscarAlunasAniversario() {
     if (totalEsperado && alunas.length !== totalEsperado) {
       console.log(`   ⚠️  Contagem diferente do esperado — confira antes de escrever.`);
     }
+    // TRAVA NA ORIGEM: se o EVO informa um total e coletamos MUITO menos (a
+    // raspagem do DOM falhou/pegou lixo, como "Pular para o conteúdo"), tratamos
+    // como LEITURA FALHA e devolvemos vazio — o chamador NÃO sincroniza e a
+    // planilha é preservada. Assim um soluço da raspagem nunca "zera" a coluna Ativa.
+    if (totalEsperado >= 10 && alunas.length < totalEsperado * 0.5) {
+      console.log(`   ⛔ Coletei só ${alunas.length} de ${totalEsperado} — leitura FALHA. Devolvendo vazio (planilha NÃO será tocada).`);
+      try {
+        require('./notificar').alertar(
+          'Planilha: leitura do EVO falhou',
+          `A raspagem coletou apenas ${alunas.length} de ${totalEsperado} alunas — a planilha NÃO foi sincronizada (preservada). `
+          + `Costuma ser um soluço da tela do EVO; roda de novo mais tarde. Se persistir, avise.`,
+          { prioridade: 'default', tags: 'warning' },
+        );
+      } catch (_) { /* alerta é opcional */ }
+      return [];
+    }
     return alunas;
   } finally {
     await browser.close().catch(() => {});
