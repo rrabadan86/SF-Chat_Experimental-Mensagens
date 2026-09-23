@@ -4117,7 +4117,11 @@ function paginaSofia(aviso, erro) {
           <button type="button" title="Mostrar/ocultar" onclick="var i=document.getElementById('transKeyInput');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'" style="padding:8px 11px">👁</button>
           <button type="button" class="save" style="width:auto;padding:9px 14px" onclick="salvarTransKey()">Salvar</button>
         </div>
-        <p class="quando" id="transKeyMsg" style="margin:6px 0 0">O painel grava a chave + a URL/modelo do provedor no <code>ChatBot/.env</code>. Ao <b>trocar de provedor</b>, cole a chave do <b>novo</b> provedor. Marque também <b>🎤 Transcrever áudios</b> em <i>Jeito de responder → Inteligência</i> e clique em <b>🔄 Reiniciar SoFIA</b> (abaixo).</p>
+        <label class="chk" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:10px 0 0;font-weight:500">
+          <input type="checkbox" id="transOnInput"${e.transcricaoOn ? ' checked' : ''} style="width:auto;margin:0">
+          🎤 Transcrever áudios das alunas ${infoI('Quando a aluna manda <b>áudio</b>, a SoFIA transcreve (fala→texto) e responde ao conteúdo — aparece como “🎤 …” no painel. <b>Desligado</b>, a SoFIA pede educadamente para a aluna mandar por <b>texto</b>. Marque e clique em <b>Salvar</b> (o botão acima).')}
+        </label>
+        <p class="quando" id="transKeyMsg" style="margin:6px 0 0">O <b>Salvar</b> acima grava o provedor + a chave + o liga/desliga. Ao <b>trocar de provedor</b>, cole a chave do <b>novo</b> provedor. Depois clique em <b>🔄 Reiniciar SoFIA</b> (abaixo).</p>
 
         <hr style="border:0;border-top:1px solid var(--linha);margin:16px 0">
 
@@ -4148,12 +4152,12 @@ function paginaSofia(aviso, erro) {
             }).catch(function(){ m.textContent='❌ erro de rede'; });
         }
         function salvarTransKey(){
-          var i=document.getElementById('transKeyInput'), pv=document.getElementById('transProvInput'), m=document.getElementById('transKeyMsg');
-          var k=(i.value||'').trim(), prov=(pv&&pv.value)||'openai';
+          var i=document.getElementById('transKeyInput'), pv=document.getElementById('transProvInput'), on=document.getElementById('transOnInput'), m=document.getElementById('transKeyMsg');
+          var k=(i.value||'').trim(), prov=(pv&&pv.value)||'openai', lig=!!(on&&on.checked);
           m.textContent='Salvando…';
-          fetch('/sofia/transcricao-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k, provedor:prov})})
+          fetch('/sofia/transcricao-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k, provedor:prov, on:lig})})
             .then(function(r){return r.json();}).then(function(j){
-              if(j&&j.ok){ m.innerHTML=(k? ('✅ Salvo ('+(j.provedor==='groq'?'Groq':'OpenAI')+').') : '✅ Transcrição desligada (chave em branco).')+' Agora clique em <b>🔄 Reiniciar SoFIA</b> (abaixo) para valer.'; }
+              if(j&&j.ok){ m.innerHTML=(k? ('✅ Salvo ('+(j.provedor==='groq'?'Groq':'OpenAI')+', '+(lig?'ligada':'desligada')+').') : '✅ Transcrição desligada (chave em branco).')+' Agora clique em <b>🔄 Reiniciar SoFIA</b> (abaixo) para valer.'; }
               else { m.textContent='❌ '+((j&&j.erro)||'não consegui salvar'); }
             }).catch(function(){ m.textContent='❌ erro de rede'; });
         }
@@ -4255,11 +4259,7 @@ function paginaSofia(aviso, erro) {
         </div>
         <p class="quando" style="margin:8px 0 0">Modelos maiores custam mais por conversa. A troca vale <b>após reiniciar a SoFIA</b> (<code>pm2 restart ${esc(PM2_SOFIA)}</code>).</p>
         <hr style="border:0;border-top:1px solid var(--linha);margin:14px 0 12px">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" name="transcricaoOn" value="1"${e.transcricaoOn ? ' checked' : ''} style="width:auto;margin:0">
-          🎤 Transcrever áudios das alunas${infoI('Quando a aluna manda <b>áudio</b>, a SoFIA transcreve (fala→texto) e responde ao conteúdo — aparece como “🎤 …” no painel. Precisa de uma <b>chave de transcrição</b> no arquivo <code>.env</code> (<code>TRANSCRICAO_API_KEY</code>, OpenAI ou Groq). Desligado, a SoFIA pede para a aluna mandar por texto.')}
-        </label>
-        <p class="quando" style="margin:6px 0 0">A <b>chave de transcrição</b> (OpenAI/Groq) fica em <b>🔑 Credenciais da unidade</b>, no topo desta aba. Sem chave, fica sem efeito. Vale <b>após reiniciar</b> a SoFIA.</p>
+        <p class="quando" style="margin:0">🎤 A <b>transcrição de áudio</b> — ligar/desligar, provedor (OpenAI/Groq) e chave — fica toda em <b>🔑 Credenciais da unidade → Transcrição</b>, no topo desta aba.</p>
       </div>
 
       <!-- Grupo 2 · Ritmo da conversa (humano/velocidade + agrupar + pausa celular) -->
@@ -6088,6 +6088,8 @@ const server = http.createServer((req, res) => {
       // Provedor (OpenAI/Groq) → grava URL + modelo certos, sem editar .env.
       let provedor = lerTranscricaoProvedor();
       if (ok && d.provedor) { try { provedor = gravarTranscricaoProvedor(d.provedor); } catch (_) {} }
+      // Liga/desliga (o toggle mora aqui agora, junto do provedor e da chave).
+      if (ok && typeof d.on === 'boolean') { try { sofia.gravarTranscricaoOn(d.on); } catch (_) {} }
       if (ok) { try { auditoria.registrar(sess.usuario, 'sofia.transcricaokey', 'TRANSCRICAO_API_KEY', (String(d.key || '').trim() ? 'atualizada' : 'removida') + ' pelo painel (' + provedor + ')'); } catch (_) {} }
       return res.end(JSON.stringify(ok ? { ok: true, provedor } : { ok: false, erro: 'chave inválida (use sk-… da OpenAI ou gsk_… da Groq, ou deixe em branco para desligar)' }));
     });
@@ -6169,7 +6171,10 @@ const server = http.createServer((req, res) => {
           inboxDias: p.get('inboxDias') != null ? p.get('inboxDias') : '365',
           followup: { on: p.get('followupOn') === '1', horas: p.get('followupHoras') || '24', instrucao: p.get('followupInstrucao') || '', janelaIni: p.get('followupJanIni') || '08:00', janelaFim: p.get('followupJanFim') || '19:00', tagsExcluir: (typeof p.getAll === 'function' ? p.getAll('followupTagExcl') : []) },
           modelos: { conversa: p.get('modeloConversa') || '', extracao: p.get('modeloExtracao') || '' },
-          transcricaoOn: p.get('transcricaoOn') === '1',
+          // O toggle da transcrição mudou-se para "Credenciais da unidade" (salva por
+          // conta própria). Aqui só PRESERVAMOS o valor atual — sem o campo no form,
+          // p.get() é null e não devemos desligar a transcrição ao salvar o resto.
+          transcricaoOn: p.get('transcricaoOn') != null ? (p.get('transcricaoOn') === '1') : !!sofia.lerTranscricaoOn(),
           midias: {
             grade_imagem: (p.get('grade_imagem') || '').trim(),
             grade_link: (p.get('grade_link') || '').trim(),
