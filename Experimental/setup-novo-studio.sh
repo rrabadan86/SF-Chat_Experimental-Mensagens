@@ -761,7 +761,7 @@ NTFY_URL=https://ntfy.sh
 # Ex.: SOFIA_GRADE={"1":["07:00","08:15"],"6":["08:30","09:45"]}
 # SOFIA_GRADE=
 
-# ===== Transcrição de áudio (opcional; liga/desliga também pelo painel) =====
+# ===== Transcrição de áudio (opcional; CHAVE e liga/desliga editáveis pelo painel) =====
 # Padrão OpenAI (Whisper). Para GROQ, defina também URL e MODELO abaixo.
 # TRANSCRICAO_API_KEY=
 # TRANSCRICAO_URL=https://api.groq.com/openai/v1/audio/transcriptions
@@ -791,6 +791,12 @@ echo "   • Confira que SOFIA_DIR é IGUAL nos dois arquivos."
 echo "   • No .env do formulário no VPS (~/sf-form-<slug>, sob /agendamentoexperimental):"
 echo "     use os MESMOS TRÊS tokens — FORM_SLOTS_TOKEN, FORM_OUTBOX_TOKEN e SOFIA_TOKEN"
 echo "     (os valores gerados estão nos .env acima). Ver Fase 5 do /implantacao."
+echo
+echo "   💡 Caminho reverso (menos edição de .env): depois que o painel subir, dá para"
+echo "      preencher pela tela — SoFIA → Configuração → 🔑 Credenciais da unidade (admin):"
+echo "      EVO_EMAIL/EVO_PASSWORD (login do robô), ANTHROPIC_API_KEY e TRANSCRICAO_API_KEY,"
+echo "      com botões de reiniciar. O que continua vindo do .env (estrutural): SOFIA_DIR,"
+echo "      EVO_DNS/EVO_TOKEN, EVO_URL/*_PATH/*_HASH e os três tokens do formulário."
 echo
 echo "   Segredos gerados (guarde a senha do painel):"
 echo "     PAINEL_SENHA (sugerida) = $SENHA_SUGERIDA"
