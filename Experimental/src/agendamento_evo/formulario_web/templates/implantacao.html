@@ -1125,6 +1125,30 @@ npm install</pre>
         </table>
       </div>
       <div class="tip">O ritmo de digitação, a pausa do atendimento humano, o <b>modelo de IA</b>, o <b>follow-up</b>, o liga/desliga da <b>transcrição</b> e o roteiro dela <b>não</b> ficam no <code>.env</code> — são editáveis no <b>painel</b> (aba 🤖 Sofia). Modelo e transcrição valem <b>ao reiniciar o <code>sofia-listener</code></b>; o resto vale na hora.</div>
+      <div class="tip">🔑 <b>As duas chaves são editáveis pelo painel</b> (só admin), sem abrir o <code>.env</code> no servidor: <b>SoFIA → Configuração → Jeito de responder → Inteligência</b> tem os campos <b>"Chave da IA (Anthropic)"</b> (a <code>ANTHROPIC_API_KEY</code>) e <b>"Chave de transcrição (OpenAI ou Groq)"</b> (a <code>TRANSCRICAO_API_KEY</code>). Depois de colar e salvar, clique em <b>🔄 Reiniciar SoFIA</b> (na <i>Conexão do WhatsApp</i>) para valer. Na primeira instalação você ainda coloca a da IA no <code>.env</code> (a SoFIA precisa dela para subir); a de transcrição pode entrar direto pelo painel. Só o <code>TRANSCRICAO_URL</code>/<code>TRANSCRICAO_MODELO</code> (usados com o Groq) continuam apenas no <code>.env</code>.</div>
+
+      <div class="call info">
+        <div class="ic">🎤</div>
+        <div>
+          <h3>Como obter a chave de transcrição (áudio → texto)</h3>
+          <p>A transcrição precisa de uma chave de um serviço de fala→texto. Você pode usar a <b>OpenAI</b> (Whisper — padrão, não precisa mexer em mais nada) ou a <b>Groq</b> (costuma sair mais barato/rápido, mas exige duas variáveis extras no <code>.env</code>). Escolha <b>uma</b>:</p>
+          <p style="margin:10px 0 4px"><b>Opção A — OpenAI (Whisper) · recomendada pela simplicidade</b></p>
+          <ol style="margin:0 0 6px;padding-left:20px">
+            <li>Acesse <code>platform.openai.com</code> e entre (ou crie a conta).</li>
+            <li>Em <b>Billing</b>, adicione um crédito (a transcrição é paga <b>por minuto de áudio</b> — o Whisper fica em torno de US$ 0,006/min).</li>
+            <li>Vá em <b>API keys</b> → <b>Create new secret key</b> → <b>copie</b> a chave (começa com <code>sk-…</code>). Ela <b>só aparece uma vez</b> — guarde.</li>
+            <li>Cole no painel em <b>Chave de transcrição</b> e <b>Salvar chave</b>. Não precisa mexer em <code>TRANSCRICAO_URL</code>/<code>TRANSCRICAO_MODELO</code> (o padrão já é OpenAI/Whisper).</li>
+          </ol>
+          <p style="margin:10px 0 4px"><b>Opção B — Groq (alternativa mais barata)</b></p>
+          <ol style="margin:0 0 6px;padding-left:20px">
+            <li>Acesse <code>console.groq.com</code> e entre.</li>
+            <li>Em <b>API Keys</b> → <b>Create API Key</b> → <b>copie</b> (começa com <code>gsk_…</code>).</li>
+            <li>Cole no painel em <b>Chave de transcrição</b> e <b>Salvar chave</b>.</li>
+            <li>No <code>ChatBot/.env</code>, defina também <code>TRANSCRICAO_URL=https://api.groq.com/openai/v1/audio/transcriptions</code> e <code>TRANSCRICAO_MODELO=whisper-large-v3-turbo</code> (essas duas ainda são só no <code>.env</code>).</li>
+          </ol>
+          <p style="margin:8px 0 0">Depois, marque <b>🎤 Transcrever áudios das alunas</b> e clique em <b>🔄 Reiniciar SoFIA</b>. Para <b>desligar</b>, deixe o campo da chave <b>em branco</b> e salve. Sem chave, a SoFIA pede educadamente para a aluna mandar por texto.</p>
+        </div>
+      </div>
     </div>
 
     <div class="stepblock">
@@ -1161,6 +1185,7 @@ pm2 logs sofia-listener        <span class="c"># espere aparecer "PRONTA"</span>
 
       <div class="tip">🆕 <b>Novidades recentes do painel</b> (já valem sem configurar nada — só <code>git pull</code> + reiniciar <code>painel</code>/<code>sofia-listener</code>):
         <ul style="margin:6px 0 0;padding-left:18px">
+          <li>🎤 <b>Chave de transcrição editável no painel</b> (reiniciar <code>&lt;slug&gt;-sofia</code>): além da chave da IA, agora a <b>chave de transcrição de áudio</b> (<code>TRANSCRICAO_API_KEY</code>, OpenAI <code>sk-…</code> ou Groq <code>gsk_…</code>) também é editável em <b>SoFIA → Configuração → Jeito de responder → Inteligência</b> (campo mascarado, com 👁, só admin) — sem abrir o <code>.env</code>. <b>Deixe em branco e salve</b> para <b>desligar</b> a transcrição. Depois de salvar, clique em <b>🔄 Reiniciar SoFIA</b>. O passo a passo de <b>como obter a chave</b> (OpenAI/Whisper ou Groq) está na <b>Fase 9.2</b> deste guia.</li>
           <li>🔓 <b>"Conversa reaberta" no histórico</b> (reiniciar <code>painel</code>): quando uma conversa <b>encerrada à mão</b> (🔒) recebe uma <b>mensagem nova da aluna</b>, o cadeado já saía sozinho e a SoFIA voltava a responder — mas a linha do tempo ainda marcava aquele ponto como <b>"🔒 Encerrada por … · nova conversa"</b>, como se estivesse fechando ali (confuso, porque a mensagem nova é justamente o que <b>reabriu</b>). Agora essa divisória marca a <b>reabertura</b>: <b>"🔓 Conversa reaberta · a aluna voltou a escrever (encerrada antes por …)"</b>, em <b>verde</b>, deixando o histórico correto — mostra que a conversa tinha sido encerrada, por quem, e que a aluna a reabriu.</li>
           <li>⏱️ <b>Antecedência mínima da experimental editável no painel</b> (reiniciar <code>&lt;slug&gt;-painel</code>, <code>&lt;slug&gt;-exp</code> e <code>&lt;slug&gt;-sofia</code>): em <b>SoFIA → Configuração → Memória e operação</b> tem um campo novo — <b>"Antecedência mínima da experimental"</b> (padrão <b>4 horas</b>). Em dia útil, os horários dentro dessa janela <b>somem da grade</b> (formulário, Cadastro Express e SoFIA) e a SoFIA recusa se pedirem. A regra de <b>fim de semana</b> (só a partir de segunda à tarde) é fixa. Vale <b>por unidade</b> (grava em <code>data/sofia-antecedencia-horas.txt</code>); a SoFIA e o cálculo da grade leem esse arquivo — antes o valor era fixo em 4h no código.</li>
           <li>🚫 <b>Follow-up: excluir tags e não incomodar conversa encerrada</b> (reiniciar <code>painel</code> + <code>&lt;slug&gt;-sofia</code>): na tela <b>SoFIA → Configuração → Follow-up de leads</b> tem um campo novo — <b>"Não enviar follow-up para estas tags"</b> — em que você marca as etiquetas do CRM que <b>não</b> devem receber a retomada (ex.: <code>FX - 3. Agendou Aula Exp</code> e as <code>Encerrado ...</code>). Um contato com qualquer uma delas fica de fora. Isso resolve o caso em que a <b>Presença da experimental</b> tira a tag "Agendou" de quem faltou e a lead, agora "fria e sem agendar", virava alvo de follow-up. Também reforçamos a <b>trava do cadeado 🔒</b>: além do painel já pular conversa encerrada à mão ao enfileirar, a SoFIA <b>reconfere na hora do envio</b> (fecha a janela de segundos entre enfileirar e enviar). Quem tem <b>"Sem interesse"</b> segue pulado sozinho.</li>
