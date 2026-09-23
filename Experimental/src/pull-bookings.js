@@ -9,6 +9,7 @@
  */
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
 const bookings = require('./bookings');
+const sofia = require('./sofia-editor'); // p/ avisar o Studio dos agendamentos do formulário
 
 const CLOUD_URL = (process.env.FORM_CLOUD_URL || '').replace(/\/+$/, '');
 const TOKEN = process.env.FORM_OUTBOX_TOKEN || '';
@@ -25,7 +26,25 @@ async function pullBookings() {
 
   if (rows.length === 0) return { add: 0 };
 
+  // Quais são NOVOS (ainda não registrados) — para avisar o Studio só UMA vez.
+  let existentes = new Set();
+  try { existentes = new Set(bookings.carregar().map(r => r.id)); } catch (_) {}
+  const novas = rows.filter(r => r && r.id && !existentes.has(r.id));
+
   const add = bookings.registrar(rows);
+
+  // Aviso "Nova aula experimental agendada" para o Studio + tag "agendou" nos
+  // agendamentos vindos do FORMULÁRIO PÚBLICO. A SoFIA e o Cadastro Express já
+  // avisam pelos próprios caminhos (chegam aqui com origem "sofia") → pulamos,
+  // para o Studio não receber aviso em dobro. O painel consome o feed e envia.
+  try {
+    for (const r of novas) {
+      if (String(r.origem || '').toLowerCase() === 'sofia') continue; // SoFIA/Express: já avisado
+      const tel = String(r.telefone || '').replace(/\D/g, '');
+      if (!tel) continue;
+      sofia.registrarAgendou({ telefone: tel, nome: r.nome || '', when: r.when || '', canal: 'formulario' });
+    }
+  } catch (e) { console.log('[bookings] aviso ao Studio pulado:', e && e.message); }
 
   // Confirma o recebimento para o formulário apagar os registros entregues.
   try {

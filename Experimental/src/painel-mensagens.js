@@ -6744,7 +6744,7 @@ function _conversaEmAndamento(tel) {
   return false;
 }
 // Aplica UMA tag a um contato e (se configurado) enfileira o aviso por WhatsApp.
-function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra }) {
+function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra, canal }) {
   const tel = String(telefone || '').replace(/\D/g, '');
   if (!tel || !tag) return;
   try { contatos.adicionarTag(tel, nome || '', tag); } catch (_) {}
@@ -6759,7 +6759,9 @@ function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra }) {
   try { if (contatos.tagConfig(tag).encerrar && !_conversaEmAndamento(tel)) { try { sofia.setAtencao(tel, false); } catch (_) {} sofia.setEncerrada(tel, true, 'SoFIA'); } } catch (_) {}
   if (avisarWpp) {
     const cab = AUTO_ROTULO[motivo] || '🔔 Automação da SoFIA';
-    const texto = `${cab}\n👤 ${nome || '(sem nome)'}\n📱 ${fmtTelAviso(tel)}${extra ? `\n${extra}` : ''}\n🏷️ ${tag}`;
+    // Diferencia por QUAL canal veio o agendamento (só faz sentido no 'agendou').
+    const canalRot = { formulario: '📲 via Formulário', sofia: '🤖 via SoFIA', express: '🖥️ via Cadastro Express' }[String(canal || '').toLowerCase()] || '';
+    const texto = `${cab}\n👤 ${nome || '(sem nome)'}\n📱 ${fmtTelAviso(tel)}${extra ? `\n${extra}` : ''}\n🏷️ ${tag}${canalRot ? `\n${canalRot}` : ''}`;
     try { sofia.enfileirarAviso(avisarWpp, texto); } catch (_) {}
   }
 }
@@ -6811,7 +6813,7 @@ function processarAgendamentos() {
   if (!autos.length) return;
   for (const ev of evs) {
     const nome = ev.nome || '';
-    for (const a of autos) aplicarAutomacao({ telefone: ev.telefone, nome, tag: a.tag, avisarWpp: a.avisarWpp, motivo: 'agendou', extra: ev.when ? `📅 ${ev.when}` : '' });
+    for (const a of autos) aplicarAutomacao({ telefone: ev.telefone, nome, tag: a.tag, avisarWpp: a.avisarWpp, motivo: 'agendou', extra: ev.when ? `📅 ${ev.when}` : '', canal: ev.canal });
   }
 }
 
@@ -6988,7 +6990,7 @@ async function processarExpressInbox() {
         if (r.ok && data && data.ok) {
           res = { ok: true, when: data.when || op.when };
           if (data.aviso) res.aviso = String(data.aviso);   // ex.: EVO não separou (mesmo e-mail)
-          try { sofia.registrarAgendou({ telefone, nome, when: res.when }); } catch (_) {}
+          try { sofia.registrarAgendou({ telefone, nome, when: res.when, canal: 'express' }); } catch (_) {}
         } else if (r.status === 409 && data && data.motivo === 'cadastro_existente' && data.existente) {
           // Cadastro de OUTRA pessoa com o mesmo e-mail/telefone (mãe x filha):
           // a tela decide sobrescrever ou criar novo, e reenvia com acao_duplicado.

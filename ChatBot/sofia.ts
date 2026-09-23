@@ -1472,7 +1472,7 @@ function registrarAgendamento(telefone: string, nome: string, when: string) {
   try {
     const tel = String(telefone || "").replace(/\D/g, "");
     if (!tel) return;
-    fs.appendFileSync(AGENDOU_FILE, JSON.stringify({ telefone: tel, nome: nome || "", when: when || "", em: Date.now() }) + "\n", "utf8");
+    fs.appendFileSync(AGENDOU_FILE, JSON.stringify({ telefone: tel, nome: nome || "", when: when || "", canal: "sofia", em: Date.now() }) + "\n", "utf8");
   } catch (e: any) { console.log("⚠️  registrarAgendamento falhou:", e?.message ?? e); }
 }
 
