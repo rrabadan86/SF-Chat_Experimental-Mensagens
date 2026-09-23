@@ -761,11 +761,14 @@ NTFY_URL=https://ntfy.sh
 # Ex.: SOFIA_GRADE={"1":["07:00","08:15"],"6":["08:30","09:45"]}
 # SOFIA_GRADE=
 
-# ===== Transcrição de áudio (opcional; CHAVE e liga/desliga editáveis pelo painel) =====
-# Padrão OpenAI (Whisper). Para GROQ, defina também URL e MODELO abaixo.
+# ===== Transcrição de áudio (opcional) — CONFIGURE PELO PAINEL =====
+# Provedor (OpenAI/Groq), chave e liga/desliga ficam em SoFIA → Configuração →
+# Credenciais da unidade → Transcrição. Ao escolher o provedor, o painel grava
+# a chave + a TRANSCRICAO_URL + o TRANSCRICAO_MODELO certos aqui sozinho. Não
+# precisa editar estas linhas à mão (Groq costuma sair de graça; OpenAI é paga).
 # TRANSCRICAO_API_KEY=
-# TRANSCRICAO_URL=https://api.groq.com/openai/v1/audio/transcriptions
-# TRANSCRICAO_MODELO=whisper-large-v3-turbo
+# TRANSCRICAO_URL=
+# TRANSCRICAO_MODELO=
 
 # ===== WhatsApp / navegador da SoFIA =====
 # USA O CHROMIUM DO SISTEMA. O empacotado do puppeteer (~/.cache/puppeteer) quebra
