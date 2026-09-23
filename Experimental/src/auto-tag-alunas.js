@@ -43,6 +43,16 @@ function gravar(cfg) {
 
 const last8 = (x) => String(x || '').replace(/\D/g, '').slice(-8);
 const norm = (t) => String(t || '').trim().toLowerCase();
+// O EVO devolve o celular SEM o "55" (ex.: "62981055502"). O CRM (variantes9) só
+// tolera o 9º dígito quando há o "55" na frente — sem ele, adicionarTag NÃO casa
+// o contato existente e cria uma DUPLICATA. Aqui garantimos a forma canônica com
+// "55" para os contatos NOVOS (os existentes usam a própria chave já guardada).
+function normBR(tel) {
+  let d = String(tel || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (!d.startsWith('55') && (d.length === 10 || d.length === 11)) d = '55' + d;
+  return d;
+}
 
 /**
  * Sincroniza as tags a partir da lista de ALUNAS ATIVAS (com telefone) do EVO.
@@ -83,8 +93,11 @@ function sincronizarTags(ativas, { dry = false } = {}) {
     if (!achou) { r.alunasNovas++; r.novasList.push({ nome: a.nome || '', telefone: tel }); }
     else if (!jaAluna) { r.alunasAtualizadas++; r.atualizadasList.push({ nome: a.nome || achou.c.nome || '', telefone: tel }); }
     if (!dry) {
-      try { contatos.adicionarTag(tel, a.nome || (achou && achou.c.nome) || '', cfg.tagAluna); } catch (_) {}
-      if (achou && (achou.c.tags || []).some(t => norm(t) === exLc)) { try { contatos.removerTag(tel, cfg.tagExAluna); } catch (_) {} }
+      // GRAVA no contato JÁ existente (chave guardada) quando achou pelos últimos 8
+      // dígitos; senão, cria em forma canônica com "55" — evita a duplicata do 9º díg.
+      const alvo = achou ? achou.key : normBR(tel);
+      try { contatos.adicionarTag(alvo, a.nome || (achou && achou.c.nome) || '', cfg.tagAluna); } catch (_) {}
+      if (achou && (achou.c.tags || []).some(t => norm(t) === exLc)) { try { contatos.removerTag(alvo, cfg.tagExAluna); } catch (_) {} }
     }
   }
 
@@ -112,4 +125,59 @@ function sincronizarTags(ativas, { dry = false } = {}) {
   return r;
 }
 
-module.exports = { ler, gravar, sincronizarTags, PADRAO };
+// Chave canônica de dedupe: DDD + 8 dígitos finais (sem "55", sem o 9º dígito).
+// Distingue DDDs (evita fundir pessoas diferentes que só compartilham os últimos
+// 8 dígitos) e junta as variantes com/sem 9 e com/sem 55 do MESMO número.
+function chaveDedup(tel) {
+  let d = String(tel || '').replace(/\D/g, '');
+  if (d.startsWith('55')) d = d.slice(2);
+  if (d.length === 11 && d[2] === '9') d = d.slice(0, 2) + d.slice(3); // DDD + 9 + 8 → DDD + 8
+  return d.length >= 10 ? d : ''; // canônico = DDD(2) + 8 dígitos
+}
+
+/**
+ * Limpa contatos DUPLICADOS pelo 9º dígito / "55" (mesma pessoa em dois cadastros).
+ * Escolhe um principal (prefere a forma com "55" — a do WhatsApp), MESCLA as tags
+ * do duplicado nele e REMOVE o duplicado. Agrupa por DDD+8 (nunca funde DDDs
+ * diferentes). dry=true só simula. Retorna a lista de ações.
+ */
+function limparDuplicatas({ dry = true } = {}) {
+  let map = {};
+  try { map = contatos.carregar() || {}; } catch (_) { return []; }
+  const grupos = new Map();
+  for (const key in map) {
+    const k = chaveDedup(key); if (!k) continue;
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(key);
+  }
+  const acoes = [];
+  for (const [, keys] of grupos) {
+    if (keys.length < 2) continue;
+    const com55 = keys.filter(x => String(x).startsWith('55')).sort((a, b) => b.length - a.length);
+    const principal = com55[0] || keys.slice().sort((a, b) => b.length - a.length)[0];
+    for (const o of keys) {
+      if (o === principal) continue;
+      const tags = (map[o] && map[o].tags) || [];
+      acoes.push({ manter: principal, manterNome: (map[principal] && map[principal].nome) || '', remover: o, nome: (map[o] && map[o].nome) || '', tags });
+      if (!dry) {
+        try { for (const t of tags) contatos.adicionarTag(principal, (map[principal] && map[principal].nome) || (map[o] && map[o].nome) || '', t); } catch (_) {}
+        try { contatos.remover(o); } catch (_) {}
+      }
+    }
+  }
+  return acoes;
+}
+
+module.exports = { ler, gravar, sincronizarTags, limparDuplicatas, PADRAO };
+
+// CLI de limpeza de duplicatas: node src/auto-tag-alunas.js --limpar [--run]
+if (require.main === module) {
+  const run = process.argv.includes('--run');
+  const acoes = limparDuplicatas({ dry: !run });
+  console.log(`\n🧹 Duplicatas por 9º dígito / "55"${run ? '' : ' (SIMULAÇÃO — nada removido)'}: ${acoes.length} par(es).`);
+  for (const a of acoes) {
+    console.log(`   • fundir "${a.nome || 's/ nome'}" [${a.remover}] → manter [${a.manter}]${a.tags && a.tags.length ? ' (tags: ' + a.tags.join(', ') + ')' : ''}`);
+  }
+  console.log(run ? '\n✅ Duplicatas fundidas.' : '\n(Use --run para fundir de verdade.)');
+  process.exit(0);
+}
