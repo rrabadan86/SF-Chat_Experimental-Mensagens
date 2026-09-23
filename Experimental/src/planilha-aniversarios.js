@@ -146,6 +146,14 @@ async function buscarAlunasAniversario() {
     catch (e) { console.log(`   ⚠️  Filtro de mês falhou (${e && e.message ? e.message : e}) — seguindo com o padrão.`); }
     await sleep(4000);
 
+    // 3.5. Filtro "Contrato ativo": marca TODOS e desmarca os que começam com
+    //      "Circuito" (contratos puros de Circuito). Assim quem é só Circuito
+    //      (ex.: Renata Moreira) sai da segmentação na FONTE, sem depender da API.
+    console.log('🧾 Filtrando "Contrato ativo": todos, menos os de Circuito...');
+    try { await selecionarContratosSemCircuito(page); }
+    catch (e) { console.log(`   ⚠️  Filtro de contrato falhou (${e && e.message ? e.message : e}) — seguindo sem ele.`); }
+    await sleep(4000);
+
     // 4. LÊ A TABELA DO DOM em todas as páginas. A tabela reflete EXATAMENTE a
     //    segmentação filtrada — é a fonte correta (a API do EVO também dispara
     //    com a base inteira antes do filtro, poluindo os dados).
@@ -352,6 +360,110 @@ async function selecionarMesTodos(page) {
   });
   if (aplicar) await page.mouse.click(aplicar.x, aplicar.y);
   console.log(`   🗓️  Filtro de mês: aberto=sim, Todos=${todos ? (todos.checked ? 'já-marcado' : 'marcado-agora') : 'n/e'}, aplicar=${!!aplicar}`);
+  await sleep(4000);
+  return true;
+}
+
+/**
+ * Abre o filtro "Contrato ativo", marca TODOS e DESMARCA os contratos que
+ * começam com "Circuito" (os puros de Circuito). Os combos SlimFit (ex.:
+ * "FREE 3X SLIMFIT/ CIRC SLIM") NÃO começam com "Circuito", então continuam
+ * marcados. Best-effort: se algo falhar, segue sem o filtro (as travas do
+ * job protegem a planilha de qualquer jeito).
+ */
+async function selecionarContratosSemCircuito(page) {
+  const overlayAberto = () => page.evaluate(() => {
+    const o = document.querySelector('.cdk-overlay-container');
+    if (!o || o.offsetHeight === 0) return false;
+    const t = (o.textContent || '').toLowerCase();
+    return /circuito|grupo|aplicar/.test(t) && !/janeiro|fevereiro/.test(t);
+  }).catch(() => false);
+
+  const acharTexto = (rs) => page.evaluate((r) => {
+    const re = new RegExp(r, 'i');
+    let best = null;
+    for (const el of document.querySelectorAll('button, span, div, a, [class*="chip"], [class*="filter"]')) {
+      const t = (el.textContent || '').trim();
+      if (t && t.length <= 40 && re.test(t) && el.offsetWidth > 0 && el.offsetHeight > 0) {
+        const c = el.closest('button, a, [class*="chip"], [class*="filter"]') || el;
+        const box = c.getBoundingClientRect();
+        if (!best || t.length < best.len) best = { x: box.left + box.width / 2, y: box.top + box.height / 2, len: t.length };
+      }
+    }
+    return best;
+  }, rs).catch(() => null);
+
+  // 1) Abre o filtro: tenta o chip "Contrato ativo"; se não abrir, "+ FILTRO" → "Contrato ativo".
+  let aberto = false;
+  for (let t = 1; t <= 3 && !aberto; t++) {
+    const chip = await acharTexto('contrato ativo');
+    if (chip) { await page.mouse.click(chip.x, chip.y); await sleep(1600); aberto = await overlayAberto(); }
+    if (!aberto) {
+      const filtro = await acharTexto('^\\+?\\s*filtro$');
+      if (filtro) {
+        await page.mouse.click(filtro.x, filtro.y); await sleep(1200);
+        const opc = await acharTexto('contrato ativo');
+        if (opc) { await page.mouse.click(opc.x, opc.y); await sleep(1600); aberto = await overlayAberto(); }
+      }
+    }
+    if (!aberto) await sleep(1000);
+  }
+  if (!aberto) { console.log('   ⚠️  Filtro "Contrato ativo" não abriu — seguindo sem ele.'); return false; }
+
+  // 2) Marca "Todos".
+  const todos = await page.evaluate(() => {
+    const o = document.querySelector('.cdk-overlay-container'); if (!o) return null;
+    for (const el of o.querySelectorAll('mat-checkbox, mat-list-option, [role="option"], label, li')) {
+      if ((el.textContent || '').trim().toLowerCase() === 'todos' && el.offsetWidth > 0) {
+        const inp = el.querySelector('input[type=checkbox]');
+        const checked = inp ? inp.checked : (el.getAttribute('aria-checked') === 'true');
+        const r = el.getBoundingClientRect();
+        return { x: r.left + Math.min(18, r.width / 2), y: r.top + r.height / 2, checked };
+      }
+    }
+    return null;
+  });
+  if (todos && !todos.checked) { await page.mouse.click(todos.x, todos.y); await sleep(1000); }
+
+  // 3) Enumera as opções e desmarca as que começam com "Circuito".
+  const opcoes = await page.evaluate(() => {
+    const o = document.querySelector('.cdk-overlay-container'); if (!o) return [];
+    const out = [], seen = new Set();
+    for (const el of o.querySelectorAll('mat-checkbox, mat-list-option, [role="option"], label, li')) {
+      const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!txt || txt.length > 90 || seen.has(txt)) continue;
+      if (/^(todos|pesquisar|aplicar)$/i.test(txt)) continue;
+      seen.add(txt);
+      const inp = el.querySelector('input[type=checkbox]');
+      const checked = inp ? inp.checked : (el.getAttribute('aria-checked') === 'true');
+      const r = el.getBoundingClientRect();
+      out.push({ txt, checked, x: r.left + Math.min(18, r.width / 2), y: r.top + r.height / 2, vis: r.height > 0 && r.top >= 0 });
+    }
+    return out;
+  });
+  console.log('   🧾 Opções de contrato:', JSON.stringify(opcoes.map(o => o.txt)));
+  let desmarcados = 0;
+  for (const op of opcoes) {
+    if (/^circuito/i.test(op.txt) && op.vis) {
+      await page.mouse.click(op.x, op.y); await sleep(500); desmarcados++;
+      console.log(`   ➖ desmarquei: ${op.txt}`);
+    }
+  }
+  console.log(`   🧾 ${desmarcados} contrato(s) de Circuito desmarcado(s).`);
+
+  // 4) APLICAR.
+  const aplicar = await page.evaluate(() => {
+    const o = document.querySelector('.cdk-overlay-container'); if (!o) return null;
+    for (const b of o.querySelectorAll('button, span, div, a')) {
+      if ((b.textContent || '').trim().toUpperCase() === 'APLICAR' && b.offsetWidth > 0) {
+        const c = b.closest('button') || b; const r = c.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }
+    }
+    return null;
+  });
+  if (aplicar) await page.mouse.click(aplicar.x, aplicar.y);
+  console.log(`   🧾 Filtro de contrato: aberto=sim, Circuito desmarcados=${desmarcados}, aplicar=${!!aplicar}`);
   await sleep(4000);
   return true;
 }
