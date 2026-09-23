@@ -124,21 +124,39 @@ function gravarAntecedenciaHoras(n) {
   return true;
 }
 
-// Chave da IA (ANTHROPIC_API_KEY) — editável pelo painel (admin). Fica no
-// ChatBot/.env; a SoFIA lê no boot, então a troca vale após reiniciar a SoFIA.
+// Chaves do ChatBot/.env editáveis pelo painel (admin): a da IA
+// (ANTHROPIC_API_KEY) e a de transcrição de áudio (TRANSCRICAO_API_KEY). A SoFIA
+// lê o .env no boot, então a troca vale após reiniciar a SoFIA.
 const CHATBOT_ENV_FILE = path.resolve(__dirname, '..', '..', 'ChatBot', '.env');
-function lerApiKey() {
-  try { const m = /^ANTHROPIC_API_KEY=(.*)$/m.exec(fs.readFileSync(CHATBOT_ENV_FILE, 'utf8')); return m ? m[1].trim().replace(/^["']|["']$/g, '') : ''; } catch (_) { return ''; }
+// Lê UMA variável do .env (sem aspas). '' se não existir.
+function lerEnvVar(nome) {
+  try { const m = new RegExp('^' + nome + '=(.*)$', 'm').exec(fs.readFileSync(CHATBOT_ENV_FILE, 'utf8')); return m ? m[1].trim().replace(/^["']|["']$/g, '') : ''; } catch (_) { return ''; }
 }
-function gravarApiKey(key) {
-  key = String(key || '').trim().replace(/^["']|["']$/g, '');
-  if (!/^sk-ant-[\w-]{20,}$/.test(key)) return false; // validação básica: chave Anthropic
+// Grava UMA variável no .env, preservando o resto do arquivo (substitui a linha
+// se existir, senão acrescenta no fim). Aceita valor vazio (para "desligar").
+function gravarEnvVar(nome, valor) {
+  valor = String(valor || '').trim().replace(/^["']|["']$/g, '');
   let txt = ''; try { txt = fs.readFileSync(CHATBOT_ENV_FILE, 'utf8'); } catch (_) {}
-  const linha = 'ANTHROPIC_API_KEY=' + key;
-  if (/^ANTHROPIC_API_KEY=.*$/m.test(txt)) txt = txt.replace(/^ANTHROPIC_API_KEY=.*$/m, linha);
+  const linha = nome + '=' + valor;
+  const re = new RegExp('^' + nome + '=.*$', 'm');
+  if (re.test(txt)) txt = txt.replace(re, linha);
   else txt = (txt.replace(/\s*$/, '') + '\n' + linha + '\n').replace(/^\n/, '');
   try { fs.mkdirSync(path.dirname(CHATBOT_ENV_FILE), { recursive: true }); } catch (_) {}
   try { fs.writeFileSync(CHATBOT_ENV_FILE, txt, 'utf8'); return true; } catch (_) { return false; }
+}
+function lerApiKey() { return lerEnvVar('ANTHROPIC_API_KEY'); }
+function gravarApiKey(key) {
+  key = String(key || '').trim().replace(/^["']|["']$/g, '');
+  if (!/^sk-ant-[\w-]{20,}$/.test(key)) return false; // validação básica: chave Anthropic (nunca vazia)
+  return gravarEnvVar('ANTHROPIC_API_KEY', key);
+}
+function lerTranscricaoKey() { return lerEnvVar('TRANSCRICAO_API_KEY'); }
+// Chave de transcrição: OpenAI (sk-...) ou Groq (gsk_...). Vazia é VÁLIDA —
+// significa "desligar a transcrição" (deixa TRANSCRICAO_API_KEY= em branco).
+function gravarTranscricaoKey(key) {
+  key = String(key || '').trim().replace(/^["']|["']$/g, '');
+  if (key && !/^(sk-|gsk_)[\w-]{20,}$/.test(key)) return false;
+  return gravarEnvVar('TRANSCRICAO_API_KEY', key);
 }
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
@@ -4137,6 +4155,29 @@ function paginaSofia(aviso, erro) {
           🎤 Transcrever áudios das alunas${infoI('Quando a aluna manda <b>áudio</b>, a SoFIA transcreve (fala→texto) e responde ao conteúdo — aparece como “🎤 …” no painel. Precisa de uma <b>chave de transcrição</b> no arquivo <code>.env</code> (<code>TRANSCRICAO_API_KEY</code>, OpenAI ou Groq). Desligado, a SoFIA pede para a aluna mandar por texto.')}
         </label>
         <p class="quando" style="margin:6px 0 0">Precisa da chave no <code>ChatBot/.env</code>. Sem chave, fica sem efeito. Vale <b>após reiniciar</b> a SoFIA.</p>
+        ${(_navSess && _navSess.admin) ? `
+        <div style="margin:12px 0 0">
+          <label>Chave de transcrição (OpenAI ou Groq) ${infoI('É a chave que faz a SoFIA <b>entender áudios</b> (fala→texto) — a <b>TRANSCRICAO_API_KEY</b>. Aceita chave da <b>OpenAI</b> (<code>sk-…</code>, modelo Whisper) ou da <b>Groq</b> (<code>gsk_…</code>). Cole a chave e salve, sem mexer no .env. Fica oculta; clique no 👁 para ver. <b>Deixe em branco e salve</b> para <b>desligar</b> a transcrição. A troca vale <b>após reiniciar a SoFIA</b>. Veja o passo a passo de como obter a chave no <b>/implantacao</b>.')}</label>
+          <div style="display:flex;gap:8px;align-items:center;max-width:600px">
+            <input type="password" id="transKeyInput" value="${esc(lerTranscricaoKey())}" placeholder="sk-… ou gsk_…" autocomplete="off" spellcheck="false" style="flex:1;padding:9px;font-family:monospace">
+            <button type="button" title="Mostrar/ocultar" onclick="var i=document.getElementById('transKeyInput');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'" style="padding:8px 11px">👁</button>
+            <button type="button" class="save" style="width:auto;padding:9px 14px" onclick="salvarTransKey()">Salvar chave</button>
+          </div>
+          <p class="quando" id="transKeyMsg" style="margin:6px 0 0">Fica no servidor (<code>ChatBot/.env</code>). Depois de salvar, clique em <b>🔄 Reiniciar SoFIA</b> (aqui na tela, na <i>Conexão do WhatsApp</i>) para valer.</p>
+        </div>
+        <script>
+        function salvarTransKey(){
+          var i=document.getElementById('transKeyInput'), m=document.getElementById('transKeyMsg');
+          var k=(i.value||'').trim();
+          m.textContent='Salvando…';
+          fetch('/sofia/transcricao-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})})
+            .then(function(r){return r.json();}).then(function(j){
+              if(j&&j.ok){ m.innerHTML=(k? '✅ Chave salva!' : '✅ Transcrição desligada (chave em branco).')+' Agora clique em <b>🔄 Reiniciar SoFIA</b> (na <i>Conexão do WhatsApp</i>, aqui na tela) para valer.'; }
+              else { m.textContent='❌ '+((j&&j.erro)||'não consegui salvar'); }
+            }).catch(function(){ m.textContent='❌ erro de rede'; });
+        }
+        </script>
+        ` : ''}
       </div>
 
       <!-- Grupo 2 · Ritmo da conversa (humano/velocidade + agrupar + pausa celular) -->
@@ -5952,6 +5993,18 @@ const server = http.createServer((req, res) => {
       const ok = gravarApiKey(d.key);
       if (ok) { try { auditoria.registrar(sess.usuario, 'sofia.apikey', 'ANTHROPIC_API_KEY', 'atualizada pelo painel'); } catch (_) {} }
       return res.end(JSON.stringify(ok ? { ok: true } : { ok: false, erro: 'chave inválida (deve começar com sk-ant-)' }));
+    });
+  }
+  // Troca da chave de transcrição (TRANSCRICAO_API_KEY) — só admin. Grava no
+  // ChatBot/.env; vale após reiniciar a SoFIA. Vazia = desliga a transcrição.
+  if (req.method === 'POST' && url === '/sofia/transcricao-key') {
+    if (!sess.admin) return negarAcesso(res, sess);
+    return lerCorpo(req, 1e5, corpo => {
+      let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      const ok = gravarTranscricaoKey(d.key);
+      if (ok) { try { auditoria.registrar(sess.usuario, 'sofia.transcricaokey', 'TRANSCRICAO_API_KEY', (String(d.key || '').trim() ? 'atualizada' : 'removida') + ' pelo painel'); } catch (_) {} }
+      return res.end(JSON.stringify(ok ? { ok: true } : { ok: false, erro: 'chave inválida (use sk-… da OpenAI ou gsk_… da Groq, ou deixe em branco para desligar)' }));
     });
   }
   // Serve a foto que VOCÊ enviou numa resposta manual (mostrada na bolha do chat).
