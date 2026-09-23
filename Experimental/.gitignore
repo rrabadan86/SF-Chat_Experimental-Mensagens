@@ -64,6 +64,7 @@ data/acessos-login.jsonl
 data/auditoria.jsonl
 
 data/tags-config.json
+data/auto-tag-alunas.json
 
 data/sofia-exp-limite.txt
 
