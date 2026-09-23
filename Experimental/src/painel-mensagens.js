@@ -1620,7 +1620,7 @@ const HORARIOS_DA_MSG = {
 };
 // Jobs sem texto editável, na seção "Outros envios" da aba Mensagens.
 // (os agendados manhã/tarde ficam na aba "Agendar envios", pois são dela.)
-const OUTROS_JOBS = ['resumoDia', 'resumoSemana'];
+const OUTROS_JOBS = ['resumoDia', 'resumoSemana', 'planilhaAniv'];
 
 // Uma linha "hora + dias" para um job; inputs pertencem ao form informado (padrão #fh).
 function blocoHorario(info, sublabel, formId = 'fh') {

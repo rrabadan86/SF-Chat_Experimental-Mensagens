@@ -24,6 +24,7 @@ const CATALOGO = [
   { chave: 'renewal',           titulo: 'Renovação de contrato',        padrao: '30 14 * * *' },
   { chave: 'aniversariantes',   titulo: 'Aniversário (nos grupos)',     padrao: '0 8 * * *' },
   { chave: 'aniversarioEx',     titulo: 'Aniversário — ex-alunas (direto)', padrao: '3 8 * * *' },
+  { chave: 'planilhaAniv',      titulo: 'Planilha de aniversários (Google Sheets)', padrao: '0 14 * * *' },
   { chave: 'instagram',         titulo: 'Boas-vindas no Instagram',     padrao: '0 7 * * *' },
   { chave: 'circuitoConvoca',   titulo: 'Circuito — convocatória',      padrao: '15 16 * * 3' },
   { chave: 'circuitoLembrete',  titulo: 'Circuito — lembrete',          padrao: '15 16 * * 5' },
