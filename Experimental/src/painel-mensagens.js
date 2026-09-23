@@ -6757,10 +6757,14 @@ function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra, canal
   // Guarda: nunca force-fecha uma conversa que está EM ANDAMENTO (evita o bug de
   // marcar "Encerrado sem agendamento" no meio do atendimento e derrubar a conversa).
   try { if (contatos.tagConfig(tag).encerrar && !_conversaEmAndamento(tel)) { try { sofia.setAtencao(tel, false); } catch (_) {} sofia.setEncerrada(tel, true, 'SoFIA'); } } catch (_) {}
-  if (avisarWpp) {
+  // O Cadastro Express normalmente é feito pela PRÓPRIA recepção — não faz sentido
+  // notificar quem acabou de cadastrar. Aplica a tag "agendou" (acima), mas PULA o
+  // aviso no WhatsApp. Os avisos ficam só para SoFIA e Formulário.
+  const pularAviso = String(canal || '').toLowerCase() === 'express';
+  if (avisarWpp && !pularAviso) {
     const cab = AUTO_ROTULO[motivo] || '🔔 Automação da SoFIA';
     // Diferencia por QUAL canal veio o agendamento (só faz sentido no 'agendou').
-    const canalRot = { formulario: '📲 via Formulário', sofia: '🤖 via SoFIA', express: '🖥️ via Cadastro Express' }[String(canal || '').toLowerCase()] || '';
+    const canalRot = { formulario: '📲 via Formulário', sofia: '🤖 via SoFIA' }[String(canal || '').toLowerCase()] || '';
     const texto = `${cab}\n👤 ${nome || '(sem nome)'}\n📱 ${fmtTelAviso(tel)}${extra ? `\n${extra}` : ''}\n🏷️ ${tag}${canalRot ? `\n${canalRot}` : ''}`;
     try { sofia.enfileirarAviso(avisarWpp, texto); } catch (_) {}
   }
