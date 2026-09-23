@@ -4100,7 +4100,7 @@ function paginaSofia(aviso, erro) {
             <button type="button" title="Mostrar/ocultar" onclick="var i=document.getElementById('apiKeyInput');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'" style="padding:8px 11px">👁</button>
             <button type="button" class="save" style="width:auto;padding:9px 14px" onclick="salvarApiKey()">Salvar chave</button>
           </div>
-          <p class="quando" id="apiKeyMsg" style="margin:6px 0 0">Fica no servidor (<code>ChatBot/.env</code>). Vale após reiniciar a SoFIA (<code>pm2 restart ${esc(PM2_SOFIA)} --update-env</code>).</p>
+          <p class="quando" id="apiKeyMsg" style="margin:6px 0 0">Fica no servidor (<code>ChatBot/.env</code>). Depois de salvar, clique em <b>🔄 Reiniciar SoFIA</b> (aqui na tela, na <i>Conexão do WhatsApp</i>) para a chave nova valer.</p>
         </div>
         <script>
         function salvarApiKey(){
@@ -4109,7 +4109,7 @@ function paginaSofia(aviso, erro) {
           m.textContent='Salvando…';
           fetch('/sofia/api-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})})
             .then(function(r){return r.json();}).then(function(j){
-              if(j&&j.ok){ m.innerHTML='✅ Chave salva. Reinicie a SoFIA para valer: <code>pm2 restart ${esc(PM2_SOFIA)} --update-env</code>'; }
+              if(j&&j.ok){ m.innerHTML='✅ Chave salva! Agora clique em <b>🔄 Reiniciar SoFIA</b> (na <i>Conexão do WhatsApp</i>, aqui na tela) para a chave nova valer.'; }
               else { m.textContent='❌ '+((j&&j.erro)||'não consegui salvar'); }
             }).catch(function(){ m.textContent='❌ erro de rede'; });
         }
