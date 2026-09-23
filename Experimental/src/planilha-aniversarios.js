@@ -630,6 +630,11 @@ function _logAutoTag(at) {
   const dry = at.dry ? ' (SIMULAÇÃO — nada gravado)' : '';
   console.log(`\n🏷️  Auto-tag Aluna/Ex-aluna${dry}: ${at.alunasNovas} nova(s) + ${at.alunasAtualizadas} atualizada(s) como "0. Aluna"; ${at.exAlunas} → "0. Ex Aluna".`
     + (at.semTelefone ? ` (${at.semTelefone} ativa[s] sem telefone — não etiquetadas.)` : ''));
+  const lista = (arr) => (arr || []).slice(0, 40).forEach(x => console.log(`      • ${x.nome || 's/ nome'}${x.telefone ? ' · ' + x.telefone : (x.id ? ' [' + x.id + ']' : '')}`));
+  if (at.novasList && at.novasList.length) { console.log('   🆕 Cadastrar + "0. Aluna":'); lista(at.novasList); }
+  if (at.atualizadasList && at.atualizadasList.length) { console.log('   ✏️  Passar a "0. Aluna" (já existem no CRM):'); lista(at.atualizadasList); }
+  if (at.exList && at.exList.length) { console.log('   👋 Passar a "0. Ex Aluna":'); lista(at.exList); }
+  if (at.semTelList && at.semTelList.length) { console.log('   ☎️  Ativas SEM telefone na API (não casam — confira o cadastro no EVO):'); lista(at.semTelList); }
   if (at.abortado) console.log(`   ⛔ Rebaixamento para ex-aluna ABORTADO — ${at.motivoAborto}`);
 }
 
