@@ -52,7 +52,7 @@ const norm = (t) => String(t || '').trim().toLowerCase();
  */
 function sincronizarTags(ativas, { dry = false } = {}) {
   const cfg = ler();
-  const r = { on: cfg.on, dry: !!dry, alunasNovas: 0, alunasAtualizadas: 0, exAlunas: 0, semTelefone: 0, abortado: false };
+  const r = { on: cfg.on, dry: !!dry, alunasNovas: 0, alunasAtualizadas: 0, exAlunas: 0, semTelefone: 0, abortado: false, novasList: [], atualizadasList: [], exList: [], semTelList: [] };
   // Em modo real, só age se estiver ligado. Em --dry, mostra o que FARIA mesmo desligado.
   if (!cfg.on && !dry) { r.desligado = true; return r; }
   if (!Array.isArray(ativas)) { r.erro = 'lista de ativas inválida'; return r; }
@@ -72,7 +72,7 @@ function sincronizarTags(ativas, { dry = false } = {}) {
 
   // Telefones das ativas de hoje.
   const ativasTel = new Set();
-  for (const a of ativas) { const k = last8(a.telefone); if (k) ativasTel.add(k); else r.semTelefone++; }
+  for (const a of ativas) { const k = last8(a.telefone); if (k) ativasTel.add(k); else { r.semTelefone++; r.semTelList.push({ nome: a.nome || '', id: a.id || '' }); } }
 
   // 1. ATIVAS → "0. Aluna" (cadastra se faltar; tira "0. Ex Aluna").
   for (const a of ativas) {
@@ -80,7 +80,8 @@ function sincronizarTags(ativas, { dry = false } = {}) {
     if (!tel) continue;
     const achou = idx.get(last8(tel));
     const jaAluna = achou && (achou.c.tags || []).some(t => norm(t) === alunaLc);
-    if (!achou) r.alunasNovas++; else if (!jaAluna) r.alunasAtualizadas++;
+    if (!achou) { r.alunasNovas++; r.novasList.push({ nome: a.nome || '', telefone: tel }); }
+    else if (!jaAluna) { r.alunasAtualizadas++; r.atualizadasList.push({ nome: a.nome || achou.c.nome || '', telefone: tel }); }
     if (!dry) {
       try { contatos.adicionarTag(tel, a.nome || (achou && achou.c.nome) || '', cfg.tagAluna); } catch (_) {}
       if (achou && (achou.c.tags || []).some(t => norm(t) === exLc)) { try { contatos.removerTag(tel, cfg.tagExAluna); } catch (_) {} }
@@ -101,6 +102,7 @@ function sincronizarTags(ativas, { dry = false } = {}) {
     if (!(v.c.tags || []).some(t => norm(t) === alunaLc)) continue; // não era aluna
     if (ativasTel.has(k)) continue;                                  // segue ativa
     r.exAlunas++;
+    r.exList.push({ nome: v.c.nome || '', telefone: v.key });
     if (!dry) {
       try { contatos.removerTag(v.key, cfg.tagAluna); } catch (_) {}
       try { contatos.adicionarTag(v.key, v.c.nome || '', cfg.tagExAluna); } catch (_) {}
