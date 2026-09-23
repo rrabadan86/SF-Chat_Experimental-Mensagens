@@ -513,9 +513,9 @@ function gravarAgendarResultId(id, res) {
 }
 // Registra um agendamento concluído no feed que o painel consome p/ aplicar a tag
 // "agendou" (mesmo arquivo que a SoFIA usa). Best-effort.
-function registrarAgendou({ telefone, nome, when } = {}) {
+function registrarAgendou({ telefone, nome, when, canal } = {}) {
   try {
-    const linha = JSON.stringify({ telefone: String(telefone || '').replace(/\D/g, ''), nome: String(nome || '').trim(), when: String(when || '').trim(), em: Date.now() }) + '\n';
+    const linha = JSON.stringify({ telefone: String(telefone || '').replace(/\D/g, ''), nome: String(nome || '').trim(), when: String(when || '').trim(), canal: String(canal || '').trim().toLowerCase(), em: Date.now() }) + '\n';
     fs.appendFileSync(F.agendou, linha, 'utf8');
   } catch (_) {}
 }
