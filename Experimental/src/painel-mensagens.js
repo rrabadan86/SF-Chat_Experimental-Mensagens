@@ -2340,7 +2340,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     // Divisória de SESSÃO: fica PERMANENTE no histórico entre uma conversa e a
     // seguinte. Aparece quando o intervalo entre duas mensagens passa do Tempo de
     // sessão (memória) OU quando houve encerramento manual (cadeado) entre elas.
-    function divisorHtml(txt){ return '<div style="display:flex;align-items:center;gap:10px;margin:16px 2px 8px;color:#a15a5a"><span style="flex:1;height:1px;background:#e6cfcf"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap">'+txt+'</span><span style="flex:1;height:1px;background:#e6cfcf"></span></div>'; }
+    function divisorHtml(txt, cor, corLinha){ var c=cor||'#a15a5a', l=corLinha||'#e6cfcf'; return '<div style="display:flex;align-items:center;gap:10px;margin:16px 2px 8px;color:'+c+'"><span style="flex:1;height:1px;background:'+l+'"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap">'+txt+'</span><span style="flex:1;height:1px;background:'+l+'"></span></div>'; }
     // Marcador: resposta manual DIRETO pelo celular da SoFIA (dispara a pausa por tempo).
     function wppDivisor(){ return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#f0dcc2"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#b45309;background:#fff4e5;border-radius:999px;padding:2px 11px">📱 Resposta manual pelo WhatsApp · SoFIA pausada por '+fmtPausa(PAUSA_MIN)+' nesta conversa</span><span style="flex:1;height:1px;background:#f0dcc2"></span></div>'; }
     var encPorTxt=(c.encPor && String(c.encPor).trim())?escH(c.encPor):'';
@@ -2351,7 +2351,11 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     if(c.encEm){ for(var _j=0;_j<msgs.length;_j++){ if(msgs[_j].autor==='aluna' && (msgs[_j].em||0)>c.encEm){ idxNova=_j; break; } } }
     var itensMsg = msgs.map(function(m,i){
       var sep='';
-      if(i===idxNova) sep=divisorHtml('🔒 Encerrada '+(encPorTxt?'por '+encPorTxt:'manualmente')+' · nova conversa');
+      // Esta divisória cai na PRIMEIRA mensagem da aluna depois de um encerramento
+      // manual — ou seja, é exatamente o instante em que a conversa foi REABERTA (a
+      // aluna voltou a escrever e o cadeado saiu sozinho). Por isso ela marca a
+      // REABERTURA (não o fechamento), lembrando por quem havia sido encerrada.
+      if(i===idxNova) sep=divisorHtml('🔓 Conversa reaberta · a aluna voltou a escrever (encerrada antes '+(encPorTxt?'por '+encPorTxt:'manualmente')+')', '#1f7a52', '#cfe8db');
       else if(i>0){
         var ant=msgs[i-1];
         var gap=(m.em||0)-(ant.em||0);
