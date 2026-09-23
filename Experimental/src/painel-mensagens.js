@@ -124,25 +124,30 @@ function gravarAntecedenciaHoras(n) {
   return true;
 }
 
-// Chaves do ChatBot/.env editáveis pelo painel (admin): a da IA
-// (ANTHROPIC_API_KEY) e a de transcrição de áudio (TRANSCRICAO_API_KEY). A SoFIA
-// lê o .env no boot, então a troca vale após reiniciar a SoFIA.
+// Credenciais editáveis pelo painel (admin), na tela "Credenciais da unidade":
+//  - ChatBot/.env: chave da IA (ANTHROPIC_API_KEY) e de transcrição (TRANSCRICAO_API_KEY).
+//  - Experimental/.env: login do robô no EVO (EVO_EMAIL / EVO_PASSWORD).
+// Quem consome (SoFIA, robô, formulário) lê o .env no BOOT — a troca vale após
+// reiniciar o processo certo (SoFIA para as chaves; robô para o login do EVO).
 const CHATBOT_ENV_FILE = path.resolve(__dirname, '..', '..', 'ChatBot', '.env');
-// Lê UMA variável do .env (sem aspas). '' se não existir.
-function lerEnvVar(nome) {
-  try { const m = new RegExp('^' + nome + '=(.*)$', 'm').exec(fs.readFileSync(CHATBOT_ENV_FILE, 'utf8')); return m ? m[1].trim().replace(/^["']|["']$/g, '') : ''; } catch (_) { return ''; }
+const EXPERIMENTAL_ENV_FILE = path.resolve(__dirname, '..', '.env');
+// Lê UMA variável de um .env (sem aspas). '' se não existir. Arquivo padrão: ChatBot/.env.
+function lerEnvVar(nome, arq) {
+  arq = arq || CHATBOT_ENV_FILE;
+  try { const m = new RegExp('^' + nome + '=(.*)$', 'm').exec(fs.readFileSync(arq, 'utf8')); return m ? m[1].trim().replace(/^["']|["']$/g, '') : ''; } catch (_) { return ''; }
 }
 // Grava UMA variável no .env, preservando o resto do arquivo (substitui a linha
 // se existir, senão acrescenta no fim). Aceita valor vazio (para "desligar").
-function gravarEnvVar(nome, valor) {
+function gravarEnvVar(nome, valor, arq) {
+  arq = arq || CHATBOT_ENV_FILE;
   valor = String(valor || '').trim().replace(/^["']|["']$/g, '');
-  let txt = ''; try { txt = fs.readFileSync(CHATBOT_ENV_FILE, 'utf8'); } catch (_) {}
+  let txt = ''; try { txt = fs.readFileSync(arq, 'utf8'); } catch (_) {}
   const linha = nome + '=' + valor;
   const re = new RegExp('^' + nome + '=.*$', 'm');
   if (re.test(txt)) txt = txt.replace(re, linha);
   else txt = (txt.replace(/\s*$/, '') + '\n' + linha + '\n').replace(/^\n/, '');
-  try { fs.mkdirSync(path.dirname(CHATBOT_ENV_FILE), { recursive: true }); } catch (_) {}
-  try { fs.writeFileSync(CHATBOT_ENV_FILE, txt, 'utf8'); return true; } catch (_) { return false; }
+  try { fs.mkdirSync(path.dirname(arq), { recursive: true }); } catch (_) {}
+  try { fs.writeFileSync(arq, txt, 'utf8'); return true; } catch (_) { return false; }
 }
 function lerApiKey() { return lerEnvVar('ANTHROPIC_API_KEY'); }
 function gravarApiKey(key) {
@@ -157,6 +162,20 @@ function gravarTranscricaoKey(key) {
   key = String(key || '').trim().replace(/^["']|["']$/g, '');
   if (key && !/^(sk-|gsk_)[\w-]{20,}$/.test(key)) return false;
   return gravarEnvVar('TRANSCRICAO_API_KEY', key);
+}
+// Login do robô no EVO (Experimental/.env). O e-mail é pré-preenchido; a senha
+// nunca volta para a tela — grava só quando vem preenchida (em branco = mantém a
+// atual). Consumido pelo robô/formulário no boot → reiniciar o robô para valer.
+function lerEvoEmail() { return lerEnvVar('EVO_EMAIL', EXPERIMENTAL_ENV_FILE); }
+function evoSenhaDefinida() { return !!lerEnvVar('EVO_PASSWORD', EXPERIMENTAL_ENV_FILE); }
+function gravarEvoCredenciais(email, senha) {
+  email = String(email || '').trim();
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, erro: 'e-mail inválido' };
+  let ok = true;
+  if (email) ok = gravarEnvVar('EVO_EMAIL', email, EXPERIMENTAL_ENV_FILE) && ok;
+  senha = String(senha || '').trim();
+  if (senha) ok = gravarEnvVar('EVO_PASSWORD', senha, EXPERIMENTAL_ENV_FILE) && ok; // em branco: mantém a atual
+  return { ok };
 }
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
@@ -4041,6 +4060,91 @@ function paginaSofia(aviso, erro) {
       </div>
     </div>
 
+    ${(_navSess && _navSess.admin) ? `
+    <details class="acc-sec">
+      <summary class="sec-t" style="cursor:pointer;padding:4px 0">🔑 Credenciais da unidade <small style="font-weight:400;color:var(--cinza)">— login do EVO e chaves de IA (só admin), sem abrir o .env</small></summary>
+      <div class="card">
+        <p class="quando" style="margin:0 0 14px">Preencha aqui as credenciais <b>desta unidade</b> — assim não precisa editar o <code>.env</code> no servidor. Cada bloco diz <b>qual processo reiniciar</b> para valer: o <b>robô</b> lê o login do EVO no boot; a <b>SoFIA</b> lê as chaves de IA no boot.</p>
+
+        <label>Login do robô no EVO ${infoI('É o <b>usuário e senha</b> com que o robô entra no EVO (o mesmo que você usa no site do EVO) — a <b>EVO_EMAIL</b> e a <b>EVO_PASSWORD</b>. <b>Sem eles, os jobs diários do EVO falham</b> (confirmações, presença, aniversários, planilha…). Grava no <code>Experimental/.env</code>; vale <b>após reiniciar o robô</b>. Não é o mesmo que o <i>token</i> da API do EVO (esse fica no .env, montado pelo script).')}</label>
+        <input type="email" id="evoEmailInput" value="${esc(lerEvoEmail())}" placeholder="email@dominio.com" autocomplete="off" spellcheck="false" style="max-width:600px;padding:9px;margin:0 0 8px">
+        <div style="display:flex;gap:8px;align-items:center;max-width:600px">
+          <input type="password" id="evoSenhaInput" value="" placeholder="${evoSenhaDefinida() ? '•••••••• (senha salva — deixe em branco p/ manter)' : 'senha do EVO'}" autocomplete="new-password" spellcheck="false" style="flex:1;padding:9px;font-family:monospace">
+          <button type="button" title="Mostrar/ocultar" onclick="var i=document.getElementById('evoSenhaInput');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'" style="padding:8px 11px">👁</button>
+          <button type="button" class="save" style="width:auto;padding:9px 14px" onclick="salvarEvoCred()">Salvar login</button>
+        </div>
+        <p class="quando" id="evoCredMsg" style="margin:6px 0 0">Grava em <code>Experimental/.env</code>. Depois clique em <b>🔄 Reiniciar robô</b> (abaixo). Confira o resultado do login em <a href="/?view=saude">Saúde → EVO</a>.</p>
+
+        <hr style="border:0;border-top:1px solid var(--linha);margin:16px 0">
+
+        <label>Chave da IA (Anthropic) ${infoI('É a chave que dá acesso ao Claude (a <b>ANTHROPIC_API_KEY</b>) — o que tem <b>custo por conversa</b>. Cole a chave nova e salve, sem mexer no .env. Fica oculta; clique no 👁 para ver. A troca vale <b>após reiniciar a SoFIA</b>.')}</label>
+        <div style="display:flex;gap:8px;align-items:center;max-width:600px">
+          <input type="password" id="apiKeyInput" value="${esc(lerApiKey())}" placeholder="sk-ant-..." autocomplete="off" spellcheck="false" style="flex:1;padding:9px;font-family:monospace">
+          <button type="button" title="Mostrar/ocultar" onclick="var i=document.getElementById('apiKeyInput');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'" style="padding:8px 11px">👁</button>
+          <button type="button" class="save" style="width:auto;padding:9px 14px" onclick="salvarApiKey()">Salvar chave</button>
+        </div>
+        <p class="quando" id="apiKeyMsg" style="margin:6px 0 0">Fica no servidor (<code>ChatBot/.env</code>). Depois de salvar, clique em <b>🔄 Reiniciar SoFIA</b> (abaixo) para a chave nova valer.</p>
+
+        <hr style="border:0;border-top:1px solid var(--linha);margin:16px 0">
+
+        <label>Chave de transcrição (OpenAI ou Groq) ${infoI('É a chave que faz a SoFIA <b>entender áudios</b> (fala→texto) — a <b>TRANSCRICAO_API_KEY</b>. Aceita chave da <b>OpenAI</b> (<code>sk-…</code>, modelo Whisper) ou da <b>Groq</b> (<code>gsk_…</code>). Cole a chave e salve, sem mexer no .env. Fica oculta; clique no 👁 para ver. <b>Deixe em branco e salve</b> para <b>desligar</b> a transcrição. A troca vale <b>após reiniciar a SoFIA</b>. Veja o passo a passo de como obter a chave no <b>/implantacao</b> (Fase 9.2).')}</label>
+        <div style="display:flex;gap:8px;align-items:center;max-width:600px">
+          <input type="password" id="transKeyInput" value="${esc(lerTranscricaoKey())}" placeholder="sk-… ou gsk_…" autocomplete="off" spellcheck="false" style="flex:1;padding:9px;font-family:monospace">
+          <button type="button" title="Mostrar/ocultar" onclick="var i=document.getElementById('transKeyInput');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'" style="padding:8px 11px">👁</button>
+          <button type="button" class="save" style="width:auto;padding:9px 14px" onclick="salvarTransKey()">Salvar chave</button>
+        </div>
+        <p class="quando" id="transKeyMsg" style="margin:6px 0 0">Fica no servidor (<code>ChatBot/.env</code>). Para a transcrição funcionar, marque também <b>🎤 Transcrever áudios</b> em <i>Jeito de responder → Inteligência</i>. Depois de salvar, clique em <b>🔄 Reiniciar SoFIA</b> (abaixo).</p>
+
+        <hr style="border:0;border-top:1px solid var(--linha);margin:16px 0">
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <button type="button" class="reset" style="padding:6px 13px" onclick="if(confirm('Reiniciar o robô agora?\\n\\nEle fica alguns segundos fora do ar e reconecta sozinho. Aplica o login do EVO recém-salvo.'))reinicCred('robo')">🔄 Reiniciar robô</button>
+          <button type="button" class="reset" style="padding:6px 13px" onclick="if(confirm('Reiniciar a SoFIA agora?\\n\\nEla fica cerca de 1 minuto fora do ar enquanto reconecta o WhatsApp — sem perder as conversas. Aplica as chaves de IA recém-salvas.'))reinicCred('sofia')">🔄 Reiniciar SoFIA</button>
+          <span class="quando" id="credRestartMsg" style="margin:0">Robô = login do EVO · SoFIA = chaves de IA.</span>
+        </div>
+
+        <script>
+        function salvarEvoCred(){
+          var e=document.getElementById('evoEmailInput'), s=document.getElementById('evoSenhaInput'), m=document.getElementById('evoCredMsg');
+          m.textContent='Salvando…';
+          fetch('/sofia/evo-credenciais',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:(e.value||'').trim(), senha:(s.value||'')})})
+            .then(function(r){return r.json();}).then(function(j){
+              if(j&&j.ok){ s.value=''; m.innerHTML='✅ Login salvo! Agora clique em <b>🔄 Reiniciar robô</b> (abaixo) para valer.'; }
+              else { m.textContent='❌ '+((j&&j.erro)||'não consegui salvar'); }
+            }).catch(function(){ m.textContent='❌ erro de rede'; });
+        }
+        function salvarApiKey(){
+          var i=document.getElementById('apiKeyInput'), m=document.getElementById('apiKeyMsg');
+          var k=(i.value||'').trim();
+          m.textContent='Salvando…';
+          fetch('/sofia/api-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})})
+            .then(function(r){return r.json();}).then(function(j){
+              if(j&&j.ok){ m.innerHTML='✅ Chave salva! Agora clique em <b>🔄 Reiniciar SoFIA</b> (abaixo) para a chave nova valer.'; }
+              else { m.textContent='❌ '+((j&&j.erro)||'não consegui salvar'); }
+            }).catch(function(){ m.textContent='❌ erro de rede'; });
+        }
+        function salvarTransKey(){
+          var i=document.getElementById('transKeyInput'), m=document.getElementById('transKeyMsg');
+          var k=(i.value||'').trim();
+          m.textContent='Salvando…';
+          fetch('/sofia/transcricao-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})})
+            .then(function(r){return r.json();}).then(function(j){
+              if(j&&j.ok){ m.innerHTML=(k? '✅ Chave salva!' : '✅ Transcrição desligada (chave em branco).')+' Agora clique em <b>🔄 Reiniciar SoFIA</b> (abaixo) para valer.'; }
+              else { m.textContent='❌ '+((j&&j.erro)||'não consegui salvar'); }
+            }).catch(function(){ m.textContent='❌ erro de rede'; });
+        }
+        function reinicCred(proc){
+          var m=document.getElementById('credRestartMsg');
+          m.textContent=(proc==='robo'?'Reiniciando o robô':'Reiniciando a SoFIA')+'… (até ~25s, não feche a página)';
+          fetch(proc==='robo'?'/wa/reiniciar':'/sofia/reiniciar',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:''})
+            .then(function(){ m.innerHTML='✅ '+(proc==='robo'?'Robô reiniciado — confira em <a href="/?view=saude">Saúde → EVO</a>.':'SoFIA reiniciada.'); })
+            .catch(function(){ m.textContent='❌ erro de rede ao reiniciar'; });
+        }
+        </script>
+      </div>
+    </details>
+    ` : ''}
+
     <details class="acc-sec">
       <summary class="sec-t" style="cursor:pointer;padding:4px 0">Avisar quando precisar de humano <small style="font-weight:400;color:var(--cinza)">— manda um WhatsApp quando a aluna pede um atendente</small></summary>
       <div class="card">
@@ -4114,30 +4218,7 @@ function paginaSofia(aviso, erro) {
       <div class="card">
         <div style="font-family:"Inter",sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">Inteligência</div>
         <p class="quando" style="margin:0 0 12px">Qual Claude a SoFIA usa e se ela entende áudios.</p>
-        ${(_navSess && _navSess.admin) ? `
-        <div style="margin:0 0 14px">
-          <label>Chave da IA (Anthropic) ${infoI('É a chave que dá acesso ao Claude (a <b>ANTHROPIC_API_KEY</b>) — o que tem <b>custo por conversa</b>. Cole a chave nova e salve, sem mexer no .env. Fica oculta; clique no 👁 para ver. A troca vale <b>após reiniciar a SoFIA</b>.')}</label>
-          <div style="display:flex;gap:8px;align-items:center;max-width:600px">
-            <input type="password" id="apiKeyInput" value="${esc(lerApiKey())}" placeholder="sk-ant-..." autocomplete="off" spellcheck="false" style="flex:1;padding:9px;font-family:monospace">
-            <button type="button" title="Mostrar/ocultar" onclick="var i=document.getElementById('apiKeyInput');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'" style="padding:8px 11px">👁</button>
-            <button type="button" class="save" style="width:auto;padding:9px 14px" onclick="salvarApiKey()">Salvar chave</button>
-          </div>
-          <p class="quando" id="apiKeyMsg" style="margin:6px 0 0">Fica no servidor (<code>ChatBot/.env</code>). Depois de salvar, clique em <b>🔄 Reiniciar SoFIA</b> (aqui na tela, na <i>Conexão do WhatsApp</i>) para a chave nova valer.</p>
-        </div>
-        <script>
-        function salvarApiKey(){
-          var i=document.getElementById('apiKeyInput'), m=document.getElementById('apiKeyMsg');
-          var k=(i.value||'').trim();
-          m.textContent='Salvando…';
-          fetch('/sofia/api-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})})
-            .then(function(r){return r.json();}).then(function(j){
-              if(j&&j.ok){ m.innerHTML='✅ Chave salva! Agora clique em <b>🔄 Reiniciar SoFIA</b> (na <i>Conexão do WhatsApp</i>, aqui na tela) para a chave nova valer.'; }
-              else { m.textContent='❌ '+((j&&j.erro)||'não consegui salvar'); }
-            }).catch(function(){ m.textContent='❌ erro de rede'; });
-        }
-        </script>
-        <hr style="border:0;border-top:1px solid var(--linha);margin:2px 0 14px">
-        ` : ''}
+        ${(_navSess && _navSess.admin) ? `<p class="quando" style="margin:0 0 12px">🔑 A <b>chave da IA (Anthropic)</b> e a <b>chave de transcrição</b> agora ficam em <b>🔑 Credenciais da unidade</b> (no topo desta aba Configuração), junto com o login do EVO.</p>` : ''}
         <div style="display:flex;gap:18px;flex-wrap:wrap">
           <div style="flex:1;min-width:240px">
             <label>Modelo da conversa ${infoI('É o cérebro que <b>fala com as alunas</b> e escreve o <b>follow-up</b> — a parte mais importante, porque a qualidade aqui vira agendamento.<br><br><b>Recomendado: Sonnet 5</b> (equilíbrio).<br><b>Opus 5:</b> qualidade máxima para conversas difíceis, mas mais caro.<br><b>Haiku 4.5:</b> mais barato, porém pode soar mais robótico e escorregar nas regras — só use se topar <b>testar e medir a conversão no Funil</b>.<br><br>Padrão: Sonnet 5.')}</label>
@@ -4154,30 +4235,7 @@ function paginaSofia(aviso, erro) {
           <input type="checkbox" name="transcricaoOn" value="1"${e.transcricaoOn ? ' checked' : ''} style="width:auto;margin:0">
           🎤 Transcrever áudios das alunas${infoI('Quando a aluna manda <b>áudio</b>, a SoFIA transcreve (fala→texto) e responde ao conteúdo — aparece como “🎤 …” no painel. Precisa de uma <b>chave de transcrição</b> no arquivo <code>.env</code> (<code>TRANSCRICAO_API_KEY</code>, OpenAI ou Groq). Desligado, a SoFIA pede para a aluna mandar por texto.')}
         </label>
-        <p class="quando" style="margin:6px 0 0">Precisa da chave no <code>ChatBot/.env</code>. Sem chave, fica sem efeito. Vale <b>após reiniciar</b> a SoFIA.</p>
-        ${(_navSess && _navSess.admin) ? `
-        <div style="margin:12px 0 0">
-          <label>Chave de transcrição (OpenAI ou Groq) ${infoI('É a chave que faz a SoFIA <b>entender áudios</b> (fala→texto) — a <b>TRANSCRICAO_API_KEY</b>. Aceita chave da <b>OpenAI</b> (<code>sk-…</code>, modelo Whisper) ou da <b>Groq</b> (<code>gsk_…</code>). Cole a chave e salve, sem mexer no .env. Fica oculta; clique no 👁 para ver. <b>Deixe em branco e salve</b> para <b>desligar</b> a transcrição. A troca vale <b>após reiniciar a SoFIA</b>. Veja o passo a passo de como obter a chave no <b>/implantacao</b>.')}</label>
-          <div style="display:flex;gap:8px;align-items:center;max-width:600px">
-            <input type="password" id="transKeyInput" value="${esc(lerTranscricaoKey())}" placeholder="sk-… ou gsk_…" autocomplete="off" spellcheck="false" style="flex:1;padding:9px;font-family:monospace">
-            <button type="button" title="Mostrar/ocultar" onclick="var i=document.getElementById('transKeyInput');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'" style="padding:8px 11px">👁</button>
-            <button type="button" class="save" style="width:auto;padding:9px 14px" onclick="salvarTransKey()">Salvar chave</button>
-          </div>
-          <p class="quando" id="transKeyMsg" style="margin:6px 0 0">Fica no servidor (<code>ChatBot/.env</code>). Depois de salvar, clique em <b>🔄 Reiniciar SoFIA</b> (aqui na tela, na <i>Conexão do WhatsApp</i>) para valer.</p>
-        </div>
-        <script>
-        function salvarTransKey(){
-          var i=document.getElementById('transKeyInput'), m=document.getElementById('transKeyMsg');
-          var k=(i.value||'').trim();
-          m.textContent='Salvando…';
-          fetch('/sofia/transcricao-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})})
-            .then(function(r){return r.json();}).then(function(j){
-              if(j&&j.ok){ m.innerHTML=(k? '✅ Chave salva!' : '✅ Transcrição desligada (chave em branco).')+' Agora clique em <b>🔄 Reiniciar SoFIA</b> (na <i>Conexão do WhatsApp</i>, aqui na tela) para valer.'; }
-              else { m.textContent='❌ '+((j&&j.erro)||'não consegui salvar'); }
-            }).catch(function(){ m.textContent='❌ erro de rede'; });
-        }
-        </script>
-        ` : ''}
+        <p class="quando" style="margin:6px 0 0">A <b>chave de transcrição</b> (OpenAI/Groq) fica em <b>🔑 Credenciais da unidade</b>, no topo desta aba. Sem chave, fica sem efeito. Vale <b>após reiniciar</b> a SoFIA.</p>
       </div>
 
       <!-- Grupo 2 · Ritmo da conversa (humano/velocidade + agrupar + pausa celular) -->
@@ -6005,6 +6063,18 @@ const server = http.createServer((req, res) => {
       const ok = gravarTranscricaoKey(d.key);
       if (ok) { try { auditoria.registrar(sess.usuario, 'sofia.transcricaokey', 'TRANSCRICAO_API_KEY', (String(d.key || '').trim() ? 'atualizada' : 'removida') + ' pelo painel'); } catch (_) {} }
       return res.end(JSON.stringify(ok ? { ok: true } : { ok: false, erro: 'chave inválida (use sk-… da OpenAI ou gsk_… da Groq, ou deixe em branco para desligar)' }));
+    });
+  }
+  // Login do robô no EVO (EVO_EMAIL / EVO_PASSWORD) — só admin. Grava no
+  // Experimental/.env; vale após reiniciar o robô. Senha em branco = mantém a atual.
+  if (req.method === 'POST' && url === '/sofia/evo-credenciais') {
+    if (!sess.admin) return negarAcesso(res, sess);
+    return lerCorpo(req, 1e5, corpo => {
+      let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      const r = gravarEvoCredenciais(d.email, d.senha);
+      if (r.ok) { try { auditoria.registrar(sess.usuario, 'evo.credenciais', 'EVO_EMAIL/EVO_PASSWORD', 'login do EVO atualizado pelo painel' + (String(d.senha || '').trim() ? ' (com senha)' : ' (só e-mail)')); } catch (_) {} }
+      return res.end(JSON.stringify(r.ok ? { ok: true } : { ok: false, erro: r.erro || 'não consegui salvar' }));
     });
   }
   // Serve a foto que VOCÊ enviou numa resposta manual (mostrada na bolha do chat).
