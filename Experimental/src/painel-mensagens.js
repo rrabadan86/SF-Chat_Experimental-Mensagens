@@ -124,6 +124,23 @@ function gravarAntecedenciaHoras(n) {
   return true;
 }
 
+// Chave da IA (ANTHROPIC_API_KEY) — editável pelo painel (admin). Fica no
+// ChatBot/.env; a SoFIA lê no boot, então a troca vale após reiniciar a SoFIA.
+const CHATBOT_ENV_FILE = path.resolve(__dirname, '..', '..', 'ChatBot', '.env');
+function lerApiKey() {
+  try { const m = /^ANTHROPIC_API_KEY=(.*)$/m.exec(fs.readFileSync(CHATBOT_ENV_FILE, 'utf8')); return m ? m[1].trim().replace(/^["']|["']$/g, '') : ''; } catch (_) { return ''; }
+}
+function gravarApiKey(key) {
+  key = String(key || '').trim().replace(/^["']|["']$/g, '');
+  if (!/^sk-ant-[\w-]{20,}$/.test(key)) return false; // validação básica: chave Anthropic
+  let txt = ''; try { txt = fs.readFileSync(CHATBOT_ENV_FILE, 'utf8'); } catch (_) {}
+  const linha = 'ANTHROPIC_API_KEY=' + key;
+  if (/^ANTHROPIC_API_KEY=.*$/m.test(txt)) txt = txt.replace(/^ANTHROPIC_API_KEY=.*$/m, linha);
+  else txt = (txt.replace(/\s*$/, '') + '\n' + linha + '\n').replace(/^\n/, '');
+  try { fs.mkdirSync(path.dirname(CHATBOT_ENV_FILE), { recursive: true }); } catch (_) {}
+  try { fs.writeFileSync(CHATBOT_ENV_FILE, txt, 'utf8'); return true; } catch (_) { return false; }
+}
+
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
 // Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
 // (reverse_proxy localhost:8080) ou por um túnel SSH — nunca direto da internet.
@@ -4075,6 +4092,30 @@ function paginaSofia(aviso, erro) {
       <div class="card">
         <div style="font-family:"Inter",sans-serif;font-weight:700;font-size:.95rem;margin:0 0 4px">Inteligência</div>
         <p class="quando" style="margin:0 0 12px">Qual Claude a SoFIA usa e se ela entende áudios.</p>
+        ${(_navSess && _navSess.admin) ? `
+        <div style="margin:0 0 14px">
+          <label>Chave da IA (Anthropic) ${infoI('É a chave que dá acesso ao Claude (a <b>ANTHROPIC_API_KEY</b>) — o que tem <b>custo por conversa</b>. Cole a chave nova e salve, sem mexer no .env. Fica oculta; clique no 👁 para ver. A troca vale <b>após reiniciar a SoFIA</b>.')}</label>
+          <div style="display:flex;gap:8px;align-items:center;max-width:600px">
+            <input type="password" id="apiKeyInput" value="${esc(lerApiKey())}" placeholder="sk-ant-..." autocomplete="off" spellcheck="false" style="flex:1;padding:9px;font-family:monospace">
+            <button type="button" title="Mostrar/ocultar" onclick="var i=document.getElementById('apiKeyInput');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'" style="padding:8px 11px">👁</button>
+            <button type="button" class="save" style="width:auto;padding:9px 14px" onclick="salvarApiKey()">Salvar chave</button>
+          </div>
+          <p class="quando" id="apiKeyMsg" style="margin:6px 0 0">Fica no servidor (<code>ChatBot/.env</code>). Vale após reiniciar a SoFIA (<code>pm2 restart ${esc(PM2_SOFIA)} --update-env</code>).</p>
+        </div>
+        <script>
+        function salvarApiKey(){
+          var i=document.getElementById('apiKeyInput'), m=document.getElementById('apiKeyMsg');
+          var k=(i.value||'').trim();
+          m.textContent='Salvando…';
+          fetch('/sofia/api-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})})
+            .then(function(r){return r.json();}).then(function(j){
+              if(j&&j.ok){ m.innerHTML='✅ Chave salva. Reinicie a SoFIA para valer: <code>pm2 restart ${esc(PM2_SOFIA)} --update-env</code>'; }
+              else { m.textContent='❌ '+((j&&j.erro)||'não consegui salvar'); }
+            }).catch(function(){ m.textContent='❌ erro de rede'; });
+        }
+        </script>
+        <hr style="border:0;border-top:1px solid var(--linha);margin:2px 0 14px">
+        ` : ''}
         <div style="display:flex;gap:18px;flex-wrap:wrap">
           <div style="flex:1;min-width:240px">
             <label>Modelo da conversa ${infoI('É o cérebro que <b>fala com as alunas</b> e escreve o <b>follow-up</b> — a parte mais importante, porque a qualidade aqui vira agendamento.<br><br><b>Recomendado: Sonnet 5</b> (equilíbrio).<br><b>Opus 5:</b> qualidade máxima para conversas difíceis, mas mais caro.<br><b>Haiku 4.5:</b> mais barato, porém pode soar mais robótico e escorregar nas regras — só use se topar <b>testar e medir a conversão no Funil</b>.<br><br>Padrão: Sonnet 5.')}</label>
@@ -5896,6 +5937,18 @@ const server = http.createServer((req, res) => {
     let r = null; try { r = sofia.lerAgendamentoResult(id); } catch (_) {}
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify({ ok: true, res: r }));
+  }
+  // Troca da chave da IA (ANTHROPIC_API_KEY) — só admin. Grava no ChatBot/.env;
+  // vale após reiniciar a SoFIA (pm2 restart <sofia> --update-env).
+  if (req.method === 'POST' && url === '/sofia/api-key') {
+    if (!sess.admin) return negarAcesso(res, sess);
+    return lerCorpo(req, 1e5, corpo => {
+      let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      const ok = gravarApiKey(d.key);
+      if (ok) { try { auditoria.registrar(sess.usuario, 'sofia.apikey', 'ANTHROPIC_API_KEY', 'atualizada pelo painel'); } catch (_) {} }
+      return res.end(JSON.stringify(ok ? { ok: true } : { ok: false, erro: 'chave inválida (deve começar com sk-ant-)' }));
+    });
   }
   // Serve a foto que VOCÊ enviou numa resposta manual (mostrada na bolha do chat).
   // Os arquivos ficam em ChatBot/humano-fotos/ (mesma máquina do listener).
