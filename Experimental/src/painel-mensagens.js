@@ -6893,14 +6893,26 @@ function processarEventos() {
   if (!evs.length) return;
   let tagsAgendou = [];
   try { tagsAgendou = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {}
+  // Contam como PROVA DE AGENDAMENTO, além das tags de "agendou", os DESFECHOS da
+  // Presença da experimental: "Fez Aula" (compareceu) e "Encerrado com Agendamento
+  // sem Presença" (agendou e faltou). O job de presença TROCA a tag "Agendou" por
+  // uma dessas — então, sem isto, quem agendou e faltou perdia o escudo e era
+  // marcado (errado) como "Encerrado SEM agendamento" no fechamento da conversa.
+  let comp = {}; try { comp = lerCompCfg(); } catch (_) {}
+  const provasAgendou = new Set([
+    ...tagsAgendou,
+    ...(Array.isArray(comp.tagsAgendou) ? comp.tagsAgendou : []),
+    comp.tagCompareceu, comp.tagFaltou,
+  ].map(t => String(t || '').trim().toLowerCase()).filter(Boolean));
   for (const ev of evs) {
     const tel = String(ev.telefone || '').replace(/\D/g, '');
     if (!tel || !ev.tag) continue;
-    // "Encerrado sem agendamento" não deve marcar quem JÁ agendou (tem a tag de agendou).
+    // "Encerrado sem agendamento" não deve marcar quem JÁ agendou (tag de agendou
+    // OU um desfecho de presença que prova o agendamento — ver provasAgendou acima).
     if (ev.motivo === 'encerrou') {
       try {
         const c = contatos.carregar()[contatos.normTel(tel)];
-        if (c && (c.tags || []).some(t => tagsAgendou.includes(t))) continue;
+        if (c && (c.tags || []).some(t => provasAgendou.has(String(t || '').trim().toLowerCase()))) continue;
       } catch (_) {}
     }
     aplicarAutomacao({ telefone: tel, nome: ev.nome, tag: ev.tag, avisarWpp: ev.avisarWpp, motivo: ev.motivo, extra: ev.extra || '' });
