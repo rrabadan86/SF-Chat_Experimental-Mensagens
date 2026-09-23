@@ -55,15 +55,34 @@ async function buscarAlunasAniversario() {
     // contrato do plano (ex.: "SLIMFIT 2X FIXA...", "COPA SLIM..."). Vem VAZIO para
     // quem tem só serviço (ex.: Circuito) — é o sinal usado para excluir.
     const contrato = String(r.contrato ?? '').replace(/\s+/g, ' ').trim();
-    return id ? { id, nome, aniversario: aniv, contrato } : null;
+    // Telefone (para casar com o contato da SoFIA na auto-tag Aluna/Ex-aluna).
+    let telefone = String(r.celular ?? r.telefone ?? r.telefoneCelular ?? r.celularCliente ?? r.fone ?? '').replace(/\D/g, '');
+    if (!telefone && Array.isArray(r.telefones)) {
+      for (const t of r.telefones) { const d = String((t && (t.numero ?? t.telefone ?? t.descricao)) || '').replace(/\D/g, ''); if (d) { telefone = d; break; } }
+    }
+    return id ? { id, nome, aniversario: aniv, contrato, telefone } : null;
   };
   await page.setRequestInterception(true);
   page.on('request', req => req.continue());
+  let _diagFeito = false;
   page.on('response', async (res) => {
     try {
       if (res.url().includes('obter-clientes') && res.status() === 200) {
         const data = JSON.parse(await res.text());
         const lista = data.retorno || data.data || [];
+        // DIAGNÓSTICO (só em --dry): imprime UMA vez os campos da API, para sabermos
+        // se há TELEFONE e STATUS (define se casamos por telefone ou por nome).
+        if (!_diagFeito && lista[0] && process.argv.includes('--dry')) {
+          _diagFeito = true;
+          const r0 = lista[0];
+          const campos = Object.keys(r0);
+          const tel = campos.filter(k => /(tel|cel|phone|contato|whats)/i.test(k));
+          const st = campos.filter(k => /(status|ativ|inativ|situa|bloque)/i.test(k));
+          console.log('🔑 [diag] Campos da API obter-clientes:', campos.join(', '));
+          console.log('   [diag] Parecem TELEFONE:', tel.length ? tel.join(', ') : '(nenhum)');
+          console.log('   [diag] Parecem STATUS:', st.length ? st.join(', ') : '(nenhum)');
+          for (const k of tel.concat(st)) { try { console.log(`   [diag] ${k} =`, JSON.stringify(r0[k]).slice(0, 140)); } catch (_) {} }
+        }
         const recs = lista.map(parseRec).filter(Boolean);
         if (recs.length) snapshots.push(recs);
       }
@@ -227,12 +246,14 @@ async function buscarAlunasAniversario() {
     //    juntamos todos os registros de todos os snapshots num mapa id→nome
     //    (ter ids extras não atrapalha — só consultamos os 81 do DOM).
     const nomeLimpoPorId = new Map();
+    const telefonePorId = new Map(); // id → celular (p/ a auto-tag Aluna/Ex-aluna)
     // Sinais de contrato por id: quem está na API mas NUNCA teve um contrato de
     // plano de verdade (vazio) ou só "Circuito" é serviço-only → será excluído.
     const idsNaApi = new Set(), idsPlanoReal = new Set();
     for (const snap of snapshots) {
       for (const r of snap) {
         if (r.id && r.nome && !nomeLimpoPorId.has(r.id)) nomeLimpoPorId.set(r.id, r.nome);
+        if (r.id && r.telefone && !telefonePorId.has(r.id)) telefonePorId.set(r.id, r.telefone);
         if (r.id) {
           idsNaApi.add(r.id);
           const c = String(r.contrato || '');
@@ -246,7 +267,7 @@ async function buscarAlunasAniversario() {
     const alunas = Array.from(domMap.values()).map(a => {
       const limpo = nomeLimpoPorId.get(a.id);
       if (limpo && limpo !== a.nome) corrigidos++;
-      return { id: a.id, nome: limpo || a.nome, aniversario: a.aniversario };
+      return { id: a.id, nome: limpo || a.nome, aniversario: a.aniversario, telefone: telefonePorId.get(a.id) || '' };
     });
     console.log(`   ✨ ${corrigidos} nome(s) ajustado(s) pela API (limpos).`);
 
@@ -583,6 +604,8 @@ async function runPlanilhaAniversarios() {
 
   if (DRY) {
     console.log('\n🧪 Modo --dry: NADA foi escrito na planilha.');
+    try { _logAutoTag(require('./auto-tag-alunas').sincronizarTags(alunas, { dry: true })); }
+    catch (e) { console.log('   ⚠️ auto-tag (dry) pulada:', e && e.message); }
     return { alunas: alunas.length };
   }
 
@@ -592,8 +615,22 @@ async function runPlanilhaAniversarios() {
   }
 
   const res = await sincronizar(alunas);
+  // Auto-tag "0. Aluna" / "0. Ex Aluna" no CRM da SoFIA (só se ligado no painel).
+  try { const at = require('./auto-tag-alunas').sincronizarTags(alunas, { dry: false }); _logAutoTag(at); if (res && typeof res === 'object') res.autoTag = at; }
+  catch (e) { console.log('   ⚠️ auto-tag pulada:', e && e.message); }
   console.log('\n✅ Concluído.');
   return res;
+}
+
+// Loga o resultado da auto-tag Aluna/Ex-aluna (usado na planilha, dry e real).
+function _logAutoTag(at) {
+  if (!at) return;
+  if (at.desligado) { console.log('\n🏷️  Auto-tag Aluna/Ex-aluna: DESLIGADA (ligue em SoFIA → Tags).'); return; }
+  if (at.erro) { console.log(`\n🏷️  Auto-tag Aluna/Ex-aluna: erro — ${at.erro}`); return; }
+  const dry = at.dry ? ' (SIMULAÇÃO — nada gravado)' : '';
+  console.log(`\n🏷️  Auto-tag Aluna/Ex-aluna${dry}: ${at.alunasNovas} nova(s) + ${at.alunasAtualizadas} atualizada(s) como "0. Aluna"; ${at.exAlunas} → "0. Ex Aluna".`
+    + (at.semTelefone ? ` (${at.semTelefone} ativa[s] sem telefone — não etiquetadas.)` : ''));
+  if (at.abortado) console.log(`   ⛔ Rebaixamento para ex-aluna ABORTADO — ${at.motivoAborto}`);
 }
 
 module.exports = { runPlanilhaAniversarios, buscarAlunasAniversario };

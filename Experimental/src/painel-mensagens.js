@@ -29,6 +29,7 @@ const igforcar = require('./ig-forcar');
 const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
 const bookings = require('./bookings');
+const autoTagAlunas = require('./auto-tag-alunas');
 const origens = require('./origens');
 const sofia = require('./sofia-editor');
 const contatos = require('./contatos');
@@ -405,6 +406,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/comparecimento') return has('sofia_contatos') || has('sofia_config'); // agora mora na aba Tags
+  if (url === '/sofia/auto-tag-alunas') return has('sofia_contatos') || has('sofia_config'); // auto-tag Aluna/Ex-aluna (aba Tags)
   if (url === '/sofia/midia-upload' || url === '/sofia/midia') return has('sofia_config'); // upload/preview das imagens (preços/grade)
   if (url === '/sofia/msgs-anuncio') return has('sofia_config'); // boas-vindas do anúncio que não pausam a SoFIA
   if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/prompt/download') return has('sofia_config');
@@ -3416,6 +3418,7 @@ function paginaSofiaTags(aviso, erro) {
   const tags = contatos.tagsDistintas();
   // Presença da experimental (troca de tags): mora nesta aba (Tags) por ser sobre tags.
   const cmp = lerCompCfg();
+  const atCfg = autoTagAlunas.ler(); // auto-tag Aluna/Ex-aluna (roda junto da planilha)
   let cmpH = null; try { cmpH = horarios.listar().find(j => j.chave === 'comparecimento'); } catch (_) {}
   const cmpHoraBloco = cmpH ? `<div class="hsec"><div class="hsec-t">Quando roda ${cmpH.editado ? '<span class="badge-ed">alterado</span>' : ''}</div>${blocoHorario(cmpH, '', 'formCmp')}</div>` : '';
   const cmpTags = tags.map(t => t.tag);
@@ -3443,6 +3446,22 @@ function paginaSofiaTags(aviso, erro) {
       <div style="margin-bottom:12px"><button type="button" class="save" onclick="criarTagNova()" style="padding:8px 16px">＋ Criar tag</button></div>
       ${lista}
     </div>
+
+    <details class="acc-sec">
+      <summary class="sec-t" style="cursor:pointer;padding:4px 0">Alunas / Ex-alunas automáticas <small style="font-weight:400;color:var(--cinza)">— junto da planilha (1x/dia), etiqueta pelo EVO</small></summary>
+      <div class="card">
+        <p class="quando" style="margin:0 0 12px">Toda vez que a <b>planilha de aniversários</b> roda (1x/dia), o robô também <b>etiqueta o CRM da SoFIA</b> pela situação no EVO: quem tem <b>contrato vigente</b> (aluna ativa — "SIM" na planilha) recebe a tag de <b>aluna</b> (<b>cadastra o contato</b> se ainda não existir); quem <b>saiu</b> (perdeu o vínculo) recebe a de <b>ex-aluna</b>. Casa por <b>telefone</b>. <b>Trava de segurança:</b> se a leitura do EVO vier suspeita, <b>não rebaixa</b> ninguém para ex-aluna. Só age <b>daqui pra frente</b> (quem já saiu antes e nunca teve a tag de aluna não é mexido).</p>
+        <form method="POST" action="/sofia/auto-tag-alunas">
+          <label class="chk" style="margin:0 0 12px"><input type="checkbox" name="on" value="1"${atCfg.on ? ' checked' : ''}> Ligado</label>
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Aluna ativa (contrato vigente) → tag</label><select name="tagAluna">${cmpSel(atCfg.tagAluna)}</select></div>
+            <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Sem vínculo (saiu) → tag</label><select name="tagExAluna">${cmpSel(atCfg.tagExAluna)}</select></div>
+          </div>
+          <div class="acts" style="margin-top:12px"><button type="submit" class="save">Salvar</button></div>
+        </form>
+        <p class="quando" style="margin:10px 0 0">🧪 Para <b>testar antes</b> sem gravar nada, rode na VPS, em <code>~/SF-Chat_Experimental-Mensagens/Experimental</code>: <code>xvfb-run -a node src/planilha-aniversarios.js --dry</code> — no fim ele mostra quantas viraram "0. Aluna"/"0. Ex Aluna" (SIMULAÇÃO).</p>
+      </div>
+    </details>
 
     <details class="acc-sec">
       <summary class="sec-t" style="cursor:pointer;padding:4px 0">Presença da experimental (troca de tags) <small style="font-weight:400;color:var(--cinza)">— 1x/semana, cruza a presença no EVO e atualiza as tags</small></summary>
@@ -6241,6 +6260,15 @@ const server = http.createServer((req, res) => {
       exec('pm2 restart ' + PM2_EXP + ' --update-env', { timeout: 25000 }, (err) => {
         res.writeHead(303, { Location: '/sofia?view=tags&okcmp=1' + (err ? '&errh=1' : '') }); res.end();
       });
+    });
+  }
+  // Salvar config da auto-tag Aluna/Ex-aluna (roda junto da planilha).
+  if (req.method === 'POST' && url === '/sofia/auto-tag-alunas') {
+    return lerCorpo(req, 1e4, corpo => {
+      const p = new URLSearchParams(corpo);
+      try { autoTagAlunas.gravar({ on: p.get('on') === '1', tagAluna: p.get('tagAluna') || '', tagExAluna: p.get('tagExAluna') || '' }); } catch (_) {}
+      try { auditoria.registrar(sess.usuario, 'sofia.autotagalunas', 'Auto-tag Aluna/Ex-aluna', p.get('on') === '1' ? 'ligada' : 'desligada'); } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?view=tags&ok=1' }); res.end();
     });
   }
   // Salvar config do aviso "precisa de humano".
