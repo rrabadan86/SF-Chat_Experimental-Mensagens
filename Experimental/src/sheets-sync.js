@@ -78,6 +78,57 @@ async function garantirAba(sheets, spreadsheetId, aba) {
   }
 }
 
+// "Lixo de interface" que NUNCA é nome de aluna: o link de acessibilidade do EVO
+// ("Pular para o conteúdo"), botões e ícones que uma raspagem antiga pode ter
+// capturado como se fossem nomes. Padrão conservador e ancorado — um nome real
+// de aluna não casa aqui (e, se casasse, o coletor nem a teria adicionado). Só
+// tokens de altíssima confiança entram, para a remoção ser segura.
+const NOME_LIXO = /\b(pular|skip|search)\b|conte[úu]do|dashboard|toolbar|keyboard|person_add|pesquisar/i;
+function ehLixoNome(nome) {
+  const n = String(nome || '').trim();
+  return !!n && NOME_LIXO.test(n);
+}
+
+/**
+ * Auto-limpeza: remove FISICAMENTE (deleteDimension) as linhas cujo NOME é lixo
+ * de interface — a planilha foi feita para nunca apagar, então uma linha-lixo
+ * antiga (de antes do filtro do coletor) ficaria ali para sempre. Apagar a LINHA
+ * INTEIRA faz as colunas do usuário (F+) subirem junto, preservando o
+ * alinhamento (diferente de sobrescrever só A:E, que desalinharia). Deleta de
+ * baixo para cima e tem trava contra remoção em massa.
+ * @returns {Promise<number>} quantas linhas removeu.
+ */
+async function limparLixo(sheets, spreadsheetId, aba) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const info = (meta.data.sheets || []).find(s => s.properties.title === aba);
+  if (!info) return 0;
+  const sheetId = info.properties.sheetId; // gid numérico — deleteDimension precisa dele
+  const resp = await sheets.spreadsheets.values.get({
+    spreadsheetId, range: `${aba}!A:B`, valueRenderOption: 'UNFORMATTED_VALUE',
+  });
+  const linhas = resp.data.values || [];
+  const temCabecalho = linhas.length > 0 && String(linhas[0][0] || '').trim().toLowerCase().startsWith('id');
+  const alvos = []; // índices FÍSICOS (0-based) das linhas-lixo
+  linhas.forEach((r, i) => {
+    if (temCabecalho && i === 0) return;      // nunca o cabeçalho
+    if (ehLixoNome(r[1])) alvos.push(i);      // r[1] = coluna Nome
+  });
+  if (!alvos.length) return 0;
+  // Trava: nunca apaga em massa. Se muitas linhas casaram, é sinal de que o
+  // padrão está errado (ou a leitura veio torta) — não remove nada.
+  if (alvos.length > 10) {
+    console.log(`   ⛔ Auto-limpeza ABORTADA: ${alvos.length} linhas casaram o padrão de lixo — suspeito demais, nada removido.`);
+    return 0;
+  }
+  // De baixo para cima, para os índices não mudarem no meio do caminho.
+  const requests = alvos.sort((a, b) => b - a).map(i => ({
+    deleteDimension: { range: { sheetId, dimension: 'ROWS', startIndex: i, endIndex: i + 1 } },
+  }));
+  await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+  console.log(`   🧹 Auto-limpeza: ${alvos.length} linha(s)-lixo (ex.: "Pular para o conteúdo") removida(s) — colunas do usuário preservadas.`);
+  return alvos.length;
+}
+
 /**
  * Sincroniza a lista de alunas com a planilha.
  * @param {Array<{id:string, nome:string, aniversario:string}>} alunas
@@ -90,6 +141,9 @@ async function sincronizar(alunas) {
 
   console.log(`\n📗 Sincronizando com Google Sheets (aba "${aba}")...`);
   await garantirAba(sheets, spreadsheetId, aba);
+  // Auto-limpeza de linhas-lixo (ex.: "Pular para o conteúdo") ANTES de ler para
+  // o upsert — remove a linha inteira, então a leitura seguinte já vem limpa.
+  try { await limparLixo(sheets, spreadsheetId, aba); } catch (e) { console.log('   ⚠️ Auto-limpeza pulada:', e.message); }
 
   // 1. Lê o que já existe (só colunas A:E — nunca tocamos F+).
   const resp = await sheets.spreadsheets.values.get({
