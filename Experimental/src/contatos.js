@@ -292,12 +292,15 @@ function tagsPorGatilho(g) {
 
 // Adiciona UMA tag a um contato (cria o contato se não existir), sem mexer nas
 // outras tags. Usado pela automação de agendamento.
-function adicionarTag(telefone, nome, tag) {
+function adicionarTag(telefone, nome, tag, opts) {
   const map = carregar();
   const tel = normTel(telefone);
   if (!tel) return false;
   const c = map[tel] || { tel, nome: '', tags: [], instrucoes: '', criadoEm: Date.now() };
-  if (nome && !c.nome) c.nome = String(nome).trim();
+  // Normalmente só preenche o nome se estiver vazio (não atropela o pushname do
+  // WhatsApp). Com opts.forcarNome (ex.: sincronização com o EVO), o nome oficial
+  // do EVO SOBREPÕE o da conversa.
+  if (nome && (!c.nome || (opts && opts.forcarNome))) c.nome = String(nome).trim();
   tag = String(tag || '').trim();
   if (tag && !c.tags.includes(tag)) c.tags.push(tag);
   c.tags = tagsAposRegras(c.tags); // aplica transições (ex.: sai de "Contato inicial")
