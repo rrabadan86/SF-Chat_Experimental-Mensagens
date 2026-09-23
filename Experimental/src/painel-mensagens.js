@@ -163,6 +163,24 @@ function gravarTranscricaoKey(key) {
   if (key && !/^(sk-|gsk_)[\w-]{20,}$/.test(key)) return false;
   return gravarEnvVar('TRANSCRICAO_API_KEY', key);
 }
+// Provedor de transcrição: define TRANSCRICAO_URL + TRANSCRICAO_MODELO no
+// ChatBot/.env — assim trocar OpenAI↔Groq é feito pelo painel, sem editar .env.
+const TRANSCRICAO_PROVEDORES = {
+  openai: { url: 'https://api.openai.com/v1/audio/transcriptions', modelo: 'whisper-1', rot: 'OpenAI (Whisper)' },
+  groq: { url: 'https://api.groq.com/openai/v1/audio/transcriptions', modelo: 'whisper-large-v3-turbo', rot: 'Groq (whisper-large-v3-turbo)' },
+};
+// Descobre o provedor atual pela TRANSCRICAO_URL (Groq se a URL for da Groq;
+// senão OpenAI, que é o padrão do código quando a URL está vazia).
+function lerTranscricaoProvedor() {
+  return /groq/i.test(lerEnvVar('TRANSCRICAO_URL') || '') ? 'groq' : 'openai';
+}
+function gravarTranscricaoProvedor(prov) {
+  const key = String(prov || '').toLowerCase() === 'groq' ? 'groq' : 'openai';
+  const p = TRANSCRICAO_PROVEDORES[key];
+  gravarEnvVar('TRANSCRICAO_URL', p.url);
+  gravarEnvVar('TRANSCRICAO_MODELO', p.modelo);
+  return key;
+}
 // Login do robô no EVO (Experimental/.env). O e-mail é pré-preenchido; a senha
 // nunca volta para a tela — grava só quando vem preenchida (em branco = mantém a
 // atual). Consumido pelo robô/formulário no boot → reiniciar o robô para valer.
@@ -4087,13 +4105,19 @@ function paginaSofia(aviso, erro) {
 
         <hr style="border:0;border-top:1px solid var(--linha);margin:16px 0">
 
-        <label>Chave de transcrição (OpenAI ou Groq) ${infoI('É a chave que faz a SoFIA <b>entender áudios</b> (fala→texto) — a <b>TRANSCRICAO_API_KEY</b>. Aceita chave da <b>OpenAI</b> (<code>sk-…</code>, modelo Whisper) ou da <b>Groq</b> (<code>gsk_…</code>). Cole a chave e salve, sem mexer no .env. Fica oculta; clique no 👁 para ver. <b>Deixe em branco e salve</b> para <b>desligar</b> a transcrição. A troca vale <b>após reiniciar a SoFIA</b>. Veja o passo a passo de como obter a chave no <b>/implantacao</b> (Fase 9.2).')}</label>
-        <div style="display:flex;gap:8px;align-items:center;max-width:600px">
-          <input type="password" id="transKeyInput" value="${esc(lerTranscricaoKey())}" placeholder="sk-… ou gsk_…" autocomplete="off" spellcheck="false" style="flex:1;padding:9px;font-family:monospace">
-          <button type="button" title="Mostrar/ocultar" onclick="var i=document.getElementById('transKeyInput');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'" style="padding:8px 11px">👁</button>
-          <button type="button" class="save" style="width:auto;padding:9px 14px" onclick="salvarTransKey()">Salvar chave</button>
+        <label>Transcrição de áudio — provedor e chave ${infoI('Faz a SoFIA <b>entender áudios</b> (fala→texto). Escolha o <b>provedor</b> e cole a <b>chave</b> dele — o painel grava sozinho a URL e o modelo certos, <b>sem mexer no .env</b>.<br><br><b>OpenAI</b> (Whisper): chave <code>sk-…</code>, paga (~US$ 0,006/min, precisa de crédito no Billing).<br><b>Groq</b>: chave <code>gsk_…</code>, tem <b>camada gratuita</b> — costuma sair de graça para o volume de um studio.<br><br><b>Deixe a chave em branco e salve</b> para <b>desligar</b> a transcrição. Vale <b>após reiniciar a SoFIA</b>. Passo a passo de como obter a chave: <b>/implantacao</b> Fase 9.2.')}</label>
+        <div style="display:flex;gap:8px;align-items:center;max-width:600px;flex-wrap:wrap">
+          <select id="transProvInput" style="padding:9px;min-width:200px">
+            <option value="openai"${lerTranscricaoProvedor() === 'openai' ? ' selected' : ''}>OpenAI (Whisper) — pago</option>
+            <option value="groq"${lerTranscricaoProvedor() === 'groq' ? ' selected' : ''}>Groq — grátis p/ uso normal</option>
+          </select>
         </div>
-        <p class="quando" id="transKeyMsg" style="margin:6px 0 0">Fica no servidor (<code>ChatBot/.env</code>). Para a transcrição funcionar, marque também <b>🎤 Transcrever áudios</b> em <i>Jeito de responder → Inteligência</i>. Depois de salvar, clique em <b>🔄 Reiniciar SoFIA</b> (abaixo).</p>
+        <div style="display:flex;gap:8px;align-items:center;max-width:600px;margin-top:8px">
+          <input type="password" id="transKeyInput" value="${esc(lerTranscricaoKey())}" placeholder="sk-… (OpenAI) ou gsk_… (Groq)" autocomplete="off" spellcheck="false" style="flex:1;padding:9px;font-family:monospace">
+          <button type="button" title="Mostrar/ocultar" onclick="var i=document.getElementById('transKeyInput');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'" style="padding:8px 11px">👁</button>
+          <button type="button" class="save" style="width:auto;padding:9px 14px" onclick="salvarTransKey()">Salvar</button>
+        </div>
+        <p class="quando" id="transKeyMsg" style="margin:6px 0 0">O painel grava a chave + a URL/modelo do provedor no <code>ChatBot/.env</code>. Ao <b>trocar de provedor</b>, cole a chave do <b>novo</b> provedor. Marque também <b>🎤 Transcrever áudios</b> em <i>Jeito de responder → Inteligência</i> e clique em <b>🔄 Reiniciar SoFIA</b> (abaixo).</p>
 
         <hr style="border:0;border-top:1px solid var(--linha);margin:16px 0">
 
@@ -4124,12 +4148,12 @@ function paginaSofia(aviso, erro) {
             }).catch(function(){ m.textContent='❌ erro de rede'; });
         }
         function salvarTransKey(){
-          var i=document.getElementById('transKeyInput'), m=document.getElementById('transKeyMsg');
-          var k=(i.value||'').trim();
+          var i=document.getElementById('transKeyInput'), pv=document.getElementById('transProvInput'), m=document.getElementById('transKeyMsg');
+          var k=(i.value||'').trim(), prov=(pv&&pv.value)||'openai';
           m.textContent='Salvando…';
-          fetch('/sofia/transcricao-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})})
+          fetch('/sofia/transcricao-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k, provedor:prov})})
             .then(function(r){return r.json();}).then(function(j){
-              if(j&&j.ok){ m.innerHTML=(k? '✅ Chave salva!' : '✅ Transcrição desligada (chave em branco).')+' Agora clique em <b>🔄 Reiniciar SoFIA</b> (abaixo) para valer.'; }
+              if(j&&j.ok){ m.innerHTML=(k? ('✅ Salvo ('+(j.provedor==='groq'?'Groq':'OpenAI')+').') : '✅ Transcrição desligada (chave em branco).')+' Agora clique em <b>🔄 Reiniciar SoFIA</b> (abaixo) para valer.'; }
               else { m.textContent='❌ '+((j&&j.erro)||'não consegui salvar'); }
             }).catch(function(){ m.textContent='❌ erro de rede'; });
         }
@@ -6061,8 +6085,11 @@ const server = http.createServer((req, res) => {
       let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       const ok = gravarTranscricaoKey(d.key);
-      if (ok) { try { auditoria.registrar(sess.usuario, 'sofia.transcricaokey', 'TRANSCRICAO_API_KEY', (String(d.key || '').trim() ? 'atualizada' : 'removida') + ' pelo painel'); } catch (_) {} }
-      return res.end(JSON.stringify(ok ? { ok: true } : { ok: false, erro: 'chave inválida (use sk-… da OpenAI ou gsk_… da Groq, ou deixe em branco para desligar)' }));
+      // Provedor (OpenAI/Groq) → grava URL + modelo certos, sem editar .env.
+      let provedor = lerTranscricaoProvedor();
+      if (ok && d.provedor) { try { provedor = gravarTranscricaoProvedor(d.provedor); } catch (_) {} }
+      if (ok) { try { auditoria.registrar(sess.usuario, 'sofia.transcricaokey', 'TRANSCRICAO_API_KEY', (String(d.key || '').trim() ? 'atualizada' : 'removida') + ' pelo painel (' + provedor + ')'); } catch (_) {} }
+      return res.end(JSON.stringify(ok ? { ok: true, provedor } : { ok: false, erro: 'chave inválida (use sk-… da OpenAI ou gsk_… da Groq, ou deixe em branco para desligar)' }));
     });
   }
   // Login do robô no EVO (EVO_EMAIL / EVO_PASSWORD) — só admin. Grava no
