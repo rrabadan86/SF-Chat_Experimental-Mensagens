@@ -70,18 +70,19 @@ async function buscarAlunasAniversario() {
       if (res.url().includes('obter-clientes') && res.status() === 200) {
         const data = JSON.parse(await res.text());
         const lista = data.retorno || data.data || [];
-        // DIAGNÓSTICO (só em --dry): imprime UMA vez os campos da API, para sabermos
-        // se há TELEFONE e STATUS (define se casamos por telefone ou por nome).
-        if (!_diagFeito && lista[0] && process.argv.includes('--dry')) {
+        // DIAGNÓSTICO (só em --dry): mostra os campos de CONTRATO de alguns clientes
+        // de plano e do cliente de Circuito, para separar plano × Circuito pela API.
+        if (!_diagFeito && lista.length >= 20 && process.argv.includes('--dry')) {
           _diagFeito = true;
-          const r0 = lista[0];
-          const campos = Object.keys(r0);
-          const tel = campos.filter(k => /(tel|cel|phone|contato|whats)/i.test(k));
-          const st = campos.filter(k => /(status|ativ|inativ|situa|bloque)/i.test(k));
-          console.log('🔑 [diag] Campos da API obter-clientes:', campos.join(', '));
-          console.log('   [diag] Parecem TELEFONE:', tel.length ? tel.join(', ') : '(nenhum)');
-          console.log('   [diag] Parecem STATUS:', st.length ? st.join(', ') : '(nenhum)');
-          for (const k of tel.concat(st)) { try { console.log(`   [diag] ${k} =`, JSON.stringify(r0[k]).slice(0, 140)); } catch (_) {} }
+          const CF = ['contrato', 'idContrato', 'categoriaContratos', 'tipoContrato', 'servicos', 'atividades', 'grupoAtividade', 'statusContrato'];
+          const amostra = (r) => CF.map(k => `${k}=${JSON.stringify(r[k])}`).join(' · ');
+          const nomeDe = (r) => String(r.nome || r.nomeCompleto || '').trim();
+          const idDe = (r) => String(r.idCliente ?? r.id ?? '');
+          console.log('🔑 [diag] Campos de CONTRATO — 5 primeiros clientes:');
+          for (const r of lista.slice(0, 5)) console.log(`   [diag] ${nomeDe(r)} [${idDe(r)}]: ${amostra(r)}`);
+          const circ = lista.find(r => idDe(r) === '5545' || /moreira\s+machado/i.test(nomeDe(r)));
+          if (circ) console.log(`   [diag] CIRCUITO (${nomeDe(circ)}) [${idDe(circ)}]: ${amostra(circ)}`);
+          else console.log('   [diag] (Renata Moreira/Circuito não veio neste snapshot)');
         }
         const recs = lista.map(parseRec).filter(Boolean);
         if (recs.length) snapshots.push(recs);
