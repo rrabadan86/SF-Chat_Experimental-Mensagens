@@ -393,12 +393,28 @@ async function selecionarMesTodos(page) {
  * job protegem a planilha de qualquer jeito).
  */
 async function selecionarContratosSemCircuito(page) {
-  const overlayAberto = () => page.evaluate(() => {
+  // A LISTA de contratos está aberta? (o overlay dela tem "aplicar" + contratos —
+  // diferente do menu de tipos de filtro, que só tem "colaborador/idade/…").
+  const listaAberta = () => page.evaluate(() => {
     const o = document.querySelector('.cdk-overlay-container');
     if (!o || o.offsetHeight === 0) return false;
     const t = (o.textContent || '').toLowerCase();
-    return /circuito|grupo|aplicar/.test(t) && !/janeiro|fevereiro/.test(t);
+    return t.includes('aplicar') && (t.includes('circuito') || t.includes('todos'));
   }).catch(() => false);
+
+  // Clica um item com TEXTO EXATO dentro do overlay aberto (menu/lista) — evita
+  // clicar na COLUNA "Contrato ativo" da tabela (que tem o mesmo texto).
+  const clicarItemOverlay = (rotExato) => page.evaluate((rot) => {
+    const o = document.querySelector('.cdk-overlay-container'); if (!o) return null;
+    for (const el of o.querySelectorAll('button, [role="menuitem"], mat-option, mat-list-option, li, span, div, a')) {
+      if ((el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase() === rot && el.offsetWidth > 0 && el.offsetHeight > 0) {
+        const c = el.closest('button, [role="menuitem"], mat-option, mat-list-option, li, a') || el;
+        const r = c.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }
+    }
+    return null;
+  }, rotExato).catch(() => null);
 
   const acharTexto = (rs) => page.evaluate((r) => {
     const re = new RegExp(r, 'i');
@@ -414,20 +430,21 @@ async function selecionarContratosSemCircuito(page) {
     return best;
   }, rs).catch(() => null);
 
-  // 1) Abre o filtro: tenta o chip "Contrato ativo"; se não abrir, "+ FILTRO" → "Contrato ativo".
+  // 1) Fluxo do EVO: clicar "+ FILTRO" → no menu aberto, clicar o item "Contrato
+  //    ativo" → abre a LISTA de contratos. (Se já houver o chip "Contrato ativo",
+  //    clicá-lo também abre a lista — por isso tentamos o clique no overlay antes.)
   let aberto = false;
-  for (let t = 1; t <= 3 && !aberto; t++) {
-    const chip = await acharTexto('contrato ativo');
-    if (chip) { await page.mouse.click(chip.x, chip.y); await sleep(1600); aberto = await overlayAberto(); }
-    if (!aberto) {
-      const filtro = await acharTexto('^\\+?\\s*filtro$');
-      if (filtro) {
-        await page.mouse.click(filtro.x, filtro.y); await sleep(1200);
-        const opc = await acharTexto('contrato ativo');
-        if (opc) { await page.mouse.click(opc.x, opc.y); await sleep(1600); aberto = await overlayAberto(); }
-      }
-    }
-    if (!aberto) await sleep(1000);
+  for (let t = 1; t <= 4 && !aberto; t++) {
+    if (await listaAberta()) { aberto = true; break; }
+    // (a) "+ FILTRO" abre o menu de tipos de filtro
+    const filtro = await acharTexto('^\\+?\\s*filtro$');
+    if (filtro) { await page.mouse.click(filtro.x, filtro.y); await sleep(1500); }
+    // (b) item "Contrato ativo" DENTRO do overlay (menu) — nunca a coluna da tabela
+    const item = await clicarItemOverlay('contrato ativo');
+    if (item) { await page.mouse.click(item.x, item.y); await sleep(2000); }
+    aberto = await listaAberta();
+    console.log(`   🔎 abrir contrato (tentativa ${t}/4): +FILTRO=${!!filtro} · itemContrato=${!!item} · listaAberta=${aberto}`);
+    if (!aberto) await sleep(1200);
   }
   if (!aberto) { console.log('   ⚠️  Filtro "Contrato ativo" não abriu — seguindo sem ele.'); return false; }
 
