@@ -1360,7 +1360,7 @@ function varrerSessoes() {
   }
 }
 
-// ── Automação por tag (gatilhos detectados aqui: novo/palavra/campanha/encerrou) ──
+// ── Automação por tag (gatilhos detectados aqui: novo/mensagem/palavra/campanha/encerrou) ──
 //    O painel publica as regras em sofia-regras.json; nós detectamos os eventos
 //    e devolvemos as AÇÕES em sofia-eventos.jsonl (o painel aplica a tag + avisa).
 const REGRAS_FILE = path.join(DIR, "sofia-regras.json");
@@ -1450,6 +1450,13 @@ function ehMsgAnuncio(texto: string): boolean {
 // Chamado no fim do handler da aluna: checa palavra-chave e "respondeu campanha".
 function checarGatilhosAluna(chave: string, nome: string, texto: string) {
   const rs = lerRegras();
+  // qualquer mensagem: aplica a tag sempre que a pessoa escreve (lead NOVO ou de
+  // RETORNO), uma vez por sessão. Diferente de 'novo', que só pega a 1ª mensagem
+  // de quem nunca vimos. As transições de funil se encarregam de não sobrepor um
+  // estágio mais avançado (ex.: quem já agendou não volta pra "Contato inicial").
+  for (const r of (rs.mensagem || [])) {
+    if (!jaDisparou(chave, "mensagem", r.tag)) emitirAcao(chave, nome, r, "mensagem");
+  }
   // palavra-chave
   const t = normTxt(texto);
   for (const r of (rs.palavra || [])) {
