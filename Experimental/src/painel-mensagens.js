@@ -2479,7 +2479,16 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     }
     while(ei<evts.length){ out.push(evtDivisor(evts[ei])); ei++; }
     var bolhas = out.join('');
-    var fim = encerrada(c) ? '<div style="text-align:center;margin:10px 0 2px"><span style="display:inline-block;background:#f3eaea;color:#a15a5a;border:1px solid #e6cfcf;border-radius:999px;padding:3px 12px;font-size:.72rem;font-weight:700">🔒 Encerrada '+(encPorTxt?'por '+encPorTxt:'manualmente')+' · a SoFIA recomeça do zero se a aluna voltar</span></div>' : '';
+    // Dois jeitos de uma conversa estar "encerrada": (1) cadeado EXPLÍCITO — alguém
+    // clicou 🔒 (encPor = perfil) ou uma automação de tag fechou (encPor = "SoFIA");
+    // fica gravado no sofia-encerradas.json. (2) TEMPO DE SESSÃO — passou da janela
+    // de memória sem mensagem nova; nada foi gravado, então NÃO é "manual". Antes o
+    // rótulo caía em "manualmente" nos dois casos — agora cada um tem seu texto.
+    var encExplicito = !!(c && c.enc);
+    var fimTxt = encExplicito
+      ? ('🔒 Encerrada '+(encPorTxt?'por '+encPorTxt:'manualmente')+' · a SoFIA recomeça do zero se a aluna voltar')
+      : ('🕒 Sessão encerrada por inatividade (tempo de sessão) · a SoFIA recomeça do zero se a aluna voltar');
+    var fim = encerrada(c) ? '<div style="text-align:center;margin:10px 0 2px"><span style="display:inline-block;background:#f3eaea;color:#a15a5a;border:1px solid #e6cfcf;border-radius:999px;padding:3px 12px;font-size:.72rem;font-weight:700">'+fimTxt+'</span></div>' : '';
     var hum = !!c.humano;                                   // alguém no controle AGORA (trava ativa)
     var donoMeu = hum && c.humanoPor===MEU_USUARIO;          // EU assumi
     var donoOutro = hum && !donoMeu;                         // outro atendente assumiu
