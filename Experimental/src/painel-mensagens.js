@@ -2437,7 +2437,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       return {em:(m.em||0), html: sep+'<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:4px 0"><div style="max-width:82%;background:'+bg+';padding:8px 12px;border-radius:12px;overflow-wrap:anywhere"><div style="font-size:.68rem;font-weight:700;color:#888">'+escH(autorRot(m.autor, nomeAluna, m.por, m.tipo))+' · '+fmtHora(m.em)+selo+'</div>'+corpoMsg+'</div></div>'};
     });
     // Marcadores de controle humano (assumiu/devolveu) intercalados por horário.
-    var MOTIVO_TAG={ia:'🧠 intenção detectada pela SoFIA', palavra:'🔑 palavra-chave', campanha:'💬 respondeu campanha', novo:'🆕 novo contato', encerrou:'🔒 encerramento sem agendamento', agendou:'📅 agendou', humano:'🙋 atendimento humano'};
+    var MOTIVO_TAG={ia:'🧠 intenção detectada pela SoFIA', palavra:'🔑 palavra-chave', campanha:'💬 respondeu campanha', novo:'🆕 novo contato', mensagem:'💬 mandou mensagem', encerrou:'🔒 encerramento sem agendamento', agendou:'📅 agendou', humano:'🙋 atendimento humano'};
     function evtDivisor(e){
       var quem=e.por?escH(e.por):'';
       if(e.acao==='tag'){
@@ -3007,6 +3007,7 @@ function paginaSofiaContatos(aviso, erro, params) {
       <select id="tgGatilho" onchange="tgSync()">
         <option value="">— não automatizar (só uso manual) —</option>
         <option value="novo">🆕 a aluna mandar a 1ª mensagem (lead novo)</option>
+        <option value="mensagem">💬 a pessoa mandar qualquer mensagem (novo ou retorno)</option>
         <option value="palavra">🔑 a aluna escrever uma palavra-chave</option>
         <option value="ia">🧠 a SoFIA entender uma intenção (você descreve)</option>
         <option value="agendou">📅 agendar uma aula experimental (a SoFIA ou você pelo botão)</option>
@@ -3502,6 +3503,7 @@ function paginaSofiaTags(aviso, erro) {
       <select id="tgGatilho" onchange="tgSync()">
         <option value="">— não automatizar (só uso manual) —</option>
         <option value="novo">🆕 a aluna mandar a 1ª mensagem (lead novo)</option>
+        <option value="mensagem">💬 a pessoa mandar qualquer mensagem (novo ou retorno)</option>
         <option value="palavra">🔑 a aluna escrever uma palavra-chave</option>
         <option value="ia">🧠 a SoFIA entender uma intenção (você descreve)</option>
         <option value="agendou">📅 agendar uma aula experimental (a SoFIA ou você pelo botão)</option>
@@ -6783,6 +6785,7 @@ function fmtTelAviso(t) {
 const AUTO_ROTULO = {
   agendou: '🎉 Nova aula experimental agendada!',
   novo: '🆕 Nova aluna falou com a SoFIA',
+  mensagem: '💬 Contato mandou mensagem',
   palavra: '🔑 Palavra-chave detectada — pode precisar de atendimento',
   ia: '🧠 Intenção detectada pela SoFIA',
   humano: '🙋 Conversa assumida por atendente',
@@ -6848,7 +6851,7 @@ function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra, canal
 // Publica as regras que o LISTENER precisa (só os gatilhos dele).
 function publicarRegras() {
   try {
-    const regras = { novo: [], palavra: [], ia: [], campanha: [], encerrou: [], anuncio: [] };
+    const regras = { novo: [], mensagem: [], palavra: [], ia: [], campanha: [], encerrou: [], anuncio: [] };
     for (const g of Object.keys(regras)) {
       for (const r of contatos.tagsPorGatilho(g)) {
         if (g === 'palavra') regras[g].push({ tag: r.tag, avisarWpp: r.avisarWpp, palavras: r.palavras });
