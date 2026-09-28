@@ -2844,15 +2844,15 @@ function paginaSofiaContatos(aviso, erro, params) {
   const q = params.q || '';
   const tagSel = params.tag || '';
   const bloqSel = ['sim', 'nao'].includes(params.bloq) ? params.bloq : '';
-  const pagina = parseInt(params.pagina, 10) || 0;
   let bloqueados = []; try { bloqueados = sofia.lerBloqueios(); } catch (_) {}
-  const r = contatos.listar({ q, tag: tagSel, pagina, porPagina: 25, bloq: bloqSel, bloqueados });
+  // Sem paginação: uma lista única que rola (igual às Conversas da SoFIA). Um
+  // porPagina enorme traz todos os contatos do filtro numa página só, então o
+  // bloco de paginação (r.paginas > 1) nunca aparece.
+  const r = contatos.listar({ q, tag: tagSel, pagina: 0, porPagina: 1000000, bloq: bloqSel, bloqueados });
   const tags = contatos.tagsDistintas();
   const total = contatos.totalContatos();
 
   const fmtTelP = (t) => { const d = String(t || '').replace(/\D/g, ''); if (/^55\d{10,11}$/.test(d)) { const ddd = d.slice(2, 4), x = d.slice(4); return '+55 (' + ddd + ') ' + (x.length === 9 ? x.slice(0, 5) + '-' + x.slice(5) : x.slice(0, 4) + '-' + x.slice(4)); } return t || ''; };
-  const qs = (pg) => { const p = new URLSearchParams(); p.set('view', 'contatos'); if (q) p.set('q', q); if (tagSel) p.set('tag', tagSel); if (bloqSel) p.set('bloq', bloqSel); p.set('pagina', pg); return '/sofia?' + p.toString(); };
-  const hidden = `<input type="hidden" name="q" value="${esc(q)}"><input type="hidden" name="tag" value="${esc(tagSel)}"><input type="hidden" name="bloq" value="${esc(bloqSel)}"><input type="hidden" name="pagina" value="${pagina}">`;
   const optBloq = (v, rot) => `<option value="${v}"${bloqSel === v ? ' selected' : ''}>${rot}</option>`;
 
   // Cores estáveis por texto (mesma tag/nome → mesma cor, no servidor e no navegador).
@@ -2923,38 +2923,6 @@ function paginaSofiaContatos(aviso, erro, params) {
       <p class="quando" id="loteHint" style="margin:8px 0 0">Nenhum marcado — vai aplicar aos <b>${r.total} contato(s) do filtro atual</b>. Marque as caixinhas na lista para agir só nos escolhidos. Ao <b>adicionar</b>, as regras de transição de funil da tag também valem.</p>
     </details>` : '';
 
-  // Paginação com NÚMEROS (janela em torno da atual + 1ª/última + reticências),
-  // para saltar direto em vez de ir de 1 em 1. Ex.: ‹  1 … 4 [5] 6 … 11  ›
-  let pag = '';
-  if (r.paginas > 1) {
-    const cur = r.pagina, last = r.paginas - 1;
-    // Janela ±2 em torno da atual + 1ª/última; nas pontas, mostra até ~5 seguidas.
-    const nums = new Set([0, last, cur - 2, cur - 1, cur, cur + 1, cur + 2]);
-    if (cur <= 3) [1, 2, 3, 4].forEach(x => nums.add(x));
-    if (cur >= last - 3) [last - 1, last - 2, last - 3, last - 4].forEach(x => nums.add(x));
-    const paginasVis = [...nums].filter(p => p >= 0 && p <= last).sort((a, b) => a - b);
-    const cel = (p) => p === cur
-      ? `<span class="save" style="padding:6px 11px;border-radius:8px;pointer-events:none">${p + 1}</span>`
-      : `<a class="reset" style="padding:6px 11px" href="${qs(p)}">${p + 1}</a>`;
-    const numHtml = [];
-    let ant = -1;
-    for (const p of paginasVis) {
-      // Se o "buraco" esconde só UMA página, mostra o número dela em vez de "…".
-      if (p - ant === 2) numHtml.push(cel(ant + 1));
-      else if (p - ant > 1) numHtml.push('<span class="quando" style="padding:0 2px">…</span>');
-      numHtml.push(cel(p));
-      ant = p;
-    }
-    pag = `<div style="display:flex;flex-direction:column;gap:8px;align-items:center;margin-top:12px">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center">
-        <a class="reset" style="padding:6px 12px;${pagina <= 0 ? 'pointer-events:none;opacity:.4' : ''}" href="${qs(Math.max(0, pagina - 1))}">‹ Anterior</a>
-        ${numHtml.join('')}
-        <a class="reset" style="padding:6px 12px;${pagina >= last ? 'pointer-events:none;opacity:.4' : ''}" href="${qs(Math.min(last, pagina + 1))}">Próxima ›</a>
-      </div>
-      <span class="quando" style="margin:0">Página ${r.pagina + 1} de ${r.paginas} · ${r.total} contato(s)</span>
-    </div>`;
-  }
-
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('contatos')}
@@ -2996,13 +2964,16 @@ function paginaSofiaContatos(aviso, erro, params) {
 
     ${loteBar}
 
-    ${r.itens.length ? pag : ''}
+    ${r.itens.length ? `<div id="ctSelBar" style="display:none;align-items:center;gap:10px;margin:2px 2px 8px;padding:8px 14px;background:#e7f0ef;border:1px solid #cbe3e2;border-radius:10px;font-weight:700;color:#0e6e6b;font-size:.86rem">
+      <span>✅ <span id="ctSelNum">0</span> selecionado(s)</span>
+      <button type="button" class="reset" style="padding:3px 10px;font-size:.78rem;margin-left:auto" onclick="limparSelecao()">Limpar seleção</button>
+    </div>` : ''}
 
     ${r.itens.length ? `<div class="ct-wrap">
       <table class="ct-tab">
         <colgroup><col class="c-nome"><col class="c-tel"><col class="c-tags"><col class="c-act"></colgroup>
         <thead><tr>
-          <th><span style="display:inline-flex;align-items:center;gap:8px"><input type="checkbox" id="ctChkAll" onclick="marcarTodos(this)" title="Selecionar todos desta página" style="width:16px;height:16px;margin:0;cursor:pointer"><button type="button" class="ct-sort" title="Ordenar por nome" onclick="ordenarContatos()">Nome <span id="ctSortArr" style="opacity:.4">↕</span></button></span></th>
+          <th><span style="display:inline-flex;align-items:center;gap:8px"><input type="checkbox" id="ctChkAll" onclick="marcarTodos(this)" title="Selecionar todos" style="width:16px;height:16px;margin:0;cursor:pointer"><button type="button" class="ct-sort" title="Ordenar por nome" onclick="ordenarContatos()">Nome <span id="ctSortArr" style="opacity:.4">↕</span></button></span></th>
           <th>Telefone</th>
           <th>Tags <button type="button" class="ct-fil" title="Filtrar por tag" onclick="abrirFiltroTag()">▾</button></th>
           <th style="text-align:right">Ações</th>
@@ -3010,7 +2981,7 @@ function paginaSofiaContatos(aviso, erro, params) {
         <tbody>${linhas}</tbody>
       </table>
     </div>` : '<div class="card"><p class="quando">Nenhum contato encontrado. Importe um CSV acima ou ajuste o filtro.</p></div>'}
-    ${pag}
+    ${r.itens.length ? `<p class="quando" style="text-align:center;margin:10px 0 0">${r.total} contato(s) no filtro atual.</p>` : ''}
   </div>
 
   <div id="ctIntModal" class="ct-ov" onclick="if(event.target===this)fecharInteracoes()">
@@ -3182,10 +3153,15 @@ function paginaSofiaContatos(aviso, erro, params) {
       if(txt)txt.textContent='Aplicar ao filtro ('+total+')';
       if(hint)hint.innerHTML='Nenhum marcado — vai aplicar aos <b>'+total+' contato(s) do filtro atual</b>. Marque as caixinhas na lista para agir só nos escolhidos.';
     }
+    // Barra visível de "X selecionado(s)" — aparece só quando há algum marcado.
+    var bar=document.getElementById('ctSelBar'), num=document.getElementById('ctSelNum');
+    if(num)num.textContent=sel;
+    if(bar)bar.style.display=sel>0?'flex':'none';
     var all=document.getElementById('ctChkAll');
     if(all){ var boxes=document.querySelectorAll('.ct-chk'); all.checked=boxes.length>0 && sel===boxes.length; all.indeterminate=sel>0 && sel<boxes.length; }
   }
   function marcarTodos(cb){ Array.prototype.slice.call(document.querySelectorAll('.ct-chk')).forEach(function(c){c.checked=cb.checked;}); atualizarSel(); }
+  function limparSelecao(){ Array.prototype.slice.call(document.querySelectorAll('.ct-chk')).forEach(function(c){c.checked=false;}); atualizarSel(); }
   function confirmarLote(f){
     var add=f.add.value, rm=f.rm.value;
     if(!add && !rm){ alert('Escolha uma tag para adicionar e/ou remover.'); return false; }
