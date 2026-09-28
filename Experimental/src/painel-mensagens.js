@@ -2281,6 +2281,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
           <div class="filtros-corpo">
             <label class="filtro-check"><input type="checkbox" id="convAtencao" onchange="filtrarAtencao(this)">🔴 <b>Pediram atendimento humano</b></label>
             <label class="filtro-check"><input type="checkbox" id="convQuieto" onchange="filtrarQuieto(this)">😴 Sem resposta há <b>${esc(String(quietoCfg.horas))}h+</b> <small>(${esc(String(quietoCfg.dias))}d)</small></label>
+            <label class="filtro-check"><input type="checkbox" id="convRespondeu" onchange="filtrarRespondeu(this)">💬 <b>Cliente respondeu</b> <small>(interagiu, não só recebeu)</small></label>
             <div class="filtro-periodo">
               <span class="filtro-lbl">Conversaram no período</span>
               <div class="filtro-datas">
@@ -2313,7 +2314,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     </div>
   </div>
 <script>
-  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ultimoInboxHtml='', ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', buscaTexto='', quietoFiltro=false, atencaoFiltro=false, tagEdAberto=false, agAberto=false, ncNome='', ncDirty=false, ncTodas=[];
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ultimoInboxHtml='', ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', buscaTexto='', quietoFiltro=false, atencaoFiltro=false, respondeuFiltro=false, tagEdAberto=false, agAberto=false, ncNome='', ncDirty=false, ncTodas=[];
   // Atalho vindo de Contatos: ?chat=<telefone> abre a conversa correspondente.
   var alvoChat=(new URLSearchParams(location.search).get('chat')||'').replace(/\\D/g,''), alvoAplicado=false;
   function mesmoTel(a,b){ a=String(a||'').replace(/\\D/g,''); b=String(b||'').replace(/\\D/g,''); if(!a||!b) return false; if(a===b) return true; var la=a.slice(-8), lb=b.slice(-8); return la.length===8 && la===lb; }
@@ -2680,6 +2681,21 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   function filtrarBusca(v){ buscaTexto=String(v||'').trim().toLowerCase(); pagina=0; renderInbox(ultimoData); }
   function filtrarQuieto(cb){ quietoFiltro=!!cb.checked; pagina=0; renderInbox(ultimoData); }
   function filtrarAtencao(cb){ atencaoFiltro=!!cb.checked; pagina=0; renderInbox(ultimoData); }
+  function filtrarRespondeu(cb){ respondeuFiltro=!!cb.checked; pagina=0; renderInbox(ultimoData); }
+  // "Cliente respondeu": a pessoa MANDOU pelo menos uma mensagem (autor==='aluna').
+  // Quem só recebeu campanha/follow-up da SoFIA e nunca respondeu NÃO passa. Se um
+  // período estiver marcado, exige que a resposta dela tenha caído DENTRO do período
+  // — assim dá pra ver "quem interagiu no mês" (não só quem recebeu algo no mês).
+  function clienteRespondeu(c){
+    var m=(c&&c.msgs)||[]; var usaPeriodo=!!(dataIniMs||dataFimMs);
+    var lo=dataIniMs||0, hi=dataFimMs||8.64e15;
+    for(var i=0;i<m.length;i++){
+      if(m[i].autor!=='aluna') continue;
+      if(!usaPeriodo) return true;
+      var e=m[i].em||0; if(e>=lo && e<=hi) return true;
+    }
+    return false;
+  }
   // Filtro por PERÍODO: conversas com alguma mensagem entre os dias De e Até
   // (inclusive). Só olha os horários já guardados — nenhuma chamada de IA.
   var dataIniMs=0, dataFimMs=0;
@@ -2725,10 +2741,11 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     if(buscaTexto) chaves = chaves.filter(function(k){ return casaBusca(k, ultimoData[k]||{}); });
     if(atencaoFiltro) chaves = chaves.filter(function(k){ return !!(ultimoData[k]||{}).atencao; });
     if(quietoFiltro) chaves = chaves.filter(function(k){ return quieto(ultimoData[k]||{}); });
+    if(respondeuFiltro) chaves = chaves.filter(function(k){ return clienteRespondeu(ultimoData[k]||{}); });
     if(dataIniMs || dataFimMs) chaves = chaves.filter(function(k){ return naData(ultimoData[k]||{}); });
     var total=chaves.length;
     var lista=document.getElementById('convLista'), pag=document.getElementById('convPag');
-    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+(atencaoFiltro?'Nenhuma conversa pedindo atendimento humano agora. 🎉':((dataIniMs||dataFimMs)?'Nenhuma conversa no período escolhido.':(quietoFiltro?'Nenhum contato quieto há 24h+ (dentro dos últimos 4 dias). 🎉':(buscaTexto?'Nada encontrado para “'+escH(buscaTexto)+'” (nome, telefone ou palavra na conversa).':(tagFiltro==='__sem__'?'Nenhuma conversa sem tag.':(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a SoFIA receber mensagens, elas aparecem aqui.'))))))+'</p>'; ultimoInboxHtml=''; if(pag)pag.innerHTML=''; return; }
+    if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+(atencaoFiltro?'Nenhuma conversa pedindo atendimento humano agora. 🎉':(respondeuFiltro?('Nenhum cliente respondeu'+((dataIniMs||dataFimMs)?' no período escolhido.':' ainda.')):((dataIniMs||dataFimMs)?'Nenhuma conversa no período escolhido.':(quietoFiltro?'Nenhum contato quieto há 24h+ (dentro dos últimos 4 dias). 🎉':(buscaTexto?'Nada encontrado para “'+escH(buscaTexto)+'” (nome, telefone ou palavra na conversa).':(tagFiltro==='__sem__'?'Nenhuma conversa sem tag.':(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a SoFIA receber mensagens, elas aparecem aqui.')))))))+'</p>'; ultimoInboxHtml=''; if(pag)pag.innerHTML=''; return; }
     // Lista COMPLETA (sem paginação) — só o #convLista rola; a janela da conversa fica fixa.
     var fatia=chaves;
     var grupos=[], gAtual=null;
