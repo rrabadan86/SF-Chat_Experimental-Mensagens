@@ -6815,6 +6815,14 @@ function _conversaEmAndamento(tel) {
 function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra, canal }) {
   const tel = String(telefone || '').replace(/\D/g, '');
   if (!tel || !tag) return;
+  // Gatilho 'novo' (lead novo → "Contato inicial"): se a pessoa JÁ está no CRM
+  // — ex.: aluna cadastrada pela planilha de aniversários, casando pelo 9º dígito —
+  // ela NÃO é um lead novo. Não marca "Contato inicial" nem avisa. Corrige o caso
+  // em que a SoFIA recebia a mensagem numa forma do número (com/sem o 9) diferente
+  // da cadastrada e rotulava uma aluna existente como contato inicial.
+  if (String(motivo || '') === 'novo') {
+    try { if (contatos.acharPorTel(tel)) return; } catch (_) {}
+  }
   try { contatos.adicionarTag(tel, nome || '', tag); } catch (_) {}
   // Marca no timeline da conversa o momento exato em que a tag foi aplicada pela
   // automação (igual aos marcadores de assumir/encerrar) — ajuda a diagnosticar.

@@ -304,7 +304,14 @@ function adicionarTag(telefone, nome, tag, opts) {
   const map = carregar();
   const tel = normTel(telefone);
   if (!tel) return false;
-  const c = map[tel] || { tel, nome: '', tags: [], instrucoes: '', criadoEm: Date.now() };
+  // Reaproveita o contato JÁ existente em qualquer variante do 9º dígito (com/sem o
+  // 9), como o upsert. Sem isto, a automação da SoFIA cria uma DUPLICATA quando a
+  // aluna já está cadastrada na outra forma — ex.: a SoFIA recebe a mensagem SEM o
+  // 9 (@c.us antigo) mas o CRM tem a aluna COM o 9 → nasce um "novo lead" errado
+  // com "Contato inicial" ao lado da mesma pessoa que já era "0. Aluna".
+  const achado = acharPorTel(tel, map);
+  const chave = achado ? achado.chave : tel;
+  const c = map[chave] || { tel: chave, nome: '', tags: [], instrucoes: '', criadoEm: Date.now() };
   // Normalmente só preenche o nome se estiver vazio (não atropela o pushname do
   // WhatsApp). Com opts.forcarNome (ex.: sincronização com o EVO), o nome oficial
   // do EVO SOBREPÕE o da conversa.
@@ -313,21 +320,23 @@ function adicionarTag(telefone, nome, tag, opts) {
   if (tag && !c.tags.includes(tag)) c.tags.push(tag);
   c.tags = tagsAposRegras(c.tags); // aplica transições (ex.: sai de "Contato inicial")
   c.atualizadoEm = Date.now();
-  map[tel] = c;
+  map[chave] = c;
   salvar(map);
   return true;
 }
 
 // Remove UMA tag de um contato (não mexe nas outras). Usado por automações de
-// estado (ex.: tira "Atendimento Humano" quando você devolve a conversa).
+// estado (ex.: tira "Atendimento Humano" quando você devolve a conversa). Também
+// tolerante ao 9º dígito para achar o mesmo contato guardado na outra forma.
 function removerTag(telefone, tag) {
   const map = carregar();
-  const tel = normTel(telefone);
-  if (!map[tel]) return false;
+  const achado = acharPorTel(normTel(telefone), map);
+  if (!achado) return false;
+  const chave = achado.chave;
   tag = String(tag || '').trim();
-  const antes = (map[tel].tags || []).length;
-  map[tel].tags = (map[tel].tags || []).filter(t => t !== tag);
-  if (map[tel].tags.length !== antes) { map[tel].atualizadoEm = Date.now(); salvar(map); return true; }
+  const antes = (map[chave].tags || []).length;
+  map[chave].tags = (map[chave].tags || []).filter(t => t !== tag);
+  if (map[chave].tags.length !== antes) { map[chave].atualizadoEm = Date.now(); salvar(map); return true; }
   return false;
 }
 
