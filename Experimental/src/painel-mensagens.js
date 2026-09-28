@@ -4970,17 +4970,23 @@ function paginaSofiaFunil(params) {
   const dentro = (dia) => dia && (!iniD || dia >= iniD) && (!fimD || dia <= fimD);
   let inbox = {}; try { inbox = sofia.conversas() || {}; } catch (_) {}
   const agSet = new Set(); try { (fuLerJson(FU_AGENDOU_FILE, []) || []).forEach(x => { const d = String(x).replace(/\D/g, ''); if (d) agSet.add(d.slice(-8)); }); } catch (_) {}
+  // Canal por telefone (últimos 8) — p/ NÃO contar o cadastro Express na conversão.
+  let canalMap = {}; try { const m = fuLerJson(FU_AGENDOU_CANAL_FILE, {}); if (m && typeof m === 'object' && !Array.isArray(m)) canalMap = m; } catch (_) {}
   let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {}
   let contatosMap = {}; try { contatosMap = contatos.carregar() || {}; } catch (_) {}
   const last8 = (k) => String(k).replace(/\D/g, '').slice(-8);
   const temAgTag = (k) => { try { const c = (contatos.acharPorTel(k, contatosMap) || {}).contato; if (!c) return false; const ts = c.tags || []; return agTags.some(t => ts.includes(t)); } catch (_) { return false; } };
+  // Só o cadastro EXPRESS é excluído: se o canal registrado for "express", não conta
+  // como agendamento da SoFIA. Sem canal conhecido (agendamento antigo / tag manual)
+  // segue contando, para não zerar o histórico.
+  const ehExpress = (k) => canalMap[last8(k)] === 'express';
   let convs = 0, agend = 0;
   for (const k in inbox) {
     const c = inbox[k] || {};
     const ult = c.ultimaEm || (c.msgs && c.msgs.length ? c.msgs[c.msgs.length - 1].em : 0);
     if (!dentro(diaDe(ult))) continue;
     convs++;
-    if (agSet.has(last8(k)) || temAgTag(k)) agend++;
+    if ((agSet.has(last8(k)) || temAgTag(k)) && !ehExpress(k)) agend++;
   }
   const naoAg = Math.max(0, convs - agend);
   const conv = convs ? Math.round((agend / convs) * 1000) / 10 : 0;
@@ -5010,7 +5016,7 @@ function paginaSofiaFunil(params) {
       ${convs ? barra('Conversaram', convs, convs, 'var(--teal)') + barra('Agendaram', agend, convs, 'var(--ok)') + barra('Não agendaram', naoAg, convs, 'var(--cinza)')
       : '<div class="vazio">Sem conversas no período.</div>'}
     </div>
-    <p class="quando" style="text-align:center">"Agendaram" = contatos que agendaram pela SoFIA (ou com tag de agendamento). O <b>comparecimento</b> à aula depende de cruzar com a presença no EVO — fica como próximo passo.</p>
+    <p class="quando" style="text-align:center">"Agendaram" = contatos que agendaram pela <b>SoFIA</b> (ou com tag de agendamento). O <b>cadastro Express</b> (feito pela recepcionista) <b>não</b> entra nesta conta — o funil mede só a conversão da SoFIA. O <b>comparecimento</b> à aula depende de cruzar com a presença no EVO — fica como próximo passo.</p>
   </div>`;
   return chrome({ tab: 'Funil', h1: 'SoFIA', p: 'Funil — conversas que viraram agendamento.' }, 'sofia', corpo);
 }
@@ -6863,6 +6869,11 @@ function publicarRegras() {
 }
 // Estado do follow-up (arquivos co-locados com os demais da Sofia, fora do Git).
 const FU_AGENDOU_FILE = path.join(sofia.DIR, 'sofia-agendaram.json');   // quem já agendou (não recebe follow-up)
+// Canal de cada agendamento por telefone (últimos 8 díg.) — { "81055502": "sofia" }.
+// Usado SÓ pelo Funil, para NÃO contar o cadastro Express na conversão da SoFIA.
+// (O sofia-agendaram.json acima segue com TODOS os telefones — inclusive Express —
+//  porque quem já agendou por qualquer via também não deve receber follow-up.)
+const FU_AGENDOU_CANAL_FILE = path.join(sofia.DIR, 'sofia-agendaram-canal.json');
 const FU_FEITO_FILE = path.join(sofia.DIR, 'sofia-followup-feito.json'); // { chave: ultimoInboundSeguido }
 // Leads que ESTÃO no ponto de receber follow-up, mas seguram porque agora é FORA
 // da janela de horário. { chave: 'HH:MM' (horário em que vai sair) }. Recalculado
@@ -6882,6 +6893,29 @@ function fuMarcarAgendou(tels) {
   for (const t of tels) { const d = String(t || '').replace(/\D/g, ''); if (d && !set.has(d)) { set.add(d); mudou = true; } }
   if (mudou) fuSalvarJson(FU_AGENDOU_FILE, Array.from(set).slice(-20000));
 }
+// Registra o CANAL de cada agendamento (por últimos 8 díg.) para o Funil. Um canal
+// "de verdade" da SoFIA (sofia/formulario) é PEGAJOSO: uma vez marcado assim, um
+// Express posterior não sobrescreve — assim quem agendou pela SoFIA e depois foi
+// recadastrado no Express continua contando como conversão da SoFIA.
+function fuMarcarCanal(evs) {
+  let mapa = fuLerJson(FU_AGENDOU_CANAL_FILE, {}) || {};
+  if (typeof mapa !== 'object' || Array.isArray(mapa)) mapa = {};
+  let mudou = false;
+  for (const ev of evs) {
+    const d = String((ev && ev.telefone) || '').replace(/\D/g, '').slice(-8);
+    const canal = String((ev && ev.canal) || '').trim().toLowerCase();
+    if (!d || !canal) continue;
+    const atual = mapa[d];
+    if (atual && atual !== 'express' && canal === 'express') continue; // não rebaixa SoFIA→Express
+    if (atual !== canal) { mapa[d] = canal; mudou = true; }
+  }
+  if (mudou) {
+    // Poda: mantém no máx. ~20000 chaves (as últimas inseridas), como o outro arquivo.
+    const ks = Object.keys(mapa);
+    if (ks.length > 20000) { const cortar = ks.slice(0, ks.length - 20000); for (const k of cortar) delete mapa[k]; }
+    fuSalvarJson(FU_AGENDOU_CANAL_FILE, mapa);
+  }
+}
 
 // 1) Agendamentos concluídos (gatilho 'agendou') → aplica tags + avisa.
 function processarAgendamentos() {
@@ -6889,6 +6923,7 @@ function processarAgendamentos() {
   try { evs = sofia.consumirAgendamentos(); } catch (_) { return; }
   if (!evs.length) return;
   try { fuMarcarAgendou(evs.map(ev => ev.telefone)); } catch (_) {} // registra p/ o follow-up NÃO incomodar quem agendou
+  try { fuMarcarCanal(evs); } catch (_) {} // guarda o canal (sofia/formulario/express) p/ o Funil não contar Express
   let autos = [];
   try { autos = contatos.tagsPorGatilho('agendou'); } catch (_) {}
   if (!autos.length) return;
