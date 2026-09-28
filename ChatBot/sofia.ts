@@ -922,7 +922,7 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
   // responder — assim ela não faz a apresentação de boas-vindas nem pergunta
   // "já conhece a metodologia?" para quem treina há anos, mesmo que a aluna
   // tenha mandado só um "oi" (sem nenhuma palavra-chave de remarcação).
-  const promptDaVez = carregarPrompt() + contextoAluna(telefone);
+  const promptDaVez = carregarPrompt() + contextoAluna(telefone) + contextoData();
   const opcoesDaVez: ClaudeAgentOptions = conversa.sessionId
     ? { ...options, resume: conversa.sessionId, systemPrompt: promptDaVez }
     : { ...options, systemPrompt: promptDaVez };
@@ -1433,6 +1433,25 @@ function contextoAluna(telefone: string): string {
 - Cumprimente de forma breve e calorosa (use o nome dela quando souber) e pergunte
   como pode ajudar. Ex.: "Oi, [nome]! 😊 Como posso te ajudar?"
 - Se ela falar em remarcar/desmarcar/reposição/horário, siga a seção ALUNAS CONTRATADAS.`;
+  } catch { return ""; }
+}
+
+// Injeta a DATA DE HOJE (relógio real do servidor, fuso de Brasília) no fim do
+// prompt, recalculada a cada mensagem. Assim a SoFIA sabe o dia atual e consegue
+// decidir sozinha se uma promoção com validade por mês/período está vigente —
+// sem cron nem "job da meia-noite" (vira na hora que a próxima mensagem chega).
+// Fica no FIM (junto do contexto de aluna) para não quebrar o cache do prompt.
+function contextoData(): string {
+  try {
+    const opts = { timeZone: "America/Sao_Paulo" } as const;
+    const data = new Date().toLocaleDateString("pt-BR", { ...opts, day: "2-digit", month: "2-digit", year: "numeric" });
+    const diaSemana = new Date().toLocaleDateString("pt-BR", { ...opts, weekday: "long" });
+    const mesAno = new Date().toLocaleDateString("pt-BR", { ...opts, month: "long", year: "numeric" });
+    return `
+
+# DATA DE HOJE (fonte da verdade para datas — vale acima de qualquer texto)
+- Hoje é ${data} (${diaSemana}), horário de Brasília. Estamos em ${mesAno}.
+- Use SEMPRE esta data para decidir se uma promoção com validade por mês/período está vigente. NUNCA suponha o mês por conta própria.`;
   } catch { return ""; }
 }
 
