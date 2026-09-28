@@ -52,8 +52,8 @@ async function buscarAlunasAniversario() {
     const s = String(nascRaw);
     let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) aniv = `${m[3]}/${m[2]}`;
     if (!aniv) { m = s.match(/(\d{2})\/(\d{2})\/\d{2,4}/); if (m) aniv = `${m[1]}/${m[2]}`; }
-    // contrato do plano (ex.: "SLIMFIT 2X FIXA...", "COPA SLIM..."). Vem VAZIO para
-    // quem tem só serviço (ex.: Circuito) — é o sinal usado para excluir.
+    // Nome do contrato (ex.: "SLIMFIT 2X FIXA...", "COPA SLIM...", "CIRCUITO SLIM...").
+    // Quem começa com "Circuito" é cliente só de Circuito — é o sinal p/ excluir.
     const contrato = String(r.contrato ?? '').replace(/\s+/g, ' ').trim();
     // Telefone (para casar com o contato da SoFIA na auto-tag Aluna/Ex-aluna).
     let telefone = String(r.celular ?? r.telefone ?? r.telefoneCelular ?? r.celularCliente ?? r.fone ?? '').replace(/\D/g, '');
@@ -64,26 +64,11 @@ async function buscarAlunasAniversario() {
   };
   await page.setRequestInterception(true);
   page.on('request', req => req.continue());
-  let _diagFeito = false;
   page.on('response', async (res) => {
     try {
       if (res.url().includes('obter-clientes') && res.status() === 200) {
         const data = JSON.parse(await res.text());
         const lista = data.retorno || data.data || [];
-        // DIAGNÓSTICO (só em --dry): mostra os campos de CONTRATO de alguns clientes
-        // de plano e do cliente de Circuito, para separar plano × Circuito pela API.
-        if (!_diagFeito && lista.length >= 20 && process.argv.includes('--dry')) {
-          _diagFeito = true;
-          const CF = ['contrato', 'idContrato', 'categoriaContratos', 'tipoContrato', 'servicos', 'atividades', 'grupoAtividade', 'statusContrato'];
-          const amostra = (r) => CF.map(k => `${k}=${JSON.stringify(r[k])}`).join(' · ');
-          const nomeDe = (r) => String(r.nome || r.nomeCompleto || '').trim();
-          const idDe = (r) => String(r.idCliente ?? r.id ?? '');
-          console.log('🔑 [diag] Campos de CONTRATO — 5 primeiros clientes:');
-          for (const r of lista.slice(0, 5)) console.log(`   [diag] ${nomeDe(r)} [${idDe(r)}]: ${amostra(r)}`);
-          const circ = lista.find(r => idDe(r) === '5545' || /moreira\s+machado/i.test(nomeDe(r)));
-          if (circ) console.log(`   [diag] CIRCUITO (${nomeDe(circ)}) [${idDe(circ)}]: ${amostra(circ)}`);
-          else console.log('   [diag] (Renata Moreira/Circuito não veio neste snapshot)');
-        }
         const recs = lista.map(parseRec).filter(Boolean);
         if (recs.length) snapshots.push(recs);
       }
@@ -166,13 +151,9 @@ async function buscarAlunasAniversario() {
     catch (e) { console.log(`   ⚠️  Filtro de mês falhou (${e && e.message ? e.message : e}) — seguindo com o padrão.`); }
     await sleep(4000);
 
-    // 3.5. Filtro "Contrato ativo": marca TODOS e desmarca os que começam com
-    //      "Circuito" (contratos puros de Circuito). Assim quem é só Circuito
-    //      (ex.: Renata Moreira) sai da segmentação na FONTE, sem depender da API.
-    console.log('🧾 Filtrando "Contrato ativo": todos, menos os de Circuito...');
-    try { await selecionarContratosSemCircuito(page); }
-    catch (e) { console.log(`   ⚠️  Filtro de contrato falhou (${e && e.message ? e.message : e}) — seguindo sem ele.`); }
-    await sleep(4000);
+    // 3.5. A exclusão do Circuito é feita PELA API (campo `contrato`) depois da
+    //      leitura — mais robusto que mexer no filtro de tela do EVO, que muda de
+    //      layout e quebra. Quem tem contrato começando com "Circuito" é removido.
 
     // 4. LÊ A TABELA DO DOM em todas as páginas. A tabela reflete EXATAMENTE a
     //    segmentação filtrada — é a fonte correta (a API do EVO também dispara
@@ -248,17 +229,17 @@ async function buscarAlunasAniversario() {
     //    (ter ids extras não atrapalha — só consultamos os 81 do DOM).
     const nomeLimpoPorId = new Map();
     const telefonePorId = new Map(); // id → celular (p/ a auto-tag Aluna/Ex-aluna)
-    // Sinais de contrato por id: quem está na API mas NUNCA teve um contrato de
-    // plano de verdade (vazio) ou só "Circuito" é serviço-only → será excluído.
-    const idsNaApi = new Set(), idsPlanoReal = new Set();
+    // Nome do CONTRATO por id (o diag confirmou que o campo `contrato` vem
+    // preenchido, ex.: "SLIMFIT 2X FIXA RECORRENTE - GRUPO 2"). Guardamos o
+    // primeiro NÃO-vazio de qualquer snapshot; usado só p/ excluir o Circuito.
+    const contratoPorId = new Map();
     for (const snap of snapshots) {
       for (const r of snap) {
         if (r.id && r.nome && !nomeLimpoPorId.has(r.id)) nomeLimpoPorId.set(r.id, r.nome);
         if (r.id && r.telefone && !telefonePorId.has(r.id)) telefonePorId.set(r.id, r.telefone);
         if (r.id) {
-          idsNaApi.add(r.id);
-          const c = String(r.contrato || '');
-          if (c.trim() && !/circuito/i.test(c)) idsPlanoReal.add(r.id);
+          const c = String(r.contrato || '').trim();
+          if (c && !(contratoPorId.get(r.id) || '').trim()) contratoPorId.set(r.id, c);
         }
       }
     }
@@ -293,19 +274,18 @@ async function buscarAlunasAniversario() {
       } catch (_) { /* alerta é opcional */ }
       return [];
     }
-    // Exclui quem tem SÓ Circuito / sem contrato de plano (na API sem contrato
-    // real). Só exclui quando o id ESTÁ na API e nunca teve plano real — nunca
-    // remove por falta de dado (id fora da API é mantido).
-    const alunasFinal = alunas.filter(a => !(idsNaApi.has(a.id) && !idsPlanoReal.has(a.id)));
+    // Exclui SOMENTE quem tem contrato começando com "Circuito" (cliente só de
+    // Circuito Slim, não é aluna de plano). Contrato vazio/desconhecido é MANTIDO
+    // — nunca removemos por falta de dado (a segmentação do DOM já é a lista certa).
+    const ehCircuito = (a) => /^circuito/i.test((contratoPorId.get(a.id) || '').trim());
+    const alunasFinal = alunas.filter(a => !ehCircuito(a));
     const excluidas = alunas.length - alunasFinal.length;
-    // Salvaguarda: se excluiria demais (>30%), é sinal de que a API não trouxe os
-    // contratos nessa rodada — mantém todas (não filtra), para não sumir com meia
-    // planilha por um dado incompleto.
-    if (excluidas > alunas.length * 0.3) {
-      console.log(`   ⚠️  O filtro de Circuito excluiria ${excluidas} de ${alunas.length} — a API não trouxe os contratos direito. Mantendo TODAS (sem filtrar).`);
-      return alunas;
+    if (excluidas) {
+      const nomes = alunas.filter(ehCircuito).map(a => a.nome).filter(Boolean);
+      console.log(`   🚫 ${excluidas} excluída(s) por serem só Circuito${nomes.length ? ': ' + nomes.join(', ') : ''}.`);
+    } else {
+      console.log(`   ✅ Nenhuma cliente só-Circuito na segmentação.`);
     }
-    if (excluidas) console.log(`   🚫 ${excluidas} excluída(s) por ter só Circuito / sem contrato de plano.`);
     return alunasFinal;
   } finally {
     await browser.close().catch(() => {});
@@ -382,127 +362,6 @@ async function selecionarMesTodos(page) {
   });
   if (aplicar) await page.mouse.click(aplicar.x, aplicar.y);
   console.log(`   🗓️  Filtro de mês: aberto=sim, Todos=${todos ? (todos.checked ? 'já-marcado' : 'marcado-agora') : 'n/e'}, aplicar=${!!aplicar}`);
-  await sleep(4000);
-  return true;
-}
-
-/**
- * Abre o filtro "Contrato ativo", marca TODOS e DESMARCA os contratos que
- * começam com "Circuito" (os puros de Circuito). Os combos SlimFit (ex.:
- * "FREE 3X SLIMFIT/ CIRC SLIM") NÃO começam com "Circuito", então continuam
- * marcados. Best-effort: se algo falhar, segue sem o filtro (as travas do
- * job protegem a planilha de qualquer jeito).
- */
-async function selecionarContratosSemCircuito(page) {
-  // A LISTA de contratos está aberta? (o overlay dela tem "aplicar" + contratos —
-  // diferente do menu de tipos de filtro, que só tem "colaborador/idade/…").
-  const listaAberta = () => page.evaluate(() => {
-    const o = document.querySelector('.cdk-overlay-container');
-    if (!o || o.offsetHeight === 0) return false;
-    const t = (o.textContent || '').toLowerCase();
-    return t.includes('aplicar') && (t.includes('circuito') || t.includes('todos'));
-  }).catch(() => false);
-
-  // Clica um item com TEXTO EXATO dentro do overlay aberto (menu/lista) — evita
-  // clicar na COLUNA "Contrato ativo" da tabela (que tem o mesmo texto).
-  const clicarItemOverlay = (rotExato) => page.evaluate((rot) => {
-    const o = document.querySelector('.cdk-overlay-container'); if (!o) return null;
-    for (const el of o.querySelectorAll('button, [role="menuitem"], mat-option, mat-list-option, li, span, div, a')) {
-      if ((el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase() === rot && el.offsetWidth > 0 && el.offsetHeight > 0) {
-        const c = el.closest('button, [role="menuitem"], mat-option, mat-list-option, li, a') || el;
-        const r = c.getBoundingClientRect();
-        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-      }
-    }
-    return null;
-  }, rotExato).catch(() => null);
-
-  const acharTexto = (rs) => page.evaluate((r) => {
-    const re = new RegExp(r, 'i');
-    let best = null;
-    for (const el of document.querySelectorAll('button, span, div, a, [class*="chip"], [class*="filter"]')) {
-      const t = (el.textContent || '').trim();
-      if (t && t.length <= 40 && re.test(t) && el.offsetWidth > 0 && el.offsetHeight > 0) {
-        const c = el.closest('button, a, [class*="chip"], [class*="filter"]') || el;
-        const box = c.getBoundingClientRect();
-        if (!best || t.length < best.len) best = { x: box.left + box.width / 2, y: box.top + box.height / 2, len: t.length };
-      }
-    }
-    return best;
-  }, rs).catch(() => null);
-
-  // 1) Fluxo do EVO: clicar "+ FILTRO" → no menu aberto, clicar o item "Contrato
-  //    ativo" → abre a LISTA de contratos. (Se já houver o chip "Contrato ativo",
-  //    clicá-lo também abre a lista — por isso tentamos o clique no overlay antes.)
-  let aberto = false;
-  for (let t = 1; t <= 4 && !aberto; t++) {
-    if (await listaAberta()) { aberto = true; break; }
-    // (a) "+ FILTRO" abre o menu de tipos de filtro
-    const filtro = await acharTexto('^\\+?\\s*filtro$');
-    if (filtro) { await page.mouse.click(filtro.x, filtro.y); await sleep(1500); }
-    // (b) item "Contrato ativo" DENTRO do overlay (menu) — nunca a coluna da tabela
-    const item = await clicarItemOverlay('contrato ativo');
-    if (item) { await page.mouse.click(item.x, item.y); await sleep(2000); }
-    aberto = await listaAberta();
-    console.log(`   🔎 abrir contrato (tentativa ${t}/4): +FILTRO=${!!filtro} · itemContrato=${!!item} · listaAberta=${aberto}`);
-    if (!aberto) await sleep(1200);
-  }
-  if (!aberto) { console.log('   ⚠️  Filtro "Contrato ativo" não abriu — seguindo sem ele.'); return false; }
-
-  // 2) Marca "Todos".
-  const todos = await page.evaluate(() => {
-    const o = document.querySelector('.cdk-overlay-container'); if (!o) return null;
-    for (const el of o.querySelectorAll('mat-checkbox, mat-list-option, [role="option"], label, li')) {
-      if ((el.textContent || '').trim().toLowerCase() === 'todos' && el.offsetWidth > 0) {
-        const inp = el.querySelector('input[type=checkbox]');
-        const checked = inp ? inp.checked : (el.getAttribute('aria-checked') === 'true');
-        const r = el.getBoundingClientRect();
-        return { x: r.left + Math.min(18, r.width / 2), y: r.top + r.height / 2, checked };
-      }
-    }
-    return null;
-  });
-  if (todos && !todos.checked) { await page.mouse.click(todos.x, todos.y); await sleep(1000); }
-
-  // 3) Enumera as opções e desmarca as que começam com "Circuito".
-  const opcoes = await page.evaluate(() => {
-    const o = document.querySelector('.cdk-overlay-container'); if (!o) return [];
-    const out = [], seen = new Set();
-    for (const el of o.querySelectorAll('mat-checkbox, mat-list-option, [role="option"], label, li')) {
-      const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
-      if (!txt || txt.length > 90 || seen.has(txt)) continue;
-      if (/^(todos|pesquisar|aplicar)$/i.test(txt)) continue;
-      seen.add(txt);
-      const inp = el.querySelector('input[type=checkbox]');
-      const checked = inp ? inp.checked : (el.getAttribute('aria-checked') === 'true');
-      const r = el.getBoundingClientRect();
-      out.push({ txt, checked, x: r.left + Math.min(18, r.width / 2), y: r.top + r.height / 2, vis: r.height > 0 && r.top >= 0 });
-    }
-    return out;
-  });
-  console.log('   🧾 Opções de contrato:', JSON.stringify(opcoes.map(o => o.txt)));
-  let desmarcados = 0;
-  for (const op of opcoes) {
-    if (/^circuito/i.test(op.txt) && op.vis) {
-      await page.mouse.click(op.x, op.y); await sleep(500); desmarcados++;
-      console.log(`   ➖ desmarquei: ${op.txt}`);
-    }
-  }
-  console.log(`   🧾 ${desmarcados} contrato(s) de Circuito desmarcado(s).`);
-
-  // 4) APLICAR.
-  const aplicar = await page.evaluate(() => {
-    const o = document.querySelector('.cdk-overlay-container'); if (!o) return null;
-    for (const b of o.querySelectorAll('button, span, div, a')) {
-      if ((b.textContent || '').trim().toUpperCase() === 'APLICAR' && b.offsetWidth > 0) {
-        const c = b.closest('button') || b; const r = c.getBoundingClientRect();
-        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-      }
-    }
-    return null;
-  });
-  if (aplicar) await page.mouse.click(aplicar.x, aplicar.y);
-  console.log(`   🧾 Filtro de contrato: aberto=sim, Circuito desmarcados=${desmarcados}, aplicar=${!!aplicar}`);
   await sleep(4000);
   return true;
 }
