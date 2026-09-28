@@ -158,11 +158,19 @@ function exportarCSV() {
 }
 
 // Substitui as tags de um contato (edição manual no painel).
+// DEFINE o conjunto EXATO de tags de um contato (edição manual pelo painel).
+// NÃO aplica as transições de funil (tagsAposRegras) de propósito: na tela
+// "Editar contato" o usuário escolhe a dedo quais tags ficam — o que ele vê
+// marcado é o que deve ser gravado. As transições (ex.: "Agendou" tira
+// "Contato inicial") valem para as AUTOMAÇÕES, que aplicam UMA tag por vez via
+// adicionarTag; ali sim faz sentido limpar o estágio anterior. Antes esta
+// função rodava as transições e removia a segunda tag manual (ex.: manter
+// "0. Equipe" e "0. Aluna" juntas era impossível).
 function setTags(telefone, tags) {
   const map = carregar();
   const tel = normTel(telefone);
   if (!map[tel]) return false;
-  map[tel].tags = tagsAposRegras(limparTags(tags)); // aplica transições entre tags
+  map[tel].tags = limparTags(tags); // grava o conjunto exato escolhido (só remove duplicatas/vazios)
   map[tel].atualizadoEm = Date.now();
   salvar(map);
   return true;

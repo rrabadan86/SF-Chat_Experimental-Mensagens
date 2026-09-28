@@ -5928,9 +5928,9 @@ const server = http.createServer((req, res) => {
         const telAlvo = achado ? achado.chave : d.telefone;
         const tagsAntes = (achado && achado.contato && Array.isArray(achado.contato.tags)) ? achado.contato.tags.slice() : [];
         const c = contatos.adicionar({ nome: d.nome, telefone: telAlvo }); // cria/atualiza (sem mexer nas tags)
-        contatos.setTags(telAlvo, d.tags || []);                            // DEFINE as tags (substitui)
+        contatos.setTags(telAlvo, d.tags || []);                            // DEFINE o conjunto EXATO (edição manual: não roda transições de funil)
         // Marca no timeline o que MUDOU (add/remove), com quem fez — comparando o
-        // conjunto ANTES x o conjunto FINAL de fato gravado (após regras de funil).
+        // conjunto ANTES x o conjunto FINAL de fato gravado.
         try {
           const depoisR = contatos.acharPorTel(telAlvo);
           const tagsDepois = (depoisR && depoisR.contato && Array.isArray(depoisR.contato.tags)) ? depoisR.contato.tags : [];
