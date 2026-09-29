@@ -470,7 +470,9 @@ async function buscarExAlunasHoje() {
           const cel = await page.evaluate((nm) => {
             const txt = document.body.innerText || '';
             if (!txt.includes(nm)) return null;
-            const m = txt.match(/Celular\s*([\d][\d\s()+\-]{8,})/i);
+            // Aceita número começando com "(" (DDD entre parênteses) ou "+" — antes
+            // exigia dígito e quem tinha "(61) ..." caía como "sem telefone".
+            const m = txt.match(/Celular[\s:]*([\d(+][\d\s()+\-]{7,})/i);
             return m ? m[1].replace(/\D/g, '') : null;
           }, doisNomes);
           if (cel && cel.length >= 10) telefone = cel;
