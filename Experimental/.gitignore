@@ -66,6 +66,9 @@ data/auditoria.jsonl
 data/tags-config.json
 data/auto-tag-alunas.json
 
+# Baseline da última leitura boa da planilha de aniversários (auto-retry) — por VPS
+data/planilha-ultimo-total.json
+
 data/sofia-exp-limite.txt
 
 data/origens.json

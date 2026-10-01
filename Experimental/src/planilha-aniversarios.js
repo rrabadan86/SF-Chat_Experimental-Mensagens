@@ -18,9 +18,47 @@ puppeteer.use(StealthPlugin());
 const config = require('./config');
 const { fecharPopupNovaTela } = require('./evo-popup');
 const { sincronizar } = require('./sheets-sync');
+const fs = require('fs');
+const path = require('path');
 
 const DRY = process.argv.includes('--dry');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Baseline = tamanho da ÚLTIMA leitura boa do EVO. Serve para detectar um soluço
+// da tela (o "Mês = Todos" às vezes não aplica e a segmentação devolve só o mês
+// corrente, poucas alunas). Guardado em data/planilha-ultimo-total.json.
+const BASELINE_FILE = path.resolve(__dirname, '..', 'data', 'planilha-ultimo-total.json');
+function lerBaseline() {
+  try { const o = JSON.parse(fs.readFileSync(BASELINE_FILE, 'utf8')); const n = Number(o && o.total); return Number.isFinite(n) && n > 0 ? n : 0; }
+  catch (_) { return 0; }
+}
+function gravarBaseline(n) {
+  try { fs.mkdirSync(path.dirname(BASELINE_FILE), { recursive: true }); } catch (_) {}
+  try { fs.writeFileSync(BASELINE_FILE, JSON.stringify({ total: n, em: new Date().toISOString() }), 'utf8'); } catch (_) {}
+}
+
+// Lê as alunas com AUTO-RETRY. Se a leitura vier BEM abaixo da última boa
+// (baseline) — sinal do soluço do "Mês = Todos" —, relê (até 3 no total) e fica
+// com a MAIOR. Assim a tela travando se recupera sozinha, sem disparar o alerta.
+// A trava da sincronização segue como rede final se as 3 tentativas falharem.
+async function lerAlunasComRetry() {
+  const baseline = lerBaseline();
+  const MAX = 3;
+  let melhor = [];
+  for (let tent = 1; tent <= MAX; tent++) {
+    let alunas = [];
+    try { alunas = await buscarAlunasAniversario(); }
+    catch (e) { console.log(`   ⚠️  Leitura (tentativa ${tent}/${MAX}) falhou: ${e && e.message}`); }
+    if (alunas.length > melhor.length) melhor = alunas;
+    const suspeita = baseline >= 10 && melhor.length < baseline * 0.5;
+    if (!suspeita) break;
+    if (tent < MAX) console.log(`   🔁 Leitura suspeita (${melhor.length} de ~${baseline} da última vez) — relendo o EVO (${tent + 1}/${MAX})...`);
+  }
+  const suspeitaFinal = baseline >= 10 && melhor.length < baseline * 0.5;
+  if (!suspeitaFinal && melhor.length >= 10) gravarBaseline(melhor.length); // registra a nova leitura boa
+  else if (suspeitaFinal) console.log(`   ⚠️  Mesmo após ${MAX} tentativas, a leitura veio baixa (${melhor.length} de ~${baseline}). A trava da planilha vai preservar os dados.`);
+  return melhor;
+}
 
 
 async function buscarAlunasAniversario() {
@@ -465,7 +503,7 @@ async function runPlanilhaAniversarios() {
   console.log('║   PLANILHA — Alunas ativas & aniversários         ║');
   console.log('╚═══════════════════════════════════════════════════╝');
 
-  const alunas = await buscarAlunasAniversario();
+  const alunas = await lerAlunasComRetry();
 
   // ordena por mês/dia para leitura (não afeta o alinhamento — a sincronização
   // preserva a ordem já existente na planilha e só adiciona novas no fim)
