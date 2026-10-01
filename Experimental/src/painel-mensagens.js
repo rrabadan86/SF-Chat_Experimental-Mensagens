@@ -4956,29 +4956,57 @@ function paginaSofiaFunil(params) {
   const diaDe = (ms) => { try { return new Date(Number(ms)).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); } catch (_) { return ''; } };
   const dentro = (dia) => dia && (!iniD || dia >= iniD) && (!fimD || dia <= fimD);
   let inbox = {}; try { inbox = sofia.conversas() || {}; } catch (_) {}
-  const agSet = new Set(); try { (fuLerJson(FU_AGENDOU_FILE, []) || []).forEach(x => { const d = String(x).replace(/\D/g, ''); if (d) agSet.add(d.slice(-8)); }); } catch (_) {}
   // Canal por telefone (últimos 8) — p/ NÃO contar o cadastro Express na conversão.
   let canalMap = {}; try { const m = fuLerJson(FU_AGENDOU_CANAL_FILE, {}); if (m && typeof m === 'object' && !Array.isArray(m)) canalMap = m; } catch (_) {}
   let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {}
-  let contatosMap = {}; try { contatosMap = contatos.carregar() || {}; } catch (_) {}
+  const agTagsLc = agTags.map(t => String(t || '').trim());
+  let tagLogMap = {}; try { tagLogMap = sofia.lerTagLog() || {}; } catch (_) {}
   const last8 = (k) => String(k).replace(/\D/g, '').slice(-8);
-  const temAgTag = (k) => { try { const c = (contatos.acharPorTel(k, contatosMap) || {}).contato; if (!c) return false; const ts = c.tags || []; return agTags.some(t => ts.includes(t)); } catch (_) { return false; } };
   // Só o cadastro EXPRESS é excluído: se o canal registrado for "express", não conta
   // como agendamento da SoFIA. Sem canal conhecido (agendamento antigo / tag manual)
   // segue contando, para não zerar o histórico.
   const ehExpress = (k) => canalMap[last8(k)] === 'express';
-  let convs = 0, agend = 0;
+  const canalDe = (k) => String(canalMap[last8(k)] || '').trim();
+  // Instante em que a pessoa AGENDOU (quando a tag de agendamento foi aplicada) DENTRO
+  // do período. Lê o tagLog e pega a ÚLTIMA aplicação (acao add) de uma tag de
+  // agendamento. Assim o funil conta por DATA DO AGENDAMENTO — quem agendou em OUTRA
+  // data não entra no período de hoje só porque mandou mensagem hoje.
+  const agendouEmNoPeriodo = (k) => {
+    const evs = tagLogMap[last8(k)] || [];
+    let ult = 0;
+    for (const e of evs) {
+      const ehAg = e.acao === 'add' && (e.motivo === 'agendou' || agTagsLc.includes(String(e.tag || '').trim()));
+      if (ehAg && e.em && e.em > ult) ult = e.em;
+    }
+    if (!ult) return 0;
+    return dentro(diaDe(ult)) ? ult : 0;
+  };
+  const rotCanal = (c) => ({ sofia: '🤖 SoFIA', formulario: '📲 Formulário', express: '🏪 Express' }[c] || '— sem canal');
+  let convs = 0, agend = 0; const detAg = [], detExp = [];
   for (const k in inbox) {
     const c = inbox[k] || {};
     const ult = c.ultimaEm || (c.msgs && c.msgs.length ? c.msgs[c.msgs.length - 1].em : 0);
     if (!dentro(diaDe(ult))) continue;
     convs++;
-    if ((agSet.has(last8(k)) || temAgTag(k)) && !ehExpress(k)) agend++;
+    const agEm = agendouEmNoPeriodo(k);
+    if (!agEm) continue;                 // não agendou NESTE período
+    const nome = (c.nome || '').trim() || last8(k);
+    if (ehExpress(k)) { detExp.push({ nome, canal: 'express', em: agEm }); continue; } // Express não conta
+    agend++;
+    detAg.push({ nome, canal: canalDe(k), em: agEm });
   }
   const naoAg = Math.max(0, convs - agend);
   const conv = convs ? Math.round((agend / convs) * 1000) / 10 : 0;
   const barra = (rot, n, max, cor) => `<div style="display:flex;align-items:center;gap:10px;margin:9px 0"><span style="width:150px;flex:none;color:var(--tinta);font-weight:600;font-size:.86rem">${rot}</span><span style="flex:1;height:26px;background:var(--linha-soft);border-radius:8px;overflow:hidden"><span style="display:block;height:100%;width:${(max && n > 0) ? Math.max(3, Math.round(n / max * 100)) : 0}%;background:${cor}"></span></span><span style="width:44px;flex:none;text-align:right;font-weight:700;color:var(--tinta)">${n}</span></div>`;
   const segs = janelas.map(([v, l]) => `<a href="/sofia?view=funil&per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
+  // Lista de quem agendou no período (com canal) + os Express que ficaram de fora —
+  // ajuda a conferir quem contou e por quê.
+  const fmtDtCurta = (ms) => { try { return new Date(Number(ms)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+  const linhaDet = (d) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--linha-soft);font-size:.82rem"><span style="font-weight:600;color:var(--tinta)">${esc(d.nome)}</span><span class="quando" style="white-space:nowrap">${rotCanal(d.canal)} · ${esc(fmtDtCurta(d.em))}</span></div>`;
+  const detalheHtml = convs ? `<details class="card" style="padding:10px 15px;margin-top:10px"><summary style="cursor:pointer;font-weight:700">🔎 Quem agendou no período (${detAg.length})${detExp.length ? ` · ${detExp.length} Express fora da conta` : ''}</summary>`
+    + (detAg.length ? `<div style="margin-top:8px">${detAg.sort((a, b) => b.em - a.em).map(linhaDet).join('')}</div>` : '<p class="quando" style="margin:8px 0 0">Ninguém agendou neste período.</p>')
+    + (detExp.length ? `<p class="quando" style="margin:12px 0 2px"><b>Não contados — cadastro Express:</b></p>${detExp.sort((a, b) => b.em - a.em).map(linhaDet).join('')}` : '')
+    + `</details>` : '';
   const corpo = `<div class="wrap">
     ${subnavSofia('funil')}
     <div class="sec-t">Funil da SoFIA <small style="font-weight:600;color:var(--cinza)">(conversas que viraram agendamento)</small></div>
@@ -5003,7 +5031,8 @@ function paginaSofiaFunil(params) {
       ${convs ? barra('Conversaram', convs, convs, 'var(--teal)') + barra('Agendaram', agend, convs, 'var(--ok)') + barra('Não agendaram', naoAg, convs, 'var(--cinza)')
       : '<div class="vazio">Sem conversas no período.</div>'}
     </div>
-    <p class="quando" style="text-align:center">"Agendaram" = contatos que agendaram pela <b>SoFIA</b> (ou com tag de agendamento). O <b>cadastro Express</b> (feito pela recepcionista) <b>não</b> entra nesta conta — o funil mede só a conversão da SoFIA. O <b>comparecimento</b> à aula depende de cruzar com a presença no EVO — fica como próximo passo.</p>
+    ${detalheHtml}
+    <p class="quando" style="text-align:center">"Agendaram" = contatos que agendaram pela <b>SoFIA</b> dentro do período (conta pela <b>data do agendamento</b>, não pela data da conversa). O <b>cadastro Express</b> (feito pela recepcionista) <b>não</b> entra nesta conta — o funil mede só a conversão da SoFIA. O <b>comparecimento</b> à aula depende de cruzar com a presença no EVO — fica como próximo passo.</p>
   </div>`;
   return chrome({ tab: 'Funil', h1: 'SoFIA', p: 'Funil — conversas que viraram agendamento.' }, 'sofia', corpo);
 }
