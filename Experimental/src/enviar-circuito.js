@@ -61,10 +61,10 @@ function telefoneDaProfessora(nome) {
 }
 
 // ─── Estado (compartilha o horário lido na quarta com o lembrete de sexta) ─
-function salvarEstado(professora, horario) {
+function salvarEstado(professora, horario, temCircuito) {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(STATE_FILE, JSON.stringify({ professora, horario, ts: new Date().toISOString() }, null, 2), 'utf8');
+    fs.writeFileSync(STATE_FILE, JSON.stringify({ professora, horario, temCircuito: temCircuito !== false, ts: new Date().toISOString() }, null, 2), 'utf8');
   } catch (_) { /* estado é só conveniência */ }
 }
 function lerEstado() {
@@ -97,6 +97,12 @@ async function buscarCircuito(scraper) {
   await scraper.sleep(3500);
 
   return scraper.page.evaluate((chave) => {
+    // Sanidade: uma grade carregada tem VÁRIOS horários (HH:MM). Se quase não há,
+    // a página provavelmente não carregou — devolvemos gradeVazia para o chamador
+    // NÃO concluir "sem Circuito" por engano (seria um soluço, não a grade real).
+    const corpo = document.body.innerText || '';
+    const nTimes = (corpo.match(/\d{1,2}:\d{2}/g) || []).length;
+    const gradeVazia = nTimes < 2;
     const cards = [];
     for (const el of document.querySelectorAll('div,td,li,a')) {
       const t = (el.innerText || '').trim();
@@ -119,11 +125,28 @@ async function buscarCircuito(scraper) {
       for (const l of lines) { const m = l.match(/(\d{1,2}:\d{2})/); if (m) { horario = m[1]; break; } }
       cards.push({ prof, horario, x: Math.round(r.left), raw: lines.join(' | ') });
     }
-    if (cards.length === 0) return null;
+    if (cards.length === 0) return { temCircuito: false, professora: null, horario: null, debug: [], gradeVazia };
     cards.sort((a, b) => b.x - a.x); // sábado é a última coluna (mais à direita)
     const c = cards[0];
-    return { professora: (c.prof || '').trim() || null, horario: c.horario || null, debug: cards.map(x => x.raw).slice(0, 4) };
+    return { temCircuito: true, professora: (c.prof || '').trim() || null, horario: c.horario || null, debug: cards.map(x => x.raw).slice(0, 4), gradeVazia };
   }, CHAVE);
+}
+
+// Abre a grade e devolve se o SÁBADO tem Circuito: { gradeOk, gradeVazia, temCircuito,
+// professora, horario }. gradeOk=false → não consegui ler (erro/login). gradeVazia=true
+// → a grade não carregou direito (não dá pra confiar no "sem Circuito"). Fecha o scraper.
+async function checarGradeSabado() {
+  const scraper = new EvoScraper();
+  try {
+    await scraper.init();
+    await scraper.login();
+    const res = await buscarCircuito(scraper);
+    return Object.assign({ gradeOk: true }, res || { temCircuito: false, professora: null, horario: null, gradeVazia: true });
+  } catch (e) {
+    return { gradeOk: false, erro: (e && e.message) || String(e), temCircuito: false, gradeVazia: true };
+  } finally {
+    try { await scraper.close(); } catch (_) {}
+  }
 }
 
 // ─── Jobs ─────────────────────────────────────────────────────────────────
@@ -132,27 +155,29 @@ async function runCircuitoConvocacao({ dry = false } = {}) {
   console.log('║   CIRCUITO — Convocatória (quarta)                ║');
   console.log('╚═══════════════════════════════════════════════════╝');
 
-  let professora = null, horario = null;
-  const scraper = new EvoScraper();
-  try {
-    await scraper.init();
-    await scraper.login();
-    const res = await buscarCircuito(scraper);
-    professora = res && res.professora;
-    horario = res && res.horario;
-    console.log(`   Circuito de sábado → professora: ${professora || '(?)'} | horário: ${horario || '(?)'}`);
-    if (res && res.debug) console.log(`   🔎 cards: ${res.debug.join('  //  ')}`);
-  } catch (e) {
-    console.log(`   ⚠️  Falha ao ler a grade: ${e.message}`);
-  } finally {
-    try { await scraper.close(); } catch (_) {}
+  // 1) ANTES de tudo: o sábado tem Circuito na grade? (agora não é todo sábado.)
+  const g = await checarGradeSabado();
+  if (!g.gradeOk || g.gradeVazia) {
+    notif.alertar('Circuito: não consegui checar a grade',
+      'Não consegui ler a Grade > Horários para saber se há Circuito no sábado. A convocatória NÃO foi enviada — confira manualmente e, se houver, envie pelo painel.',
+      { tags: 'warning' });
+    console.log(`   ⚠️  Grade não lida (${g.erro || 'vazia'}) — convocatória NÃO enviada.`);
+    return;
   }
+  if (!g.temCircuito) {
+    console.log('   ⏭️  Sem Circuito no sábado (não está na grade) — convocatória NÃO enviada.');
+    salvarEstado(null, null, false); // o lembrete de sexta também vai pular
+    return;
+  }
+  console.log(`   ✅ Circuito de sábado NA GRADE → professora: ${g.professora || '(?)'} | horário: ${g.horario || '(?)'}`);
+  if (g.debug) console.log(`   🔎 cards: ${g.debug.join('  //  ')}`);
 
+  let professora = g.professora, horario = g.horario;
   if (!professora) {
     professora = process.env.CIRCUITO_PROFESSORA_PADRAO || '';
     if (!professora) {
       notif.alertar('Circuito: professora não encontrada',
-        'Não achei a professora do Circuito de sábado na Grade. A convocatória NÃO foi enviada. '
+        'Há Circuito no sábado, mas não achei o nome da professora na Grade. A convocatória NÃO foi enviada. '
         + 'Confira a Grade > Horários ou defina CIRCUITO_PROFESSORA_PADRAO no .env.',
         { tags: 'warning' });
       console.log('   ❌ Sem professora e sem fallback — convocatória NÃO enviada.');
@@ -162,7 +187,7 @@ async function runCircuitoConvocacao({ dry = false } = {}) {
   }
 
   const horaFmt = fmtHora(horario);
-  salvarEstado(professora, horario || HORA_PADRAO); // guarda para o lembrete de sexta
+  salvarEstado(professora, horario || HORA_PADRAO, true); // guarda para o lembrete de sexta
 
   const tel = telefoneDaProfessora(professora);
   const msg = msgConvocacao(professora, horaFmt);
@@ -191,11 +216,27 @@ async function runCircuitoLembrete({ dry = false } = {}) {
   console.log('║   CIRCUITO — Lembrete (sexta)                     ║');
   console.log('╚═══════════════════════════════════════════════════╝');
 
-  // Usa o horário que a convocatória (quarta) leu e guardou. Reserva: HORA_PADRAO.
+  // ANTES de lembrar, confirma de novo na grade que o sábado tem Circuito (pode ter
+  // mudado desde quarta). Se não conseguir ler agora, cai no que a convocatória achou.
+  const g = await checarGradeSabado();
   const est = lerEstado();
-  const horaFmt = fmtHora(est.horario || HORA_PADRAO);
-  console.log(`   Horário (do estado da quarta): ${est.horario || HORA_PADRAO}`);
+  let temCircuito, horario;
+  if (g.gradeOk && !g.gradeVazia) {
+    temCircuito = g.temCircuito;
+    horario = g.horario || est.horario || HORA_PADRAO;
+  } else {
+    temCircuito = est.temCircuito !== false; // sem leitura agora: respeita o "não" da quarta; senão assume que tem
+    horario = est.horario || HORA_PADRAO;
+    console.log(`   ⚠️  Não consegui checar a grade agora (${g.erro || 'vazia'}) — usando o estado da quarta (temCircuito=${temCircuito}).`);
+  }
 
+  if (!temCircuito) {
+    console.log('   ⏭️  Sem Circuito no sábado — lembrete NÃO enviado.');
+    return;
+  }
+  console.log(`   ✅ Circuito confirmado no sábado — horário: ${horario}`);
+
+  const horaFmt = fmtHora(horario);
   const msg = msgLembrete(horaFmt);
   console.log('\n--- MENSAGEM ---\n' + msg + '\n----------------');
   if (dry) { console.log('🧪 DRY — nada enviado.'); return; }
@@ -207,7 +248,7 @@ async function runCircuitoLembrete({ dry = false } = {}) {
   console.log(`✅ Lembrete enviado no grupo "${GRUPO}"${foto ? ' + foto' : ''}.`);
 }
 
-module.exports = { runCircuitoConvocacao, runCircuitoLembrete, buscarCircuito, msgConvocacao, msgLembrete };
+module.exports = { runCircuitoConvocacao, runCircuitoLembrete, buscarCircuito, checarGradeSabado, msgConvocacao, msgLembrete };
 
 // ─── CLI ──────────────────────────────────────────────────────────────────
 if (require.main === module) {

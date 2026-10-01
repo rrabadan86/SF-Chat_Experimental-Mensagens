@@ -60,6 +60,30 @@ function agendarCircuitoConvocacao(tentativa = 1) {
     });
 }
 
+// Lembrete de sexta: agora TAMBÉM lê a grade (confirma o Circuito do sábado), então
+// usa o scraper e precisa respeitar o jobRunning, igual à convocatória.
+function agendarCircuitoLembrete(tentativa = 1) {
+  if (jobRunning) {
+    if (tentativa > 6) {
+      logError('Circuito lembrete', new Error('scraper ocupado — desisti após esperar ~9 min'));
+      return;
+    }
+    log(`⏳ Circuito lembrete: outro job em execução — tento de novo em 90s (tentativa ${tentativa})`);
+    setTimeout(() => agendarCircuitoLembrete(tentativa + 1), 90000);
+    return;
+  }
+  jobRunning = true;
+  atividade.setContexto('Circuito — lembrete');
+  const start = new Date();
+  require('./enviar-circuito').runCircuitoLembrete()
+    .then(() => log('✅ Circuito lembrete concluído'))
+    .catch(err => logError('Circuito lembrete', err))
+    .finally(() => {
+      jobRunning = false;
+      log(`⏱️  Circuito lembrete finalizado em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
+    });
+}
+
 function log(msg) {
   const ts = new Date().toLocaleString('pt-BR', {
     timeZone: 'America/Sao_Paulo',
@@ -798,16 +822,14 @@ async function main() {
   }
 
   // Schedule: 16:15 sexta → Lembrete "É amanhã!" no grupo "Circuito Slim".
-  // Só posta no grupo (não usa o EVO), então roda independente do jobRunning.
+  // Agora confere a grade antes (o Circuito pode não rodar no sábado), então usa o
+  // scraper e respeita o jobRunning.
   if (!config.jobAtivo('circuito_lembrete')) {
     log('📅 Job CIRCUITO (lembrete) DESATIVADO nesta unidade (JOBS_OFF).');
   } else if (config.schedule.circuitoLembrete) {
     cron.schedule(config.schedule.circuitoLembrete, () => {
       log('⏰ Cron disparado: Circuito — lembrete');
-      atividade.setContexto('Circuito — lembrete');
-      require('./enviar-circuito').runCircuitoLembrete()
-        .then(() => log('✅ Circuito lembrete enviado'))
-        .catch(err => logError('Circuito lembrete', err));
+      agendarCircuitoLembrete();
     }, { timezone: 'America/Sao_Paulo' });
     log(`📅 Job CIRCUITO (lembrete) agendado: ${config.schedule.circuitoLembrete} (16:15 sexta)`);
     console.log('   → Lembrete "é amanhã" no grupo Circuito Slim');
