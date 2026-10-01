@@ -930,15 +930,17 @@ function lerHumanoLog() {
 // motivo = origem da automação ('ia','palavra','campanha','novo','encerrou'...)
 // ou 'manual' quando um atendente trocou à mão (aí `por` = usuário, `acao` =
 // 'add' | 'remove'). A automação sempre adiciona (acao='add', por='').
-function registrarTagLog(chave, tag, motivo, por, acao, em) {
+function registrarTagLog(chave, tag, motivo, por, acao, em, canal) {
   try {
     const d = String(chave || '').replace(/\D/g, '');
     const t = String(tag || '').trim();
     if (!d || !t) return;
-    fs.appendFileSync(F.tagLog, JSON.stringify({ chave: d, tag: t, motivo: String(motivo || '').trim(), por: String(por || '').trim(), acao: (acao === 'remove' ? 'remove' : 'add'), em: Number(em) || Date.now() }) + '\n', 'utf8');
+    const obj = { chave: d, tag: t, motivo: String(motivo || '').trim(), por: String(por || '').trim(), acao: (acao === 'remove' ? 'remove' : 'add'), em: Number(em) || Date.now() };
+    const c = String(canal || '').trim().toLowerCase(); if (c) obj.canal = c; // canal do agendamento (sofia/formulario/express) — usado pelo Funil
+    fs.appendFileSync(F.tagLog, JSON.stringify(obj) + '\n', 'utf8');
   } catch (_) { /* best-effort */ }
 }
-// Devolve os últimos eventos por conversa: { <chave-8díg>: [ {tag,motivo,por,acao,em}, ... ] }.
+// Devolve os últimos eventos por conversa: { <chave-8díg>: [ {tag,motivo,por,acao,em,canal}, ... ] }.
 function lerTagLog() {
   const mapa = {};
   let linhas = [];
@@ -949,7 +951,7 @@ function lerTagLog() {
     let o; try { o = JSON.parse(s); } catch (_) { continue; }
     const k8 = String(o.chave || '').replace(/\D/g, '').slice(-8);
     if (!k8) continue;
-    (mapa[k8] = mapa[k8] || []).push({ tag: o.tag || '', motivo: o.motivo || '', por: o.por || '', acao: (o.acao === 'remove' ? 'remove' : 'add'), em: Number(o.em) || 0 });
+    (mapa[k8] = mapa[k8] || []).push({ tag: o.tag || '', motivo: o.motivo || '', por: o.por || '', acao: (o.acao === 'remove' ? 'remove' : 'add'), em: Number(o.em) || 0, canal: String(o.canal || '').trim().toLowerCase() });
   }
   for (const k in mapa) mapa[k] = mapa[k].slice(-30); // no máx 30 eventos por conversa
   return mapa;
