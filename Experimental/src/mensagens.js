@@ -139,9 +139,9 @@ const CATALOGO = [
     chave: 'circuito_lembrete',
     foto: true,
     titulo: 'Circuito — lembrete (sexta)',
-    quando: 'Enviada sexta 16:15 no grupo do Circuito — SÓ se houver Circuito no sábado (confere na grade antes de enviar).',
-    vars: [['hora', 'horário da aula de sábado, ex.: 09h45']],
-    padrao: '🔥 *É AMANHÃ!* 🔥\n⚡️ Estamos esperando todas vocês!\n\n⏰ Sábado às {hora}',
+    quando: 'Enviada sexta 16:15 no grupo do Circuito — SÓ se houver Circuito no sábado (confere na grade antes de enviar). A professora é @marcada onde está {professora} (opcional — pode remover).',
+    vars: [['professora', 'a @menção da professora — mantenha o {professora} no texto (opcional)'], ['hora', 'horário da aula de sábado, ex.: 09h45']],
+    padrao: '🔥 *É AMANHÃ!* 🔥\n⚡️ Estamos esperando todas vocês com a professora {professora}!\n\n⏰ Sábado às {hora}',
   },
 ];
 
