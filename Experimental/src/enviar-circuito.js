@@ -41,7 +41,8 @@ function fmtHora(h) {
 const mensagens = require('./mensagens');
 function partesConvocacao(horaFmt) { return mensagens.partes('circuito_convocacao', { hora: horaFmt }, 'professora'); }
 function msgConvocacao(professora, horaFmt) { return mensagens.render('circuito_convocacao', { professora, hora: horaFmt }); }
-function msgLembrete(horaFmt) { return mensagens.render('circuito_lembrete', { hora: horaFmt }); }
+function partesLembrete(horaFmt) { return mensagens.partes('circuito_lembrete', { hora: horaFmt }, 'professora'); }
+function msgLembrete(professora, horaFmt) { return mensagens.render('circuito_lembrete', { professora, hora: horaFmt }); }
 
 // ─── Telefone da professora (para @marcar) ────────────────────────────────
 // PROFESSORAS_TEL no .env (JSON: {"raissa":"5562...","taynara":"..."}), buscado
@@ -220,32 +221,51 @@ async function runCircuitoLembrete({ dry = false } = {}) {
   // mudado desde quarta). Se não conseguir ler agora, cai no que a convocatória achou.
   const g = await checarGradeSabado();
   const est = lerEstado();
-  let temCircuito, horario;
+  let temCircuito, horario, professora;
   if (g.gradeOk && !g.gradeVazia) {
     temCircuito = g.temCircuito;
     horario = g.horario || est.horario || HORA_PADRAO;
+    professora = g.professora || est.professora || '';
   } else {
     temCircuito = est.temCircuito !== false; // sem leitura agora: respeita o "não" da quarta; senão assume que tem
     horario = est.horario || HORA_PADRAO;
+    professora = est.professora || '';
     console.log(`   ⚠️  Não consegui checar a grade agora (${g.erro || 'vazia'}) — usando o estado da quarta (temCircuito=${temCircuito}).`);
   }
+  if (!professora) professora = process.env.CIRCUITO_PROFESSORA_PADRAO || '';
 
   if (!temCircuito) {
     console.log('   ⏭️  Sem Circuito no sábado — lembrete NÃO enviado.');
     return;
   }
-  console.log(`   ✅ Circuito confirmado no sábado — horário: ${horario}`);
+  console.log(`   ✅ Circuito confirmado no sábado — professora: ${professora || '(?)'} | horário: ${horario}`);
 
   const horaFmt = fmtHora(horario);
-  const msg = msgLembrete(horaFmt);
+  // Só @marca se o texto do lembrete tiver o marcador {professora}, se há professora
+  // resolvida E se o telefone dela está configurado. Caso contrário, envia texto puro.
+  const temMarcador = /\{professora\}/.test(mensagens.texto('circuito_lembrete'));
+  const tel = professora ? telefoneDaProfessora(professora) : null;
+  const msg = msgLembrete(professora, horaFmt);
   console.log('\n--- MENSAGEM ---\n' + msg + '\n----------------');
+  if (temMarcador && professora) {
+    console.log(tel ? '   👤 Vai @marcar a professora (tel configurado).' : '   ℹ️  Sem telefone da professora no .env → sai sem @ (só o nome).');
+  }
   if (dry) { console.log('🧪 DRY — nada enviado.'); return; }
 
   const wa = require('./wa-client');
   const foto = mensagens.fotoPath('circuito_lembrete'); // flyer opcional (painel)
-  if (foto) await wa.sendGrupoMidia(GRUPO, foto, msg);
-  else await wa.sendGrupo(GRUPO, msg);
-  console.log(`✅ Lembrete enviado no grupo "${GRUPO}"${foto ? ' + foto' : ''}.`);
+  if (temMarcador && tel) {
+    const grp = await wa.acharGrupo(GRUPO);
+    if (!grp) throw new Error('Grupo não encontrado: ' + GRUPO);
+    const { antes, depois } = partesLembrete(horaFmt);
+    if (foto) await wa.sendGrupoMidiaComMencao(grp.id, foto, antes, depois, tel);
+    else await wa.sendGrupoComMencao(grp.id, antes, depois, tel);
+    console.log(`✅ Lembrete enviado no grupo "${GRUPO}" com @menção da professora${foto ? ' + foto' : ''}.`);
+  } else {
+    if (foto) await wa.sendGrupoMidia(GRUPO, foto, msg);
+    else await wa.sendGrupo(GRUPO, msg);
+    console.log(`✅ Lembrete enviado no grupo "${GRUPO}"${temMarcador && professora && !tel ? ' (sem @ — telefone não configurado)' : ''}${foto ? ' + foto' : ''}.`);
+  }
 }
 
 module.exports = { runCircuitoConvocacao, runCircuitoLembrete, buscarCircuito, checarGradeSabado, msgConvocacao, msgLembrete };
