@@ -37,6 +37,18 @@ function extrairLista(data) {
   return null;
 }
 
+// Procura, num objeto (raso + 1 nível), campos cujo VALOR seja uma URL http(s).
+// É assim que achamos o LINK DE PAGAMENTO, mesmo sem saber o nome do campo.
+function camposComUrl(obj, prefixo = '') {
+  const out = [];
+  if (!obj || typeof obj !== 'object') return out;
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === 'string' && /^https?:\/\//i.test(v)) out.push([prefixo + k, v]);
+    else if (v && typeof v === 'object' && !Array.isArray(v)) out.push(...camposComUrl(v, prefixo + k + '.'));
+  }
+  return out;
+}
+
 async function main() {
   console.log('\n═══════════════════════════════════════════════════');
   console.log('🔎 DIAGNÓSTICO v7 — ficha da devedora (não envia nada)');
@@ -74,12 +86,17 @@ async function main() {
         if (!amostra || typeof amostra !== 'object') return;
         const chaves = Object.keys(amostra);
         const campoParcela = chaves.filter(k => RE_PARCELA.test(k));
+        // procura link de pagamento em QUALQUER registro da lista (não só o 1º)
+        const urls = [];
+        for (const r of (lista ? lista.slice(0, 15) : [amostra])) for (const par of camposComUrl(r)) if (!urls.some(u => u[0] === par[0])) urls.push(par);
+        const temLink = urls.length > 0;
         (resultado.fases[faseAtual] = resultado.fases[faseAtual] || []).push({
           url: url.split('?')[0], registros: lista ? lista.length : null, chaves,
           chavesParcela: campoParcela, ehParcela: campoParcela.length >= 2,
+          camposUrl: urls, temLink,
           exemplo: amostra,
         });
-        console.log(`   ${campoParcela.length >= 2 ? '💰' : '  '} [${faseAtual}] ${url.split('?')[0]} (${lista ? lista.length + ' reg.' : 'obj'})`);
+        console.log(`   ${temLink ? '🔗' : (campoParcela.length >= 2 ? '💰' : '  ')} [${faseAtual}] ${url.split('?')[0]} (${lista ? lista.length + ' reg.' : 'obj'})${temLink ? ' — TEM URL!' : ''}`);
       } catch (_) {}
     });
   };
@@ -199,17 +216,19 @@ async function main() {
   for (const [fase, caps] of Object.entries(resultado.fases)) {
     console.log(`\n■ Fase "${fase}" — ${caps.length} endpoint(s) JSON:`);
     for (const c of caps) {
-      console.log(`   ${c.ehParcela ? '💰' : '  '} ${c.url} (${c.registros != null ? c.registros + ' reg.' : 'obj'})`);
+      const marca = c.temLink ? '🔗' : (c.ehParcela ? '💰' : '  ');
+      console.log(`   ${marca} ${c.url} (${c.registros != null ? c.registros + ' reg.' : 'obj'})`);
       console.log(`      campos: ${c.chaves.join(', ')}`);
-      if (c.ehParcela) {
+      if (c.temLink) c.camposUrl.forEach(([k, v]) => console.log(`      🔗 ${k} = ${v}`));
+      if (c.ehParcela || c.temLink) {
         const r = {};
         for (const k of Object.keys(c.exemplo)) if (RE_PARCELA.test(k) || /nome|cliente/i.test(k)) r[k] = c.exemplo[k];
-        console.log(`      exemplo: ${JSON.stringify(r)}`);
+        console.log(`      campos de parcela: ${JSON.stringify(r)}`);
       }
     }
   }
   console.log('\n✅ Detalhes em data/diag-debito.json | HTML em data/diag-ficha.html');
-  console.log('   Me manda: a URL da ficha, as abas, e os endpoints 💰 (ou a lista toda se não houver 💰).\n');
+  console.log('   Me manda: a URL da ficha, as abas, e os endpoints 🔗/💰 (ou a lista toda).\n');
 }
 
 main();
