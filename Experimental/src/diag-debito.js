@@ -1,14 +1,16 @@
 /**
- * DIAGNÓSTICO v4 (não envia nada) — achar o endpoint do financeiro da ficha com
- * as PARCELAS (vencimento + valor + status), comparando uma devedora VENCIDA com
- * uma de débito FUTURO (Carol), para sabermos qual campo cortar por data < hoje.
+ * DIAGNÓSTICO v5 (não envia nada) — mapear o relatório "Contas a Receber" do EVO.
  *
- * Estratégia:
- *   1. Abre a segmentação salva "Com débito" e pega as devedoras (id + nome).
- *   2. Para CADA devedora: abre a ficha, CAPTURA TODO JSON (não filtra por URL),
- *      lista as abas clicáveis, clica em "Financeiro" (e variações) e guarda as
- *      respostas cujos campos parecem de parcela (vencimento/valor/status/pago).
- *   3. Grava data/diag-debito.json com, por devedora, as parcelas encontradas.
+ * O v4 revelou que o menu Financeiro tem "Contas a Receber": um relatório global
+ * de recebíveis. É a melhor fonte para inadimplência vencida (cliente + vencimento
+ * + valor + status, todos numa lista só).
+ *
+ * Este script:
+ *   1. Loga no EVO.
+ *   2. Abre Financeiro → Contas a Receber (clicando no menu; com fallback por hash).
+ *   3. Captura TODO JSON (sem ruído) e destaca o endpoint com campos de parcela
+ *      (vencimento/valor/status/situação), despejando os campos + algumas linhas.
+ *   4. Grava data/diag-debito.json e data/diag-receber.html.
  *
  * NÃO escreve no EVO, NÃO manda WhatsApp, NÃO toca na planilha.
  *   node src/diag-debito.js
@@ -25,24 +27,23 @@ const path = require('path');
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const OUT = path.resolve(__dirname, '..', 'data', 'diag-debito.json');
-// URLs de telemetria/ruído que não interessam.
-const RE_RUIDO = /intercom|instatus|signalr|informativo|launcher_settings|\/ping|versao-aplicacao|wehelpsoftware|google|gstatic|sentry|hotjar|clarity/i;
-// Campos que caracterizam uma parcela/conta a receber.
-const RE_PARCELA = /venc|valor|status|pago|quita|baixa|parcela|aberto|recebi|cobran|desconto|multa|juros|competenc/i;
+const RE_RUIDO = /intercom|instatus|signalr|informativo|launcher_settings|\/ping|versao-aplicacao|wehelpsoftware|google|gstatic|sentry|hotjar|clarity|obter-filtros|montar-filtro|verificar-filtro|listar-conexoes|qtde-requisicoes|obterBasico|permissoes/i;
+const RE_PARCELA = /venc|valor|status|situac|situaç|pago|quita|baixa|parcela|aberto|recebi|cobran|desconto|multa|juros|competenc|atras/i;
 
 function extrairLista(data) {
   if (Array.isArray(data)) return data;
   if (data && typeof data === 'object') {
-    for (const k of ['retorno', 'data', 'items', 'rows', 'lista', 'result', 'results', 'content', 'parcelas', 'lancamentos', 'contas', 'receber']) {
+    for (const k of ['retorno', 'data', 'items', 'rows', 'lista', 'result', 'results', 'content', 'parcelas', 'lancamentos', 'contas', 'receber', 'registros']) {
       if (Array.isArray(data[k])) return data[k];
     }
+    // objeto paginado { totalRegistros, ... , lista:[...] } já coberto acima
   }
   return null;
 }
 
 async function main() {
   console.log('\n═══════════════════════════════════════════════════');
-  console.log('🔎 DIAGNÓSTICO v4 — parcelas do financeiro (não envia nada)');
+  console.log('🔎 DIAGNÓSTICO v5 — Contas a Receber (não envia nada)');
   console.log('═══════════════════════════════════════════════════\n');
 
   const browser = await puppeteer.launch({
@@ -56,46 +57,33 @@ async function main() {
   page.setDefaultTimeout(60000);
   page.setDefaultNavigationTimeout(60000);
 
-  const resultado = { geradoEm: new Date().toISOString(), devedoras: [], fichas: {} };
-  let capturaAtiva = null; // nome da devedora cuja ficha estamos lendo
-  let listaDevedoras = null;
-
+  const resultado = { geradoEm: new Date().toISOString(), capturas: [] };
+  let capturar = false;
   page.on('response', async (res) => {
     try {
-      if (res.status() !== 200) return;
+      if (!capturar || res.status() !== 200) return;
       const url = res.url();
-      // Sempre tenta pegar a lista filtrada da segmentação.
-      if (/clientes-segmentacao\/obter-clientes/i.test(url)) {
-        try {
-          const d = JSON.parse(await res.text());
-          const l = Array.isArray(d) ? d : (d.retorno || d.data || d.lista || []);
-          if (Array.isArray(l) && l.length && l.length <= 50) listaDevedoras = l;
-        } catch (_) {}
-        return;
-      }
-      if (!capturaAtiva) return;
       if (RE_RUIDO.test(url)) return;
       const ct = (res.headers()['content-type'] || '').toLowerCase();
       if (!ct.includes('json')) return;
       const txt = await res.text();
-      if (!txt || txt.length > 4_000_000) return;
+      if (!txt || txt.length > 6_000_000) return;
       let data; try { data = JSON.parse(txt); } catch { return; }
       const lista = extrairLista(data);
       const amostra = (lista && lista.length) ? lista[0] : (data && typeof data === 'object' && !Array.isArray(data) ? data : null);
       if (!amostra || typeof amostra !== 'object') return;
       const chaves = Object.keys(amostra);
-      const pareceParcela = chaves.filter(k => RE_PARCELA.test(k)).length >= 2; // 2+ campos de parcela
-      const reg = resultado.fichas[capturaAtiva];
-      reg.todasRespostas.push({ url: url.split('?')[0], registros: lista ? lista.length : null, chaves });
-      if (pareceParcela) {
-        reg.financeiro.push({
-          url: url.split('?')[0],
-          registros: lista ? lista.length : null,
-          chaves,
-          exemplos: (lista ? lista.slice(0, 12) : [amostra]),
-        });
-        console.log(`   💰 [${capturaAtiva}] parcelas em ${url.split('?')[0]} (${lista ? lista.length + ' reg.' : 'objeto'})`);
-      }
+      const campoParcela = chaves.filter(k => RE_PARCELA.test(k));
+      resultado.capturas.push({
+        url: url.split('?')[0],
+        registros: lista ? lista.length : null,
+        chaves,
+        chavesParcela: campoParcela,
+        ehParcela: campoParcela.length >= 2,
+        exemplos: lista ? lista.slice(0, 15) : [amostra],
+      });
+      const marca = campoParcela.length >= 2 ? '💰' : '  ';
+      console.log(`   ${marca} ${url.split('?')[0]} (${lista ? lista.length + ' reg.' : 'obj'})`);
     } catch (_) {}
   });
 
@@ -121,69 +109,54 @@ async function main() {
     await fecharPopupNovaTela(page);
     console.log('✅ Login OK\n');
 
-    // Abre "Com débito" e pega devedoras
-    console.log('📂 Abrindo "Com débito"...');
-    await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
-    await sleep(7000);
+    capturar = true;
+
+    // 1) Tenta pelo MENU: abre "Financeiro" e clica "Contas a Receber".
+    console.log('🧭 Abrindo Financeiro → Contas a Receber (via menu)...');
+    const clicarTexto = (alvos) => page.evaluate((alvos) => {
+      const quer = alvos.map(s => s.toLowerCase());
+      for (const el of document.querySelectorAll('a, li, span, div, button, [role="menuitem"], [role="tab"]')) {
+        if (el.children.length > 1) continue;
+        const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        if (quer.includes(t) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return t; }
+      }
+      return null;
+    }, alvos);
+
+    const abriuMenu = await clicarTexto(['financeiro']);
+    console.log(abriuMenu ? '   ✓ menu "Financeiro" aberto' : '   ⚠️  não achei o menu "Financeiro"');
+    await sleep(1800);
+    const clicouCR = await clicarTexto(['contas a receber']);
+    console.log(clicouCR ? '   ✓ "Contas a Receber" clicado' : '   ⚠️  não achei "Contas a Receber" no menu');
+    await sleep(8000);
     await fecharPopupNovaTela(page);
-    for (let i = 0; i < 12; i++) {
-      const ok = await page.evaluate(() => {
-        for (const el of document.querySelectorAll('a, li, span, div, p')) {
-          const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-          if (t === 'com débito' && el.children.length === 0 && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
-        }
-        return false;
-      });
-      if (ok) break;
-      await sleep(1500);
+
+    // 2) Fallback por hash, caso o menu não tenha navegado.
+    if (!resultado.capturas.some(c => c.ehParcela)) {
+      console.log('🧭 Fallback: tentando rotas de hash para Contas a Receber...');
+      const rotas = [
+        'financeiro/contas-a-receber', 'financeiro/contas-receber', 'financeiro/receber',
+        'financeiro/contas/receber', 'contas-a-receber', 'financeiro/contasReceber',
+      ];
+      for (const r of rotas) {
+        await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/${r}`);
+        await sleep(6000);
+        await fecharPopupNovaTela(page);
+        console.log(`   • tentei rota ${r}`);
+        if (resultado.capturas.some(c => c.ehParcela)) { console.log(`   ✓ parcelas apareceram na rota ${r}`); break; }
+      }
     }
+
+    // 3) Se há uma grade/filtro de data, tenta uma busca ampla (clica lupa/buscar).
+    await page.evaluate(() => {
+      for (const b of document.querySelectorAll('button, a, [role="button"]')) {
+        const t = (b.textContent || '').trim().toUpperCase();
+        if (['BUSCAR', 'PESQUISAR', 'FILTRAR', 'APLICAR'].includes(t) && (b.offsetWidth > 0 || b.offsetHeight > 0)) { b.click(); return; }
+      }
+    }).catch(() => {});
     await sleep(6000);
-    const devs = (listaDevedoras || []).map(r => ({ idCliente: r.idCliente, nome: r.nome, celular: r.celular }));
-    resultado.devedoras = devs;
-    console.log(`   Devedoras: ${devs.map(d => `${d.idCliente}:${d.nome}`).join(' | ') || '(não capturei)'}`);
 
-    // Para cada devedora: abre ficha, lista abas, clica Financeiro, captura
-    for (const dev of devs) {
-      console.log(`\n🧾 Ficha de ${dev.nome} (id ${dev.idCliente})...`);
-      resultado.fichas[dev.nome] = { idCliente: dev.idCliente, celular: dev.celular, abas: [], financeiro: [], todasRespostas: [] };
-      capturaAtiva = dev.nome;
-
-      await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/ficha-cliente/${dev.idCliente}`);
-      await sleep(6000);
-      await fecharPopupNovaTela(page);
-
-      // Lista as abas/menus clicáveis da ficha (texto curto, folha).
-      resultado.fichas[dev.nome].abas = await page.evaluate(() => {
-        const out = [];
-        for (const el of document.querySelectorAll('a, li, span, div, button, [role="tab"]')) {
-          if (el.children.length > 1) continue;
-          const t = (el.textContent || '').trim().replace(/\s+/g, ' ');
-          if (t && t.length <= 24 && (el.offsetWidth > 0 || el.offsetHeight > 0) && !out.includes(t)) out.push(t);
-        }
-        return out.slice(0, 50);
-      }).catch(() => []);
-
-      // Clica em abas financeiras possíveis (uma de cada vez, com espera).
-      for (const alvo of ['financeiro', 'contas a receber', 'contas', 'lançamentos', 'lancamentos', 'contratos', 'pagamentos', 'fluxo']) {
-        const clicou = await page.evaluate((nome) => {
-          for (const el of document.querySelectorAll('a, li, span, div, button, [role="tab"]')) {
-            if (el.children.length > 1) continue;
-            const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-            if (t === nome && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
-          }
-          return false;
-        }, alvo);
-        if (clicou) { console.log(`   ↳ aba "${alvo}" clicada`); await sleep(4500); }
-        if (resultado.fichas[dev.nome].financeiro.length) break;
-      }
-
-      // salva o HTML da ficha da 1ª devedora para inspeção, se não achou nada
-      if (!resultado.fichas[dev.nome].financeiro.length) {
-        console.log(`   ⚠️  Sem parcelas capturadas para ${dev.nome}. Abas vistas: ${resultado.fichas[dev.nome].abas.join(' | ')}`);
-        try { fs.writeFileSync(path.resolve(__dirname, '..', 'data', `diag-ficha-${dev.idCliente}.html`), await page.content(), 'utf8'); } catch (_) {}
-      }
-      capturaAtiva = null;
-    }
+    try { fs.writeFileSync(path.resolve(__dirname, '..', 'data', 'diag-receber.html'), await page.content(), 'utf8'); } catch (_) {}
 
   } catch (e) {
     console.error('❌ Erro no diagnóstico:', e && e.message);
@@ -195,26 +168,21 @@ async function main() {
   try { fs.writeFileSync(OUT, JSON.stringify(resultado, null, 2), 'utf8'); } catch (_) {}
 
   console.log('\n────────────────────────── RESUMO ──────────────────────────');
-  for (const [nome, f] of Object.entries(resultado.fichas)) {
-    console.log(`\n👤 ${nome} (id ${f.idCliente})`);
-    console.log(`   abas: ${f.abas.join(' | ')}`);
-    if (!f.financeiro.length) {
-      console.log('   ⚠️  nenhuma parcela capturada (veja diag-ficha-<id>.html). Endpoints JSON vistos:');
-      for (const r of f.todasRespostas.slice(0, 20)) console.log(`       - ${r.url} (${r.registros != null ? r.registros + ' reg.' : 'obj'}) campos: ${r.chaves.slice(0, 12).join(', ')}`);
-    } else {
-      for (const fin of f.financeiro) {
-        console.log(`   💰 ${fin.url} (${fin.registros != null ? fin.registros + ' reg.' : 'obj'})`);
-        console.log(`      campos: ${fin.chaves.join(', ')}`);
-        (fin.exemplos || []).slice(0, 6).forEach((e, i) => {
-          const resumo = {};
-          for (const k of Object.keys(e)) if (RE_PARCELA.test(k)) resumo[k] = e[k];
-          console.log(`      parcela ${i + 1}: ${JSON.stringify(resumo)}`);
-        });
-      }
-    }
+  const parcelas = resultado.capturas.filter(c => c.ehParcela);
+  console.log(`Respostas JSON capturadas: ${resultado.capturas.length} | com cara de parcela: ${parcelas.length}`);
+  const mostrar = parcelas.length ? parcelas : resultado.capturas;
+  for (const c of mostrar) {
+    console.log(`\n${c.ehParcela ? '💰' : '  '} ${c.url}  (${c.registros != null ? c.registros + ' reg.' : 'obj'})`);
+    console.log(`   campos de parcela: ${c.chavesParcela.join(', ') || '(nenhum pelo nome)'}`);
+    console.log(`   todos os campos: ${c.chaves.join(', ')}`);
+    (c.exemplos || []).slice(0, 5).forEach((e, i) => {
+      const r = {};
+      for (const k of Object.keys(e)) if (RE_PARCELA.test(k) || /nome|cliente/i.test(k)) r[k] = e[k];
+      console.log(`   linha ${i + 1}: ${JSON.stringify(r)}`);
+    });
   }
-  console.log('\n✅ Detalhes completos em data/diag-debito.json');
-  console.log('   Compare Daiene (provável vencida) x Carol (futura): o campo de data que difere é o nosso corte.\n');
+  console.log('\n✅ Detalhes em data/diag-debito.json | HTML em data/diag-receber.html');
+  console.log('   Me manda o RESUMO: com os campos de vencimento/valor/status eu fecho o corte "vencido e em aberto".\n');
 }
 
 main();
