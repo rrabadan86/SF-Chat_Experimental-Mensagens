@@ -1,11 +1,7 @@
 /**
- * DIAGNÓSTICO v8 (não envia nada) — falar DIRETO com a API do EVO.
- *
- * Captura o header de Authorization de uma chamada real e sonda endpoints
- * financeiros da aluna (contas a receber / parcelas / link de pagamento),
- * listando status e campos de cada um — inclusive qualquer valor que seja URL
- * (o link de pagamento). Base da futura automação (que falará com a API, não
- * com a tela).
+ * DIAGNÓSTICO v9 (não envia nada) — mapear os elementos CLICÁVEIS da ficha/drawer
+ * da aluna (incluindo ícones e aria-labels) e interceptar as chamadas da API,
+ * para achar como chegar no financeiro (parcelas/cobranças/link).
  *
  * NÃO escreve no EVO, NÃO manda WhatsApp, NÃO toca na planilha.
  *   node src/diag-debito.js
@@ -22,23 +18,12 @@ const path = require('path');
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const OUT = path.resolve(__dirname, '..', 'data', 'diag-debito.json');
-const G = 'https://evo-abc-api-gerencial.w12app.com.br/api/v1';
-const A = 'https://evo-abc-api.w12app.com.br/api/v1';
-const A2 = 'https://evo-abc-api.w12app.com.br/api/v2';
-
-function urlsEmObj(obj, prefixo = '', prof = 0) {
-  const out = [];
-  if (!obj || typeof obj !== 'object' || prof > 3) return out;
-  for (const [k, v] of Object.entries(obj)) {
-    if (typeof v === 'string' && /^https?:\/\//i.test(v)) out.push([prefixo + k, v]);
-    else if (v && typeof v === 'object') out.push(...urlsEmObj(v, prefixo + k + '.', prof + 1));
-  }
-  return out;
-}
+const RE_RUIDO = /intercom|instatus|signalr|informativo|launcher_settings|\/ping|versao-aplicacao|wehelpsoftware|google|gstatic|sentry|hotjar|clarity/i;
+const RE_FIN = /financ|receb|parcela|cobran|debito|d[eé]bito|saldo|fatura|pagamento|titulo|t[ií]tulo|venda|contrato/i;
 
 async function main() {
   console.log('\n═══════════════════════════════════════════════════');
-  console.log('🔎 DIAGNÓSTICO v8 — API direta do EVO (não envia nada)');
+  console.log('🔎 DIAGNÓSTICO v9 — mapa de cliques da ficha (não envia nada)');
   console.log('═══════════════════════════════════════════════════\n');
 
   const browser = await puppeteer.launch({
@@ -52,35 +37,24 @@ async function main() {
   page.setDefaultTimeout(60000);
   page.setDefaultNavigationTimeout(60000);
 
-  // Captura o Authorization (e headers afins) de chamadas reais à API do EVO.
-  const authHeaders = {};
-  let idFilial = null;
-  page.on('request', (req) => {
-    try {
-      const u = req.url();
-      if (!/evo-abc-api/i.test(u)) return;
-      const h = req.headers();
-      for (const k of Object.keys(h)) {
-        const kl = k.toLowerCase();
-        if (['authorization', 'x-access-token', 'x-token', 'tokenacesso', 'idfilial', 'x-filial'].includes(kl) && h[k] && !authHeaders[kl]) {
-          authHeaders[kl] = h[k];
-        }
-      }
-    } catch (_) {}
-  });
-  let listaDevedoras = null;
+  const resultado = { geradoEm: new Date().toISOString(), devedoras: [], cliqueaveis: [], endpointsPorFase: {} };
+  let listaDevedoras = null, fase = 'inicial';
   page.on('response', async (res) => {
     try {
       if (res.status() !== 200) return;
-      if (/clientes-segmentacao\/obter-clientes/i.test(res.url())) {
-        const d = JSON.parse(await res.text());
-        const l = Array.isArray(d) ? d : (d.retorno || d.data || d.lista || []);
-        if (Array.isArray(l) && l.length && l.length <= 50) listaDevedoras = l;
+      const url = res.url();
+      if (/clientes-segmentacao\/obter-clientes/i.test(url)) {
+        const d = JSON.parse(await res.text()); const l = Array.isArray(d) ? d : (d.retorno || d.data || d.lista || []);
+        if (Array.isArray(l) && l.length && l.length <= 50) listaDevedoras = l; return;
       }
+      if (RE_RUIDO.test(url)) return;
+      const ct = (res.headers()['content-type'] || '').toLowerCase();
+      if (!ct.includes('json')) return;
+      const u = url.split('?')[0];
+      (resultado.endpointsPorFase[fase] = resultado.endpointsPorFase[fase] || new Set()).add(u);
+      if (RE_FIN.test(u)) console.log(`   💰 [${fase}] ${u}`);
     } catch (_) {}
   });
-
-  const resultado = { geradoEm: new Date().toISOString(), devedoras: [], authKeys: [], probes: [] };
 
   try {
     // LOGIN
@@ -93,9 +67,7 @@ async function main() {
     await page.click('input#senha, input[type="password"]', { clickCount: 3 });
     await page.type('input#senha, input[type="password"]', config.evo.password, { delay: 60 });
     await page.evaluate(() => {
-      for (const b of document.querySelectorAll('button')) {
-        if (['ENTRAR', 'LOGIN', 'ACESSAR'].includes(b.textContent?.trim().toUpperCase())) { b.click(); return; }
-      }
+      for (const b of document.querySelectorAll('button')) { if (['ENTRAR', 'LOGIN', 'ACESSAR'].includes(b.textContent?.trim().toUpperCase())) { b.click(); return; } }
       document.querySelector('button[type="submit"], button.primary')?.click();
     });
     try { await require('./evo-totp').preencher2FA(page); } catch (_) {}
@@ -104,83 +76,59 @@ async function main() {
     await fecharPopupNovaTela(page);
     console.log('✅ Login OK');
 
-    // Abre "Com débito" (gera chamadas gerenciais → captura auth + devedoras)
+    // Abre "Com débito" e devedoras
     await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
     await sleep(7000);
     await fecharPopupNovaTela(page);
     for (let i = 0; i < 12; i++) {
-      const ok = await page.evaluate(() => {
-        for (const el of document.querySelectorAll('a, li, span, div, p')) {
-          const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-          if (t === 'com débito' && el.children.length === 0 && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
-        }
-        return false;
-      });
+      const ok = await page.evaluate(() => { for (const el of document.querySelectorAll('a,li,span,div,p')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if (t === 'com débito' && el.children.length === 0 && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return true; } } return false; });
       if (ok) break; await sleep(1500);
     }
     await sleep(5000);
-    // Clica no nome da 1ª devedora (gera chamadas /clientes/{id}/... → mais auth)
-    const devs = (listaDevedoras || []).map(r => ({ idCliente: r.idCliente, nome: r.nome, celular: r.celular, contrato: r.contrato }));
+    const devs = (listaDevedoras || []).map(r => ({ idCliente: r.idCliente, nome: r.nome }));
     resultado.devedoras = devs;
-    if (devs.length) {
-      await page.evaluate((nome) => {
-        const n = nome.trim().toLowerCase();
-        for (const el of document.querySelectorAll('a, span, div, td')) {
-          const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-          if (t === n && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return; }
-        }
-      }, devs[0].nome);
-      await sleep(6000);
-      await fecharPopupNovaTela(page);
-    }
-    resultado.authKeys = Object.keys(authHeaders);
-    console.log(`   🔑 headers de auth capturados: ${resultado.authKeys.join(', ') || '(nenhum!)'}`);
-    console.log(`   👥 devedoras: ${devs.map(d => d.idCliente + ':' + d.nome).join(' | ')}`);
+    if (!devs.length) throw new Error('sem devedoras');
 
-    // SONDA endpoints financeiros, via fetch DENTRO da página (herda CORS/sessão),
-    // com os headers de auth capturados. Para a 1ª devedora (id).
-    const id = devs.length ? devs[0].idCliente : 7650;
-    const candidatos = [
-      `${G}/clientes/${id}/contas-receber`,
-      `${G}/clientes/${id}/financeiro`,
-      `${G}/clientes/${id}/recebiveis`,
-      `${G}/clientes/${id}/debitos`,
-      `${G}/clientes/${id}/parcelas`,
-      `${G}/clientes/${id}/saldo`,
-      `${G}/clientes/${id}/cobrancas`,
-      `${A}/clientesContratos/${id}/parcelas`,
-      `${A}/clientes/${id}/contas-receber`,
-      `${A}/clientes/${id}/financeiro`,
-      `${A}/contas-receber?idCliente=${id}`,
-      `${A}/financeiro/contas-receber?idCliente=${id}`,
-      `${A}/recebiveis?idCliente=${id}`,
-      `${A}/contas-receber/cliente/${id}`,
-      `${A2}/financeiro/contas-receber?idCliente=${id}`,
-    ];
-    console.log(`\n🛰️  Sondando ${candidatos.length} endpoints para id ${id}...`);
-    resultado.probes = await page.evaluate(async (urls, headers) => {
+    // Abre a ficha/drawer da 1ª devedora
+    fase = 'ficha';
+    console.log(`\n🖱️  Abrindo ficha de ${devs[0].nome}...`);
+    await page.evaluate((nome) => { const n = nome.trim().toLowerCase(); for (const el of document.querySelectorAll('a,span,div,td')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if (t === n && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return; } } }, devs[0].nome);
+    await sleep(7000);
+    await fecharPopupNovaTela(page);
+
+    // Mapeia TODOS os elementos clicáveis: tag, texto, aria-label, title, ícone.
+    resultado.cliqueaveis = await page.evaluate(() => {
       const out = [];
-      for (const url of urls) {
-        try {
-          const r = await fetch(url, { headers, credentials: 'include' });
-          const ct = (r.headers.get('content-type') || '').toLowerCase();
-          let info = { url, status: r.status, ct };
-          if (r.ok && ct.includes('json')) {
-            const txt = await r.text();
-            try {
-              const data = JSON.parse(txt);
-              const lista = Array.isArray(data) ? data : (data.retorno || data.data || data.lista || data.registros || data.parcelas || data.content || null);
-              const amostra = (lista && lista.length) ? lista[0] : (typeof data === 'object' && !Array.isArray(data) ? data : null);
-              info.registros = Array.isArray(lista) ? lista.length : null;
-              info.chaves = amostra ? Object.keys(amostra) : [];
-              info.amostra = amostra;
-            } catch (_) { info.corpo = txt.slice(0, 300); }
-          }
-          out.push(info);
-        } catch (e) { out.push({ url, erro: String(e && e.message || e) }); }
+      const sel = 'a,button,[role="tab"],[role="button"],[role="menuitem"],[onclick],mat-icon,i,.mat-icon,li';
+      for (const el of document.querySelectorAll(sel)) {
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) continue;
+        const txt = (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30);
+        const aria = (el.getAttribute('aria-label') || '').trim().slice(0, 40);
+        const title = (el.getAttribute('title') || '').trim().slice(0, 40);
+        const icon = el.classList && (el.classList.contains('material-icons') || el.classList.contains('mat-icon') || el.tagName.toLowerCase() === 'mat-icon') ? (el.textContent || '').trim().slice(0, 24) : '';
+        const label = [txt, aria && 'aria=' + aria, title && 'title=' + title, icon && 'icon=' + icon].filter(Boolean).join(' | ');
+        if (label && !out.some(o => o.label === label)) out.push({ tag: el.tagName.toLowerCase(), label, x: Math.round(r.left), y: Math.round(r.top) });
       }
-      return out;
-    }, candidatos, authHeaders);
+      return out.slice(0, 120);
+    }).catch(() => []);
+
+    // Dá uma fuçada: clica em coisas que cheiram a financeiro e vê o que carrega.
+    for (const alvo of ['contratos', 'financeiro', 'contas a receber', 'cobranças', 'cobrancas', 'pagamentos', 'faturas', 'parcelas', 'histórico financeiro']) {
+      fase = `clique:${alvo}`;
+      const ok = await page.evaluate((nome) => {
+        for (const el of document.querySelectorAll('a,button,[role="tab"],[role="menuitem"],span,div,li')) {
+          if (el.children.length > 1) continue;
+          const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+          const aria = (el.getAttribute('aria-label') || '').trim().toLowerCase();
+          if ((t === nome || aria === nome) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
+        }
+        return false;
+      }, alvo);
+      if (ok) { console.log(`   ↳ cliquei "${alvo}"`); await sleep(4000); }
+    }
+
+    try { fs.writeFileSync(path.resolve(__dirname, '..', 'data', 'diag-ficha.html'), await page.content(), 'utf8'); } catch (_) {}
 
   } catch (e) {
     console.error('❌ Erro:', e && e.message);
@@ -188,26 +136,23 @@ async function main() {
     try { await browser.close(); } catch (_) {}
   }
 
+  // normaliza Sets -> arrays
+  const eps = {};
+  for (const [f, s] of Object.entries(resultado.endpointsPorFase)) eps[f] = [...s];
+  resultado.endpointsPorFase = eps;
   try { fs.mkdirSync(path.dirname(OUT), { recursive: true }); } catch (_) {}
   try { fs.writeFileSync(OUT, JSON.stringify(resultado, null, 2), 'utf8'); } catch (_) {}
 
   console.log('\n────────────────────────── RESUMO ──────────────────────────');
-  console.log(`Headers de auth: ${resultado.authKeys.join(', ') || '(nenhum)'}`);
-  for (const p of resultado.probes) {
-    if (p.erro) { console.log(`\n   ❌ ${p.url} → erro: ${p.erro}`); continue; }
-    const temDados = p.chaves && p.chaves.length;
-    const marca = p.status === 200 && temDados ? '✅' : (p.status === 200 ? '· ' : '✗ ');
-    console.log(`\n   ${marca} [${p.status}] ${p.url}${p.registros != null ? ' (' + p.registros + ' reg.)' : ''}`);
-    if (temDados) {
-      console.log(`      campos: ${p.chaves.join(', ')}`);
-      const urls = urlsEmObj(p.amostra);
-      urls.forEach(([k, v]) => console.log(`      🔗 ${k} = ${v}`));
-    } else if (p.corpo) {
-      console.log(`      corpo: ${p.corpo}`);
-    }
+  console.log('🧩 Elementos clicáveis na ficha (tag | rótulo):');
+  for (const c of resultado.cliqueaveis) console.log(`   ${c.tag.padEnd(8)} ${c.label}`);
+  console.log('\n🌐 Endpoints por fase (💰 = cheiro de financeiro):');
+  for (const [f, arr] of Object.entries(resultado.endpointsPorFase)) {
+    console.log(`\n  ■ ${f}:`);
+    for (const u of arr) console.log(`     ${RE_FIN.test(u) ? '💰' : '  '} ${u}`);
   }
-  console.log('\n✅ Detalhes em data/diag-debito.json');
-  console.log('   Me manda os endpoints ✅ (com campos/🔗). É daí que sai a parcela vencida + o link.\n');
+  console.log('\n✅ Detalhes em data/diag-debito.json | HTML em data/diag-ficha.html');
+  console.log('   Me manda a lista de CLICÁVEIS e os endpoints 💰 — aí eu sei onde clicar pro financeiro.\n');
 }
 
 main();
