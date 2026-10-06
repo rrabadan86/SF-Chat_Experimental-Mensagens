@@ -1,13 +1,11 @@
 /**
- * DIAGNÓSTICO v7 (não envia nada) — descobrir a ROTA REAL da ficha da aluna e os
- * endpoints JSON que ela chama, clicando no NOME da devedora na segmentação.
+ * DIAGNÓSTICO v8 (não envia nada) — falar DIRETO com a API do EVO.
  *
- *   1. Loga no EVO, abre a segmentação salva "Com débito".
- *   2. Clica no NOME da 1ª devedora (link) → abre a ficha.
- *   3. Registra a URL real da ficha, lista TODOS os endpoints JSON (não-ruído)
- *      com seus campos, e as abas reais da ficha. Tenta clicar uma aba
- *      "Financeiro" e captura de novo.
- *   4. Grava data/diag-debito.json + data/diag-ficha.html.
+ * Captura o header de Authorization de uma chamada real e sonda endpoints
+ * financeiros da aluna (contas a receber / parcelas / link de pagamento),
+ * listando status e campos de cada um — inclusive qualquer valor que seja URL
+ * (o link de pagamento). Base da futura automação (que falará com a API, não
+ * com a tela).
  *
  * NÃO escreve no EVO, NÃO manda WhatsApp, NÃO toca na planilha.
  *   node src/diag-debito.js
@@ -24,34 +22,23 @@ const path = require('path');
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const OUT = path.resolve(__dirname, '..', 'data', 'diag-debito.json');
-const RE_RUIDO = /intercom|instatus|signalr|informativo|launcher_settings|\/ping|versao-aplicacao|wehelpsoftware|google|gstatic|sentry|hotjar|clarity/i;
-const RE_PARCELA = /venc|valor|status|situac|situaç|pago|quita|baixa|parcela|aberto|recebi|cobran|desconto|multa|juros|competenc|atras|titulo|t[ií]tulo|devedor|debito|d[eé]bito/i;
+const G = 'https://evo-abc-api-gerencial.w12app.com.br/api/v1';
+const A = 'https://evo-abc-api.w12app.com.br/api/v1';
+const A2 = 'https://evo-abc-api.w12app.com.br/api/v2';
 
-function extrairLista(data) {
-  if (Array.isArray(data)) return data;
-  if (data && typeof data === 'object') {
-    for (const k of ['retorno', 'data', 'items', 'rows', 'lista', 'result', 'results', 'content', 'parcelas', 'lancamentos', 'contas', 'receber', 'registros', 'titulos']) {
-      if (Array.isArray(data[k])) return data[k];
-    }
-  }
-  return null;
-}
-
-// Procura, num objeto (raso + 1 nível), campos cujo VALOR seja uma URL http(s).
-// É assim que achamos o LINK DE PAGAMENTO, mesmo sem saber o nome do campo.
-function camposComUrl(obj, prefixo = '') {
+function urlsEmObj(obj, prefixo = '', prof = 0) {
   const out = [];
-  if (!obj || typeof obj !== 'object') return out;
+  if (!obj || typeof obj !== 'object' || prof > 3) return out;
   for (const [k, v] of Object.entries(obj)) {
     if (typeof v === 'string' && /^https?:\/\//i.test(v)) out.push([prefixo + k, v]);
-    else if (v && typeof v === 'object' && !Array.isArray(v)) out.push(...camposComUrl(v, prefixo + k + '.'));
+    else if (v && typeof v === 'object') out.push(...urlsEmObj(v, prefixo + k + '.', prof + 1));
   }
   return out;
 }
 
 async function main() {
   console.log('\n═══════════════════════════════════════════════════');
-  console.log('🔎 DIAGNÓSTICO v7 — ficha da devedora (não envia nada)');
+  console.log('🔎 DIAGNÓSTICO v8 — API direta do EVO (não envia nada)');
   console.log('═══════════════════════════════════════════════════\n');
 
   const browser = await puppeteer.launch({
@@ -60,54 +47,40 @@ async function main() {
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--window-size=1366,900'],
     defaultViewport: { width: 1366, height: 900 },
   });
-
-  const resultado = { geradoEm: new Date().toISOString(), urlFicha: null, devedoras: [], fases: {} };
-  let faseAtual = null;           // rótulo da fase de captura atual
-  let listaDevedoras = null;
-  const pagRef = {};              // guarda a page principal
-
-  const anexar = (p) => {
-    p.on('response', async (res) => {
-      try {
-        if (res.status() !== 200) return;
-        const url = res.url();
-        if (/clientes-segmentacao\/obter-clientes/i.test(url)) {
-          try { const d = JSON.parse(await res.text()); const l = Array.isArray(d) ? d : (d.retorno || d.data || d.lista || []); if (Array.isArray(l) && l.length && l.length <= 50) listaDevedoras = l; } catch (_) {}
-          return;
-        }
-        if (!faseAtual || RE_RUIDO.test(url)) return;
-        const ct = (res.headers()['content-type'] || '').toLowerCase();
-        if (!ct.includes('json')) return;
-        const txt = await res.text();
-        if (!txt || txt.length > 6_000_000) return;
-        let data; try { data = JSON.parse(txt); } catch { return; }
-        const lista = extrairLista(data);
-        const amostra = (lista && lista.length) ? lista[0] : (data && typeof data === 'object' && !Array.isArray(data) ? data : null);
-        if (!amostra || typeof amostra !== 'object') return;
-        const chaves = Object.keys(amostra);
-        const campoParcela = chaves.filter(k => RE_PARCELA.test(k));
-        // procura link de pagamento em QUALQUER registro da lista (não só o 1º)
-        const urls = [];
-        for (const r of (lista ? lista.slice(0, 15) : [amostra])) for (const par of camposComUrl(r)) if (!urls.some(u => u[0] === par[0])) urls.push(par);
-        const temLink = urls.length > 0;
-        (resultado.fases[faseAtual] = resultado.fases[faseAtual] || []).push({
-          url: url.split('?')[0], registros: lista ? lista.length : null, chaves,
-          chavesParcela: campoParcela, ehParcela: campoParcela.length >= 2,
-          camposUrl: urls, temLink,
-          exemplo: amostra,
-        });
-        console.log(`   ${temLink ? '🔗' : (campoParcela.length >= 2 ? '💰' : '  ')} [${faseAtual}] ${url.split('?')[0]} (${lista ? lista.length + ' reg.' : 'obj'})${temLink ? ' — TEM URL!' : ''}`);
-      } catch (_) {}
-    });
-  };
-  browser.on('targetcreated', async (t) => { try { if (t.type() === 'page') anexar(await t.page()); } catch (_) {} });
-
   const page = (await browser.pages())[0] || await browser.newPage();
-  pagRef.page = page;
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
   page.setDefaultTimeout(60000);
   page.setDefaultNavigationTimeout(60000);
-  anexar(page);
+
+  // Captura o Authorization (e headers afins) de chamadas reais à API do EVO.
+  const authHeaders = {};
+  let idFilial = null;
+  page.on('request', (req) => {
+    try {
+      const u = req.url();
+      if (!/evo-abc-api/i.test(u)) return;
+      const h = req.headers();
+      for (const k of Object.keys(h)) {
+        const kl = k.toLowerCase();
+        if (['authorization', 'x-access-token', 'x-token', 'tokenacesso', 'idfilial', 'x-filial'].includes(kl) && h[k] && !authHeaders[kl]) {
+          authHeaders[kl] = h[k];
+        }
+      }
+    } catch (_) {}
+  });
+  let listaDevedoras = null;
+  page.on('response', async (res) => {
+    try {
+      if (res.status() !== 200) return;
+      if (/clientes-segmentacao\/obter-clientes/i.test(res.url())) {
+        const d = JSON.parse(await res.text());
+        const l = Array.isArray(d) ? d : (d.retorno || d.data || d.lista || []);
+        if (Array.isArray(l) && l.length && l.length <= 50) listaDevedoras = l;
+      }
+    } catch (_) {}
+  });
+
+  const resultado = { geradoEm: new Date().toISOString(), devedoras: [], authKeys: [], probes: [] };
 
   try {
     // LOGIN
@@ -129,10 +102,9 @@ async function main() {
     await page.waitForFunction(() => location.hash.includes('/inicio/') || location.hash.includes('/app/'), { timeout: 30000 });
     await sleep(3000);
     await fecharPopupNovaTela(page);
-    console.log('✅ Login OK\n');
+    console.log('✅ Login OK');
 
-    // Abre "Com débito" e pega devedoras
-    console.log('📂 Abrindo "Com débito"...');
+    // Abre "Com débito" (gera chamadas gerenciais → captura auth + devedoras)
     await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
     await sleep(7000);
     await fecharPopupNovaTela(page);
@@ -146,63 +118,72 @@ async function main() {
       });
       if (ok) break; await sleep(1500);
     }
-    await sleep(6000);
-    const devs = (listaDevedoras || []).map(r => ({ idCliente: r.idCliente, nome: r.nome }));
+    await sleep(5000);
+    // Clica no nome da 1ª devedora (gera chamadas /clientes/{id}/... → mais auth)
+    const devs = (listaDevedoras || []).map(r => ({ idCliente: r.idCliente, nome: r.nome, celular: r.celular, contrato: r.contrato }));
     resultado.devedoras = devs;
-    console.log(`   Devedoras: ${devs.map(d => `${d.idCliente}:${d.nome}`).join(' | ') || '(não capturei)'}`);
-    if (!devs.length) throw new Error('não capturei a lista de devedoras');
-
-    // Clica no NOME da 1ª devedora (link da tabela) → abre a ficha
-    const alvoNome = devs[0].nome;
-    console.log(`\n🖱️  Clicando no nome "${alvoNome}" para abrir a ficha...`);
-    faseAtual = 'ficha';
-    const clicou = await page.evaluate((nome) => {
-      const n = nome.trim().toLowerCase();
-      // procura um link/elemento clicável cujo texto seja o nome
-      for (const el of document.querySelectorAll('a, span, div, td')) {
-        const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-        if (t === n && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
-      }
-      return false;
-    }, alvoNome);
-    console.log(clicou ? '   ✓ nome clicado' : '   ⚠️  não achei o nome na tabela');
-    await sleep(8000);
-    await fecharPopupNovaTela(page);
-    resultado.urlFicha = page.url();
-    console.log(`   🌐 URL da ficha: ${resultado.urlFicha}`);
-
-    // Lista as abas REAIS da ficha (dentro do painel da aluna, texto curto).
-    const abas = await page.evaluate(() => {
-      const out = [];
-      for (const el of document.querySelectorAll('a, li, span, div, button, [role="tab"]')) {
-        if (el.children.length > 1) continue;
-        const t = (el.textContent || '').trim().replace(/\s+/g, ' ');
-        if (t && t.length <= 22 && (el.offsetWidth > 0 || el.offsetHeight > 0) && !out.includes(t)) out.push(t);
-      }
-      return out.slice(0, 60);
-    }).catch(() => []);
-    resultado.abasFicha = abas;
-    console.log(`   🗂️  Abas na ficha: ${abas.join(' | ')}`);
-
-    // Tenta clicar uma aba financeira dentro da ficha
-    faseAtual = 'ficha-financeiro';
-    for (const alvo of ['financeiro', 'contas a receber', 'contas', 'pagamentos', 'cobranças', 'cobrancas', 'lançamentos', 'lancamentos']) {
-      const ok = await page.evaluate((nome) => {
-        for (const el of document.querySelectorAll('a, li, span, div, button, [role="tab"]')) {
-          if (el.children.length > 1) continue;
+    if (devs.length) {
+      await page.evaluate((nome) => {
+        const n = nome.trim().toLowerCase();
+        for (const el of document.querySelectorAll('a, span, div, td')) {
           const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-          if (t === nome && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
+          if (t === n && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return; }
         }
-        return false;
-      }, alvo);
-      if (ok) { console.log(`   ↳ aba "${alvo}" clicada`); await sleep(5000); }
-      if ((resultado.fases['ficha-financeiro'] || []).some(c => c.ehParcela)) break;
+      }, devs[0].nome);
+      await sleep(6000);
+      await fecharPopupNovaTela(page);
     }
+    resultado.authKeys = Object.keys(authHeaders);
+    console.log(`   🔑 headers de auth capturados: ${resultado.authKeys.join(', ') || '(nenhum!)'}`);
+    console.log(`   👥 devedoras: ${devs.map(d => d.idCliente + ':' + d.nome).join(' | ')}`);
 
-    try { fs.writeFileSync(path.resolve(__dirname, '..', 'data', 'diag-ficha.html'), await page.content(), 'utf8'); } catch (_) {}
+    // SONDA endpoints financeiros, via fetch DENTRO da página (herda CORS/sessão),
+    // com os headers de auth capturados. Para a 1ª devedora (id).
+    const id = devs.length ? devs[0].idCliente : 7650;
+    const candidatos = [
+      `${G}/clientes/${id}/contas-receber`,
+      `${G}/clientes/${id}/financeiro`,
+      `${G}/clientes/${id}/recebiveis`,
+      `${G}/clientes/${id}/debitos`,
+      `${G}/clientes/${id}/parcelas`,
+      `${G}/clientes/${id}/saldo`,
+      `${G}/clientes/${id}/cobrancas`,
+      `${A}/clientesContratos/${id}/parcelas`,
+      `${A}/clientes/${id}/contas-receber`,
+      `${A}/clientes/${id}/financeiro`,
+      `${A}/contas-receber?idCliente=${id}`,
+      `${A}/financeiro/contas-receber?idCliente=${id}`,
+      `${A}/recebiveis?idCliente=${id}`,
+      `${A}/contas-receber/cliente/${id}`,
+      `${A2}/financeiro/contas-receber?idCliente=${id}`,
+    ];
+    console.log(`\n🛰️  Sondando ${candidatos.length} endpoints para id ${id}...`);
+    resultado.probes = await page.evaluate(async (urls, headers) => {
+      const out = [];
+      for (const url of urls) {
+        try {
+          const r = await fetch(url, { headers, credentials: 'include' });
+          const ct = (r.headers.get('content-type') || '').toLowerCase();
+          let info = { url, status: r.status, ct };
+          if (r.ok && ct.includes('json')) {
+            const txt = await r.text();
+            try {
+              const data = JSON.parse(txt);
+              const lista = Array.isArray(data) ? data : (data.retorno || data.data || data.lista || data.registros || data.parcelas || data.content || null);
+              const amostra = (lista && lista.length) ? lista[0] : (typeof data === 'object' && !Array.isArray(data) ? data : null);
+              info.registros = Array.isArray(lista) ? lista.length : null;
+              info.chaves = amostra ? Object.keys(amostra) : [];
+              info.amostra = amostra;
+            } catch (_) { info.corpo = txt.slice(0, 300); }
+          }
+          out.push(info);
+        } catch (e) { out.push({ url, erro: String(e && e.message || e) }); }
+      }
+      return out;
+    }, candidatos, authHeaders);
 
   } catch (e) {
-    console.error('❌ Erro no diagnóstico:', e && e.message);
+    console.error('❌ Erro:', e && e.message);
   } finally {
     try { await browser.close(); } catch (_) {}
   }
@@ -211,24 +192,22 @@ async function main() {
   try { fs.writeFileSync(OUT, JSON.stringify(resultado, null, 2), 'utf8'); } catch (_) {}
 
   console.log('\n────────────────────────── RESUMO ──────────────────────────');
-  console.log(`URL da ficha: ${resultado.urlFicha}`);
-  console.log(`Abas da ficha: ${(resultado.abasFicha || []).join(' | ')}`);
-  for (const [fase, caps] of Object.entries(resultado.fases)) {
-    console.log(`\n■ Fase "${fase}" — ${caps.length} endpoint(s) JSON:`);
-    for (const c of caps) {
-      const marca = c.temLink ? '🔗' : (c.ehParcela ? '💰' : '  ');
-      console.log(`   ${marca} ${c.url} (${c.registros != null ? c.registros + ' reg.' : 'obj'})`);
-      console.log(`      campos: ${c.chaves.join(', ')}`);
-      if (c.temLink) c.camposUrl.forEach(([k, v]) => console.log(`      🔗 ${k} = ${v}`));
-      if (c.ehParcela || c.temLink) {
-        const r = {};
-        for (const k of Object.keys(c.exemplo)) if (RE_PARCELA.test(k) || /nome|cliente/i.test(k)) r[k] = c.exemplo[k];
-        console.log(`      campos de parcela: ${JSON.stringify(r)}`);
-      }
+  console.log(`Headers de auth: ${resultado.authKeys.join(', ') || '(nenhum)'}`);
+  for (const p of resultado.probes) {
+    if (p.erro) { console.log(`\n   ❌ ${p.url} → erro: ${p.erro}`); continue; }
+    const temDados = p.chaves && p.chaves.length;
+    const marca = p.status === 200 && temDados ? '✅' : (p.status === 200 ? '· ' : '✗ ');
+    console.log(`\n   ${marca} [${p.status}] ${p.url}${p.registros != null ? ' (' + p.registros + ' reg.)' : ''}`);
+    if (temDados) {
+      console.log(`      campos: ${p.chaves.join(', ')}`);
+      const urls = urlsEmObj(p.amostra);
+      urls.forEach(([k, v]) => console.log(`      🔗 ${k} = ${v}`));
+    } else if (p.corpo) {
+      console.log(`      corpo: ${p.corpo}`);
     }
   }
-  console.log('\n✅ Detalhes em data/diag-debito.json | HTML em data/diag-ficha.html');
-  console.log('   Me manda: a URL da ficha, as abas, e os endpoints 🔗/💰 (ou a lista toda).\n');
+  console.log('\n✅ Detalhes em data/diag-debito.json');
+  console.log('   Me manda os endpoints ✅ (com campos/🔗). É daí que sai a parcela vencida + o link.\n');
 }
 
 main();
