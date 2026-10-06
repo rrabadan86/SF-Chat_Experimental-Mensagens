@@ -91,3 +91,9 @@ src/agendamento_evo/confirmacoes_outbox_enviados.json
 src/agendamento_evo/confirmacoes_outbox_falhas.json
 src/agendamento_evo/confirmacoes_outbox_retidas.json
 src/agendamento_evo/confirmacoes_outbox_enviados.json.bak-*
+
+# Cobrança de inadimplentes — estado de envios (por VPS)
+data/inadimplentes-enviados.json
+# Saídas locais dos diagnósticos de débito
+data/diag-debito.json
+data/diag-*.html
