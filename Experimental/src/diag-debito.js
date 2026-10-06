@@ -1,17 +1,17 @@
 /**
- * DIAGNÓSTICO (não envia nada) — lê a segmentação SALVA "Com débito" no EVO e
- * mostra os campos financeiros das devedoras REAIS, para sabermos de onde tirar
- * o "saldo devedor".
+ * DIAGNÓSTICO v3 (não envia nada) — descobrir como listar SÓ inadimplência
+ * VENCIDA (vencimento < hoje), excluindo débito futuro.
  *
- * O que faz:
- *   1. Loga no EVO (mesmo login/2FA dos outros jobs).
- *   2. Abre a Segmentação e clica na segmentação salva "Com débito" (lateral).
- *   3. Intercepta a resposta de `obter-clientes` (filtrada) e imprime, de cada
- *      devedora, os campos financeiros (inadimplente, vencimentoDebito,
- *      valorContrato, statusContrato, sessoesPendentes, categoriaContratos…).
- *   4. Grava tudo em data/diag-debito.json + o HTML da tela.
+ * Checa DOIS caminhos num run só:
+ *   A) Opções do "+ FILTRO": procura um filtro tipo "Inadimplente / Vencido /
+ *      Em atraso" (que já significaria vencido) — se existir, basta salvar uma
+ *      segmentação com ele.
+ *   B) Financeiro da devedora: abre a ficha de uma devedora da segmentação
+ *      "Com débito" e captura o endpoint de contas a receber (vencimento +
+ *      valor + status), para nós mesmos cortarmos por data.
  *
- * NÃO escreve no EVO, NÃO manda WhatsApp, NÃO toca na planilha.
+ * Grava tudo em data/diag-debito.json + HTML das telas. NÃO escreve no EVO,
+ * NÃO manda WhatsApp, NÃO toca na planilha.
  *
  * Uso (no VPS):
  *   cd ~/SF-Chat_Experimental-Mensagens/Experimental
@@ -29,17 +29,22 @@ const path = require('path');
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const OUT = path.resolve(__dirname, '..', 'data', 'diag-debito.json');
+const RE_FIN_URL = /financeiro|receber|parcela|lancamento|lançamento|debito|d[eé]bito|cobranca|cobran[çc]a|saldo|fatura|recebivel|receb[ií]vel|contas/i;
+const RE_FIN_FIELD = /saldo|d[eé]bito|divida|d[ií]vida|valor|pendenc|aberto|receber|atras|venc|parcela|cobran|inadimpl|status|pag/i;
 
-// Campos que, pelo NOME, parecem carregar saldo/pendência financeira.
-const RE_FINANCEIRO = /saldo|d[eé]bito|divida|d[ií]vida|valor|pendenc|pend[eê]nc|aberto|receber|atras|venc|parcela|cobran|inadimpl/i;
-// Campos que queremos ver explícitos de cada devedora (quando existirem).
-const CAMPOS_VER = ['idCliente', 'nome', 'celular', 'telefone', 'contrato', 'status', 'statusCliente',
-  'inadimplente', 'vencimentoDebito', 'valorContrato', 'dataVencimentoContrato', 'statusContrato',
-  'categoriaContratos', 'sessoesPendentes', 'statusTreino', 'dtFimContrato', 'mesesContrato'];
+function extrairLista(data) {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === 'object') {
+    for (const k of ['retorno', 'data', 'items', 'rows', 'lista', 'result', 'results', 'content', 'parcelas', 'lancamentos']) {
+      if (Array.isArray(data[k])) return data[k];
+    }
+  }
+  return null;
+}
 
 async function main() {
   console.log('\n═══════════════════════════════════════════════════');
-  console.log('🔎 DIAGNÓSTICO — segmentação salva "Com débito" (não envia nada)');
+  console.log('🔎 DIAGNÓSTICO v3 — inadimplência vencida (não envia nada)');
   console.log('═══════════════════════════════════════════════════\n');
 
   const browser = await puppeteer.launch({
@@ -53,32 +58,30 @@ async function main() {
   page.setDefaultTimeout(60000);
   page.setDefaultNavigationTimeout(60000);
 
-  // ── Captura das respostas de obter-clientes (cada chamada = um snapshot) ──
-  let fase = 'inicial';
-  const snapshots = [];
+  const resultado = { geradoEm: new Date().toISOString(), opcoesFiltro: {}, devedoras: [], capturasFinanceiro: [] };
+  let capturarFin = false; // só liga quando entrarmos na ficha da devedora
   page.on('response', async (res) => {
     try {
-      if (res.status() !== 200) return;
+      if (!capturarFin || res.status() !== 200) return;
       const url = res.url();
-      if (!/clientes-segmentacao\/obter-clientes/i.test(url)) return;
+      if (!RE_FIN_URL.test(url)) return;
+      const ct = (res.headers()['content-type'] || '').toLowerCase();
+      if (!ct.includes('json')) return;
       const txt = await res.text();
+      if (!txt || txt.length > 4_000_000) return;
       let data; try { data = JSON.parse(txt); } catch { return; }
-      const lista = Array.isArray(data) ? data : (data.retorno || data.data || data.lista || []);
-      if (!Array.isArray(lista)) return;
-      const chaves = new Set();
-      for (const r of lista.slice(0, 3)) if (r && typeof r === 'object') Object.keys(r).forEach(k => chaves.add(k));
-      // Subconjunto financeiro de CADA registro (até 10), para olharmos os valores.
-      const registrosFin = lista.slice(0, 10).map(r => {
-        const o = {};
-        for (const k of CAMPOS_VER) if (k in (r || {})) o[k] = r[k];
-        // qualquer OUTRO campo financeiro com valor não-nulo que escape da lista acima
-        for (const k of Object.keys(r || {})) {
-          if (RE_FINANCEIRO.test(k) && !(k in o) && r[k] != null && r[k] !== '') o[k] = r[k];
-        }
-        return o;
+      const lista = extrairLista(data);
+      const amostra = (lista && lista.length) ? lista[0] : (data && typeof data === 'object' && !Array.isArray(data) ? data : null);
+      if (!amostra || typeof amostra !== 'object') return;
+      const chaves = Object.keys(amostra);
+      resultado.capturasFinanceiro.push({
+        url: url.split('?')[0],
+        registros: lista ? lista.length : null,
+        chaves,
+        chavesFinanceiras: chaves.filter(k => RE_FIN_FIELD.test(k)),
+        exemplos: (lista ? lista.slice(0, 8) : [amostra]),
       });
-      snapshots.push({ fase, registros: lista.length, chaves: [...chaves], registrosFin });
-      console.log(`   📸 obter-clientes [${fase}] → ${lista.length} registro(s)`);
+      console.log(`   💰 financeiro capturado: ${url.split('?')[0]} (${lista ? lista.length + ' reg.' : 'objeto'})`);
     } catch (_) {}
   });
 
@@ -104,15 +107,58 @@ async function main() {
     await fecharPopupNovaTela(page);
     console.log('✅ Login OK\n');
 
-    // 2) SEGMENTAÇÃO de clientes
+    // 2) SEGMENTAÇÃO
     console.log('📂 Abrindo Segmentação de clientes...');
     await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
     await sleep(7000);
     await fecharPopupNovaTela(page);
 
-    // 3) Clica na segmentação SALVA "Com débito" (lista da lateral, grupo SALVOS)
-    fase = 'com-debito';
-    console.log('🧮 Abrindo a segmentação salva "Com débito"...');
+    // 3) PROBE "+ FILTRO": procura um filtro de inadimplência/vencido ────────
+    console.log('🧪 Caminho A — procurando um filtro de inadimplência/vencido no "+ FILTRO"...');
+    await page.evaluate(() => {
+      for (const el of document.querySelectorAll('button, a, span, div')) {
+        const t = (el.textContent || '').trim().toUpperCase().replace(/\s+/g, ' ');
+        if ((t === '+ FILTRO' || t === '+FILTRO' || t === 'FILTRO') && (el.offsetWidth > 0 || el.offsetHeight > 0)) {
+          (el.closest('button, a, [role="button"]') || el).click(); return true;
+        }
+      }
+      return false;
+    });
+    await sleep(1500);
+    for (const termo of ['inad', 'vencid', 'atras', 'débito', 'aberto', 'pend']) {
+      try {
+        const campo = await page.$('input[placeholder*="esquisar" i], input[placeholder*="Pesquis"]');
+        if (campo) { await campo.click({ clickCount: 3 }); await campo.type(termo, { delay: 50 }); }
+      } catch (_) {}
+      await sleep(900);
+      const opcoes = await page.evaluate(() => {
+        const out = [];
+        for (const el of document.querySelectorAll('li, md-option, [role="option"], .option, div, span, label')) {
+          if (el.children.length > 1) continue;
+          const t = (el.textContent || '').trim().replace(/\s+/g, ' ');
+          if (t && t.length < 50 && (el.offsetWidth > 0 || el.offsetHeight > 0) && !out.includes(t)) out.push(t);
+        }
+        return out.slice(0, 40);
+      }).catch(() => []);
+      resultado.opcoesFiltro[termo] = opcoes;
+      console.log(`   • "${termo}" → ${opcoes.length ? opcoes.join(' | ') : '(nada)'}`);
+    }
+    // fecha o menu de filtro (Esc)
+    await page.keyboard.press('Escape').catch(() => {});
+    await sleep(800);
+
+    // 4) Abre a segmentação salva "Com débito" e pega as devedoras ──────────
+    console.log('\n📂 Caminho B — abrindo "Com débito" para pegar as devedoras...');
+    let listaDevedoras = null;
+    const onObter = async (res) => {
+      try {
+        if (res.status() !== 200 || !/clientes-segmentacao\/obter-clientes/i.test(res.url())) return;
+        const d = JSON.parse(await res.text());
+        const l = Array.isArray(d) ? d : (d.retorno || d.data || d.lista || []);
+        if (Array.isArray(l) && l.length && l.length <= 50) listaDevedoras = l; // a filtrada é a pequena
+      } catch (_) {}
+    };
+    page.on('response', onObter);
     let abriu = false;
     for (let i = 0; i < 12 && !abriu; i++) {
       abriu = await page.evaluate(() => {
@@ -126,30 +172,42 @@ async function main() {
       });
       if (!abriu) await sleep(1500);
     }
-    if (!abriu) {
-      // Diagnóstico: lista os itens clicáveis da lateral para acharmos o nome certo.
-      const itens = await page.evaluate(() => {
-        const out = [];
-        for (const el of document.querySelectorAll('a, li, span, div, p')) {
-          const t = (el.innerText || '').trim().replace(/\s+/g, ' ');
-          if (t && t.length < 45 && el.children.length === 0 && el.offsetWidth > 0 && !out.includes(t)) out.push(t);
-        }
-        return out.slice(0, 60);
-      }).catch(() => []);
-      console.log('   ⚠️  Não achei "Com débito" na lateral. Itens visíveis:');
-      itens.forEach(t => console.log(`      • ${t}`));
-    } else {
-      console.log('   ✓ Segmentação "Com débito" clicada');
+    await sleep(6000);
+    const devs = (listaDevedoras || []).map(r => ({ idCliente: r.idCliente, nome: r.nome, celular: r.celular }));
+    resultado.devedoras = devs;
+    console.log(`   Devedoras: ${devs.map(d => `${d.idCliente}:${d.nome}`).join(' | ') || '(não capturei)'}`);
+
+    // 5) Abre a FICHA da 1ª devedora e tenta o FINANCEIRO (captura endpoints) ─
+    if (devs.length) {
+      const alvo = devs[0];
+      console.log(`\n🧾 Abrindo a ficha de ${alvo.nome} (id ${alvo.idCliente}) para ver o financeiro...`);
+      capturarFin = true;
+      // tenta rotas conhecidas da ficha do cliente; captura o que responder
+      const rotas = [
+        `clientes/ficha-cliente/${alvo.idCliente}`,
+        `clientes/ficha/${alvo.idCliente}`,
+        `clientes/${alvo.idCliente}`,
+      ];
+      for (const r of rotas) {
+        await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/${r}`);
+        await sleep(5000);
+        await fecharPopupNovaTela(page);
+        // tenta clicar numa aba/menu "Financeiro"
+        const foiFin = await page.evaluate(() => {
+          for (const el of document.querySelectorAll('a, li, span, div, button')) {
+            const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+            if ((t === 'financeiro' || t === 'contas a receber' || t === 'contas') && (el.offsetWidth > 0 || el.offsetHeight > 0) && el.children.length <= 1) {
+              el.scrollIntoView({ block: 'center' }); el.click(); return true;
+            }
+          }
+          return false;
+        });
+        if (foiFin) { console.log(`   ✓ Aba "Financeiro" clicada (rota ${r})`); await sleep(5000); }
+        if (resultado.capturasFinanceiro.length) break; // já pegamos algo
+      }
+      if (!resultado.capturasFinanceiro.length) console.log('   ⚠️  Não capturei endpoint financeiro — veja o HTML salvo.');
+      try { fs.writeFileSync(path.resolve(__dirname, '..', 'data', 'diag-ficha.html'), await page.content(), 'utf8'); } catch (_) {}
     }
-    await sleep(7000);
-
-    const totalTxt = await page.evaluate(() => {
-      const m = (document.body.innerText || '').match(/(\d+)\s+resultado/i);
-      return m ? m[1] : null;
-    }).catch(() => null);
-    console.log(`   🔢 EVO mostra: ${totalTxt || '?'} resultado(s)`);
-
-    try { fs.writeFileSync(path.resolve(__dirname, '..', 'data', 'diag-debito.html'), await page.content(), 'utf8'); } catch (_) {}
 
   } catch (e) {
     console.error('❌ Erro no diagnóstico:', e && e.message);
@@ -157,30 +215,23 @@ async function main() {
     try { await browser.close(); } catch (_) {}
   }
 
-  // ── RESUMO ──────────────────────────────────────────────────────────────
+  // ── Grava e resume ────────────────────────────────────────────────────────
   try { fs.mkdirSync(path.dirname(OUT), { recursive: true }); } catch (_) {}
-  try { fs.writeFileSync(OUT, JSON.stringify({ geradoEm: new Date().toISOString(), snapshots }, null, 2), 'utf8'); } catch (_) {}
-
-  // O snapshot que interessa é o da fase "com-debito" com MENOS registros
-  // (a lista filtrada; o EVO também chama obter-clientes com a base inteira).
-  const comDeb = snapshots.filter(s => s.fase === 'com-debito');
-  const alvo = comDeb.length ? comDeb.reduce((a, b) => (b.registros < a.registros ? b : a)) : null;
+  try { fs.writeFileSync(OUT, JSON.stringify(resultado, null, 2), 'utf8'); } catch (_) {}
 
   console.log('\n────────────────────────── RESUMO ──────────────────────────');
-  console.log(`Snapshots de obter-clientes: ${snapshots.length} (fase com-debito: ${comDeb.length})`);
-  if (!alvo) {
-    console.log('⚠️  Nenhum snapshot filtrado capturado. Veja data/diag-debito.html para achar o seletor certo.');
-  } else {
-    console.log(`\n💰 Lista FILTRADA (com débito): ${alvo.registros} devedora(s). Campos de cada uma:\n`);
-    alvo.registrosFin.forEach((r, i) => {
-      console.log(`  ── Devedora ${i + 1} ──`);
-      for (const [k, v] of Object.entries(r)) console.log(`     ${k} = ${JSON.stringify(v)}`);
-      console.log('');
-    });
-    console.log('Campos disponíveis no registro (todos): veja "chaves" no diag-debito.json');
+  console.log('A) Opções de filtro encontradas por termo:');
+  for (const [t, ops] of Object.entries(resultado.opcoesFiltro)) console.log(`   "${t}": ${ops.join(' | ') || '(nada)'}`);
+  console.log(`\nB) Devedoras (${resultado.devedoras.length}): ${resultado.devedoras.map(d => d.nome).join(', ') || '(nenhuma)'}`);
+  console.log(`\nEndpoints financeiros capturados: ${resultado.capturasFinanceiro.length}`);
+  for (const c of resultado.capturasFinanceiro) {
+    console.log(`\n   ${c.url}  (${c.registros != null ? c.registros + ' reg.' : 'objeto'})`);
+    console.log(`     campos financeiros: ${c.chavesFinanceiras.join(', ') || '(nenhum pelo nome)'}`);
+    console.log(`     todos os campos: ${c.chaves.join(', ')}`);
+    if (c.exemplos && c.exemplos[0]) console.log(`     exemplo[0]: ${JSON.stringify(c.exemplos[0])}`);
   }
-  console.log('\n✅ Detalhes completos em: data/diag-debito.json  |  HTML em: data/diag-debito.html');
-  console.log('   Me manda o RESUMO acima que eu te digo se dá pra mostrar o VALOR do saldo ou só quem/ quando.\n');
+  console.log('\n✅ Detalhes em data/diag-debito.json | HTML da ficha em data/diag-ficha.html');
+  console.log('   Me manda esse RESUMO que eu defino como cortar por "vencimento < hoje".\n');
 }
 
 main();
