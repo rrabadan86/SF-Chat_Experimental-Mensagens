@@ -78,14 +78,22 @@ async function lerInadimplentes() {
       }
       if (/\/clientes\/\d+\/perfil/i.test(url)) {
         const d = JSON.parse(await res.text());
-        const l = Array.isArray(d) ? d : (d.retorno || d.data || d.lista || []);
-        // vários itens possíveis → pega o de vencimento MAIS ANTIGO (mais atrasado)
+        // Varre a resposta (qualquer embrulho) e coleta itens de débito: objetos
+        // com `vencimento` (data) — somando o valorSaldoDevedor de cada um.
+        const itens = [];
+        (function walk(o) {
+          if (!o || typeof o !== 'object') return;
+          if (Array.isArray(o)) { o.forEach(walk); return; }
+          if (typeof o.vencimento === 'string' && /\d{4}-\d{2}-\d{2}/.test(o.vencimento)) itens.push(o);
+          for (const v of Object.values(o)) if (v && typeof v === 'object') walk(v);
+        })(d);
         let vmin = null, valor = 0;
-        for (const it of (Array.isArray(l) ? l : [l])) {
-          if (it && it.vencimento) { if (!vmin || it.vencimento < vmin) vmin = it.vencimento; }
-          if (it && typeof it.valorSaldoDevedor === 'number') valor += it.valorSaldoDevedor;
+        for (const it of itens) {
+          if (!vmin || it.vencimento < vmin) vmin = it.vencimento;
+          if (typeof it.valorSaldoDevedor === 'number') valor += it.valorSaldoDevedor;
         }
-        if (vmin) perfilAtual = { vencimento: vmin, valor };
+        perfilAtual = vmin ? { vencimento: vmin, valor } : { vencimento: null, valor: 0 };
+        console.log(`   · perfil recebido (${itens.length} item[s], venc. mais antigo: ${vmin || 'nenhum'})`);
         return;
       }
       if (/recebimentos\/saldo-devedor\/dados-envio-cobranca/i.test(url)) {
@@ -154,7 +162,8 @@ async function lerInadimplentes() {
       const clicou = await page.evaluate((nome) => { const n = nome.trim().toLowerCase(); for (const el of document.querySelectorAll('a,span,div,td')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if (t === n && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return true; } } return false; }, nome);
       if (!clicou) return false;
       await sleep(5000); await fecharPopupNovaTela(page);
-      await page.evaluate(() => { for (const el of document.querySelectorAll('button,a,span,div,li')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if ((t === 'ver perfil' || t === 'person ver perfil') && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return; } } });
+      const verPerfil = await page.evaluate(() => { for (const el of document.querySelectorAll('button,a,span,div,li')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if ((t === 'ver perfil' || t === 'person ver perfil') && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return true; } } return false; });
+      console.log(`   · nome clicado; "Ver perfil" ${verPerfil ? 'clicado' : 'NÃO encontrado'}`);
       await sleep(7000); await fecharPopupNovaTela(page);
       return true;
     };
