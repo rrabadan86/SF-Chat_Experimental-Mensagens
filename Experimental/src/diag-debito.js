@@ -1,21 +1,21 @@
 /**
- * DIAGNÓSTICO (não envia nada) — descobre de ONDE sai o "saldo devedor" no EVO.
+ * DIAGNÓSTICO (não envia nada) — lê a segmentação SALVA "Com débito" no EVO e
+ * mostra os campos financeiros das devedoras REAIS, para sabermos de onde tirar
+ * o "saldo devedor".
  *
  * O que faz:
  *   1. Loga no EVO (mesmo login/2FA dos outros jobs).
- *   2. Abre a Segmentação de clientes.
- *   3. Aplica o filtro "+ FILTRO" → "Com débito".
- *   4. Intercepta TODAS as respostas JSON do EVO e registra, para cada uma:
- *      a URL, quantos registros voltaram, a LISTA DE CAMPOS e UM registro de
- *      exemplo. Destaca os campos que parecem financeiros (saldo/valor/débito…).
- *   5. Escreve tudo em data/diag-debito.json e imprime um resumo no console.
+ *   2. Abre a Segmentação e clica na segmentação salva "Com débito" (lateral).
+ *   3. Intercepta a resposta de `obter-clientes` (filtrada) e imprime, de cada
+ *      devedora, os campos financeiros (inadimplente, vencimentoDebito,
+ *      valorContrato, statusContrato, sessoesPendentes, categoriaContratos…).
+ *   4. Grava tudo em data/diag-debito.json + o HTML da tela.
  *
- * NÃO escreve no EVO, NÃO manda WhatsApp, NÃO toca na planilha. Só leitura + 1 arquivo local.
+ * NÃO escreve no EVO, NÃO manda WhatsApp, NÃO toca na planilha.
  *
  * Uso (no VPS):
  *   cd ~/SF-Chat_Experimental-Mensagens/Experimental
  *   node src/diag-debito.js
- *   # depois me manda o resumo do console (ou o arquivo data/diag-debito.json)
  */
 
 const puppeteer = require('puppeteer-extra');
@@ -30,12 +30,16 @@ const path = require('path');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const OUT = path.resolve(__dirname, '..', 'data', 'diag-debito.json');
 
-// Campos que, pelo NOME, parecem carregar o saldo/pendência financeira.
+// Campos que, pelo NOME, parecem carregar saldo/pendência financeira.
 const RE_FINANCEIRO = /saldo|d[eé]bito|divida|d[ií]vida|valor|pendenc|pend[eê]nc|aberto|receber|atras|venc|parcela|cobran|inadimpl/i;
+// Campos que queremos ver explícitos de cada devedora (quando existirem).
+const CAMPOS_VER = ['idCliente', 'nome', 'celular', 'telefone', 'contrato', 'status', 'statusCliente',
+  'inadimplente', 'vencimentoDebito', 'valorContrato', 'dataVencimentoContrato', 'statusContrato',
+  'categoriaContratos', 'sessoesPendentes', 'statusTreino', 'dtFimContrato', 'mesesContrato'];
 
 async function main() {
   console.log('\n═══════════════════════════════════════════════════');
-  console.log('🔎 DIAGNÓSTICO "Com débito" — lendo campos do EVO (não envia nada)');
+  console.log('🔎 DIAGNÓSTICO — segmentação salva "Com débito" (não envia nada)');
   console.log('═══════════════════════════════════════════════════\n');
 
   const browser = await puppeteer.launch({
@@ -49,56 +53,37 @@ async function main() {
   page.setDefaultTimeout(60000);
   page.setDefaultNavigationTimeout(60000);
 
-  // ── Captura de TODAS as respostas JSON (o tesouro está aqui) ──────────────
-  // Para cada resposta: URL (sem querystring), nº de registros, união de chaves
-  // e UM registro de exemplo (fica só no arquivo local do VPS). Marcamos a
-  // "fase" (antes/depois do filtro) para sabermos o que o filtro trouxe de novo.
-  let fase = 'antes-do-filtro';
-  const capturas = [];
-  const extrairLista = (data) => {
-    if (Array.isArray(data)) return data;
-    if (data && typeof data === 'object') {
-      for (const k of ['retorno', 'data', 'items', 'rows', 'lista', 'result', 'results', 'content']) {
-        if (Array.isArray(data[k])) return data[k];
-      }
-    }
-    return null;
-  };
+  // ── Captura das respostas de obter-clientes (cada chamada = um snapshot) ──
+  let fase = 'inicial';
+  const snapshots = [];
   page.on('response', async (res) => {
     try {
       if (res.status() !== 200) return;
       const url = res.url();
-      const ct = (res.headers()['content-type'] || '').toLowerCase();
-      const pareceInteressante = /obter-clientes|debito|d[eé]bito|saldo|financ|receber|pendenc|cliente/i.test(url);
-      if (!ct.includes('json') && !pareceInteressante) return;
+      if (!/clientes-segmentacao\/obter-clientes/i.test(url)) return;
       const txt = await res.text();
-      if (!txt || txt.length > 4_000_000) return;
       let data; try { data = JSON.parse(txt); } catch { return; }
-      const lista = extrairLista(data);
-      const amostra = (lista && lista.length) ? lista[0]
-                     : (data && typeof data === 'object' && !Array.isArray(data) ? data : null);
-      if (!amostra || typeof amostra !== 'object') return;
-      // União das chaves dos 3 primeiros registros (alguns campos só aparecem
-      // quando preenchidos, então olhar mais de um registro ajuda).
+      const lista = Array.isArray(data) ? data : (data.retorno || data.data || data.lista || []);
+      if (!Array.isArray(lista)) return;
       const chaves = new Set();
-      const base = lista && lista.length ? lista.slice(0, 3) : [amostra];
-      for (const r of base) if (r && typeof r === 'object') Object.keys(r).forEach(k => chaves.add(k));
-      const chavesArr = [...chaves];
-      const financeiras = chavesArr.filter(k => RE_FINANCEIRO.test(k));
-      capturas.push({
-        fase,
-        url: url.split('?')[0],
-        comQueryString: url.includes('?'),
-        registros: lista ? lista.length : null,
-        chaves: chavesArr,
-        chavesFinanceiras: financeiras,
-        exemplo: amostra, // registro completo (dado pessoal — fica só no VPS)
+      for (const r of lista.slice(0, 3)) if (r && typeof r === 'object') Object.keys(r).forEach(k => chaves.add(k));
+      // Subconjunto financeiro de CADA registro (até 10), para olharmos os valores.
+      const registrosFin = lista.slice(0, 10).map(r => {
+        const o = {};
+        for (const k of CAMPOS_VER) if (k in (r || {})) o[k] = r[k];
+        // qualquer OUTRO campo financeiro com valor não-nulo que escape da lista acima
+        for (const k of Object.keys(r || {})) {
+          if (RE_FINANCEIRO.test(k) && !(k in o) && r[k] != null && r[k] !== '') o[k] = r[k];
+        }
+        return o;
       });
-    } catch (_) { /* resposta não-JSON ou já consumida */ }
+      snapshots.push({ fase, registros: lista.length, chaves: [...chaves], registrosFin });
+      console.log(`   📸 obter-clientes [${fase}] → ${lista.length} registro(s)`);
+    } catch (_) {}
   });
 
   try {
-    // 1) LOGIN ──────────────────────────────────────────────────────────────
+    // 1) LOGIN
     console.log('🔐 Login no EVO...');
     await page.goto(`${config.evo.url}/${config.evo.loginPath}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await sleep(4000);
@@ -119,72 +104,51 @@ async function main() {
     await fecharPopupNovaTela(page);
     console.log('✅ Login OK\n');
 
-    // 2) SEGMENTAÇÃO de clientes ───────────────────────────────────────────
+    // 2) SEGMENTAÇÃO de clientes
     console.log('📂 Abrindo Segmentação de clientes...');
     await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
     await sleep(7000);
     await fecharPopupNovaTela(page);
-    console.log(`   📸 Snapshots capturados até aqui (antes do filtro): ${capturas.length}`);
 
-    // 3) "+ FILTRO" → "Com débito" ─────────────────────────────────────────
-    fase = 'depois-do-filtro';
-    console.log('🧮 Abrindo "+ FILTRO"...');
-    const abriu = await page.evaluate(() => {
-      for (const el of document.querySelectorAll('button, a, span, div')) {
-        const t = (el.textContent || '').trim().toUpperCase().replace(/\s+/g, ' ');
-        if ((t === '+ FILTRO' || t === '+FILTRO' || t === 'FILTRO') && (el.offsetWidth > 0 || el.offsetHeight > 0)) {
-          (el.closest('button, a, [role="button"]') || el).click(); return true;
+    // 3) Clica na segmentação SALVA "Com débito" (lista da lateral, grupo SALVOS)
+    fase = 'com-debito';
+    console.log('🧮 Abrindo a segmentação salva "Com débito"...');
+    let abriu = false;
+    for (let i = 0; i < 12 && !abriu; i++) {
+      abriu = await page.evaluate(() => {
+        for (const el of document.querySelectorAll('a, li, span, div, p')) {
+          const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+          if (t === 'com débito' && el.children.length === 0 && (el.offsetWidth > 0 || el.offsetHeight > 0)) {
+            el.scrollIntoView({ block: 'center' }); el.click(); return true;
+          }
         }
-      }
-      return false;
-    });
-    console.log(abriu ? '   ✓ "+ FILTRO" clicado' : '   ⚠️  Não achei o botão "+ FILTRO" (seguindo mesmo assim)');
-    await sleep(1500);
-
-    // Digita "débito" no campo de busca do menu de filtros (placeholder "Pesquisar").
-    try {
-      await page.waitForSelector('input[placeholder*="esquisar" i], input[placeholder*="Pesquis"]', { timeout: 6000 });
-      const campo = await page.$('input[placeholder*="esquisar" i], input[placeholder*="Pesquis"]');
-      if (campo) { await campo.click(); await campo.type('débito', { delay: 70 }); console.log('   ✓ Digitei "débito" na busca de filtros'); }
-    } catch (_) { console.log('   ℹ️  Campo de busca do filtro não apareceu — vou procurar a opção direto'); }
-    await sleep(1200);
-
-    // Clica na opção "Com débito".
-    const marcou = await page.evaluate(() => {
-      const alvo = ['com débito', 'com debito'];
-      for (const el of document.querySelectorAll('li, div, span, a, md-option, [role="option"], label')) {
-        if (el.children.length > 2) continue;
-        const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-        if (alvo.includes(t) && (el.offsetWidth > 0 || el.offsetHeight > 0)) {
-          el.scrollIntoView({ block: 'center' }); el.click(); return t;
+        return false;
+      });
+      if (!abriu) await sleep(1500);
+    }
+    if (!abriu) {
+      // Diagnóstico: lista os itens clicáveis da lateral para acharmos o nome certo.
+      const itens = await page.evaluate(() => {
+        const out = [];
+        for (const el of document.querySelectorAll('a, li, span, div, p')) {
+          const t = (el.innerText || '').trim().replace(/\s+/g, ' ');
+          if (t && t.length < 45 && el.children.length === 0 && el.offsetWidth > 0 && !out.includes(t)) out.push(t);
         }
-      }
-      return null;
-    });
-    console.log(marcou ? `   ✓ Opção "${marcou}" selecionada` : '   ⚠️  Não achei a opção "Com débito" no menu');
-    await sleep(2500);
+        return out.slice(0, 60);
+      }).catch(() => []);
+      console.log('   ⚠️  Não achei "Com débito" na lateral. Itens visíveis:');
+      itens.forEach(t => console.log(`      • ${t}`));
+    } else {
+      console.log('   ✓ Segmentação "Com débito" clicada');
+    }
+    await sleep(7000);
 
-    // Alguns filtros do EVO exigem um "Aplicar/Filtrar/Buscar" ou um Enter.
-    const aplicou = await page.evaluate(() => {
-      for (const b of document.querySelectorAll('button, a, [role="button"]')) {
-        const t = (b.textContent || '').trim().toUpperCase();
-        if (['APLICAR', 'FILTRAR', 'BUSCAR', 'PESQUISAR', 'CONFIRMAR'].includes(t) && (b.offsetWidth > 0 || b.offsetHeight > 0)) {
-          b.click(); return t;
-        }
-      }
-      return null;
-    });
-    if (aplicou) console.log(`   ✓ Botão "${aplicou}" clicado`);
-    await sleep(6000); // dá tempo da lista filtrada (e de um possível endpoint financeiro) chegar
-
-    // Lê quantos resultados o EVO mostra agora (ex.: "12 resultados").
     const totalTxt = await page.evaluate(() => {
       const m = (document.body.innerText || '').match(/(\d+)\s+resultado/i);
       return m ? m[1] : null;
     }).catch(() => null);
-    console.log(`   🔢 EVO mostra agora: ${totalTxt || '?'} resultado(s) com débito`);
+    console.log(`   🔢 EVO mostra: ${totalTxt || '?'} resultado(s)`);
 
-    // Salva o HTML pós-filtro (ajuda se a gente precisar achar a coluna do valor).
     try { fs.writeFileSync(path.resolve(__dirname, '..', 'data', 'diag-debito.html'), await page.content(), 'utf8'); } catch (_) {}
 
   } catch (e) {
@@ -193,24 +157,30 @@ async function main() {
     try { await browser.close(); } catch (_) {}
   }
 
-  // ── RESUMO ────────────────────────────────────────────────────────────────
+  // ── RESUMO ──────────────────────────────────────────────────────────────
   try { fs.mkdirSync(path.dirname(OUT), { recursive: true }); } catch (_) {}
-  try { fs.writeFileSync(OUT, JSON.stringify({ geradoEm: new Date().toISOString(), capturas }, null, 2), 'utf8'); } catch (_) {}
+  try { fs.writeFileSync(OUT, JSON.stringify({ geradoEm: new Date().toISOString(), snapshots }, null, 2), 'utf8'); } catch (_) {}
+
+  // O snapshot que interessa é o da fase "com-debito" com MENOS registros
+  // (a lista filtrada; o EVO também chama obter-clientes com a base inteira).
+  const comDeb = snapshots.filter(s => s.fase === 'com-debito');
+  const alvo = comDeb.length ? comDeb.reduce((a, b) => (b.registros < a.registros ? b : a)) : null;
 
   console.log('\n────────────────────────── RESUMO ──────────────────────────');
-  console.log(`Respostas JSON capturadas: ${capturas.length}`);
-  for (const c of capturas) {
-    const marca = c.chavesFinanceiras.length ? '💰' : '  ';
-    console.log(`\n${marca} [${c.fase}] ${c.url}  (${c.registros != null ? c.registros + ' reg.' : 'objeto'})`);
-    if (c.chavesFinanceiras.length) {
-      console.log(`     ↳ CAMPOS FINANCEIROS: ${c.chavesFinanceiras.join(', ')}`);
-      for (const k of c.chavesFinanceiras) console.log(`         ex.: ${k} = ${JSON.stringify(c.exemplo[k])}`);
-    }
-    console.log(`     campos: ${c.chaves.join(', ')}`);
+  console.log(`Snapshots de obter-clientes: ${snapshots.length} (fase com-debito: ${comDeb.length})`);
+  if (!alvo) {
+    console.log('⚠️  Nenhum snapshot filtrado capturado. Veja data/diag-debito.html para achar o seletor certo.');
+  } else {
+    console.log(`\n💰 Lista FILTRADA (com débito): ${alvo.registros} devedora(s). Campos de cada uma:\n`);
+    alvo.registrosFin.forEach((r, i) => {
+      console.log(`  ── Devedora ${i + 1} ──`);
+      for (const [k, v] of Object.entries(r)) console.log(`     ${k} = ${JSON.stringify(v)}`);
+      console.log('');
+    });
+    console.log('Campos disponíveis no registro (todos): veja "chaves" no diag-debito.json');
   }
-  console.log('\n✅ Detalhes completos (com um registro de exemplo) em: data/diag-debito.json');
-  console.log('   HTML da tela filtrada em: data/diag-debito.html');
-  console.log('   Me manda o RESUMO acima (ou o diag-debito.json) que eu te digo de onde tirar o saldo.\n');
+  console.log('\n✅ Detalhes completos em: data/diag-debito.json  |  HTML em: data/diag-debito.html');
+  console.log('   Me manda o RESUMO acima que eu te digo se dá pra mostrar o VALOR do saldo ou só quem/ quando.\n');
 }
 
 main();
