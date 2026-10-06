@@ -1,9 +1,13 @@
 /**
- * DIAGNÓSTICO v10 (não envia nada) — abrir "Pendências" e "Ver perfil" da aluna,
- * mapear a ficha completa e capturar o CORPO das respostas financeiras (parcelas
- * em aberto + link de pagamento).
+ * DIAGNÓSTICO v11 (não cobra nada) — pegar o LINK DE PAGAMENTO da aluna.
  *
- * NÃO escreve no EVO, NÃO manda WhatsApp, NÃO toca na planilha.
+ * Fluxo (igual ao manual): Perfil → Financeiro → Saldo devedor → "ENVIAR
+ * COBRANÇA" (que SÓ ABRE o popup e GERA o link; não cobra). Capturamos o link
+ * (https://evo-totem...) do popup e o endpoint que o gerou. NUNCA clicamos em
+ * CONFIRMAR.
+ *
+ * SEGURANÇA: só clica em "ENVIAR COBRANÇA" (gera link) e depois CANCELAR.
+ * Jamais clica CONFIRMAR / Receber / Cobrar. Não envia WhatsApp.
  *   node src/diag-debito.js
  */
 
@@ -18,27 +22,21 @@ const path = require('path');
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const OUT = path.resolve(__dirname, '..', 'data', 'diag-debito.json');
-const RE_RUIDO = /intercom|instatus|signalr|informativo|launcher_settings|\/ping|versao-aplicacao|wehelpsoftware|google|gstatic|sentry|hotjar|clarity|traducao|possui-integracao|status-envio|tiposmarketing|\/passos|\/interesses|obterBasico|verificar-personal|qtde-requisicoes|total-notificacoes|listar-conexoes|obter-filtros|montar-filtro|verificar-filtro|obter-etiquetas|obter-fluxos|filiais-basico|conexoes-colaboradores|historicoPresencas|historicoTreinos|crm\/templates|listarContatosTipos|notificacaoPush/i;
-const RE_FIN = /financ|receb|parcela|cobran|debito|d[eé]bito|saldo|fatura|pagamento|titulo|t[ií]tulo|venda|contrato|pendencia|pend[eê]ncia/i;
+const ID = 7650; // Daiene (vencida) — alvo fixo do diagnóstico
 
 function urlsEmObj(obj, prefixo = '', prof = 0) {
   const out = [];
-  if (!obj || typeof obj !== 'object' || prof > 3) return out;
+  if (!obj || typeof obj !== 'object' || prof > 4) return out;
   for (const [k, v] of Object.entries(obj)) {
     if (typeof v === 'string' && /^https?:\/\//i.test(v)) out.push([prefixo + k, v]);
     else if (v && typeof v === 'object') out.push(...urlsEmObj(v, prefixo + k + '.', prof + 1));
   }
   return out;
 }
-function extrairLista(data) {
-  if (Array.isArray(data)) return data;
-  if (data && typeof data === 'object') for (const k of ['retorno', 'data', 'lista', 'registros', 'parcelas', 'content', 'result', 'items', 'contas', 'pendencias', 'titulos']) if (Array.isArray(data[k])) return data[k];
-  return null;
-}
 
 async function main() {
   console.log('\n═══════════════════════════════════════════════════');
-  console.log('🔎 DIAGNÓSTICO v10 — Pendências + Ver perfil (não envia nada)');
+  console.log('🔎 DIAGNÓSTICO v11 — link de pagamento (NÃO cobra nada)');
   console.log('═══════════════════════════════════════════════════\n');
 
   const browser = await puppeteer.launch({
@@ -47,51 +45,41 @@ async function main() {
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--window-size=1366,900'],
     defaultViewport: { width: 1366, height: 900 },
   });
-  const anexados = [];
-  const resultado = { geradoEm: new Date().toISOString(), devedoras: [], financeiro: [], clicaveisPerfil: [] };
-  let listaDevedoras = null, fase = 'inicial';
-
-  const anexar = (p) => {
-    if (!p || anexados.includes(p)) return; anexados.push(p);
-    p.on('response', async (res) => {
-      try {
-        if (res.status() !== 200) return;
-        const url = res.url();
-        if (/clientes-segmentacao\/obter-clientes/i.test(url)) { try { const d = JSON.parse(await res.text()); const l = Array.isArray(d) ? d : (d.retorno || d.data || d.lista || []); if (Array.isArray(l) && l.length && l.length <= 50) listaDevedoras = l; } catch (_) {} return; }
-        if (RE_RUIDO.test(url)) return;
-        const ct = (res.headers()['content-type'] || '').toLowerCase();
-        if (!ct.includes('json')) return;
-        const u = url.split('?')[0];
-        const txt = await res.text(); if (!txt || txt.length > 6_000_000) return;
-        let data; try { data = JSON.parse(txt); } catch { return; }
-        const lista = extrairLista(data);
-        const amostra = (lista && lista.length) ? lista[0] : (data && typeof data === 'object' && !Array.isArray(data) ? data : null);
-        if (!amostra || typeof amostra !== 'object') return;
-        const chaves = Object.keys(amostra);
-        const urls = []; for (const r of (lista ? lista.slice(0, 15) : [amostra])) for (const par of urlsEmObj(r)) if (!urls.some(x => x[0] === par[0])) urls.push(par);
-        const interessa = RE_FIN.test(u) || urls.length > 0 || chaves.some(k => /venc|valor|parcela|situac|pago|aberto|link/i.test(k));
-        if (!interessa) return;
-        resultado.financeiro.push({ fase, url: u, registros: lista ? lista.length : null, chaves, camposUrl: urls, amostras: (lista ? lista.slice(0, 6) : [amostra]) });
-        console.log(`   ${urls.length ? '🔗' : '💰'} [${fase}] ${u} (${lista ? lista.length + ' reg.' : 'obj'})${urls.length ? ' — TEM URL' : ''}`);
-      } catch (_) {}
-    });
-  };
-  browser.on('targetcreated', async (t) => { try { if (t.type() === 'page') anexar(await t.page()); } catch (_) {} });
   const page = (await browser.pages())[0] || await browser.newPage();
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
   page.setDefaultTimeout(60000); page.setDefaultNavigationTimeout(60000);
-  anexar(page);
 
-  const clicar = (p, alvos) => p.evaluate((alvos) => {
+  const resultado = { geradoEm: new Date().toISOString(), id: ID, endpointsCobranca: [], linksNoDOM: [] };
+  let capturarCobranca = false;
+  page.on('response', async (res) => {
+    try {
+      if (!capturarCobranca || res.status() !== 200) return;
+      const url = res.url();
+      if (/intercom|instatus|signalr|google|gstatic|clarity|traducao/i.test(url)) return;
+      const ct = (res.headers()['content-type'] || '').toLowerCase();
+      if (!ct.includes('json')) return;
+      const txt = await res.text(); if (!txt || txt.length > 4_000_000) return;
+      let data; try { data = JSON.parse(txt); } catch { return; }
+      const urls = urlsEmObj(data);
+      const temTotem = /evo-totem|\/sl\//i.test(txt) || urls.some(([, v]) => /evo-totem/i.test(v));
+      if (urls.length || temTotem) {
+        resultado.endpointsCobranca.push({ url: url.split('?')[0], urls, trechoTotem: temTotem ? (txt.match(/https?:\/\/[^"'\\\s]*evo-totem[^"'\\\s]*/i) || [null])[0] : null });
+        console.log(`   🔗 ${url.split('?')[0]}${temTotem ? '  ← TEM link evo-totem!' : ''}`);
+        urls.forEach(([k, v]) => console.log(`        ${k} = ${v}`));
+      }
+    } catch (_) {}
+  });
+
+  const clicarTxt = (alvos, { exato = true } = {}) => page.evaluate(({ alvos, exato }) => {
     const quer = alvos.map(s => s.toLowerCase());
     for (const el of document.querySelectorAll('a,button,[role="tab"],[role="menuitem"],span,div,li')) {
       if (el.children.length > 2) continue;
       const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-      const aria = (el.getAttribute('aria-label') || '').trim().toLowerCase();
-      if ((quer.includes(t) || quer.some(q => aria === q || aria === 'abrir: ' + q)) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return t || aria; }
+      const ok = exato ? quer.includes(t) : quer.some(q => t.includes(q));
+      if (ok && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return t; }
     }
     return null;
-  }, alvos);
+  }, { alvos, exato });
 
   try {
     // LOGIN
@@ -109,53 +97,47 @@ async function main() {
     await sleep(3000); await fecharPopupNovaTela(page);
     console.log('✅ Login OK');
 
-    // Com débito → devedoras → abre ficha da 1ª
-    await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
-    await sleep(7000); await fecharPopupNovaTela(page);
-    for (let i = 0; i < 12; i++) { if (await clicar(page, ['com débito'])) break; await sleep(1500); }
-    await sleep(5000);
-    const devs = (listaDevedoras || []).map(r => ({ idCliente: r.idCliente, nome: r.nome }));
-    resultado.devedoras = devs;
-    if (!devs.length) throw new Error('sem devedoras');
-    console.log(`🖱️  Abrindo ficha de ${devs[0].nome}...`);
-    await page.evaluate((nome) => { const n = nome.trim().toLowerCase(); for (const el of document.querySelectorAll('a,span,div,td')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if (t === n && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return; } } }, devs[0].nome);
-    await sleep(7000); await fecharPopupNovaTela(page);
+    // Vai direto para a ficha completa da aluna (rota descoberta no v10)
+    console.log(`\n🧾 Abrindo ficha completa da aluna ${ID}...`);
+    await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/cadastro/${ID}//perfil`);
+    await sleep(8000); await fecharPopupNovaTela(page);
+    console.log(`   🌐 ${page.url()}`);
 
-    // 1) Clica "Pendências"
-    fase = 'pendencias';
-    console.log(`\n🔸 Clicando "Pendências"... (${await clicar(page, ['pendências 1', 'pendências', 'pendencias']) || 'não achei'})`);
+    // Aba "Financeiro"
+    console.log(`   Financeiro: ${await clicarTxt(['financeiro']) || 'não achei'}`);
+    await sleep(5000);
+    // Sub-aba "Saldo devedor"
+    console.log(`   Saldo devedor: ${await clicarTxt(['saldo devedor']) || 'não achei'}`);
     await sleep(5000);
 
-    // 2) Clica "Ver perfil" (abre ficha completa)
-    fase = 'perfil';
-    console.log(`🔸 Clicando "Ver perfil"... (${await clicar(page, ['ver perfil', 'person ver perfil']) || 'não achei'})`);
-    await sleep(9000);
-    const alvo = anexados[anexados.length - 1] || page;
-    try { await alvo.bringToFront(); } catch (_) {}
-    try { await fecharPopupNovaTela(alvo); } catch (_) {}
-    console.log(`   🌐 URL agora: ${alvo.url()}`);
+    // Marca a linha do débito (checkbox), se houver
+    await page.evaluate(() => { const cb = document.querySelector('table input[type="checkbox"], [role="row"] input[type="checkbox"]'); if (cb && !cb.checked) cb.click(); }).catch(() => {});
+    await sleep(800);
 
-    // Mapeia clicáveis da ficha completa
-    resultado.clicaveisPerfil = await alvo.evaluate(() => {
-      const out = [];
-      for (const el of document.querySelectorAll('a,button,[role="tab"],mat-icon,li')) {
-        const r = el.getBoundingClientRect(); if (r.width <= 0 || r.height <= 0) continue;
-        const t = (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 28);
-        const aria = (el.getAttribute('aria-label') || '').trim().slice(0, 34);
-        const lbl = [t, aria && 'aria=' + aria].filter(Boolean).join(' | ');
-        if (lbl && !out.includes(lbl)) out.push(lbl);
-      }
-      return out.slice(0, 90);
+    // Clica "ENVIAR COBRANÇA" — SÓ ABRE o popup e gera o link (não cobra)
+    capturarCobranca = true;
+    console.log(`\n💳 Clicando "ENVIAR COBRANÇA" (só gera o link; NÃO confirma)...`);
+    const clicou = await clicarTxt(['enviar cobrança', 'enviar cobranca'], { exato: false });
+    console.log(`   ${clicou ? 'clicado: ' + clicou : '⚠️  não achei o botão'}`);
+    await sleep(7000);
+
+    // Lê o link direto do popup/DOM (evo-totem...)
+    resultado.linksNoDOM = await page.evaluate(() => {
+      const out = new Set();
+      const add = (s) => { if (s && /^https?:\/\//i.test(s)) out.add(s); };
+      for (const a of document.querySelectorAll('a[href]')) add(a.getAttribute('href'));
+      for (const el of document.querySelectorAll('input,textarea')) add(el.value);
+      // texto visível com http
+      const m = (document.body.innerText || '').match(/https?:\/\/[^\s"'<>]+/g) || [];
+      m.forEach(add);
+      return [...out].filter(u => /evo-totem|\/sl\/|pag|checkout|cobr/i.test(u)).slice(0, 10);
     }).catch(() => []);
 
-    // 3) Na ficha completa, tenta abas financeiras
-    for (const a of ['financeiro', 'contas a receber', 'cobranças', 'cobrancas', 'pagamentos', 'faturas', 'parcelas', 'contratos']) {
-      fase = `perfil:${a}`;
-      const ok = await clicar(alvo, [a]);
-      if (ok) { console.log(`   ↳ perfil: cliquei "${a}"`); await sleep(4500); }
-    }
+    // SEGURANÇA: fecha o popup SEM confirmar (Cancelar / X / Esc)
+    await clicarTxt(['cancelar']).catch(() => {});
+    await page.keyboard.press('Escape').catch(() => {});
 
-    try { fs.writeFileSync(path.resolve(__dirname, '..', 'data', 'diag-ficha.html'), await alvo.content(), 'utf8'); } catch (_) {}
+    try { fs.writeFileSync(path.resolve(__dirname, '..', 'data', 'diag-cobranca.html'), await page.content(), 'utf8'); } catch (_) {}
 
   } catch (e) {
     console.error('❌ Erro:', e && e.message);
@@ -167,19 +149,15 @@ async function main() {
   try { fs.writeFileSync(OUT, JSON.stringify(resultado, null, 2), 'utf8'); } catch (_) {}
 
   console.log('\n────────────────────────── RESUMO ──────────────────────────');
-  console.log(`\n🧩 Clicáveis da ficha completa:\n   ${(resultado.clicaveisPerfil || []).join('\n   ')}`);
-  console.log(`\n💰 Endpoints financeiros capturados: ${resultado.financeiro.length}`);
-  for (const c of resultado.financeiro) {
-    console.log(`\n   ${c.camposUrl.length ? '🔗' : '💰'} [${c.fase}] ${c.url} (${c.registros != null ? c.registros + ' reg.' : 'obj'})`);
-    console.log(`      campos: ${c.chaves.join(', ')}`);
-    c.camposUrl.forEach(([k, v]) => console.log(`      🔗 ${k} = ${v}`));
-    (c.amostras || []).slice(0, 3).forEach((e, i) => {
-      const r = {};
-      for (const k of Object.keys(e)) if (/venc|valor|situac|status|pago|aberto|parcela|link|url|nome|cliente|descr/i.test(k)) r[k] = e[k];
-      console.log(`      amostra ${i + 1}: ${JSON.stringify(r)}`);
-    });
+  console.log(`\n🔗 Links achados no popup/DOM (${resultado.linksNoDOM.length}):`);
+  resultado.linksNoDOM.forEach(u => console.log(`   ${u}`));
+  console.log(`\n🛰️  Endpoints que retornaram URL durante "ENVIAR COBRANÇA" (${resultado.endpointsCobranca.length}):`);
+  for (const e of resultado.endpointsCobranca) {
+    console.log(`   ${e.url}${e.trechoTotem ? '  ← ' + e.trechoTotem : ''}`);
+    e.urls.forEach(([k, v]) => console.log(`      ${k} = ${v}`));
   }
-  console.log('\n✅ Detalhes em data/diag-debito.json | HTML em data/diag-ficha.html\n');
+  console.log('\n✅ Detalhes em data/diag-debito.json | HTML em data/diag-cobranca.html');
+  console.log('   Me manda os links e o endpoint — é o que a automação vai usar pra pegar o link sem cobrar.\n');
 }
 
 main();
