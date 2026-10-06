@@ -1,13 +1,13 @@
 /**
- * DIAGNÓSTICO v11 (não cobra nada) — pegar o LINK DE PAGAMENTO da aluna.
+ * DIAGNÓSTICO v13 (não cobra nada) — pegar o LINK DE PAGAMENTO da aluna.
  *
- * Fluxo (igual ao manual): Perfil → Financeiro → Saldo devedor → "ENVIAR
- * COBRANÇA" (que SÓ ABRE o popup e GERA o link; não cobra). Capturamos o link
- * (https://evo-totem...) do popup e o endpoint que o gerou. NUNCA clicamos em
- * CONFIRMAR.
+ * Fluxo robusto (o que funciona de verdade):
+ *   segmentação "Com débito" → clica no nome → drawer → "Ver perfil" (ficha
+ *   completa) → aba "Financeiro" (a da FICHA, na mesma linha da aba "Cadastro",
+ *   para não pegar o menu lateral) → sub-aba "Saldo devedor" → "ENVIAR COBRANÇA"
+ *   (que SÓ gera o link; não cobra). Captura o link evo-totem e o endpoint.
  *
- * SEGURANÇA: só clica em "ENVIAR COBRANÇA" (gera link) e depois CANCELAR.
- * Jamais clica CONFIRMAR / Receber / Cobrar. Não envia WhatsApp.
+ * SEGURANÇA: nunca clica CONFIRMAR / Receber / Cobrar. Não envia WhatsApp.
  *   node src/diag-debito.js
  */
 
@@ -22,7 +22,6 @@ const path = require('path');
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const OUT = path.resolve(__dirname, '..', 'data', 'diag-debito.json');
-const ID = 7650; // Daiene (vencida) — alvo fixo do diagnóstico
 
 function urlsEmObj(obj, prefixo = '', prof = 0) {
   const out = [];
@@ -36,7 +35,7 @@ function urlsEmObj(obj, prefixo = '', prof = 0) {
 
 async function main() {
   console.log('\n═══════════════════════════════════════════════════');
-  console.log('🔎 DIAGNÓSTICO v11 — link de pagamento (NÃO cobra nada)');
+  console.log('🔎 DIAGNÓSTICO v13 — link de pagamento (NÃO cobra nada)');
   console.log('═══════════════════════════════════════════════════\n');
 
   const browser = await puppeteer.launch({
@@ -49,22 +48,24 @@ async function main() {
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
   page.setDefaultTimeout(60000); page.setDefaultNavigationTimeout(60000);
 
-  const resultado = { geradoEm: new Date().toISOString(), id: ID, endpointsCobranca: [], linksNoDOM: [] };
-  let capturarCobranca = false;
+  const resultado = { geradoEm: new Date().toISOString(), devedoras: [], subabas: [], endpointsCobranca: [], linksNoDOM: [] };
+  let listaDevedoras = null, capturarCobranca = false;
   page.on('response', async (res) => {
     try {
-      if (!capturarCobranca || res.status() !== 200) return;
+      if (res.status() !== 200) return;
       const url = res.url();
+      if (/clientes-segmentacao\/obter-clientes/i.test(url)) { try { const d = JSON.parse(await res.text()); const l = Array.isArray(d) ? d : (d.retorno || d.data || d.lista || []); if (Array.isArray(l) && l.length && l.length <= 50) listaDevedoras = l; } catch (_) {} return; }
+      if (!capturarCobranca) return;
       if (/intercom|instatus|signalr|google|gstatic|clarity|traducao/i.test(url)) return;
       const ct = (res.headers()['content-type'] || '').toLowerCase();
       if (!ct.includes('json')) return;
       const txt = await res.text(); if (!txt || txt.length > 4_000_000) return;
       let data; try { data = JSON.parse(txt); } catch { return; }
       const urls = urlsEmObj(data);
-      const temTotem = /evo-totem|\/sl\//i.test(txt) || urls.some(([, v]) => /evo-totem/i.test(v));
-      if (urls.length || temTotem) {
-        resultado.endpointsCobranca.push({ url: url.split('?')[0], urls, trechoTotem: temTotem ? (txt.match(/https?:\/\/[^"'\\\s]*evo-totem[^"'\\\s]*/i) || [null])[0] : null });
-        console.log(`   🔗 ${url.split('?')[0]}${temTotem ? '  ← TEM link evo-totem!' : ''}`);
+      const totem = (txt.match(/https?:\/\/[^"'\\\s]*(evo-totem|\/sl\/)[^"'\\\s]*/i) || [null])[0];
+      if (urls.length || totem) {
+        resultado.endpointsCobranca.push({ url: url.split('?')[0], urls, totem });
+        console.log(`   🔗 ${url.split('?')[0]}${totem ? '  ← ' + totem : ''}`);
         urls.forEach(([k, v]) => console.log(`        ${k} = ${v}`));
       }
     } catch (_) {}
@@ -80,6 +81,16 @@ async function main() {
     }
     return null;
   }, { alvos, exato });
+
+  // Clica um alvo que esteja NA MESMA LINHA (mesmo y) de uma âncora (p/ pegar a aba da ficha)
+  const clicarMesmaLinha = (ancora, alvo) => page.evaluate(({ ancora, alvo }) => {
+    const leaf = (el) => el.children.length <= 1 && (el.offsetWidth > 0 || el.offsetHeight > 0);
+    let y = null;
+    for (const el of document.querySelectorAll('a,div,span,li,button,[role="tab"]')) { if (leaf(el) && (el.textContent || '').trim().toLowerCase() === ancora) { y = el.getBoundingClientRect().top; break; } }
+    if (y == null) return 'sem-ancora';
+    for (const el of document.querySelectorAll('a,div,span,li,button,[role="tab"]')) { if (leaf(el) && (el.textContent || '').trim().toLowerCase() === alvo && Math.abs(el.getBoundingClientRect().top - y) < 28) { el.scrollIntoView({ block: 'center' }); el.click(); return 'ok'; } }
+    return 'sem-alvo-na-linha';
+  }, { ancora, alvo });
 
   try {
     // LOGIN
@@ -97,56 +108,52 @@ async function main() {
     await sleep(3000); await fecharPopupNovaTela(page);
     console.log('✅ Login OK');
 
-    // Vai DIRETO para o Financeiro da ficha via URL (sem ambiguidade de menu)
-    console.log(`\n🧾 Abrindo Financeiro da aluna ${ID} via URL...`);
-    await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/cadastro/${ID}//financeiro`);
+    // Com débito → devedoras → abre ficha da 1ª (Daiene)
+    await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
+    await sleep(7000); await fecharPopupNovaTela(page);
+    for (let i = 0; i < 12; i++) { if (await clicarTxt(['com débito'])) break; await sleep(1500); }
+    await sleep(5000);
+    const devs = (listaDevedoras || []).map(r => ({ idCliente: r.idCliente, nome: r.nome }));
+    resultado.devedoras = devs;
+    if (!devs.length) throw new Error('sem devedoras');
+    console.log(`🖱️  Abrindo ficha de ${devs[0].nome}...`);
+    await page.evaluate((nome) => { const n = nome.trim().toLowerCase(); for (const el of document.querySelectorAll('a,span,div,td')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if (t === n && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return; } } }, devs[0].nome);
+    await sleep(6000); await fecharPopupNovaTela(page);
+    console.log(`   Ver perfil: ${await clicarTxt(['ver perfil', 'person ver perfil']) || 'não achei'}`);
     await sleep(8000); await fecharPopupNovaTela(page);
     console.log(`   🌐 ${page.url()}`);
 
-    // Lista as sub-abas/itens clicáveis visíveis (pra achar o rótulo exato)
-    const subabas = await page.evaluate(() => {
-      const out = [];
-      for (const el of document.querySelectorAll('a,button,[role="tab"],span,div,li')) {
-        if (el.children.length > 1) continue;
-        const t = (el.textContent || '').trim().replace(/\s+/g, ' ');
-        if (t && t.length <= 24 && (el.offsetWidth > 0 || el.offsetHeight > 0) && !out.includes(t)) out.push(t);
-      }
-      return out.slice(0, 70);
-    }).catch(() => []);
-    resultado.subabasFinanceiro = subabas;
-    console.log(`   🗂️  visíveis: ${subabas.join(' | ')}`);
+    // Agora o app já tem o contexto do cliente → navega DIRETO ao Saldo devedor
+    // (rota exata confirmada: .../clientes/cadastro/{id}//financeiro/saldodevedor)
+    const id = devs[0].idCliente;
+    await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/cadastro/${id}//financeiro/saldodevedor`);
+    await sleep(7000); await fecharPopupNovaTela(page);
+    console.log(`   🌐 Saldo devedor: ${page.url()}`);
+    resultado.subabas = await page.evaluate(() => { const out = []; for (const el of document.querySelectorAll('a,button,[role="tab"],span,div,li')) { if (el.children.length > 1) continue; const t = (el.textContent || '').trim().replace(/\s+/g, ' '); if (t && t.length <= 22 && (el.offsetWidth > 0 || el.offsetHeight > 0) && !out.includes(t)) out.push(t); } return out.slice(0, 60); }).catch(() => []);
+    console.log(`   🗂️  visíveis: ${resultado.subabas.join(' | ')}`);
 
-    // Sub-aba "Saldo devedor"
-    console.log(`   Saldo devedor: ${await clicarTxt(['saldo devedor'], { exato: false }) || 'não achei'}`);
-    await sleep(6000);
-
-    // Marca a linha do débito (checkbox), se houver
+    // marca a linha (checkbox) se houver
     await page.evaluate(() => { const cb = document.querySelector('table input[type="checkbox"], [role="row"] input[type="checkbox"]'); if (cb && !cb.checked) cb.click(); }).catch(() => {});
     await sleep(800);
 
-    // Clica "ENVIAR COBRANÇA" — SÓ ABRE o popup e gera o link (não cobra)
+    // ENVIAR COBRANÇA — só gera o link
     capturarCobranca = true;
-    console.log(`\n💳 Clicando "ENVIAR COBRANÇA" (só gera o link; NÃO confirma)...`);
-    const clicou = await clicarTxt(['enviar cobrança', 'enviar cobranca'], { exato: false });
-    console.log(`   ${clicou ? 'clicado: ' + clicou : '⚠️  não achei o botão'}`);
+    console.log(`\n💳 "ENVIAR COBRANÇA" (só gera; NÃO confirma)...`);
+    console.log(`   ${await clicarTxt(['enviar cobrança', 'enviar cobranca'], { exato: false }) || '⚠️  botão não achado'}`);
     await sleep(7000);
 
-    // Lê o link direto do popup/DOM (evo-totem...)
     resultado.linksNoDOM = await page.evaluate(() => {
       const out = new Set();
       const add = (s) => { if (s && /^https?:\/\//i.test(s)) out.add(s); };
       for (const a of document.querySelectorAll('a[href]')) add(a.getAttribute('href'));
       for (const el of document.querySelectorAll('input,textarea')) add(el.value);
-      // texto visível com http
-      const m = (document.body.innerText || '').match(/https?:\/\/[^\s"'<>]+/g) || [];
-      m.forEach(add);
+      (document.body.innerText.match(/https?:\/\/[^\s"'<>]+/g) || []).forEach(add);
       return [...out].filter(u => /evo-totem|\/sl\/|pag|checkout|cobr/i.test(u)).slice(0, 10);
     }).catch(() => []);
 
-    // SEGURANÇA: fecha o popup SEM confirmar (Cancelar / X / Esc)
+    // SEGURANÇA: cancela/fecha sem confirmar
     await clicarTxt(['cancelar']).catch(() => {});
     await page.keyboard.press('Escape').catch(() => {});
-
     try { fs.writeFileSync(path.resolve(__dirname, '..', 'data', 'diag-cobranca.html'), await page.content(), 'utf8'); } catch (_) {}
 
   } catch (e) {
@@ -159,16 +166,12 @@ async function main() {
   try { fs.writeFileSync(OUT, JSON.stringify(resultado, null, 2), 'utf8'); } catch (_) {}
 
   console.log('\n────────────────────────── RESUMO ──────────────────────────');
-  if (resultado.subabasFinanceiro) console.log(`\n🗂️  Sub-abas/itens no Financeiro: ${resultado.subabasFinanceiro.join(' | ')}`);
-  console.log(`\n🔗 Links achados no popup/DOM (${resultado.linksNoDOM.length}):`);
+  console.log(`🗂️  sub-abas do Financeiro: ${resultado.subabas.join(' | ')}`);
+  console.log(`\n🔗 Links achados (${resultado.linksNoDOM.length}):`);
   resultado.linksNoDOM.forEach(u => console.log(`   ${u}`));
-  console.log(`\n🛰️  Endpoints que retornaram URL durante "ENVIAR COBRANÇA" (${resultado.endpointsCobranca.length}):`);
-  for (const e of resultado.endpointsCobranca) {
-    console.log(`   ${e.url}${e.trechoTotem ? '  ← ' + e.trechoTotem : ''}`);
-    e.urls.forEach(([k, v]) => console.log(`      ${k} = ${v}`));
-  }
-  console.log('\n✅ Detalhes em data/diag-debito.json | HTML em data/diag-cobranca.html');
-  console.log('   Me manda os links e o endpoint — é o que a automação vai usar pra pegar o link sem cobrar.\n');
+  console.log(`\n🛰️  Endpoints com URL durante ENVIAR COBRANÇA (${resultado.endpointsCobranca.length}):`);
+  for (const e of resultado.endpointsCobranca) { console.log(`   ${e.url}${e.totem ? '  ← ' + e.totem : ''}`); e.urls.forEach(([k, v]) => console.log(`      ${k} = ${v}`)); }
+  console.log('\n✅ Detalhes em data/diag-debito.json | HTML em data/diag-cobranca.html\n');
 }
 
 main();
