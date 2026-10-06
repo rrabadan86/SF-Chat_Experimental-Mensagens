@@ -132,15 +132,19 @@ async function main() {
     resultado.subabas = await page.evaluate(() => { const out = []; for (const el of document.querySelectorAll('a,button,[role="tab"],span,div,li')) { if (el.children.length > 1) continue; const t = (el.textContent || '').trim().replace(/\s+/g, ' '); if (t && t.length <= 22 && (el.offsetWidth > 0 || el.offsetHeight > 0) && !out.includes(t)) out.push(t); } return out.slice(0, 60); }).catch(() => []);
     console.log(`   🗂️  visíveis: ${resultado.subabas.join(' | ')}`);
 
-    // marca a linha (checkbox) se houver
-    await page.evaluate(() => { const cb = document.querySelector('table input[type="checkbox"], [role="row"] input[type="checkbox"]'); if (cb && !cb.checked) cb.click(); }).catch(() => {});
-    await sleep(800);
-
-    // ENVIAR COBRANÇA — só gera o link
+    // NÃO seleciono checkbox (isso abre a barra "receber/todos" — "receber" COBRA).
+    // Clico só no botão "ENVIAR COBRANÇA" (match EXATO) — abre o popup do link.
     capturarCobranca = true;
-    console.log(`\n💳 "ENVIAR COBRANÇA" (só gera; NÃO confirma)...`);
-    console.log(`   ${await clicarTxt(['enviar cobrança', 'enviar cobranca'], { exato: false }) || '⚠️  botão não achado'}`);
-    await sleep(7000);
+    console.log(`\n💳 "ENVIAR COBRANÇA" (match exato; só gera o link, NÃO cobra)...`);
+    const cliqueEnviar = await page.evaluate(() => {
+      for (const el of document.querySelectorAll('button,a,[role="button"]')) {
+        const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        if ((t === 'enviar cobrança' || t === 'enviar cobranca') && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
+      }
+      return false;
+    });
+    console.log(`   ${cliqueEnviar ? 'botão clicado' : '⚠️  botão não achado'}`);
+    await sleep(8000);
 
     resultado.linksNoDOM = await page.evaluate(() => {
       const out = new Set();
