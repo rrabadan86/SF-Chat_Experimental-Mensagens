@@ -97,18 +97,28 @@ async function main() {
     await sleep(3000); await fecharPopupNovaTela(page);
     console.log('✅ Login OK');
 
-    // Vai direto para a ficha completa da aluna (rota descoberta no v10)
-    console.log(`\n🧾 Abrindo ficha completa da aluna ${ID}...`);
-    await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/cadastro/${ID}//perfil`);
+    // Vai DIRETO para o Financeiro da ficha via URL (sem ambiguidade de menu)
+    console.log(`\n🧾 Abrindo Financeiro da aluna ${ID} via URL...`);
+    await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/cadastro/${ID}//financeiro`);
     await sleep(8000); await fecharPopupNovaTela(page);
     console.log(`   🌐 ${page.url()}`);
 
-    // Aba "Financeiro"
-    console.log(`   Financeiro: ${await clicarTxt(['financeiro']) || 'não achei'}`);
-    await sleep(5000);
+    // Lista as sub-abas/itens clicáveis visíveis (pra achar o rótulo exato)
+    const subabas = await page.evaluate(() => {
+      const out = [];
+      for (const el of document.querySelectorAll('a,button,[role="tab"],span,div,li')) {
+        if (el.children.length > 1) continue;
+        const t = (el.textContent || '').trim().replace(/\s+/g, ' ');
+        if (t && t.length <= 24 && (el.offsetWidth > 0 || el.offsetHeight > 0) && !out.includes(t)) out.push(t);
+      }
+      return out.slice(0, 70);
+    }).catch(() => []);
+    resultado.subabasFinanceiro = subabas;
+    console.log(`   🗂️  visíveis: ${subabas.join(' | ')}`);
+
     // Sub-aba "Saldo devedor"
-    console.log(`   Saldo devedor: ${await clicarTxt(['saldo devedor']) || 'não achei'}`);
-    await sleep(5000);
+    console.log(`   Saldo devedor: ${await clicarTxt(['saldo devedor'], { exato: false }) || 'não achei'}`);
+    await sleep(6000);
 
     // Marca a linha do débito (checkbox), se houver
     await page.evaluate(() => { const cb = document.querySelector('table input[type="checkbox"], [role="row"] input[type="checkbox"]'); if (cb && !cb.checked) cb.click(); }).catch(() => {});
@@ -149,6 +159,7 @@ async function main() {
   try { fs.writeFileSync(OUT, JSON.stringify(resultado, null, 2), 'utf8'); } catch (_) {}
 
   console.log('\n────────────────────────── RESUMO ──────────────────────────');
+  if (resultado.subabasFinanceiro) console.log(`\n🗂️  Sub-abas/itens no Financeiro: ${resultado.subabasFinanceiro.join(' | ')}`);
   console.log(`\n🔗 Links achados no popup/DOM (${resultado.linksNoDOM.length}):`);
   resultado.linksNoDOM.forEach(u => console.log(`   ${u}`));
   console.log(`\n🛰️  Endpoints que retornaram URL durante "ENVIAR COBRANÇA" (${resultado.endpointsCobranca.length}):`);
