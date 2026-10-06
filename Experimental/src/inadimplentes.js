@@ -137,19 +137,35 @@ async function lerInadimplentes() {
     console.log(`👥 "Com débito": ${candidatas.length} candidata(s).`);
     if (!candidatas.length) { console.log('   (nenhuma — nada a fazer)'); return resultados; }
 
-    // Bootstrap da ficha: abre a 1ª pelo nome → "Ver perfil" (dá contexto ao SPA,
-    // o que faz a navegação por hash funcionar para as demais).
-    await page.evaluate((nome) => { const n = nome.trim().toLowerCase(); for (const el of document.querySelectorAll('a,span,div,td')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if (t === n && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return; } } }, candidatas[0].nome);
-    await sleep(6000); await fecharPopupNovaTela(page);
-    await page.evaluate(() => { for (const el of document.querySelectorAll('button,a,span,div,li')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if ((t === 'ver perfil' || t === 'person ver perfil') && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return; } } });
-    await sleep(7000); await fecharPopupNovaTela(page);
+    // Helpers de navegação. O SPA do EVO só carrega o perfil (clientes/{id}/perfil)
+    // quando se clica em "Ver perfil" — navegar por hash entre clientes diferentes
+    // NÃO recarrega. Então, para CADA candidata, voltamos à segmentação, clicamos
+    // no nome e em "Ver perfil".
+    const abrirComDebito = async () => {
+      await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
+      await sleep(5000); await fecharPopupNovaTela(page);
+      for (let i = 0; i < 12; i++) {
+        const ok = await page.evaluate(() => { for (const el of document.querySelectorAll('a,li,span,div,p')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if (t === 'com débito' && el.children.length === 0 && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return true; } } return false; });
+        if (ok) break; await sleep(1500);
+      }
+      await sleep(4000);
+    };
+    const abrirFicha = async (nome) => {
+      const clicou = await page.evaluate((nome) => { const n = nome.trim().toLowerCase(); for (const el of document.querySelectorAll('a,span,div,td')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if (t === n && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return true; } } return false; }, nome);
+      if (!clicou) return false;
+      await sleep(5000); await fecharPopupNovaTela(page);
+      await page.evaluate(() => { for (const el of document.querySelectorAll('button,a,span,div,li')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if ((t === 'ver perfil' || t === 'person ver perfil') && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return; } } });
+      await sleep(7000); await fecharPopupNovaTela(page);
+      return true;
+    };
 
-    // 3) Para cada candidata: perfil (vencimento) → filtra vencidas → link se recorrente
+    // 3) Para cada candidata: abre a ficha → perfil (vencimento) → filtra → link
     for (const c of candidatas) {
       perfilAtual = null; linkAtual = null;
-      await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/cadastro/${c.idCliente}//perfil`);
-      // espera o perfil chegar (até ~12s)
-      for (let i = 0; i < 24 && !perfilAtual; i++) await sleep(500);
+      await abrirComDebito();
+      const achou = await abrirFicha(c.nome);
+      if (!achou) { console.log(`   ⚠️  ${c.nome}: não achei o nome na lista (pulando).`); continue; }
+      for (let i = 0; i < 20 && !perfilAtual; i++) await sleep(500);
       await fecharPopupNovaTela(page);
 
       if (!perfilAtual) { console.log(`   ⚠️  ${c.nome}: não li o perfil (pulando).`); continue; }
