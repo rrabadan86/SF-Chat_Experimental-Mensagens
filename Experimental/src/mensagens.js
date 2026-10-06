@@ -143,6 +143,20 @@ const CATALOGO = [
     vars: [['professora', 'a @menção da professora — mantenha o {professora} no texto (opcional)'], ['hora', 'horário da aula de sábado, ex.: 09h45']],
     padrao: '🔥 *É AMANHÃ!* 🔥\n⚡️ Estamos esperando todas vocês com a professora {professora}!\n\n⏰ Sábado às {hora}',
   },
+  {
+    chave: 'cobranca_recorrente',
+    titulo: 'Cobrança — recorrente (cartão, com link)',
+    quando: 'Enviada direto no WhatsApp da aluna com débito VENCIDO há 2+ dias cujo contrato é RECORRENTE (cartão). Leva o link de pagamento. Horário/dias no painel (Horários → Cobrança de inadimplentes).',
+    vars: [['nome', 'primeiro nome da aluna'], ['link', 'link de pagamento dela — mantenha o {link} no texto']],
+    padrao: 'Oi, {nome}! 💜 Aqui é do {studio}.\n\nNotamos que ficou um valor em aberto no seu plano. Para regularizar rapidinho é só por este link:\n{link}\n\nQualquer dúvida, é só me chamar por aqui! 😊',
+  },
+  {
+    chave: 'cobranca_boleto',
+    titulo: 'Cobrança — comum/boleto (sem link)',
+    quando: 'Enviada direto no WhatsApp da aluna com débito VENCIDO há 2+ dias cujo contrato NÃO é recorrente (boleto/pix). Sem link — direciona para a unidade. Horário/dias no painel (Horários → Cobrança de inadimplentes).',
+    vars: [['nome', 'primeiro nome da aluna'], ['vencimento', 'data de vencimento, ex.: 25/09/2026']],
+    padrao: 'Olá, {nome}! Tudo bem? 💜\n\nPassando pra avisar que o pagamento da sua mensalidade do {studio}, vencido em {vencimento}, ainda não foi identificado no sistema.\n\nPara quitar sem multa e juros, é só falar direto com a unidade pelo WhatsApp (62) 98550-8065. 😊\n\nObrigada e tenha uma ótima semana!',
+  },
 ];
 
 const PADROES = Object.fromEntries(CATALOGO.map(m => [m.chave, m.padrao]));
@@ -232,6 +246,8 @@ const EXEMPLOS = {
   hora: '09h45',
   quando: 'sexta-feira, 28/08 às 16:15',
   contrato: 'COPA SLIM 2026 - C.C. - GRUPO 1',
+  link: 'https://evo-totem.w12app.com.br/slimfit/15/site/checkout/EXEMPLO',
+  vencimento: '25/09/2026',
 };
 function exemplosCompletos() {
   return Object.assign(globais(), EXEMPLOS);
@@ -288,7 +304,7 @@ function removerFoto(chave) {
 // Todas as mensagens de WhatsApp aceitam foto (flyer), MENOS as text-only:
 //  • 'instagram' — DM do Instagram (canal diferente, tratado na aba Instagram);
 //  • 'ausentes'  — listagem de texto no grupo da equipe (enviada sem mídia).
-const SEM_FOTO = new Set(['instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes']);
+const SEM_FOTO = new Set(['instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'cobranca_recorrente', 'cobranca_boleto']);
 function aceitaFoto(chave) { const m = CATALOGO.find(x => x.chave === chave); return !!(m && !SEM_FOTO.has(m.chave)); }
 function salvarFoto(chave, dataUrl) {
   if (!aceitaFoto(chave)) throw new Error('Esta mensagem não aceita foto.');

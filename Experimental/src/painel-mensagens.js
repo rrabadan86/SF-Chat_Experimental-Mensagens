@@ -1173,6 +1173,9 @@ function paginaMensagens(aviso, erro) {
     if (mapa === 'compartilha:followup') {
       hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
         <p class="quando" style="margin:0">Segue o <b>mesmo horário do Follow-up pós-aula (ainda não fechou)</b>, logo acima — é o mesmo disparo, muda só o texto conforme a lead.</p></div>`;
+    } else if (mapa === 'compartilha:cobranca') {
+      hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
+        <p class="quando" style="margin:0">Segue o <b>mesmo horário da Cobrança — recorrente</b>, logo acima — é o mesmo disparo (débito vencido há 2+ dias), muda só o texto conforme o contrato (recorrente = com link; boleto = contato).</p></div>`;
     } else if (Array.isArray(mapa)) {
       const linhas = mapa.map(([chave, sub]) => hmap[chave] ? blocoHorario(hmap[chave], sub) : '').join('');
       const editouHora = mapa.some(([chave]) => hmap[chave] && hmap[chave].editado);
@@ -1637,6 +1640,8 @@ const HORARIOS_DA_MSG = {
   instagram:           [['instagram', '']],
   circuito_convocacao: [['circuitoConvoca', '']],
   circuito_lembrete:   [['circuitoLembrete', '']],
+  cobranca_recorrente: [['inadimplentes', '']],
+  cobranca_boleto:     'compartilha:cobranca', // mesmo disparo da cobrança — só nota
 };
 // Jobs sem texto editável, na seção "Outros envios" da aba Mensagens.
 // (os agendados manhã/tarde ficam na aba "Agendar envios", pois são dela.)

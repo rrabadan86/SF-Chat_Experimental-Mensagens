@@ -21,6 +21,8 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 
+const fs = require('fs');
+const path = require('path');
 const config = require('./config');
 const { fecharPopupNovaTela } = require('./evo-popup');
 
@@ -28,6 +30,13 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // Débito vencido há quantos dias já conta (regra do Studio: "após 2 dias").
 const DIAS_MIN_ATRASO = parseInt(process.env.INADIMPLENTES_DIAS || '2', 10);
+// Não reenvia para a mesma aluna dentro desta janela (evita mandar todo dia).
+const REENVIO_DIAS = parseInt(process.env.INADIMPLENTES_REENVIO_DIAS || '3', 10);
+// Estado dos envios (por idCliente) — gitignored, por VPS.
+const ENVIADOS_FILE = path.resolve(__dirname, '..', 'data', 'inadimplentes-enviados.json');
+function lerEnviados() { try { const o = JSON.parse(fs.readFileSync(ENVIADOS_FILE, 'utf8')); return (o && typeof o === 'object') ? o : {}; } catch (_) { return {}; } }
+function gravarEnviados(o) { try { fs.mkdirSync(path.dirname(ENVIADOS_FILE), { recursive: true }); } catch (_) {} try { fs.writeFileSync(ENVIADOS_FILE, JSON.stringify(o, null, 2), 'utf8'); } catch (_) {} }
+const primeiroNome = (nome) => String(nome || '').trim().split(/\s+/)[0] || '';
 
 // Dias de atraso entre uma data (ISO) e hoje, no fuso de São Paulo (só data).
 function diasDeAtraso(iso) {
@@ -218,24 +227,92 @@ async function lerInadimplentes() {
   return resultados;
 }
 
-// ─── CLI: dry-run (só lê e imprime; não envia, não cobra) ───────────────────
-if (require.main === module) {
-  (async () => {
+// ─── Envio ──────────────────────────────────────────────────────────────────
+// Lê os inadimplentes vencidos e envia a mensagem certa (recorrente = com link;
+// boleto/comum = sem link). dry=true: só imprime, NÃO envia. Deduplica por
+// idCliente (não reenvia dentro de REENVIO_DIAS). O scheduler chama com dry=false
+// e a sessão do WhatsApp já pronta; no CLI, inicializamos/encerramos aqui.
+async function runInadimplentes({ dry = false } = {}) {
+  const mensagens = require('./mensagens');
+  const lista = await lerInadimplentes();
+  const res = { sent: 0, skipped: 0, failed: 0, details: [] };
+  if (!lista.length) { console.log('   📭 Ninguém vencido há 2+ dias — nada a enviar.'); return res; }
+
+  const wa = dry ? null : require('./wa-client');
+  if (!dry && wa && !wa.isReady()) await wa.initWhatsApp();
+
+  const enviados = lerEnviados();
+  const agora = Date.now();
+  console.log(`\n${dry ? '🧪 DRY (nada enviado)' : '📤 Enviando'} — ${lista.length} inadimplente(s):`);
+
+  for (const r of lista) {
+    const chave = String(r.idCliente);
+    const nome = r.nome;
+
+    // Dedup: não reenvia dentro da janela.
+    const ult = enviados[chave] && enviados[chave].em ? new Date(enviados[chave].em).getTime() : 0;
+    if (ult && (agora - ult) < REENVIO_DIAS * 86400000) {
+      res.skipped++; res.details.push({ name: nome, status: 'skipped', reason: `avisada há < ${REENVIO_DIAS}d` });
+      console.log(`   ⏭️  ${nome}: já avisada nos últimos ${REENVIO_DIAS} dia(s) — pulando.`);
+      continue;
+    }
+    if (!r.celular) {
+      res.skipped++; res.details.push({ name: nome, status: 'skipped', reason: 'sem telefone' });
+      console.log(`   ⏭️  ${nome}: sem telefone — pulando.`);
+      continue;
+    }
+
+    let texto;
+    if (r.tipo === 'recorrente') {
+      if (!r.link) { res.failed++; res.details.push({ name: nome, status: 'failed', reason: 'link não gerado' }); console.log(`   ❌ ${nome}: recorrente sem link — não envio.`); continue; }
+      texto = mensagens.render('cobranca_recorrente', { nome: primeiroNome(nome), link: r.link });
+    } else {
+      texto = mensagens.render('cobranca_boleto', { nome: primeiroNome(nome), vencimento: r.vencimentoFmt });
+    }
+
+    if (dry) {
+      res.details.push({ name: nome, status: 'simulado' });
+      console.log(`\n   — ${nome} (${r.celular}) · ${r.tipo} · venc. ${r.vencimentoFmt} —\n${texto}\n`);
+      continue;
+    }
+
     try {
-      const lista = await lerInadimplentes();
-      console.log('\n────────────── RESULTADO (DRY — nada enviado) ──────────────');
-      for (const r of lista) {
-        console.log(`\n• ${r.nome}  (${r.celular || 'sem telefone'})`);
-        console.log(`  contrato: ${r.contrato}`);
-        console.log(`  venceu em ${r.vencimentoFmt} — ${r.diasAtraso} dia(s) de atraso — tipo: ${r.tipo}`);
-        if (r.tipo === 'recorrente') console.log(`  link: ${r.link || '(não gerado)'}`);
-      }
-      if (!lista.length) console.log('  (ninguém vencido há 2+ dias no momento)');
-      console.log('');
+      await wa.sendTexto(r.celular, texto, 'Cobrança de inadimplência');
+      enviados[chave] = { em: new Date().toISOString(), nome, tipo: r.tipo, vencimento: r.vencimento };
+      gravarEnviados(enviados);
+      res.sent++; res.details.push({ name: nome, phone: r.celular, status: 'sent' });
+      console.log(`   ✅ ${nome} (${r.tipo}) — enviado.`);
+      await sleep(9000 + Math.floor(Math.random() * 3000)); // 9-12s entre envios
     } catch (e) {
-      console.error('❌ erro:', e && e.message);
-    } finally { process.exit(0); }
-  })();
+      res.failed++; res.details.push({ name: nome, status: 'failed', reason: e && e.message });
+      console.log(`   ❌ ${nome}: ${e && e.message}`);
+    }
+  }
+
+  console.log(`\n📊 Cobrança de inadimplentes — enviadas: ${res.sent} | puladas: ${res.skipped} | falhas: ${res.failed}`);
+  return res;
 }
 
-module.exports = { lerInadimplentes, diasDeAtraso, ehRecorrente, fmtData, DIAS_MIN_ATRASO };
+module.exports = { lerInadimplentes, runInadimplentes, diasDeAtraso, ehRecorrente, fmtData, DIAS_MIN_ATRASO };
+
+// ─── CLI ────────────────────────────────────────────────────────────────────
+//   node src/inadimplentes.js --dry      → só lê e imprime (não envia, não cobra)
+//   node src/inadimplentes.js --enviar   → envia de verdade (inicia/encerra o WhatsApp)
+if (require.main === module) {
+  const enviar = process.argv.includes('--enviar');
+  (async () => {
+    try {
+      if (enviar) {
+        await require('./wa-client').initWhatsApp();
+        await runInadimplentes({ dry: false });
+      } else {
+        await runInadimplentes({ dry: true });
+      }
+    } catch (e) {
+      console.error('❌ erro:', e && e.message);
+    } finally {
+      if (enviar) { try { await require('./wa-client').destroy(); } catch (_) {} }
+      process.exit(0);
+    }
+  })();
+}

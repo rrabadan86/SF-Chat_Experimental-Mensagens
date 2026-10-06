@@ -84,6 +84,28 @@ function agendarCircuitoLembrete(tentativa = 1) {
     });
 }
 
+// Cobrança de inadimplentes: usa o scraper do EVO (lê débitos vencidos + gera o
+// link) e depois envia pelo WhatsApp. Como usa o EVO, respeita o jobRunning; se
+// outro job estiver rodando, espera e tenta de novo (não loga no EVO em paralelo).
+function agendarInadimplentes(tentativa = 1) {
+  if (jobRunning) {
+    if (tentativa > 6) { logError('Inadimplentes', new Error('scraper ocupado — desisti após ~9 min')); return; }
+    log(`⏳ Inadimplentes: outro job em execução — tento de novo em 90s (tentativa ${tentativa})`);
+    setTimeout(() => agendarInadimplentes(tentativa + 1), 90000);
+    return;
+  }
+  jobRunning = true;
+  atividade.setContexto('Cobrança de inadimplentes');
+  const start = new Date();
+  require('./inadimplentes').runInadimplentes({ dry: false })
+    .then(r => log(`✅ Inadimplentes concluído — ${r.sent} enviada(s), ${r.skipped} pulada(s), ${r.failed} falha(s)`))
+    .catch(err => logError('Inadimplentes', err))
+    .finally(() => {
+      jobRunning = false;
+      log(`⏱️  Inadimplentes finalizado em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
+    });
+}
+
 function log(msg) {
   const ts = new Date().toLocaleString('pt-BR', {
     timeZone: 'America/Sao_Paulo',
@@ -417,6 +439,14 @@ function checkMissedCrons() {
       validDays: [0, 1, 2, 3, 4, 5, 6], // todos os dias
       executor: () => require('./planilha-aniversarios').runPlanilhaAniversarios(),
     },
+    ...(config.jobAtivo('inadimplentes') && config.schedule.inadimplentes ? [{
+      name: 'Cobrança de inadimplentes',
+      horario: '10:20',
+      cron: config.schedule.inadimplentes,
+      scheduledMinutes: 10 * 60 + 20,
+      validDays: [1, 2, 3, 4, 5, 6], // seg-sáb (padrão; o cron real manda)
+      executor: () => require('./inadimplentes').runInadimplentes({ dry: false }),
+    }] : []),
   ];
 
   const MAX_DELAY_MINUTES = 8 * 60; // Executa se atrasou até 8 horas
@@ -527,6 +557,7 @@ function iniciarRodarJobWatcher() {
     resumoDia:         { nome: 'Resumo do dia [manual]',        fn: () => require('./resumo-dia').runResumoDia() },
     ausentes:          { nome: 'Ausentes 10 dias [manual]',     fn: () => require('./ausentes-10-dias').runAusentes10Dias() },
     planilha:          { nome: 'Planilha de aniversários [manual]', fn: () => require('./planilha-aniversarios').runPlanilhaAniversarios() },
+    inadimplentes:     { nome: 'Cobrança de inadimplentes [manual]', fn: () => require('./inadimplentes').runInadimplentes({ dry: false }) },
   };
   const t = setInterval(() => {
     let pedido = null;
@@ -882,6 +913,20 @@ async function main() {
   }
   if (config.schedule.agendadosManha) agendarEnvios('manha', '10:45 todos os dias');
   if (config.schedule.agendadosTarde) agendarEnvios('tarde', '15:45 todos os dias');
+
+  // Cobrança de inadimplentes (dias/horário editáveis no painel → Horários).
+  // Lê quem está com débito vencido há 2+ dias e manda a mensagem certa
+  // (recorrente = com link; boleto = sem link). Desligável por unidade (JOBS_OFF).
+  if (!config.jobAtivo('inadimplentes')) {
+    log('📅 Job INADIMPLENTES DESATIVADO nesta unidade (JOBS_OFF).');
+  } else if (config.schedule.inadimplentes) {
+    cron.schedule(config.schedule.inadimplentes, () => {
+      log('⏰ Cron disparado: Cobrança de inadimplentes');
+      agendarInadimplentes();
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job INADIMPLENTES agendado: ${config.schedule.inadimplentes} (10:20 seg-sáb)`);
+    console.log('   → Cobra quem está com débito vencido há 2+ dias (recorrente: link; boleto: contato)');
+  }
 
   // Schedule: a cada 5 min (05h-22h) → calcula a grade de horários NO VPS e
   // ENVIA pronta para o formulário (Render). Assim a aluna vê os horários na

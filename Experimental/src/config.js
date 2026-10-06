@@ -104,6 +104,7 @@ const config = {
     agendadosManha:   '45 10 * * *',    // 10:45 todos os dias (envios agendados no painel — turno manhã)
     agendadosTarde:   '45 15 * * *',    // 15:45 todos os dias (envios agendados no painel — turno tarde)
     comparecimento:   '0 16 * * 6',     // 16:00 sábado (cruza presença da semana no EVO → troca tags)
+    inadimplentes:    '20 10 * * 1-6',  // 10:20 seg-sáb (cobra quem está com débito vencido há 2+ dias)
   },
 
   // Filtros de horário
@@ -148,6 +149,7 @@ const _JOBS_LABEL = {
   presentes:           'Presentes de tempo de casa (grupo)',
   circuito_convocacao: 'Circuito — convocatória (quarta)',
   circuito_lembrete:   'Circuito — lembrete (sexta)',
+  inadimplentes:       'Cobrança de inadimplentes',
 };
 config.jobsOff = new Set(
   String(process.env.JOBS_OFF || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
