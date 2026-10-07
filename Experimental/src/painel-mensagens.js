@@ -1216,7 +1216,7 @@ function paginaMensagens(aviso, erro) {
   // A do Instagram é editada na aba "📸 Instagram" (fica tudo do IG lá).
   const MSGS_GRUPO = new Set(['ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'aniversario', 'circuito_convocacao', 'circuito_lembrete']);
   // 'instagram' fica na aba Instagram; as cobranças ficam na aba SoFIA → Cobrança.
-  const COBRANCA_MSGS = new Set(['cobranca_recorrente', 'cobranca_boleto']);
+  const COBRANCA_MSGS = new Set(['cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje']);
   const listaMsgs = mensagens.listar().filter(m => m.chave !== 'instagram' && !COBRANCA_MSGS.has(m.chave));
   // Individuais (1 p/ 1): "Aniversário — ex-alunas" (reativação, direto no WhatsApp)
   // aparece no TOPO, acima de "Confirmação — aula de hoje".
@@ -1670,7 +1670,8 @@ const HORARIOS_DA_MSG = {
   circuito_convocacao: [['circuitoConvoca', '']],
   circuito_lembrete:   [['circuitoLembrete', '']],
   cobranca_recorrente: [['inadimplentes', '']],
-  cobranca_boleto:     'compartilha:cobranca', // mesmo disparo da cobrança — só nota
+  cobranca_boleto:      'compartilha:cobranca', // mesmo disparo da cobrança — só nota
+  cobranca_boleto_hoje: 'compartilha:cobranca', // mesmo disparo da cobrança — só nota
 };
 // Mensagens de GRUPO que têm job agendado próprio (não estão no HORARIOS_DA_MSG
 // porque o horário delas é dia-do-mês/semana fixo, não editável aqui) — mas o
@@ -1703,7 +1704,7 @@ function cardDeMsg(m, hmap, voltar) {
       <p class="quando" style="margin:0">Segue o <b>mesmo horário do Follow-up pós-aula (ainda não fechou)</b>, logo acima — é o mesmo disparo, muda só o texto conforme a lead.</p></div>`;
   } else if (mapa === 'compartilha:cobranca') {
     hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
-      <p class="quando" style="margin:0">Segue o <b>mesmo horário da Cobrança — recorrente</b>, logo acima — é o mesmo disparo (débito vencido há 2+ dias), muda só o texto conforme o contrato (recorrente = com link; boleto = contato).</p></div>`;
+      <p class="quando" style="margin:0">Segue o <b>mesmo horário da Cobrança — recorrente</b>, logo acima — é o mesmo disparo, muda só o texto conforme o caso (recorrente = link de pagamento; boleto vencido = boleto; boleto que vence hoje = aviso + boleto).</p></div>`;
   } else if (Array.isArray(mapa)) {
     const linhas = mapa.map(([chave, sub]) => hmap[chave] ? blocoHorario(hmap[chave], sub) : '').join('');
     const editouHora = mapa.some(([chave]) => hmap[chave] && hmap[chave].editado);
@@ -5035,7 +5036,7 @@ function paginaCobranca(aviso, erro) {
   const hmap = {};
   horarios.listar().forEach(j => { hmap[j.chave] = j; });
   const VOLTAR = '/sofia?view=cobranca';
-  const cards = ['cobranca_recorrente', 'cobranca_boleto']
+  const cards = ['cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje']
     .map(ch => mensagens.listar().find(m => m.chave === ch))
     .filter(Boolean).map(m => cardDeMsg(m, hmap, VOLTAR)).join('\n');
   const corpo = `<div class="wrap">

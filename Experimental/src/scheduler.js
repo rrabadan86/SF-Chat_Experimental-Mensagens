@@ -926,8 +926,9 @@ async function main() {
   if (config.schedule.agendadosTarde) agendarEnvios('tarde', '15:45 todos os dias');
 
   // Cobrança de inadimplentes (dias/horário editáveis no painel → Horários).
-  // Lê quem está com débito vencido há 2+ dias e manda a mensagem certa
-  // (recorrente = com link; boleto = sem link). Desligável por unidade (JOBS_OFF).
+  // Lê quem está com débito vencido e manda a mensagem certa (recorrente = link de
+  // pagamento; boleto vencido = boleto; boleto que vence hoje = aviso + boleto).
+  // Desligável por unidade (JOBS_OFF).
   if (!config.jobAtivo('inadimplentes')) {
     log('📅 Job INADIMPLENTES DESATIVADO nesta unidade (JOBS_OFF).');
   } else if (config.schedule.inadimplentes) {
