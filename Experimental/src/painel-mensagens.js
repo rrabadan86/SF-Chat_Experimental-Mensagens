@@ -1678,6 +1678,10 @@ const TOGGLE_EXTRA_DA_MSG = {
   aniversariantes_mes: ['aniversMesGrupo'],
   renovacoes_mes:      ['renovacoesMesGrupo'],
   presentes:           ['presentesPend'],
+  // Confirmações de experimental: não têm cron (disparam no agendamento), então
+  // a chave do switch é a própria mensagem; o envio consulta jobsAtivos.ativo(chave).
+  confirmacao_experimental:         ['confirmacao_experimental'],
+  confirmacao_experimental_express: ['confirmacao_experimental_express'],
 };
 // Jobs que este card controla com o switch (vazio = sem switch).
 function jobsDoCard(chave) {

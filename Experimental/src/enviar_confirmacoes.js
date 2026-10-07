@@ -256,8 +256,18 @@ async function enviarConfirmacoes(page) {
     return !enviados.has(k) && (falhas[k] || 0) < MAX_TENTATIVAS;
   });
   console.log(`[confirmacoes] ${pendentes.length} pendente(s)`);
+  const jobsAtivos = require('./jobs-ativos'); // liga/desliga do envio pelo painel
   for (const row of pendentes) {
     const k = chave(row);
+    // Liga/Desliga pelo painel: se a confirmação correspondente está DESLIGADA,
+    // consome o item (marca como enviado) e NÃO envia — a confirmação é
+    // sensível ao tempo, então não deixamos pendente para disparar atrasada.
+    const chaveMsg = ehExpress(row) ? 'confirmacao_experimental_express' : 'confirmacao_experimental';
+    if (!jobsAtivos.ativo(chaveMsg)) {
+      enviados.add(k); salvarEnviados(enviados);
+      console.log(`[confirmacoes] ${row.name}: envio "${chaveMsg}" DESLIGADO no painel — não enviada.`);
+      continue;
+    }
     try {
       await enviarUma(page, row.phone, mensagemDaConfirmacao(row), chaveFotoDaConfirmacao(row));
       enviados.add(k);
