@@ -26,6 +26,7 @@ const igcfg = require('./instagram-config');
 const igApi = require('./instagram-api'); // integração OFICIAL (Graph API): webhook comentário/DM → resposta
 const igcookies = require('./instagram-cookies');
 const igforcar = require('./ig-forcar');
+const jobsAtivos = require('./jobs-ativos'); // liga/desliga de cada envio
 const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
 const bookings = require('./bookings');
@@ -926,6 +927,16 @@ function scriptPreviewTeste() {
   return `<script>
   var EXEMPLOS = ${exemplosJson};
   var EXEMPLOS_CHAVE = ${exemplosChaveJson};
+  // Liga/Desliga de um envio (salva no servidor; reverte a chave se falhar).
+  function toggleEnvio(chave, el){
+    var on = el.checked;
+    var st = document.getElementById('envst_'+chave);
+    if(st){ st.textContent = on ? '🟢 Ativado' : '🔴 Desligado'; st.style.color = on ? '#0a7d53' : '#b23b3b'; }
+    fetch('/envio/ativo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:chave,ativo:on})})
+      .then(function(r){return r.json();})
+      .then(function(j){ if(!j||!j.ok){ el.checked=!on; if(st){ st.textContent=(!on)?'🟢 Ativado':'🔴 Desligado'; st.style.color=(!on)?'#0a7d53':'#b23b3b'; } alert('Não consegui salvar o estado deste envio.'); } })
+      .catch(function(){ el.checked=!on; if(st){ st.textContent=(!on)?'🟢 Ativado':'🔴 Desligado'; st.style.color=(!on)?'#0a7d53':'#b23b3b'; } alert('Falha de conexão ao salvar.'); });
+  }
   function inserirVar(el, token){
     var ta = el.closest('form').querySelector('textarea');
     if(!ta) return;
@@ -1655,7 +1666,18 @@ function blocoHorario(info, sublabel, formId = 'fh') {
     return `<label><input type="checkbox" form="${f}" name="dias_${esc(info.chave)}" value="${i}"${on}><span>${nome}</span></label>`;
   }).join('');
   const rot = sublabel ? `Horário — ${esc(sublabel)}` : 'Horário';
-  return `<div class="hrow">
+  // Liga/Desliga deste envio (padrão ligado). Desligado → o robô NÃO dispara no
+  // horário (mas o "Enviar teste" continua funcionando).
+  const ativo = jobsAtivos.ativo(info.chave);
+  const toggle = `<div class="hrow" style="margin-bottom:10px">
+    <div><div class="lbl">Este envio${sublabel ? ' — ' + esc(sublabel) : ''}</div>
+      <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:700">
+        <input type="checkbox" ${ativo ? 'checked' : ''} onchange="toggleEnvio('${esc(info.chave)}', this)">
+        <span id="envst_${esc(info.chave)}" style="color:${ativo ? '#0a7d53' : '#b23b3b'}">${ativo ? '🟢 Ativado' : '🔴 Desligado'}</span>
+      </label>
+    </div>
+  </div>`;
+  return toggle + `<div class="hrow">
     <div><div class="lbl">${rot}</div><input type="time" form="${f}" name="hora_${esc(info.chave)}" value="${esc(info.hora)}" required></div>
     <div><div class="lbl">Dias da semana</div><div class="dias">${dias}</div></div>
   </div>`;
@@ -6723,6 +6745,22 @@ const server = http.createServer((req, res) => {
     const p = testeIg.ler(id);
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     return res.end(JSON.stringify(p ? { status: p.status, erro: p.erro } : { status: 'desconhecido' }));
+  }
+  // Liga/Desliga de um envio (toggle do card). Salva em data/jobs-ativos.json.
+  if (req.method === 'POST' && url === '/envio/ativo') {
+    return lerCorpo(req, 1e5, corpo => {
+      try {
+        const d = JSON.parse(corpo || '{}');
+        const chave = String(d.chave || '').trim();
+        if (!chave) throw new Error('sem chave');
+        const estado = jobsAtivos.setAtivo(chave, d.ativo !== false);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        return res.end(JSON.stringify({ ok: true, chave, ativo: estado }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        return res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
   }
   // Forçar as boas-vindas do IG agora (o robô, que tem o navegador, executa).
   if (req.method === 'POST' && url === '/instagram/forcar') {
