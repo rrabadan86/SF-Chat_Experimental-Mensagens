@@ -671,6 +671,17 @@ const ESTILO = `
   .dias input:checked + span{border-color:var(--teal);background:#e4efee;color:#0c6f70}
   .hbar{position:sticky;bottom:0;background:linear-gradient(180deg,transparent,var(--bg) 40%);padding:14px 0 6px;margin-top:6px}
   .badge-ed{background:var(--erro-bg);color:var(--erro);border:1px solid var(--erro-bd);border-radius:999px;font-size:var(--fs-xs);font-weight:700;padding:2px 8px;margin-left:6px}
+  /* Switch Ativado/Desligado (canto superior direito do card) */
+  .envsw{position:absolute;top:13px;right:15px;display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;z-index:2}
+  .envsw input{position:absolute;opacity:0;width:0;height:0}
+  .envsw-txt{font-family:"Inter";font-weight:800;font-size:var(--fs-xs);letter-spacing:.02em}
+  .envsw.on .envsw-txt{color:#0a7d53}
+  .envsw.off .envsw-txt{color:#98a2b3}
+  .envsw-track{position:relative;width:46px;height:26px;border-radius:999px;background:#cfd4dc;transition:background .18s ease;flex:0 0 auto}
+  .envsw.on .envsw-track{background:#2bb673}
+  .envsw-thumb{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(16,24,40,.35);transition:left .18s ease}
+  .envsw.on .envsw-thumb{left:23px}
+  .envsw:focus-within .envsw-track{outline:2px solid var(--teal);outline-offset:2px}
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:14px 0}
   .stat{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:14px;text-align:center}
   .stat .n{font-family:"Inter";font-weight:800;font-size:1.8rem;line-height:1}
@@ -927,15 +938,18 @@ function scriptPreviewTeste() {
   return `<script>
   var EXEMPLOS = ${exemplosJson};
   var EXEMPLOS_CHAVE = ${exemplosChaveJson};
-  // Liga/Desliga de um envio (salva no servidor; reverte a chave se falhar).
-  function toggleEnvio(chave, el){
+  // Liga/Desliga de um envio (switch). chavesCsv = 1+ jobs separados por vírgula.
+  function toggleEnvio(chavesCsv, el){
     var on = el.checked;
-    var st = document.getElementById('envst_'+chave);
-    if(st){ st.textContent = on ? '🟢 Ativado' : '🔴 Desligado'; st.style.color = on ? '#0a7d53' : '#b23b3b'; }
-    fetch('/envio/ativo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:chave,ativo:on})})
+    var id = chavesCsv.split(',').join('_');
+    var wrap = document.getElementById('envsw_'+id);
+    var st = document.getElementById('envst_'+id);
+    function pinta(v){ if(st) st.textContent = v ? 'Ativado' : 'Desligado'; if(wrap){ wrap.classList.toggle('on', v); wrap.classList.toggle('off', !v); } }
+    pinta(on);
+    fetch('/envio/ativo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chaves:chavesCsv.split(','),ativo:on})})
       .then(function(r){return r.json();})
-      .then(function(j){ if(!j||!j.ok){ el.checked=!on; if(st){ st.textContent=(!on)?'🟢 Ativado':'🔴 Desligado'; st.style.color=(!on)?'#0a7d53':'#b23b3b'; } alert('Não consegui salvar o estado deste envio.'); } })
-      .catch(function(){ el.checked=!on; if(st){ st.textContent=(!on)?'🟢 Ativado':'🔴 Desligado'; st.style.color=(!on)?'#0a7d53':'#b23b3b'; } alert('Falha de conexão ao salvar.'); });
+      .then(function(j){ if(!j||!j.ok){ el.checked=!on; pinta(!on); alert('Não consegui salvar o estado deste envio.'); } })
+      .catch(function(){ el.checked=!on; pinta(!on); alert('Falha de conexão ao salvar.'); });
   }
   function inserirVar(el, token){
     var ta = el.closest('form').querySelector('textarea');
@@ -1193,7 +1207,9 @@ function paginaMensagens(aviso, erro) {
       const badgeH = editouHora ? '<span class="badge-ed">alterado</span>' : '';
       hbloco = `<div class="hsec"><div class="hsec-t">Horário deste envio ${badgeH}</div>${linhas}</div>`;
     }
-    return `<div class="card">${cardMensagem(m)}${hbloco}</div>`;
+    // Switch Ativado/Desligado no canto superior direito (só p/ envios agendados).
+    const sw = Array.isArray(mapa) ? switchEnvio(mapa.map(([chave]) => chave)) : '';
+    return `<div class="card" style="position:relative">${sw}${cardMensagem(m)}${hbloco}</div>`;
   };
 
   // Mensagens que vão para GRUPOS do WhatsApp (o resto é individual, 1 para 1).
@@ -1666,21 +1682,24 @@ function blocoHorario(info, sublabel, formId = 'fh') {
     return `<label><input type="checkbox" form="${f}" name="dias_${esc(info.chave)}" value="${i}"${on}><span>${nome}</span></label>`;
   }).join('');
   const rot = sublabel ? `Horário — ${esc(sublabel)}` : 'Horário';
-  // Liga/Desliga deste envio (padrão ligado). Desligado → o robô NÃO dispara no
-  // horário (mas o "Enviar teste" continua funcionando).
-  const ativo = jobsAtivos.ativo(info.chave);
-  const toggle = `<div class="hrow" style="margin-bottom:10px">
-    <div><div class="lbl">Este envio${sublabel ? ' — ' + esc(sublabel) : ''}</div>
-      <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:700">
-        <input type="checkbox" ${ativo ? 'checked' : ''} onchange="toggleEnvio('${esc(info.chave)}', this)">
-        <span id="envst_${esc(info.chave)}" style="color:${ativo ? '#0a7d53' : '#b23b3b'}">${ativo ? '🟢 Ativado' : '🔴 Desligado'}</span>
-      </label>
-    </div>
-  </div>`;
-  return toggle + `<div class="hrow">
+  return `<div class="hrow">
     <div><div class="lbl">${rot}</div><input type="time" form="${f}" name="hora_${esc(info.chave)}" value="${esc(info.hora)}" required></div>
     <div><div class="lbl">Dias da semana</div><div class="dias">${dias}</div></div>
   </div>`;
+}
+
+// Switch Ativado/Desligado (deslizante) para o canto superior direito do card.
+// chaves = jobs que este envio controla (1 ou mais). Padrão ligado.
+function switchEnvio(chaves) {
+  const lista = (Array.isArray(chaves) ? chaves : [chaves]).filter(Boolean);
+  if (!lista.length) return '';
+  const on = lista.every(c => jobsAtivos.ativo(c));
+  const id = lista.join('_');
+  return `<label class="envsw ${on ? 'on' : 'off'}" title="Ligar/desligar este envio" id="envsw_${esc(id)}">
+    <span class="envsw-txt" id="envst_${esc(id)}">${on ? 'Ativado' : 'Desligado'}</span>
+    <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleEnvio('${esc(lista.join(','))}', this)">
+    <span class="envsw-track"><span class="envsw-thumb"></span></span>
+  </label>`;
 }
 
 // Hora 'HH:MM' de um job (override ou padrão) — usada nos rótulos do /agendar.
@@ -6751,11 +6770,13 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e5, corpo => {
       try {
         const d = JSON.parse(corpo || '{}');
-        const chave = String(d.chave || '').trim();
-        if (!chave) throw new Error('sem chave');
-        const estado = jobsAtivos.setAtivo(chave, d.ativo !== false);
+        const chaves = Array.isArray(d.chaves) ? d.chaves : (d.chave ? [d.chave] : []);
+        const limpa = chaves.map(c => String(c || '').trim()).filter(Boolean);
+        if (!limpa.length) throw new Error('sem chave');
+        const on = d.ativo !== false;
+        limpa.forEach(c => jobsAtivos.setAtivo(c, on));
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-        return res.end(JSON.stringify({ ok: true, chave, ativo: estado }));
+        return res.end(JSON.stringify({ ok: true, chaves: limpa, ativo: on }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
         return res.end(JSON.stringify({ ok: false, erro: e.message }));
