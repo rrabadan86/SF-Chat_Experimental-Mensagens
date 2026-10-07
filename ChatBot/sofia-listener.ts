@@ -1602,6 +1602,19 @@ const COBRANCA_OUTBOX = (() => {
 })();
 try { console.log(`[sofia] fila de cobrança: ${COBRANCA_OUTBOX}${fs.existsSync(COBRANCA_OUTBOX) ? " (existe)" : " (vazia/ainda não criada)"}`); } catch {}
 const COBRANCA_MAX_TENTATIVAS = 3;
+// Marca a aluna como "avisada" só QUANDO O ENVIO É CONFIRMADO (não ao enfileirar).
+// O robô (inadimplentes.js) lê este arquivo para o anti-reenvio. Fica ao lado da
+// fila de cobrança (Experimental/data/inadimplentes-enviados.json).
+const ENVIADOS_COBRANCA = COBRANCA_OUTBOX.replace(/cobranca-outbox\.jsonl.*$/, "inadimplentes-enviados.json");
+function marcarCobrancaEnviada(idCliente: any, nome: string, tipo: string) {
+  if (!idCliente) return;
+  try {
+    let o: any = {};
+    try { o = JSON.parse(fs.readFileSync(ENVIADOS_COBRANCA, "utf8")) || {}; } catch {}
+    o[String(idCliente)] = { em: new Date().toISOString(), nome, tipo, por: "sofia" };
+    fs.writeFileSync(ENVIADOS_COBRANCA, JSON.stringify(o, null, 2), "utf8");
+  } catch {}
+}
 let processandoCobranca = false;
 async function processarCobranca() {
   if (processandoCobranca || !pronta) return;
@@ -1628,6 +1641,7 @@ async function processarCobranca() {
         const chaveInbox = alvo.endsWith("@c.us") ? jidParaTel(alvo) : (telefone.startsWith("55") ? telefone : "55" + telefone);
         await enviar(alvo, texto);
         registrarInbox(chaveInbox, alvo, String(ent?.nome || ""), "sofia", texto); // cai na conversa da aluna
+        marcarCobrancaEnviada(ent?.idCliente, String(ent?.nome || ""), String(ent?.tipo || "")); // só marca "avisada" após confirmar
         log(`cobrança enviada para ${ent?.nome || telefone}.`);
         await new Promise((r) => setTimeout(r, 10000 + Math.floor(Math.random() * 3000))); // 10-13s entre cobranças
       } catch (e: any) {

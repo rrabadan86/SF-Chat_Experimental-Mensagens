@@ -41,10 +41,20 @@ const cfg = require('./inadimplentes-config');
 const REENVIO_DIAS = parseInt(process.env.INADIMPLENTES_REENVIO_DIAS || '3', 10);
 // Fila de cobrança consumida pela SoFIA (envia pelo NÚMERO dela, não o do robô).
 const OUTBOX_FILE = process.env.COBRANCA_OUTBOX_FILE || path.resolve(__dirname, '..', 'data', 'cobranca-outbox.jsonl');
-// Estado dos envios (por idCliente) — gitignored, por VPS.
+// Estado dos envios (por idCliente) — gitignored, por VPS. Escrito pela SoFIA SÓ
+// quando ela confirma o envio (ChatBot/sofia-listener.ts: marcarCobrancaEnviada).
 const ENVIADOS_FILE = path.resolve(__dirname, '..', 'data', 'inadimplentes-enviados.json');
 function lerEnviados() { try { const o = JSON.parse(fs.readFileSync(ENVIADOS_FILE, 'utf8')); return (o && typeof o === 'object') ? o : {}; } catch (_) { return {}; } }
-function gravarEnviados(o) { try { fs.mkdirSync(path.dirname(ENVIADOS_FILE), { recursive: true }); } catch (_) {} try { fs.writeFileSync(ENVIADOS_FILE, JSON.stringify(o, null, 2), 'utf8'); } catch (_) {} }
+// idClientes que já estão na fila (cobranca-outbox.jsonl), aguardando envio — para
+// não enfileirar de novo a mesma aluna antes de a SoFIA processar.
+function lerPendentesOutbox() {
+  const set = new Set();
+  try {
+    const txt = fs.readFileSync(OUTBOX_FILE, 'utf8');
+    for (const l of txt.split('\n')) { const s = l.trim(); if (!s) continue; try { const o = JSON.parse(s); if (o && o.idCliente != null) set.add(String(o.idCliente)); } catch (_) {} }
+  } catch (_) {}
+  return set;
+}
 const primeiroNome = (nome) => String(nome || '').trim().split(/\s+/)[0] || '';
 const soDigitos = (s) => String(s || '').replace(/\D/g, '');
 
@@ -175,20 +185,27 @@ async function lerInadimplentes() {
     await sleep(7000); await fecharPopupNovaTela(page);
     return true;
   };
-  // Abre a ficha da aluna buscando pelo ID no campo de pesquisa global (aceita ID).
-  const abrirFichaPorId = async (idCliente) => {
+  // Abre a ficha da aluna pela BUSCA (campo global que aceita nome/ID). Digita o
+  // NOME, clica no resultado (de preferência a linha que contém o ID) e em "Ver
+  // perfil" — como fizemos no diagnóstico que funcionou. Chega no perfil, o que
+  // dispara /api/v1/boletos (urlBoleto) e as chamadas com o telefone.
+  const abrirFichaBusca = async (nome, idCliente) => {
     const campo = await page.$('input[placeholder*="Pesquise por nome" i], input[aria-label*="Pesquise por nome" i]');
     if (!campo) return false;
     await campo.click({ clickCount: 3 });
-    await campo.type(String(idCliente), { delay: 60 });
-    await sleep(2500);
-    await page.keyboard.press('Enter').catch(() => {});
-    await sleep(6000); await fecharPopupNovaTela(page);
-    // Se o Enter não abriu a ficha, tenta clicar o 1º resultado.
-    if (!/cadastro\/\d+/.test(page.url())) {
-      await page.evaluate(() => { const r = document.querySelector('a[href*="cadastro/"], .resultado-busca a, [role="option"]'); if (r) r.click(); });
-      await sleep(5000); await fecharPopupNovaTela(page);
-    }
+    await campo.type(String(nome), { delay: 55 });
+    await sleep(4500); await fecharPopupNovaTela(page);
+    const partes = String(nome).toLowerCase().split(/\s+/).filter(Boolean);
+    const clicou = await page.evaluate(({ partes, id }) => {
+      const cands = [...document.querySelectorAll('a,td,span,div,li')];
+      if (id) { const re = new RegExp('(^|\\D)' + id + '(\\D|$)'); for (const el of cands) { if (el.children.length > 4) continue; const t = (el.textContent || '').trim(); if (re.test(t) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return 'id'; } } }
+      for (const el of cands) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if (t.length <= 120 && partes[0] && t.includes(partes[0]) && t.includes(partes[partes.length - 1]) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return 'nome'; } }
+      return null;
+    }, { partes, id: idCliente });
+    if (!clicou) { await page.keyboard.press('Enter').catch(() => {}); }
+    await sleep(5000); await fecharPopupNovaTela(page);
+    await page.evaluate(() => { for (const el of document.querySelectorAll('button,a,span,div,li')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if ((t === 'ver perfil' || t === 'person ver perfil') && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return; } } });
+    await sleep(7000); await fecharPopupNovaTela(page);
     return /cadastro\/\d+/.test(page.url());
   };
 
@@ -261,31 +278,37 @@ async function lerInadimplentes() {
     for (let i = 0; i < 16 && !listaBoletos; i++) { await sleep(800); await fecharPopupNovaTela(page); }
     console.log(`   · carga automática (período padrão): ${listaBoletos ? listaBoletos.length + ' boleto(s)' : 'nada'}`);
 
+    // A tela é um IFRAME do sistema legado (evo3). Repetimos a requisição DENTRO
+    // desse iframe (mesma origem → sem CORS) com um período amplo e pageSize grande.
     const JANELA = parseInt(process.env.INADIMPLENTES_BOLETO_JANELA || '120', 10);
     const d2 = (dt) => `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`;
     const hojeSp = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
     const dtIni = d2(new Date(hojeSp.getTime() - JANELA * 86400000));
     const dtFim = d2(hojeSp);
     try {
-      const body = `sort=&page=1&pageSize=5000&group=&filter=&aberto=true&pago=false&cancelado=false&ID_CLIENTE=0&ID_FORNECEDOR=0&ID_FUNCIONARIO=0&ID_PROSPECT=0&ID_PERSONAL=0&ID_CONVENIO=0&dtIni=${encodeURIComponent(dtIni)}&dtFim=${encodeURIComponent(dtFim)}`;
-      const resp = await page.evaluate(async (body) => {
-        try {
-          const r = await fetch('https://evo3.w12app.com.br/Financeiro/Boletos/CarregarListaBoletos', {
-            method: 'POST', credentials: 'include',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
-            body,
-          });
-          const t = await r.text();
-          return { ok: r.ok, status: r.status, text: t.slice(0, 8_000_000) };
-        } catch (e) { return { ok: false, error: String(e) }; }
-      }, body);
-      if (resp && resp.ok && resp.text) {
-        const d = JSON.parse(resp.text);
-        const l = Array.isArray(d) ? d : (d.Data || d.data || d.$values || []);
-        if (Array.isArray(l)) listaBoletos = l;
-        console.log(`   · busca ampla [${dtIni} → ${dtFim}]: ${l.length} boleto(s) em aberto.`);
-      } else {
-        console.log(`   · busca ampla falhou (${resp && (resp.status || resp.error)}) — usando a carga padrão.`);
+      const frame = page.frames().find(f => /evo3\.w12app|\/Financeiro\//i.test(f.url())) || null;
+      console.log(`   · iframe evo3: ${frame ? 'encontrado' : 'NÃO encontrado (usando carga padrão)'}`);
+      if (frame) {
+        const body = `sort=&page=1&pageSize=5000&group=&filter=&aberto=true&pago=false&cancelado=false&ID_CLIENTE=0&ID_FORNECEDOR=0&ID_FUNCIONARIO=0&ID_PROSPECT=0&ID_PERSONAL=0&ID_CONVENIO=0&dtIni=${encodeURIComponent(dtIni)}&dtFim=${encodeURIComponent(dtFim)}`;
+        const resp = await frame.evaluate(async (body) => {
+          try {
+            const r = await fetch('/Financeiro/Boletos/CarregarListaBoletos', {
+              method: 'POST', credentials: 'include',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+              body,
+            });
+            const t = await r.text();
+            return { ok: r.ok, status: r.status, text: t.slice(0, 8_000_000) };
+          } catch (e) { return { ok: false, error: String(e) }; }
+        }, body);
+        if (resp && resp.ok && resp.text) {
+          const d = JSON.parse(resp.text);
+          const l = Array.isArray(d) ? d : (d.Data || d.data || d.$values || []);
+          if (Array.isArray(l)) listaBoletos = l;
+          console.log(`   · busca ampla [${dtIni} → ${dtFim}]: ${l.length} boleto(s) em aberto.`);
+        } else {
+          console.log(`   · busca ampla falhou (${resp && (resp.status || resp.error)}) — usando a carga padrão.`);
+        }
       }
     } catch (e) { console.log('   · (erro na busca ampla:', e.message, '— usando a carga padrão.)'); }
 
@@ -314,7 +337,7 @@ async function lerInadimplentes() {
       if (vistos.has(String(idCliente))) { console.log(`   ⏭️  ${b.NOME}: já incluída pelo recorrente.`); continue; }
       const dias = hojeDias(b.DT_VENCIMENTO);
       boletosCliente = null; telefoneAtual = null;
-      const ok = await abrirFichaPorId(idCliente);
+      const ok = await abrirFichaBusca(b.NOME, idCliente);
       if (!ok) { console.log(`   ⚠️  ${b.NOME} (id ${idCliente}): não abri a ficha (pulando).`); continue; }
       for (let i = 0; i < 20 && !boletosCliente; i++) await sleep(500);
       // link do boleto: casa pelo ID_BOLETO; senão, o mais próximo do vencimento.
@@ -352,7 +375,8 @@ async function runInadimplentes({ dry = false } = {}) {
   const res = { enfileirados: 0, skipped: 0, failed: 0, details: [] };
   if (!lista.length) { console.log('   📭 Ninguém a cobrar — nada a enfileirar.'); return res; }
 
-  const enviados = lerEnviados();
+  const enviados = lerEnviados();         // escrito pela SoFIA SÓ quando confirma o envio
+  const pendentes = lerPendentesOutbox(); // já na fila, ainda não enviados pela SoFIA
   const agora = Date.now();
   const linhas = [];
   console.log(`\n${dry ? '🧪 DRY (nada enfileirado)' : '📥 Enfileirando para a SoFIA'} — ${lista.length} inadimplente(s):`);
@@ -364,7 +388,12 @@ async function runInadimplentes({ dry = false } = {}) {
     const ult = enviados[chave] && enviados[chave].em ? new Date(enviados[chave].em).getTime() : 0;
     if (ult && (agora - ult) < REENVIO_DIAS * 86400000) {
       res.skipped++; res.details.push({ name: nome, status: 'skipped', reason: `avisada há < ${REENVIO_DIAS}d` });
-      console.log(`   ⏭️  ${nome}: já avisada nos últimos ${REENVIO_DIAS} dia(s) — pulando.`);
+      console.log(`   ⏭️  ${nome}: já avisada (enviada) nos últimos ${REENVIO_DIAS} dia(s) — pulando.`);
+      continue;
+    }
+    if (pendentes.has(chave)) {
+      res.skipped++; res.details.push({ name: nome, status: 'skipped', reason: 'já na fila da SoFIA' });
+      console.log(`   ⏭️  ${nome}: já está na fila da SoFIA (aguardando envio) — não duplico.`);
       continue;
     }
     if (!r.celular) {
@@ -395,7 +424,8 @@ async function runInadimplentes({ dry = false } = {}) {
       telefone: r.celular, texto, nome, tipo: r.tipo, chaveMsg, idCliente: r.idCliente,
       em: new Date().toISOString(),
     }));
-    enviados[chave] = { em: new Date().toISOString(), nome, tipo: r.tipo, vencimento: r.vencimento };
+    // NÃO marca "avisada" aqui — a SoFIA marca SÓ quando confirmar o envio
+    // (evita marcar quem não recebeu por falha de envio).
     res.enfileirados++; res.details.push({ name: nome, phone: r.celular, status: 'enfileirado' });
     console.log(`   📥 ${nome} (${chaveMsg}) — enfileirada para a SoFIA.`);
   }
@@ -403,7 +433,6 @@ async function runInadimplentes({ dry = false } = {}) {
   if (!dry && linhas.length) {
     try { fs.mkdirSync(path.dirname(OUTBOX_FILE), { recursive: true }); } catch (_) {}
     fs.appendFileSync(OUTBOX_FILE, linhas.join('\n') + '\n', 'utf8');
-    gravarEnviados(enviados);
     console.log(`   📤 ${linhas.length} mensagem(ns) na fila da SoFIA → ${OUTBOX_FILE}`);
   }
 
