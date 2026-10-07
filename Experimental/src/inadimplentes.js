@@ -39,8 +39,6 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const cfg = require('./inadimplentes-config');
 // Não reenvia para a mesma aluna dentro desta janela (evita mandar todo dia).
 const REENVIO_DIAS = parseInt(process.env.INADIMPLENTES_REENVIO_DIAS || '3', 10);
-// Quantos dias para trás varrer boletos vencidos na tela global (padrão 120).
-const BOLETO_JANELA_DIAS = parseInt(process.env.INADIMPLENTES_BOLETO_JANELA || '120', 10);
 // Fila de cobrança consumida pela SoFIA (envia pelo NÚMERO dela, não o do robô).
 const OUTBOX_FILE = process.env.COBRANCA_OUTBOX_FILE || path.resolve(__dirname, '..', 'data', 'cobranca-outbox.jsonl');
 // Estado dos envios (por idCliente) — gitignored, por VPS.
@@ -125,6 +123,12 @@ async function lerInadimplentes() {
         const d = JSON.parse(await res.text());
         const l = Array.isArray(d) ? d : (d.$values || d.retorno || d.data || d.lista || []);
         if (Array.isArray(l) && l.length) boletosCliente = l;
+        return;
+      }
+      if (/recebimentos\/saldo-devedor\/dados-envio-cobranca/i.test(url)) {
+        const d = JSON.parse(await res.text());
+        const link = (d && (d.url || d.link)) || (typeof d === 'string' ? d : null);
+        if (link && /^https?:\/\//.test(link)) linkAtual = link;
         return;
       }
       if (/\/clientes\/\d+\/perfil/i.test(url)) {
@@ -247,31 +251,13 @@ async function lerInadimplentes() {
     }
 
     // ════════ PASSO B — BOLETO (tela global Integração Bancária) ════════
+    // A tela carrega sozinha a lista de boletos do período padrão (em aberto,
+    // ~últimos 30 dias de vencimento + hoje), que é a janela de cobrança. Só
+    // lemos o que ela trouxe (CarregarListaBoletos) — sem mexer nos filtros.
     console.log('\n🧾 Boletos — tela global (Integração Bancária)...');
     listaBoletos = null;
     await irPara('evo3/-Financeiro-Boletos-IntegracaoBancaria', 9000);
-    // Amplia o período: início = hoje - BOLETO_JANELA_DIAS, fim = hoje. (Se falhar,
-    // segue com o período padrão da tela.) Depois clica a busca.
-    try {
-      const ini = new Date(Date.now() - BOLETO_JANELA_DIAS * 86400000);
-      const dataIni = `${String(ini.getDate()).padStart(2, '0')}/${String(ini.getMonth() + 1).padStart(2, '0')}/${ini.getFullYear()}`;
-      await page.evaluate((val) => {
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-        const datas = [...document.querySelectorAll('input')].filter(i => /^\d{2}\/\d{2}\/\d{4}$/.test(i.value || ''));
-        if (datas.length) { const inp = datas[0]; setter.call(inp, val); inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true })); inp.blur(); }
-      }, dataIni);
-      await sleep(1000);
-      await page.evaluate(() => {
-        for (const el of document.querySelectorAll('button, a, [role="button"]')) {
-          if (el.closest('table tbody')) continue;
-          const blob = `${(el.textContent || '').trim()} ${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''} ${el.className || ''}`.toLowerCase();
-          if (/excluir|lixeir|remov|cancelar|export|email|e-mail|imprimir/.test(blob)) continue;
-          const rect = el.getBoundingClientRect();
-          if (/pesquis|buscar|consultar|filtrar|search|lupa/.test(blob) && rect.top < 320 && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return; }
-        }
-      });
-      await sleep(6000);
-    } catch (_) {}
+    for (let i = 0; i < 16 && !listaBoletos; i++) { await sleep(800); await fecharPopupNovaTela(page); }
 
     const hojeDias = (iso) => diasDeAtraso(iso);
     const boletosAbertos = (listaBoletos || []).filter(b => {
