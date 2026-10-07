@@ -356,7 +356,11 @@ async function lerInadimplentes() {
       boletosCliente = null; telefoneAtual = null;
       const ok = await abrirFichaBusca(b.NOME);
       if (!ok) { console.log(`   ⚠️  ${b.NOME} (id ${idCliente}): não abri a ficha (pulando).`); continue; }
-      for (let i = 0; i < 20 && !boletosCliente; i++) await sleep(500);
+      // Já com o cliente carregado, vai para a aba Boletos (dispara /api/v1/boletos
+      // com os urlBoleto). O id vem da URL da ficha (pode diferir do ID_CLIENTE_PAGADOR).
+      const mId = /cadastro\/(\d+)\//.exec(page.url());
+      if (mId) await irPara(`clientes/cadastro/${mId[1]}//financeiro/boletos`, 6000);
+      for (let i = 0; i < 24 && !boletosCliente; i++) await sleep(500);
       // link do boleto: casa pelo ID_BOLETO; senão, o mais próximo do vencimento.
       let urlBoleto = null;
       if (Array.isArray(boletosCliente)) {
