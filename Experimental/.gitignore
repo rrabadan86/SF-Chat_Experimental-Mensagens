@@ -97,3 +97,5 @@ data/inadimplentes-enviados.json
 # Saídas locais dos diagnósticos de débito
 data/diag-debito.json
 data/diag-*.html
+# Liga/Desliga de cada envio (por VPS)
+data/jobs-ativos.json
