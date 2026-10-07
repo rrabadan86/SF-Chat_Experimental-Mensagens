@@ -146,14 +146,14 @@ const CATALOGO = [
   {
     chave: 'cobranca_recorrente',
     titulo: 'Cobrança — recorrente (cartão, com link)',
-    quando: 'Enviada direto no WhatsApp da aluna com débito VENCIDO há 2+ dias cujo contrato é RECORRENTE (cartão). Leva o link de pagamento. Horário/dias no painel (Horários → Cobrança de inadimplentes).',
+    quando: 'Enviada pela SoFIA para a aluna com débito VENCIDO (dias de atraso configuráveis na aba Cobrança) cujo contrato é RECORRENTE (cartão). Leva o link de pagamento. Horário/dias também na aba Cobrança.',
     vars: [['nome', 'primeiro nome da aluna'], ['link', 'link de pagamento dela — mantenha o {link} no texto']],
     padrao: 'Oi, {nome}! 💜 Aqui é do {studio}.\n\nNotamos que ficou um valor em aberto no seu plano. Para regularizar rapidinho é só por este link:\n{link}\n\nQualquer dúvida, é só me chamar por aqui! 😊',
   },
   {
     chave: 'cobranca_boleto',
     titulo: 'Cobrança — comum/boleto (sem link)',
-    quando: 'Enviada direto no WhatsApp da aluna com débito VENCIDO há 2+ dias cujo contrato NÃO é recorrente (boleto/pix). Sem link — direciona para a unidade. Horário/dias no painel (Horários → Cobrança de inadimplentes).',
+    quando: 'Enviada pela SoFIA para a aluna com débito VENCIDO (dias de atraso configuráveis na aba Cobrança) cujo contrato NÃO é recorrente (boleto/pix). Sem link — direciona para a unidade. Horário/dias também na aba Cobrança.',
     vars: [['nome', 'primeiro nome da aluna'], ['vencimento', 'data de vencimento, ex.: 25/09/2026']],
     padrao: 'Olá, {nome}! Tudo bem? 💜\n\nPassando pra avisar que o pagamento da sua mensalidade do {studio}, vencido em {vencimento}, ainda não foi identificado no sistema.\n\nPara quitar sem multa e juros, é só falar direto com a unidade pelo WhatsApp (62) 98550-8065. 😊\n\nObrigada e tenha uma ótima semana!',
   },

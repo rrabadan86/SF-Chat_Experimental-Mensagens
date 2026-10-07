@@ -102,3 +102,5 @@ data/jobs-ativos.json
 # Fila de cobrança (robô grava, SoFIA envia) — por VPS
 data/cobranca-outbox.jsonl
 data/cobranca-outbox.jsonl.*
+# Config da cobrança (dias de atraso) — por VPS
+data/inadimplentes-config.json
