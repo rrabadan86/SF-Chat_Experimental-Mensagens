@@ -27,6 +27,7 @@ const igApi = require('./instagram-api'); // integração OFICIAL (Graph API): w
 const igcookies = require('./instagram-cookies');
 const igforcar = require('./ig-forcar');
 const jobsAtivos = require('./jobs-ativos'); // liga/desliga de cada envio
+const inadConfig = require('./inadimplentes-config'); // "vencido há X+ dias" (configurável)
 const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
 const bookings = require('./bookings');
@@ -5043,7 +5044,18 @@ function paginaCobranca(aviso, erro) {
     ${barraTeste()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"><input type="hidden" name="voltar" value="${esc(VOLTAR)}"></form>
     <div class="card" style="background:#f6fbf9;border-left:4px solid var(--teal)">
-      <p class="quando" style="margin:0">Enviadas <b>pelo número da SoFIA</b> (não o da recepção), para alunas com débito <b>vencido há 2+ dias</b>. O robô lê os débitos no EVO no horário abaixo, gera o link e a SoFIA envia. Use o <b>switch</b> no canto do card para ligar/desligar cada mensagem.</p>
+      <p class="quando" style="margin:0">Enviadas <b>pelo número da SoFIA</b> (não o da recepção), para alunas com débito <b>vencido há ${inadConfig.lerDias()}+ dia(s)</b>. O robô lê os débitos no EVO no horário abaixo, gera o link e a SoFIA envia. Use o <b>switch</b> no canto do card para ligar/desligar cada mensagem.</p>
+    </div>
+    <div class="card">
+      <div class="chead" style="margin:0"><h2 style="font-size:.98rem">⏱️ A partir de quantos dias de atraso cobrar?</h2></div>
+      <p class="quando" style="margin:6px 0 10px">Só entra na cobrança quem está vencido há <b>este número de dias ou mais</b>. Ex.: <b>2</b> → cobra a partir de 2 dias de atraso; <b>4</b> → só a partir de 4.</p>
+      <form method="POST" action="/cobranca/config" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <label style="font-weight:700">Vencido há
+          <input type="number" name="dias" min="${inadConfig.MIN}" max="${inadConfig.MAX}" value="${inadConfig.lerDias()}" required style="width:70px;margin:0 6px;padding:6px;border:1px solid var(--linha);border-radius:8px;text-align:center">
+          + dia(s)
+        </label>
+        <button type="submit" class="save" style="padding:8px 16px">Salvar</button>
+      </form>
     </div>
     ${cards || '<div class="card">Mensagens de cobrança não encontradas no catálogo.</div>'}
     <div class="hbar">
@@ -5785,6 +5797,19 @@ const server = http.createServer((req, res) => {
       }
     });
   }
+  // Config da cobrança: "vencido há X+ dias" (não precisa reiniciar — lido a cada run).
+  if (req.method === 'POST' && url === '/cobranca/config') {
+    return lerCorpo(req, 1e5, corpo => {
+      try {
+        const p = new URLSearchParams(corpo);
+        const v = inadConfig.salvarDias(p.get('dias'));
+        res.writeHead(303, { Location: '/sofia?view=cobranca&okdias=' + v }); return res.end();
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(paginaCobranca('Erro ao salvar: ' + e.message, true));
+      }
+    });
+  }
 
   // Página de agendamentos
   if (req.method === 'GET' && (url === '/agendar')) {
@@ -5906,7 +5931,8 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && url === '/sofia') {
     const q = req.url.split('?')[1] || '';
     let aviso = '', erro = false;
-    if (/(?:^|&)ok=1/.test(q)) aviso = 'Salvo! As próximas conversas já usam estas configurações.';
+    if (/(?:^|&)okdias=\d+/.test(q)) aviso = '⏱️ Salvo! A cobrança passa a começar a partir de ' + ((q.match(/okdias=(\d+)/) || [])[1] || '?') + ' dia(s) de atraso.';
+    else if (/(?:^|&)ok=1/.test(q)) aviso = 'Salvo! As próximas conversas já usam estas configurações.';
     else if (/(?:^|&)okma=\d+/.test(q)) aviso = '📣 Boas-vindas do anúncio salvas (' + ((q.match(/okma=(\d+)/) || [])[1] || '0') + ') — a SoFIA não se pausa mais com elas.';
     else if (/(?:^|&)on=1/.test(q)) aviso = '🟢 SoFIA ativada — voltou a responder as alunas.';
     else if (/(?:^|&)off=1/.test(q)) aviso = '⏸️ SoFIA pausada — atenda manualmente pelo WhatsApp.';

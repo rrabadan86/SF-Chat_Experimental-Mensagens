@@ -29,7 +29,8 @@ const { fecharPopupNovaTela } = require('./evo-popup');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // Débito vencido há quantos dias já conta (regra do Studio: "após 2 dias").
-const DIAS_MIN_ATRASO = parseInt(process.env.INADIMPLENTES_DIAS || '2', 10);
+// Limite "vencido há X+ dias" — configurável no painel (data/inadimplentes-config.json).
+const cfg = require('./inadimplentes-config');
 // Não reenvia para a mesma aluna dentro desta janela (evita mandar todo dia).
 const REENVIO_DIAS = parseInt(process.env.INADIMPLENTES_REENVIO_DIAS || '3', 10);
 // Fila de cobrança consumida pela SoFIA (envia pelo NÚMERO dela, não o do robô).
@@ -60,10 +61,11 @@ function fmtData(iso) {
 function ehRecorrente(contrato) { return /recorrente/i.test(String(contrato || '')); }
 
 async function lerInadimplentes() {
+  const diasMin = cfg.lerDias(); // limite configurável no painel
   console.log('\n═══════════════════════════════════════════════════');
   console.log('💳 Inadimplentes — lendo débitos vencidos no EVO...');
   console.log('═══════════════════════════════════════════════════');
-  console.log(`   Regra: vencido há ${DIAS_MIN_ATRASO}+ dia(s) e ainda em aberto.\n`);
+  console.log(`   Regra: vencido há ${diasMin}+ dia(s) e ainda em aberto.\n`);
 
   const browser = await puppeteer.launch({
     headless: 'new',
@@ -194,8 +196,8 @@ async function lerInadimplentes() {
       const dias = diasDeAtraso(perfilAtual.vencimento);
       const base = { ...c, vencimento: perfilAtual.vencimento, vencimentoFmt: fmtData(perfilAtual.vencimento), diasAtraso: dias, valor: perfilAtual.valor };
 
-      if (dias == null || dias < DIAS_MIN_ATRASO) {
-        console.log(`   ⏭️  ${c.nome}: venc. ${base.vencimentoFmt} (atraso ${dias}d) — ainda não entra (< ${DIAS_MIN_ATRASO}d).`);
+      if (dias == null || dias < diasMin) {
+        console.log(`   ⏭️  ${c.nome}: venc. ${base.vencimentoFmt} (atraso ${dias}d) — ainda não entra (< ${diasMin}d).`);
         continue;
       }
       const recorrente = ehRecorrente(c.contrato);
@@ -299,7 +301,7 @@ async function runInadimplentes({ dry = false } = {}) {
   return res;
 }
 
-module.exports = { lerInadimplentes, runInadimplentes, diasDeAtraso, ehRecorrente, fmtData, DIAS_MIN_ATRASO, OUTBOX_FILE };
+module.exports = { lerInadimplentes, runInadimplentes, diasDeAtraso, ehRecorrente, fmtData, OUTBOX_FILE };
 
 // ─── CLI ────────────────────────────────────────────────────────────────────
 //   node src/inadimplentes.js            → só lê e imprime (dry, não enfileira)
