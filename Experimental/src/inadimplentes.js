@@ -195,28 +195,34 @@ async function lerInadimplentes() {
   // NOME, clica no resultado (de preferência a linha que contém o ID) e em "Ver
   // perfil" — como fizemos no diagnóstico que funcionou. Chega no perfil, o que
   // dispara /api/v1/boletos (urlBoleto) e as chamadas com o telefone.
-  const abrirFichaBusca = async (nome, idCliente) => {
-    const campo = await page.$('input[placeholder*="Pesquise por nome" i], input[aria-label*="Pesquise por nome" i]');
-    if (!campo) return false;
+  // Replica o fluxo do diagnóstico que funcionou: vai para a Segmentação de
+  // clientes, digita o nome na busca global, clica no RESULTADO (nome exato →
+  // senão primeiro+último) e em "Ver perfil". Chega no //perfil (dispara
+  // /api/v1/boletos + telefone).
+  const abrirFichaBusca = async (nome) => {
+    await irPara('clientes/segmentacao/clientes', 6000);
+    const campo = await page.$('input[placeholder*="Pesquise por nome" i], input[aria-label*="Pesquise por nome" i], input[placeholder*="esquise" i]');
+    if (!campo) { console.log('      (não achei o campo de busca)'); return false; }
     await campo.click({ clickCount: 3 });
     await page.keyboard.press('Backspace').catch(() => {});
     await campo.type(String(nome), { delay: 55 });
-    await sleep(3500);
-    await page.keyboard.press('Enter').catch(() => {}); // Enter navega direto p/ a ficha
-    await sleep(6000); await fecharPopupNovaTela(page);
-    // Se não abriu a ficha (ex.: caiu numa lista de resultados), clica no da aluna.
-    if (!/cadastro\/\d+/.test(page.url())) {
-      const partes = String(nome).toLowerCase().split(/\s+/).filter(Boolean);
-      await page.evaluate(({ partes, id }) => {
-        const cands = [...document.querySelectorAll('a,td,span,div,li')];
-        if (id) { const re = new RegExp('(^|\\D)' + id + '(\\D|$)'); for (const el of cands) { if (el.children.length > 4) continue; const t = (el.textContent || '').trim(); if (re.test(t) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return; } } }
-        for (const el of cands) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if (t.length <= 120 && partes[0] && t.includes(partes[0]) && t.includes(partes[partes.length - 1]) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return; } }
-      }, { partes, id: idCliente });
-      await sleep(5000); await fecharPopupNovaTela(page);
-    }
-    // Garante o perfil (dispara /api/v1/boletos + telefone).
+    await sleep(5000); await fecharPopupNovaTela(page);
+    const partes = String(nome).toLowerCase().split(/\s+/).filter(Boolean);
+    const clicou = await page.evaluate(({ alvo, partes }) => {
+      for (const el of document.querySelectorAll('a,td,span,div')) {
+        const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        if (t === alvo && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
+      }
+      for (const el of document.querySelectorAll('a,td,span')) {
+        const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        if (partes[0] && t.includes(partes[0]) && t.includes(partes[partes.length - 1]) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
+      }
+      return false;
+    }, { alvo: String(nome).toLowerCase(), partes });
+    if (!clicou) { console.log('      (não achei o resultado da busca)'); return false; }
+    await sleep(5000); await fecharPopupNovaTela(page);
     await page.evaluate(() => { for (const el of document.querySelectorAll('button,a,span,div,li')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if ((t === 'ver perfil' || t === 'person ver perfil') && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return; } } });
-    await sleep(6000); await fecharPopupNovaTela(page);
+    await sleep(7000); await fecharPopupNovaTela(page);
     return /cadastro\/\d+/.test(page.url());
   };
 
@@ -348,7 +354,7 @@ async function lerInadimplentes() {
       if (vistos.has(String(idCliente))) { console.log(`   ⏭️  ${b.NOME}: já incluída pelo recorrente.`); continue; }
       const dias = hojeDias(b.DT_VENCIMENTO);
       boletosCliente = null; telefoneAtual = null;
-      const ok = await abrirFichaBusca(b.NOME, idCliente);
+      const ok = await abrirFichaBusca(b.NOME);
       if (!ok) { console.log(`   ⚠️  ${b.NOME} (id ${idCliente}): não abri a ficha (pulando).`); continue; }
       for (let i = 0; i < 20 && !boletosCliente; i++) await sleep(500);
       // link do boleto: casa pelo ID_BOLETO; senão, o mais próximo do vencimento.
