@@ -199,19 +199,24 @@ async function lerInadimplentes() {
     const campo = await page.$('input[placeholder*="Pesquise por nome" i], input[aria-label*="Pesquise por nome" i]');
     if (!campo) return false;
     await campo.click({ clickCount: 3 });
+    await page.keyboard.press('Backspace').catch(() => {});
     await campo.type(String(nome), { delay: 55 });
-    await sleep(4500); await fecharPopupNovaTela(page);
-    const partes = String(nome).toLowerCase().split(/\s+/).filter(Boolean);
-    const clicou = await page.evaluate(({ partes, id }) => {
-      const cands = [...document.querySelectorAll('a,td,span,div,li')];
-      if (id) { const re = new RegExp('(^|\\D)' + id + '(\\D|$)'); for (const el of cands) { if (el.children.length > 4) continue; const t = (el.textContent || '').trim(); if (re.test(t) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return 'id'; } } }
-      for (const el of cands) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if (t.length <= 120 && partes[0] && t.includes(partes[0]) && t.includes(partes[partes.length - 1]) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return 'nome'; } }
-      return null;
-    }, { partes, id: idCliente });
-    if (!clicou) { await page.keyboard.press('Enter').catch(() => {}); }
-    await sleep(5000); await fecharPopupNovaTela(page);
+    await sleep(3500);
+    await page.keyboard.press('Enter').catch(() => {}); // Enter navega direto p/ a ficha
+    await sleep(6000); await fecharPopupNovaTela(page);
+    // Se não abriu a ficha (ex.: caiu numa lista de resultados), clica no da aluna.
+    if (!/cadastro\/\d+/.test(page.url())) {
+      const partes = String(nome).toLowerCase().split(/\s+/).filter(Boolean);
+      await page.evaluate(({ partes, id }) => {
+        const cands = [...document.querySelectorAll('a,td,span,div,li')];
+        if (id) { const re = new RegExp('(^|\\D)' + id + '(\\D|$)'); for (const el of cands) { if (el.children.length > 4) continue; const t = (el.textContent || '').trim(); if (re.test(t) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return; } } }
+        for (const el of cands) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if (t.length <= 120 && partes[0] && t.includes(partes[0]) && t.includes(partes[partes.length - 1]) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return; } }
+      }, { partes, id: idCliente });
+      await sleep(5000); await fecharPopupNovaTela(page);
+    }
+    // Garante o perfil (dispara /api/v1/boletos + telefone).
     await page.evaluate(() => { for (const el of document.querySelectorAll('button,a,span,div,li')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if ((t === 'ver perfil' || t === 'person ver perfil') && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return; } } });
-    await sleep(7000); await fecharPopupNovaTela(page);
+    await sleep(6000); await fecharPopupNovaTela(page);
     return /cadastro\/\d+/.test(page.url());
   };
 
@@ -295,7 +300,7 @@ async function lerInadimplentes() {
       const frame = page.frames().find(f => /evo3\.w12app|\/Financeiro\//i.test(f.url())) || null;
       console.log(`   · iframe evo3: ${frame ? 'encontrado' : 'NÃO encontrado (usando carga padrão)'}`);
       if (frame) {
-        const body = `sort=&page=1&pageSize=5000&group=&filter=&aberto=true&pago=false&cancelado=false&ID_CLIENTE=0&ID_FORNECEDOR=0&ID_FUNCIONARIO=0&ID_PROSPECT=0&ID_PERSONAL=0&ID_CONVENIO=0&dtIni=${encodeURIComponent(dtIni)}&dtFim=${encodeURIComponent(dtFim)}`;
+        const body = `sort=&page=1&pageSize=1000&group=&filter=&aberto=true&pago=false&cancelado=false&ID_CLIENTE=0&ID_FORNECEDOR=0&ID_FUNCIONARIO=0&ID_PROSPECT=0&ID_PERSONAL=0&ID_CONVENIO=0&dtIni=${encodeURIComponent(dtIni)}&dtFim=${encodeURIComponent(dtFim)}`;
         const resp = await frame.evaluate(async (body) => {
           try {
             const r = await fetch('/Financeiro/Boletos/CarregarListaBoletos', {
