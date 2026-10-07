@@ -104,3 +104,5 @@ data/cobranca-outbox.jsonl
 data/cobranca-outbox.jsonl.*
 # Config da cobrança (dias de atraso) — por VPS
 data/inadimplentes-config.json
+data/diag-boleto.json
+data/diag-boleto-*.html
