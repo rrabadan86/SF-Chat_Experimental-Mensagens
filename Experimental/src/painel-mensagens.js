@@ -1192,30 +1192,14 @@ function paginaMensagens(aviso, erro) {
   horarios.listar().forEach(j => { hmap[j.chave] = j; });
 
   // Monta o card de UMA mensagem (texto + bloco de horário embutido no form #fh).
-  const cardDe = (m) => {
-    const mapa = HORARIOS_DA_MSG[m.chave];
-    let hbloco = '';
-    if (mapa === 'compartilha:followup') {
-      hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
-        <p class="quando" style="margin:0">Segue o <b>mesmo horário do Follow-up pós-aula (ainda não fechou)</b>, logo acima — é o mesmo disparo, muda só o texto conforme a lead.</p></div>`;
-    } else if (mapa === 'compartilha:cobranca') {
-      hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
-        <p class="quando" style="margin:0">Segue o <b>mesmo horário da Cobrança — recorrente</b>, logo acima — é o mesmo disparo (débito vencido há 2+ dias), muda só o texto conforme o contrato (recorrente = com link; boleto = contato).</p></div>`;
-    } else if (Array.isArray(mapa)) {
-      const linhas = mapa.map(([chave, sub]) => hmap[chave] ? blocoHorario(hmap[chave], sub) : '').join('');
-      const editouHora = mapa.some(([chave]) => hmap[chave] && hmap[chave].editado);
-      const badgeH = editouHora ? '<span class="badge-ed">alterado</span>' : '';
-      hbloco = `<div class="hsec"><div class="hsec-t">Horário deste envio ${badgeH}</div>${linhas}</div>`;
-    }
-    // Switch Ativado/Desligado no canto superior direito (p/ todo envio agendado).
-    const sw = switchEnvio(jobsDoCard(m.chave));
-    return `<div class="card" style="position:relative">${sw}${cardMensagem(m)}${hbloco}</div>`;
-  };
+  const cardDe = (m) => cardDeMsg(m, hmap);
 
   // Mensagens que vão para GRUPOS do WhatsApp (o resto é individual, 1 para 1).
   // A do Instagram é editada na aba "📸 Instagram" (fica tudo do IG lá).
   const MSGS_GRUPO = new Set(['ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'aniversario', 'circuito_convocacao', 'circuito_lembrete']);
-  const listaMsgs = mensagens.listar().filter(m => m.chave !== 'instagram');
+  // 'instagram' fica na aba Instagram; as cobranças ficam na aba SoFIA → Cobrança.
+  const COBRANCA_MSGS = new Set(['cobranca_recorrente', 'cobranca_boleto']);
+  const listaMsgs = mensagens.listar().filter(m => m.chave !== 'instagram' && !COBRANCA_MSGS.has(m.chave));
   // Individuais (1 p/ 1): "Aniversário — ex-alunas" (reativação, direto no WhatsApp)
   // aparece no TOPO, acima de "Confirmação — aula de hoje".
   const indiv = listaMsgs.filter(m => !MSGS_GRUPO.has(m.chave));
@@ -1689,6 +1673,27 @@ function jobsDoCard(chave) {
   if (Array.isArray(m)) return m.map(([c]) => c);
   if (TOGGLE_EXTRA_DA_MSG[chave]) return TOGGLE_EXTRA_DA_MSG[chave];
   return [];
+}
+
+// Card de UMA mensagem (texto + horário + switch). hmap = horarios.listar() por chave.
+// Módulo (não só dentro de paginaConfig) para ser reusado na aba SoFIA → Cobrança.
+function cardDeMsg(m, hmap, voltar) {
+  const mapa = HORARIOS_DA_MSG[m.chave];
+  let hbloco = '';
+  if (mapa === 'compartilha:followup') {
+    hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
+      <p class="quando" style="margin:0">Segue o <b>mesmo horário do Follow-up pós-aula (ainda não fechou)</b>, logo acima — é o mesmo disparo, muda só o texto conforme a lead.</p></div>`;
+  } else if (mapa === 'compartilha:cobranca') {
+    hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
+      <p class="quando" style="margin:0">Segue o <b>mesmo horário da Cobrança — recorrente</b>, logo acima — é o mesmo disparo (débito vencido há 2+ dias), muda só o texto conforme o contrato (recorrente = com link; boleto = contato).</p></div>`;
+  } else if (Array.isArray(mapa)) {
+    const linhas = mapa.map(([chave, sub]) => hmap[chave] ? blocoHorario(hmap[chave], sub) : '').join('');
+    const editouHora = mapa.some(([chave]) => hmap[chave] && hmap[chave].editado);
+    const badgeH = editouHora ? '<span class="badge-ed">alterado</span>' : '';
+    hbloco = `<div class="hsec"><div class="hsec-t">Horário deste envio ${badgeH}</div>${linhas}</div>`;
+  }
+  const sw = switchEnvio(jobsDoCard(m.chave));
+  return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar)}${hbloco}</div>`;
 }
 
 // Jobs sem texto editável, na seção "Outros envios" da aba Mensagens.
@@ -2275,6 +2280,7 @@ function subnavSofia(view) {
   if (podeSofiaSub(sess, 'contatos')) its += item('tags', 'Tags');
   if (podeSofiaSub(sess, 'campanhas')) its += item('campanhas', 'Campanhas');
   if (podeSofiaSub(sess, 'conversas')) its += item('funil', 'Funil');
+  if (podeSofiaSub(sess, 'config')) its += item('cobranca', 'Cobrança');
   if (podeSofiaSub(sess, 'config')) its += item('custo', 'Custo IA');
   return `<div class="subtabs">${its}</div>`;
 }
@@ -5003,6 +5009,33 @@ function negarAcesso(res, sess) {
   res.end(chrome({ tab: 'Sem acesso', h1: 'SlimFit', p: 'Painel do Studio.' }, '', corpo));
 }
 
+// ── Página: SoFIA → Cobrança ────────────────────────────────────────────────
+// As mensagens de cobrança de inadimplentes, enviadas PELO número da SoFIA.
+// Reaproveita o render dos cards (texto + horário + switch) da aba Mensagens.
+function paginaCobranca(aviso, erro) {
+  const hmap = {};
+  horarios.listar().forEach(j => { hmap[j.chave] = j; });
+  const VOLTAR = '/sofia?view=cobranca';
+  const cards = ['cobranca_recorrente', 'cobranca_boleto']
+    .map(ch => mensagens.listar().find(m => m.chave === ch))
+    .filter(Boolean).map(m => cardDeMsg(m, hmap, VOLTAR)).join('\n');
+  const corpo = `<div class="wrap">
+    ${subnavSofia('cobranca')}
+    ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"><input type="hidden" name="voltar" value="${esc(VOLTAR)}"></form>
+    <div class="card" style="background:#f6fbf9;border-left:4px solid var(--teal)">
+      <p class="quando" style="margin:0">Enviadas <b>pelo número da SoFIA</b> (não o da recepção), para alunas com débito <b>vencido há 2+ dias</b>. O robô lê os débitos no EVO no horário abaixo, gera o link e a SoFIA envia. Use o <b>switch</b> no canto do card para ligar/desligar cada mensagem.</p>
+    </div>
+    ${cards || '<div class="card">Mensagens de cobrança não encontradas no catálogo.</div>'}
+    <div class="hbar">
+      <div class="acts"><button type="submit" form="fh" id="btnH" class="save">🕒 Salvar horário e reiniciar o robô</button></div>
+      <p class="quando" style="text-align:center;margin:8px 0 0">O <b>texto</b> salva na hora. Mudança de <b>horário/dias</b> vale depois que o robô reinicia — alguns segundos.</p>
+    </div>
+  </div>
+${scriptPreviewTeste()}`;
+  return chrome({ tab: 'Cobrança', h1: 'SoFIA — Cobrança', p: 'Cobrança de inadimplentes, enviada pelo número da SoFIA.' }, 'sofia', corpo);
+}
+
 // ── Página: SoFIA → Funil ───────────────────────────────────────────────────
 // Conversas → Agendaram → Não agendaram, por período. "Agendou" = telefone na
 // lista de quem agendou pela SoFIA (sofia-agendaram.json) OU contato com uma tag
@@ -5635,15 +5668,17 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url === '/salvar') {
     return lerCorpo(req, 1e6, corpo => {
       const p = new URLSearchParams(corpo);
-      const voltar = p.get('voltar') === '/instagram' ? '/instagram' : '/'; // whitelist
+      const vRaw = p.get('voltar');
+      const voltar = (vRaw === '/instagram' || vRaw === '/sofia?view=cobranca') ? vRaw : '/'; // whitelist
       try {
         if (p.get('reset')) mensagens.salvarOverride(p.get('chave'), '');
         else mensagens.salvarOverride(p.get('chave'), p.get('texto') || '');
-        res.writeHead(303, { Location: voltar + '?ok=1' }); res.end();
+        const sep = voltar.includes('?') ? '&' : '?';
+        res.writeHead(303, { Location: voltar + sep + 'ok=1' }); res.end();
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         const msg = 'Erro ao salvar: ' + e.message;
-        res.end(voltar === '/instagram' ? paginaInstagram(msg, true) : paginaMensagens(msg, true));
+        res.end(voltar === '/instagram' ? paginaInstagram(msg, true) : voltar === '/sofia?view=cobranca' ? paginaCobranca(msg, true) : paginaMensagens(msg, true));
       }
     });
   }
@@ -5759,7 +5794,7 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e6, corpo => {
       const p = new URLSearchParams(corpo);
       const vRaw = p.get('voltar');
-      const voltar = (vRaw === '/agendar' || vRaw === '/instagram') ? vRaw : '/'; // whitelist
+      const voltar = (vRaw === '/agendar' || vRaw === '/instagram' || vRaw === '/sofia?view=cobranca') ? vRaw : '/'; // whitelist
       try {
         // Valida TUDO antes de salvar qualquer coisa (build lança em entrada inválida).
         const planos = horarios.CATALOGO.map(j => {
@@ -5773,11 +5808,12 @@ const server = http.createServer((req, res) => {
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         const msg = 'Erro ao salvar horários: ' + e.message + ' (nada foi alterado).';
-        return res.end(voltar === '/agendar' ? paginaExpress(msg, true) : voltar === '/instagram' ? paginaInstagram(msg, true) : paginaMensagens(msg, true));
+        return res.end(voltar === '/agendar' ? paginaExpress(msg, true) : voltar === '/instagram' ? paginaInstagram(msg, true) : voltar === '/sofia?view=cobranca' ? paginaCobranca(msg, true) : paginaMensagens(msg, true));
       }
       // Reinicia o robô para reagendar os jobs com os novos horários.
       exec('pm2 restart ' + PM2_EXP + ' --update-env', { timeout: 25000 }, (err) => {
-        res.writeHead(303, { Location: voltar + (err ? '?errh=1' : '?okh=1') }); res.end();
+        const sep = voltar.includes('?') ? '&' : '?';
+        res.writeHead(303, { Location: voltar + sep + (err ? 'errh=1' : 'okh=1') }); res.end();
       });
     });
   }
@@ -5856,7 +5892,7 @@ const server = http.createServer((req, res) => {
     // cai na primeira permitida (config → conversas → contatos).
     let view = sp.get('view') || 'config';
     // 'tags' e 'custo' são sub-abas ligadas a Contatos/Configuração (mesma permissão).
-    const podeVerSub = (v) => (v === 'tags' ? podeSofiaSub(sess, 'contatos') : v === 'custo' ? podeSofiaSub(sess, 'config') : v === 'funil' ? podeSofiaSub(sess, 'conversas') : podeSofiaSub(sess, v));
+    const podeVerSub = (v) => (v === 'tags' ? podeSofiaSub(sess, 'contatos') : (v === 'custo' || v === 'cobranca') ? podeSofiaSub(sess, 'config') : v === 'funil' ? podeSofiaSub(sess, 'conversas') : podeSofiaSub(sess, v));
     if (!podeVerSub(view)) view = SOFIA_SUBS.find(s => podeSofiaSub(sess, s)) || 'config';
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     if (view === 'contatos') return res.end(paginaSofiaContatos(aviso, erro, { q: sp.get('q') || '', tag: sp.get('tag') || '', bloq: sp.get('bloq') || '', pagina: sp.get('pagina') || 0 }));
@@ -5864,6 +5900,7 @@ const server = http.createServer((req, res) => {
     if (view === 'conversas') return res.end(paginaSofiaConversas(aviso, erro, (sess && sess.usuario) ? sess.usuario : ''));
     if (view === 'campanhas') return res.end(paginaSofiaCampanhas(aviso, erro));
     if (view === 'funil') return res.end(paginaSofiaFunil({ per: sp.get('per') || '7', de: sp.get('de') || '', ate: sp.get('ate') || '' }));
+    if (view === 'cobranca') return res.end(paginaCobranca(aviso, erro));
     if (view === 'custo') return res.end(paginaSofiaCusto(aviso, erro, { per: sp.get('per') || '7', de: sp.get('de') || '', ate: sp.get('ate') || '' }));
     return res.end(paginaSofia(aviso, erro));
   }

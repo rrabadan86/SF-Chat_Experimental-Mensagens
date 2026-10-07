@@ -1582,6 +1582,55 @@ async function processarRespostas() {
 }
 setInterval(() => { processarRespostas().catch(() => {}); }, 1500);
 
+// ── Cobrança (inadimplência): enviada PELA SoFIA ────────────────────────────
+// O robô (Experimental) lê os débitos vencidos no EVO, gera o link e ENFILEIRA
+// em ../Experimental/data/cobranca-outbox.jsonl. Aqui a SoFIA envia pelo NÚMERO
+// dela (não o da recepção). Falha → re-enfileira até COBRANCA_MAX_TENTATIVAS.
+const COBRANCA_OUTBOX = process.env.COBRANCA_OUTBOX_FILE
+  || path.resolve(DIR, "..", "Experimental", "data", "cobranca-outbox.jsonl");
+const COBRANCA_MAX_TENTATIVAS = 3;
+let processandoCobranca = false;
+async function processarCobranca() {
+  if (processandoCobranca || !pronta) return;
+  let tamanho = 0;
+  try { tamanho = fs.statSync(COBRANCA_OUTBOX).size; } catch { return; } // sem fila
+  if (!tamanho) return;
+  processandoCobranca = true;
+  const tmp = COBRANCA_OUTBOX + "." + Date.now() + ".proc";
+  let linhas: string[] = [];
+  try {
+    fs.renameSync(COBRANCA_OUTBOX, tmp);           // atômico: novas gravações vão p/ arquivo novo
+    linhas = fs.readFileSync(tmp, "utf8").split("\n").map((l) => l.trim()).filter(Boolean);
+    fs.rmSync(tmp, { force: true });
+  } catch (e: any) { log("erro lendo fila de cobrança: " + (e?.message || e)); processandoCobranca = false; return; }
+  for (const linha of linhas) {
+    let ent: any; try { ent = JSON.parse(linha); } catch { continue; }
+    const texto = String(ent?.texto || "").trim();
+    const telefone = String(ent?.telefone || "").replace(/\D/g, "");
+    if (!texto || !telefone) { log("cobrança sem texto/telefone — ignorada."); continue; }
+    const tentativas = Number(ent?.tentativas || 0);
+    enfileirar(async () => {
+      try {
+        const alvo = await resolverIdEnvio(telefone);     // trata 9º dígito / "@lid"
+        const chaveInbox = alvo.endsWith("@c.us") ? jidParaTel(alvo) : (telefone.startsWith("55") ? telefone : "55" + telefone);
+        await enviar(alvo, texto);
+        registrarInbox(chaveInbox, alvo, String(ent?.nome || ""), "sofia", texto); // cai na conversa da aluna
+        log(`cobrança enviada para ${ent?.nome || telefone}.`);
+        await new Promise((r) => setTimeout(r, 10000 + Math.floor(Math.random() * 3000))); // 10-13s entre cobranças
+      } catch (e: any) {
+        log("falha ao enviar cobrança p/ " + (ent?.nome || telefone) + ": " + (e?.message || e));
+        if (tentativas + 1 < COBRANCA_MAX_TENTATIVAS) {
+          try { fs.appendFileSync(COBRANCA_OUTBOX, JSON.stringify({ ...ent, tentativas: tentativas + 1 }) + "\n", "utf8"); } catch {}
+        } else {
+          log(`cobrança p/ ${ent?.nome || telefone} descartada após ${COBRANCA_MAX_TENTATIVAS} tentativas.`);
+        }
+      }
+    });
+  }
+  processandoCobranca = false;
+}
+setInterval(() => { processarCobranca().catch(() => {}); }, 5000);
+
 // ── Agendamento MANUAL pelo painel (atendente) ──────────────────────────────
 // O painel enfileira pedidos em sofia-agendar-inbox.jsonl; aqui agendamos no EVO
 // (mesma rota da SoFIA) e gravamos o resultado por id em sofia-agendar-result.json,

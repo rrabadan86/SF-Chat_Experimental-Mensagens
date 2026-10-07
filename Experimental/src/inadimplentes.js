@@ -32,6 +32,10 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const DIAS_MIN_ATRASO = parseInt(process.env.INADIMPLENTES_DIAS || '2', 10);
 // Não reenvia para a mesma aluna dentro desta janela (evita mandar todo dia).
 const REENVIO_DIAS = parseInt(process.env.INADIMPLENTES_REENVIO_DIAS || '3', 10);
+// Fila de cobrança consumida pela SoFIA (envia pelo NÚMERO dela, não o do robô).
+// Compartilhada entre os processos: o robô (Experimental) grava, a SoFIA (ChatBot)
+// lê em ../Experimental/data/cobranca-outbox.jsonl.
+const OUTBOX_FILE = process.env.COBRANCA_OUTBOX_FILE || path.resolve(__dirname, '..', 'data', 'cobranca-outbox.jsonl');
 // Estado dos envios (por idCliente) — gitignored, por VPS.
 const ENVIADOS_FILE = path.resolve(__dirname, '..', 'data', 'inadimplentes-enviados.json');
 function lerEnviados() { try { const o = JSON.parse(fs.readFileSync(ENVIADOS_FILE, 'utf8')); return (o && typeof o === 'object') ? o : {}; } catch (_) { return {}; } }
@@ -227,29 +231,27 @@ async function lerInadimplentes() {
   return resultados;
 }
 
-// ─── Envio ──────────────────────────────────────────────────────────────────
-// Lê os inadimplentes vencidos e envia a mensagem certa (recorrente = com link;
-// boleto/comum = sem link). dry=true: só imprime, NÃO envia. Deduplica por
-// idCliente (não reenvia dentro de REENVIO_DIAS). O scheduler chama com dry=false
-// e a sessão do WhatsApp já pronta; no CLI, inicializamos/encerramos aqui.
+// ─── Enfileirar para a SoFIA ────────────────────────────────────────────────
+// Lê os inadimplentes vencidos e ENFILEIRA a mensagem certa (recorrente = com
+// link; boleto/comum = sem link) na fila de cobrança. Quem ENVIA é a SoFIA, pelo
+// NÚMERO dela (consumidor em ChatBot/sofia-listener.ts). dry=true: só imprime.
+// Deduplica por idCliente (não re-enfileira dentro de REENVIO_DIAS).
 async function runInadimplentes({ dry = false } = {}) {
   const mensagens = require('./mensagens');
   const lista = await lerInadimplentes();
-  const res = { sent: 0, skipped: 0, failed: 0, details: [] };
-  if (!lista.length) { console.log('   📭 Ninguém vencido há 2+ dias — nada a enviar.'); return res; }
-
-  const wa = dry ? null : require('./wa-client');
-  if (!dry && wa && !wa.isReady()) await wa.initWhatsApp();
+  const res = { enfileirados: 0, skipped: 0, failed: 0, details: [] };
+  if (!lista.length) { console.log('   📭 Ninguém vencido há 2+ dias — nada a enfileirar.'); return res; }
 
   const enviados = lerEnviados();
   const agora = Date.now();
-  console.log(`\n${dry ? '🧪 DRY (nada enviado)' : '📤 Enviando'} — ${lista.length} inadimplente(s):`);
+  const linhas = [];
+  console.log(`\n${dry ? '🧪 DRY (nada enfileirado)' : '📥 Enfileirando para a SoFIA'} — ${lista.length} inadimplente(s):`);
 
   for (const r of lista) {
     const chave = String(r.idCliente);
     const nome = r.nome;
 
-    // Dedup: não reenvia dentro da janela.
+    // Dedup: não re-enfileira dentro da janela.
     const ult = enviados[chave] && enviados[chave].em ? new Date(enviados[chave].em).getTime() : 0;
     if (ult && (agora - ult) < REENVIO_DIAS * 86400000) {
       res.skipped++; res.details.push({ name: nome, status: 'skipped', reason: `avisada há < ${REENVIO_DIAS}d` });
@@ -264,7 +266,7 @@ async function runInadimplentes({ dry = false } = {}) {
 
     let texto;
     if (r.tipo === 'recorrente') {
-      if (!r.link) { res.failed++; res.details.push({ name: nome, status: 'failed', reason: 'link não gerado' }); console.log(`   ❌ ${nome}: recorrente sem link — não envio.`); continue; }
+      if (!r.link) { res.failed++; res.details.push({ name: nome, status: 'failed', reason: 'link não gerado' }); console.log(`   ❌ ${nome}: recorrente sem link — não enfileiro.`); continue; }
       texto = mensagens.render('cobranca_recorrente', { nome: primeiroNome(nome), link: r.link });
     } else {
       texto = mensagens.render('cobranca_boleto', { nome: primeiroNome(nome), vencimento: r.vencimentoFmt });
@@ -276,43 +278,37 @@ async function runInadimplentes({ dry = false } = {}) {
       continue;
     }
 
-    try {
-      await wa.sendTexto(r.celular, texto, 'Cobrança de inadimplência');
-      enviados[chave] = { em: new Date().toISOString(), nome, tipo: r.tipo, vencimento: r.vencimento };
-      gravarEnviados(enviados);
-      res.sent++; res.details.push({ name: nome, phone: r.celular, status: 'sent' });
-      console.log(`   ✅ ${nome} (${r.tipo}) — enviado.`);
-      await sleep(9000 + Math.floor(Math.random() * 3000)); // 9-12s entre envios
-    } catch (e) {
-      res.failed++; res.details.push({ name: nome, status: 'failed', reason: e && e.message });
-      console.log(`   ❌ ${nome}: ${e && e.message}`);
-    }
+    linhas.push(JSON.stringify({
+      id: `${chave}-${String(r.vencimento || '').slice(0, 10)}`,
+      telefone: r.celular, texto, nome, tipo: r.tipo, idCliente: r.idCliente,
+      em: new Date().toISOString(),
+    }));
+    enviados[chave] = { em: new Date().toISOString(), nome, tipo: r.tipo, vencimento: r.vencimento };
+    res.enfileirados++; res.details.push({ name: nome, phone: r.celular, status: 'enfileirado' });
+    console.log(`   📥 ${nome} (${r.tipo}) — enfileirada para a SoFIA.`);
   }
 
-  console.log(`\n📊 Cobrança de inadimplentes — enviadas: ${res.sent} | puladas: ${res.skipped} | falhas: ${res.failed}`);
+  if (!dry && linhas.length) {
+    try { fs.mkdirSync(path.dirname(OUTBOX_FILE), { recursive: true }); } catch (_) {}
+    fs.appendFileSync(OUTBOX_FILE, linhas.join('\n') + '\n', 'utf8');
+    gravarEnviados(enviados);
+    console.log(`   📤 ${linhas.length} mensagem(ns) na fila da SoFIA → ${OUTBOX_FILE}`);
+  }
+
+  console.log(`\n📊 Cobrança de inadimplentes — enfileiradas: ${res.enfileirados} | puladas: ${res.skipped} | falhas: ${res.failed}`);
   return res;
 }
 
-module.exports = { lerInadimplentes, runInadimplentes, diasDeAtraso, ehRecorrente, fmtData, DIAS_MIN_ATRASO };
+module.exports = { lerInadimplentes, runInadimplentes, diasDeAtraso, ehRecorrente, fmtData, DIAS_MIN_ATRASO, OUTBOX_FILE };
 
 // ─── CLI ────────────────────────────────────────────────────────────────────
-//   node src/inadimplentes.js --dry      → só lê e imprime (não envia, não cobra)
-//   node src/inadimplentes.js --enviar   → envia de verdade (inicia/encerra o WhatsApp)
+//   node src/inadimplentes.js            → só lê e imprime (dry, não enfileira)
+//   node src/inadimplentes.js --enviar   → enfileira na fila da SoFIA (ela envia)
 if (require.main === module) {
   const enviar = process.argv.includes('--enviar');
   (async () => {
-    try {
-      if (enviar) {
-        await require('./wa-client').initWhatsApp();
-        await runInadimplentes({ dry: false });
-      } else {
-        await runInadimplentes({ dry: true });
-      }
-    } catch (e) {
-      console.error('❌ erro:', e && e.message);
-    } finally {
-      if (enviar) { try { await require('./wa-client').destroy(); } catch (_) {} }
-      process.exit(0);
-    }
+    try { await runInadimplentes({ dry: !enviar }); }
+    catch (e) { console.error('❌ erro:', e && e.message); }
+    finally { process.exit(0); }
   })();
 }
