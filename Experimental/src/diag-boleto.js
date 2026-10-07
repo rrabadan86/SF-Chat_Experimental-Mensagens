@@ -1,15 +1,19 @@
 /**
- * DIAGNÓSTICO (não envia/cobra/apaga nada) — achar como abrir a aluna por NOME e
- * onde fica o LINK/PDF do boleto.
+ * DIAGNÓSTICO (não envia/cobra/apaga nada) — mapear a tela GLOBAL de boletos
+ * (Financeiro → Boletos → Integração Bancária), que lista TODOS os boletos de
+ * todas as alunas. É daqui que o robô vai tirar quem está vencido / vence hoje.
  *
- * PROBE: despeja a estrutura da tela (campos de busca, linhas de resultado) em
- * cada etapa, para a gente ver exatamente o que o EVO mostra. Depois tenta abrir
- * a ficha → Financeiro → Boletos e clicar na LUPA (🔍). NUNCA clica em lixeira.
+ * Rota informada pela unidade:
+ *   #/app/slimfit/15/evo3/-Financeiro-Boletos-IntegracaoBancaria
  *
- * ⚠️ Rode no VPS da unidade certa (Bianca/Paula são do BUENO).
+ * Captura: respostas JSON da API (lista de boletos + campos: nome, vencimento,
+ * valor, status, link/linha digitável), estrutura da tabela (cabeçalhos + 1ªs
+ * linhas), filtros (inputs/selects) e a ação de 2ª via/lupa de uma linha.
+ * NUNCA clica em excluir/lixeira/cancelar.
  *
+ * ⚠️ Rode no VPS da unidade certa (BUENO).
  * Uso: node src/diag-boleto.js
- *      node src/diag-boleto.js --nomes="Bianca de Castro,Paula Renata Camargo Braga"
+ *      node src/diag-boleto.js --rota="app/slimfit/15/evo3/-Financeiro-Boletos-IntegracaoBancaria"
  */
 
 const puppeteer = require('puppeteer-extra');
@@ -24,14 +28,13 @@ const path = require('path');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const OUT = path.resolve(__dirname, '..', 'data', 'diag-boleto.json');
 const RE_RUIDO = /intercom|instatus|signalr|informativo|launcher_settings|\/ping|versao-aplicacao|wehelpsoftware|google|gstatic|clarity|traducao|possui-integracao|status-envio|tiposmarketing|\/passos|\/interesses|obterBasico|verificar-personal|qtde-requisicoes|total-notificacoes|listar-conexoes|obter-filtros|montar-filtro|verificar-filtro|filiais-basico|conexoes-colaboradores|historicoPresencas|historicoTreinos|crm\/templates|listarContatosTipos|notificacaoPush/i;
-const RE_BOLETO = /boleto|linha.?digit|nosso.?numero|nossoNumero|codigo.?barra|codigoBarra|2.?via|segunda.?via|pdf|url|link|pix|qr/i;
 
-const argNomes = (process.argv.find(a => a.startsWith('--nomes=')) || '').split('=')[1];
-const ALVOS = (argNomes || 'Bianca de Castro,Paula Renata Camargo Braga').split(',').map(s => s.trim()).filter(Boolean);
+const argRota = (process.argv.find(a => a.startsWith('--rota=')) || '').split('=')[1];
+const ROTA = argRota || 'app/slimfit/15/evo3/-Financeiro-Boletos-IntegracaoBancaria';
 
 function urlsEmObj(obj, prefixo = '', prof = 0) {
   const out = [];
-  if (!obj || typeof obj !== 'object' || prof > 4) return out;
+  if (!obj || typeof obj !== 'object' || prof > 5) return out;
   for (const [k, v] of Object.entries(obj)) {
     if (typeof v === 'string' && /^https?:\/\//i.test(v)) out.push([prefixo + k, v]);
     else if (v && typeof v === 'object') out.push(...urlsEmObj(v, prefixo + k + '.', prof + 1));
@@ -40,34 +43,18 @@ function urlsEmObj(obj, prefixo = '', prof = 0) {
 }
 function extrairLista(data) {
   if (Array.isArray(data)) return data;
-  if (data && typeof data === 'object') for (const k of ['retorno', 'data', 'lista', 'registros', 'boletos', 'content', 'result', 'items', 'parcelas']) if (Array.isArray(data[k])) return data[k];
+  if (data && typeof data === 'object') {
+    for (const k of ['retorno', 'data', 'lista', 'registros', 'boletos', 'content', 'result', 'items', 'parcelas', 'rows']) if (Array.isArray(data[k])) return data[k];
+    // às vezes vem {data:{content:[...]}}
+    for (const v of Object.values(data)) { const l = (v && typeof v === 'object') ? extrairLista(v) : null; if (l) return l; }
+  }
   return null;
 }
 
-// Despeja os <input> visíveis (placeholder/name/id/aria) — pra achar o campo de busca.
-const dumpInputs = (page) => page.evaluate(() => {
-  const out = [];
-  for (const el of document.querySelectorAll('input,textarea')) {
-    if (el.type === 'hidden' || !(el.offsetWidth > 0 || el.offsetHeight > 0)) continue;
-    out.push({ ph: el.placeholder || '', name: el.name || '', id: el.id || '', aria: el.getAttribute('aria-label') || '', type: el.type || '' });
-  }
-  return out.slice(0, 25);
-});
-// Despeja as primeiras linhas de resultado (texto) — pra ver se a busca retornou.
-const dumpLinhas = (page) => page.evaluate(() => {
-  const out = [];
-  for (const tr of document.querySelectorAll('table tbody tr, [role="row"], .list-item, .card')) {
-    const t = (tr.textContent || '').trim().replace(/\s+/g, ' ');
-    if (t && t.length <= 160 && !out.includes(t)) out.push(t);
-    if (out.length >= 15) break;
-  }
-  return out;
-});
-
 async function main() {
   console.log('\n═══════════════════════════════════════════════════');
-  console.log('🧾 PROBE — busca por nome + link do boleto (não envia/apaga nada)');
-  console.log(`   Alvos: ${ALVOS.join(' | ')}`);
+  console.log('🧾 DIAGNÓSTICO — tela GLOBAL de boletos (não envia/apaga nada)');
+  console.log(`   Rota: #/${ROTA}`);
   console.log('═══════════════════════════════════════════════════\n');
 
   const browser = await puppeteer.launch({
@@ -80,41 +67,34 @@ async function main() {
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
   page.setDefaultTimeout(60000); page.setDefaultNavigationTimeout(60000);
 
-  const resultado = { geradoEm: new Date().toISOString(), fichas: {} };
-  let capturaAtual = null;
+  const resultado = { geradoEm: new Date().toISOString(), rota: ROTA, urlFinal: null, capturas: [], pdfs: [] };
+  let gravando = false;
   page.on('response', async (res) => {
     try {
-      if (!capturaAtual || res.status() !== 200) return;
+      if (!gravando || res.status() !== 200) return;
       const url = res.url();
       if (RE_RUIDO.test(url)) return;
       const ct = (res.headers()['content-type'] || '').toLowerCase();
+      // PDFs / downloads de boleto
+      if (ct.includes('pdf') || /\.pdf(\?|$)/i.test(url)) { resultado.pdfs.push(url.split('?')[0]); console.log(`   📄 PDF: ${url.split('?')[0]}`); return; }
       if (!ct.includes('json')) return;
-      const txt = await res.text(); if (!txt || txt.length > 6_000_000) return;
+      const txt = await res.text(); if (!txt || txt.length > 8_000_000) return;
       let data; try { data = JSON.parse(txt); } catch { return; }
       const lista = extrairLista(data);
       const amostra = (lista && lista.length) ? lista[0] : (data && typeof data === 'object' && !Array.isArray(data) ? data : null);
       if (!amostra || typeof amostra !== 'object') return;
       const chaves = Object.keys(amostra);
-      const urls = []; for (const r of (lista ? lista.slice(0, 10) : [amostra])) for (const par of urlsEmObj(r)) if (!urls.some(x => x[0] === par[0])) urls.push(par);
-      const temBoleto = chaves.some(k => RE_BOLETO.test(k)) || urls.length > 0 || /boleto|recebimentos|financ|parcela|titulo/i.test(url);
-      if (!temBoleto) return;
-      const reg = resultado.fichas[capturaAtual];
-      if (reg) reg.capturas.push({ url: url.split('?')[0], registros: lista ? lista.length : null, chaves, camposUrl: urls, amostras: (lista ? lista.slice(0, 6) : [amostra]) });
-      console.log(`   ${urls.length ? '🔗' : '💰'} [${capturaAtual}] ${url.split('?')[0]} (${lista ? lista.length + ' reg.' : 'obj'})${urls.length ? ' — TEM URL' : ''}`);
-      urls.forEach(([k, v]) => console.log(`        ${k} = ${v}`));
+      // só interessa se parece boleto/financeiro (pela url ou pelos campos)
+      const ehFin = /boleto|financ|receb|parcela|titulo|cobranca|integracao|banc/i.test(url) ||
+        chaves.some(k => /boleto|venc|valor|nome|cliente|aluno|nosso|digit|barra|linha|pdf|url|link|status|situac/i.test(k));
+      if (!ehFin) return;
+      const urls = []; for (const r of (lista ? lista.slice(0, 15) : [amostra])) for (const par of urlsEmObj(r)) if (!urls.some(x => x[0] === par[0])) urls.push(par);
+      resultado.capturas.push({ url: url.split('?')[0], registros: lista ? lista.length : null, chaves, camposUrl: urls, amostras: (lista ? lista.slice(0, 4) : [amostra]) });
+      console.log(`   ${urls.length ? '🔗' : '📦'} ${url.split('?')[0]} (${lista ? lista.length + ' reg.' : 'obj'})`);
+      console.log(`        campos: ${chaves.join(', ')}`);
+      urls.forEach(([k, v]) => console.log(`        🔗 ${k} = ${v}`));
     } catch (_) {}
   });
-
-  const clicarTxt = (alvos, { exato = true } = {}) => page.evaluate(({ alvos, exato }) => {
-    const quer = alvos.map(s => s.toLowerCase());
-    for (const el of document.querySelectorAll('a,button,[role="tab"],[role="menuitem"],span,div,li')) {
-      if (el.children.length > 2) continue;
-      const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-      const ok = exato ? quer.includes(t) : quer.some(q => t.includes(q));
-      if (ok && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return t; }
-    }
-    return null;
-  }, { alvos, exato });
 
   try {
     // LOGIN
@@ -130,112 +110,101 @@ async function main() {
     try { await require('./evo-totp').preencher2FA(page); } catch (_) {}
     await page.waitForFunction(() => location.hash.includes('/inicio/') || location.hash.includes('/app/'), { timeout: 30000 });
     await sleep(3000); await fecharPopupNovaTela(page);
-    console.log('✅ Login OK');
+    console.log('✅ Login OK\n');
 
-    for (const nome of ALVOS) {
-      console.log(`\n═══ Aluna: ${nome} ═══`);
-      resultado.fichas[nome] = { nome, urlFicha: null, abas: [], capturas: [], inputsBusca: [], linhasAntes: [], linhasDepois: [] };
+    // Vai para a tela global de boletos
+    gravando = true;
+    console.log('🧭 Abrindo a tela de boletos (Integração Bancária)...');
+    await page.evaluate((h) => { location.hash = '#/' + h; }, ROTA);
+    await sleep(9000); await fecharPopupNovaTela(page);
+    resultado.urlFinal = page.url();
+    console.log(`   🌐 ${page.url()}`);
+    if (!/boleto|integracao|financ/i.test(page.url())) console.log('   ⚠️  a URL não parece a de boletos — pode ter redirecionado (host/permissão?).');
 
-      // Abre a Segmentação de clientes (lista geral — a busca cobre toda a base).
-      await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
-      await sleep(7000); await fecharPopupNovaTela(page);
-
-      // PROBE 1: quais campos de busca existem?
-      const inputs = await dumpInputs(page);
-      resultado.fichas[nome].inputsBusca = inputs;
-      console.log('   🔎 campos na tela:');
-      inputs.forEach((i, n) => console.log(`      [${n}] ph="${i.ph}" name="${i.name}" id="${i.id}" aria="${i.aria}" type=${i.type}`));
-      resultado.fichas[nome].linhasAntes = await dumpLinhas(page);
-
-      // Tenta digitar no campo de busca mais provável (placeholder/aria/name com "nome/pesquis/busca/search").
-      const idxBusca = inputs.findIndex(i => /nome|pesquis|busca|search|localiz|filtr/i.test(`${i.ph} ${i.aria} ${i.name} ${i.id}`));
-      if (idxBusca >= 0) {
-        console.log(`   ⌨️  digitando no campo [${idxBusca}] e pressionando Enter...`);
-        const campos = await page.$$('input,textarea');
-        // mapeia o índice visível → handle (pula hidden/invisíveis)
-        let visI = -1, alvoHandle = null;
-        for (const h of campos) {
-          const vis = await h.evaluate(el => el.type !== 'hidden' && (el.offsetWidth > 0 || el.offsetHeight > 0));
-          if (vis) { visI++; if (visI === idxBusca) { alvoHandle = h; break; } }
-        }
-        if (alvoHandle) {
-          await alvoHandle.click({ clickCount: 3 });
-          await alvoHandle.type(nome, { delay: 55 });
-          await sleep(1500);
-          await page.keyboard.press('Enter').catch(() => {});
-          await sleep(5000);
-        }
-      } else {
-        console.log('   ⚠️  nenhum campo parece ser de busca — veja a lista acima.');
+    // Dump da estrutura: filtros (inputs/selects), cabeçalhos e 1ªs linhas da tabela.
+    const estrutura = await page.evaluate(() => {
+      const inputs = [];
+      for (const el of document.querySelectorAll('input,select,textarea')) {
+        if (el.type === 'hidden' || !(el.offsetWidth > 0 || el.offsetHeight > 0)) continue;
+        inputs.push({ tag: el.tagName.toLowerCase(), ph: el.placeholder || '', name: el.name || '', id: el.id || '', aria: el.getAttribute('aria-label') || '' });
       }
+      const cabecalhos = [...document.querySelectorAll('table thead th, [role="columnheader"]')].map(th => (th.textContent || '').trim().replace(/\s+/g, ' ')).filter(Boolean).slice(0, 25);
+      const linhas = [];
+      for (const tr of document.querySelectorAll('table tbody tr, [role="row"]')) {
+        const t = (tr.textContent || '').trim().replace(/\s+/g, ' ');
+        if (t && !linhas.includes(t)) linhas.push(t.slice(0, 200));
+        if (linhas.length >= 12) break;
+      }
+      // botões/ações visíveis (pra achar a 2ª via / lupa)
+      const acoes = [];
+      for (const el of document.querySelectorAll('button,a,[role="button"],i,mat-icon')) {
+        const blob = `${(el.textContent || '').trim()} ${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''}`.trim().replace(/\s+/g, ' ');
+        if (blob && blob.length <= 40 && (el.offsetWidth > 0 || el.offsetHeight > 0) && !acoes.includes(blob)) acoes.push(blob);
+        if (acoes.length >= 40) break;
+      }
+      return { inputs: inputs.slice(0, 25), cabecalhos, linhas, acoes };
+    }).catch(() => ({ inputs: [], cabecalhos: [], linhas: [], acoes: [] }));
+    resultado.estrutura = estrutura;
 
-      // PROBE 2: o que apareceu depois da busca?
-      resultado.fichas[nome].linhasDepois = await dumpLinhas(page);
-      console.log('   📄 linhas após a busca:');
-      resultado.fichas[nome].linhasDepois.slice(0, 10).forEach(l => console.log(`      • ${l}`));
+    console.log('\n   🔎 filtros/inputs na tela:');
+    estrutura.inputs.forEach((i, n) => console.log(`      [${n}] <${i.tag}> ph="${i.ph}" name="${i.name}" id="${i.id}" aria="${i.aria}"`));
+    console.log('\n   🧱 cabeçalhos da tabela:');
+    console.log('      ' + (estrutura.cabecalhos.join(' | ') || '(nenhum — veja o HTML salvo)'));
+    console.log('\n   📄 primeiras linhas:');
+    estrutura.linhas.slice(0, 8).forEach(l => console.log(`      • ${l}`));
+    console.log('\n   🔘 ações/botões visíveis:');
+    console.log('      ' + (estrutura.acoes.join(' | ') || '(nenhum)'));
 
-      // Tenta clicar no resultado (nome exato → senão por primeiro+último nome)
-      const partes = nome.toLowerCase().split(/\s+/);
-      const clicou = await page.evaluate(({ alvo, partes }) => {
-        for (const el of document.querySelectorAll('a,td,span,div')) {
-          const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-          if (t === alvo && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
-        }
-        for (const el of document.querySelectorAll('a,td,span')) {
-          const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-          if (t.includes(partes[0]) && t.includes(partes[partes.length - 1]) && el.offsetWidth > 0) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
-        }
-        return false;
-      }, { alvo: nome.toLowerCase(), partes });
-      if (!clicou) { console.log('   ⚠️  não achei o nome nos resultados — veja as linhas acima.'); continue; }
-      await sleep(5000); await fecharPopupNovaTela(page);
-      await clicarTxt(['ver perfil', 'person ver perfil']);
-      await sleep(7000); await fecharPopupNovaTela(page);
-      resultado.fichas[nome].urlFicha = page.url();
-      console.log(`   🌐 ${page.url()}`);
+    // Clica o botão de BUSCA/filtro (lupa azul no topo) para carregar a lista.
+    // NUNCA é "excluir"/"cancelar". Procura no topo da tela (fora de linhas da tabela).
+    const buscou = await page.evaluate(() => {
+      for (const el of document.querySelectorAll('button, a, [role="button"]')) {
+        if (el.closest('table tbody')) continue; // ignora ações de linha
+        const blob = `${(el.textContent || '').trim()} ${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''} ${el.className || ''}`.toLowerCase();
+        if (/excluir|lixeir|remov|cancelar|export|email|e-mail|imprimir/.test(blob)) continue;
+        const rect = el.getBoundingClientRect();
+        if (/pesquis|buscar|consultar|filtrar|search|lupa|magnif/.test(blob) && rect.top < 320 && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return blob.trim().slice(0, 30) || '(botão)'; }
+      }
+      // fallback: botão azul/primário no topo
+      for (const el of document.querySelectorAll('button')) {
+        const rect = el.getBoundingClientRect();
+        if (rect.top < 320 && rect.top > 120 && (el.offsetWidth > 0) && /btn-primary|primary|azul|search/i.test(el.className || '')) { el.click(); return '(primário topo)'; }
+      }
+      return null;
+    });
+    console.log(buscou ? `   🔎 botão de busca clicado: "${buscou}"` : '   ⚠️  não achei o botão de busca (a lista pode já ter carregado).');
+    await sleep(7000);
+    const linhasApos = await page.evaluate(() => { const o = []; for (const tr of document.querySelectorAll('table tbody tr, [role="row"]')) { const t = (tr.textContent || '').trim().replace(/\s+/g, ' '); if (t && !o.includes(t)) o.push(t.slice(0, 200)); if (o.length >= 12) break; } return o; }).catch(() => []);
+    resultado.estrutura.linhasApos = linhasApos;
+    console.log('   📄 linhas após a busca:');
+    linhasApos.slice(0, 8).forEach(l => console.log(`      • ${l}`));
 
-      capturaAtual = nome;
-      // Vai para a aba Boletos. A URL atual já tem o id do cliente — derivamos a rota.
-      const m = /cadastro\/(\d+)\//.exec(page.url());
-      if (m) { await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/cadastro/${m[1]}//financeiro/boletos`); await sleep(6000); await fecharPopupNovaTela(page); }
-      else { await clicarTxt(['financeiro']); await sleep(3000); await clicarTxt(['boletos'], { exato: false }); await sleep(4000); }
+    // Tenta clicar a 2ª via / lupa da 1ª linha (NUNCA excluir/lixeira).
+    const acao = await page.evaluate(() => {
+      const linha = document.querySelector('table tbody tr, [role="row"]');
+      const scope = linha || document.body;
+      for (const el of scope.querySelectorAll('button, a, i, mat-icon, [role="button"], span')) {
+        const blob = `${(el.textContent || '').trim()} ${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''}`.toLowerCase();
+        if (/delete|excluir|lixeir|remov|trash|cancelar|estornar|baixar.?manual/.test(blob)) continue; // SEGURANÇA
+        if (/2.?via|segunda.?via|boleto|visualiz|detalh|imprimir|pdf|lupa|search|download|baixar/.test(blob) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return blob.trim().slice(0, 30) || '(icone)'; }
+      }
+      return null;
+    });
+    console.log(acao ? `\n   🔍 ação de boleto clicada: "${acao}"` : '\n   ⚠️  não achei uma ação de 2ª via/boleto na linha.');
+    await sleep(7000);
 
-      resultado.fichas[nome].abas = await page.evaluate(() => { const o = []; for (const el of document.querySelectorAll('a,button,[role="tab"],span,div,li')) { if (el.children.length > 1) continue; const t = (el.textContent || '').trim().replace(/\s+/g, ' '); if (t && t.length <= 24 && (el.offsetWidth > 0 || el.offsetHeight > 0) && !o.includes(t)) o.push(t); } return o.slice(0, 50); }).catch(() => []);
-      resultado.fichas[nome].linhasBoleto = await dumpLinhas(page);
-      console.log('   📄 linhas na aba Boletos:');
-      (resultado.fichas[nome].linhasBoleto || []).slice(0, 8).forEach(l => console.log(`      • ${l}`));
+    const linksDom = await page.evaluate(() => {
+      const out = new Set();
+      const add = s => { if (s && /^https?:\/\//i.test(s)) out.add(s); };
+      for (const a of document.querySelectorAll('a[href]')) add(a.getAttribute('href'));
+      for (const el of document.querySelectorAll('input,textarea')) add(el.value);
+      (document.body.innerText.match(/https?:\/\/[^\s"'<>]+/g) || []).forEach(add);
+      return [...out].slice(0, 20);
+    }).catch(() => []);
+    resultado.linksDom = linksDom;
+    if (linksDom.length) { console.log('   🔗 links na tela:'); linksDom.forEach(u => console.log('        ' + u)); }
 
-      // Clica a LUPA da 1ª linha de boleto (🔍) — NUNCA a lixeira.
-      const acao = await page.evaluate(() => {
-        const linha = document.querySelector('table tbody tr, [role="row"]');
-        const scope = linha || document.body;
-        for (const el of scope.querySelectorAll('button, a, i, mat-icon, [role="button"], span')) {
-          const t = (el.textContent || '').trim().toLowerCase();
-          const aria = (el.getAttribute('aria-label') || '').toLowerCase();
-          const title = (el.getAttribute('title') || '').toLowerCase();
-          const blob = `${t} ${aria} ${title}`;
-          if (/delete|excluir|lixeir|remov|trash|cancelar/.test(blob)) continue; // SEGURANÇA
-          if (/search|zoom|visib|pageview|lupa|visualiz|detalh|ver\b|abrir|boleto/.test(blob) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return blob.trim().slice(0, 30) || '(icone)'; }
-        }
-        return null;
-      });
-      console.log(acao ? `   🔍 lupa/ação clicada: "${acao}"` : '   ⚠️  não achei a lupa na linha do boleto.');
-      await sleep(6000);
-      // lê links visíveis no modal/tela
-      const linksDom = await page.evaluate(() => {
-        const out = new Set();
-        const add = s => { if (s && /^https?:\/\//i.test(s)) out.add(s); };
-        for (const a of document.querySelectorAll('a[href]')) add(a.getAttribute('href'));
-        for (const el of document.querySelectorAll('input,textarea')) add(el.value);
-        (document.body.innerText.match(/https?:\/\/[^\s"'<>]+/g) || []).forEach(add);
-        return [...out].slice(0, 15);
-      }).catch(() => []);
-      resultado.fichas[nome].linksDom = linksDom;
-      if (linksDom.length) { console.log('   🔗 links na tela:'); linksDom.forEach(u => console.log('        ' + u)); }
-
-      try { fs.writeFileSync(path.resolve(__dirname, '..', 'data', `diag-boleto-${nome.replace(/\s+/g, '_')}.html`), await page.content(), 'utf8'); } catch (_) {}
-      capturaAtual = null;
-    }
+    try { fs.writeFileSync(path.resolve(__dirname, '..', 'data', 'diag-boleto.html'), await page.content(), 'utf8'); } catch (_) {}
   } catch (e) {
     console.error('❌ Erro:', e && e.message);
   } finally {
@@ -246,18 +215,17 @@ async function main() {
   try { fs.writeFileSync(OUT, JSON.stringify(resultado, null, 2), 'utf8'); } catch (_) {}
 
   console.log('\n────────────────────────── RESUMO ──────────────────────────');
-  for (const [nome, f] of Object.entries(resultado.fichas)) {
-    console.log(`\n👤 ${nome}`);
-    console.log(`   campos de busca: ${(f.inputsBusca || []).map(i => i.ph || i.aria || i.name || i.id).filter(Boolean).join(' | ') || '(nenhum)'}`);
-    console.log(`   abas ficha: ${f.abas.join(' | ')}`);
-    if (f.linksDom && f.linksDom.length) { console.log('   🔗 links na tela:'); f.linksDom.forEach(u => console.log('      ' + u)); }
-    for (const c of (f.capturas || [])) {
-      console.log(`   ${c.camposUrl.length ? '🔗' : '💰'} ${c.url} (${c.registros != null ? c.registros + ' reg.' : 'obj'})`);
-      console.log(`      campos: ${c.chaves.join(', ')}`);
-      c.camposUrl.forEach(([k, v]) => console.log(`      🔗 ${k} = ${v}`));
-    }
-    if (!(f.capturas || []).length && !(f.linksDom || []).length) console.log('   ⚠️  nada capturado (veja diag-boleto-' + nome.replace(/\s+/g, '_') + '.html).');
+  console.log(`URL final: ${resultado.urlFinal}`);
+  console.log(`Capturas de API: ${resultado.capturas.length} | PDFs: ${resultado.pdfs.length}`);
+  for (const c of resultado.capturas) {
+    console.log(`\n${c.camposUrl.length ? '🔗' : '📦'} ${c.url} (${c.registros != null ? c.registros + ' reg.' : 'obj'})`);
+    console.log(`   campos: ${c.chaves.join(', ')}`);
+    c.camposUrl.forEach(([k, v]) => console.log(`   🔗 ${k} = ${v}`));
+    if (c.amostras && c.amostras[0]) console.log(`   📋 amostra: ${JSON.stringify(c.amostras[0]).slice(0, 600)}`);
   }
+  if (resultado.pdfs.length) { console.log('\n📄 PDFs:'); resultado.pdfs.forEach(u => console.log('   ' + u)); }
+  if (resultado.linksDom && resultado.linksDom.length) { console.log('\n🔗 links na tela:'); resultado.linksDom.forEach(u => console.log('   ' + u)); }
+  if (!resultado.capturas.length && !resultado.pdfs.length) console.log('\n⚠️  nada capturado — veja data/diag-boleto.html (a tela pode estar noutro host/permissão).');
   console.log('\n✅ Detalhes em data/diag-boleto.json\n');
 }
 
