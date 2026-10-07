@@ -1014,6 +1014,21 @@ function scriptPreviewTeste() {
       },2000);
     }catch(err){ b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(err.message||'Falha ao enviar.')+'</div>'; btn.disabled=false; }
   }
+  // Teste da cobrança: enfileira na fila da SoFIA (sai pelo NÚMERO dela, não o do robô).
+  async function testarCobranca(btn){
+    var tel = soDigTeste((_tt&&_tt.value)||'');
+    var card = btn.closest('.card'); var ta = card.querySelector('textarea'); var b = card.querySelector('.prev');
+    if(tel.length<10){ alert('Preencha o "Número para testes" no topo da página.'); if(_tt) _tt.focus(); return; }
+    var chaveInp = card.querySelector('input[name="chave"]'); var chaveMsg = chaveInp?chaveInp.value:'';
+    b.style.display='block'; b.innerHTML='<div class="prev-b">⏳ Enfileirando teste pela SoFIA…</div>'; btn.disabled=true;
+    try{
+      var r = await fetch('/cobranca/teste',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:tel, texto:ta.value, chave:chaveMsg})});
+      var d = await r.json();
+      if(d.ok) b.innerHTML='<div class="prev-b ok">✅ Teste enfileirado — a SoFIA envia para '+escHtml(tel)+' em instantes (pelo número dela). Confira o WhatsApp.</div>';
+      else b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(d.erro||'Não foi possível enfileirar.')+'</div>';
+    }catch(e){ b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(e.message||'Falha.')+'</div>'; }
+    finally{ btn.disabled=false; }
+  }
   function mfToggle(chk){ var w=chk.closest('.fotorow').querySelector('.mfWrap'); if(w) w.style.display=chk.checked?'':'none'; }
   function mfLer(f){ return new Promise(function(res,rej){ var r=new FileReader(); r.onload=function(){res(r.result);}; r.onerror=rej; r.readAsDataURL(f); }); }
   async function mfSalvar(btn, chave){
@@ -1080,6 +1095,8 @@ function cardMensagem(m, voltar, opts = {}) {
         <button type="button" class="tbtn" onclick="testarDMIg(this)">📩 Enviar DM de teste</button>
         <small style="color:var(--cinza)">envia o DM de verdade — e comprova o cookie</small>
        </div>`
+    : opts.cobranca
+    ? `<button type="button" class="tbtn" onclick="testarCobranca(this)">🧪 Enviar teste (pela SoFIA)</button>`
     : `<button type="button" class="tbtn" onclick="testarMsg(this)">🧪 Enviar teste</button>`;
   return `<form method="POST" action="/salvar">
       <input type="hidden" name="chave" value="${esc(m.chave)}">
@@ -1693,7 +1710,8 @@ function cardDeMsg(m, hmap, voltar) {
     hbloco = `<div class="hsec"><div class="hsec-t">Horário deste envio ${badgeH}</div>${linhas}</div>`;
   }
   const sw = switchEnvio(jobsDoCard(m.chave));
-  return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar)}${hbloco}</div>`;
+  const opts = /^cobranca_/.test(m.chave) ? { cobranca: true } : undefined;
+  return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar, opts)}${hbloco}</div>`;
 }
 
 // Jobs sem texto editável, na seção "Outros envios" da aba Mensagens.
@@ -5746,6 +5764,25 @@ const server = http.createServer((req, res) => {
     const p = teste.ler(id);
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     return res.end(JSON.stringify(p ? { status: p.status, erro: p.erro } : { status: 'desconhecido' }));
+  }
+  // Teste da COBRANÇA: enfileira na fila da SoFIA (sai pelo NÚMERO dela, não o do robô).
+  if (req.method === 'POST' && url === '/cobranca/teste') {
+    return lerCorpo(req, 1e6, corpo => {
+      try {
+        const d = JSON.parse(corpo || '{}');
+        const tel = String(d.telefone || '').replace(/\D/g, '');
+        if (tel.length < 10) throw new Error('Número para testes inválido (preencha no topo).');
+        const texto = mensagens.renderTexto(d.texto || '', mensagens.exemplosDe(d.chave));
+        if (!String(texto).trim()) throw new Error('texto vazio');
+        const outbox = process.env.COBRANCA_OUTBOX_FILE || path.resolve(__dirname, '..', 'data', 'cobranca-outbox.jsonl');
+        const linha = JSON.stringify({ id: 'teste-' + Date.now(), telefone: tel, texto, nome: 'Teste', tipo: 'teste', em: new Date().toISOString() });
+        try { fs.mkdirSync(path.dirname(outbox), { recursive: true }); } catch (_) {}
+        fs.appendFileSync(outbox, linha + '\n', 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
   }
 
   // Página de agendamentos
