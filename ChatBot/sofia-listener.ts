@@ -1586,8 +1586,21 @@ setInterval(() => { processarRespostas().catch(() => {}); }, 1500);
 // O robô (Experimental) lê os débitos vencidos no EVO, gera o link e ENFILEIRA
 // em ../Experimental/data/cobranca-outbox.jsonl. Aqui a SoFIA envia pelo NÚMERO
 // dela (não o da recepção). Falha → re-enfileira até COBRANCA_MAX_TENTATIVAS.
-const COBRANCA_OUTBOX = process.env.COBRANCA_OUTBOX_FILE
-  || path.resolve(DIR, "..", "Experimental", "data", "cobranca-outbox.jsonl");
+// Caminho da fila: igual ao contatos.json, procura nos lugares onde o arquivo
+// costuma ficar (a Sofia roda de ChatBot/, o painel/robô gravam em
+// Experimental/data/). Usar só DIR quebrava quando SOFIA_DIR aponta p/ outro lugar.
+const COBRANCA_OUTBOX = (() => {
+  if (process.env.COBRANCA_OUTBOX_FILE) return process.env.COBRANCA_OUTBOX_FILE;
+  const cands = [
+    path.resolve(process.cwd(), "..", "Experimental", "data", "cobranca-outbox.jsonl"),
+    path.resolve(process.cwd(), "Experimental", "data", "cobranca-outbox.jsonl"),
+    path.resolve(DIR, "..", "Experimental", "data", "cobranca-outbox.jsonl"),
+    path.resolve(DIR, "..", "..", "Experimental", "data", "cobranca-outbox.jsonl"),
+    path.resolve(DIR, "data", "cobranca-outbox.jsonl"),
+  ];
+  return cands.find((f) => { try { return fs.existsSync(f); } catch { return false; } }) || cands[0];
+})();
+try { console.log(`[sofia] fila de cobrança: ${COBRANCA_OUTBOX}${fs.existsSync(COBRANCA_OUTBOX) ? " (existe)" : " (vazia/ainda não criada)"}`); } catch {}
 const COBRANCA_MAX_TENTATIVAS = 3;
 let processandoCobranca = false;
 async function processarCobranca() {
