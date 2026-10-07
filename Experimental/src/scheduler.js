@@ -1036,6 +1036,7 @@ async function main() {
   // Schedule: 06:30 segunda → Planilha Google de alunas ativas + aniversários
   cron.schedule(config.schedule.planilhaAniv, () => {
     log('⏰ Cron disparado: Planilha de aniversários');
+    if (!jobsAtivos.ativo('planilhaAniv')) { log('⏸️  Planilha desligada no painel — pulando'); return; }
     if (jobRunning) { log('⚠️  Planilha ignorada — outro job em execução'); return; }
     jobRunning = true;
     const start = new Date();
@@ -1054,6 +1055,7 @@ async function main() {
   // Schedule: 05:30 todo dia 01 → Lista de aniversariantes do mês no grupo da equipe
   cron.schedule(config.schedule.aniversMesGrupo, () => {
     log('⏰ Cron disparado: Aniversariantes do mês (grupo da equipe)');
+    if (!jobsAtivos.ativo('aniversMesGrupo')) { log('⏸️  Aniversariantes do mês desligado no painel — pulando'); return; }
     if (jobRunning) { log('⚠️  Aniversariantes-mês ignorado — outro job em execução'); return; }
     jobRunning = true;
     const start = new Date();
@@ -1072,6 +1074,7 @@ async function main() {
   // Schedule: 09:07 todo dia 28 → Contratos a vencer no MÊS SEGUINTE no grupo da equipe
   cron.schedule(config.schedule.renovacoesMesGrupo, () => {
     log('⏰ Cron disparado: Contratos a vencer no mês (grupo da equipe)');
+    if (!jobsAtivos.ativo('renovacoesMesGrupo')) { log('⏸️  Contratos a vencer no mês desligado no painel — pulando'); return; }
     if (jobRunning) { log('⚠️  Renovações-mês ignorado — outro job em execução'); return; }
     jobRunning = true;
     const start = new Date();
@@ -1093,6 +1096,7 @@ async function main() {
   } else {
     cron.schedule(config.schedule.presentesPend, () => {
       log('⏰ Cron disparado: Presentes pendentes (grupo da equipe)');
+      if (!jobsAtivos.ativo('presentesPend')) { log('⏸️  Presentes pendentes desligado no painel — pulando'); return; }
       if (jobRunning) { log('⚠️  Presentes pendentes ignorado — outro job em execução'); return; }
       jobRunning = true;
       const start = new Date();
@@ -1112,6 +1116,7 @@ async function main() {
   // Schedule: 16:30 toda sexta → Resumo da semana no grupo da equipe
   cron.schedule(config.schedule.resumoSemana, () => {
     log('⏰ Cron disparado: Resumo da semana');
+    if (!jobsAtivos.ativo('resumoSemana')) { log('⏸️  Resumo da semana desligado no painel — pulando'); return; }
     if (jobRunning) { log('⚠️  Resumo da semana ignorado — outro job em execução'); return; }
     jobRunning = true;
     const start = new Date();
@@ -1130,6 +1135,7 @@ async function main() {
   // Schedule: 06:10 toda segunda → Alunas ausentes há 10+ dias no grupo da equipe
   cron.schedule(config.schedule.ausentes10, () => {
     log('⏰ Cron disparado: Ausentes 10 dias');
+    if (!jobsAtivos.ativo('ausentes10')) { log('⏸️  Ausentes 10 dias desligado no painel — pulando'); return; }
     if (jobRunning) { log('⚠️  Ausentes 10 dias ignorado — outro job em execução'); return; }
     jobRunning = true;
     const start = new Date();
@@ -1148,6 +1154,7 @@ async function main() {
   // Schedule: 19:45 todos os dias → Resumo do dia das experimentais no grupo
   cron.schedule(config.schedule.resumoDia, () => {
     log('⏰ Cron disparado: Resumo do dia');
+    if (!jobsAtivos.ativo('resumoDia')) { log('⏸️  Resumo do dia desligado no painel — pulando'); return; }
     if (jobRunning) { log('⚠️  Resumo do dia ignorado — outro job em execução'); return; }
     jobRunning = true;
     const start = new Date();

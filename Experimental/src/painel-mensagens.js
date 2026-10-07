@@ -1207,8 +1207,8 @@ function paginaMensagens(aviso, erro) {
       const badgeH = editouHora ? '<span class="badge-ed">alterado</span>' : '';
       hbloco = `<div class="hsec"><div class="hsec-t">Horário deste envio ${badgeH}</div>${linhas}</div>`;
     }
-    // Switch Ativado/Desligado no canto superior direito (só p/ envios agendados).
-    const sw = Array.isArray(mapa) ? switchEnvio(mapa.map(([chave]) => chave)) : '';
+    // Switch Ativado/Desligado no canto superior direito (p/ todo envio agendado).
+    const sw = switchEnvio(jobsDoCard(m.chave));
     return `<div class="card" style="position:relative">${sw}${cardMensagem(m)}${hbloco}</div>`;
   };
 
@@ -1229,7 +1229,7 @@ function paginaMensagens(aviso, erro) {
   // Seção final: jobs sem texto editável (só horário).
   const outros = OUTROS_JOBS.map(chave => hmap[chave]).filter(Boolean).map(j => {
     const badgeH = j.editado ? '<span class="badge-ed">alterado</span>' : '';
-    return `<div class="card"><div class="chead"><h2 style="font-size:.98rem">${esc(j.titulo)} ${badgeH}</h2></div>
+    return `<div class="card" style="position:relative">${switchEnvio([j.chave])}<div class="chead"><h2 style="font-size:.98rem">${esc(j.titulo)} ${badgeH}</h2></div>
       <div class="hsec" style="border:0;margin:8px 0 0;padding:0">${blocoHorario(j, '')}</div></div>`;
   }).join('\n');
 
@@ -1670,6 +1670,23 @@ const HORARIOS_DA_MSG = {
   cobranca_recorrente: [['inadimplentes', '']],
   cobranca_boleto:     'compartilha:cobranca', // mesmo disparo da cobrança — só nota
 };
+// Mensagens de GRUPO que têm job agendado próprio (não estão no HORARIOS_DA_MSG
+// porque o horário delas é dia-do-mês/semana fixo, não editável aqui) — mas o
+// switch Ativado/Desligado vale. mensagem (mensagens.js) → job(s) (config/scheduler).
+const TOGGLE_EXTRA_DA_MSG = {
+  ausentes:            ['ausentes10'],
+  aniversariantes_mes: ['aniversMesGrupo'],
+  renovacoes_mes:      ['renovacoesMesGrupo'],
+  presentes:           ['presentesPend'],
+};
+// Jobs que este card controla com o switch (vazio = sem switch).
+function jobsDoCard(chave) {
+  const m = HORARIOS_DA_MSG[chave];
+  if (Array.isArray(m)) return m.map(([c]) => c);
+  if (TOGGLE_EXTRA_DA_MSG[chave]) return TOGGLE_EXTRA_DA_MSG[chave];
+  return [];
+}
+
 // Jobs sem texto editável, na seção "Outros envios" da aba Mensagens.
 // (os agendados manhã/tarde ficam na aba "Agendar envios", pois são dela.)
 const OUTROS_JOBS = ['resumoDia', 'resumoSemana', 'planilhaAniv'];
