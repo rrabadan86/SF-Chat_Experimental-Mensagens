@@ -37,8 +37,14 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // Limite "vencido há X+ dias" — configurável no painel (data/inadimplentes-config.json).
 const cfg = require('./inadimplentes-config');
-// Não reenvia para a mesma aluna dentro desta janela (evita mandar todo dia).
-const REENVIO_DIAS = parseInt(process.env.INADIMPLENTES_REENVIO_DIAS || '3', 10);
+// Regra: a cobrança é reenviada TODO DIA enquanto o débito continua em aberto, mas
+// no máximo UMA vez por dia (não duplica no mesmo dia). Até a aluna pagar.
+// Mesmo dia (fuso de São Paulo) que um ISO?
+function mesmoDiaSp(iso) {
+  if (!iso) return false;
+  const fmt = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); // YYYY-MM-DD
+  try { return fmt(new Date(iso)) === fmt(new Date()); } catch (_) { return false; }
+}
 // Fila de cobrança consumida pela SoFIA (envia pelo NÚMERO dela, não o do robô).
 const OUTBOX_FILE = process.env.COBRANCA_OUTBOX_FILE || path.resolve(__dirname, '..', 'data', 'cobranca-outbox.jsonl');
 // Estado dos envios (por idCliente) — gitignored, por VPS. Escrito pela SoFIA SÓ
@@ -366,8 +372,8 @@ async function lerInadimplentes() {
 
 // ─── Enfileirar para a SoFIA ────────────────────────────────────────────────
 // Lê os inadimplentes e ENFILEIRA a mensagem certa na fila de cobrança. Quem ENVIA
-// é a SoFIA, pelo NÚMERO dela. dry=true: só imprime. Dedup por idCliente (não
-// re-enfileira dentro de REENVIO_DIAS).
+// é a SoFIA, pelo NÚMERO dela. dry=true: só imprime. Reenvia TODO DIA enquanto o
+// débito segue em aberto, no máximo 1x por dia (dedup por idCliente+dia).
 async function runInadimplentes({ dry = false } = {}) {
   const mensagens = require('./mensagens');
   const diasMin = cfg.lerDias();
@@ -377,7 +383,6 @@ async function runInadimplentes({ dry = false } = {}) {
 
   const enviados = lerEnviados();         // escrito pela SoFIA SÓ quando confirma o envio
   const pendentes = lerPendentesOutbox(); // já na fila, ainda não enviados pela SoFIA
-  const agora = Date.now();
   const linhas = [];
   console.log(`\n${dry ? '🧪 DRY (nada enfileirado)' : '📥 Enfileirando para a SoFIA'} — ${lista.length} inadimplente(s):`);
 
@@ -385,10 +390,10 @@ async function runInadimplentes({ dry = false } = {}) {
     const chave = String(r.idCliente);
     const nome = r.nome;
 
-    const ult = enviados[chave] && enviados[chave].em ? new Date(enviados[chave].em).getTime() : 0;
-    if (ult && (agora - ult) < REENVIO_DIAS * 86400000) {
-      res.skipped++; res.details.push({ name: nome, status: 'skipped', reason: `avisada há < ${REENVIO_DIAS}d` });
-      console.log(`   ⏭️  ${nome}: já avisada (enviada) nos últimos ${REENVIO_DIAS} dia(s) — pulando.`);
+    // Reenvia todo dia até pagar, mas no máximo uma vez por dia.
+    if (enviados[chave] && mesmoDiaSp(enviados[chave].em)) {
+      res.skipped++; res.details.push({ name: nome, status: 'skipped', reason: 'já cobrada hoje' });
+      console.log(`   ⏭️  ${nome}: já cobrada HOJE — pulando (reenvia amanhã se continuar em aberto).`);
       continue;
     }
     if (pendentes.has(chave)) {
