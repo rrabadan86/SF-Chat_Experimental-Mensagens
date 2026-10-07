@@ -5040,6 +5040,7 @@ function paginaCobranca(aviso, erro) {
   const corpo = `<div class="wrap">
     ${subnavSofia('cobranca')}
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+    ${barraTeste()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"><input type="hidden" name="voltar" value="${esc(VOLTAR)}"></form>
     <div class="card" style="background:#f6fbf9;border-left:4px solid var(--teal)">
       <p class="quando" style="margin:0">Enviadas <b>pelo número da SoFIA</b> (não o da recepção), para alunas com débito <b>vencido há 2+ dias</b>. O robô lê os débitos no EVO no horário abaixo, gera o link e a SoFIA envia. Use o <b>switch</b> no canto do card para ligar/desligar cada mensagem.</p>
