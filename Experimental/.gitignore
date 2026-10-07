@@ -99,3 +99,6 @@ data/diag-debito.json
 data/diag-*.html
 # Liga/Desliga de cada envio (por VPS)
 data/jobs-ativos.json
+# Fila de cobrança (robô grava, SoFIA envia) — por VPS
+data/cobranca-outbox.jsonl
+data/cobranca-outbox.jsonl.*

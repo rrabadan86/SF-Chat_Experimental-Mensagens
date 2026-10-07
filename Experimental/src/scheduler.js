@@ -99,7 +99,7 @@ function agendarInadimplentes(tentativa = 1) {
   atividade.setContexto('Cobrança de inadimplentes');
   const start = new Date();
   require('./inadimplentes').runInadimplentes({ dry: false })
-    .then(r => log(`✅ Inadimplentes concluído — ${r.sent} enviada(s), ${r.skipped} pulada(s), ${r.failed} falha(s)`))
+    .then(r => log(`✅ Inadimplentes concluído — ${r.enfileirados} enfileirada(s) p/ a SoFIA, ${r.skipped} pulada(s), ${r.failed} falha(s)`))
     .catch(err => logError('Inadimplentes', err))
     .finally(() => {
       jobRunning = false;
