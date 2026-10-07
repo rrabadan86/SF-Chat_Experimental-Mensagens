@@ -1,11 +1,12 @@
 /**
- * DIAGNÓSTICO (não envia/cobra/apaga nada) — achar o LINK do boleto da aluna.
+ * DIAGNÓSTICO (não envia/cobra/apaga nada) — achar como abrir a aluna por NOME e
+ * onde fica o LINK/PDF do boleto.
  *
- * Abre a aluna pela BUSCA (não depende da segmentação "Com débito"), vai em
- * Financeiro → Boletos e clica na LUPA da linha (🔍) para abrir o boleto,
- * capturando o link/PDF/linha digitável. NUNCA clica na lixeira.
+ * PROBE: despeja a estrutura da tela (campos de busca, linhas de resultado) em
+ * cada etapa, para a gente ver exatamente o que o EVO mostra. Depois tenta abrir
+ * a ficha → Financeiro → Boletos e clicar na LUPA (🔍). NUNCA clica em lixeira.
  *
- * ⚠️ Rode no VPS da unidade certa (as ids 3550/5047 são do BUENO).
+ * ⚠️ Rode no VPS da unidade certa (Bianca/Paula são do BUENO).
  *
  * Uso: node src/diag-boleto.js
  *      node src/diag-boleto.js --nomes="Bianca de Castro,Paula Renata Camargo Braga"
@@ -43,9 +44,29 @@ function extrairLista(data) {
   return null;
 }
 
+// Despeja os <input> visíveis (placeholder/name/id/aria) — pra achar o campo de busca.
+const dumpInputs = (page) => page.evaluate(() => {
+  const out = [];
+  for (const el of document.querySelectorAll('input,textarea')) {
+    if (el.type === 'hidden' || !(el.offsetWidth > 0 || el.offsetHeight > 0)) continue;
+    out.push({ ph: el.placeholder || '', name: el.name || '', id: el.id || '', aria: el.getAttribute('aria-label') || '', type: el.type || '' });
+  }
+  return out.slice(0, 25);
+});
+// Despeja as primeiras linhas de resultado (texto) — pra ver se a busca retornou.
+const dumpLinhas = (page) => page.evaluate(() => {
+  const out = [];
+  for (const tr of document.querySelectorAll('table tbody tr, [role="row"], .list-item, .card')) {
+    const t = (tr.textContent || '').trim().replace(/\s+/g, ' ');
+    if (t && t.length <= 160 && !out.includes(t)) out.push(t);
+    if (out.length >= 15) break;
+  }
+  return out;
+});
+
 async function main() {
   console.log('\n═══════════════════════════════════════════════════');
-  console.log('🧾 DIAGNÓSTICO — link do boleto (não envia/apaga nada)');
+  console.log('🧾 PROBE — busca por nome + link do boleto (não envia/apaga nada)');
   console.log(`   Alvos: ${ALVOS.join(' | ')}`);
   console.log('═══════════════════════════════════════════════════\n');
 
@@ -112,19 +133,48 @@ async function main() {
     console.log('✅ Login OK');
 
     for (const nome of ALVOS) {
-      console.log(`\n🧾 Aluna: ${nome}`);
-      resultado.fichas[nome] = { nome, idNaUrl: null, abas: [], capturas: [] };
+      console.log(`\n═══ Aluna: ${nome} ═══`);
+      resultado.fichas[nome] = { nome, urlFicha: null, abas: [], capturas: [], inputsBusca: [], linhasAntes: [], linhasDepois: [] };
 
-      // Abre a Segmentação de clientes e BUSCA pelo nome (a busca cobre toda a base).
+      // Abre a Segmentação de clientes (lista geral — a busca cobre toda a base).
       await page.evaluate((h) => { location.hash = h; }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
-      await sleep(6000); await fecharPopupNovaTela(page);
-      try {
-        const campo = await page.$('input[placeholder*="esquise" i], input[placeholder*="Pesquis" i], input[placeholder*="nome" i]');
-        if (campo) { await campo.click({ clickCount: 3 }); await campo.type(nome, { delay: 55 }); }
-        else console.log('   ⚠️  não achei o campo de busca.');
-      } catch (_) {}
-      await sleep(5000);
-      // clica no resultado (nome exato → senão por primeiro+último nome)
+      await sleep(7000); await fecharPopupNovaTela(page);
+
+      // PROBE 1: quais campos de busca existem?
+      const inputs = await dumpInputs(page);
+      resultado.fichas[nome].inputsBusca = inputs;
+      console.log('   🔎 campos na tela:');
+      inputs.forEach((i, n) => console.log(`      [${n}] ph="${i.ph}" name="${i.name}" id="${i.id}" aria="${i.aria}" type=${i.type}`));
+      resultado.fichas[nome].linhasAntes = await dumpLinhas(page);
+
+      // Tenta digitar no campo de busca mais provável (placeholder/aria/name com "nome/pesquis/busca/search").
+      const idxBusca = inputs.findIndex(i => /nome|pesquis|busca|search|localiz|filtr/i.test(`${i.ph} ${i.aria} ${i.name} ${i.id}`));
+      if (idxBusca >= 0) {
+        console.log(`   ⌨️  digitando no campo [${idxBusca}] e pressionando Enter...`);
+        const campos = await page.$$('input,textarea');
+        // mapeia o índice visível → handle (pula hidden/invisíveis)
+        let visI = -1, alvoHandle = null;
+        for (const h of campos) {
+          const vis = await h.evaluate(el => el.type !== 'hidden' && (el.offsetWidth > 0 || el.offsetHeight > 0));
+          if (vis) { visI++; if (visI === idxBusca) { alvoHandle = h; break; } }
+        }
+        if (alvoHandle) {
+          await alvoHandle.click({ clickCount: 3 });
+          await alvoHandle.type(nome, { delay: 55 });
+          await sleep(1500);
+          await page.keyboard.press('Enter').catch(() => {});
+          await sleep(5000);
+        }
+      } else {
+        console.log('   ⚠️  nenhum campo parece ser de busca — veja a lista acima.');
+      }
+
+      // PROBE 2: o que apareceu depois da busca?
+      resultado.fichas[nome].linhasDepois = await dumpLinhas(page);
+      console.log('   📄 linhas após a busca:');
+      resultado.fichas[nome].linhasDepois.slice(0, 10).forEach(l => console.log(`      • ${l}`));
+
+      // Tenta clicar no resultado (nome exato → senão por primeiro+último nome)
       const partes = nome.toLowerCase().split(/\s+/);
       const clicou = await page.evaluate(({ alvo, partes }) => {
         for (const el of document.querySelectorAll('a,td,span,div')) {
@@ -137,11 +187,11 @@ async function main() {
         }
         return false;
       }, { alvo: nome.toLowerCase(), partes });
-      if (!clicou) { console.log('   ⚠️  não achei o nome na busca — confira a grafia.'); continue; }
+      if (!clicou) { console.log('   ⚠️  não achei o nome nos resultados — veja as linhas acima.'); continue; }
       await sleep(5000); await fecharPopupNovaTela(page);
       await clicarTxt(['ver perfil', 'person ver perfil']);
       await sleep(7000); await fecharPopupNovaTela(page);
-      resultado.fichas[nome].idNaUrl = page.url();
+      resultado.fichas[nome].urlFicha = page.url();
       console.log(`   🌐 ${page.url()}`);
 
       capturaAtual = nome;
@@ -151,6 +201,9 @@ async function main() {
       else { await clicarTxt(['financeiro']); await sleep(3000); await clicarTxt(['boletos'], { exato: false }); await sleep(4000); }
 
       resultado.fichas[nome].abas = await page.evaluate(() => { const o = []; for (const el of document.querySelectorAll('a,button,[role="tab"],span,div,li')) { if (el.children.length > 1) continue; const t = (el.textContent || '').trim().replace(/\s+/g, ' '); if (t && t.length <= 24 && (el.offsetWidth > 0 || el.offsetHeight > 0) && !o.includes(t)) o.push(t); } return o.slice(0, 50); }).catch(() => []);
+      resultado.fichas[nome].linhasBoleto = await dumpLinhas(page);
+      console.log('   📄 linhas na aba Boletos:');
+      (resultado.fichas[nome].linhasBoleto || []).slice(0, 8).forEach(l => console.log(`      • ${l}`));
 
       // Clica a LUPA da 1ª linha de boleto (🔍) — NUNCA a lixeira.
       const acao = await page.evaluate(() => {
@@ -195,7 +248,8 @@ async function main() {
   console.log('\n────────────────────────── RESUMO ──────────────────────────');
   for (const [nome, f] of Object.entries(resultado.fichas)) {
     console.log(`\n👤 ${nome}`);
-    console.log(`   abas: ${f.abas.join(' | ')}`);
+    console.log(`   campos de busca: ${(f.inputsBusca || []).map(i => i.ph || i.aria || i.name || i.id).filter(Boolean).join(' | ') || '(nenhum)'}`);
+    console.log(`   abas ficha: ${f.abas.join(' | ')}`);
     if (f.linksDom && f.linksDom.length) { console.log('   🔗 links na tela:'); f.linksDom.forEach(u => console.log('      ' + u)); }
     for (const c of (f.capturas || [])) {
       console.log(`   ${c.camposUrl.length ? '🔗' : '💰'} ${c.url} (${c.registros != null ? c.registros + ' reg.' : 'obj'})`);
