@@ -258,15 +258,65 @@ async function lerInadimplentes() {
     listaBoletos = null;
     await irPara('evo3/-Financeiro-Boletos-IntegracaoBancaria', 9000);
     for (let i = 0; i < 16 && !listaBoletos; i++) { await sleep(800); await fecharPopupNovaTela(page); }
+    console.log(`   · carga automática: ${listaBoletos ? listaBoletos.length + ' boleto(s)' : 'nada capturado (null)'}`);
+
+    // Define o período de vencimento: início = hoje - JANELA, fim = hoje — digitando
+    // via TECLADO (o Angular sincroniza o ngModel) e clicando na busca (lupa azul).
+    const JANELA = parseInt(process.env.INADIMPLENTES_BOLETO_JANELA || '120', 10);
+    try {
+      const d2 = (dt) => `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`;
+      const hoje = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+      const ini = new Date(hoje.getTime() - JANELA * 86400000);
+      // localiza os inputs de data (valor dd/mm/aaaa)
+      const inputs = await page.$$('input');
+      const dateHandles = [];
+      for (const h of inputs) { const v = await h.evaluate(el => el.value || ''); if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) dateHandles.push(h); }
+      console.log(`   · campos de data encontrados: ${dateHandles.length}`);
+      const setData = async (h, val) => { await h.click({ clickCount: 3 }); await page.keyboard.press('Backspace'); await h.type(val, { delay: 60 }); await page.keyboard.press('Tab'); await sleep(400); };
+      if (dateHandles[0]) await setData(dateHandles[0], d2(ini));
+      if (dateHandles[1]) await setData(dateHandles[1], d2(hoje));
+      await sleep(600);
+      const antes = listaBoletos;
+      const clicou = await page.evaluate(() => {
+        const vis = (el) => el.offsetWidth > 0 || el.offsetHeight > 0;
+        const proibido = (b) => /excluir|lixeir|remov|cancelar|export|email|e-mail|imprimir|limpar|nova conta|transfer|copiar|baixar/.test(b);
+        // 1) botão com texto/aria de busca na faixa de filtros (não o da barra de topo).
+        for (const el of document.querySelectorAll('button, [role="button"], a')) {
+          if (el.closest('table tbody')) continue;
+          const blob = `${(el.textContent || '').trim()} ${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''} ${el.className || ''}`.toLowerCase();
+          if (proibido(blob)) continue;
+          const rect = el.getBoundingClientRect();
+          if (/pesquis|buscar|consultar|filtrar|search|lupa/.test(blob) && rect.top > 60 && rect.top < 440 && vis(el)) { el.scrollIntoView({ block: 'center' }); el.click(); return (blob.trim().slice(0, 24) || '(lupa)'); }
+        }
+        // 2) botão-ícone de lupa (só <i>/mat-icon "search") na faixa de filtros.
+        for (const el of document.querySelectorAll('button, [role="button"], a')) {
+          if (el.closest('table tbody')) continue;
+          const ico = el.querySelector('i, mat-icon, svg');
+          const txt = `${el.textContent || ''} ${ico ? ico.textContent : ''} ${ico ? (ico.getAttribute('class') || '') : ''}`.toLowerCase();
+          const blob = `${txt} ${el.getAttribute('aria-label') || ''} ${el.className || ''}`.toLowerCase();
+          if (proibido(blob)) continue;
+          const rect = el.getBoundingClientRect();
+          if (/search|lupa|magnif|fa-search|pesquis|buscar/.test(blob) && rect.top > 60 && rect.top < 440 && vis(el)) { el.scrollIntoView({ block: 'center' }); el.click(); return '(ícone lupa)'; }
+        }
+        return null;
+      });
+      console.log(`   · busca por período [${d2(ini)} → ${d2(hoje)}]: ${clicou ? 'clicada ("' + clicou + '")' : 'botão não achado'}`);
+      for (let i = 0; i < 12 && listaBoletos === antes; i++) await sleep(800); // espera nova carga
+      console.log(`   · após a busca: ${listaBoletos ? listaBoletos.length + ' boleto(s)' : 'nada'}`);
+    } catch (e) { console.log('   · (não consegui ajustar o período:', e.message, ')'); }
 
     const hojeDias = (iso) => diasDeAtraso(iso);
+    let nCanc = 0, nPago = 0, nForaJanela = 0;
     const boletosAbertos = (listaBoletos || []).filter(b => {
-      if (b.FL_CANCELADO === true || b.FL_CANCELADO === 1) return false;
-      if (b.RECEBIMENTO) return false;                 // já recebido/pago
+      if (b.FL_CANCELADO === true || b.FL_CANCELADO === 1) { nCanc++; return false; }
+      if (b.RECEBIMENTO) { nPago++; return false; }    // já recebido/pago
       const dias = hojeDias(b.DT_VENCIMENTO);
       if (dias == null) return false;
-      return dias === 0 || dias >= diasMin;             // vence hoje OU vencido há X+ dias
+      const ok = dias === 0 || dias >= diasMin;         // vence hoje OU vencido há X+ dias
+      if (!ok) nForaJanela++;
+      return ok;
     });
+    console.log(`   · total ${listaBoletos ? listaBoletos.length : 0} | cancelados ${nCanc} | pagos ${nPago} | fora da regra (futuro/<${diasMin}d) ${nForaJanela} | elegíveis ${boletosAbertos.length}`);
     // Um boleto por aluna (o mais antigo vencido).
     const porCliente = new Map();
     for (const b of boletosAbertos) {
