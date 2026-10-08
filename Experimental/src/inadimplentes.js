@@ -63,6 +63,12 @@ function lerPendentesOutbox() {
 }
 const primeiroNome = (nome) => String(nome || '').trim().split(/\s+/)[0] || '';
 const soDigitos = (s) => String(s || '').replace(/\D/g, '');
+// Valor em Real (ex.: 647 -> "R$ 647,00"). Vazio se não houver valor.
+const fmtBRL = (n) => {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v <= 0) return '';
+  return 'R$ ' + v.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+};
 
 // Dias de atraso entre uma data (ISO) e hoje, no fuso de São Paulo (só data).
 function diasDeAtraso(iso) {
@@ -422,15 +428,16 @@ async function runInadimplentes({ dry = false } = {}) {
       continue;
     }
 
+    const valorFmt = fmtBRL(r.valor);
     let texto, chaveMsg;
     if (r.tipo === 'recorrente') {
       if (!r.link) { res.failed++; res.details.push({ name: nome, status: 'failed', reason: 'link não gerado' }); console.log(`   ❌ ${nome}: recorrente sem link — não enfileiro.`); continue; }
       chaveMsg = 'cobranca_recorrente';
-      texto = mensagens.render(chaveMsg, { nome: primeiroNome(nome), link: r.link });
+      texto = mensagens.render(chaveMsg, { nome: primeiroNome(nome), link: r.link, valor: valorFmt });
     } else {
       if (!r.link) { res.failed++; res.details.push({ name: nome, status: 'failed', reason: 'boleto não gerado' }); console.log(`   ❌ ${nome}: boleto sem link — não enfileiro.`); continue; }
       chaveMsg = r.venceHoje ? 'cobranca_boleto_hoje' : 'cobranca_boleto';
-      texto = mensagens.render(chaveMsg, { nome: primeiroNome(nome), vencimento: r.vencimentoFmt, link: r.link });
+      texto = mensagens.render(chaveMsg, { nome: primeiroNome(nome), vencimento: r.vencimentoFmt, link: r.link, valor: valorFmt });
     }
 
     if (dry) {
