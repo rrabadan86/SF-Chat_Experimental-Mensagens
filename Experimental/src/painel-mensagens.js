@@ -1596,7 +1596,7 @@ function paginaExpress(aviso, erro) {
               var ex=res.existente||{};
               var quem=exEsc(ex.nome||'(sem nome)');
               var contato=ex.telefone?(' · '+exEsc(String(ex.telefone))):(ex.email?(' · '+exEsc(String(ex.email))):'');
-              exStatus('⚠️ Já existe um cadastro com este e-mail/telefone em nome de <b>'+quem+'</b>'+contato+'.<br>É a <b>mesma pessoa</b> (atualizar) ou <b>outra pessoa</b> — ex.: mãe e filha (criar novo)?'
+              exStatus('⚠️ Já existe um cadastro com <b>este telefone</b> em nome de <b>'+quem+'</b>'+contato+'.<br>É a <b>mesma pessoa</b> (atualizar) ou <b>outra pessoa</b> — ex.: mãe e filha (criar novo)?'
                 +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
                 +'<button type="button" class="save" style="width:auto;padding:9px 14px" onclick="exDupSobrescrever()">Mesma pessoa — atualizar</button>'
                 +'<button type="button" class="save" style="width:auto;padding:9px 14px;background:#8a6100" onclick="exDupNovo()">Outra pessoa — criar novo</button>'
@@ -2662,7 +2662,10 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   }
   function toggleTagEd(){ tagEdAberto=!tagEdAberto; if(selecionada){ ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[selecionada],selecionada); } }
   function toggleAgendar(){ agAberto=!agAberto; if(selecionada){ ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[selecionada],selecionada); } }
-  function enviarAgendamento(){
+  function agDupSobrescrever(){ enviarAgendamento('sobrescrever'); }
+  function agDupNovo(){ enviarAgendamento('novo'); }
+  function enviarAgendamento(acaoDup){
+    acaoDup=(acaoDup==='sobrescrever'||acaoDup==='novo')?acaoDup:'';
     var k=selecionada; if(!k) return;
     var nome=(document.getElementById('agNome').value||'').trim();
     var email=(document.getElementById('agEmail').value||'').trim();
@@ -2671,8 +2674,8 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     var st=document.getElementById('agMsg');
     if(!nome||!email||!data||!hora){ if(st)st.textContent='Preencha nome, e-mail, data e horário.'; return; }
     var when=data+' '+hora; // AAAA-MM-DD HH:MM (o EVO/form entende)
-    if(st)st.textContent='⏳ Agendando no EVO…';
-    fetch('/sofia/agendar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,nome:nome,email:email,when:when})})
+    if(st)st.innerHTML=acaoDup==='novo'?'⏳ Criando um cadastro novo…':(acaoDup==='sobrescrever'?'⏳ Atualizando o cadastro existente…':'⏳ Agendando no EVO…');
+    fetch('/sofia/agendar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,nome:nome,email:email,when:when,origem:'painel',acao_duplicado:acaoDup})})
       .then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok||!j.id){ if(st)st.textContent='❌ '+((j&&j.erro)||'falha ao enviar'); return; }
         var n=0;
@@ -2682,6 +2685,16 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
             var res=s&&s.res;
             if(!res){ if(n>40){ if(st)st.textContent='⏳ Ainda processando… confira em instantes.'; return; } setTimeout(poll,1500); return; }
             if(res.ok){ if(st)st.innerHTML='✅ Agendada no EVO para <b>'+escH(res.when||when)+'</b>!'; setTimeout(function(){ agAberto=false; if(selecionada){ ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[selecionada],selecionada); } },2000); }
+            else if(res.duplicado){
+              var ex=res.existente||{};
+              var quem=escH(ex.nome||'(sem nome)');
+              var contato=ex.telefone?(' · '+escH(String(ex.telefone))):'';
+              if(st)st.innerHTML='⚠️ Já existe um cadastro com <b>este telefone</b> em nome de <b>'+quem+'</b>'+contato+'.<br>É a <b>mesma pessoa</b> (atualizar) ou <b>outra pessoa</b> — ex.: mãe e filha (criar novo)?'
+                +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
+                +'<button type="button" onclick="agDupSobrescrever()" style="padding:8px 12px;border-radius:9px;border:1px solid var(--linha);background:var(--verde);color:#fff;cursor:pointer">Mesma pessoa — atualizar</button>'
+                +'<button type="button" onclick="agDupNovo()" style="padding:8px 12px;border-radius:9px;border:1px solid var(--linha);background:#8a6100;color:#fff;cursor:pointer">Outra pessoa — criar novo</button>'
+                +'</div>';
+            }
             else if(res.lotada){ if(st)st.innerHTML='⚠️ Turma cheia nesse horário. Alternativas: '+escH((res.alternativas||[]).join('  ·  ')||'—'); }
             else { if(st)st.textContent='❌ Não consegui agendar: '+(res.detalhe||'erro no EVO'); }
           }).catch(function(){ if(n>40){ if(st)st.textContent='❌ erro de rede'; return; } setTimeout(poll,1500); });
@@ -6284,8 +6297,11 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       const chave = String(d.chave || '').replace(/\D/g, '');
       const nome = String(d.nome || '').trim(), email = String(d.email || '').trim(), when = String(d.when || '').trim();
-      // origem: "express" (Cadastro Express) → confirmação com texto próprio; vazio (agendar da conversa) → texto padrão SoFIA/form.
-      const origem = String(d.origem || '').trim().toLowerCase() === 'express' ? 'express' : '';
+      // origem: "express" (Cadastro Express) → confirmação com texto próprio;
+      // "painel" (widget da conversa, com operador) → mesmo fluxo de PERGUNTAR no
+      // duplicado; vazio (SoFIA sozinha) → cria novo, sem perguntar.
+      const _org = String(d.origem || '').trim().toLowerCase();
+      const origem = (_org === 'express' || _org === 'painel') ? _org : '';
       // decisão diante de cadastro de outra pessoa com o mesmo contato (mãe x filha).
       const ad = String(d.acao_duplicado || '').trim().toLowerCase();
       const acaoDuplicado = (ad === 'sobrescrever' || ad === 'novo') ? ad : '';
