@@ -436,6 +436,11 @@ if [ "$START" = "1" ]; then
         echo "FORM_URL_PREFIX=$FORM_PREFIX"
         echo "FORM_UNIDADE=$(envget STUDIO_NOME "$EXP_DIR/.env")"
         echo "ZEE_STUDIO_PHONE=$(envget ZEE_STUDIO_PHONE "$EXP_DIR/.env")"
+        # O formulário fica numa pasta própria (FORM_DIR), separada do painel. Apontar
+        # o limite de experimentais para o arquivo que o PAINEL grava faz o controle
+        # "Máx. experimentais por turma" (SoFIA → Configuração) valer no agendamento,
+        # sem reiniciar. (0 = sem limite.)
+        echo "SOFIA_EXP_LIMITE_FILE=$EXP_DIR/data/sofia-exp-limite.txt"
         [ -n "$DOMAIN" ] && echo "PAINEL_URL=https://$DOMAIN"
         echo "# Identidade da landing (preencha p/ a página não cair no Setor Bueno):"
         echo "# FORM_ENDERECO="
