@@ -147,15 +147,22 @@ const CATALOGO = [
     chave: 'cobranca_recorrente',
     titulo: 'Cobrança — recorrente (cartão, com link)',
     quando: 'Enviada pela SoFIA para a aluna com débito VENCIDO (dias de atraso configuráveis na aba Cobrança) cujo contrato é RECORRENTE (cartão). Leva o link de pagamento. Horário/dias também na aba Cobrança.',
-    vars: [['nome', 'primeiro nome da aluna'], ['link', 'link de pagamento dela — mantenha o {link} no texto']],
+    vars: [['nome', 'primeiro nome da aluna'], ['link', 'link de pagamento dela — mantenha o {link} no texto'], ['valor', 'valor em aberto, ex.: R$ 199,00 (opcional)']],
     padrao: 'Oi, {nome}! 💜 Aqui é do {studio}.\n\nNotamos que ficou um valor em aberto no seu plano. Para regularizar rapidinho é só por este link:\n{link}\n\nQualquer dúvida, é só me chamar por aqui! 😊',
   },
   {
     chave: 'cobranca_boleto',
-    titulo: 'Cobrança — comum/boleto (sem link)',
-    quando: 'Enviada pela SoFIA para a aluna com débito VENCIDO (dias de atraso configuráveis na aba Cobrança) cujo contrato NÃO é recorrente (boleto/pix). Sem link — direciona para a unidade. Horário/dias também na aba Cobrança.',
-    vars: [['nome', 'primeiro nome da aluna'], ['vencimento', 'data de vencimento, ex.: 25/09/2026']],
-    padrao: 'Olá, {nome}! Tudo bem? 💜\n\nPassando pra avisar que o pagamento da sua mensalidade do {studio}, vencido em {vencimento}, ainda não foi identificado no sistema.\n\nPara quitar sem multa e juros, é só falar direto com a unidade pelo WhatsApp (62) 98550-8065. 😊\n\nObrigada e tenha uma ótima semana!',
+    titulo: 'Cobrança — boleto vencido (com boleto)',
+    quando: 'Enviada pela SoFIA para a aluna com BOLETO em aberto e VENCIDO há X+ dias (X configurável na aba Cobrança). Leva o boleto atualizado no {link}. Horário/dias também na aba Cobrança.',
+    vars: [['nome', 'primeiro nome da aluna'], ['vencimento', 'data de vencimento, ex.: 25/09/2026'], ['link', 'link do boleto dela — mantenha o {link} no texto'], ['valor', 'valor do boleto, ex.: R$ 647,00 (opcional)']],
+    padrao: 'Olá, {nome}! Tudo bem? 💜\n\nIdentificamos que o boleto da sua mensalidade do {studio}, vencido em {vencimento}, ainda está em aberto.\n\nPara regularizar sem complicação, segue o boleto atualizado:\n{link}\n\nSe já tiver pago, pode desconsiderar. Qualquer dúvida, é só me chamar! 😊',
+  },
+  {
+    chave: 'cobranca_boleto_hoje',
+    titulo: 'Cobrança — boleto vence HOJE (com boleto)',
+    quando: 'Enviada pela SoFIA para a aluna com BOLETO em aberto que VENCE HOJE. Lembra que vence hoje e leva o boleto no {link}. Horário/dias também na aba Cobrança.',
+    vars: [['nome', 'primeiro nome da aluna'], ['vencimento', 'data de vencimento (hoje), ex.: 07/10/2026'], ['link', 'link do boleto dela — mantenha o {link} no texto'], ['valor', 'valor do boleto, ex.: R$ 647,00 (opcional)']],
+    padrao: 'Oi, {nome}! 💜 Passando pra lembrar que o boleto da sua mensalidade do {studio} *vence hoje* ({vencimento}).\n\nPara manter tudo em dia, segue o boleto:\n{link}\n\nSe já pagou, é só desconsiderar. Qualquer dúvida, é só me chamar! 😊',
   },
 ];
 
@@ -248,6 +255,7 @@ const EXEMPLOS = {
   contrato: 'COPA SLIM 2026 - C.C. - GRUPO 1',
   link: 'https://evo-totem.w12app.com.br/slimfit/15/site/checkout/EXEMPLO',
   vencimento: '25/09/2026',
+  valor: 'R$ 199,00',
 };
 function exemplosCompletos() {
   return Object.assign(globais(), EXEMPLOS);
@@ -304,7 +312,7 @@ function removerFoto(chave) {
 // Todas as mensagens de WhatsApp aceitam foto (flyer), MENOS as text-only:
 //  • 'instagram' — DM do Instagram (canal diferente, tratado na aba Instagram);
 //  • 'ausentes'  — listagem de texto no grupo da equipe (enviada sem mídia).
-const SEM_FOTO = new Set(['instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'cobranca_recorrente', 'cobranca_boleto']);
+const SEM_FOTO = new Set(['instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje']);
 function aceitaFoto(chave) { const m = CATALOGO.find(x => x.chave === chave); return !!(m && !SEM_FOTO.has(m.chave)); }
 function salvarFoto(chave, dataUrl) {
   if (!aceitaFoto(chave)) throw new Error('Esta mensagem não aceita foto.');
