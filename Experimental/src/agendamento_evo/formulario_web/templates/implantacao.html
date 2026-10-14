@@ -376,6 +376,20 @@ pm2 start <b>SEU-SLUG</b>-exp       <span class="c"># volta ao normal</span></pr
       (<b>0 = sem limite</b>, vale só a capacidade real da turma). O script já conecta o
       formulário a esse controle (<code>SOFIA_EXP_LIMITE_FILE</code> no <code>.env</code>
       do form aponta para o arquivo do painel), então a mudança vale sem reiniciar.</div>
+    <div class="tip">🚫 <b>Planos FREE — desmarcação por antecedência:</b> configure em
+      <b>💬 WhatsApp → Configuração</b> (card "Planos FREE"). As alunas desses planos
+      só podem marcar com <b>1 dia</b> de antecedência; o robô varre a grade a cada
+      <b>N horas</b>, <b>desmarca</b> (falta justificada) quem marcou com <b>2+ dias</b> e
+      <b>avisa no grupo da Equipe</b> (o mesmo "Grupo da equipe (professoras)"). Tudo é
+      editável no painel, <b>sem reiniciar</b>: o <b>toggle</b> Ativado/Desligado, o
+      <b>intervalo</b> (horas), a <b>janela</b> (dias), os <b>planos que entram</b>
+      (padrão <code>free, 3x, grupo 2</code> — só os FREE 3X; os FREE 5X ficam de fora)
+      e o <b>texto da mensagem</b> (variáveis <code>{studio}</code>, <code>{lista}</code>,
+      <code>{qtd}</code>, <code>{falhas}</code>). Usa a <b>API do EVO</b>
+      (<code>EVO_DNS</code>/<code>EVO_TOKEN</code>) — as mesmas credenciais do agendamento.
+      Desligável por unidade com <code>JOBS_OFF=free_antecedencia</code>. Para testar sem
+      desmarcar: <code>cd Experimental/src/agendamento_evo &amp;&amp; .venv/bin/python
+      run_free_antecedencia.py --dry</code>.</div>
   </section>
 
   <!-- DUAS LOJAS NO MESMO SERVIDOR -->

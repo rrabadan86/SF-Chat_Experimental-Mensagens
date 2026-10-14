@@ -150,6 +150,7 @@ const _JOBS_LABEL = {
   circuito_convocacao: 'Circuito — convocatória (quarta)',
   circuito_lembrete:   'Circuito — lembrete (sexta)',
   inadimplentes:       'Cobrança de inadimplentes',
+  free_antecedencia:   'Planos FREE — desmarcação por antecedência',
 };
 config.jobsOff = new Set(
   String(process.env.JOBS_OFF || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
