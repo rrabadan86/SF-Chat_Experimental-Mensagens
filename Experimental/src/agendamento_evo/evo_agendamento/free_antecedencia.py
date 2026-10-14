@@ -15,6 +15,7 @@ Desmarca via change_session_status(status=2) — "falta justificada": libera a
 vaga, é reversível e preserva a sessão da aluna (ela pode remarcar p/ até amanhã).
 É o mesmo mecanismo que a SoFIA usa na desmarcação de experimental.
 """
+import os
 from datetime import timedelta
 
 from . import config
@@ -24,18 +25,46 @@ from .util import agora_brasilia
 import logging
 log = logging.getLogger(__name__)
 
-# Critério de FREE … GRUPO 2: o nome do contrato precisa conter TODOS estes
-# termos (pega RECORRENTE / C.C. / SLIMSUMMER … / 3X / 5X sem fixar os nomes).
-FREE_TERMOS = ["free", "grupo 2"]
+# Critério dos planos que entram, EDITÁVEL NO PAINEL. Guardado em
+# data/free-antecedencia-planos.txt: UMA regra por linha; os termos de cada linha
+# separados por vírgula; o plano entra se o nome contém TODOS os termos de ALGUMA
+# linha (linhas = OU; termos da mesma linha = E). Linha começando com # é comentário.
+# Padrão (arquivo ausente/vazio): "free, grupo 2".
+_PLANOS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data",
+                            "free-antecedencia-planos.txt")
+_REGRAS_PADRAO = [["free", "grupo 2"]]
 
 
 def _norm(s):
     return str(s or "").strip().lower()
 
 
-def eh_free_grupo2(nome_plano):
+def carregar_regras():
+    """Lê as regras do arquivo (editável no painel). Cada regra é uma lista de
+    termos (substrings em minúsculo) que precisam TODOS estar no nome do plano."""
+    try:
+        with open(_PLANOS_FILE, encoding="utf-8") as f:
+            regras = []
+            for linha in f:
+                linha = linha.strip()
+                if not linha or linha.startswith("#"):
+                    continue
+                termos = [t.strip().lower() for t in linha.split(",") if t.strip()]
+                if termos:
+                    regras.append(termos)
+            if regras:
+                return regras
+    except (OSError, ValueError):
+        pass
+    return _REGRAS_PADRAO
+
+
+def eh_free_grupo2(nome_plano, regras=None):
     n = _norm(nome_plano)
-    return all(t in n for t in FREE_TERMOS)
+    for termos in (regras if regras is not None else carregar_regras()):
+        if all(t in n for t in termos):
+            return True
+    return False
 
 
 def _contrato_ativo(m):
@@ -58,9 +87,9 @@ def contratos_ativos(reg):
     return nomes
 
 
-def free_ativos(reg):
-    """Nomes dos contratos ATIVOS que são FREE/GRUPO 2."""
-    return [n for n in contratos_ativos(reg) if eh_free_grupo2(n)]
+def free_ativos(reg, regras=None):
+    """Nomes dos contratos ATIVOS que batem com as regras de planos (FREE/GRUPO 2)."""
+    return [n for n in contratos_ativos(reg) if eh_free_grupo2(n, regras)]
 
 
 def _hora_turma(t):
@@ -108,6 +137,7 @@ def varrer(evo=None, dias=3, dry=True, branch_id=None):
     inicio = hoje + timedelta(days=2)
     fim = hoje + timedelta(days=max(1, int(dias)) + 1)   # dias=3 → +2..+4
 
+    regras = carregar_regras()   # lê 1x por rodada (editável no painel)
     cache = {}
     itens = []
     alunas = set()
@@ -142,7 +172,7 @@ def varrer(evo=None, dias=3, dry=True, branch_id=None):
                 if idm not in cache:
                     reg = _buscar_membro(evo, idm)
                     cache[idm] = {
-                        "free": free_ativos(reg) if reg else [],
+                        "free": free_ativos(reg, regras) if reg else [],
                         "ativos": contratos_ativos(reg) if reg else [],
                         "achou": bool(reg),
                     }
@@ -180,6 +210,7 @@ def varrer(evo=None, dias=3, dry=True, branch_id=None):
         "inicio": inicio.strftime("%Y-%m-%d"),
         "fim": fim.strftime("%Y-%m-%d"),
         "dry": bool(dry),
+        "regras": [", ".join(r) for r in regras],
         "turmas": total_turmas,
         "matriculas": total_matriculas,
         "alunas": len(alunas),

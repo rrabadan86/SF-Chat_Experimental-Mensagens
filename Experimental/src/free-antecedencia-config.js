@@ -12,6 +12,11 @@ const fs = require('fs');
 const path = require('path');
 
 const FILE = path.resolve(__dirname, '..', 'data', 'free-antecedencia.json');
+// Planos que entram (critério), editável no painel. UMA regra por linha; termos
+// separados por vírgula; o plano entra se o nome contém TODOS os termos de ALGUMA
+// linha. Lido pelo Python (free_antecedencia.carregar_regras).
+const PLANOS_FILE = path.resolve(__dirname, '..', 'data', 'free-antecedencia-planos.txt');
+const PLANOS_PADRAO = 'free, grupo 2';
 
 const HORAS_MIN = 1, HORAS_MAX = 24, HORAS_PADRAO = 6;
 const DIAS_MIN = 1, DIAS_MAX = 30, DIAS_PADRAO = 3;
@@ -79,8 +84,31 @@ function deveRodar(horas, now) {
   return passadasH >= (Number(horas) - (1 / 60));
 }
 
+// Planos (critério) — texto cru, uma regra por linha. Lido pelo Python.
+function lerPlanos() {
+  try {
+    const t = fs.readFileSync(PLANOS_FILE, 'utf8');
+    // só retorna o do arquivo se tiver alguma regra de verdade (linha não-comentário)
+    if (t && t.split('\n').some(l => l.trim() && !l.trim().startsWith('#'))) return t.replace(/\s+$/, '');
+  } catch (_) {}
+  return PLANOS_PADRAO;
+}
+
+function salvarPlanos(txt) {
+  // normaliza: remove linhas vazias nas pontas, limita tamanho. Linhas vazias no
+  // meio e comentários (#) são preservados. Se vier tudo vazio, grava o padrão.
+  let s = String(txt == null ? '' : txt).replace(/\r\n/g, '\n').trim();
+  if (s.length > 4000) throw new Error('Lista de planos muito longa.');
+  const temRegra = s.split('\n').some(l => l.trim() && !l.trim().startsWith('#'));
+  if (!temRegra) s = PLANOS_PADRAO;
+  try { fs.mkdirSync(path.dirname(PLANOS_FILE), { recursive: true }); } catch (_) {}
+  fs.writeFileSync(PLANOS_FILE, s + '\n', 'utf8');
+  return s;
+}
+
 module.exports = {
   lerHoras, salvarHoras, lerDias, salvarDias, FILE,
   lerUltima, marcarRodada, deveRodar,
+  lerPlanos, salvarPlanos, PLANOS_FILE, PLANOS_PADRAO,
   HORAS_MIN, HORAS_MAX, HORAS_PADRAO, DIAS_MIN, DIAS_MAX, DIAS_PADRAO,
 };

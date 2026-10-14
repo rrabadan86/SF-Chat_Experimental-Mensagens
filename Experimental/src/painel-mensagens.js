@@ -1276,6 +1276,11 @@ function paginaMensagens(aviso, erro) {
         <label style="font-weight:700">Janela
           <input type="number" name="freeDias" min="${freeCfg.DIAS_MIN}" max="${freeCfg.DIAS_MAX}" step="1" value="${(function(){try{return freeCfg.lerDias();}catch(_){return freeCfg.DIAS_PADRAO;}})()}" style="width:64px;margin:0 6px;padding:6px;border:1px solid var(--linha);border-radius:8px;text-align:center"> dias (a partir de hoje+2)
         </label>
+        <div style="flex-basis:100%;max-width:560px">
+          <label style="font-weight:700">Planos que entram${infoI('<b>Uma regra por linha.</b> Os termos de cada linha são separados por <b>vírgula</b>. O plano entra se o nome do contrato (ativo) contém <b>TODOS</b> os termos de <b>alguma</b> linha. Não liga para maiúscula/minúscula. Exemplos:<br>• <code>free, grupo 2</code> → qualquer plano com "free" <b>e</b> "grupo 2" no nome (padrão).<br>• Uma linha por família, ex.:<br><code>free, grupo 2</code><br><code>copa slim, grupo 2</code> → entra quem bate em <b>qualquer</b> uma.<br>• Para um plano exato, escreva o nome quase inteiro numa linha.')}</label>
+          <textarea name="freePlanos" rows="3" maxlength="4000" placeholder="free, grupo 2" style="width:100%;resize:vertical;padding:8px;border:1px solid var(--linha);border-radius:8px;font-family:monospace;font-size:.9rem">${esc((function(){try{return freeCfg.lerPlanos();}catch(_){return freeCfg.PLANOS_PADRAO;}})())}</textarea>
+          <p class="quando" style="margin:4px 0 0">Uma regra por linha; termos separados por vírgula (ex.: <code>free, grupo 2</code>). Deixe vazio para voltar ao padrão.</p>
+        </div>
         <button type="submit" class="save" style="padding:8px 16px">Salvar</button>
       </form>
       <p class="quando" style="margin:10px 0 0">Vale <b>sem reiniciar</b> o robô — na próxima verificação (de hora em hora).</p>
@@ -5852,6 +5857,7 @@ const server = http.createServer((req, res) => {
         jobsAtivos.setAtivo('freeAntecedencia', p.get('freeOn') === '1');
         const fh = p.get('freeHoras'); if (fh != null && fh !== '') freeCfg.salvarHoras(fh);
         const fd = p.get('freeDias'); if (fd != null && fd !== '') freeCfg.salvarDias(fd);
+        const fp = p.get('freePlanos'); if (fp != null) freeCfg.salvarPlanos(fp);
         try { auditoria.registrar(sess.usuario, 'free.config', 'Planos FREE — antecedência', `on=${p.get('freeOn') === '1'} horas=${fh} dias=${fd}`); } catch (_) {}
         res.writeHead(303, { Location: '/?okfree=1' }); return res.end();
       } catch (e) {

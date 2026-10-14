@@ -33,24 +33,16 @@ from datetime import timedelta
 try:
     from evo_agendamento import EvoClient
     from evo_agendamento.util import agora_brasilia
+    # Reusa as MESMAS regras/critério do job (editáveis no painel).
+    from evo_agendamento.free_antecedencia import eh_free_grupo2 as _eh_free_grupo2
+    from evo_agendamento.free_antecedencia import carregar_regras as _carregar_regras
 except Exception as e:  # pragma: no cover
     print(f"[ERRO] não consegui importar o pacote evo_agendamento: {e}")
     sys.exit(1)
 
 
-# Critério de FREE … GRUPO 2: o nome do plano precisa conter TODOS estes termos.
-# Pega as variações atuais (RECORRENTE / C.C. / SLIMSUMMER … / 3X / 5X) sem fixar
-# os nomes exatos — e é fácil de ajustar depois.
-FREE_TERMOS = ["free", "grupo 2"]
-
-
 def _norm(s):
     return str(s or "").strip().lower()
-
-
-def _eh_free_grupo2(nome_plano):
-    n = _norm(nome_plano)
-    return all(t in n for t in FREE_TERMOS)
 
 
 def _contrato_ativo(m):
@@ -132,7 +124,7 @@ def main():
 
     print(f"🔎 DIAG FREE/antecedência — hoje={hoje:%d/%m/%Y}  "
           f"permitido até {limite_ok:%d/%m/%Y}  |  varrendo {inicio:%d/%m} → {fim:%d/%m}")
-    print(f"   critério de plano FREE: nome contém {FREE_TERMOS} E contrato ATIVO")
+    print(f"   regras de plano (painel): {[', '.join(r) for r in _carregar_regras()]} E contrato ATIVO")
     print("   (só LEITURA — não desmarca nada)\n")
 
     cache = {}
