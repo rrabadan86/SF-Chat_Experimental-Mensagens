@@ -1263,6 +1263,23 @@ function paginaMensagens(aviso, erro) {
     ${itensGrupo}
     <div class="sec-t">Outros envios em grupo <small style="font-weight:600;color:var(--cinza)">(automáticos, sem texto editável)</small></div>
     ${outros}
+    <div class="sec-t">Planos FREE — desmarcação por antecedência <small style="font-weight:600;color:var(--cinza)">(robô desmarca quem marcou cedo demais e avisa a Equipe)</small></div>
+    <div class="card" style="border-left:4px solid var(--teal);background:#f6fbf9">
+      <p class="quando" style="margin:0 0 10px">As alunas de plano <b>FREE … GRUPO 2</b> só podem marcar a aula com, no máximo, <b>1 dia de antecedência</b>. O robô varre a grade de tempos em tempos, <b>desmarca</b> quem marcou com <b>2+ dias</b> (falta justificada — libera a vaga e a aluna pode remarcar) e <b>avisa no grupo da Equipe</b>. Só conta plano FREE com <b>contrato ativo</b>. A aluna <b>não</b> recebe mensagem direta.</p>
+      <form method="POST" action="/free/config" style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700">
+          <input type="checkbox" name="freeOn" value="1"${(function(){try{return jobsAtivos.ativo('freeAntecedencia');}catch(_){return true;}})() ? ' checked' : ''} style="width:auto;margin:0"> Ativar desmarcação automática
+        </label>
+        <label style="font-weight:700">Verificar a cada
+          <input type="number" name="freeHoras" min="${freeCfg.HORAS_MIN}" max="${freeCfg.HORAS_MAX}" step="1" value="${(function(){try{return freeCfg.lerHoras();}catch(_){return freeCfg.HORAS_PADRAO;}})()}" style="width:64px;margin:0 6px;padding:6px;border:1px solid var(--linha);border-radius:8px;text-align:center"> horas
+        </label>
+        <label style="font-weight:700">Janela
+          <input type="number" name="freeDias" min="${freeCfg.DIAS_MIN}" max="${freeCfg.DIAS_MAX}" step="1" value="${(function(){try{return freeCfg.lerDias();}catch(_){return freeCfg.DIAS_PADRAO;}})()}" style="width:64px;margin:0 6px;padding:6px;border:1px solid var(--linha);border-radius:8px;text-align:center"> dias (a partir de hoje+2)
+        </label>
+        <button type="submit" class="save" style="padding:8px 16px">Salvar</button>
+      </form>
+      <p class="quando" style="margin:10px 0 0">Vale <b>sem reiniciar</b> o robô — na próxima verificação (de hora em hora).</p>
+    </div>
     <div class="hbar">
       <div class="acts"><button type="submit" form="fh" id="btnH" class="save">🕒 Salvar horários e reiniciar o robô</button></div>
       <p class="quando" style="text-align:center;margin:8px 0 0">O <b>texto</b> é salvo na hora (sem reiniciar). Já mudanças de <b>horário</b> só valem depois que o robô reinicia — alguns segundos. Evite salvar bem em cima de um horário de disparo.</p>
@@ -4517,28 +4534,6 @@ function paginaSofia(aviso, erro) {
 
       </details>
 
-      <details class="acc-sec">
-        <summary class="sec-t" style="cursor:pointer;padding:4px 0">Planos FREE — desmarcação por antecedência <small style="font-weight:400;color:var(--cinza)">— desmarca quem é FREE/GRUPO 2 e marcou cedo demais</small></summary>
-      <div class="card">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" name="freeOn" value="1"${(function(){try{return jobsAtivos.ativo('freeAntecedencia');}catch(_){return true;}})() ? ' checked' : ''} style="width:auto;margin:0">
-          Ativar desmarcação automática${infoI('As alunas de plano <b>FREE … GRUPO 2</b> só podem marcar a aula com, no máximo, <b>1 dia de antecedência</b>. O app antigo deixa marcar qualquer dia. Com isto ligado, o robô varre a grade de tempos em tempos, <b>desmarca</b> quem é FREE/GRUPO 2 e marcou com <b>2+ dias</b> de antecedência (falta justificada — libera a vaga e a aluna pode remarcar), e <b>avisa no grupo da Equipe</b>. Só conta plano FREE com contrato <b>ativo</b>.')}
-        </label>
-        <p class="quando" style="margin:6px 0 14px">Desligado, o robô não desmarca ninguém. A aluna é avisada só no <b>grupo da Equipe</b> (não recebe mensagem direta).</p>
-        <div style="display:flex;gap:18px;flex-wrap:wrap">
-          <div style="max-width:260px">
-            <label>Verificar a cada${infoI('De quantas em quantas horas o robô roda a varredura (no horário comercial, 07h-22h). Padrão: 6 horas. Vale sem reiniciar — na próxima verificação de hora em hora.')}</label>
-            <div class="cfg-in"><input type="number" name="freeHoras" min="${freeCfg.HORAS_MIN}" max="${freeCfg.HORAS_MAX}" step="1" value="${(function(){try{return freeCfg.lerHoras();}catch(_){return freeCfg.HORAS_PADRAO;}})()}"><span class="suf">horas</span></div>
-          </div>
-          <div style="max-width:260px">
-            <label>Janela de busca${infoI('Quantos dias à frente, a partir de <b>hoje+2</b>, o robô procura marcações irregulares. Padrão: 3 dias (ex.: hoje 14 → procura 16, 17 e 18). Mais dias = mais consultas ao EVO por rodada.')}</label>
-            <div class="cfg-in"><input type="number" name="freeDias" min="${freeCfg.DIAS_MIN}" max="${freeCfg.DIAS_MAX}" step="1" value="${(function(){try{return freeCfg.lerDias();}catch(_){return freeCfg.DIAS_PADRAO;}})()}"><span class="suf">dias (a partir de hoje+2)</span></div>
-          </div>
-        </div>
-      </div>
-
-      </details>
-
       <details class="acc-sec" open>
         <summary class="sec-t">Prompt da SoFIA <small style="font-weight:400;color:var(--cinza)">— o roteiro (cada bloco é uma parte do atendimento; clique no título p/ abrir, ↑↓ reordenam)</small></summary>
         <div>
@@ -5721,6 +5716,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)oksof=1/.test(q)) aviso = '🔄 Robô reiniciando… ele volta ao ar em ~1 minuto (o selo do WhatsApp acima mostra quando reconectar).';
     else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar o robô pelo painel. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
+    else if (/(?:^|&)okfree=1/.test(q)) aviso = '✅ Planos FREE: configuração salva — já vale na próxima verificação (sem reiniciar).';
     // Só a sub-aba permitida; se pediu uma sem acesso, cai na primeira permitida.
     // "Express" é a tela unificada (Express + Agendar mensagem); view=agendar cai nela.
     const podeMerged = podeMsgSub(sess, 'express') || podeMsgSub(sess, 'agendar');
@@ -5844,6 +5840,23 @@ const server = http.createServer((req, res) => {
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         return res.end(paginaCobranca('Erro ao salvar: ' + e.message, true));
+      }
+    });
+  }
+  // Config dos planos FREE (desmarcação por antecedência): liga/desliga + intervalo
+  // (horas) + janela (dias). Não precisa reiniciar — o robô lê a cada verificação.
+  if (req.method === 'POST' && url === '/free/config') {
+    return lerCorpo(req, 1e5, corpo => {
+      try {
+        const p = new URLSearchParams(corpo);
+        jobsAtivos.setAtivo('freeAntecedencia', p.get('freeOn') === '1');
+        const fh = p.get('freeHoras'); if (fh != null && fh !== '') freeCfg.salvarHoras(fh);
+        const fd = p.get('freeDias'); if (fd != null && fd !== '') freeCfg.salvarDias(fd);
+        try { auditoria.registrar(sess.usuario, 'free.config', 'Planos FREE — antecedência', `on=${p.get('freeOn') === '1'} horas=${fh} dias=${fd}`); } catch (_) {}
+        res.writeHead(303, { Location: '/?okfree=1' }); return res.end();
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(paginaMensagens('Erro ao salvar a config dos planos FREE: ' + e.message, true));
       }
     });
   }
@@ -6469,10 +6482,6 @@ const server = http.createServer((req, res) => {
         });
         try { const el = p.get('expLimite'); if (el != null && el !== '') gravarExpLimite(el); } catch (_) {}
         try { const ah = p.get('antecedenciaHoras'); if (ah != null && ah !== '') gravarAntecedenciaHoras(ah); } catch (_) {}
-        // Planos FREE — desmarcação por antecedência (liga/desliga + intervalo + janela).
-        try { jobsAtivos.setAtivo('freeAntecedencia', p.get('freeOn') === '1'); } catch (_) {}
-        try { const fh = p.get('freeHoras'); if (fh != null && fh !== '') freeCfg.salvarHoras(fh); } catch (_) {}
-        try { const fd = p.get('freeDias'); if (fd != null && fd !== '') freeCfg.salvarDias(fd); } catch (_) {}
         try { const lm = p.get('humanoLockMin'); if (lm != null && lm !== '') sofia.gravarHumanoLockMin(lm); } catch (_) {}
         try { const rf = p.get('refreshSeg'); if (rf != null && rf !== '') gravarRefreshSeg(rf); } catch (_) {}
         try { auditoria.registrar(sess.usuario, 'sofia.config', 'Configuração/prompt da SoFIA', 'modelo: ' + (p.get('modeloConversa') || '—')); } catch (_) {}
