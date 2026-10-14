@@ -12,6 +12,7 @@ USO (na pasta agendamento_evo, com o .env da unidade):
     python diag_slot_motivo.py --data 2026-10-15 --hora 08:20
 """
 import argparse
+import json
 from datetime import datetime
 
 from evo_agendamento import EvoClient
@@ -26,6 +27,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True, help="Data yyyy-MM-dd")
     ap.add_argument("--hora", default=None, help="Foca um horário HH:MM (opcional)")
+    ap.add_argument("--dump", action="store_true",
+                    help="despeja a turma crua + lista de matriculadas (quem são as 'ocupation')")
     args = ap.parse_args()
 
     evo = EvoClient()
@@ -104,6 +107,34 @@ def main():
 
         res = "✅ APARECE" if ok else "❌ SOME — " + "; ".join(motivos)
         print(f"{hora:<6} {nome:<22} {ocup_txt:>7} {str(n_exp):>4}  {res}")
+
+        if args.dump:
+            print(f"      ─ campos da turma: idConfiguration={s.get('idConfiguration')} "
+                  f"capacity={s.get('capacity')} ocupation={s.get('ocupation')} "
+                  f"status={s.get('status')} statusName={s.get('statusName')!r}")
+            try:
+                det = evo.schedule_detail(id_configuration=s.get("idConfiguration"),
+                                          activity_date=dt.strftime("%Y-%m-%d")) or {}
+                enr = det.get("enrollments") or []
+                print(f"      ─ detail: capacity={det.get('capacity')} ocupation={det.get('ocupation')} "
+                      f"enrollments={len(enr)}")
+                ativas = 0
+                for e in enr:
+                    tipo = "experimental" if (e.get("idProspect") and not e.get("idMember")) else "matrícula"
+                    ativa = (e.get("status") != 2 and not e.get("justifiedAbsence")
+                             and not e.get("removed") and not e.get("suspended"))
+                    if ativa:
+                        ativas += 1
+                    flags = []
+                    if e.get("status") is not None: flags.append(f"status={e.get('status')}")
+                    if e.get("justifiedAbsence"): flags.append("faltaJustificada")
+                    if e.get("removed"): flags.append("removed")
+                    if e.get("suspended"): flags.append("suspended")
+                    print(f"          • {(e.get('name') or '?')[:34]:<34} {tipo:<12} "
+                          f"{'ATIVA' if ativa else 'inativa':<7} {' '.join(flags)}")
+                print(f"      ─ matrículas ATIVAS (ocupam vaga de verdade): {ativas}")
+            except Exception as e:
+                print(f"      ─ erro no schedule_detail: {e}")
 
     print()
 
