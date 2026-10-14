@@ -16,7 +16,8 @@ const FILE = path.resolve(__dirname, '..', 'data', 'free-antecedencia.json');
 // separados por vírgula; o plano entra se o nome contém TODOS os termos de ALGUMA
 // linha. Lido pelo Python (free_antecedencia.carregar_regras).
 const PLANOS_FILE = path.resolve(__dirname, '..', 'data', 'free-antecedencia-planos.txt');
-const PLANOS_PADRAO = 'free, grupo 2';
+// Padrão: pega os 4 planos FREE 3X GRUPO 2 e exclui os FREE 5X.
+const PLANOS_PADRAO = 'free, 3x, grupo 2';
 
 const HORAS_MIN = 1, HORAS_MAX = 24, HORAS_PADRAO = 6;
 const DIAS_MIN = 1, DIAS_MAX = 30, DIAS_PADRAO = 3;

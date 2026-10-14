@@ -29,10 +29,11 @@ log = logging.getLogger(__name__)
 # data/free-antecedencia-planos.txt: UMA regra por linha; os termos de cada linha
 # separados por vírgula; o plano entra se o nome contém TODOS os termos de ALGUMA
 # linha (linhas = OU; termos da mesma linha = E). Linha começando com # é comentário.
-# Padrão (arquivo ausente/vazio): "free, grupo 2".
+# Padrão (arquivo ausente/vazio): "free, 3x, grupo 2" — pega os 4 planos FREE 3X
+# GRUPO 2 e deixa de fora os FREE 5X (que NÃO têm a regra de antecedência).
 _PLANOS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data",
                             "free-antecedencia-planos.txt")
-_REGRAS_PADRAO = [["free", "grupo 2"]]
+_REGRAS_PADRAO = [["free", "3x", "grupo 2"]]
 
 
 def _norm(s):
