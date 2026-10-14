@@ -1264,12 +1264,10 @@ function paginaMensagens(aviso, erro) {
     <div class="sec-t">Outros envios em grupo <small style="font-weight:600;color:var(--cinza)">(automáticos, sem texto editável)</small></div>
     ${outros}
     <div class="sec-t">Planos FREE — desmarcação por antecedência <small style="font-weight:600;color:var(--cinza)">(robô desmarca quem marcou cedo demais e avisa a Equipe)</small></div>
-    <div class="card" style="border-left:4px solid var(--teal);background:#f6fbf9">
-      <p class="quando" style="margin:0 0 10px">As alunas de plano <b>FREE … GRUPO 2</b> só podem marcar a aula com, no máximo, <b>1 dia de antecedência</b>. O robô varre a grade de tempos em tempos, <b>desmarca</b> quem marcou com <b>2+ dias</b> (falta justificada — libera a vaga e a aluna pode remarcar) e <b>avisa no grupo da Equipe</b>. Só conta plano FREE com <b>contrato ativo</b>. A aluna <b>não</b> recebe mensagem direta.</p>
+    <div class="card" style="position:relative;border-left:4px solid var(--teal);background:#f6fbf9">
+      ${switchEnvio(['freeAntecedencia'])}
+      <p class="quando" style="margin:0 0 10px;padding-right:100px">As alunas de plano <b>FREE … GRUPO 2</b> só podem marcar a aula com, no máximo, <b>1 dia de antecedência</b>. O robô varre a grade de tempos em tempos, <b>desmarca</b> quem marcou com <b>2+ dias</b> (falta justificada — libera a vaga e a aluna pode remarcar) e <b>avisa no grupo da Equipe</b>. Só conta plano FREE com <b>contrato ativo</b>. A aluna <b>não</b> recebe mensagem direta. Ligue/desligue no <b>botão acima</b>.</p>
       <form method="POST" action="/free/config" style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700">
-          <input type="checkbox" name="freeOn" value="1"${(function(){try{return jobsAtivos.ativo('freeAntecedencia');}catch(_){return true;}})() ? ' checked' : ''} style="width:auto;margin:0"> Ativar desmarcação automática
-        </label>
         <label style="font-weight:700">Verificar a cada
           <input type="number" name="freeHoras" min="${freeCfg.HORAS_MIN}" max="${freeCfg.HORAS_MAX}" step="1" value="${(function(){try{return freeCfg.lerHoras();}catch(_){return freeCfg.HORAS_PADRAO;}})()}" style="width:64px;margin:0 6px;padding:6px;border:1px solid var(--linha);border-radius:8px;text-align:center"> horas
         </label>
@@ -5859,12 +5857,13 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e5, corpo => {
       try {
         const p = new URLSearchParams(corpo);
-        jobsAtivos.setAtivo('freeAntecedencia', p.get('freeOn') === '1');
+        // O liga/desliga é o toggle do card (switchEnvio → /envio/ativo); aqui só
+        // salvamos intervalo, janela, planos e texto — sem mexer no on/off.
         const fh = p.get('freeHoras'); if (fh != null && fh !== '') freeCfg.salvarHoras(fh);
         const fd = p.get('freeDias'); if (fd != null && fd !== '') freeCfg.salvarDias(fd);
         const fp = p.get('freePlanos'); if (fp != null) freeCfg.salvarPlanos(fp);
         const ft = p.get('freeTexto'); if (ft != null) freeCfg.salvarTexto(ft);
-        try { auditoria.registrar(sess.usuario, 'free.config', 'Planos FREE — antecedência', `on=${p.get('freeOn') === '1'} horas=${fh} dias=${fd}`); } catch (_) {}
+        try { auditoria.registrar(sess.usuario, 'free.config', 'Planos FREE — antecedência', `horas=${fh} dias=${fd}`); } catch (_) {}
         res.writeHead(303, { Location: '/?okfree=1' }); return res.end();
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
