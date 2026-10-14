@@ -57,32 +57,34 @@ function _rodarPython({ dry, dias }) {
   });
 }
 
-/** Monta a mensagem do grupo a partir do resultado. */
+/** Monta a mensagem do grupo a partir do resultado, usando o modelo editável
+ * no painel. Variáveis: {studio} {lista} {qtd} {falhas}. */
 function _montarMensagem(res) {
   const studio = config.STUDIO_NOME || 'Studio';
   const ok = (res.itens || []).filter(i => i.desmarcada === true);
-  const falhas = (res.itens || []).filter(i => i.desmarcada === false);
+  const falhasItens = (res.itens || []).filter(i => i.desmarcada === false);
 
-  const linhas = [];
-  linhas.push('🚫 *Planos FREE — desmarcação por antecedência*');
-  linhas.push(`_${studio}_`);
-  linhas.push('');
-  linhas.push('As alunas de plano *FREE* só podem marcar com até *1 dia* de antecedência. Desmarquei as aulas abaixo (marcadas com 2+ dias de antecedência):');
-  linhas.push('');
-  for (const i of ok) {
-    linhas.push(`❌ ${_fmtDia(i.data)} ${i.hora || '--:--'} — *${i.nome || 'aluna'}*`);
-    linhas.push(`     ${i.plano || ''}`);
+  const lista = ok.map(i =>
+    `❌ ${_fmtDia(i.data)} ${i.hora || '--:--'} — *${i.nome || 'aluna'}*\n     ${i.plano || ''}`
+  ).join('\n');
+
+  let falhas = '';
+  if (falhasItens.length) {
+    falhas = '\n\n⚠️ *Não consegui desmarcar (confiram manualmente):*\n'
+      + falhasItens.map(i => `• ${_fmtDia(i.data)} ${i.hora || '--:--'} — ${i.nome || 'aluna'}${i.erro ? ' (' + i.erro + ')' : ''}`).join('\n');
   }
-  if (falhas.length) {
-    linhas.push('');
-    linhas.push('⚠️ *Não consegui desmarcar (confiram manualmente):*');
-    for (const i of falhas) {
-      linhas.push(`• ${_fmtDia(i.data)} ${i.hora || '--:--'} — ${i.nome || 'aluna'}${i.erro ? ' (' + i.erro + ')' : ''}`);
-    }
-  }
-  linhas.push('');
-  linhas.push('A aluna pode remarcar para até amanhã. 🗓️');
-  return linhas.join('\n');
+
+  let modelo;
+  try { modelo = cfg.lerTexto(); } catch (_) { modelo = cfg.TEXTO_PADRAO; }
+  // Se o modelo não tiver {lista}, garante que a lista apareça (não deixa a
+  // mensagem sair sem os nomes por um erro de edição).
+  if (modelo.indexOf('{lista}') === -1) modelo = modelo + '\n\n{lista}{falhas}';
+
+  return modelo
+    .replace(/\{studio\}/g, studio)
+    .replace(/\{qtd\}/g, String(ok.length))
+    .replace(/\{lista\}/g, lista)
+    .replace(/\{falhas\}/g, falhas);
 }
 
 /**

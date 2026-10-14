@@ -19,6 +19,21 @@ const PLANOS_FILE = path.resolve(__dirname, '..', 'data', 'free-antecedencia-pla
 // Padrão: pega os 4 planos FREE 3X GRUPO 2 e exclui os FREE 5X.
 const PLANOS_PADRAO = 'free, 3x, grupo 2';
 
+// Texto da mensagem do grupo da Equipe (modelo editável no painel). Variáveis:
+//   {studio} nome da loja · {lista} as alunas desmarcadas · {qtd} quantas ·
+//   {falhas} bloco de falhas (vazio se não houver).
+const TEXTO_FILE = path.resolve(__dirname, '..', 'data', 'free-antecedencia-texto.txt');
+const TEXTO_PADRAO = [
+  '🚫 *Planos FREE — desmarcação por antecedência*',
+  '_{studio}_',
+  '',
+  'As alunas de plano *FREE* só podem marcar com até *1 dia* de antecedência. Desmarquei as aulas abaixo (marcadas com 2+ dias de antecedência):',
+  '',
+  '{lista}{falhas}',
+  '',
+  'A aluna pode remarcar para até amanhã. 🗓️',
+].join('\n');
+
 const HORAS_MIN = 1, HORAS_MAX = 24, HORAS_PADRAO = 6;
 const DIAS_MIN = 1, DIAS_MAX = 30, DIAS_PADRAO = 3;
 
@@ -107,9 +122,27 @@ function salvarPlanos(txt) {
   return s;
 }
 
+// Texto da mensagem do grupo (modelo editável). Vazio → volta ao padrão.
+function lerTexto() {
+  try {
+    const t = fs.readFileSync(TEXTO_FILE, 'utf8');
+    if (t && t.trim()) return t.replace(/\s+$/, '');
+  } catch (_) {}
+  return TEXTO_PADRAO;
+}
+function salvarTexto(txt) {
+  let s = String(txt == null ? '' : txt).replace(/\r\n/g, '\n').trim();
+  if (s.length > 4000) throw new Error('Texto muito longo.');
+  if (!s) s = TEXTO_PADRAO;
+  try { fs.mkdirSync(path.dirname(TEXTO_FILE), { recursive: true }); } catch (_) {}
+  fs.writeFileSync(TEXTO_FILE, s + '\n', 'utf8');
+  return s;
+}
+
 module.exports = {
   lerHoras, salvarHoras, lerDias, salvarDias, FILE,
   lerUltima, marcarRodada, deveRodar,
   lerPlanos, salvarPlanos, PLANOS_FILE, PLANOS_PADRAO,
+  lerTexto, salvarTexto, TEXTO_FILE, TEXTO_PADRAO,
   HORAS_MIN, HORAS_MAX, HORAS_PADRAO, DIAS_MIN, DIAS_MAX, DIAS_PADRAO,
 };

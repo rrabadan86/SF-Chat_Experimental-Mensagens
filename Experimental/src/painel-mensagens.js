@@ -1281,6 +1281,11 @@ function paginaMensagens(aviso, erro) {
           <textarea name="freePlanos" rows="3" maxlength="4000" placeholder="free, 3x, grupo 2" style="width:100%;resize:vertical;padding:8px;border:1px solid var(--linha);border-radius:8px;font-family:monospace;font-size:.9rem">${esc((function(){try{return freeCfg.lerPlanos();}catch(_){return freeCfg.PLANOS_PADRAO;}})())}</textarea>
           <p class="quando" style="margin:4px 0 0">Uma regra por linha; termos separados por vírgula (padrão: <code>free, 3x, grupo 2</code> — só os FREE 3X). Deixe vazio para voltar ao padrão.</p>
         </div>
+        <div style="flex-basis:100%;max-width:560px">
+          <label style="font-weight:700">Mensagem no grupo da Equipe${infoI('Texto postado no grupo da Equipe quando o robô desmarca. Use as <b>variáveis</b> (o robô troca na hora):<br>• <code>{studio}</code> — nome da loja<br>• <code>{lista}</code> — as alunas desmarcadas (data, horário, nome e plano) — <b>deixe esta no texto</b><br>• <code>{qtd}</code> — quantas foram desmarcadas<br>• <code>{falhas}</code> — bloco de falhas (vazio se não houver)<br>O <code>*negrito*</code> do WhatsApp funciona. Deixe vazio para voltar ao padrão.')}</label>
+          <textarea name="freeTexto" rows="8" maxlength="4000" style="width:100%;resize:vertical;padding:8px;border:1px solid var(--linha);border-radius:8px;font-size:.9rem">${esc((function(){try{return freeCfg.lerTexto();}catch(_){return freeCfg.TEXTO_PADRAO;}})())}</textarea>
+          <p class="quando" style="margin:4px 0 0">Variáveis: <code>{studio}</code>, <code>{lista}</code>, <code>{qtd}</code>, <code>{falhas}</code>. Mantenha o <code>{lista}</code> para os nomes aparecerem.</p>
+        </div>
         <button type="submit" class="save" style="padding:8px 16px">Salvar</button>
       </form>
       <p class="quando" style="margin:10px 0 0">Vale <b>sem reiniciar</b> o robô — na próxima verificação (de hora em hora).</p>
@@ -5858,6 +5863,7 @@ const server = http.createServer((req, res) => {
         const fh = p.get('freeHoras'); if (fh != null && fh !== '') freeCfg.salvarHoras(fh);
         const fd = p.get('freeDias'); if (fd != null && fd !== '') freeCfg.salvarDias(fd);
         const fp = p.get('freePlanos'); if (fp != null) freeCfg.salvarPlanos(fp);
+        const ft = p.get('freeTexto'); if (ft != null) freeCfg.salvarTexto(ft);
         try { auditoria.registrar(sess.usuario, 'free.config', 'Planos FREE — antecedência', `on=${p.get('freeOn') === '1'} horas=${fh} dias=${fd}`); } catch (_) {}
         res.writeHead(303, { Location: '/?okfree=1' }); return res.end();
       } catch (e) {
