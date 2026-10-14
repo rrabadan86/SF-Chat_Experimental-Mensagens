@@ -8,18 +8,22 @@ MÁXIMO, 1 dia de antecedência (hoje 14 → pode marcar para 15; NÃO pode 16+)
 O app antigo deixa ela marcar qualquer dia, então precisamos achar (e depois
 desmarcar) as marcações feitas com 2+ dias de antecedência.
 
+IMPORTANTE: só conta quem tem o plano FREE/GRUPO 2 **ATIVO** (membershipStatus
+== "active"). Contrato FREE antigo que já foi cancelado/expirado NÃO conta —
+senão quem já foi FREE e hoje tem plano pago (ex.: Fernanda, Duanny) apareceria
+por engano.
+
 Este script NÃO desmarca nada. Ele:
   1) varre a grade de (hoje+2) até (hoje+N dias);
   2) em cada turma, lê os `enrollments` (quem está matriculado);
-  3) para cada ALUNA (idMember) marcada, descobre o PLANO dela;
-  4) mostra quem SERIA desmarcada (FREE … GRUPO 2 marcada com 2+ dias) e lista
-     TODOS os planos distintos vistos, pra confirmarmos o critério de match.
+  3) para cada ALUNA (idMember), lê o cadastro e pega os contratos ATIVOS;
+  4) mostra quem SERIA desmarcada (plano FREE/GRUPO 2 ATIVO, 2+ dias de
+     antecedência) e lista os contratos ATIVOS vistos, pra confirmar o critério.
 
 COMO USAR (dentro da pasta agendamento_evo, com o .env da unidade):
-    python diag_free_antecedencia.py                 # janela padrão: 21 dias
-    python diag_free_antecedencia.py --dias 30
-    python diag_free_antecedencia.py --dump-membro 12345   # vê o JSON cru de 1 aluna
-    python diag_free_antecedencia.py --full                # dump cru das 1as alunas (achar o campo do plano)
+    python diag_free_antecedencia.py                 # janela padrão: hoje+2 a hoje+4
+    python diag_free_antecedencia.py --dias 10
+    python diag_free_antecedencia.py --dump-membro 5310   # vê o cadastro cru de 1 aluna
 """
 import argparse
 import json
@@ -35,8 +39,8 @@ except Exception as e:  # pragma: no cover
 
 
 # Critério de FREE … GRUPO 2: o nome do plano precisa conter TODOS estes termos.
-# Pega as 4 variações atuais (RECORRENTE / C.C. / SLIMSUMMER 2026 …) sem fixar os
-# nomes exatos — e é fácil de ajustar depois.
+# Pega as variações atuais (RECORRENTE / C.C. / SLIMSUMMER … / 3X / 5X) sem fixar
+# os nomes exatos — e é fácil de ajustar depois.
 FREE_TERMOS = ["free", "grupo 2"]
 
 
@@ -47,6 +51,36 @@ def _norm(s):
 def _eh_free_grupo2(nome_plano):
     n = _norm(nome_plano)
     return all(t in n for t in FREE_TERMOS)
+
+
+def _contrato_ativo(m):
+    """Contrato ATIVO = membershipStatus 'active'. (expired/canceled não contam.)"""
+    return _norm(m.get("membershipStatus")) == "active"
+
+
+def _contratos_ativos(reg):
+    """Lista de nomes dos contratos ATIVOS da aluna (sem os cancelados/expirados).
+    Olha a lista `memberships` e também o `membership` singular (contrato primário)."""
+    nomes = []
+    vistos = set()
+    for m in (reg.get("memberships") or []):
+        if _contrato_ativo(m):
+            nome = str(m.get("name") or "").strip()
+            if nome and nome.lower() not in vistos:
+                vistos.add(nome.lower())
+                nomes.append(nome)
+    prim = reg.get("membership") or {}
+    if _contrato_ativo(prim):
+        nome = str(prim.get("name") or "").strip()
+        if nome and nome.lower() not in vistos:
+            vistos.add(nome.lower())
+            nomes.append(nome)
+    return nomes
+
+
+def _free_ativos(reg):
+    """Nomes dos contratos ATIVOS que são FREE/GRUPO 2."""
+    return [n for n in _contratos_ativos(reg) if _eh_free_grupo2(n)]
 
 
 def _hora_turma(t):
@@ -62,78 +96,33 @@ def _enroll_ativa(en):
             and not en.get("removed") and not en.get("suspended"))
 
 
-def _coletar_strings_plano(obj, achados, prof=0):
-    """Varre o objeto da aluna recursivamente e junta QUALQUER string que tenha
-    cara de nome de plano (contém 'grupo', 'slimfit', 'free' ou 'circ'). Serve
-    pra descobrir onde o EVO guarda o plano, sem sabermos o nome do campo."""
-    if prof > 6:
-        return
-    if isinstance(obj, dict):
-        for v in obj.values():
-            _coletar_strings_plano(v, achados, prof + 1)
-    elif isinstance(obj, (list, tuple)):
-        for v in obj:
-            _coletar_strings_plano(v, achados, prof + 1)
-    elif isinstance(obj, str):
-        n = obj.lower()
-        if any(t in n for t in ("grupo", "slimfit", "free", "circ")) and len(obj) <= 120:
-            achados.add(obj.strip())
-
-
 def _buscar_membro(evo, id_member):
-    """Tenta alguns endpoints de cliente/aluna do EVO pra trazer o registro com o
-    plano. Retorna (registro|None, endpoint_usado). Só LEITURA."""
-    tentativas = [
-        ("GET", f"/api/v1/members/{int(id_member)}", None),
-        ("GET", "/api/v1/members", {"idMember": int(id_member), "take": 1}),
-        ("GET", f"/api/v1/members/{int(id_member)}/memberships", None),
-        ("GET", "/api/v1/members/memberships", {"idMember": int(id_member)}),
-    ]
-    for method, path, params in tentativas:
-        try:
-            data = evo._request(method, path, params=params)
-        except Exception:
-            continue
-        if not data:
-            continue
-        reg = data[0] if isinstance(data, list) and data else data
-        if reg:
-            return reg, f"{method} {path}" + (f" {params}" if params else "")
-    return None, None
-
-
-def _planos_do_membro(evo, id_member, cache, dump=False):
-    """Descobre o(s) nome(s) de plano da aluna. Retorna (set_de_planos, endpoint)."""
-    if id_member in cache:
-        return cache[id_member]
-    reg, endpoint = _buscar_membro(evo, id_member)
-    planos = set()
-    if reg:
-        _coletar_strings_plano(reg, planos)
-        if dump:
-            print("\n----- DUMP CRU DA ALUNA idMember=%s (%s) -----" % (id_member, endpoint))
-            print(json.dumps(reg, indent=2, ensure_ascii=False)[:3000])
-            print("----- fim do dump -----\n")
-    cache[id_member] = (planos, endpoint)
-    return cache[id_member]
+    """Traz o cadastro da aluna (com a lista de contratos). Só LEITURA."""
+    try:
+        data = evo._request("GET", f"/api/v1/members/{int(id_member)}")
+    except Exception:
+        data = None
+    if isinstance(data, list):
+        data = data[0] if data else None
+    return data
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dias", type=int, default=4,
-                    help="quantos dias à frente varrer a grade (padrão 4 = hoje+2 até hoje+4, ex.: 16-18/10)")
-    ap.add_argument("--full", action="store_true",
-                    help="dump cru das primeiras alunas (ajuda a achar o campo do plano)")
+                    help="quantos dias à frente varrer a grade (padrão 4 = hoje+2 até hoje+4)")
     ap.add_argument("--dump-membro", type=int, default=None,
-                    help="imprime o JSON cru de UMA aluna (idMember) e sai")
+                    help="imprime o cadastro cru de UMA aluna (idMember) e sai")
     args = ap.parse_args()
 
     evo = EvoClient()
 
     if args.dump_membro:
-        reg, endpoint = _buscar_membro(evo, args.dump_membro)
-        print(f"endpoint: {endpoint}")
+        reg = _buscar_membro(evo, args.dump_membro)
         print(json.dumps(reg, indent=2, ensure_ascii=False) if reg else "(nada)")
+        if reg:
+            print("\n→ contratos ATIVOS:", _contratos_ativos(reg) or "(nenhum)")
+            print("→ FREE/GRUPO 2 ativos:", _free_ativos(reg) or "(nenhum)")
         return
 
     hoje = agora_brasilia().date()
@@ -143,18 +132,18 @@ def main():
 
     print(f"🔎 DIAG FREE/antecedência — hoje={hoje:%d/%m/%Y}  "
           f"permitido até {limite_ok:%d/%m/%Y}  |  varrendo {inicio:%d/%m} → {fim:%d/%m}")
-    print(f"   critério de plano FREE: nome contém {FREE_TERMOS}")
+    print(f"   critério de plano FREE: nome contém {FREE_TERMOS} E contrato ATIVO")
     print("   (só LEITURA — não desmarca nada)\n")
 
     cache = {}
     violacoes = []          # [{data, hora, nome, idMember, plano}]
-    planos_vistos = {}      # nome_plano -> contagem
-    sem_plano = []          # idMembers cujo plano não foi encontrado
+    ativos_vistos = {}      # nome_contrato_ativo -> contagem (de alunas distintas)
+    membros_contados = set()
+    sem_contrato = []       # idMembers sem contrato ativo encontrado
     total_turmas = 0
     total_matriculas = 0
 
     d = inicio
-    primeiras_dump = 0
     while d <= fim:
         ds = d.strftime("%Y-%m-%d")
         try:
@@ -179,40 +168,44 @@ def main():
                 if not idm or not _enroll_ativa(en):
                     continue  # pula leads (idProspect) e matrículas canceladas
                 total_matriculas += 1
-                dump = args.full and primeiras_dump < 3
-                planos, endpoint = _planos_do_membro(evo, idm, cache, dump=dump)
-                if dump:
-                    primeiras_dump += 1
-                if not planos:
-                    sem_plano.append((idm, en.get("name")))
-                for p in planos:
-                    planos_vistos[p] = planos_vistos.get(p, 0) + 1
-                if any(_eh_free_grupo2(p) for p in planos):
-                    plano_free = next(p for p in planos if _eh_free_grupo2(p))
+                if idm not in cache:
+                    reg = _buscar_membro(evo, idm)
+                    cache[idm] = {
+                        "ativos": _contratos_ativos(reg) if reg else [],
+                        "free": _free_ativos(reg) if reg else [],
+                        "achou": bool(reg),
+                    }
+                info = cache[idm]
+                if idm not in membros_contados:
+                    membros_contados.add(idm)
+                    if not info["achou"] or not info["ativos"]:
+                        sem_contrato.append((idm, en.get("name")))
+                    for nome in info["ativos"]:
+                        ativos_vistos[nome] = ativos_vistos.get(nome, 0) + 1
+                if info["free"]:
                     violacoes.append({
                         "data": ds, "hora": hora, "nome": en.get("name"),
-                        "idMember": idm, "plano": plano_free,
+                        "idMember": idm, "plano": info["free"][0],
                     })
         d += timedelta(days=1)
 
-    print(f"\n📊 Varredura: {total_turmas} turma(s) lidas, {total_matriculas} matrícula(s) ativa(s).\n")
+    print(f"\n📊 Varredura: {total_turmas} turma(s) lidas, {total_matriculas} matrícula(s) ativa(s), "
+          f"{len(membros_contados)} aluna(s) distinta(s).\n")
 
-    print("── PLANOS DISTINTOS VISTOS (confira se o critério FREE/GRUPO 2 está certo) ──")
-    if planos_vistos:
-        for nome, qtd in sorted(planos_vistos.items(), key=lambda x: (-x[1], x[0])):
+    print("── CONTRATOS ATIVOS VISTOS (confira o critério FREE/GRUPO 2) ──")
+    if ativos_vistos:
+        for nome, qtd in sorted(ativos_vistos.items(), key=lambda x: (-x[1], x[0])):
             tag = "  ← FREE/GRUPO 2 ✅" if _eh_free_grupo2(nome) else ""
             print(f"   {qtd:>3}×  {nome}{tag}")
     else:
-        print("   ⚠️  NENHUM nome de plano foi extraído dos cadastros.")
-        print("       → rode com --full pra ver o JSON cru da aluna e achar o campo do plano.")
+        print("   ⚠️  nenhum contrato ativo extraído — rode --dump-membro <id> p/ investigar.")
     print()
 
-    if sem_plano:
-        print(f"⚠️  {len(sem_plano)} matrícula(s) sem plano identificado (ex.: "
-              + ", ".join(f"{n or '?'}#{i}" for i, n in sem_plano[:5]) + " …)")
-        print("    → se houver FREE entre elas, precisamos ajustar o lookup do plano.\n")
+    if sem_contrato:
+        print(f"⚠️  {len(sem_contrato)} aluna(s) sem contrato ATIVO identificado (ex.: "
+              + ", ".join(f"{n or '?'}#{i}" for i, n in sem_contrato[:5]) + " …)\n")
 
-    print("── SERIAM DESMARCADAS (FREE/GRUPO 2 com 2+ dias de antecedência) ──")
+    print("── SERIAM DESMARCADAS (FREE/GRUPO 2 ATIVO, 2+ dias de antecedência) ──")
     if not violacoes:
         print("   ✅ nenhuma marcação FREE irregular na janela.")
     else:
@@ -220,7 +213,7 @@ def main():
         for v in violacoes:
             dd = v["data"][8:10] + "/" + v["data"][5:7]
             print(f"   ❌ {dd} {v['hora'] or '--:--'}  {v['nome']}  (idMember={v['idMember']})")
-            print(f"        plano: {v['plano']}")
+            print(f"        plano ATIVO: {v['plano']}")
         print(f"\n   Total: {len(violacoes)} marcação(ões) seriam desmarcadas.")
     print()
 
