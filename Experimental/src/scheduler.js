@@ -107,6 +107,28 @@ function agendarInadimplentes(tentativa = 1) {
     });
 }
 
+// Planos FREE — desmarcação por antecedência: usa o EVO (varre a grade e desmarca
+// quem é FREE/GRUPO 2 e marcou com 2+ dias). Como usa o EVO, respeita o jobRunning;
+// se outro job estiver rodando, espera e tenta de novo (não loga no EVO em paralelo).
+function agendarFreeAntecedencia(tentativa = 1) {
+  if (jobRunning) {
+    if (tentativa > 6) { logError('Planos FREE (antecedência)', new Error('scraper ocupado — desisti após ~9 min')); return; }
+    log(`⏳ Planos FREE: outro job em execução — tento de novo em 90s (tentativa ${tentativa})`);
+    setTimeout(() => agendarFreeAntecedencia(tentativa + 1), 90000);
+    return;
+  }
+  jobRunning = true;
+  atividade.setContexto('Planos FREE — antecedência');
+  const start = new Date();
+  require('./free-antecedencia').runFreeAntecedencia({ dry: false })
+    .then(r => log(`✅ Planos FREE concluído — ${r.desmarcadas} desmarcada(s), ${r.falhas} falha(s), janela ${r.janela}${r.postado ? ' (avisado no grupo)' : ''}`))
+    .catch(err => logError('Planos FREE (antecedência)', err))
+    .finally(() => {
+      jobRunning = false;
+      log(`⏱️  Planos FREE finalizado em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
+    });
+}
+
 function log(msg) {
   const ts = new Date().toLocaleString('pt-BR', {
     timeZone: 'America/Sao_Paulo',
@@ -559,6 +581,7 @@ function iniciarRodarJobWatcher() {
     ausentes:          { nome: 'Ausentes 10 dias [manual]',     fn: () => require('./ausentes-10-dias').runAusentes10Dias() },
     planilha:          { nome: 'Planilha de aniversários [manual]', fn: () => require('./planilha-aniversarios').runPlanilhaAniversarios() },
     inadimplentes:     { nome: 'Cobrança de inadimplentes [manual]', fn: () => require('./inadimplentes').runInadimplentes({ dry: false }) },
+    freeAntecedencia:  { nome: 'Planos FREE — antecedência [manual]', fn: (pedido) => require('./free-antecedencia').runFreeAntecedencia({ dry: !!(pedido && pedido.dry) }) },
   };
   const t = setInterval(() => {
     let pedido = null;
@@ -939,6 +962,25 @@ async function main() {
     }, { timezone: 'America/Sao_Paulo' });
     log(`📅 Job INADIMPLENTES agendado: ${config.schedule.inadimplentes} (10:20 seg-sáb)`);
     console.log('   → Cobra quem está com débito vencido há 2+ dias (recorrente: link; boleto: contato)');
+  }
+
+  // Planos FREE — desmarcação por antecedência. Roda a cada N horas (editável no
+  // painel; padrão 6h) no horário comercial (07h-22h), desmarca quem é FREE/GRUPO 2
+  // e marcou com 2+ dias de antecedência e avisa no grupo da Equipe. Desligável no
+  // painel (jobsAtivos) e por unidade (JOBS_OFF=free_antecedencia). Usa o EVO →
+  // respeita o mutex jobRunning.
+  if (!config.jobAtivo('free_antecedencia')) {
+    log('📅 Job PLANOS FREE (antecedência) DESATIVADO nesta unidade (JOBS_OFF).');
+  } else {
+    const horasFree = require('./free-antecedencia-config').lerHoras();
+    const cronFree = `0 7-22/${horasFree} * * *`;   // a cada N horas, 07h-22h
+    cron.schedule(cronFree, () => {
+      log('⏰ Cron disparado: Planos FREE (antecedência)');
+      if (!jobsAtivos.ativo('freeAntecedencia')) { log('⏸️  Planos FREE desligado no painel — pulando'); return; }
+      agendarFreeAntecedencia();
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job PLANOS FREE (antecedência) agendado: ${cronFree} (a cada ${horasFree}h, 07h-22h)`);
+    console.log('   → Desmarca aluna FREE/GRUPO 2 que marcou com 2+ dias e avisa o grupo da Equipe');
   }
 
   // Schedule: a cada 5 min (05h-22h) → calcula a grade de horários NO VPS e
