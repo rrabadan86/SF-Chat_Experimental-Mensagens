@@ -979,7 +979,10 @@ async function main() {
   } else {
     // Verifica de HORA em HORA (07h-22h) e só roda quando já passou o intervalo de
     // N horas (editável no painel). Assim mudar o intervalo vale sem reiniciar.
-    cron.schedule('0 7-22 * * *', () => {
+    // O MINUTO do tick usa o mesmo escalonamento da grade (config.formSlotsMinuto),
+    // para as duas lojas do mesmo VPS não baterem no EVO no mesmo minuto.
+    const tickMin = Number.isFinite(config.formSlotsMinuto) ? config.formSlotsMinuto : 0;
+    cron.schedule(`${tickMin} 7-22 * * *`, () => {
       if (!jobsAtivos.ativo('freeAntecedencia')) return;  // desligado no painel
       const fcfg = require('./free-antecedencia-config');
       const horas = fcfg.lerHoras();
@@ -988,7 +991,7 @@ async function main() {
       agendarFreeAntecedencia();
     }, { timezone: 'America/Sao_Paulo' });
     const h0 = require('./free-antecedencia-config').lerHoras();
-    log(`📅 Job PLANOS FREE (antecedência) agendado: checa de hora em hora (07h-22h), roda a cada ${h0}h (editável no painel)`);
+    log(`📅 Job PLANOS FREE (antecedência) agendado: checa a cada hora no minuto ${tickMin} (07h-22h), roda a cada ${h0}h (editável no painel)`);
     console.log('   → Desmarca aluna FREE/GRUPO 2 que marcou com 2+ dias e avisa o grupo da Equipe');
   }
 
