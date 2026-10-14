@@ -1194,7 +1194,7 @@ function cardGrupos() {
       <form method="POST" action="/grupos/salvar" onsubmit="var b=this.querySelector('button[type=submit]');if(b){b.disabled=true;b.textContent='Salvando…';}">
         <label style="margin:0 0 4px">Grupo da equipe (professoras)</label>
         <input type="text" name="equipe" value="${esc(eqp)}" placeholder="SlimFit Equipe 💪" autocomplete="off" style="width:100%">
-        <small class="quando" style="display:block;margin:4px 0 0">Usado em: <b>Ausentes/faltantes</b>, <b>Aniversariantes do mês</b>, <b>Resumo do dia</b> e resumo da semana.</small>
+        <small class="quando" style="display:block;margin:4px 0 0">Usado em: <b>Ausentes/faltantes</b>, <b>Aniversariantes do mês</b>, <b>Resumo do dia</b>, resumo da semana e <b>Planos FREE (antecedência)</b>.</small>
         <label style="margin:14px 0 4px">Grupo do Circuito (alunas)</label>
         <input type="text" name="circuito" value="${esc(circ)}" placeholder="Circuito Slim" autocomplete="off" style="width:100%">
         <small class="quando" style="display:block;margin:4px 0 0">Usado em: <b>Circuito — convocatória</b> e <b>Circuito — lembrete</b>.</small>
