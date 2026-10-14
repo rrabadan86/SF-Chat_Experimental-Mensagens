@@ -120,8 +120,8 @@ def _planos_do_membro(evo, id_member, cache, dump=False):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dias", type=int, default=21,
-                    help="quantos dias à frente varrer a grade (padrão 21)")
+    ap.add_argument("--dias", type=int, default=4,
+                    help="quantos dias à frente varrer a grade (padrão 4 = hoje+2 até hoje+4, ex.: 16-18/10)")
     ap.add_argument("--full", action="store_true",
                     help="dump cru das primeiras alunas (ajuda a achar o campo do plano)")
     ap.add_argument("--dump-membro", type=int, default=None,
@@ -160,9 +160,10 @@ def main():
         try:
             turmas = evo.list_schedule(ds, show_full_week=False, only_availables=False) or []
         except Exception as e:
-            print(f"   ⚠️  {ds}: falha ao ler a grade: {e}")
+            print(f"   ⚠️  {d:%d/%m}: falha ao ler a grade: {e}")
             d += timedelta(days=1)
             continue
+        print(f"   … {d:%d/%m}: {len(turmas)} turma(s) — lendo matrículas", flush=True)
         for t in turmas:
             idc = t.get("idConfiguration")
             if not idc:
