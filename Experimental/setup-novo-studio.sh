@@ -619,7 +619,8 @@ STUDIO_NOME=${STUDIO_NOME:-Studio SlimFit $SLUG}
 # O painel usa isto p/ reiniciar/consultar o robô e a SoFIA DESTA unidade.
 PM2_SLUG=$SLUG
 # Envios que ESTA unidade NÃO usa (o robô não agenda; o painel mostra "desativado").
-# Chaves: presentes, circuito_convocacao, circuito_lembrete (ou "circuito" = os dois).
+# Chaves: presentes, circuito_convocacao, circuito_lembrete (ou "circuito" = os dois),
+#         inadimplentes, free_antecedencia (desmarcação dos planos FREE por antecedência).
 # Ex.: JOBS_OFF=presentes,circuito_convocacao,circuito_lembrete
 JOBS_OFF=
 # Dias ANTES do vencimento para avisar a renovação (padrão 7; ex.: 30):

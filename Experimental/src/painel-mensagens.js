@@ -28,6 +28,7 @@ const igcookies = require('./instagram-cookies');
 const igforcar = require('./ig-forcar');
 const jobsAtivos = require('./jobs-ativos'); // liga/desliga de cada envio
 const inadConfig = require('./inadimplentes-config'); // "vencido há X+ dias" (configurável)
+const freeCfg = require('./free-antecedencia-config'); // planos FREE: intervalo (horas) + janela (dias)
 const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
 const bookings = require('./bookings');
@@ -1193,7 +1194,7 @@ function cardGrupos() {
       <form method="POST" action="/grupos/salvar" onsubmit="var b=this.querySelector('button[type=submit]');if(b){b.disabled=true;b.textContent='Salvando…';}">
         <label style="margin:0 0 4px">Grupo da equipe (professoras)</label>
         <input type="text" name="equipe" value="${esc(eqp)}" placeholder="SlimFit Equipe 💪" autocomplete="off" style="width:100%">
-        <small class="quando" style="display:block;margin:4px 0 0">Usado em: <b>Ausentes/faltantes</b>, <b>Aniversariantes do mês</b>, <b>Resumo do dia</b> e resumo da semana.</small>
+        <small class="quando" style="display:block;margin:4px 0 0">Usado em: <b>Ausentes/faltantes</b>, <b>Aniversariantes do mês</b>, <b>Resumo do dia</b>, resumo da semana e <b>Planos FREE (antecedência)</b>.</small>
         <label style="margin:14px 0 4px">Grupo do Circuito (alunas)</label>
         <input type="text" name="circuito" value="${esc(circ)}" placeholder="Circuito Slim" autocomplete="off" style="width:100%">
         <small class="quando" style="display:block;margin:4px 0 0">Usado em: <b>Circuito — convocatória</b> e <b>Circuito — lembrete</b>.</small>
@@ -1262,6 +1263,31 @@ function paginaMensagens(aviso, erro) {
     ${itensGrupo}
     <div class="sec-t">Outros envios em grupo <small style="font-weight:600;color:var(--cinza)">(automáticos, sem texto editável)</small></div>
     ${outros}
+    <div class="sec-t">Planos FREE — desmarcação por antecedência <small style="font-weight:600;color:var(--cinza)">(robô desmarca quem marcou cedo demais e avisa a Equipe)</small></div>
+    <div class="card" style="position:relative;border-left:4px solid var(--teal);background:#f6fbf9">
+      ${switchEnvio(['freeAntecedencia'])}
+      <p class="quando" style="margin:0 0 10px;padding-right:100px">As alunas de plano <b>FREE … GRUPO 2</b> só podem marcar a aula com, no máximo, <b>1 dia de antecedência</b>. O robô varre a grade de tempos em tempos, <b>desmarca</b> quem marcou com <b>2+ dias</b> (falta justificada — libera a vaga e a aluna pode remarcar) e <b>avisa no grupo da Equipe</b>. Só conta plano FREE com <b>contrato ativo</b>. A aluna <b>não</b> recebe mensagem direta. Ligue/desligue no <b>botão acima</b>.</p>
+      <form method="POST" action="/free/config" style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
+        <label style="font-weight:700">Verificar a cada
+          <input type="number" name="freeHoras" min="${freeCfg.HORAS_MIN}" max="${freeCfg.HORAS_MAX}" step="1" value="${(function(){try{return freeCfg.lerHoras();}catch(_){return freeCfg.HORAS_PADRAO;}})()}" style="width:64px;margin:0 6px;padding:6px;border:1px solid var(--linha);border-radius:8px;text-align:center"> horas
+        </label>
+        <label style="font-weight:700">Janela
+          <input type="number" name="freeDias" min="${freeCfg.DIAS_MIN}" max="${freeCfg.DIAS_MAX}" step="1" value="${(function(){try{return freeCfg.lerDias();}catch(_){return freeCfg.DIAS_PADRAO;}})()}" style="width:64px;margin:0 6px;padding:6px;border:1px solid var(--linha);border-radius:8px;text-align:center"> dias (a partir de hoje+2)
+        </label>
+        <div style="flex-basis:100%;max-width:560px">
+          <label style="font-weight:700">Planos que entram${infoI('<b>Uma regra por linha.</b> Os termos de cada linha são separados por <b>vírgula</b>. O plano entra se o nome do contrato (ativo) contém <b>TODOS</b> os termos de <b>alguma</b> linha. Não liga para maiúscula/minúscula. Exemplos:<br>• <code>free, 3x, grupo 2</code> → só os planos FREE <b>3X</b> GRUPO 2 (padrão) — exclui os FREE <b>5X</b>.<br>• <code>free, grupo 2</code> → qualquer FREE/GRUPO 2 (incluindo os 5X).<br>• Uma linha por família (entra quem bate em <b>qualquer</b> uma), ex.:<br><code>free, 3x, grupo 2</code><br><code>copa slim, grupo 2</code><br>• Para um plano exato, escreva o nome quase inteiro numa linha.')}</label>
+          <textarea name="freePlanos" rows="3" maxlength="4000" placeholder="free, 3x, grupo 2" style="width:100%;resize:vertical;padding:8px;border:1px solid var(--linha);border-radius:8px;font-family:monospace;font-size:.9rem">${esc((function(){try{return freeCfg.lerPlanos();}catch(_){return freeCfg.PLANOS_PADRAO;}})())}</textarea>
+          <p class="quando" style="margin:4px 0 0">Uma regra por linha; termos separados por vírgula (padrão: <code>free, 3x, grupo 2</code> — só os FREE 3X). Deixe vazio para voltar ao padrão.</p>
+        </div>
+        <div style="flex-basis:100%;max-width:560px">
+          <label style="font-weight:700">Mensagem no grupo da Equipe${infoI('Texto postado no grupo da Equipe quando o robô desmarca. Use as <b>variáveis</b> (o robô troca na hora):<br>• <code>{studio}</code> — nome da loja<br>• <code>{lista}</code> — as alunas desmarcadas (data, horário, nome e plano) — <b>deixe esta no texto</b><br>• <code>{qtd}</code> — quantas foram desmarcadas<br>• <code>{falhas}</code> — bloco de falhas (vazio se não houver)<br>O <code>*negrito*</code> do WhatsApp funciona. Deixe vazio para voltar ao padrão.')}</label>
+          <textarea name="freeTexto" rows="8" maxlength="4000" style="width:100%;resize:vertical;padding:8px;border:1px solid var(--linha);border-radius:8px;font-size:.9rem">${esc((function(){try{return freeCfg.lerTexto();}catch(_){return freeCfg.TEXTO_PADRAO;}})())}</textarea>
+          <p class="quando" style="margin:4px 0 0">Variáveis: <code>{studio}</code>, <code>{lista}</code>, <code>{qtd}</code>, <code>{falhas}</code>. Mantenha o <code>{lista}</code> para os nomes aparecerem.</p>
+        </div>
+        <button type="submit" class="save" style="padding:8px 16px">Salvar</button>
+      </form>
+      <p class="quando" style="margin:10px 0 0">Vale <b>sem reiniciar</b> o robô — na próxima verificação (de hora em hora).</p>
+    </div>
     <div class="hbar">
       <div class="acts"><button type="submit" form="fh" id="btnH" class="save">🕒 Salvar horários e reiniciar o robô</button></div>
       <p class="quando" style="text-align:center;margin:8px 0 0">O <b>texto</b> é salvo na hora (sem reiniciar). Já mudanças de <b>horário</b> só valem depois que o robô reinicia — alguns segundos. Evite salvar bem em cima de um horário de disparo.</p>
@@ -5698,6 +5724,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)oksof=1/.test(q)) aviso = '🔄 Robô reiniciando… ele volta ao ar em ~1 minuto (o selo do WhatsApp acima mostra quando reconectar).';
     else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar o robô pelo painel. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
+    else if (/(?:^|&)okfree=1/.test(q)) aviso = '✅ Planos FREE: configuração salva — já vale na próxima verificação (sem reiniciar).';
     // Só a sub-aba permitida; se pediu uma sem acesso, cai na primeira permitida.
     // "Express" é a tela unificada (Express + Agendar mensagem); view=agendar cai nela.
     const podeMerged = podeMsgSub(sess, 'express') || podeMsgSub(sess, 'agendar');
@@ -5821,6 +5848,26 @@ const server = http.createServer((req, res) => {
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         return res.end(paginaCobranca('Erro ao salvar: ' + e.message, true));
+      }
+    });
+  }
+  // Config dos planos FREE (desmarcação por antecedência): liga/desliga + intervalo
+  // (horas) + janela (dias). Não precisa reiniciar — o robô lê a cada verificação.
+  if (req.method === 'POST' && url === '/free/config') {
+    return lerCorpo(req, 1e5, corpo => {
+      try {
+        const p = new URLSearchParams(corpo);
+        // O liga/desliga é o toggle do card (switchEnvio → /envio/ativo); aqui só
+        // salvamos intervalo, janela, planos e texto — sem mexer no on/off.
+        const fh = p.get('freeHoras'); if (fh != null && fh !== '') freeCfg.salvarHoras(fh);
+        const fd = p.get('freeDias'); if (fd != null && fd !== '') freeCfg.salvarDias(fd);
+        const fp = p.get('freePlanos'); if (fp != null) freeCfg.salvarPlanos(fp);
+        const ft = p.get('freeTexto'); if (ft != null) freeCfg.salvarTexto(ft);
+        try { auditoria.registrar(sess.usuario, 'free.config', 'Planos FREE — antecedência', `horas=${fh} dias=${fd}`); } catch (_) {}
+        res.writeHead(303, { Location: '/?okfree=1' }); return res.end();
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(paginaMensagens('Erro ao salvar a config dos planos FREE: ' + e.message, true));
       }
     });
   }
