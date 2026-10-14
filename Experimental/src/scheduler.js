@@ -121,7 +121,12 @@ function agendarFreeAntecedencia(tentativa = 1) {
   atividade.setContexto('Planos FREE — antecedência');
   const start = new Date();
   require('./free-antecedencia').runFreeAntecedencia({ dry: false })
-    .then(r => log(`✅ Planos FREE concluído — ${r.desmarcadas} desmarcada(s), ${r.falhas} falha(s), janela ${r.janela}${r.postado ? ' (avisado no grupo)' : ''}`))
+    .then(r => {
+      // Marca a rodada só no SUCESSO — se falhar (EVO instável), o tick de hora em
+      // hora tenta de novo em vez de esperar o intervalo inteiro.
+      try { require('./free-antecedencia-config').marcarRodada(); } catch (_) {}
+      log(`✅ Planos FREE concluído — ${r.desmarcadas} desmarcada(s), ${r.falhas} falha(s), janela ${r.janela}${r.postado ? ' (avisado no grupo)' : ''}`);
+    })
     .catch(err => logError('Planos FREE (antecedência)', err))
     .finally(() => {
       jobRunning = false;
@@ -972,14 +977,18 @@ async function main() {
   if (!config.jobAtivo('free_antecedencia')) {
     log('📅 Job PLANOS FREE (antecedência) DESATIVADO nesta unidade (JOBS_OFF).');
   } else {
-    const horasFree = require('./free-antecedencia-config').lerHoras();
-    const cronFree = `0 7-22/${horasFree} * * *`;   // a cada N horas, 07h-22h
-    cron.schedule(cronFree, () => {
-      log('⏰ Cron disparado: Planos FREE (antecedência)');
-      if (!jobsAtivos.ativo('freeAntecedencia')) { log('⏸️  Planos FREE desligado no painel — pulando'); return; }
+    // Verifica de HORA em HORA (07h-22h) e só roda quando já passou o intervalo de
+    // N horas (editável no painel). Assim mudar o intervalo vale sem reiniciar.
+    cron.schedule('0 7-22 * * *', () => {
+      if (!jobsAtivos.ativo('freeAntecedencia')) return;  // desligado no painel
+      const fcfg = require('./free-antecedencia-config');
+      const horas = fcfg.lerHoras();
+      if (!fcfg.deveRodar(horas, new Date())) return;     // ainda não deu o intervalo
+      log(`⏰ Planos FREE: deu o intervalo de ${horas}h — rodando`);
       agendarFreeAntecedencia();
     }, { timezone: 'America/Sao_Paulo' });
-    log(`📅 Job PLANOS FREE (antecedência) agendado: ${cronFree} (a cada ${horasFree}h, 07h-22h)`);
+    const h0 = require('./free-antecedencia-config').lerHoras();
+    log(`📅 Job PLANOS FREE (antecedência) agendado: checa de hora em hora (07h-22h), roda a cada ${h0}h (editável no painel)`);
     console.log('   → Desmarca aluna FREE/GRUPO 2 que marcou com 2+ dias e avisa o grupo da Equipe');
   }
 

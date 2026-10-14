@@ -28,6 +28,7 @@ const igcookies = require('./instagram-cookies');
 const igforcar = require('./ig-forcar');
 const jobsAtivos = require('./jobs-ativos'); // liga/desliga de cada envio
 const inadConfig = require('./inadimplentes-config'); // "vencido há X+ dias" (configurável)
+const freeCfg = require('./free-antecedencia-config'); // planos FREE: intervalo (horas) + janela (dias)
 const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
 const bookings = require('./bookings');
@@ -4516,6 +4517,28 @@ function paginaSofia(aviso, erro) {
 
       </details>
 
+      <details class="acc-sec">
+        <summary class="sec-t" style="cursor:pointer;padding:4px 0">Planos FREE — desmarcação por antecedência <small style="font-weight:400;color:var(--cinza)">— desmarca quem é FREE/GRUPO 2 e marcou cedo demais</small></summary>
+      <div class="card">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" name="freeOn" value="1"${(function(){try{return jobsAtivos.ativo('freeAntecedencia');}catch(_){return true;}})() ? ' checked' : ''} style="width:auto;margin:0">
+          Ativar desmarcação automática${infoI('As alunas de plano <b>FREE … GRUPO 2</b> só podem marcar a aula com, no máximo, <b>1 dia de antecedência</b>. O app antigo deixa marcar qualquer dia. Com isto ligado, o robô varre a grade de tempos em tempos, <b>desmarca</b> quem é FREE/GRUPO 2 e marcou com <b>2+ dias</b> de antecedência (falta justificada — libera a vaga e a aluna pode remarcar), e <b>avisa no grupo da Equipe</b>. Só conta plano FREE com contrato <b>ativo</b>.')}
+        </label>
+        <p class="quando" style="margin:6px 0 14px">Desligado, o robô não desmarca ninguém. A aluna é avisada só no <b>grupo da Equipe</b> (não recebe mensagem direta).</p>
+        <div style="display:flex;gap:18px;flex-wrap:wrap">
+          <div style="max-width:260px">
+            <label>Verificar a cada${infoI('De quantas em quantas horas o robô roda a varredura (no horário comercial, 07h-22h). Padrão: 6 horas. Vale sem reiniciar — na próxima verificação de hora em hora.')}</label>
+            <div class="cfg-in"><input type="number" name="freeHoras" min="${freeCfg.HORAS_MIN}" max="${freeCfg.HORAS_MAX}" step="1" value="${(function(){try{return freeCfg.lerHoras();}catch(_){return freeCfg.HORAS_PADRAO;}})()}"><span class="suf">horas</span></div>
+          </div>
+          <div style="max-width:260px">
+            <label>Janela de busca${infoI('Quantos dias à frente, a partir de <b>hoje+2</b>, o robô procura marcações irregulares. Padrão: 3 dias (ex.: hoje 14 → procura 16, 17 e 18). Mais dias = mais consultas ao EVO por rodada.')}</label>
+            <div class="cfg-in"><input type="number" name="freeDias" min="${freeCfg.DIAS_MIN}" max="${freeCfg.DIAS_MAX}" step="1" value="${(function(){try{return freeCfg.lerDias();}catch(_){return freeCfg.DIAS_PADRAO;}})()}"><span class="suf">dias (a partir de hoje+2)</span></div>
+          </div>
+        </div>
+      </div>
+
+      </details>
+
       <details class="acc-sec" open>
         <summary class="sec-t">Prompt da SoFIA <small style="font-weight:400;color:var(--cinza)">— o roteiro (cada bloco é uma parte do atendimento; clique no título p/ abrir, ↑↓ reordenam)</small></summary>
         <div>
@@ -6446,6 +6469,10 @@ const server = http.createServer((req, res) => {
         });
         try { const el = p.get('expLimite'); if (el != null && el !== '') gravarExpLimite(el); } catch (_) {}
         try { const ah = p.get('antecedenciaHoras'); if (ah != null && ah !== '') gravarAntecedenciaHoras(ah); } catch (_) {}
+        // Planos FREE — desmarcação por antecedência (liga/desliga + intervalo + janela).
+        try { jobsAtivos.setAtivo('freeAntecedencia', p.get('freeOn') === '1'); } catch (_) {}
+        try { const fh = p.get('freeHoras'); if (fh != null && fh !== '') freeCfg.salvarHoras(fh); } catch (_) {}
+        try { const fd = p.get('freeDias'); if (fd != null && fd !== '') freeCfg.salvarDias(fd); } catch (_) {}
         try { const lm = p.get('humanoLockMin'); if (lm != null && lm !== '') sofia.gravarHumanoLockMin(lm); } catch (_) {}
         try { const rf = p.get('refreshSeg'); if (rf != null && rf !== '') gravarRefreshSeg(rf); } catch (_) {}
         try { auditoria.registrar(sess.usuario, 'sofia.config', 'Configuração/prompt da SoFIA', 'modelo: ' + (p.get('modeloConversa') || '—')); } catch (_) {}

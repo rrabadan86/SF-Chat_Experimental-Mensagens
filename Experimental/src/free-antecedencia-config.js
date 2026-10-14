@@ -57,7 +57,30 @@ function salvarDias(n) {
   return v;
 }
 
+// "Última rodada" — para o scheduler verificar de hora em hora e só rodar quando
+// já passou o intervalo de N horas (assim mudar as horas no painel vale sem
+// reiniciar o robô).
+function lerUltima() {
+  const o = _ler();
+  const t = o && o.ultimaRodada ? new Date(o.ultimaRodada) : null;
+  return (t && !isNaN(t)) ? t : null;
+}
+function marcarRodada(quando) {
+  const o = _ler();
+  o.ultimaRodada = (quando instanceof Date ? quando : new Date()).toISOString();
+  _salvar(o);
+}
+// true se nunca rodou OU já passou (horas) desde a última rodada (margem de 1 min
+// para o tick de hora em hora não "perder" por poucos segundos).
+function deveRodar(horas, now) {
+  const ult = lerUltima();
+  if (!ult) return true;
+  const passadasH = ((now || new Date()) - ult) / 3600000;
+  return passadasH >= (Number(horas) - (1 / 60));
+}
+
 module.exports = {
   lerHoras, salvarHoras, lerDias, salvarDias, FILE,
+  lerUltima, marcarRodada, deveRodar,
   HORAS_MIN, HORAS_MAX, HORAS_PADRAO, DIAS_MIN, DIAS_MAX, DIAS_PADRAO,
 };
