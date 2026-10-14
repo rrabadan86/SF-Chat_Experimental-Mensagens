@@ -15,12 +15,22 @@
  */
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
 const path = require('path');
+const fs = require('fs');
 const { execFile } = require('child_process');
 const config = require('./config');
 const cfg = require('./free-antecedencia-config');
 
 const AGEND_DIR = path.resolve(__dirname, 'agendamento_evo');
 const SCRIPT = path.join(AGEND_DIR, 'run_free_antecedencia.py');
+
+// Python a usar: PREFERE o venv do agendamento (tem as dependências: requests
+// etc.), senão PYTHON_BIN do .env, senão o python3 do sistema. Assim não depende
+// de editar o .env em cada unidade (o Bueno, p.ex., não tem PYTHON_BIN).
+function _pythonBin() {
+  const venv = path.join(AGEND_DIR, '.venv', 'bin', 'python');
+  try { if (fs.existsSync(venv)) return venv; } catch (_) {}
+  return process.env.PYTHON_BIN || 'python3';
+}
 
 function _fmtDia(iso) {
   // "2026-10-16" → "16/10"
@@ -31,7 +41,7 @@ function _fmtDia(iso) {
 /** Roda o Python e devolve o objeto de resultado (promise). */
 function _rodarPython({ dry, dias }) {
   return new Promise((resolve, reject) => {
-    const py = process.env.PYTHON_BIN || 'python3';
+    const py = _pythonBin();
     const args = [SCRIPT, '--dias', String(dias)];
     if (dry) args.push('--dry');
     execFile(py, args, { cwd: AGEND_DIR, timeout: 180000, maxBuffer: 10 * 1024 * 1024 },
