@@ -1545,7 +1545,7 @@ function paginaExpress(aviso, erro) {
         </div>
         <div style="display:flex;gap:14px;flex-wrap:wrap">
           <div style="flex:1 1 170px;min-width:0"><label>Data</label><input type="date" id="exData" value="${hoje}" min="${hoje}"></div>
-          <div style="flex:1 1 160px;min-width:0"><label>Horário</label><select id="exHora"><option value="">carregando horários…</option></select></div>
+          <div style="flex:1 1 160px;min-width:0"><label style="display:flex;align-items:center;justify-content:space-between;gap:8px">Horário <button type="button" id="exRefresh" onclick="exAtualizarGrade()" title="Buscar a grade atualizada no EVO agora" style="border:1px solid var(--linha);background:#fff;color:var(--teal);border-radius:8px;padding:2px 9px;font-size:.74rem;font-weight:600;cursor:pointer;line-height:1.5">🔄 atualizar</button></label><select id="exHora"><option value="">carregando horários…</option></select></div>
         </div>
         <div class="acts" style="margin-top:18px"><button type="button" class="save" id="exBtn" onclick="exAgendar()" style="width:100%;padding:12px 20px;font-size:1rem;font-weight:600">📅 Agendar no EVO</button></div>
         <div id="exMsg" class="aviso" style="display:none"></div>
@@ -1586,6 +1586,20 @@ function paginaExpress(aviso, erro) {
   }
   document.getElementById('exData').addEventListener('change',exPreencherHoras);
   exCarregarSlots();
+  // 🔄 Atualizar grade AGORA: recalcula no EVO e reenvia (push_slots), depois recarrega
+  // os horários. Evita o "turma cheia" por grade defasada (o envio automático é a cada ~30 min).
+  function exAtualizarGrade(){
+    var b=document.getElementById('exRefresh'), sel=document.getElementById('exHora');
+    if(b){ b.disabled=true; b.textContent='⏳ atualizando…'; }
+    if(sel){ sel.innerHTML='<option value="">atualizando a grade…</option>'; }
+    fetch('/agendar/slots/atualizar',{method:'POST'}).then(function(r){return r.json();}).then(function(j){
+      exSlots=null; exCarregarSlots();
+      if(b){ b.disabled=false; b.textContent='🔄 atualizar'; }
+      if(j&&j.ok){ exStatus('✅ Grade atualizada agora.',''); setTimeout(function(){ var m=document.getElementById('exMsg'); if(m)m.style.display='none'; },2500); }
+      else { exStatus('⚠️ '+exEsc((j&&j.erro)||'não consegui atualizar a grade agora — tente de novo em instantes.'),'err'); }
+    }).catch(function(){ if(b){ b.disabled=false; b.textContent='🔄 atualizar'; } exSlots=null; exCarregarSlots(); });
+  }
+  window.exAtualizarGrade=exAtualizarGrade;
   function exDupSobrescrever(){ exAgendar('sobrescrever'); }
   function exDupNovo(){ exAgendar('novo'); }
   function exAgendar(acaoDup){
@@ -6336,6 +6350,21 @@ const server = http.createServer((req, res) => {
       .then(r => r.json())
       .then(j => { clearTimeout(t); res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ dias: (j && j.dias) || {} })); })
       .catch(e => { clearTimeout(t); res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ dias: {}, erro: String((e && e.message) || e) })); });
+  }
+  // Atualizar a grade AGORA (botão 🔄 do Cadastro Express): recalcula a grade no
+  // EVO e reenvia ao formulário (push_slots). Assim a recepção vê as vagas na hora,
+  // sem esperar o envio automático (a cada ~30 min). Usa o venv do agendamento.
+  if (req.method === 'POST' && url === '/agendar/slots/atualizar') {
+    const cp = require('child_process'), p = require('path'), f = require('fs');
+    const dir = p.resolve(__dirname, 'agendamento_evo');
+    const venv = p.join(dir, '.venv', 'bin', 'python');
+    let py = process.env.PYTHON_BIN || 'python3';
+    try { if (f.existsSync(venv)) py = venv; } catch (_) {}
+    return cp.execFile(py, [p.join(dir, 'push_slots.py')], { cwd: dir, timeout: 115000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      if (err) return res.end(JSON.stringify({ ok: false, erro: String((stderr || err.message || 'falha ao atualizar a grade')).trim().slice(0, 300) }));
+      return res.end(JSON.stringify({ ok: true, saida: String(stdout || '').trim().slice(0, 200) }));
+    });
   }
   if (req.method === 'POST' && url === '/sofia/agendar') {
     const quem = (sess && sess.usuario) ? sess.usuario : '';
