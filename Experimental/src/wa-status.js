@@ -12,15 +12,17 @@ const path = require('path');
 
 const ARQUIVO = path.resolve(__dirname, '..', 'data', 'wa-status.json');
 
-function set(estado, qr) {
+function set(estado, qr, extra) {
   try {
     const dir = path.dirname(ARQUIVO);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(ARQUIVO, JSON.stringify({
-      estado,
-      qr: qr || null,
-      atualizadoEm: new Date().toISOString(),
-    }), 'utf8');
+    // `extra` (opcional) carrega campos como pairingCode/pairingNumero (conexão
+    // por CÓDIGO em vez de QR). Como escrevemos um objeto NOVO a cada chamada, os
+    // campos extras somem sozinhos quando o estado muda (ex.: 'conectado'), que é
+    // o comportamento desejado.
+    const base = { estado, qr: qr || null, atualizadoEm: new Date().toISOString() };
+    if (extra && typeof extra === 'object') Object.assign(base, extra);
+    fs.writeFileSync(ARQUIVO, JSON.stringify(base), 'utf8');
   } catch (_) { /* estado é só conveniência */ }
 }
 

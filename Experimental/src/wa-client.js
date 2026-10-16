@@ -112,6 +112,8 @@ let initPromise = null;
 let keepAliveTimer = null;
 let comandoTimer = null;
 let qrAvisado = false;   // 1 alerta por episódio de QR (o WhatsApp emite 'qr' a cada ~20s → não floodar o ntfy)
+let pairingNumero = null;   // conexão por CÓDIGO (pairing code) em vez de QR: número a parear (só dígitos)
+let pairingPedido = false;  // já pedi o código para este número? (pede 1x por comando do painel)
 
 function log(msg) { console.log(`[wa] ${msg}`); }
 
@@ -126,7 +128,22 @@ function iniciarWatcherComando() {
     let cmd = null;
     try { cmd = JSON.parse(require('fs').readFileSync(COMANDO_FILE, 'utf8')); } catch (_) { return; } // sem comando
     try { require('fs').unlinkSync(COMANDO_FILE); } catch (_) {} // consome uma vez só
-    if (!cmd || cmd.cmd !== 'logout') return;
+    if (!cmd) return;
+    // Conectar por CÓDIGO (pairing code) em vez de QR: o painel manda o número; no
+    // próximo evento 'qr' (quando o WhatsApp Web está pronto p/ parear) pedimos o
+    // código de 8 dígitos e publicamos no estado para o painel mostrar.
+    if (cmd.cmd === 'parear') {
+      pairingNumero = String(cmd.numero || '').replace(/\D/g, '') || null;
+      pairingPedido = false;   // força pedir um código NOVO
+      log('comando do painel: PAREAR por código — número=' + (pairingNumero || '(vazio)'));
+      return;
+    }
+    if (cmd.cmd === 'qr') {     // o painel pediu para voltar ao QR (cancelar o código)
+      pairingNumero = null; pairingPedido = false;
+      log('comando do painel: voltar ao QR (cancela pareamento por código).');
+      return;
+    }
+    if (cmd.cmd !== 'logout') return;
     log('🔌 comando do painel: DESCONECTAR (logout). Encerrando a sessão…');
     waStatus.set('desconectado', null);
     try { if (client) await client.logout(); log('sessão desvinculada (logout).'); }
@@ -293,7 +310,24 @@ function initWhatsApp() {
   let rejectInit = null;
   initPromise = new Promise((resolve, reject) => {
     rejectInit = reject;
-    client.on('qr', (qr) => {
+    client.on('qr', async (qr) => {
+      // Modo CÓDIGO (pairing): se o painel pediu conexão por número, pedimos o
+      // código de 8 dígitos ao WhatsApp (1x por comando) e NÃO mostramos o QR.
+      // Se falhar, cai no QR normal (fallback seguro).
+      if (pairingNumero) {
+        if (!pairingPedido) {
+          pairingPedido = true;
+          try {
+            const code = await client.requestPairingCode(pairingNumero);
+            log('📲 código de pareamento para ' + pairingNumero + ': ' + code);
+            waStatus.set('qr', null, { pairingCode: code, pairingNumero });
+          } catch (e) {
+            log('pareamento por código falhou (' + ((e && e.message) || e) + ') — voltando ao QR.');
+            pairingNumero = null; pairingPedido = false;
+          }
+        }
+        if (pairingNumero) return;   // código já pedido: não mostra QR
+      }
       console.log('\n📲 Escaneie o QR no WhatsApp do número (Aparelhos conectados → Conectar um aparelho):\n');
       qrcodeTerminal.generate(qr, { small: true });
       // Grava o QR (como imagem) no estado compartilhado para o painel exibir.
@@ -320,6 +354,7 @@ function initWhatsApp() {
       resolvido = true;
       pronto = true;
       qrAvisado = false;   // reconectou: rearma o alerta p/ a próxima queda
+      pairingNumero = null; pairingPedido = false;   // conectou: sai do modo código
       waStatus.set('conectado', null);
       log(`✅ WhatsApp PRONTO (${via}) — pode disparar.`);
       iniciarKeepAlive();
