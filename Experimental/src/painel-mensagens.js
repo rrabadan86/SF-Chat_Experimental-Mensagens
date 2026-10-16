@@ -4807,27 +4807,33 @@ function paginaGrade() {
     const horas = [...new Set(turmas.map(t => t.hora))].sort();
     const cel = {};
     for (const t of turmas) cel[t.hora + '|' + t.weekday] = t;
-    const th = wds.map(w => `<th>${WD[w]}<span class="dt">${fmtDia(diaPorWd[w])}</span></th>`).join('');
+    // Cabeçalho só com o dia da semana (a estrutura fixa vale toda semana;
+    // as datas do período ficam no resumo acima — evita a confusão de datas fora de ordem).
+    const th = wds.map(w => `<th>${WD[w]}</th>`).join('');
     const linhas = horas.map(h => {
       const tds = wds.map(w => {
         const t = cel[h + '|' + w];
         if (!t) return '<td class="vaziocel"></td>';
-        const cap = (t.capacity == null) ? '?' : t.capacity;
-        const nf = t.nFixas;
-        const lotada = (t.vagas === 0) || (t.capacity != null && nf >= t.capacity);
-        const vagasTxt = lotada ? 'lotada' : (t.vagas + (t.vagas === 1 ? ' vaga' : ' vagas'));
-        const badge = `<span class="vg ${lotada ? 'cheia' : 'livre'}">${vagasTxt}</span>`;
+        const cap = t.capacity, nf = t.nFixas, vagas = t.vagas;
+        let tier, vtxt;
+        if (cap == null) { tier = 'nd'; vtxt = nf + ' fixas'; }
+        else if (nf >= cap || vagas === 0) { tier = 'cheia'; vtxt = 'lotada'; }
+        else if (vagas <= 2) { tier = 'quase'; vtxt = vagas + (vagas === 1 ? ' vaga' : ' vagas'); }
+        else { tier = 'livre'; vtxt = vagas + ' vagas'; }
+        const pct = (cap && cap > 0) ? Math.min(100, Math.round(nf / cap * 100)) : 0;
+        const bar = (cap != null) ? `<div class="bar"><span style="width:${pct}%"></span></div>` : '';
         const prof = t.professora ? `<div class="prof">${escH(t.professora)}</div>` : '';
+        const capTxt = (cap == null) ? '?' : cap;
         const nomes = (t.fixas || []).map(n => `<li>${escH(n)}</li>`).join('');
         const det = (t.fixas || []).length
-          ? `<details><summary>👥 ${nf}/${cap} fixas</summary><ul>${nomes}</ul></details>`
-          : `<div class="semf">0/${cap} fixas</div>`;
-        return `<td class="cel ${lotada ? 'tlotada' : ''}">${badge}${prof}${det}</td>`;
+          ? `<details><summary>👥 ${nf}/${capTxt} fixas</summary><ul>${nomes}</ul></details>`
+          : `<div class="semf">${nf}/${capTxt} fixas</div>`;
+        return `<td class="cel t-${tier}"><span class="vg">${vtxt}</span>${bar}${prof}${det}</td>`;
       }).join('');
       return `<tr><th class="hora">${escH(h)}</th>${tds}</tr>`;
     }).join('');
     const r = snap.resumo || {};
-    corpo = `<div class="meta">Período <b>${fmtDia(snap.inicio)}</b>–<b>${fmtDia(snap.fim)}</b> · ${r.turmas || turmas.length} turmas · <b>${r.fixas != null ? r.fixas : ''}</b> matrículas fixas · gerado ${escH(snap.gerado_em || '')}<span class="fora"> · fixo lido ${snap.semanas_frente || 2} semana(s) à frente (reposição/FREE ficam de fora)</span></div>`
+    corpo = `<div class="meta"><span><b>${fmtDia(snap.inicio)}</b>–<b>${fmtDia(snap.fim)}</b></span><span>${r.turmas || turmas.length} turmas · <b>${r.fixas != null ? r.fixas : ''}</b> matrículas fixas</span><span class="fora">gerado ${escH(snap.gerado_em || '')} · fixo lido ${snap.semanas_frente || 2} sem. à frente</span><span class="leg"><i><b class="lg-livre"></b>vaga</i><i><b class="lg-quase"></b>quase (1-2)</i><i><b class="lg-cheia"></b>lotada</i></span></div>`
       + `<div class="tabwrap"><table class="grade"><thead><tr><th class="hora">Horário</th>${th}</tr></thead><tbody>${linhas}</tbody></table></div>`;
   }
   const g = _gradeGerando;
@@ -4835,30 +4841,47 @@ function paginaGrade() {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Grade de Matrículas Fixas</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f4f7f7;color:#223;padding:18px}
-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:12px}
-.volta{color:#13b0a5;text-decoration:none;font-size:.85rem}
-h1{margin:4px 0 2px;font-size:1.3rem}
-.sub{margin:0;color:#567;font-size:.82rem;max-width:760px;line-height:1.45}
-#btnAt{background:#13b0a5;color:#fff;border:0;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer;white-space:nowrap}
-#btnAt:disabled{opacity:.6;cursor:default}
-.aviso{background:#fff7e6;border:1px solid #ffd98a;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:.88rem}
-.meta{font-size:.8rem;color:#567;margin-bottom:10px}.meta .fora{color:#89a}
-.tabwrap{overflow-x:auto;border:1px solid #dde;border-radius:10px;background:#fff}
-table.grade{border-collapse:collapse;width:100%;min-width:800px}
-table.grade th,table.grade td{border:1px solid #e7ecec;vertical-align:top;padding:7px 8px}
-thead th{background:#0a4f4c;color:#eafffb;font-size:.8rem}
-thead th .dt{display:block;font-weight:400;opacity:.85;font-size:.72rem}
-th.hora{background:#eef5f5;color:#245;font-weight:700;white-space:nowrap;text-align:center;font-size:.82rem}
-td.cel{min-width:150px}td.vaziocel{background:#fafbfb}td.tlotada{background:#fff6f5}
-.vg{display:inline-block;font-size:.72rem;font-weight:700;border-radius:999px;padding:2px 9px;margin-bottom:4px}
-.vg.livre{background:#e4f7f0;color:#0a7a52}.vg.cheia{background:#fde6e4;color:#b23b30}
-.prof{font-size:.74rem;color:#789;margin-bottom:3px}
-details summary{cursor:pointer;font-size:.78rem;font-weight:600;color:#245;list-style:none}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#eef3f3;color:#1c2b2a;padding:16px}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:10px}
+.volta{color:#0f766e;text-decoration:none;font-size:.82rem;font-weight:600}
+h1{margin:4px 0 2px;font-size:1.35rem;letter-spacing:-.01em}
+.sub{margin:0;color:#4a5e5c;font-size:.82rem;max-width:720px;line-height:1.45}
+#btnAt{background:#0f766e;color:#fff;border:0;border-radius:9px;padding:10px 18px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 6px 16px -8px rgba(15,118,110,.7)}
+#btnAt:disabled{opacity:.55;cursor:default;box-shadow:none}
+.aviso{background:#fff7e6;border:1px solid #ffd98a;border-radius:9px;padding:10px 14px;margin-bottom:12px;font-size:.88rem}
+.meta{font-size:.78rem;color:#5a6d6b;margin:2px 0 10px;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center}
+.meta .fora{color:#8a9b99}
+.leg{display:inline-flex;gap:11px;align-items:center;font-weight:600}
+.leg i{display:inline-flex;align-items:center;gap:5px;font-style:normal}
+.leg b{width:11px;height:11px;border-radius:3px;display:inline-block}
+.lg-livre{background:#15a06f}.lg-quase{background:#e3a008}.lg-cheia{background:#e05246}
+.tabwrap{overflow:auto;border:1px solid #d6e0df;border-radius:12px;background:#fff;max-height:82vh;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+table.grade{border-collapse:separate;border-spacing:0;width:100%;min-width:860px}
+table.grade th,table.grade td{border-bottom:1px solid #eef2f2;border-right:1px solid #eef2f2}
+thead th{background:#0d5c56;color:#eafffb;font-size:.8rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:9px 8px;position:sticky;top:0;z-index:3}
+th.hora{background:#f0f6f5;color:#234;font-weight:700;white-space:nowrap;text-align:center;font-size:.82rem;position:sticky;left:0;z-index:2;padding:8px 10px;font-variant-numeric:tabular-nums}
+thead th.hora{z-index:4}
+td.cel{min-width:158px;vertical-align:top;padding:8px 9px}
+td.vaziocel{background:#fbfcfc}
+td.t-cheia{background:#fdf1f0}td.t-quase{background:#fffaf0}td.t-livre{background:#fff}
+.vg{display:inline-block;font-size:.76rem;font-weight:800;border-radius:999px;padding:3px 11px}
+.t-livre .vg{background:#e2f6ee;color:#0a7a52}
+.t-quase .vg{background:#fdf0d2;color:#9a6a00}
+.t-cheia .vg{background:#fde3e1;color:#c0392b}
+.t-nd .vg{background:#eceff0;color:#667}
+.bar{height:5px;border-radius:3px;background:#eef2f1;margin:7px 0 6px;overflow:hidden}
+.bar span{display:block;height:100%;border-radius:3px}
+.t-livre .bar span{background:#15a06f}.t-quase .bar span{background:#e3a008}.t-cheia .bar span{background:#e05246}.t-nd .bar span{background:#aab}
+.prof{font-size:.75rem;color:#5c706e;margin-bottom:4px}
+details summary{cursor:pointer;font-size:.78rem;font-weight:600;color:#234;list-style:none;user-select:none}
 details summary::-webkit-details-marker{display:none}
-details ul{margin:5px 0 0;padding-left:16px}details li{font-size:.76rem;color:#334;line-height:1.35}
+details summary:hover{color:#0f766e}
+details ul{margin:6px 0 0;padding-left:16px}
+details li{font-size:.76rem;color:#33403e;line-height:1.4}
 .semf{font-size:.78rem;color:#9ab}
-.vazio{background:#fff;border:1px solid #dde;border-radius:10px;padding:34px;text-align:center;color:#567;line-height:1.6}
+.vazio{background:#fff;border:1px solid #d6e0df;border-radius:12px;padding:38px;text-align:center;color:#5a6d6b;line-height:1.6}
+@media(max-width:640px){body{padding:10px}h1{font-size:1.15rem}}
 </style></head>
 <body>
   <header>
