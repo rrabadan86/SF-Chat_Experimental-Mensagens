@@ -21,6 +21,10 @@ import sys
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dias", type=int, default=7, help="quantos dias à frente (padrão 7)")
+    ap.add_argument("--semanas", type=int, default=3,
+                    help="quantas semanas olhar p/ decidir recorrência (padrão 3)")
+    ap.add_argument("--min-semanas", dest="min_semanas", type=int, default=2,
+                    help="em quantas semanas a aluna precisa aparecer p/ ser fixa (padrão 2)")
     ap.add_argument("--print", dest="imprimir", action="store_true",
                     help="imprime um resumo legível (além de gravar o JSON)")
     args = ap.parse_args()
@@ -29,7 +33,7 @@ def main():
                         format="%(levelname)s %(name)s: %(message)s")
 
     from evo_agendamento.grade_fixas import montar_grade
-    res = montar_grade(dias=args.dias)
+    res = montar_grade(dias=args.dias, semanas=args.semanas, min_semanas=args.min_semanas)
 
     # grava o snapshot que a página /grade vai servir (Experimental/data/)
     out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..",
@@ -45,8 +49,8 @@ def main():
         r = res["resumo"]
         print(f"📋 Grade de fixas {res['inicio']}..{res['fim']} — {r['turmas']} turmas, "
               f"{r['fixas']} matrículas fixas")
-        print(f"   fora: {r['excluidas_free']} FREE · {r['excluidas_reposicao']} reposição · "
-              f"{r['excluidas_experimental']} experimental · {r['excluidas_removidas']} removida(s)")
+        print(f"   recorrência: aparece em ≥{res['min_semanas']} de {res['semanas']} semanas · "
+              f"{r['visitantes']} visitante(s)/reposição(ões) fora da conta")
         print(f"   arquivo: {out}\n")
         _WD = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
         for t in res["turmas"]:

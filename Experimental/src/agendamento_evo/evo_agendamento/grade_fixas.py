@@ -2,25 +2,23 @@
 """
 Grade de MATRÍCULAS FIXAS por turma (previsibilidade de vaga pra matrícula).
 
-Mostra, por turma/horário, as alunas MATRICULADAS DE FORMA FIXA — contadas
-INDEPENDENTE de faltarem no dia — e a vaga restante pra matrícula.
+O EVO NÃO marca reposição/FREE no enrollment da turma: o campo `replacement` vem
+sempre false, `slotNumber` só reflete presença, e o cadastro da aluna não traz a
+agenda fixa. Então separamos FIXA de REPOSIÇÃO/FREE por RECORRÊNCIA entre semanas:
 
-Fica de FORA:
-  • experimentais (idProspect, sem idMember);
-  • REPOSIÇÕES (enrollment.replacement == true) — quem veio repor aula de outro horário;
-  • planos FREE (marcam de passagem, não são fixas) — mesmo critério editável do job
-    de antecedência (free_antecedencia / data/free-antecedencia-planos.txt);
-  • removidas da turma (enrollment.removed == true).
+  A matrícula FIXA é RECORRENTE — a aluna aparece naquela turma (mesmo
+  idConfiguration, mesmo dia da semana) TODA semana, inclusive faltando (a
+  matrícula continua na lista com status de ausência). Já a REPOSIÇÃO (quem veio
+  repor aula de outro horário) e a marcação FREE aparecem só na semana pontual.
 
-A FALTA (status / justifiedAbsence) NÃO exclui a fixa: o lugar é dela mesmo faltando.
+Para cada turma, olhamos as próximas `semanas` ocorrências (mesmo idConfiguration,
++7/+14 dias) e contamos em quantas a aluna tem matrícula. Entra como FIXA quem
+aparece em pelo menos `min_semanas` delas. Reposição/FREE (1 semana só) ficam de
+fora — e assim a turma nunca passa da capacidade.
 
-Como ler o plano de cada aluna é 1 chamada por idMember (limite do EVO), guardamos
-um cache (data/grade-membros-cache.json, TTL 7 dias) — a 1ª geração é lenta, as
-seguintes são rápidas (só consulta quem é novo).
+Sempre de fora: experimentais (idProspect) e removidas (removed). A FALTA NÃO
+exclui: a matrícula fixa continua listada toda semana.
 """
-import json
-import os
-import time
 from datetime import timedelta
 import logging
 
@@ -28,14 +26,9 @@ from . import config
 from .evo_client import EvoClient
 from .util import agora_brasilia, session_start_datetime
 from .orchestrator import _match_activity
-from .free_antecedencia import (carregar_regras, contratos_ativos, free_ativos,
-                                _buscar_membro, _norm)
+from .free_antecedencia import _norm
 
 log = logging.getLogger(__name__)
-
-_CACHE_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data",
-                           "grade-membros-cache.json")
-_CACHE_TTL = 7 * 24 * 3600   # 7 dias
 
 
 def _prof(s):
@@ -52,50 +45,13 @@ def _prof(s):
     return ""
 
 
-def _carregar_cache():
-    try:
-        with open(_CACHE_FILE, encoding="utf-8") as f:
-            d = json.load(f)
-        agora = time.time()
-        return {int(k): v for k, v in d.items()
-                if isinstance(v, dict) and (agora - float(v.get("ts", 0))) < _CACHE_TTL}
-    except Exception:
-        return {}
+def montar_grade(evo=None, dias=7, semanas=3, min_semanas=2, branch_id=None, now=None):
+    """Grade de matrículas fixas dos próximos `dias` dias, separando fixa de
+    reposição/FREE por recorrência (`semanas` ocorrências, mínimo `min_semanas`).
 
-
-def _salvar_cache(cache):
-    try:
-        os.makedirs(os.path.dirname(_CACHE_FILE), exist_ok=True)
-        with open(_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(cache, f, ensure_ascii=False)
-    except Exception as e:
-        log.warning("grade: falha ao salvar cache de membros (%s)", e)
-
-
-def _plano_membro(evo, idm, regras, cache):
-    """{achou, ativos:[nomes], free_only:bool} para um idMember (com cache)."""
-    if idm in cache and "free_only" in cache[idm]:
-        return cache[idm]
-    reg = _buscar_membro(evo, idm)
-    ativos = contratos_ativos(reg) if reg else []
-    frees = free_ativos(reg, regras) if reg else []
-    info = {
-        "achou": bool(reg),
-        "ativos": ativos,
-        # free_only = TEM contrato ativo e TODOS são FREE (aí é "FREE flutuante", fora)
-        "free_only": bool(ativos) and len(frees) == len(ativos),
-        "ts": time.time(),
-    }
-    cache[idm] = info
-    return info
-
-
-def montar_grade(evo=None, dias=7, branch_id=None, now=None):
-    """Monta a grade de matrículas fixas dos próximos `dias` dias (padrão 7).
-
-    Retorna dict: {gerado_em, inicio, fim, dias:[...], turmas:[...], resumo:{...}}.
+    Retorna dict: {gerado_em, inicio, fim, semanas, min_semanas, dias, turmas, resumo}.
     Cada turma: {data, weekday, hora, activity, professora, idConfiguration,
-    capacity, nFixas, vagas, fixas:[nomes]}.
+    capacity, nFixas, vagas, visitantes, fixas:[nomes]}.
     """
     evo = evo or EvoClient()
     now = now or agora_brasilia()
@@ -103,13 +59,12 @@ def montar_grade(evo=None, dias=7, branch_id=None, now=None):
     fim = inicio + timedelta(days=max(1, int(dias)) - 1)
     activity = config.EVO_ACTIVITY or None
     id_activity = config.EVO_ACTIVITY_ID or None
-    regras = carregar_regras()
-    cache = _carregar_cache()
+    semanas = max(1, int(semanas))
+    min_semanas = max(1, min(int(min_semanas), semanas))
 
-    turmas = []
+    # 1) turmas da janela (estrutura a exibir): idConfiguration + dia/hora.
+    base = []
     seen = set()
-    total_fixas = excl_free = excl_repos = excl_exp = excl_removed = 0
-
     d = inicio
     while d <= fim:
         ds = d.strftime("%Y-%m-%d")
@@ -126,57 +81,65 @@ def montar_grade(evo=None, dias=7, branch_id=None, now=None):
             if not _match_activity(s, activity, id_activity):
                 continue
             idc = s.get("idConfiguration")
-            key = (idc, ds)
-            if not idc or key in seen:
+            if not idc or (idc, ds) in seen:
                 continue
-            seen.add(key)
-            try:
-                det = evo.schedule_detail(id_configuration=idc, activity_date=ds,
-                                          branch_id=branch_id) or {}
-            except Exception:
-                det = {}
-            fixas = []
-            for en in (det.get("enrollments") or []):
-                if en.get("idProspect") or not en.get("idMember"):
-                    excl_exp += 1
-                    continue                 # experimental (lead)
-                if en.get("replacement"):
-                    excl_repos += 1
-                    continue                 # reposição — não é fixa deste horário
-                if en.get("removed"):
-                    excl_removed += 1
-                    continue                 # tirada da turma
-                idm = en.get("idMember")
-                info = _plano_membro(evo, idm, regras, cache)
-                if info.get("achou") and info.get("ativos") and info.get("free_only"):
-                    excl_free += 1
-                    continue                 # plano só FREE → flutuante, fora
-                fixas.append(en.get("name") or f"id={idm}")
-            fixas.sort(key=_norm)
-            cap = s.get("capacity")
-            nf = len(fixas)
-            total_fixas += nf
-            turmas.append({
-                "data": ds, "weekday": dt.weekday(), "hora": dt.strftime("%H:%M"),
-                "activity": s.get("name") or activity or "", "professora": _prof(s),
-                "idConfiguration": idc, "capacity": cap, "nFixas": nf,
-                "vagas": (max(cap - nf, 0) if cap is not None else None),
-                "fixas": fixas,
-            })
+            seen.add((idc, ds))
+            base.append({"idc": idc, "date": d, "weekday": dt.weekday(),
+                         "hora": dt.strftime("%H:%M"),
+                         "activity": s.get("name") or activity or "",
+                         "prof": _prof(s), "capacity": s.get("capacity")})
         d += timedelta(days=1)
 
-    _salvar_cache(cache)
+    # 2) recorrência: schedule_detail de cada turma nas próximas `semanas` semanas.
+    det_cache = {}
+
+    def _enr(idc, dstr):
+        key = (idc, dstr)
+        if key not in det_cache:
+            try:
+                det_cache[key] = (evo.schedule_detail(id_configuration=idc, activity_date=dstr,
+                                                      branch_id=branch_id) or {}).get("enrollments") or []
+            except Exception:
+                det_cache[key] = []
+        return det_cache[key]
+
+    turmas = []
+    total_fixas = total_visitantes = 0
+    for bt in base:
+        cont = {}   # idMember -> {"n": nº de semanas em que aparece, "nome": ...}
+        for w in range(semanas):
+            dd = bt["date"] + timedelta(days=7 * w)
+            for en in _enr(bt["idc"], dd.strftime("%Y-%m-%d")):
+                if en.get("idProspect") or not en.get("idMember"):
+                    continue
+                if en.get("removed"):
+                    continue
+                idm = en.get("idMember")
+                c = cont.setdefault(idm, {"n": 0, "nome": en.get("name") or f"id={idm}"})
+                c["n"] += 1
+        fixas = sorted((c["nome"] for c in cont.values() if c["n"] >= min_semanas), key=_norm)
+        # visitantes = quem apareceu em < min_semanas (reposição/FREE da semana)
+        visitantes = sum(1 for c in cont.values() if c["n"] < min_semanas)
+        cap = bt["capacity"]
+        nf = len(fixas)
+        total_fixas += nf
+        total_visitantes += visitantes
+        turmas.append({
+            "data": bt["date"].strftime("%Y-%m-%d"), "weekday": bt["weekday"], "hora": bt["hora"],
+            "activity": bt["activity"], "professora": bt["prof"],
+            "idConfiguration": bt["idc"], "capacity": cap, "nFixas": nf,
+            "vagas": (max(cap - nf, 0) if cap is not None else None),
+            "visitantes": visitantes, "fixas": fixas,
+        })
+
     turmas.sort(key=lambda t: (t["data"], t["hora"]))
     return {
         "gerado_em": now.strftime("%Y-%m-%d %H:%M"),
         "inicio": inicio.strftime("%Y-%m-%d"),
         "fim": fim.strftime("%Y-%m-%d"),
+        "semanas": semanas, "min_semanas": min_semanas,
         "dias": [(inicio + timedelta(days=i)).strftime("%Y-%m-%d")
                  for i in range((fim - inicio).days + 1)],
         "turmas": turmas,
-        "resumo": {
-            "fixas": total_fixas, "excluidas_free": excl_free,
-            "excluidas_reposicao": excl_repos, "excluidas_experimental": excl_exp,
-            "excluidas_removidas": excl_removed, "turmas": len(turmas),
-        },
+        "resumo": {"fixas": total_fixas, "turmas": len(turmas), "visitantes": total_visitantes},
     }
