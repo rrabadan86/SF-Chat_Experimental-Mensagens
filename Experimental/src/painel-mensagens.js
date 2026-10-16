@@ -4827,7 +4827,7 @@ function paginaGrade() {
       return `<tr><th class="hora">${escH(h)}</th>${tds}</tr>`;
     }).join('');
     const r = snap.resumo || {};
-    corpo = `<div class="meta">Período <b>${fmtDia(snap.inicio)}</b>–<b>${fmtDia(snap.fim)}</b> · ${r.turmas || turmas.length} turmas · <b>${r.fixas != null ? r.fixas : ''}</b> matrículas fixas · gerado ${escH(snap.gerado_em || '')}<span class="fora"> · fixa = aparece em ≥${snap.min_semanas || 2} de ${snap.semanas || 3} semanas · ${r.visitantes || 0} reposição/visitante fora da conta</span></div>`
+    corpo = `<div class="meta">Período <b>${fmtDia(snap.inicio)}</b>–<b>${fmtDia(snap.fim)}</b> · ${r.turmas || turmas.length} turmas · <b>${r.fixas != null ? r.fixas : ''}</b> matrículas fixas · gerado ${escH(snap.gerado_em || '')}<span class="fora"> · fixo lido ${snap.semanas_frente || 2} semana(s) à frente (reposição/FREE ficam de fora)</span></div>`
       + `<div class="tabwrap"><table class="grade"><thead><tr><th class="hora">Horário</th>${th}</tr></thead><tbody>${linhas}</tbody></table></div>`;
   }
   const g = _gradeGerando;
