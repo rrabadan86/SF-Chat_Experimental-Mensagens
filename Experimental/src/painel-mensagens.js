@@ -4884,7 +4884,7 @@ function paginaGrade() {
     const horas = [...new Set(turmas.map(t => t.hora))].sort();
     const cel = {};
     for (const t of turmas) cel[t.hora + '|' + t.weekday] = t;
-    const th = wds.map(w => `<th>${WD[w]}<span class="gr-th-d">${fmtDia(diaPorWd[w])}</span></th>`).join('');
+    const th = wds.map(w => `<th>${WD[w]}</th>`).join('');
     const linhas = horas.map(h => {
       const tds = wds.map(w => {
         const t = cel[h + '|' + w];
@@ -4913,12 +4913,12 @@ function paginaGrade() {
         <div class="gr-prof-bar"><span class="t-${tier}" style="width:${p.pct != null ? Math.min(100, p.pct) : 0}%"></span></div>
         <div class="gr-prof-pc t-${tier}">${p.pct != null ? p.pct + '%' : '—'}</div>
       </div>`;
-    }).join('') : '<p class="quando" style="margin:0">Sem turmas.</p>';
+    }).join('') : '<p class="quando" style="margin:0">Clique em <b>🔄 Atualizar</b> para gerar a ocupação por professora.</p>';
 
     corpo = `<div class="stats">
       <div class="stat tot"><div class="n">${r.turmas != null ? r.turmas : turmas.length}</div><div class="l">turmas</div></div>
-      <div class="stat"><div class="n">${alunasFixas != null ? alunasFixas : (r.fixas != null ? r.fixas : '')}</div><div class="l">alunas fixas</div>${pctAlunasFixas != null ? `<div class="gr-sub">${pctAlunasFixas}% das ${totalAlunas} alunas</div>` : `<div class="gr-sub">${r.fixas != null ? r.fixas : '—'} matrículas fixas</div>`}</div>
-      <div class="stat ok"><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação</div>${r.total_vagas ? `<div class="gr-sub">${r.fixas}/${r.total_vagas} vagas</div>` : ''}</div>
+      <div class="stat"><div class="n">${alunasFixas != null ? alunasFixas : '—'}</div><div class="l">alunas fixas</div><div class="gr-sub">${alunasFixas == null ? 'atualize a grade' : (pctAlunasFixas != null ? `${pctAlunasFixas}% de ${totalAlunas} alunas` : (r.fixas != null ? `${r.fixas} matrículas fixas` : ''))}</div></div>
+      <div class="stat ok"><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação</div><div class="gr-sub">${ocupPct == null ? 'atualize a grade' : (r.total_vagas ? `${r.fixas}/${r.total_vagas} vagas` : '')}</div></div>
     </div>
     <div class="sec-t" data-nosec>Ocupação por professora</div>
     <div class="card" style="padding:10px 15px">${profRows}</div>
@@ -4952,15 +4952,16 @@ function paginaGrade() {
     .gr-det ul{margin:5px 0 0;padding-left:16px}
     .gr-det li{font-size:var(--fs-xs);color:var(--tinta);line-height:1.45}
     .gr-semf{font-size:var(--fs-xs);color:var(--faint)}
-    /* desktop: grade semanal */
+    /* nesta página a grade precisa de mais largura (Seg→Sáb) do que o padrão 900px */
+    .wrap{max-width:1080px}
+    /* desktop: grade semanal (colunas = dia da semana; a estrutura fixa vale toda semana) */
     .gr-wrap{overflow:auto;border:1px solid var(--linha);border-radius:14px;background:var(--card);box-shadow:0 1px 2px rgba(16,24,40,.04);max-height:78vh}
-    table.gr{border-collapse:separate;border-spacing:0;width:100%;min-width:820px}
+    table.gr{border-collapse:separate;border-spacing:0;width:100%}
     table.gr th,table.gr td{border-bottom:1px solid var(--linha-soft);border-right:1px solid var(--linha-soft)}
     table.gr thead th{background:var(--teal);color:#fff;font-size:var(--fs-xs);font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:9px 8px;position:sticky;top:0;z-index:3;text-align:center}
-    .gr-th-d{display:block;font-size:.64rem;font-weight:600;opacity:.8;letter-spacing:0;text-transform:none;margin-top:1px}
     table.gr th.h{background:var(--teal-soft);color:var(--teal-esc);font-weight:700;white-space:nowrap;text-align:center;font-size:var(--fs-sm);position:sticky;left:0;z-index:2;padding:8px 10px;font-variant-numeric:tabular-nums}
     table.gr thead th.h{z-index:4}
-    .gr-cel{min-width:148px;vertical-align:top;padding:8px 10px;background:var(--card)}
+    .gr-cel{min-width:132px;vertical-align:top;padding:8px 10px;background:var(--card)}
     .gr-cel.t-quase{background:#fdfaf2}.gr-cel.t-cheia{background:#fcf2f1}
     td.gr-empty{background:#fafafa}
     /* mobile: lista por dia */
