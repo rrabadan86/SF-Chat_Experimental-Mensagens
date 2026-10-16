@@ -1147,6 +1147,9 @@ function cardFoto(m) {
 // Conexão do WhatsApp do ROBÔ, no MESMO leiaute (wa-card) da aba Sofia.
 function blocoWaRobo() {
   const st = waStatus.get() || {};
+  if (st.pairingCode) {
+    return `<div class="wa-card warn"><div class="wa-ic">🔢</div><h2>Conectando por código</h2><p>Veja o <b>código</b> no quadro "Conectar por código" abaixo e digite no celular do chip.</p></div>`;
+  }
   if (st.estado === 'conectado') {
     return `<div class="wa-card ok"><div class="wa-ic">✅</div><h2>WhatsApp conectado</h2><p>A sessão está ativa — o robô envia normalmente.</p></div>`;
   }
@@ -1243,6 +1246,22 @@ function paginaMensagens(aviso, erro) {
       <form method="POST" action="/wa/reiniciar" onsubmit="return confirm('Reiniciar o robô agora?\\n\\nEle fica cerca de 1 minuto fora do ar enquanto reconecta o WhatsApp. Evite reiniciar bem em cima de um horário de disparo.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔄 Reiniciar robô</button></form>
       <form id="waBtnDesc" method="POST" action="/wa/desconectar" onsubmit="return confirm('Desconectar o WhatsApp do robô?\\n\\nO robô para de enviar e será preciso reescanear o QR (aqui mesmo) para reconectar.')" style="display:none" title="Só disponível quando o WhatsApp está conectado"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">Desconectar</button></form>
     </div>
+    <details class="acc-sec" id="pairSec" data-nosec="1" style="margin-top:8px">
+      <summary>🔢 Conectar por código (sem QR)</summary>
+      <div class="card">
+        <p class="quando" style="margin:0 0 10px">Não conseguiu ler o QR? Conecte digitando um <b>código de 8 dígitos</b> no celular do chip. Informe o <b>número do WhatsApp do robô</b> (DDI + DDD + número, só dígitos) e clique em <b>Gerar código</b> — ele aparece aqui em ~20s.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="pairNum" type="tel" inputmode="numeric" placeholder="5562999998010" autocomplete="off" style="max-width:220px">
+          <button type="button" class="save" id="pairBtn" onclick="pedirCodigo()" style="padding:8px 18px">Gerar código</button>
+          <span id="pairMsg" class="quando" style="margin:0"></span>
+        </div>
+        <div id="pairCodeBox" style="display:none;margin-top:14px;text-align:center">
+          <div style="font-size:.82rem;color:var(--cinza);margin-bottom:4px">Digite este código no celular do chip:</div>
+          <div id="pairCode" style="font-size:1.9rem;font-weight:800;letter-spacing:5px;font-family:monospace;color:#0f766e"></div>
+          <div class="quando" style="margin:10px auto 0;max-width:470px">No <b>celular do chip</b>: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → <b>Conectar com número de telefone</b> → digite o código acima. Vale por poucos minutos — se expirar, clique em "Gerar outro código".</div>
+        </div>
+      </div>
+    </details>
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
     ${card2FA()}
@@ -1297,6 +1316,7 @@ ${scriptPreviewTeste()}
 <script>
   function renderWa(st){
     var e = st && st.estado;
+    if(st && st.pairingCode) return '<div class="wa-card warn"><div class="wa-ic">🔢</div><h2>Conectando por código</h2><p>Veja o <b>código</b> no quadro "Conectar por código" abaixo e digite no celular do chip.</p></div>';
     if(e==='conectado') return '<div class="wa-card ok"><div class="wa-ic">✅</div><h2>WhatsApp conectado</h2><p>A sessão está ativa — o robô envia normalmente.</p></div>';
     if(e==='qr' && st.qr) return '<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR para reconectar</h2><p>A sessão caiu. No <b>celular do Studio</b>: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte a câmera para o código.</p><img class="qr" src="'+st.qr+'" alt="QR do WhatsApp"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira ✅.</p></div>';
     if(e==='iniciando') return '<div class="wa-card"><div class="wa-ic">⏳</div><h2>Iniciando…</h2><p>O robô está subindo a conexão. Se precisar de QR, ele aparece aqui.</p></div>';
@@ -1307,9 +1327,27 @@ ${scriptPreviewTeste()}
     fetch('/wa/estado').then(function(r){return r.json();}).then(function(st){
       var el=document.getElementById('waBanner'); if(el) el.innerHTML=renderWa(st);
       var d=document.getElementById('waBtnDesc'); if(d) d.style.display=(st&&st.estado==='conectado')?'inline':'none';
+      var box=document.getElementById('pairCodeBox'), code=document.getElementById('pairCode'), sec=document.getElementById('pairSec'), pbtn=document.getElementById('pairBtn');
+      if(st && st.pairingCode && st.estado!=='conectado'){
+        if(code) code.textContent=st.pairingCode;
+        if(box) box.style.display='block';
+        if(sec && !sec.open) sec.open=true;
+        if(pbtn){ pbtn.disabled=false; pbtn.textContent='Gerar outro código'; }
+      } else if(box){ box.style.display='none'; }
     }).catch(function(){});
   }
   atualizaWa(); setInterval(atualizaWa, 7000);
+  function pedirCodigo(){
+    var inp=document.getElementById('pairNum'), msg=document.getElementById('pairMsg'), btn=document.getElementById('pairBtn');
+    var num=(inp.value||'').replace(/\\D/g,'');
+    if(num.length<10){ msg.textContent='Informe o número com DDI+DDD (ex.: 5562999998010).'; msg.style.color='#a12626'; inp.focus(); return; }
+    btn.disabled=true; msg.style.color=''; msg.textContent='Pedindo o código ao WhatsApp… (uns 20s)';
+    fetch('/wa/parear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero:num})})
+      .then(function(r){return r.json();}).then(function(d){
+        if(d.ok){ msg.textContent='⏳ Gerando… o código aparece abaixo em instantes.'; msg.style.color='#1a7f37'; }
+        else { msg.textContent='⚠️ '+(d.erro||'Falha.'); msg.style.color='#a12626'; btn.disabled=false; }
+      }).catch(function(){ msg.textContent='⚠️ Falha de rede.'; msg.style.color='#a12626'; btn.disabled=false; });
+  }
 
   // ── Código do EVO (2FA) — plano B: acende quando o robô está esperando ──────
   function pintar2fa(p){
@@ -7178,7 +7216,24 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && url === '/wa/estado') {
     const st = waStatus.get() || {};
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    return res.end(JSON.stringify({ estado: st.estado || '', qr: st.qr || '', atualizadoEm: st.atualizadoEm || '' }));
+    return res.end(JSON.stringify({ estado: st.estado || '', qr: st.qr || '', atualizadoEm: st.atualizadoEm || '',
+      pairingCode: st.pairingCode || '', pairingNumero: st.pairingNumero || '' }));
+  }
+  // Conectar por CÓDIGO (pairing): grava o comando com o número → o robô pede o
+  // código de 8 dígitos ao WhatsApp e o publica no estado (aparece aqui em ~20s).
+  if (req.method === 'POST' && url === '/wa/parear') {
+    return lerCorpo(req, 1e4, (corpo) => {
+      let numero = '';
+      try { numero = String((JSON.parse(corpo) || {}).numero || '').replace(/\D/g, ''); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      if (numero.length < 10 || numero.length > 15) return res.end(JSON.stringify({ ok: false, erro: 'Número inválido. Use DDI+DDD+número, só dígitos (ex.: 5562999998010).' }));
+      try {
+        const arq = path.join(path.dirname(waStatus.ARQUIVO), 'wa-comando.json');
+        fs.writeFileSync(arq, JSON.stringify({ cmd: 'parear', numero, em: Date.now() }), 'utf8');
+      } catch (e) { return res.end(JSON.stringify({ ok: false, erro: 'Não consegui enviar o pedido ao robô.' })); }
+      try { auditoria.registrar(sess.usuario, 'robo.parear', 'WhatsApp por código (' + numero + ')', ''); } catch (_) {}
+      return res.end(JSON.stringify({ ok: true }));
+    });
   }
 
   // ── Código do EVO (2FA) — plano B (humano digita o código pelo painel) ──────
