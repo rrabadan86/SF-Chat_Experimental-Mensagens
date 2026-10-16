@@ -4832,6 +4832,8 @@ function _gradeSnapshot() {
 }
 function paginaGrade() {
   const escH = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // nome normalizado (sem acento, minúsculo) para a busca de aluna
+  const nrmFx = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
   const snap = _gradeSnapshot();
   const g = _gradeGerando;
   const WD = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
@@ -4891,7 +4893,7 @@ function paginaGrade() {
         const t = cel[h + '|' + w];
         if (!t) return '<td class="gr-empty"></td>';
         const ti = tierOf(t), c = conteudo(t);
-        return `<td class="gr-cel t-${ti.k}"><span class="gr-vg">${ti.txt}</span>${c.bar}${c.prof}${c.det}</td>`;
+        return `<td class="gr-cel t-${ti.k}" data-fx="${escH((t.fixas || []).map(nrmFx).join('|'))}"><span class="gr-vg">${ti.txt}</span>${c.bar}${c.prof}${c.det}</td>`;
       }).join('');
       return `<tr><th class="h">${escH(h)}</th>${tds}</tr>`;
     }).join('');
@@ -4902,7 +4904,7 @@ function paginaGrade() {
     const mob = `<div class="gr-mob">` + byDay.map(([data, wd, arr]) => {
       const items = arr.map(t => {
         const ti = tierOf(t), c = conteudo(t);
-        return `<div class="gr-item t-${ti.k}"><div class="gr-item-h"><span class="gr-hora">${escH(t.hora)}</span><span class="gr-vg">${ti.txt}</span></div>${c.prof}${c.bar}${c.det}</div>`;
+        return `<div class="gr-item t-${ti.k}" data-fx="${escH((t.fixas || []).map(nrmFx).join('|'))}"><div class="gr-item-h"><span class="gr-hora">${escH(t.hora)}</span><span class="gr-vg">${ti.txt}</span></div>${c.prof}${c.bar}${c.det}</div>`;
       }).join('');
       return `<div class="gr-day"><div class="gr-day-h">${WD[wd]} · ${fmtDia(data)}</div>${items}</div>`;
     }).join('') + `</div>`;
@@ -4928,6 +4930,10 @@ function paginaGrade() {
       <span style="color:var(--faint)">gerado ${escH(snap.gerado_em || '')} · fixa = matrícula do contrato (EVO)</span>
       <span class="gr-leg"><i><b class="lg-livre"></b>vaga</i><i><b class="lg-quase"></b>quase (1-2)</i><i><b class="lg-cheia"></b>lotada</i></span>
     </p>
+    <div class="gr-search">
+      <input id="grBusca" type="search" placeholder="🔍 Buscar aluna — ver em quais turmas ela é fixa" autocomplete="off">
+      <span id="grBuscaInfo" class="gr-busca-info"></span>
+    </div>
     ${desk}${mob}`;
   }
 
@@ -4973,6 +4979,15 @@ function paginaGrade() {
     .gr-item.t-livre{border-left-color:var(--ok)}.gr-item.t-quase{border-left-color:var(--warn)}.gr-item.t-cheia{border-left-color:var(--erro)}.gr-item.t-nd{border-left-color:var(--linha)}
     .gr-item-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
     .gr-hora{font-weight:800;font-size:1.04rem;color:var(--tinta);font-variant-numeric:tabular-nums}
+    /* busca de aluna */
+    .gr-search{display:flex;align-items:center;gap:10px;margin:6px 0 10px;flex-wrap:wrap}
+    .gr-search input{flex:1 1 300px;max-width:480px;border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
+    .gr-search input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(14,110,107,.16)}
+    .gr-busca-info{font-size:var(--fs-xs);color:var(--cinza);font-weight:700;white-space:nowrap}
+    .gr-dim{opacity:.24;transition:opacity .12s}
+    .gr-cel.gr-hit{box-shadow:inset 0 0 0 2px var(--teal)}
+    .gr-item.gr-hit{outline:2px solid var(--teal);outline-offset:-2px}
+    .gr-liht{background:var(--ok-bg);border-radius:4px;padding:0 3px;font-weight:800}
     /* KPI: subtexto abaixo do número */
     .gr-sub{font-size:.66rem;color:var(--cinza);margin-top:4px;font-weight:600;line-height:1.3}
     /* ocupação por professora */
@@ -5002,6 +5017,32 @@ function paginaGrade() {
         fetch('/grade/atualizar',{method:'POST'}).then(function(r){return r.json();}).then(function(){gerando=true;setTimeout(poll,4000);}).catch(function(){b.disabled=false;b.textContent='🔄 Atualizar';});}
       function poll(){fetch('/grade/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){if(s.gerando){setTimeout(poll,4000);}else{location.reload();}}).catch(function(){setTimeout(poll,5000);});}
       if(gerando) setTimeout(poll,4000);
+      // Busca de aluna: destaca as turmas em que ela é fixa e esmaece as demais.
+      (function(){
+        var inp=document.getElementById('grBusca'); if(!inp) return;
+        var info=document.getElementById('grBuscaInfo');
+        var cells=[].slice.call(document.querySelectorAll('[data-fx]'));
+        function nrm(s){return String(s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim();}
+        function run(){
+          var q=nrm(inp.value);
+          if(q.length<2){
+            cells.forEach(function(c){ c.classList.remove('gr-dim','gr-hit'); var d=c.querySelector('details'); if(d) d.open=false; [].forEach.call(c.querySelectorAll('li'),function(li){li.classList.remove('gr-liht');}); });
+            info.textContent = q.length===1 ? 'digite ao menos 2 letras' : '';
+            return;
+          }
+          var n=0;
+          cells.forEach(function(c){
+            var fx=c.getAttribute('data-fx')||'';
+            var hit = fx.split('|').some(function(x){ return x && x.indexOf(q)>=0; });
+            c.classList.toggle('gr-hit',hit); c.classList.toggle('gr-dim',!hit);
+            var d=c.querySelector('details'); if(d) d.open=hit;
+            [].forEach.call(c.querySelectorAll('li'),function(li){ li.classList.toggle('gr-liht', hit && nrm(li.textContent).indexOf(q)>=0); });
+            if(hit && c.offsetParent!==null) n++;
+          });
+          info.textContent = n ? (n+' turma'+(n===1?'':'s')) : 'nenhuma turma encontrada';
+        }
+        inp.addEventListener('input', run);
+      })();
     </script>
   </div>`;
   return chrome({ tab: 'Grade' }, 'grade', corpoWrap);
