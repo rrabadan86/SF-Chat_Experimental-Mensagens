@@ -4829,116 +4829,146 @@ function _gradeSnapshot() {
   catch (_) { return null; }
 }
 function paginaGrade() {
-  // escH é local em outra função (não global); defino um aqui p/ esta página.
   const escH = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const snap = _gradeSnapshot();
+  const g = _gradeGerando;
   const WD = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
   const fmtDia = (d) => { const p = String(d || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] : (d || ''); };
+  const tierOf = (t) => {
+    const cap = t.capacity, nf = t.nFixas, vagas = t.vagas;
+    if (cap == null) return { k: 'nd', txt: nf + ' fixas' };
+    if (nf >= cap || vagas === 0) return { k: 'cheia', txt: 'lotada' };
+    if (vagas <= 2) return { k: 'quase', txt: vagas + (vagas === 1 ? ' vaga' : ' vagas') };
+    return { k: 'livre', txt: vagas + ' vagas' };
+  };
+  const conteudo = (t) => {
+    const cap = t.capacity, nf = t.nFixas, capTxt = (cap == null) ? '?' : cap;
+    const pct = (cap && cap > 0) ? Math.min(100, Math.round(nf / cap * 100)) : 0;
+    const bar = (cap != null) ? `<div class="gr-bar"><span style="width:${pct}%"></span></div>` : '';
+    const prof = t.professora ? `<div class="gr-prof">${escH(t.professora)}</div>` : '';
+    const nomes = (t.fixas || []).map(n => `<li>${escH(n)}</li>`).join('');
+    const det = (t.fixas || []).length
+      ? `<details class="gr-det"><summary>👥 ${nf}/${capTxt} fixas</summary><ul>${nomes}</ul></details>`
+      : `<div class="gr-semf">${nf}/${capTxt} fixas</div>`;
+    return { bar, prof, det };
+  };
+
   let corpo;
   if (!snap || !Array.isArray(snap.turmas) || !snap.turmas.length) {
-    corpo = '<div class="vazio">Nenhuma grade gerada ainda.<br>Clique em <b>🔄 Atualizar</b> para montar a grade de matrículas fixas a partir do EVO.<br><small>Na primeira vez demora alguns minutos (lê o plano de cada aluna).</small></div>';
+    corpo = `<div class="card" style="text-align:center;padding:34px 20px">
+      <div style="font-size:1.6rem;margin-bottom:6px">📋</div>
+      <p style="margin:0 0 4px;font-weight:600">Nenhuma grade gerada ainda.</p>
+      <p class="quando" style="margin:0">Clique em <b>🔄 Atualizar</b> para montar a grade de matrículas fixas a partir do EVO.<br>Na primeira vez demora alguns minutos (lê a matrícula de cada aluna).</p>
+    </div>`;
   } else {
-    const turmas = snap.turmas;
+    const turmas = snap.turmas, r = snap.resumo || {};
+    // KPIs
+    let nLot = 0, nVaga = 0;
+    for (const t of turmas) { const k = tierOf(t).k; if (k === 'cheia') nLot++; else if (k === 'livre' || k === 'quase') nVaga++; }
+    // DESKTOP — grade semanal (colunas = dias; linhas = horários)
     const diaPorWd = {};
     for (const t of turmas) if (!(t.weekday in diaPorWd)) diaPorWd[t.weekday] = t.data;
     const wds = [0, 1, 2, 3, 4, 5, 6].filter(w => w in diaPorWd);
     const horas = [...new Set(turmas.map(t => t.hora))].sort();
     const cel = {};
     for (const t of turmas) cel[t.hora + '|' + t.weekday] = t;
-    // Cabeçalho só com o dia da semana (a estrutura fixa vale toda semana;
-    // as datas do período ficam no resumo acima — evita a confusão de datas fora de ordem).
-    const th = wds.map(w => `<th>${WD[w]}</th>`).join('');
+    const th = wds.map(w => `<th>${WD[w]}<span class="gr-th-d">${fmtDia(diaPorWd[w])}</span></th>`).join('');
     const linhas = horas.map(h => {
       const tds = wds.map(w => {
         const t = cel[h + '|' + w];
-        if (!t) return '<td class="vaziocel"></td>';
-        const cap = t.capacity, nf = t.nFixas, vagas = t.vagas;
-        let tier, vtxt;
-        if (cap == null) { tier = 'nd'; vtxt = nf + ' fixas'; }
-        else if (nf >= cap || vagas === 0) { tier = 'cheia'; vtxt = 'lotada'; }
-        else if (vagas <= 2) { tier = 'quase'; vtxt = vagas + (vagas === 1 ? ' vaga' : ' vagas'); }
-        else { tier = 'livre'; vtxt = vagas + ' vagas'; }
-        const pct = (cap && cap > 0) ? Math.min(100, Math.round(nf / cap * 100)) : 0;
-        const bar = (cap != null) ? `<div class="bar"><span style="width:${pct}%"></span></div>` : '';
-        const prof = t.professora ? `<div class="prof">${escH(t.professora)}</div>` : '';
-        const capTxt = (cap == null) ? '?' : cap;
-        const nomes = (t.fixas || []).map(n => `<li>${escH(n)}</li>`).join('');
-        const det = (t.fixas || []).length
-          ? `<details><summary>👥 ${nf}/${capTxt} fixas</summary><ul>${nomes}</ul></details>`
-          : `<div class="semf">${nf}/${capTxt} fixas</div>`;
-        return `<td class="cel t-${tier}"><span class="vg">${vtxt}</span>${bar}${prof}${det}</td>`;
+        if (!t) return '<td class="gr-empty"></td>';
+        const ti = tierOf(t), c = conteudo(t);
+        return `<td class="gr-cel t-${ti.k}"><span class="gr-vg">${ti.txt}</span>${c.bar}${c.prof}${c.det}</td>`;
       }).join('');
-      return `<tr><th class="hora">${escH(h)}</th>${tds}</tr>`;
+      return `<tr><th class="h">${escH(h)}</th>${tds}</tr>`;
     }).join('');
-    const r = snap.resumo || {};
-    corpo = `<div class="meta"><span><b>${fmtDia(snap.inicio)}</b>–<b>${fmtDia(snap.fim)}</b></span><span>${r.turmas || turmas.length} turmas · <b>${r.fixas != null ? r.fixas : ''}</b> matrículas fixas</span><span class="fora">gerado ${escH(snap.gerado_em || '')} · fixa = matrícula do contrato (EVO)</span><span class="leg"><i><b class="lg-livre"></b>vaga</i><i><b class="lg-quase"></b>quase (1-2)</i><i><b class="lg-cheia"></b>lotada</i></span></div>`
-      + `<div class="tabwrap"><table class="grade"><thead><tr><th class="hora">Horário</th>${th}</tr></thead><tbody>${linhas}</tbody></table></div>`;
-  }
-  const g = _gradeGerando;
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Grade de Matrículas Fixas</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#eef3f3;color:#1c2b2a;padding:16px}
-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:10px}
-.volta{color:#0f766e;text-decoration:none;font-size:.82rem;font-weight:600}
-h1{margin:4px 0 2px;font-size:1.35rem;letter-spacing:-.01em}
-.sub{margin:0;color:#4a5e5c;font-size:.82rem;max-width:720px;line-height:1.45}
-#btnAt{background:#0f766e;color:#fff;border:0;border-radius:9px;padding:10px 18px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 6px 16px -8px rgba(15,118,110,.7)}
-#btnAt:disabled{opacity:.55;cursor:default;box-shadow:none}
-.aviso{background:#fff7e6;border:1px solid #ffd98a;border-radius:9px;padding:10px 14px;margin-bottom:12px;font-size:.88rem}
-.meta{font-size:.78rem;color:#5a6d6b;margin:2px 0 10px;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center}
-.meta .fora{color:#8a9b99}
-.leg{display:inline-flex;gap:11px;align-items:center;font-weight:600}
-.leg i{display:inline-flex;align-items:center;gap:5px;font-style:normal}
-.leg b{width:11px;height:11px;border-radius:3px;display:inline-block}
-.lg-livre{background:#15a06f}.lg-quase{background:#e3a008}.lg-cheia{background:#e05246}
-.tabwrap{overflow:auto;border:1px solid #d6e0df;border-radius:12px;background:#fff;max-height:82vh;box-shadow:0 1px 3px rgba(0,0,0,.05)}
-table.grade{border-collapse:separate;border-spacing:0;width:100%;min-width:860px}
-table.grade th,table.grade td{border-bottom:1px solid #eef2f2;border-right:1px solid #eef2f2}
-thead th{background:#0d5c56;color:#eafffb;font-size:.8rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:9px 8px;position:sticky;top:0;z-index:3}
-th.hora{background:#f0f6f5;color:#234;font-weight:700;white-space:nowrap;text-align:center;font-size:.82rem;position:sticky;left:0;z-index:2;padding:8px 10px;font-variant-numeric:tabular-nums}
-thead th.hora{z-index:4}
-td.cel{min-width:158px;vertical-align:top;padding:8px 9px}
-td.vaziocel{background:#fbfcfc}
-td.t-cheia{background:#fdf1f0}td.t-quase{background:#fffaf0}td.t-livre{background:#fff}
-.vg{display:inline-block;font-size:.76rem;font-weight:800;border-radius:999px;padding:3px 11px}
-.t-livre .vg{background:#e2f6ee;color:#0a7a52}
-.t-quase .vg{background:#fdf0d2;color:#9a6a00}
-.t-cheia .vg{background:#fde3e1;color:#c0392b}
-.t-nd .vg{background:#eceff0;color:#667}
-.bar{height:5px;border-radius:3px;background:#eef2f1;margin:7px 0 6px;overflow:hidden}
-.bar span{display:block;height:100%;border-radius:3px}
-.t-livre .bar span{background:#15a06f}.t-quase .bar span{background:#e3a008}.t-cheia .bar span{background:#e05246}.t-nd .bar span{background:#aab}
-.prof{font-size:.75rem;color:#5c706e;margin-bottom:4px}
-details summary{cursor:pointer;font-size:.78rem;font-weight:600;color:#234;list-style:none;user-select:none}
-details summary::-webkit-details-marker{display:none}
-details summary:hover{color:#0f766e}
-details ul{margin:6px 0 0;padding-left:16px}
-details li{font-size:.76rem;color:#33403e;line-height:1.4}
-.semf{font-size:.78rem;color:#9ab}
-.vazio{background:#fff;border:1px solid #d6e0df;border-radius:12px;padding:38px;text-align:center;color:#5a6d6b;line-height:1.6}
-@media(max-width:640px){body{padding:10px}h1{font-size:1.15rem}}
-</style></head>
-<body>
-  <header>
-    <div><a class="volta" href="/">← painel</a>
-      <h1>📋 Grade de Matrículas Fixas</h1>
-      <p class="sub">Alunas <b>matriculadas fixas</b> em cada turma — <b>contadas mesmo se faltarem</b>. Ficam de fora experimentais, <b>reposições</b> e planos <b>FREE</b>. A estrutura fixa vale toda semana — use para ver <b>vaga de matrícula</b>.</p>
+    const desk = `<div class="gr-desk gr-wrap"><table class="gr"><thead><tr><th class="h">Horário</th>${th}</tr></thead><tbody>${linhas}</tbody></table></div>`;
+    // MOBILE — lista por dia (as turmas já vêm ordenadas por data/hora)
+    const byDay = []; const idxD = {};
+    for (const t of turmas) { if (!(t.data in idxD)) { idxD[t.data] = []; byDay.push([t.data, t.weekday, idxD[t.data]]); } idxD[t.data].push(t); }
+    const mob = `<div class="gr-mob">` + byDay.map(([data, wd, arr]) => {
+      const items = arr.map(t => {
+        const ti = tierOf(t), c = conteudo(t);
+        return `<div class="gr-item t-${ti.k}"><div class="gr-item-h"><span class="gr-hora">${escH(t.hora)}</span><span class="gr-vg">${ti.txt}</span></div>${c.prof}${c.bar}${c.det}</div>`;
+      }).join('');
+      return `<div class="gr-day"><div class="gr-day-h">${WD[wd]} · ${fmtDia(data)}</div>${items}</div>`;
+    }).join('') + `</div>`;
+
+    corpo = `<div class="stats">
+      <div class="stat tot"><div class="n">${r.turmas != null ? r.turmas : turmas.length}</div><div class="l">turmas</div></div>
+      <div class="stat"><div class="n">${r.fixas != null ? r.fixas : ''}</div><div class="l">matrículas fixas</div></div>
+      <div class="stat ok"><div class="n">${nVaga}</div><div class="l">com vaga</div></div>
+      <div class="stat err"><div class="n">${nLot}</div><div class="l">lotadas</div></div>
     </div>
-    <button id="btnAt" onclick="atualizar()"${g ? ' disabled' : ''}>${g ? '⏳ gerando…' : '🔄 Atualizar'}</button>
-  </header>
-  <div id="aviso" class="aviso" style="display:${g ? 'block' : 'none'}">⏳ Gerando a grade a partir do EVO… pode levar alguns minutos. A página recarrega sozinha ao terminar.</div>
-  ${corpo}
-  <script>
-    var gerando = ${g ? 'true' : 'false'};
-    function atualizar(){var b=document.getElementById('btnAt');b.disabled=true;b.textContent='⏳ gerando…';document.getElementById('aviso').style.display='block';
-      fetch('/grade/atualizar',{method:'POST'}).then(function(r){return r.json();}).then(function(){gerando=true;setTimeout(poll,4000);}).catch(function(){b.disabled=false;b.textContent='🔄 Atualizar';});}
-    function poll(){fetch('/grade/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){if(s.gerando){setTimeout(poll,4000);}else{location.reload();}}).catch(function(){setTimeout(poll,5000);});}
-    if(gerando) setTimeout(poll,4000);
-  </script>
-</body></html>`;
+    <p class="quando" style="display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:0 0 8px">
+      <span>Período <b>${fmtDia(snap.inicio)}–${fmtDia(snap.fim)}</b></span>
+      <span style="color:var(--faint)">gerado ${escH(snap.gerado_em || '')} · fixa = matrícula do contrato (EVO)</span>
+      <span class="gr-leg"><i><b class="lg-livre"></b>vaga</i><i><b class="lg-quase"></b>quase (1-2)</i><i><b class="lg-cheia"></b>lotada</i></span>
+    </p>
+    ${desk}${mob}`;
+  }
+
+  const corpoWrap = `<div class="wrap">
+    <style>
+    .gr-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin:4px 0 2px}
+    .gr-leg{display:inline-flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .gr-leg i{display:inline-flex;align-items:center;gap:5px;font-style:normal;color:var(--cinza);font-weight:600;font-size:var(--fs-xs)}
+    .gr-leg b{width:10px;height:10px;border-radius:3px;display:inline-block}
+    .lg-livre{background:var(--ok)}.lg-quase{background:var(--warn)}.lg-cheia{background:var(--erro)}
+    .gr-vg{display:inline-block;font-size:var(--fs-xs);font-weight:800;border-radius:999px;padding:3px 10px;border:1px solid transparent;white-space:nowrap}
+    .t-livre .gr-vg{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-bd)}
+    .t-quase .gr-vg{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-bd)}
+    .t-cheia .gr-vg{background:var(--erro-bg);color:var(--erro);border-color:var(--erro-bd)}
+    .t-nd .gr-vg{background:var(--linha-soft);color:var(--cinza)}
+    .gr-bar{height:5px;border-radius:3px;background:var(--linha-soft);margin:7px 0 6px;overflow:hidden}
+    .gr-bar span{display:block;height:100%;border-radius:3px;background:var(--teal)}
+    .t-livre .gr-bar span{background:var(--ok)}.t-quase .gr-bar span{background:var(--warn)}.t-cheia .gr-bar span{background:var(--erro)}.t-nd .gr-bar span{background:var(--faint)}
+    .gr-prof{font-size:var(--fs-xs);color:var(--cinza);margin-bottom:3px}
+    .gr-det summary{cursor:pointer;font-size:var(--fs-xs);font-weight:700;color:var(--tinta);list-style:none;user-select:none}
+    .gr-det summary::-webkit-details-marker{display:none}
+    .gr-det summary:hover{color:var(--teal)}
+    .gr-det ul{margin:5px 0 0;padding-left:16px}
+    .gr-det li{font-size:var(--fs-xs);color:var(--tinta);line-height:1.45}
+    .gr-semf{font-size:var(--fs-xs);color:var(--faint)}
+    /* desktop: grade semanal */
+    .gr-wrap{overflow:auto;border:1px solid var(--linha);border-radius:14px;background:var(--card);box-shadow:0 1px 2px rgba(16,24,40,.04);max-height:78vh}
+    table.gr{border-collapse:separate;border-spacing:0;width:100%;min-width:820px}
+    table.gr th,table.gr td{border-bottom:1px solid var(--linha-soft);border-right:1px solid var(--linha-soft)}
+    table.gr thead th{background:var(--teal);color:#fff;font-size:var(--fs-xs);font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:9px 8px;position:sticky;top:0;z-index:3;text-align:center}
+    .gr-th-d{display:block;font-size:.64rem;font-weight:600;opacity:.8;letter-spacing:0;text-transform:none;margin-top:1px}
+    table.gr th.h{background:var(--teal-soft);color:var(--teal-esc);font-weight:700;white-space:nowrap;text-align:center;font-size:var(--fs-sm);position:sticky;left:0;z-index:2;padding:8px 10px;font-variant-numeric:tabular-nums}
+    table.gr thead th.h{z-index:4}
+    .gr-cel{min-width:148px;vertical-align:top;padding:8px 10px;background:var(--card)}
+    .gr-cel.t-quase{background:#fdfaf2}.gr-cel.t-cheia{background:#fcf2f1}
+    td.gr-empty{background:#fafafa}
+    /* mobile: lista por dia */
+    .gr-mob{display:none}
+    .gr-day{margin:16px 0 8px}
+    .gr-day-h{font-weight:700;font-size:var(--fs-sm);color:var(--teal-esc);background:var(--teal-soft);border-radius:999px;padding:5px 14px;display:inline-block;font-variant-numeric:tabular-nums}
+    .gr-item{background:var(--card);border:1px solid var(--linha);border-left-width:4px;border-radius:12px;padding:11px 13px;margin:8px 0;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+    .gr-item.t-livre{border-left-color:var(--ok)}.gr-item.t-quase{border-left-color:var(--warn)}.gr-item.t-cheia{border-left-color:var(--erro)}.gr-item.t-nd{border-left-color:var(--linha)}
+    .gr-item-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .gr-hora{font-weight:800;font-size:1.04rem;color:var(--tinta);font-variant-numeric:tabular-nums}
+    @media(max-width:760px){ .gr-desk{display:none} .gr-mob{display:block} }
+    </style>
+    <div class="gr-top">
+      <div>
+        <div class="sec-t" style="margin:0" data-nosec>📋 Grade de Matrículas Fixas</div>
+        <p class="quando" style="margin:3px 0 0;max-width:640px">Alunas <b>matriculadas fixas</b> em cada turma — <b>contadas mesmo se faltarem</b>. Ficam de fora experimentais, <b>reposições</b> e planos <b>FREE</b>. Use para ver <b>vaga de matrícula</b>.</p>
+      </div>
+      <button id="btnAt" class="save" onclick="atualizar()" style="white-space:nowrap"${g ? ' disabled' : ''}>${g ? '⏳ gerando…' : '🔄 Atualizar'}</button>
+    </div>
+    <div id="aviso" class="aviso" style="display:${g ? 'block' : 'none'}">⏳ Gerando a grade a partir do EVO… pode levar alguns minutos. A página recarrega sozinha ao terminar.</div>
+    ${corpo}
+    <script>
+      var gerando = ${g ? 'true' : 'false'};
+      function atualizar(){var b=document.getElementById('btnAt');b.disabled=true;b.textContent='⏳ gerando…';document.getElementById('aviso').style.display='block';
+        fetch('/grade/atualizar',{method:'POST'}).then(function(r){return r.json();}).then(function(){gerando=true;setTimeout(poll,4000);}).catch(function(){b.disabled=false;b.textContent='🔄 Atualizar';});}
+      function poll(){fetch('/grade/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){if(s.gerando){setTimeout(poll,4000);}else{location.reload();}}).catch(function(){setTimeout(poll,5000);});}
+      if(gerando) setTimeout(poll,4000);
+    </script>
+  </div>`;
+  return chrome({ tab: 'Grade' }, '', corpoWrap);
 }
 
 // Página de login (sem menu). Simples: usuário + senha.
