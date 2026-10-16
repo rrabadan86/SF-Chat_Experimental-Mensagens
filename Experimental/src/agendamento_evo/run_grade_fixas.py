@@ -22,7 +22,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dias", type=int, default=7, help="quantos dias à frente exibir (padrão 7)")
     ap.add_argument("--semanas-frente", dest="semanas_frente", type=int, default=2,
-                    help="quantas semanas à frente ler o roster fixo (padrão 2)")
+                    help="a partir de quantas semanas à frente ler o roster fixo (padrão 2)")
+    ap.add_argument("--semanas-amostra", dest="semanas_amostra", type=int, default=3,
+                    help="quantas semanas futuras cruzar p/ achar a fixa (padrão 3; fixa = aparece em >=2)")
     ap.add_argument("--print", dest="imprimir", action="store_true",
                     help="imprime um resumo legível (além de gravar o JSON)")
     args = ap.parse_args()
@@ -31,7 +33,8 @@ def main():
                         format="%(levelname)s %(name)s: %(message)s")
 
     from evo_agendamento.grade_fixas import montar_grade
-    res = montar_grade(dias=args.dias, semanas_frente=args.semanas_frente)
+    res = montar_grade(dias=args.dias, semanas_frente=args.semanas_frente,
+                       semanas_amostra=args.semanas_amostra)
 
     # grava o snapshot que a página /grade vai servir (Experimental/data/)
     out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..",
