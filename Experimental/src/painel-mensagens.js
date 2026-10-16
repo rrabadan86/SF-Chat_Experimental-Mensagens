@@ -4776,6 +4776,108 @@ function paginaSofia(aviso, erro) {
   return chrome({ tab: 'SoFIA', h1: 'SoFIA', p: 'Edite o prompt, as configurações e conecte o WhatsApp da SoFIA.' }, 'sofia', corpo);
 }
 
+// ── Grade de MATRÍCULAS FIXAS (/grade) ───────────────────────────────────────
+// Snapshot gerado pelo run_grade_fixas.py (Python) → data/grade-fixas.json.
+let _gradeGerando = false, _gradeDesde = 0;
+function _gradePyBin() {
+  const dir = path.resolve(__dirname, 'agendamento_evo');
+  const venv = path.join(dir, '.venv', 'bin', 'python');
+  let py = process.env.PYTHON_BIN || 'python3';
+  try { if (fs.existsSync(venv)) py = venv; } catch (_) {}
+  return { py, dir };
+}
+function _gradeSnapshot() {
+  try { return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'grade-fixas.json'), 'utf8')); }
+  catch (_) { return null; }
+}
+function paginaGrade() {
+  const snap = _gradeSnapshot();
+  const WD = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+  const fmtDia = (d) => { const p = String(d || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] : (d || ''); };
+  let corpo;
+  if (!snap || !Array.isArray(snap.turmas) || !snap.turmas.length) {
+    corpo = '<div class="vazio">Nenhuma grade gerada ainda.<br>Clique em <b>🔄 Atualizar</b> para montar a grade de matrículas fixas a partir do EVO.<br><small>Na primeira vez demora alguns minutos (lê o plano de cada aluna).</small></div>';
+  } else {
+    const turmas = snap.turmas;
+    const diaPorWd = {};
+    for (const t of turmas) if (!(t.weekday in diaPorWd)) diaPorWd[t.weekday] = t.data;
+    const wds = [0, 1, 2, 3, 4, 5, 6].filter(w => w in diaPorWd);
+    const horas = [...new Set(turmas.map(t => t.hora))].sort();
+    const cel = {};
+    for (const t of turmas) cel[t.hora + '|' + t.weekday] = t;
+    const th = wds.map(w => `<th>${WD[w]}<span class="dt">${fmtDia(diaPorWd[w])}</span></th>`).join('');
+    const linhas = horas.map(h => {
+      const tds = wds.map(w => {
+        const t = cel[h + '|' + w];
+        if (!t) return '<td class="vaziocel"></td>';
+        const cap = (t.capacity == null) ? '?' : t.capacity;
+        const nf = t.nFixas;
+        const lotada = (t.vagas === 0) || (t.capacity != null && nf >= t.capacity);
+        const vagasTxt = lotada ? 'lotada' : (t.vagas + (t.vagas === 1 ? ' vaga' : ' vagas'));
+        const badge = `<span class="vg ${lotada ? 'cheia' : 'livre'}">${vagasTxt}</span>`;
+        const prof = t.professora ? `<div class="prof">${escH(t.professora)}</div>` : '';
+        const nomes = (t.fixas || []).map(n => `<li>${escH(n)}</li>`).join('');
+        const det = (t.fixas || []).length
+          ? `<details><summary>👥 ${nf}/${cap} fixas</summary><ul>${nomes}</ul></details>`
+          : `<div class="semf">0/${cap} fixas</div>`;
+        return `<td class="cel ${lotada ? 'tlotada' : ''}">${badge}${prof}${det}</td>`;
+      }).join('');
+      return `<tr><th class="hora">${escH(h)}</th>${tds}</tr>`;
+    }).join('');
+    const r = snap.resumo || {};
+    corpo = `<div class="meta">Período <b>${fmtDia(snap.inicio)}</b>–<b>${fmtDia(snap.fim)}</b> · ${r.turmas || turmas.length} turmas · <b>${r.fixas != null ? r.fixas : ''}</b> matrículas fixas · gerado ${escH(snap.gerado_em || '')}<span class="fora"> (fora: ${r.excluidas_free || 0} FREE · ${r.excluidas_reposicao || 0} reposição · ${r.excluidas_experimental || 0} experimental)</span></div>`
+      + `<div class="tabwrap"><table class="grade"><thead><tr><th class="hora">Horário</th>${th}</tr></thead><tbody>${linhas}</tbody></table></div>`;
+  }
+  const g = _gradeGerando;
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grade de Matrículas Fixas</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f4f7f7;color:#223;padding:18px}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+.volta{color:#13b0a5;text-decoration:none;font-size:.85rem}
+h1{margin:4px 0 2px;font-size:1.3rem}
+.sub{margin:0;color:#567;font-size:.82rem;max-width:760px;line-height:1.45}
+#btnAt{background:#13b0a5;color:#fff;border:0;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer;white-space:nowrap}
+#btnAt:disabled{opacity:.6;cursor:default}
+.aviso{background:#fff7e6;border:1px solid #ffd98a;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:.88rem}
+.meta{font-size:.8rem;color:#567;margin-bottom:10px}.meta .fora{color:#89a}
+.tabwrap{overflow-x:auto;border:1px solid #dde;border-radius:10px;background:#fff}
+table.grade{border-collapse:collapse;width:100%;min-width:800px}
+table.grade th,table.grade td{border:1px solid #e7ecec;vertical-align:top;padding:7px 8px}
+thead th{background:#0a4f4c;color:#eafffb;font-size:.8rem}
+thead th .dt{display:block;font-weight:400;opacity:.85;font-size:.72rem}
+th.hora{background:#eef5f5;color:#245;font-weight:700;white-space:nowrap;text-align:center;font-size:.82rem}
+td.cel{min-width:150px}td.vaziocel{background:#fafbfb}td.tlotada{background:#fff6f5}
+.vg{display:inline-block;font-size:.72rem;font-weight:700;border-radius:999px;padding:2px 9px;margin-bottom:4px}
+.vg.livre{background:#e4f7f0;color:#0a7a52}.vg.cheia{background:#fde6e4;color:#b23b30}
+.prof{font-size:.74rem;color:#789;margin-bottom:3px}
+details summary{cursor:pointer;font-size:.78rem;font-weight:600;color:#245;list-style:none}
+details summary::-webkit-details-marker{display:none}
+details ul{margin:5px 0 0;padding-left:16px}details li{font-size:.76rem;color:#334;line-height:1.35}
+.semf{font-size:.78rem;color:#9ab}
+.vazio{background:#fff;border:1px solid #dde;border-radius:10px;padding:34px;text-align:center;color:#567;line-height:1.6}
+</style></head>
+<body>
+  <header>
+    <div><a class="volta" href="/">← painel</a>
+      <h1>📋 Grade de Matrículas Fixas</h1>
+      <p class="sub">Alunas <b>matriculadas fixas</b> em cada turma — <b>contadas mesmo se faltarem</b>. Ficam de fora experimentais, <b>reposições</b> e planos <b>FREE</b>. A estrutura fixa vale toda semana — use para ver <b>vaga de matrícula</b>.</p>
+    </div>
+    <button id="btnAt" onclick="atualizar()"${g ? ' disabled' : ''}>${g ? '⏳ gerando…' : '🔄 Atualizar'}</button>
+  </header>
+  <div id="aviso" class="aviso" style="display:${g ? 'block' : 'none'}">⏳ Gerando a grade a partir do EVO… pode levar alguns minutos. A página recarrega sozinha ao terminar.</div>
+  ${corpo}
+  <script>
+    var gerando = ${g ? 'true' : 'false'};
+    function atualizar(){var b=document.getElementById('btnAt');b.disabled=true;b.textContent='⏳ gerando…';document.getElementById('aviso').style.display='block';
+      fetch('/grade/atualizar',{method:'POST'}).then(function(r){return r.json();}).then(function(){gerando=true;setTimeout(poll,4000);}).catch(function(){b.disabled=false;b.textContent='🔄 Atualizar';});}
+    function poll(){fetch('/grade/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){if(s.gerando){setTimeout(poll,4000);}else{location.reload();}}).catch(function(){setTimeout(poll,5000);});}
+    if(gerando) setTimeout(poll,4000);
+  </script>
+</body></html>`;
+}
+
 // Página de login (sem menu). Simples: usuário + senha.
 function paginaLogin(erro) {
   return `<!doctype html><html lang="pt-BR"><head>
@@ -5622,6 +5724,32 @@ const server = http.createServer((req, res) => {
   }
   _navSess = sess;
   try { acessos.registrarAcesso(sess.usuario); } catch (_) {} // marca "último acesso" (com trava de tempo)
+
+  // ── Grade de matrículas FIXAS (/grade) — qualquer usuário logado ───────────
+  if (req.method === 'GET' && url === '/grade') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(paginaGrade());
+  }
+  if (req.method === 'POST' && url === '/grade/atualizar') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    if (_gradeGerando) return res.end(JSON.stringify({ ok: true, jaRodando: true }));
+    try {
+      const cp = require('child_process');
+      const { py, dir } = _gradePyBin();
+      _gradeGerando = true; _gradeDesde = Date.now();
+      const child = cp.spawn(py, ['run_grade_fixas.py', '--dias', '7'], { cwd: dir, detached: true, stdio: 'ignore' });
+      child.on('exit', () => { _gradeGerando = false; });
+      child.on('error', () => { _gradeGerando = false; });
+      try { child.unref(); } catch (_) {}
+      try { auditoria.registrar(sess.usuario, 'grade.atualizar', '', ''); } catch (_) {}
+      return res.end(JSON.stringify({ ok: true, iniciado: true }));
+    } catch (e) { _gradeGerando = false; return res.end(JSON.stringify({ ok: false, erro: e.message })); }
+  }
+  if (req.method === 'GET' && url === '/grade/status') {
+    const snap = _gradeSnapshot();
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ ok: true, gerando: _gradeGerando, desde: _gradeDesde, gerado_em: snap ? snap.gerado_em : null }));
+  }
 
   // ── Raiz "pura" → tela inicial da pessoa (Conversas da SoFIA) ─────────────
   // Abrir o domínio/bookmark (GET "/" sem querystring) leva à primeira tela
