@@ -503,13 +503,14 @@ const ESTILO = `
   .tabs a:hover{color:var(--tinta);background:var(--linha-soft)}
   .tabs a.on{background:var(--teal);color:#fff;border-color:var(--teal)}
   /* Mesma ordem no desktop E no mobile: SoFIA → WhatsApp → Instagram →
-     Formulário → Perfis → Saúde (no HTML a SoFIA fica por último; o order reordena). */
+     Formulário → Perfis → Grade → Saúde (no HTML a SoFIA fica por último; o order reordena). */
   .tabs .nav-sofia{order:1}
   .tabs .nav-msg{order:2}
   .tabs .nav-ig{order:3}
   .tabs .nav-ind{order:4}
   .tabs .nav-perfis{order:5}
-  .tabs .nav-saude{order:6}
+  .tabs .nav-grade{order:6}
+  .tabs .nav-saude{order:7}
   /* Mobile: logo + login na 1ª linha; o menu ocupa a linha inteira logo abaixo.
      A barra inteira continua fixa ao rolar. */
   @media(max-width:760px){
@@ -4918,7 +4919,7 @@ function paginaGrade() {
     corpo = `<div class="stats">
       <div class="stat tot"><div class="n">${r.turmas != null ? r.turmas : turmas.length}</div><div class="l">turmas</div></div>
       <div class="stat"><div class="n">${alunasFixas != null ? alunasFixas : '—'}</div><div class="l">alunas fixas</div><div class="gr-sub">${alunasFixas == null ? 'atualize a grade' : (pctAlunasFixas != null ? `${pctAlunasFixas}% de ${totalAlunas} alunas` : (r.fixas != null ? `${r.fixas} matrículas fixas` : ''))}</div></div>
-      <div class="stat ok"><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação</div><div class="gr-sub">${ocupPct == null ? 'atualize a grade' : (r.total_vagas ? `${r.fixas}/${r.total_vagas} vagas` : '')}</div></div>
+      <div class="stat ok"><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação</div><div class="gr-sub">${ocupPct == null ? 'atualize a grade' : (r.ocupacao_vagas ? `${r.ocupacao_fixas}/${r.ocupacao_vagas} vagas · sem sáb` : '')}</div></div>
     </div>
     <div class="sec-t" data-nosec>Ocupação por professora</div>
     <div class="card" style="padding:10px 15px">${profRows}</div>

@@ -48,8 +48,8 @@ def main():
         print(f"📋 Grade de fixas {res['inicio']}..{res['fim']} — {r['turmas']} turmas, "
               f"{r['fixas']} matrículas fixas ({r.get('alunas_fixas', '?')} alunas fixas)")
         oc = r.get('ocupacao_pct')
-        print(f"   ocupação por fixas: {oc if oc is not None else '?'}% "
-              f"({r['fixas']}/{r.get('total_vagas', '?')} vagas)")
+        print(f"   ocupação por fixas (sem sábado): {oc if oc is not None else '?'}% "
+              f"({r.get('ocupacao_fixas', '?')}/{r.get('ocupacao_vagas', '?')} vagas)")
         print(f"   fixa = turma na matrícula do contrato da aluna (member-enrollment)")
         print(f"   arquivo: {out}\n")
         _WD = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]

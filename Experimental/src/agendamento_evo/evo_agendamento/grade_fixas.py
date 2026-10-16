@@ -161,9 +161,15 @@ def montar_grade(evo=None, dias=7, branch_id=None, now=None, **_ignored):
     # - ocupacao_pct = % dessas vagas ocupado por matrículas FIXAS;
     # - por_professora = ocupação (fixas/capacidade) de cada professora.
     total_vagas = sum(t["capacity"] for t in turmas if t["capacity"])
-    ocupacao_pct = round(total_fixas / total_vagas * 100) if total_vagas else None
+    # Ocupação e ocupação por professora EXCLUEM o SÁBADO (weekday 5): sábado é escala
+    # e nem sempre tem aula, então não entra nessas contas. (O sábado continua
+    # aparecendo na grade e contando nas alunas fixas.)
+    uteis = [t for t in turmas if t["weekday"] != 5]
+    oc_fixas = sum(t["nFixas"] for t in uteis)
+    oc_vagas = sum(t["capacity"] for t in uteis if t["capacity"])
+    ocupacao_pct = round(oc_fixas / oc_vagas * 100) if oc_vagas else None
     prof_agg = {}
-    for t in turmas:
+    for t in uteis:
         p = t["professora"] or "—"
         a = prof_agg.setdefault(p, {"fixas": 0, "vagas": 0, "turmas": 0})
         a["fixas"] += t["nFixas"]
@@ -186,10 +192,12 @@ def montar_grade(evo=None, dias=7, branch_id=None, now=None, **_ignored):
         "turmas": turmas,
         "por_professora": por_professora,
         "resumo": {
-            "fixas": total_fixas,                 # matrículas fixas (turma-slots)
-            "alunas_fixas": len(alunas_fixas_ids),  # alunas DISTINTAS fixas
+            "fixas": total_fixas,                 # matrículas fixas (turma-slots, incl. sábado)
+            "alunas_fixas": len(alunas_fixas_ids),  # alunas DISTINTAS fixas (incl. sábado)
             "turmas": len(turmas),
-            "total_vagas": total_vagas,
-            "ocupacao_pct": ocupacao_pct,
+            "total_vagas": total_vagas,           # todas as vagas (incl. sábado)
+            "ocupacao_pct": ocupacao_pct,         # ocupação por fixas SEM sábado
+            "ocupacao_fixas": oc_fixas,           # fixas consideradas (sem sábado)
+            "ocupacao_vagas": oc_vagas,           # vagas consideradas (sem sábado)
         },
     }
