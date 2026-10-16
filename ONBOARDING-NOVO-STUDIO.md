@@ -54,6 +54,24 @@ Edite os dois `.env` (o script diz exatamente quais campos):
 
 Modelos completos e comentados: `Experimental/.env.example` e `ChatBot/.env.example`.
 
+### 3.1) Personalizar a SoFIA (prompt + tags)
+O `--start` semeia os modelos da SoFIA no `SOFIA_DIR` (sem sobrescrever):
+
+- **Prompt** (`sofia-prompt.txt`, a partir de `ChatBot/sofia-prompt.default.txt`): já vem
+  pronto, com os campos da unidade entre colchetes para preencher no painel
+  (SoFIA → Prompt): `[NOME_UNIDADE]`, `[EMAIL_UNIDADE]`, `[WHATSAPP_RECEPCAO]`,
+  `[ENDERECO_UNIDADE]`, `[LINK_MAPA_GOOGLE]`, `[INSTAGRAM_UNIDADE]`,
+  `[NOMES_DAS_PROFESSORAS]`, `[PECULIARIDADES_DA_UNIDADE]`, `[CIRCUITO_SLIM_DA_UNIDADE]`
+  e o domínio `SEU-PAINEL.duckdns.org`. O valor base já vem em R$ 917,00 e a
+  **promoção vem "nenhuma"** — para criar uma, edite só a seção *PREÇO E PROMOÇÃO*.
+- **Automações de tag** (`sofia-regras.json`) e **trocas de tag por presença**
+  (`comparecimento.json`): já vêm com o conjunto de tags/automações pronto. Basta
+  **criar as tags correspondentes no CRM** e preencher os **números de aviso**
+  (`avisarWpp`/relatório) no painel. As tags-base: `FX - 1. Contato inicial`,
+  `FX - 2. Encerrado sem agendamento`, `FX - 3. Agendou Aula Exp`,
+  `FX - 5. Fez Aula Experimental`, `FX - 0. Sem interesse`,
+  `0. Humano - Notificar Recepção`, `0. Preço`, `0. Patrocinado`.
+
 ### 4) Descobrir os ids da aula no EVO (opcional)
 Com o EVO já preenchido no `.env`:
 ```bash
