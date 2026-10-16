@@ -31,6 +31,9 @@ data/wa-status.json
 data/wa-comando.json
 # Horários dos jobs editados no painel (estado por VPS/franquia) — não versionar
 data/horarios.json
+# Config de troca de tags por presença (editada no painel, estado por VPS) — o modelo
+# fica em ChatBot/comparecimento.default.json e o setup semeia a cópia viva aqui.
+data/comparecimento.json
 # Registro de atividade do robô (o que enviou hoje) — estado por VPS
 data/atividade.json
 # Ponte de "enviar teste" painel↔robô — estado por VPS

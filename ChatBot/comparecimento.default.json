@@ -1,0 +1,13 @@
+{
+  "on": true,
+  "tagsAgendou": [
+    "FX - 3. Agendou Aula Exp"
+  ],
+  "tagAgendou": "FX - 3. Agendou Aula Exp",
+  "tagCompareceu": "FX - 5. Fez Aula Experimental",
+  "tagFaltou": "FX - 2. Encerrado com Agendamento sem Presença",
+  "numeroRelatorio": "",
+  "criarNovos": true,
+  "diasJanela": 2,
+  "intervaloHoras": 8
+}

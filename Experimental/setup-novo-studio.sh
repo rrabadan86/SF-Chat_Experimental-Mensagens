@@ -548,6 +548,22 @@ for _d in "$CHATBOT_DIR"/sofia-*.default.txt; do
 done
 [ "$_semeou" -gt 0 ] && echo "   ✔ modelos da SoFIA copiados para o SOFIA_DIR ($_semeou) — o roteiro/mídias sobem prontos p/ editar."
 
+# Automações de tag (gatilho → tag) e trocas de tag por presença: a unidade NOVA já
+# sobe com o conjunto de tags/automações pronto (basta o franqueado criar as tags
+# correspondentes no CRM e preencher os números de aviso no painel).
+#  - sofia-regras.json vive no SOFIA_DIR e NÃO tem fallback .default no runtime, então
+#    copiamos o modelo já com o nome final (sem sobrescrever).
+if [ -e "$CHATBOT_DIR/sofia-regras.default.json" ] && [ ! -e "$SOFIA_DIR/sofia-regras.json" ]; then
+  cp "$CHATBOT_DIR/sofia-regras.default.json" "$SOFIA_DIR/sofia-regras.json" \
+    && echo "   ✔ automações de tag (sofia-regras.json) semeadas no SOFIA_DIR."
+fi
+#  - comparecimento.json vive em Experimental/data/ (fora do versionamento).
+if [ -e "$CHATBOT_DIR/comparecimento.default.json" ] && [ ! -e "$EXP_DIR/data/comparecimento.json" ]; then
+  mkdir -p "$EXP_DIR/data"
+  cp "$CHATBOT_DIR/comparecimento.default.json" "$EXP_DIR/data/comparecimento.json" \
+    && echo "   ✔ trocas de tag por presença (comparecimento.json) semeadas em data/."
+fi
+
 echo "📦 Instalando dependências (Experimental)…"
 ( cd "$EXP_DIR" && npm install --no-audit --no-fund )
 echo "📦 Instalando dependências (ChatBot)…"

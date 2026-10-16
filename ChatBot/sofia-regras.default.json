@@ -1,0 +1,40 @@
+{
+  "novo": [],
+  "mensagem": [
+    {
+      "tag": "FX - 1. Contato inicial",
+      "avisarWpp": ""
+    }
+  ],
+  "palavra": [],
+  "ia": [
+    {
+      "tag": "0. Humano - Notificar Recepção",
+      "avisarWpp": "",
+      "instrucao": "Aplique SOMENTE quando a conversa realmente precisar da RECEPÇÃO (atendimento humano) para algo que a SoFIA NÃO resolve sozinha.\nDEVE acionar, por exemplo: a aluna e uma amiga querem a MESMA vaga e aquele horário está lotado (a recepção precisa abrir/ajustar a vaga); pedido de exceção fora das regras (desconto especial, condição não prevista, remarcar fora do permitido); reclamação ou problema de cadastro/cobrança; a aluna pede explicitamente para falar com um atendente/recepção.\nNÃO aplique nestes casos — a SoFIA resolve sozinha e deve continuar atendendo normalmente: perguntar preço/valores/planos; pedir a grade/horários; pedir a localização/endereço; agendar ou remarcar a aula experimental (escolher dia e horário disponíveis); perguntar se pode levar uma amiga (a resposta é sim, cada uma agenda a sua); dúvidas sobre a metodologia / como funciona.\nNa dúvida, NÃO aplique — deixe a SoFIA conduzir."
+    },
+    {
+      "tag": "0. Preço",
+      "avisarWpp": "",
+      "instrucao": "Essa tag será utilizada apenas se a aluna perguntar por preço da mensalidade ou sobre tabela de valores."
+    },
+    {
+      "tag": "FX - 0. Sem interesse",
+      "avisarWpp": "",
+      "instrucao": "Aplique SOMENTE quando a aluna deixar CLARO e explícito que NÃO quer conhecer o SlimFit e NÃO quer dar continuidade — por exemplo: \"não é pra mim\", \"não tenho interesse\", \"já treino em outro lugar e estou satisfeita, não quero trocar\", \"pode parar de me mandar mensagem\", \"me tira da lista\".\nNUNCA aplique nestes casos (não são desinteresse):\n- Recuou pelo PREÇO/VALOR, ou disse \"vou pensar\" / \"não consigo agora\" / \"depois entro em contato\" → é adiamento.\n- Está REMARCANDO ou trocando de dia/horário (\"amanhã não posso\", \"pode ser segunda\", \"essa semana não dá\") → segue interessada.\n- Mencionou outra atividade mas continua na conversa (\"amanhã vou no pilates\", \"hoje tenho outro compromisso\") → não é recusa ao SlimFit.\n- Ainda está agendando, tirando dúvidas, pedindo horários ou respondendo às perguntas da SoFIA.\n- Ficou só em silêncio / não respondeu.\nNa DÚVIDA, NÃO aplique — é melhor não etiquetar do que etiquetar errado. Só marque quando a recusa for inequívoca."
+    }
+  ],
+  "campanha": [],
+  "encerrou": [
+    {
+      "tag": "FX - 2. Encerrado sem agendamento",
+      "avisarWpp": ""
+    }
+  ],
+  "anuncio": [
+    {
+      "tag": "0. Patrocinado",
+      "avisarWpp": ""
+    }
+  ]
+}
