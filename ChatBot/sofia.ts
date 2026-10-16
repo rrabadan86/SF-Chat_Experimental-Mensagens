@@ -232,14 +232,7 @@ const DIAS = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quint
 // ══════════════════════════════════════════════════════════════════════════
 // 3) FERRAMENTAS
 // ══════════════════════════════════════════════════════════════════════════
-function paraMinutos(hhmm: string) { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; }
 function json(obj: unknown) { return { content: [{ type: "text" as const, text: JSON.stringify(obj) }] }; }
-function proximaSegundaTarde(ref: Date) {
-  const d = new Date(ref);
-  do { d.setDate(d.getDate() + 1); } while (d.getDay() !== 1);
-  d.setHours(14, 0, 0, 0);
-  return d;
-}
 
 // Antecedência mínima (em horas) para agendar em DIA ÚTIL. Editável no painel
 // (SoFIA → Configuração → Memória e operação), que grava em
@@ -345,23 +338,14 @@ const verificarDisponibilidade = tool(
         return json({ valido: false, motivo: `${horario_desejado} não existe na ${DIAS[diaSemana]}.`, opcoes_do_dia: slots });
     }
 
-    const diaAgora = agora.getDay();
-    const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
-    const emJanelaSemana =
-      (diaAgora >= 2 && diaAgora <= 4) ||
-      (diaAgora === 1 && minutosAgora > paraMinutos("07:00")) ||
-      (diaAgora === 5 && minutosAgora <= paraMinutos("17:30"));
-
-    if (emJanelaSemana) {
-      const minH = antecedenciaHoras();
-      const horas = (alvo.getTime() - agora.getTime()) / 3_600_000;
-      if (horas < minH)
-        return json({ valido: false, motivo: `Em dias úteis é preciso pelo menos ${minH}h de antecedência.`, opcoes_do_dia: slots ?? [] });
-    } else {
-      const segundaTarde = proximaSegundaTarde(agora);
-      if (alvo < segundaTarde)
-        return json({ valido: false, motivo: "No fim de semana só agendamos a partir de segunda-feira à tarde.", primeiro_horario_valido: "segunda-feira à tarde" });
-    }
+    // Regra única de antecedência (todo dia igual): basta a aula EXISTIR, ter vaga e
+    // faltar pelo menos N horas (N editável no painel, padrão 4h). Não há mais trava
+    // especial de fim de semana — se a unidade tem aula no sábado com vaga, a SoFIA
+    // oferece. Domingo (ou qualquer dia sem aula) já cai fora na checagem de existência.
+    const minH = antecedenciaHoras();
+    const horas = (alvo.getTime() - agora.getTime()) / 3_600_000;
+    if (horas < minH)
+      return json({ valido: false, motivo: `É preciso pelo menos ${minH}h de antecedência.`, opcoes_do_dia: slots ?? [] });
     return json({ valido: true, dia_semana: DIAS[diaSemana], horario: horario_desejado });
   },
 );
