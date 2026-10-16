@@ -2,26 +2,23 @@
 """
 Grade de MATRÍCULAS FIXAS por turma (previsibilidade de vaga pra matrícula).
 
-Como separamos FIXA de REPOSIÇÃO/FREE (a API pública do EVO NÃO marca isso no
-enrollment — `replacement` vem sempre false, não há campo de reposição): pela
-RECORRÊNCIA entre semanas. A matrícula fixa é recorrente (o EVO deixa a aluna
-pré-matriculada em TODAS as próximas semanas daquela turma), enquanto REPOSIÇÃO e
-marcação FREE são PONTUAIS — aparecem numa semana só. Então lemos VÁRIAS semanas
-futuras da mesma turma (mesmo idConfiguration) e cruzamos: é FIXA quem aparece em
->= 2 dessas semanas; quem aparece em uma só é reposição/FREE e fica de fora.
+Como sabemos quem é FIXA (e não reposição/FREE): a API do EVO expõe as matrículas
+FIXAS (recorrentes) de cada aluna em /api/v1/activities/enrollment/member-enrollment
+— é a lista de turmas (idConfiguration) do CONTRATO dela. Então, para uma turma X:
+é FIXA quem tem o idConfiguration de X na própria lista de matrículas (status ativo,
+sem endDate vencido). Quem está na turma mas NÃO tem X nessa lista é reposição ou
+marcação FREE — e fica de fora.
 
-Ler só 1 semana futura (versão anterior) marcava reposição como fixa quando a
-reposição caía justo naquela semana — era o bug. Contamos só as semanas em que a
-turma EXISTE na grade (roster vazio numa semana válida = turma sem fixas, não erro
-de leitura) — assim uma turma usada só para reposição aparece com 0 fixas.
+Isso é EXATO (bate com os ícones "R"/"RC" da tela do EVO), não depende de heurística
+nem de ler semanas futuras, e inclui a fixa mesmo que ela vá FALTAR naquele dia.
+Validado: na turma de sáb 08:30 (idConfig 1225), Andreia (3646) tem 1225 na lista
+(fixa) e Márcia (7615) só tem 1169/1170 (logo, reposição no 1225).
 
-Validado: SLIMFIT B Sex 07:00 (idConfig 1170) na semana atual tinha 11 (com 2
-reposições + 1 FREE); 23/10, 30/10 e 06/11 deram 8 idênticas (as fixas).
-
-Sempre de fora: experimentais (idProspect) e removidas (removed). A FALTA não
-exclui: a matrícula fixa continua na turma toda semana.
+O roster de cada turma (schedule/detail) dá os membros daquele dia; o member-
+enrollment (1 chamada por aluna, em cache) diz em quais turmas ela é fixa.
+Sempre de fora: experimentais (idProspect) e removidas (removed).
 """
-from datetime import timedelta
+from datetime import datetime, timedelta
 import logging
 
 from . import config
@@ -49,12 +46,24 @@ def _prof(s):
     return ""
 
 
-def montar_grade(evo=None, dias=7, semanas_frente=2, semanas_amostra=3,
-                 branch_id=None, now=None):
-    """Grade de matrículas fixas dos próximos `dias` dias. A FIXA de cada turma sai
-    por RECORRÊNCIA: lemos `semanas_amostra` semanas futuras (a partir de
-    `semanas_frente`) e consideramos fixa quem aparece em >= 2 delas (reposição/FREE
-    aparece em uma só)."""
+def _matricula_ativa(e, hoje):
+    """True se a matrícula fixa `e` (item do member-enrollment) está vigente HOJE:
+    status ativo (1) e sem endDate (ou endDate ainda no futuro)."""
+    if e.get("status") not in (1, None):      # 1 = matrícula ativa
+        return False
+    end = e.get("endDate")
+    if not end:
+        return True
+    try:
+        return datetime.fromisoformat(str(end)[:19]).date() >= hoje
+    except Exception:
+        return True
+
+
+def montar_grade(evo=None, dias=7, branch_id=None, now=None, **_ignored):
+    """Grade de matrículas fixas dos próximos `dias` dias. FIXA de uma turma = a aluna
+    tem o idConfiguration daquela turma na própria lista de matrículas fixas
+    (member-enrollment). Reposição/FREE não têm → ficam de fora."""
     evo = evo or EvoClient()
     now = now or agora_brasilia()
     inicio = now.date()
@@ -62,15 +71,7 @@ def montar_grade(evo=None, dias=7, semanas_frente=2, semanas_amostra=3,
     activity = config.EVO_ACTIVITY or None
     id_activity = config.EVO_ACTIVITY_ID or None
 
-    # Janela de semanas futuras para cruzar (ex.: base=2, amostra=3 → [2,3,4]).
-    # Fallback (1, 0) só se a turma nem existir na janela (turma nova, EVO ainda não
-    # pré-criou tão à frente) — aí usa uma ocorrência isolada, mesmo que inclua
-    # reposição, para não ocultar a turma.
-    base = max(1, int(semanas_frente))
-    janela = [base + i for i in range(max(2, int(semanas_amostra)))]
-    fallback = [o for o in (1, 0) if o not in janela]
-
-    # cache: grade por semana (lista) e detail por (idConfig, data).
+    # cache da grade por semana (list_schedule).
     week_cache = {}
     def _week_sched(dt):
         wk = dt - timedelta(days=dt.weekday())   # segunda-feira daquela semana
@@ -83,18 +84,9 @@ def montar_grade(evo=None, dias=7, semanas_frente=2, semanas_amostra=3,
                 week_cache[wk] = []
         return week_cache[wk]
 
-    def _existe(idc, futdate):
-        """True se a turma (idConfiguration) tem sessão naquela data futura
-        (`futdate` é um datetime.date)."""
-        for s in _week_sched(futdate):
-            dt = session_start_datetime(s)
-            if s.get("idConfiguration") == idc and dt and dt.date() == futdate:
-                return True
-        return False
-
+    # roster da turma num dia: {idMember: nome} (exclui experimental/removida).
     det_cache = {}
     def _roster(idc, dstr):
-        """{idMember: nome} das matrículas da turma nessa data, ou None se erro."""
         key = (idc, dstr)
         if key not in det_cache:
             try:
@@ -110,11 +102,24 @@ def montar_grade(evo=None, dias=7, semanas_frente=2, semanas_amostra=3,
                 det_cache[key] = None
         return det_cache[key]
 
+    # matrículas FIXAS (idConfiguration) de cada aluna — 1 chamada por aluna, em cache.
+    fix_cache = {}
+    def _fixset(idm):
+        if idm not in fix_cache:
+            try:
+                data = evo.member_enrollments(idm, branch_id=branch_id) or []
+                fix_cache[idm] = {e["idConfiguration"] for e in data
+                                  if e.get("idConfiguration") and _matricula_ativa(e, inicio)}
+            except Exception:
+                fix_cache[idm] = None     # erro de leitura → desconhecido (não conta)
+        return fix_cache[idm]
+
     turmas = []
     seen = set()
     total_fixas = 0
     d = inicio
     while d <= fim:
+        dstr = d.strftime("%Y-%m-%d")
         for s in _week_sched(d):
             dt = session_start_datetime(s)
             if not dt or dt.date() != d:
@@ -125,44 +130,25 @@ def montar_grade(evo=None, dias=7, semanas_frente=2, semanas_amostra=3,
             if not idc or (idc, d) in seen:
                 continue
             seen.add((idc, d))
-            # FIXA por recorrência: conta em quantas semanas futuras (onde a turma
-            # EXISTE) cada aluna aparece. Fixa = aparece em >= 2 semanas; reposição/
-            # FREE aparece em uma só e fica de fora.
-            cont, nomes, semanas_validas = {}, {}, 0
-            for off in janela:
-                futdt = d + timedelta(days=7 * off)
-                if not _existe(idc, futdt):      # turma não roda nessa semana → ignora
-                    continue
-                r = _roster(idc, futdt.strftime("%Y-%m-%d"))
-                if r is None:                    # erro de leitura → ignora a semana
-                    continue
-                semanas_validas += 1             # semana válida (mesmo roster vazio)
-                for m, nome in r.items():
-                    cont[m] = cont.get(m, 0) + 1
-                    nomes[m] = nome
-            if semanas_validas >= 2:
-                ids = [m for m, c in cont.items() if c >= 2]
-            else:
-                # janela não deu p/ comparar (turma nova): último recurso = 1
-                # ocorrência isolada (pode incluir reposição, mas não oculta a turma).
-                ids, nomes = [], {}
-                for off in (janela[:1] + fallback):
-                    r = _roster(idc, (d + timedelta(days=7 * off)).strftime("%Y-%m-%d"))
-                    if r is None:
-                        continue
-                    if r or off == 0:
-                        ids, nomes = list(r.keys()), r
-                        break
-            fixas = sorted((nomes[m] for m in ids), key=_norm)
+            roster = _roster(idc, dstr) or {}
+            # FIXA = aluna cujo contrato inclui ESTA turma (idc na lista dela).
+            fixas, incerto = [], 0
+            for idm, nome in roster.items():
+                fs = _fixset(idm)
+                if fs is None:
+                    incerto += 1          # não deu p/ checar (erro) → não conta como fixa
+                elif idc in fs:
+                    fixas.append(nome)
+            fixas = sorted(fixas, key=_norm)
             cap = s.get("capacity")
             nf = len(fixas)
             total_fixas += nf
             turmas.append({
-                "data": d.strftime("%Y-%m-%d"), "weekday": dt.weekday(), "hora": dt.strftime("%H:%M"),
+                "data": dstr, "weekday": dt.weekday(), "hora": dt.strftime("%H:%M"),
                 "activity": s.get("name") or activity or "", "professora": _prof(s),
                 "idConfiguration": idc, "capacity": cap, "nFixas": nf,
                 "vagas": (max(cap - nf, 0) if cap is not None else None),
-                "fonte_semanas": semanas_validas, "fixas": fixas,
+                "incerto": incerto, "fixas": fixas,
             })
         d += timedelta(days=1)
 
@@ -171,7 +157,7 @@ def montar_grade(evo=None, dias=7, semanas_frente=2, semanas_amostra=3,
         "gerado_em": now.strftime("%Y-%m-%d %H:%M"),
         "inicio": inicio.strftime("%Y-%m-%d"),
         "fim": fim.strftime("%Y-%m-%d"),
-        "semanas_frente": base,
+        "metodo": "member-enrollment",
         "dias": [(inicio + timedelta(days=i)).strftime("%Y-%m-%d")
                  for i in range((fim - inicio).days + 1)],
         "turmas": turmas,

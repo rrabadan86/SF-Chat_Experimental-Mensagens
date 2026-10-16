@@ -367,6 +367,20 @@ class EvoClient:
             params["idBranch"] = bid
         return self._request("GET", "/api/v1/activities/schedule/detail", params=params) or {}
 
+    def member_enrollments(self, id_member, branch_id=None):
+        """Matrículas FIXAS (recorrentes) de uma aluna — as turmas do contrato dela.
+        Cada item traz idConfiguration, status (1=ativa), startDate, endDate, weekDay,
+        startTime. É assim que sabemos em quais turmas a aluna é FIXA (e não reposição/
+        FREE): a turma cujo idConfiguration está nesta lista é fixa dela.
+
+        Endpoint: GET /api/v1/activities/enrollment/member-enrollment"""
+        params = {"idMember": int(id_member)}
+        bid = self._bid(branch_id)
+        if bid:
+            params["idBranch"] = bid
+        return self._request("GET", "/api/v1/activities/enrollment/member-enrollment",
+                             params=params) or []
+
     # --------------- venda do serviço ---------------
     def create_sale(self, id_service, id_prospect=None, id_member=None,
                     service_value=0.0, payment=None, total_installments=1, branch_id=None):

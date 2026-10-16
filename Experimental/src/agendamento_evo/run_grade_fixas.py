@@ -8,8 +8,10 @@ Uso (na pasta agendamento_evo, com o .env da unidade):
     .venv/bin/python run_grade_fixas.py --dias 7          # próximos 7 dias
     .venv/bin/python run_grade_fixas.py --print | grep -i "rachel"   # conferir uma aluna
 
-A 1ª rodada é lenta (lê o plano de cada aluna no EVO p/ separar FREE; fica em cache
-por 7 dias — as próximas são rápidas).
+A FIXA de cada turma sai da lista de matrículas do contrato de cada aluna
+(member-enrollment no EVO): é fixa quem tem aquele idConfiguration na própria lista.
+Lê 1 vez por aluna (em cache na rodada), então a grade toda faz algumas dezenas de
+chamadas ao EVO — roda em background.
 """
 import argparse
 import json
@@ -21,10 +23,6 @@ import sys
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dias", type=int, default=7, help="quantos dias à frente exibir (padrão 7)")
-    ap.add_argument("--semanas-frente", dest="semanas_frente", type=int, default=2,
-                    help="a partir de quantas semanas à frente ler o roster fixo (padrão 2)")
-    ap.add_argument("--semanas-amostra", dest="semanas_amostra", type=int, default=3,
-                    help="quantas semanas futuras cruzar p/ achar a fixa (padrão 3; fixa = aparece em >=2)")
     ap.add_argument("--print", dest="imprimir", action="store_true",
                     help="imprime um resumo legível (além de gravar o JSON)")
     args = ap.parse_args()
@@ -33,8 +31,7 @@ def main():
                         format="%(levelname)s %(name)s: %(message)s")
 
     from evo_agendamento.grade_fixas import montar_grade
-    res = montar_grade(dias=args.dias, semanas_frente=args.semanas_frente,
-                       semanas_amostra=args.semanas_amostra)
+    res = montar_grade(dias=args.dias)
 
     # grava o snapshot que a página /grade vai servir (Experimental/data/)
     out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..",
@@ -50,7 +47,7 @@ def main():
         r = res["resumo"]
         print(f"📋 Grade de fixas {res['inicio']}..{res['fim']} — {r['turmas']} turmas, "
               f"{r['fixas']} matrículas fixas")
-        print(f"   fixo lido {res['semanas_frente']} semana(s) à frente (sem reposição/FREE)")
+        print(f"   fixa = turma na matrícula do contrato da aluna (member-enrollment)")
         print(f"   arquivo: {out}\n")
         _WD = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
         for t in res["turmas"]:

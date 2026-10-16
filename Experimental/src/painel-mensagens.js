@@ -4871,7 +4871,7 @@ function paginaGrade() {
       return `<tr><th class="hora">${escH(h)}</th>${tds}</tr>`;
     }).join('');
     const r = snap.resumo || {};
-    corpo = `<div class="meta"><span><b>${fmtDia(snap.inicio)}</b>–<b>${fmtDia(snap.fim)}</b></span><span>${r.turmas || turmas.length} turmas · <b>${r.fixas != null ? r.fixas : ''}</b> matrículas fixas</span><span class="fora">gerado ${escH(snap.gerado_em || '')} · fixo lido ${snap.semanas_frente || 2} sem. à frente</span><span class="leg"><i><b class="lg-livre"></b>vaga</i><i><b class="lg-quase"></b>quase (1-2)</i><i><b class="lg-cheia"></b>lotada</i></span></div>`
+    corpo = `<div class="meta"><span><b>${fmtDia(snap.inicio)}</b>–<b>${fmtDia(snap.fim)}</b></span><span>${r.turmas || turmas.length} turmas · <b>${r.fixas != null ? r.fixas : ''}</b> matrículas fixas</span><span class="fora">gerado ${escH(snap.gerado_em || '')} · fixa = matrícula do contrato (EVO)</span><span class="leg"><i><b class="lg-livre"></b>vaga</i><i><b class="lg-quase"></b>quase (1-2)</i><i><b class="lg-cheia"></b>lotada</i></span></div>`
       + `<div class="tabwrap"><table class="grade"><thead><tr><th class="hora">Horário</th>${th}</tr></thead><tbody>${linhas}</tbody></table></div>`;
   }
   const g = _gradeGerando;
