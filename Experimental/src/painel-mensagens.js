@@ -4791,6 +4791,8 @@ function _gradeSnapshot() {
   catch (_) { return null; }
 }
 function paginaGrade() {
+  // escH é local em outra função (não global); defino um aqui p/ esta página.
+  const escH = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const snap = _gradeSnapshot();
   const WD = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
   const fmtDia = (d) => { const p = String(d || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] : (d || ''); };
