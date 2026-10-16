@@ -4990,7 +4990,7 @@ function paginaGrade() {
     <div class="gr-top">
       <div>
         <div class="sec-t" style="margin:0" data-nosec>📋 Grade de Matrículas Fixas</div>
-        <p class="quando" style="margin:3px 0 0;max-width:640px">Alunas <b>matriculadas fixas</b> em cada turma — <b>contadas mesmo se faltarem</b>. Ficam de fora experimentais, <b>reposições</b> e planos <b>FREE</b>. Use para ver <b>vaga de matrícula</b>.</p>
+        <p class="quando" style="margin:3px 0 0;max-width:660px">Alunas <b>matriculadas fixas</b> em cada turma — <b>contadas mesmo se faltarem</b>. Ficam de fora experimentais, <b>reposições</b> e planos <b>FREE</b>. Use para ver <b>vaga de matrícula</b>. O <b>sábado</b> aparece na grade, mas <b>não entra</b> na taxa de ocupação nem na ocupação por professora (é considerado <b>escala</b>).</p>
       </div>
       <button id="btnAt" class="save" onclick="atualizar()" style="white-space:nowrap"${g ? ' disabled' : ''}>${g ? '⏳ gerando…' : '🔄 Atualizar'}</button>
     </div>
