@@ -117,6 +117,7 @@ def montar_grade(evo=None, dias=7, branch_id=None, now=None, **_ignored):
     turmas = []
     seen = set()
     total_fixas = 0
+    alunas_fixas_ids = set()      # alunas DISTINTAS que são fixas em >=1 turma
     d = inicio
     while d <= fim:
         dstr = d.strftime("%Y-%m-%d")
@@ -139,6 +140,7 @@ def montar_grade(evo=None, dias=7, branch_id=None, now=None, **_ignored):
                     incerto += 1          # não deu p/ checar (erro) → não conta como fixa
                 elif idc in fs:
                     fixas.append(nome)
+                    alunas_fixas_ids.add(idm)
             fixas = sorted(fixas, key=_norm)
             cap = s.get("capacity")
             nf = len(fixas)
@@ -153,6 +155,27 @@ def montar_grade(evo=None, dias=7, branch_id=None, now=None, **_ignored):
         d += timedelta(days=1)
 
     turmas.sort(key=lambda t: (t["data"], t["hora"]))
+
+    # Métricas agregadas (para os KPIs da página /grade):
+    # - total_vagas = soma das capacidades (vagas totais da semana do Studio);
+    # - ocupacao_pct = % dessas vagas ocupado por matrículas FIXAS;
+    # - por_professora = ocupação (fixas/capacidade) de cada professora.
+    total_vagas = sum(t["capacity"] for t in turmas if t["capacity"])
+    ocupacao_pct = round(total_fixas / total_vagas * 100) if total_vagas else None
+    prof_agg = {}
+    for t in turmas:
+        p = t["professora"] or "—"
+        a = prof_agg.setdefault(p, {"fixas": 0, "vagas": 0, "turmas": 0})
+        a["fixas"] += t["nFixas"]
+        if t["capacity"]:
+            a["vagas"] += t["capacity"]
+        a["turmas"] += 1
+    por_professora = sorted(
+        ({"professora": p, "fixas": a["fixas"], "vagas": a["vagas"], "turmas": a["turmas"],
+          "pct": (round(a["fixas"] / a["vagas"] * 100) if a["vagas"] else None)}
+         for p, a in prof_agg.items()),
+        key=lambda x: (x["pct"] is None, -(x["pct"] or 0), x["professora"]))
+
     return {
         "gerado_em": now.strftime("%Y-%m-%d %H:%M"),
         "inicio": inicio.strftime("%Y-%m-%d"),
@@ -161,5 +184,12 @@ def montar_grade(evo=None, dias=7, branch_id=None, now=None, **_ignored):
         "dias": [(inicio + timedelta(days=i)).strftime("%Y-%m-%d")
                  for i in range((fim - inicio).days + 1)],
         "turmas": turmas,
-        "resumo": {"fixas": total_fixas, "turmas": len(turmas)},
+        "por_professora": por_professora,
+        "resumo": {
+            "fixas": total_fixas,                 # matrículas fixas (turma-slots)
+            "alunas_fixas": len(alunas_fixas_ids),  # alunas DISTINTAS fixas
+            "turmas": len(turmas),
+            "total_vagas": total_vagas,
+            "ocupacao_pct": ocupacao_pct,
+        },
     }

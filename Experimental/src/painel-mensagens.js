@@ -834,6 +834,7 @@ function navTabs(ativo) {
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp', 'msg');
   html += item('ig', '/instagram', '📸', 'Instagram');
   if (sess.admin) html += cel('/perfis', ativo === 'perfis', '👤', 'Perfis', 'perfis');
+  html += cel('/grade', ativo === 'grade', '📋', 'Grade', 'grade');
   if (sess.admin || (sess.telas || []).includes('saude')) html += cel('/saude', ativo === 'saude', '🩺', 'Saúde', 'saude');
   if (temSofia(sess)) html += cel(sofiaHref(sess), ativo === 'sofia', '🤖', 'SoFIA', 'sofia');
   return html;
@@ -4863,8 +4864,19 @@ function paginaGrade() {
   } else {
     const turmas = snap.turmas, r = snap.resumo || {};
     // KPIs
-    let nLot = 0, nVaga = 0;
-    for (const t of turmas) { const k = tierOf(t).k; if (k === 'cheia') nLot++; else if (k === 'livre' || k === 'quase') nVaga++; }
+    const alunasFixas = (r.alunas_fixas != null) ? r.alunas_fixas : null;
+    const ocupPct = (r.ocupacao_pct != null) ? r.ocupacao_pct : null;
+    // Total de alunas matriculadas: contagem da tag "0. Aluna" no CRM (sem tocar o EVO).
+    let totalAlunas = null;
+    try {
+      const tagAl = (autoTagAlunas.ler().tagAluna || '0. Aluna');
+      const nrm = (s) => String(s || '').trim().toLowerCase();
+      const found = contatos.tagsDistintas().find(x => nrm(x.tag) === nrm(tagAl));
+      if (found) totalAlunas = found.n;
+    } catch (_) {}
+    const pctAlunasFixas = (totalAlunas && alunasFixas != null) ? Math.round(alunasFixas / totalAlunas * 100) : null;
+    const porProf = Array.isArray(snap.por_professora) ? snap.por_professora : [];
+    const profTier = (pc) => (pc == null ? 'nd' : (pc >= 90 ? 'cheia' : (pc >= 70 ? 'quase' : 'livre')));
     // DESKTOP — grade semanal (colunas = dias; linhas = horários)
     const diaPorWd = {};
     for (const t of turmas) if (!(t.weekday in diaPorWd)) diaPorWd[t.weekday] = t.data;
@@ -4894,13 +4906,23 @@ function paginaGrade() {
       return `<div class="gr-day"><div class="gr-day-h">${WD[wd]} · ${fmtDia(data)}</div>${items}</div>`;
     }).join('') + `</div>`;
 
+    const profRows = porProf.length ? porProf.map(p => {
+      const tier = profTier(p.pct);
+      return `<div class="gr-prof-row">
+        <div class="gr-prof-nm">${escH(p.professora)}<span class="gr-prof-sub">${p.turmas} turma${p.turmas === 1 ? '' : 's'} · ${p.fixas}/${p.vagas} vagas fixas</span></div>
+        <div class="gr-prof-bar"><span class="t-${tier}" style="width:${p.pct != null ? Math.min(100, p.pct) : 0}%"></span></div>
+        <div class="gr-prof-pc t-${tier}">${p.pct != null ? p.pct + '%' : '—'}</div>
+      </div>`;
+    }).join('') : '<p class="quando" style="margin:0">Sem turmas.</p>';
+
     corpo = `<div class="stats">
       <div class="stat tot"><div class="n">${r.turmas != null ? r.turmas : turmas.length}</div><div class="l">turmas</div></div>
-      <div class="stat"><div class="n">${r.fixas != null ? r.fixas : ''}</div><div class="l">matrículas fixas</div></div>
-      <div class="stat ok"><div class="n">${nVaga}</div><div class="l">com vaga</div></div>
-      <div class="stat err"><div class="n">${nLot}</div><div class="l">lotadas</div></div>
+      <div class="stat"><div class="n">${alunasFixas != null ? alunasFixas : (r.fixas != null ? r.fixas : '')}</div><div class="l">alunas fixas</div>${pctAlunasFixas != null ? `<div class="gr-sub">${pctAlunasFixas}% das ${totalAlunas} alunas</div>` : `<div class="gr-sub">${r.fixas != null ? r.fixas : '—'} matrículas fixas</div>`}</div>
+      <div class="stat ok"><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação</div>${r.total_vagas ? `<div class="gr-sub">${r.fixas}/${r.total_vagas} vagas</div>` : ''}</div>
     </div>
-    <p class="quando" style="display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:0 0 8px">
+    <div class="sec-t" data-nosec>Ocupação por professora</div>
+    <div class="card" style="padding:10px 15px">${profRows}</div>
+    <p class="quando" style="display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:4px 0 8px">
       <span>Período <b>${fmtDia(snap.inicio)}–${fmtDia(snap.fim)}</b></span>
       <span style="color:var(--faint)">gerado ${escH(snap.gerado_em || '')} · fixa = matrícula do contrato (EVO)</span>
       <span class="gr-leg"><i><b class="lg-livre"></b>vaga</i><i><b class="lg-quase"></b>quase (1-2)</i><i><b class="lg-cheia"></b>lotada</i></span>
@@ -4949,6 +4971,18 @@ function paginaGrade() {
     .gr-item.t-livre{border-left-color:var(--ok)}.gr-item.t-quase{border-left-color:var(--warn)}.gr-item.t-cheia{border-left-color:var(--erro)}.gr-item.t-nd{border-left-color:var(--linha)}
     .gr-item-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
     .gr-hora{font-weight:800;font-size:1.04rem;color:var(--tinta);font-variant-numeric:tabular-nums}
+    /* KPI: subtexto abaixo do número */
+    .gr-sub{font-size:.66rem;color:var(--cinza);margin-top:4px;font-weight:600;line-height:1.3}
+    /* ocupação por professora */
+    .gr-prof-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--linha-soft)}
+    .gr-prof-row:first-child{border-top:0}
+    .gr-prof-nm{flex:1 1 42%;min-width:0;font-weight:700;font-size:var(--fs-sm);color:var(--tinta);display:flex;flex-direction:column}
+    .gr-prof-sub{font-weight:500;font-size:var(--fs-xs);color:var(--cinza);margin-top:1px}
+    .gr-prof-bar{flex:1 1 34%;height:8px;border-radius:5px;background:var(--linha-soft);overflow:hidden;min-width:56px}
+    .gr-prof-bar span{display:block;height:100%;border-radius:5px;background:var(--teal)}
+    .gr-prof-bar span.t-livre{background:var(--ok)}.gr-prof-bar span.t-quase{background:var(--warn)}.gr-prof-bar span.t-cheia{background:var(--erro)}
+    .gr-prof-pc{flex:none;width:46px;text-align:right;font-weight:800;font-size:var(--fs-sm);font-variant-numeric:tabular-nums;color:var(--tinta)}
+    .gr-prof-pc.t-livre{color:var(--ok)}.gr-prof-pc.t-quase{color:var(--warn)}.gr-prof-pc.t-cheia{color:var(--erro)}
     @media(max-width:760px){ .gr-desk{display:none} .gr-mob{display:block} }
     </style>
     <div class="gr-top">
@@ -4968,7 +5002,7 @@ function paginaGrade() {
       if(gerando) setTimeout(poll,4000);
     </script>
   </div>`;
-  return chrome({ tab: 'Grade' }, '', corpoWrap);
+  return chrome({ tab: 'Grade' }, 'grade', corpoWrap);
 }
 
 // Página de login (sem menu). Simples: usuário + senha.
