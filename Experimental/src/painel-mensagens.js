@@ -7348,7 +7348,12 @@ function processarEventos() {
     // OU um desfecho de presença que prova o agendamento — ver provasAgendou acima).
     if (ev.motivo === 'encerrou') {
       try {
-        const c = contatos.carregar()[contatos.normTel(tel)];
+        // Busca TOLERANTE ao 9º dígito (acharPorTel), não por chave exata: o mesmo
+        // número pode estar guardado numa forma (com/sem o 9) e chegar no evento na
+        // outra. Com a busca exata, a trava não achava o contato e marcava "Encerrado
+        // sem agendamento" em quem já tinha "...com Agendamento sem Presença" (no-show).
+        const r = contatos.acharPorTel(tel);
+        const c = r && r.contato;
         if (c && (c.tags || []).some(t => provasAgendou.has(String(t || '').trim().toLowerCase()))) continue;
       } catch (_) {}
     }
