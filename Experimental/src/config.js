@@ -105,6 +105,7 @@ const config = {
     agendadosTarde:   '45 15 * * *',    // 15:45 todos os dias (envios agendados no painel — turno tarde)
     comparecimento:   '0 16 * * 6',     // 16:00 sábado (cruza presença da semana no EVO → troca tags)
     inadimplentes:    '20 10 * * 1-6',  // 10:20 seg-sáb (cobra quem está com débito vencido há 2+ dias)
+    gradeFixas:       '40 5 * * *',     // 05:40 todo dia — atualiza a grade de MATRÍCULAS FIXAS (página /grade do painel), em horário calmo do EVO
   },
 
   // Filtros de horário

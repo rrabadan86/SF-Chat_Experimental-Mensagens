@@ -36,6 +36,26 @@ function runSlotsPush(motivo) {
   });
 }
 
+// Atualiza a grade de MATRÍCULAS FIXAS (página /grade do painel) — lê o EVO e grava
+// data/grade-fixas.json. Processo Python leve (não usa o navegador/WhatsApp), mas faz
+// dezenas de chamadas ao EVO (1 por aluna), então roda 1x/dia em horário calmo. O
+// botão "Atualizar grade agora" do painel faz o mesmo sob demanda.
+let _gradeFixasRunning = false;
+function runGradeFixas(motivo) {
+  if (_gradeFixasRunning) return;           // já há uma geração em andamento
+  _gradeFixasRunning = true;
+  const dir = path.resolve(__dirname, 'agendamento_evo');
+  const script = path.join(dir, 'run_grade_fixas.py');
+  const py = process.env.PYTHON_BIN || 'python3';
+  const tag = motivo ? ` (${motivo})` : '';
+  execFile(py, [script, '--dias', '7'], { cwd: dir, timeout: 600000 }, (err, stdout, stderr) => {
+    _gradeFixasRunning = false;
+    const out = (stdout || stderr || '').trim();
+    if (err) { logError('Grade de fixas (run_grade_fixas)' + tag, err); if (out) console.log('   ' + out); return; }
+    log('📋 ' + (out || 'grade de fixas atualizada') + tag);
+  });
+}
+
 // Convocatória do Circuito (quarta): lê a professora na Grade (usa o scraper do
 // EVO), então respeita o jobRunning. Se outro job estiver rodando, espera e
 // tenta de novo (não pode logar no EVO em paralelo com outro job).
@@ -1014,6 +1034,11 @@ async function main() {
     cron.schedule(config.schedule.slotsPushNoite, runSlotsPush, { timezone: 'America/Sao_Paulo' });
     log(`📅 Job GRADE→FORMULÁRIO (noite) agendado: ${config.schedule.slotsPushNoite} (a cada ~3h, 22h-06h)`);
     _slotsAgendado = true;
+  }
+  // Grade de MATRÍCULAS FIXAS (página /grade): atualiza sozinha 1x/dia.
+  if (config.schedule.gradeFixas) {
+    cron.schedule(config.schedule.gradeFixas, () => runGradeFixas('agendado'), { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job GRADE DE FIXAS agendado: ${config.schedule.gradeFixas} (atualiza a página /grade)`);
   }
   if (_slotsAgendado) {
     console.log('   → Calcula os horários e envia prontos ao formulário de agendamento');
