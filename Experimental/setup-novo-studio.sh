@@ -453,7 +453,11 @@ if [ "$START" = "1" ]; then
       echo "⏭️  $FORM_DIR/.env já existe — mantido."
     fi
     pm2 delete "$P_FORM" >/dev/null 2>&1 || true
-    ( cd "$FORM_DIR" && pm2 start .venv/bin/gunicorn --name "$P_FORM" --time -- \
+    # --interpreter: o gunicorn é um script PYTHON sem extensão. Sem apontar o
+    # interpretador, pm2 novo (Node recente) tenta rodá-lo como módulo Node e quebra
+    # com "SyntaxError: Unexpected identifier 'gunicorn'". Forçamos o python do venv.
+    ( cd "$FORM_DIR" && pm2 start .venv/bin/gunicorn --name "$P_FORM" \
+        --interpreter "$FORM_DIR/.venv/bin/python" --time -- \
         formulario_web.app:app --workers 1 --threads 8 --timeout 120 --bind "127.0.0.1:$FORM_PORT" )
     # Se veio --domain, aponta o robô e a SoFIA para a subpasta (fecha a automação).
     if [ -n "$DOMAIN" ]; then
