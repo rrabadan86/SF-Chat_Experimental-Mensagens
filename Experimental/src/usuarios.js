@@ -26,6 +26,7 @@ const TELAS = [
   { key: 'msg_hoje', rot: '📊 Log', grupo: '💬 WhatsApp' },
   { key: 'ig', rot: '📸 Instagram' },
   { key: 'saude', rot: '🩺 Saúde' },
+  { key: 'grade', rot: '📋 Grade' },
   { key: 'sofia_conversas', rot: '💬 Conversas', grupo: '🤖 Sofia' },
   { key: 'sofia_config', rot: '⚙️ Configuração', grupo: '🤖 Sofia' },
   { key: 'sofia_contatos', rot: '📇 Contatos', grupo: '🤖 Sofia' },
