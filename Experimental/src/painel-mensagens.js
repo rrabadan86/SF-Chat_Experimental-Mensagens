@@ -4873,23 +4873,26 @@ function paginaGrade() {
     if (vagas <= 2) return { k: 'quase', txt: vagas + (vagas === 1 ? ' vaga' : ' vagas') };
     return { k: 'livre', txt: vagas + ' vagas' };
   };
-  const icPres = { foi: '✓', faltou: '✗', justif: '⚠' };
+  const icPres = { foi: '✓', faltou: '✗', justif: '⚠', trancada: '🔒' };
+  const titPres = { foi: 'foi à aula', faltou: 'faltou (sem justificar)', justif: 'falta justificada', trancada: 'trancada/suspensa' };
   // todos os nomes da turma (fixa + reposição + FREE), normalizados → busca
   const fxData = (t) => escH([].concat((t.fixas || []).map(x => (x && x.nome != null) ? x.nome : x),
     t.reposicao || [], t.free || []).map(nrmFx).join('|'));
   const conteudo = (t) => {
     const cap = t.capacity, nf = t.nFixas;
     const nReal = (t.nReal != null) ? t.nReal : nf;
-    const pctF = (cap && cap > 0) ? Math.min(100, Math.round(nf / cap * 100)) : 0;
-    const pctR = (cap && cap > 0) ? Math.max(0, Math.min(100 - pctF, Math.round((nReal - nf) / cap * 100))) : 0;
+    const nRepo = t.nRepo || 0, nFree = t.nFree || 0;
+    const occF = Math.max(0, nReal - nRepo - nFree);     // fixas que de fato ocuparam
+    const pctF = (cap && cap > 0) ? Math.min(100, Math.round(occF / cap * 100)) : 0;
+    const pctR = (cap && cap > 0) ? Math.max(0, Math.min(100 - pctF, Math.round((nRepo + nFree) / cap * 100))) : 0;
     const bar = (cap != null)
       ? `<div class="gr-bar"><span class="fx" style="width:${pctF}%"></span><span class="rp" style="width:${pctR}%"></span></div>`
       : '';
     const prof = t.professora ? `<div class="gr-prof">${escH(t.professora)}</div>` : '';
-    const extraNum = (nReal > nf) ? ` · <span class="gr-real">${nReal} na turma</span>` : '';
+    const extraNum = ` · <span class="gr-real">${nReal} na turma</span>`;
     const liFix = (t.fixas || []).map(x => {
       const nome = (x && x.nome != null) ? x.nome : x, p = x && x.pres;
-      const ic = p ? `<span class="pres pres-${p}">${icPres[p] || ''}</span>` : '';
+      const ic = p ? `<span class="pres pres-${p}" title="${titPres[p] || ''}">${icPres[p] || ''}</span>` : '';
       return `<li>${ic}${escH(nome)}</li>`;
     }).join('');
     const cab = (t.aconteceu && t.presentes != null)
@@ -5007,7 +5010,7 @@ function paginaGrade() {
     .gr-grp ul{margin:1px 0 0;padding-left:16px}
     .gr-grp li{font-size:var(--fs-xs);color:var(--tinta);line-height:1.5}
     .pres{display:inline-block;width:1.15em;font-weight:800;margin-left:-2px}
-    .pres-foi{color:var(--ok)}.pres-faltou{color:var(--erro)}.pres-justif{color:var(--warn)}
+    .pres-foi{color:var(--ok)}.pres-faltou{color:var(--erro)}.pres-justif{color:var(--warn)}.pres-trancada{color:var(--cinza);font-size:.82em}
     .gr-vazio2{color:var(--faint);list-style:none;margin-left:-16px}
     .gr-th-d{display:block;font-size:.64rem;font-weight:600;opacity:.82;letter-spacing:0;text-transform:none;margin-top:1px}
     .gr-prof{font-size:var(--fs-xs);color:var(--cinza);margin-bottom:3px}
@@ -5063,7 +5066,7 @@ function paginaGrade() {
     <div class="gr-top">
       <div>
         <div class="sec-t" style="margin:0" data-nosec>📋 Grade de Matrículas Fixas</div>
-        <p class="quando" style="margin:3px 0 0;max-width:720px">Visão da <b>semana</b>. O selo e a barra cheia são a <b>vaga de matrícula</b> (fixas) — contadas mesmo se faltarem. A faixa listrada e o "<b>na turma</b>" mostram a ocupação <b>real</b> (fixas + <b>reposição</b> + <b>FREE</b>). Clique numa turma para ver os nomes separados e, nas aulas que <b>já aconteceram</b>, quem <b>foi (✓)</b> e quem <b>faltou (✗)</b>. O <b>sábado</b> não entra na taxa de ocupação (é <b>escala</b>).</p>
+        <p class="quando" style="margin:3px 0 0;max-width:740px">Visão da <b>semana</b>. O selo é a <b>vaga de matrícula</b> (fixas, contadas mesmo faltando). O "<b>na turma</b>" é a ocupação <b>real</b> (quem ocupou a vaga: presentes + reposição/FREE) — <b>falta</b>, <b>falta justificada</b> e <b>trancado</b> liberam a vaga e não contam (por isso nunca passa da capacidade). Clique numa turma para ver os nomes: <b>✓ foi</b> · <b>✗ faltou</b> · <b>⚠ falta justificada</b> · <b>🔒 trancada</b>. O <b>sábado</b> não entra na taxa de ocupação (<b>escala</b>).</p>
       </div>
       <button id="btnAt" class="save" onclick="atualizar()" style="white-space:nowrap"${g ? ' disabled' : ''}>${g ? '⏳ gerando…' : '🔄 Atualizar'}</button>
     </div>

@@ -60,16 +60,33 @@ def _matricula_ativa(e, hoje):
         return True
 
 
-def _presenca(info):
-    """'foi' | 'faltou' | 'justif' | '?' a partir do status do roster (dict com as
-    chaves 'status' e 'justif')."""
+def _presenca(info, aconteceu):
+    """Situação da FIXA na ocorrência: 'trancada' | 'foi' | 'faltou' | 'justif' | None
+    (None = aula ainda não aconteceu)."""
+    if info.get("suspended"):
+        return "trancada"            # trancamento/suspensão (libera a vaga)
+    if not aconteceu:
+        return None
     if info.get("justif") or info.get("status") == 2:
-        return "justif"
+        return "justif"              # falta justificada (libera a vaga → reposição)
     if info.get("status") == 1:
-        return "faltou"
+        return "faltou"              # falta não justificada (não compareceu)
     if info.get("status") == 0:
         return "foi"
     return "?"
+
+
+def _ocupa(info, aconteceu):
+    """True se a matrícula OCUPA uma vaga na aula (conta na ocupação real). Libera a
+    vaga (NÃO conta): trancado/suspenso, falta justificada e — se a aula já aconteceu —
+    também a falta não justificada (não compareceu)."""
+    if info.get("suspended"):
+        return False
+    if info.get("justif") or info.get("status") == 2:
+        return False
+    if aconteceu and info.get("status") == 1:
+        return False
+    return True
 
 
 def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None, **_ignored):
@@ -118,6 +135,7 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None, **_ignored
                     r[x["idMember"]] = {
                         "nome": (x.get("name") or f"id={x['idMember']}").strip(),
                         "status": x.get("status"), "justif": bool(x.get("justifiedAbsence")),
+                        "suspended": bool(x.get("suspended")),
                     }
                 det_cache[key] = r
             except Exception:
@@ -154,26 +172,35 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None, **_ignored
             seen.add((idc, d))
             aconteceu = dt <= now
             roster = _roster(idc, dstr) or {}
+            # fixas = TODAS as matrículas fixas desta turma (vaga de matrícula, com a
+            # situação de cada uma). reposição/FREE listadas só quando OCUPAM vaga.
+            # Ocupação real (n_real) só conta quem ocupa (exclui falta/justif/trancado).
             fixas, reposicao, free = [], [], []
             incerto = 0
+            occ_fix = 0
             for idm, info in roster.items():
                 fs = _fixset(idm)
                 nome = info["nome"]
+                oc = _ocupa(info, aconteceu)
                 if fs is None:
                     incerto += 1
                 elif idc in fs:                         # FIXA desta turma
-                    fixas.append({"nome": nome, "pres": _presenca(info) if aconteceu else None})
+                    fixas.append({"nome": nome, "pres": _presenca(info, aconteceu)})
                     alunas_fixas_ids.add(idm)
+                    if oc:
+                        occ_fix += 1
                 elif fs:                                # fixa em OUTRA turma → reposição
-                    reposicao.append(nome)
+                    if oc:
+                        reposicao.append(nome)
                 else:                                   # sem turma fixa → FREE
-                    free.append(nome)
+                    if oc:
+                        free.append(nome)
             fixas.sort(key=lambda x: _norm(x["nome"]))
             reposicao.sort(key=_norm)
             free.sort(key=_norm)
             cap = s.get("capacity")
             nf = len(fixas)
-            n_real = nf + len(reposicao) + len(free)
+            n_real = occ_fix + len(reposicao) + len(free)   # ocupação real (≤ capacidade)
             total_fixas += nf
             presentes = sum(1 for x in fixas if x["pres"] == "foi") if aconteceu else None
             faltas = sum(1 for x in fixas if x["pres"] in ("faltou", "justif")) if aconteceu else None
