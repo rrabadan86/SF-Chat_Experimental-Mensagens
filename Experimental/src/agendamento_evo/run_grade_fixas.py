@@ -26,13 +26,15 @@ def main():
                     help="offset de semana (0 = atual, -1 = anterior, 1 = próxima)")
     ap.add_argument("--print", dest="imprimir", action="store_true",
                     help="imprime um resumo legível (além de gravar o JSON)")
+    ap.add_argument("--sem-financeiro", dest="sem_financeiro", action="store_true",
+                    help="NÃO calcula o TKM/faturamento (mais rápido, menos chamadas ao EVO)")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr,
                         format="%(levelname)s %(name)s: %(message)s")
 
     from evo_agendamento.grade_fixas import montar_grade
-    res = montar_grade(semana_offset=args.semana)
+    res = montar_grade(semana_offset=args.semana, financeiro=(not args.sem_financeiro))
 
     # snapshot servido pela página /grade. Semana atual = grade-fixas.json; outras
     # semanas = grade-fixas.s<off>.json (para a navegação de semanas).
@@ -53,6 +55,16 @@ def main():
         oc = r.get('ocupacao_pct')
         print(f"   ocupação por fixas (sem sábado): {oc if oc is not None else '?'}% "
               f"({r.get('ocupacao_fixas', '?')}/{r.get('ocupacao_vagas', '?')} vagas)")
+        pr = r.get('presenca_pct')
+        if pr is not None:
+            print(f"   presença na turma (aulas realizadas): {pr}% "
+                  f"({r.get('presenca_real', '?')}/{r.get('presenca_vagas', '?')} vagas)")
+        if r.get('tkm_medio') is not None:
+            print(f"   TKM médio (contrato mensalizado): R$ {r['tkm_medio']:.2f} "
+                  f"(de {r.get('tkm_alunas', '?')} alunas)")
+        if r.get('fatura_mes') is not None:
+            print(f"   faturamento do mês (vencimento): R$ {r['fatura_mes']:.2f} "
+                  f"({r.get('fatura_alunas', '?')} alunas)")
         print(f"   arquivo: {out}\n")
         _WD = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
         _IC = {"foi": "✓", "faltou": "✗", "justif": "⚠"}

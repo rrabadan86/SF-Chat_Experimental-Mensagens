@@ -4862,6 +4862,8 @@ function paginaGrade() {
   const escH = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   // nome normalizado (sem acento, minúsculo) para a busca de aluna
   const nrmFx = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  // R$ com separador de milhar (sem depender de toLocaleString/ICU no servidor)
+  const fmtBRL = (v) => (v == null) ? '—' : ('R$ ' + String(Math.round(Number(v))).replace(/\B(?=(\d{3})+(?!\d))/g, '.'));
   const snap = _gradeSnapshot();
   const g = _gradeGerando;
   const WD = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
@@ -4893,7 +4895,8 @@ function paginaGrade() {
     const liFix = (t.fixas || []).map(x => {
       const nome = (x && x.nome != null) ? x.nome : x, p = x && x.pres;
       const ic = p ? `<span class="pres pres-${p}" title="${titPres[p] || ''}">${icPres[p] || ''}</span>` : '';
-      return `<li>${ic}${escH(nome)}</li>`;
+      const tk = (x && x.ticket != null) ? `<span class="gr-tk" title="${escH(x.plano || '')}">${fmtBRL(x.ticket)}/mês</span>` : '';
+      return `<li>${ic}${escH(nome)}${tk}</li>`;
     }).join('');
     const cab = (t.aconteceu && t.presentes != null)
       ? ` · <span class="pres-foi">${t.presentes} ${t.presentes === 1 ? 'foi' : 'foram'}</span>${t.faltas ? ` · <span class="pres-faltou">${t.faltas} ${t.faltas === 1 ? 'faltou' : 'faltaram'}</span>` : ''}`
@@ -4918,6 +4921,8 @@ function paginaGrade() {
     const alunasFixas = (r.alunas_fixas != null) ? r.alunas_fixas : null;
     const ocupPct = (r.ocupacao_pct != null) ? r.ocupacao_pct : null;
     const presPct = (r.presenca_pct != null) ? r.presenca_pct : null;
+    const tkmMed = (r.tkm_medio != null) ? r.tkm_medio : null;
+    const fatMes = (r.fatura_mes != null) ? r.fatura_mes : null;
     // Total de alunas matriculadas: contagem da tag "0. Aluna" no CRM (sem tocar o EVO).
     let totalAlunas = null;
     try {
@@ -4971,8 +4976,9 @@ function paginaGrade() {
         <div class="gr-prof-bar"><span class="prez" style="width:${presPc != null ? Math.min(100, presPc) : 0}%"></span></div>
         <span class="gr-prof-pc prez">${presPc != null ? presPc + '%' : '—'}</span>
       </div>`;
+      const tkmPill = (p.tkm != null) ? `<span class="gr-prof-tkm" title="ticket mensal médio das ${p.tkm_n || 0} alunas fixas dela">TKM ${fmtBRL(p.tkm)}</span>` : '';
       return `<div class="gr-prof-row">
-        <div class="gr-prof-nm">${escH(p.professora)}<span class="gr-prof-sub">${p.turmas} turma${p.turmas === 1 ? '' : 's'} · ${p.fixas}/${p.vagas} vagas fixas${p.pres_turmas ? ` · ${p.pres_turmas} realizada${p.pres_turmas === 1 ? '' : 's'}` : ''}</span></div>
+        <div class="gr-prof-nm">${escH(p.professora)}${tkmPill}<span class="gr-prof-sub">${p.turmas} turma${p.turmas === 1 ? '' : 's'} · ${p.fixas}/${p.vagas} vagas fixas${p.pres_turmas ? ` · ${p.pres_turmas} realizada${p.pres_turmas === 1 ? '' : 's'}` : ''}</span></div>
         <div class="gr-prof-bars">${linhaFix}${linhaPres}</div>
       </div>`;
     }).join('') : '<p class="quando" style="margin:0">Clique em <b>🔄 Atualizar</b> para gerar a ocupação por professora.</p>';
@@ -4982,10 +4988,12 @@ function paginaGrade() {
       <div class="stat"><div class="n">${alunasFixas != null ? alunasFixas : '—'}</div><div class="l">alunas fixas</div><div class="gr-sub">${alunasFixas == null ? 'atualize a grade' : (pctAlunasFixas != null ? `${pctAlunasFixas}% de ${totalAlunas} alunas` : (r.fixas != null ? `${r.fixas} matrículas fixas` : ''))}</div></div>
       <div class="stat ok"><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação FIXAS</div><div class="gr-sub">${ocupPct == null ? 'atualize a grade' : (r.ocupacao_vagas ? `${r.ocupacao_fixas}/${r.ocupacao_vagas} vagas · sem sáb` : '')}</div></div>
       <div class="stat prez"><div class="n">${presPct != null ? presPct + '%' : '—'}</div><div class="l">presença na turma</div><div class="gr-sub">${presPct == null ? 'aulas já realizadas' : (r.presenca_vagas ? `${r.presenca_real}/${r.presenca_vagas} vagas · realizadas` : '')}</div></div>
+      ${tkmMed != null ? `<div class="stat tkm"><div class="n">${fmtBRL(tkmMed)}</div><div class="l">TKM médio</div><div class="gr-sub">contrato mensalizado · ${r.tkm_alunas || 0} alunas</div></div>` : ''}
+      ${fatMes != null ? `<div class="stat fat"><div class="n">${fmtBRL(fatMes)}</div><div class="l">faturamento do mês</div><div class="gr-sub">a vencer no mês · ${r.fatura_alunas || 0} alunas</div></div>` : ''}
     </div>
     <div class="sec-t" data-nosec>Ocupação &amp; presença por professora</div>
     <p class="quando" style="margin:0 0 6px">
-      <b>Fixas</b> = matrículas fixas ÷ vagas (quanto da agenda dela está vendida). <b>Presença</b> = quem de fato ocupou a aula (fixas presentes + reposição + FREE) ÷ vagas, só nas aulas já realizadas. Sem sábado (escala).</p>
+      <b>Fixas</b> = matrículas fixas ÷ vagas (quanto da agenda dela está vendida). <b>Presença</b> = quem de fato ocupou a aula (fixas presentes + reposição + FREE) ÷ vagas, só nas aulas já realizadas. Sem sábado (escala).${tkmMed != null ? ' <b>TKM</b> = ticket mensal médio das alunas fixas dela (valor do contrato vigente ÷ meses).' : ''}</p>
     <div class="card" style="padding:10px 15px">${profRows}</div>
     <p class="quando" style="display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:4px 0 8px">
       <span>Período <b>${fmtDia(snap.inicio)}–${fmtDia(snap.fim)}</b></span>
@@ -5080,8 +5088,13 @@ function paginaGrade() {
     .gr-prof-pc{flex:none;width:44px;text-align:right;font-weight:800;font-size:var(--fs-sm);font-variant-numeric:tabular-nums;color:var(--tinta)}
     .gr-prof-pc.t-livre{color:var(--ok)}.gr-prof-pc.t-quase{color:var(--warn)}.gr-prof-pc.t-cheia{color:var(--erro)}
     .gr-prof-pc.prez{color:#3f5e9e}
-    /* KPI presença na turma */
+    /* KPI presença na turma + financeiro (TKM / faturamento) */
     .stat.prez .n{color:#3f5e9e}
+    .stat.tkm .n{color:var(--teal)}
+    .stat.fat .n{color:#9a6b00}
+    /* TKM por professora (pílula) e valor por aluna no expandir */
+    .gr-prof-tkm{display:inline-block;margin-left:8px;font-size:var(--fs-xs);font-weight:800;color:var(--teal-esc);background:var(--teal-soft);border:1px solid var(--teal);border-radius:999px;padding:1px 8px;vertical-align:middle;font-variant-numeric:tabular-nums}
+    .gr-tk{margin-left:7px;font-size:.66rem;font-weight:700;color:var(--teal);font-variant-numeric:tabular-nums}
     @media(max-width:760px){ .gr-desk{display:none} .gr-mob{display:block} }
     </style>
     <div class="gr-top">
