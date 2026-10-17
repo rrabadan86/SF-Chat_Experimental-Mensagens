@@ -163,7 +163,6 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
     seen = set()
     total_fixas = 0
     alunas_fixas_ids = set()
-    prof_fixa_ids = {}            # professora -> set(idMember das fixas dela) p/ o TKM
     for d in dias_semana:
         dstr = d.strftime("%Y-%m-%d")
         for s in _week_sched(d):
@@ -195,7 +194,6 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
                     fixas.append({"nome": nome, "pres": _presenca(info, aconteceu),
                                   "idm": idm})
                     alunas_fixas_ids.add(idm)
-                    prof_fixa_ids.setdefault(prof, set()).add(idm)
                     if oc:
                         occ_fix += 1
                 elif fs:                                # fixa em OUTRA turma → reposição
@@ -236,8 +234,6 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
                 if f:
                     x["ticket"] = f.get("ticket")
                     x["plano"] = f.get("plano")
-    tkm_por_prof = ({p: fin_mod.tkm_prof(fin, ids) for p, ids in prof_fixa_ids.items()}
-                    if fin else {})
     fin_resumo = fin_mod.resumir(fin) if fin else {}
 
     # Métricas agregadas — por FIXAS, excluindo o SÁBADO (escala) da ocupação.
@@ -267,9 +263,7 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
           "pct": (round(a["fixas"] / a["vagas"] * 100) if a["vagas"] else None),
           "pres_real": a["pres_real"], "pres_vagas": a["pres_vagas"],
           "pres_turmas": a["pres_turmas"],
-          "pres_pct": (round(a["pres_real"] / a["pres_vagas"] * 100) if a["pres_vagas"] else None),
-          "tkm": tkm_por_prof.get(p, (None, 0))[0],
-          "tkm_n": tkm_por_prof.get(p, (None, 0))[1]}
+          "pres_pct": (round(a["pres_real"] / a["pres_vagas"] * 100) if a["pres_vagas"] else None)}
          for p, a in prof_agg.items()),
         key=lambda x: (x["pct"] is None, -(x["pct"] or 0), x["professora"]))
     # PRESENÇA agregada da semana (aulas já realizadas, sem sábado).

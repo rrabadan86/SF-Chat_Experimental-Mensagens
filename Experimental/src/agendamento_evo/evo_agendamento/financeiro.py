@@ -154,11 +154,3 @@ def resumir(fin):
         "fatura_mes": round(sum(faturas), 2) if faturas else None,
         "fatura_alunas": len(faturas),
     }
-
-
-def tkm_prof(fin, ids):
-    """TKM médio (contrato mensalizado) das alunas fixas de uma professora."""
-    ts = [fin[i]["ticket"] for i in ids if fin.get(i, {}).get("ticket")]
-    if not ts:
-        return None, 0
-    return round(sum(ts) / len(ts), 2), len(ts)

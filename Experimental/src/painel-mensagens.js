@@ -4976,9 +4976,8 @@ function paginaGrade() {
         <div class="gr-prof-bar"><span class="prez" style="width:${presPc != null ? Math.min(100, presPc) : 0}%"></span></div>
         <span class="gr-prof-pc prez">${presPc != null ? presPc + '%' : '—'}</span>
       </div>`;
-      const tkmPill = (p.tkm != null) ? `<span class="gr-prof-tkm" title="ticket mensal médio das ${p.tkm_n || 0} alunas fixas dela">TKM ${fmtBRL(p.tkm)}</span>` : '';
       return `<div class="gr-prof-row">
-        <div class="gr-prof-nm">${escH(p.professora)}${tkmPill}<span class="gr-prof-sub">${p.turmas} turma${p.turmas === 1 ? '' : 's'} · ${p.fixas}/${p.vagas} vagas fixas${p.pres_turmas ? ` · ${p.pres_turmas} realizada${p.pres_turmas === 1 ? '' : 's'}` : ''}</span></div>
+        <div class="gr-prof-nm">${escH(p.professora)}<span class="gr-prof-sub">${p.turmas} turma${p.turmas === 1 ? '' : 's'} · ${p.fixas}/${p.vagas} vagas fixas${p.pres_turmas ? ` · ${p.pres_turmas} realizada${p.pres_turmas === 1 ? '' : 's'}` : ''}</span></div>
         <div class="gr-prof-bars">${linhaFix}${linhaPres}</div>
       </div>`;
     }).join('') : '<p class="quando" style="margin:0">Clique em <b>🔄 Atualizar</b> para gerar a ocupação por professora.</p>';
@@ -4993,7 +4992,7 @@ function paginaGrade() {
     </div>
     <div class="sec-t" data-nosec>Ocupação &amp; presença por professora</div>
     <p class="quando" style="margin:0 0 6px">
-      <b>Fixas</b> = matrículas fixas ÷ vagas (quanto da agenda dela está vendida). <b>Presença</b> = quem de fato ocupou a aula (fixas presentes + reposição + FREE) ÷ vagas, só nas aulas já realizadas. Sem sábado (escala).${tkmMed != null ? ' <b>TKM</b> = ticket mensal médio das alunas fixas dela (valor do contrato vigente ÷ meses).' : ''}</p>
+      <b>Fixas</b> = matrículas fixas ÷ vagas (quanto da agenda dela está vendida). <b>Presença</b> = quem de fato ocupou a aula (fixas presentes + reposição + FREE) ÷ vagas, só nas aulas já realizadas. Sem sábado (escala).</p>
     <div class="card" style="padding:10px 15px">${profRows}</div>
     <p class="quando" style="display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:4px 0 8px">
       <span>Período <b>${fmtDia(snap.inicio)}–${fmtDia(snap.fim)}</b></span>
@@ -5092,8 +5091,7 @@ function paginaGrade() {
     .stat.prez .n{color:#3f5e9e}
     .stat.tkm .n{color:var(--teal)}
     .stat.fat .n{color:#9a6b00}
-    /* TKM por professora (pílula) e valor por aluna no expandir */
-    .gr-prof-tkm{display:inline-block;margin-left:8px;font-size:var(--fs-xs);font-weight:800;color:var(--teal-esc);background:var(--teal-soft);border:1px solid var(--teal);border-radius:999px;padding:1px 8px;vertical-align:middle;font-variant-numeric:tabular-nums}
+    /* valor mensal por aluna no expandir */
     .gr-tk{margin-left:7px;font-size:.66rem;font-weight:700;color:var(--teal);font-variant-numeric:tabular-nums}
     @media(max-width:760px){ .gr-desk{display:none} .gr-mob{display:block} }
     </style>
