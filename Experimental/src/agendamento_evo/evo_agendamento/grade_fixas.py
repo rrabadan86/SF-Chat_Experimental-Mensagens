@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 import logging
 
 from . import config
+from . import financeiro as fin_mod
 from .evo_client import EvoClient
 from .util import agora_brasilia, session_start_datetime
 from .orchestrator import _match_activity
@@ -89,10 +90,14 @@ def _ocupa(info, aconteceu):
     return True
 
 
-def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None, **_ignored):
+def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
+                 financeiro=False, **_ignored):
     """Grade da semana (semana_offset: 0 = atual). Cada turma traz a vaga de matrícula
     (fixas), a ocupação real (fixas + reposição + FREE) e a presença das fixas nas
-    aulas que já aconteceram."""
+    aulas que já aconteceram.
+
+    financeiro=True calcula também o TKM (ticket mensal do contrato) e o faturamento
+    do mês por aluna — custa ~2 chamadas EVO a mais por aluna fixa (ver financeiro.py)."""
     evo = evo or EvoClient()
     now = now or agora_brasilia()
     hoje = now.date()
@@ -158,6 +163,7 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None, **_ignored
     seen = set()
     total_fixas = 0
     alunas_fixas_ids = set()
+    prof_fixa_ids = {}            # professora -> set(idMember das fixas dela) p/ o TKM
     for d in dias_semana:
         dstr = d.strftime("%Y-%m-%d")
         for s in _week_sched(d):
@@ -171,6 +177,7 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None, **_ignored
                 continue
             seen.add((idc, d))
             aconteceu = dt <= now
+            prof = _prof(s)
             roster = _roster(idc, dstr) or {}
             # fixas = TODAS as matrículas fixas desta turma (vaga de matrícula, com a
             # situação de cada uma). reposição/FREE listadas só quando OCUPAM vaga.
@@ -185,8 +192,10 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None, **_ignored
                 if fs is None:
                     incerto += 1
                 elif idc in fs:                         # FIXA desta turma
-                    fixas.append({"nome": nome, "pres": _presenca(info, aconteceu)})
+                    fixas.append({"nome": nome, "pres": _presenca(info, aconteceu),
+                                  "idm": idm})
                     alunas_fixas_ids.add(idm)
+                    prof_fixa_ids.setdefault(prof, set()).add(idm)
                     if oc:
                         occ_fix += 1
                 elif fs:                                # fixa em OUTRA turma → reposição
@@ -206,7 +215,7 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None, **_ignored
             faltas = sum(1 for x in fixas if x["pres"] in ("faltou", "justif")) if aconteceu else None
             turmas.append({
                 "data": dstr, "weekday": dt.weekday(), "hora": dt.strftime("%H:%M"),
-                "activity": s.get("name") or activity or "", "professora": _prof(s),
+                "activity": s.get("name") or activity or "", "professora": prof,
                 "idConfiguration": idc, "capacity": cap,
                 "nFixas": nf, "vagas": (max(cap - nf, 0) if cap is not None else None),
                 "nRepo": len(reposicao), "nFree": len(free), "nReal": n_real,
@@ -217,6 +226,20 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None, **_ignored
 
     turmas.sort(key=lambda t: (t["data"], t["hora"]))
 
+    # Financeiro / TKM (opcional — custa chamadas EVO a mais por aluna fixa).
+    fin = (fin_mod.carregar_financeiro(evo, alunas_fixas_ids, now, branch_id)
+           if financeiro else {})
+    if fin:
+        for t in turmas:                       # anexa o ticket de cada fixa p/ o "expandir"
+            for x in t["fixas"]:
+                f = fin.get(x.get("idm"))
+                if f:
+                    x["ticket"] = f.get("ticket")
+                    x["plano"] = f.get("plano")
+    tkm_por_prof = ({p: fin_mod.tkm_prof(fin, ids) for p, ids in prof_fixa_ids.items()}
+                    if fin else {})
+    fin_resumo = fin_mod.resumir(fin) if fin else {}
+
     # Métricas agregadas — por FIXAS, excluindo o SÁBADO (escala) da ocupação.
     total_vagas = sum(t["capacity"] for t in turmas if t["capacity"])
     uteis = [t for t in turmas if t["weekday"] != 5]
@@ -226,16 +249,33 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None, **_ignored
     prof_agg = {}
     for t in uteis:
         p = t["professora"] or "—"
-        a = prof_agg.setdefault(p, {"fixas": 0, "vagas": 0, "turmas": 0})
+        a = prof_agg.setdefault(p, {"fixas": 0, "vagas": 0, "turmas": 0,
+                                    "pres_real": 0, "pres_vagas": 0, "pres_turmas": 0})
         a["fixas"] += t["nFixas"]
         if t["capacity"]:
             a["vagas"] += t["capacity"]
         a["turmas"] += 1
+        # PRESENÇA na turma (ocupação REAL): só nas aulas que JÁ aconteceram, onde o
+        # nReal (fixas presentes + reposição + FREE que compareceram) é confiável.
+        if t["aconteceu"]:
+            a["pres_real"] += t["nReal"]
+            if t["capacity"]:
+                a["pres_vagas"] += t["capacity"]
+            a["pres_turmas"] += 1
     por_professora = sorted(
         ({"professora": p, "fixas": a["fixas"], "vagas": a["vagas"], "turmas": a["turmas"],
-          "pct": (round(a["fixas"] / a["vagas"] * 100) if a["vagas"] else None)}
+          "pct": (round(a["fixas"] / a["vagas"] * 100) if a["vagas"] else None),
+          "pres_real": a["pres_real"], "pres_vagas": a["pres_vagas"],
+          "pres_turmas": a["pres_turmas"],
+          "pres_pct": (round(a["pres_real"] / a["pres_vagas"] * 100) if a["pres_vagas"] else None),
+          "tkm": tkm_por_prof.get(p, (None, 0))[0],
+          "tkm_n": tkm_por_prof.get(p, (None, 0))[1]}
          for p, a in prof_agg.items()),
         key=lambda x: (x["pct"] is None, -(x["pct"] or 0), x["professora"]))
+    # PRESENÇA agregada da semana (aulas já realizadas, sem sábado).
+    pres_real_tot = sum(t["nReal"] for t in uteis if t["aconteceu"])
+    pres_vagas_tot = sum(t["capacity"] for t in uteis if t["aconteceu"] and t["capacity"])
+    presenca_pct = round(pres_real_tot / pres_vagas_tot * 100) if pres_vagas_tot else None
 
     return {
         "gerado_em": now.strftime("%Y-%m-%d %H:%M"),
@@ -254,5 +294,9 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None, **_ignored
             "ocupacao_pct": ocupacao_pct,
             "ocupacao_fixas": oc_fixas,
             "ocupacao_vagas": oc_vagas,
+            "presenca_pct": presenca_pct,
+            "presenca_real": pres_real_tot,
+            "presenca_vagas": pres_vagas_tot,
+            **fin_resumo,
         },
     }
