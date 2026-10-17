@@ -226,16 +226,31 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None, **_ignored
     prof_agg = {}
     for t in uteis:
         p = t["professora"] or "—"
-        a = prof_agg.setdefault(p, {"fixas": 0, "vagas": 0, "turmas": 0})
+        a = prof_agg.setdefault(p, {"fixas": 0, "vagas": 0, "turmas": 0,
+                                    "pres_real": 0, "pres_vagas": 0, "pres_turmas": 0})
         a["fixas"] += t["nFixas"]
         if t["capacity"]:
             a["vagas"] += t["capacity"]
         a["turmas"] += 1
+        # PRESENÇA na turma (ocupação REAL): só nas aulas que JÁ aconteceram, onde o
+        # nReal (fixas presentes + reposição + FREE que compareceram) é confiável.
+        if t["aconteceu"]:
+            a["pres_real"] += t["nReal"]
+            if t["capacity"]:
+                a["pres_vagas"] += t["capacity"]
+            a["pres_turmas"] += 1
     por_professora = sorted(
         ({"professora": p, "fixas": a["fixas"], "vagas": a["vagas"], "turmas": a["turmas"],
-          "pct": (round(a["fixas"] / a["vagas"] * 100) if a["vagas"] else None)}
+          "pct": (round(a["fixas"] / a["vagas"] * 100) if a["vagas"] else None),
+          "pres_real": a["pres_real"], "pres_vagas": a["pres_vagas"],
+          "pres_turmas": a["pres_turmas"],
+          "pres_pct": (round(a["pres_real"] / a["pres_vagas"] * 100) if a["pres_vagas"] else None)}
          for p, a in prof_agg.items()),
         key=lambda x: (x["pct"] is None, -(x["pct"] or 0), x["professora"]))
+    # PRESENÇA agregada da semana (aulas já realizadas, sem sábado).
+    pres_real_tot = sum(t["nReal"] for t in uteis if t["aconteceu"])
+    pres_vagas_tot = sum(t["capacity"] for t in uteis if t["aconteceu"] and t["capacity"])
+    presenca_pct = round(pres_real_tot / pres_vagas_tot * 100) if pres_vagas_tot else None
 
     return {
         "gerado_em": now.strftime("%Y-%m-%d %H:%M"),
@@ -254,5 +269,8 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None, **_ignored
             "ocupacao_pct": ocupacao_pct,
             "ocupacao_fixas": oc_fixas,
             "ocupacao_vagas": oc_vagas,
+            "presenca_pct": presenca_pct,
+            "presenca_real": pres_real_tot,
+            "presenca_vagas": pres_vagas_tot,
         },
     }

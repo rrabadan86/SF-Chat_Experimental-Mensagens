@@ -4889,7 +4889,7 @@ function paginaGrade() {
       ? `<div class="gr-bar"><span class="fx" style="width:${pctF}%"></span><span class="rp" style="width:${pctR}%"></span></div>`
       : '';
     const prof = t.professora ? `<div class="gr-prof">${escH(t.professora)}</div>` : '';
-    const extraNum = ` · <span class="gr-real">${nReal} na turma</span>`;
+    const extraNum = ` · <span class="gr-real">${nReal} presença</span>`;
     const liFix = (t.fixas || []).map(x => {
       const nome = (x && x.nome != null) ? x.nome : x, p = x && x.pres;
       const ic = p ? `<span class="pres pres-${p}" title="${titPres[p] || ''}">${icPres[p] || ''}</span>` : '';
@@ -4917,6 +4917,7 @@ function paginaGrade() {
     // KPIs
     const alunasFixas = (r.alunas_fixas != null) ? r.alunas_fixas : null;
     const ocupPct = (r.ocupacao_pct != null) ? r.ocupacao_pct : null;
+    const presPct = (r.presenca_pct != null) ? r.presenca_pct : null;
     // Total de alunas matriculadas: contagem da tag "0. Aluna" no CRM (sem tocar o EVO).
     let totalAlunas = null;
     try {
@@ -4959,19 +4960,32 @@ function paginaGrade() {
 
     const profRows = porProf.length ? porProf.map(p => {
       const tier = profTier(p.pct);
-      return `<div class="gr-prof-row">
-        <div class="gr-prof-nm">${escH(p.professora)}<span class="gr-prof-sub">${p.turmas} turma${p.turmas === 1 ? '' : 's'} · ${p.fixas}/${p.vagas} vagas fixas</span></div>
+      const presPc = (p.pres_pct != null) ? p.pres_pct : null;
+      const linhaFix = `<div class="gr-prof-ln">
+        <span class="gr-prof-cap">Fixas</span>
         <div class="gr-prof-bar"><span class="t-${tier}" style="width:${p.pct != null ? Math.min(100, p.pct) : 0}%"></span></div>
-        <div class="gr-prof-pc t-${tier}">${p.pct != null ? p.pct + '%' : '—'}</div>
+        <span class="gr-prof-pc t-${tier}">${p.pct != null ? p.pct + '%' : '—'}</span>
+      </div>`;
+      const linhaPres = `<div class="gr-prof-ln">
+        <span class="gr-prof-cap">Presença</span>
+        <div class="gr-prof-bar"><span class="prez" style="width:${presPc != null ? Math.min(100, presPc) : 0}%"></span></div>
+        <span class="gr-prof-pc prez">${presPc != null ? presPc + '%' : '—'}</span>
+      </div>`;
+      return `<div class="gr-prof-row">
+        <div class="gr-prof-nm">${escH(p.professora)}<span class="gr-prof-sub">${p.turmas} turma${p.turmas === 1 ? '' : 's'} · ${p.fixas}/${p.vagas} vagas fixas${p.pres_turmas ? ` · ${p.pres_turmas} realizada${p.pres_turmas === 1 ? '' : 's'}` : ''}</span></div>
+        <div class="gr-prof-bars">${linhaFix}${linhaPres}</div>
       </div>`;
     }).join('') : '<p class="quando" style="margin:0">Clique em <b>🔄 Atualizar</b> para gerar a ocupação por professora.</p>';
 
     corpo = `<div class="stats">
       <div class="stat tot"><div class="n">${r.turmas != null ? r.turmas : turmas.length}</div><div class="l">turmas</div></div>
       <div class="stat"><div class="n">${alunasFixas != null ? alunasFixas : '—'}</div><div class="l">alunas fixas</div><div class="gr-sub">${alunasFixas == null ? 'atualize a grade' : (pctAlunasFixas != null ? `${pctAlunasFixas}% de ${totalAlunas} alunas` : (r.fixas != null ? `${r.fixas} matrículas fixas` : ''))}</div></div>
-      <div class="stat ok"><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação</div><div class="gr-sub">${ocupPct == null ? 'atualize a grade' : (r.ocupacao_vagas ? `${r.ocupacao_fixas}/${r.ocupacao_vagas} vagas · sem sáb` : '')}</div></div>
+      <div class="stat ok"><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação FIXAS</div><div class="gr-sub">${ocupPct == null ? 'atualize a grade' : (r.ocupacao_vagas ? `${r.ocupacao_fixas}/${r.ocupacao_vagas} vagas · sem sáb` : '')}</div></div>
+      <div class="stat prez"><div class="n">${presPct != null ? presPct + '%' : '—'}</div><div class="l">presença na turma</div><div class="gr-sub">${presPct == null ? 'aulas já realizadas' : (r.presenca_vagas ? `${r.presenca_real}/${r.presenca_vagas} vagas · realizadas` : '')}</div></div>
     </div>
-    <div class="sec-t" data-nosec>Ocupação por professora</div>
+    <div class="sec-t" data-nosec>Ocupação &amp; presença por professora</div>
+    <p class="quando" style="margin:0 0 6px">
+      <b>Fixas</b> = matrículas fixas ÷ vagas (quanto da agenda dela está vendida). <b>Presença</b> = quem de fato ocupou a aula (fixas presentes + reposição + FREE) ÷ vagas, só nas aulas já realizadas. Sem sábado (escala).</p>
     <div class="card" style="padding:10px 15px">${profRows}</div>
     <p class="quando" style="display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:4px 0 8px">
       <span>Período <b>${fmtDia(snap.inicio)}–${fmtDia(snap.fim)}</b></span>
@@ -5051,22 +5065,29 @@ function paginaGrade() {
     .gr-liht{background:var(--ok-bg);border-radius:4px;padding:0 3px;font-weight:800}
     /* KPI: subtexto abaixo do número */
     .gr-sub{font-size:.66rem;color:var(--cinza);margin-top:4px;font-weight:600;line-height:1.3}
-    /* ocupação por professora */
-    .gr-prof-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--linha-soft)}
+    /* ocupação & presença por professora */
+    .gr-prof-row{display:flex;align-items:center;gap:14px;padding:9px 0;border-top:1px solid var(--linha-soft)}
     .gr-prof-row:first-child{border-top:0}
-    .gr-prof-nm{flex:1 1 42%;min-width:0;font-weight:700;font-size:var(--fs-sm);color:var(--tinta);display:flex;flex-direction:column}
+    .gr-prof-nm{flex:1 1 38%;min-width:0;font-weight:700;font-size:var(--fs-sm);color:var(--tinta);display:flex;flex-direction:column}
     .gr-prof-sub{font-weight:500;font-size:var(--fs-xs);color:var(--cinza);margin-top:1px}
-    .gr-prof-bar{flex:1 1 34%;height:8px;border-radius:5px;background:var(--linha-soft);overflow:hidden;min-width:56px}
+    .gr-prof-bars{flex:1 1 56%;display:flex;flex-direction:column;gap:5px;min-width:160px}
+    .gr-prof-ln{display:flex;align-items:center;gap:8px}
+    .gr-prof-cap{flex:none;width:58px;font-size:var(--fs-xs);font-weight:700;color:var(--cinza);text-transform:uppercase;letter-spacing:.02em}
+    .gr-prof-bar{flex:1 1 auto;height:8px;border-radius:5px;background:var(--linha-soft);overflow:hidden;min-width:56px}
     .gr-prof-bar span{display:block;height:100%;border-radius:5px;background:var(--teal)}
     .gr-prof-bar span.t-livre{background:var(--ok)}.gr-prof-bar span.t-quase{background:var(--warn)}.gr-prof-bar span.t-cheia{background:var(--erro)}
-    .gr-prof-pc{flex:none;width:46px;text-align:right;font-weight:800;font-size:var(--fs-sm);font-variant-numeric:tabular-nums;color:var(--tinta)}
+    .gr-prof-bar span.prez{background:#5b7cc2}
+    .gr-prof-pc{flex:none;width:44px;text-align:right;font-weight:800;font-size:var(--fs-sm);font-variant-numeric:tabular-nums;color:var(--tinta)}
     .gr-prof-pc.t-livre{color:var(--ok)}.gr-prof-pc.t-quase{color:var(--warn)}.gr-prof-pc.t-cheia{color:var(--erro)}
+    .gr-prof-pc.prez{color:#3f5e9e}
+    /* KPI presença na turma */
+    .stat.prez .n{color:#3f5e9e}
     @media(max-width:760px){ .gr-desk{display:none} .gr-mob{display:block} }
     </style>
     <div class="gr-top">
       <div>
         <div class="sec-t" style="margin:0" data-nosec>📋 Grade de Matrículas Fixas</div>
-        <p class="quando" style="margin:3px 0 0;max-width:740px">Visão da <b>semana</b>. O selo é a <b>vaga de matrícula</b> (fixas, contadas mesmo faltando). O "<b>na turma</b>" é a ocupação <b>real</b> (quem ocupou a vaga: presentes + reposição/FREE) — <b>falta</b>, <b>falta justificada</b> e <b>trancado</b> liberam a vaga e não contam (por isso nunca passa da capacidade). Clique numa turma para ver os nomes: <b>✓ foi</b> · <b>✗ faltou</b> · <b>⚠ falta justificada</b> · <b>🔒 trancada</b>. O <b>sábado</b> não entra na taxa de ocupação (<b>escala</b>).</p>
+        <p class="quando" style="margin:3px 0 0;max-width:740px">Visão da <b>semana</b>. O selo é a <b>vaga de matrícula</b> (fixas, contadas mesmo faltando). A "<b>presença</b>" é a ocupação <b>real</b> da aula (quem ocupou a vaga: fixas presentes + reposição/FREE) — <b>falta</b>, <b>falta justificada</b> e <b>trancado</b> liberam a vaga e não contam (por isso nunca passa da capacidade). Clique numa turma para ver os nomes: <b>✓ foi</b> · <b>✗ faltou</b> · <b>⚠ falta justificada</b> · <b>🔒 trancada</b>. O <b>sábado</b> não entra na taxa de ocupação (<b>escala</b>).</p>
       </div>
       <button id="btnAt" class="save" onclick="atualizar()" style="white-space:nowrap"${g ? ' disabled' : ''}>${g ? '⏳ gerando…' : '🔄 Atualizar'}</button>
     </div>
