@@ -4873,15 +4873,32 @@ function paginaGrade() {
     if (vagas <= 2) return { k: 'quase', txt: vagas + (vagas === 1 ? ' vaga' : ' vagas') };
     return { k: 'livre', txt: vagas + ' vagas' };
   };
+  const icPres = { foi: '✓', faltou: '✗', justif: '⚠' };
+  // todos os nomes da turma (fixa + reposição + FREE), normalizados → busca
+  const fxData = (t) => escH([].concat((t.fixas || []).map(x => (x && x.nome != null) ? x.nome : x),
+    t.reposicao || [], t.free || []).map(nrmFx).join('|'));
   const conteudo = (t) => {
-    const cap = t.capacity, nf = t.nFixas, capTxt = (cap == null) ? '?' : cap;
-    const pct = (cap && cap > 0) ? Math.min(100, Math.round(nf / cap * 100)) : 0;
-    const bar = (cap != null) ? `<div class="gr-bar"><span style="width:${pct}%"></span></div>` : '';
+    const cap = t.capacity, nf = t.nFixas;
+    const nReal = (t.nReal != null) ? t.nReal : nf;
+    const pctF = (cap && cap > 0) ? Math.min(100, Math.round(nf / cap * 100)) : 0;
+    const pctR = (cap && cap > 0) ? Math.max(0, Math.min(100 - pctF, Math.round((nReal - nf) / cap * 100))) : 0;
+    const bar = (cap != null)
+      ? `<div class="gr-bar"><span class="fx" style="width:${pctF}%"></span><span class="rp" style="width:${pctR}%"></span></div>`
+      : '';
     const prof = t.professora ? `<div class="gr-prof">${escH(t.professora)}</div>` : '';
-    const nomes = (t.fixas || []).map(n => `<li>${escH(n)}</li>`).join('');
-    const det = (t.fixas || []).length
-      ? `<details class="gr-det"><summary>👥 ${nf}/${capTxt} fixas</summary><ul>${nomes}</ul></details>`
-      : `<div class="gr-semf">${nf}/${capTxt} fixas</div>`;
+    const extraNum = (nReal > nf) ? ` · <span class="gr-real">${nReal} na turma</span>` : '';
+    const liFix = (t.fixas || []).map(x => {
+      const nome = (x && x.nome != null) ? x.nome : x, p = x && x.pres;
+      const ic = p ? `<span class="pres pres-${p}">${icPres[p] || ''}</span>` : '';
+      return `<li>${ic}${escH(nome)}</li>`;
+    }).join('');
+    const cab = (t.aconteceu && t.presentes != null)
+      ? ` · <span class="pres-foi">${t.presentes} ${t.presentes === 1 ? 'foi' : 'foram'}</span>${t.faltas ? ` · <span class="pres-faltou">${t.faltas} ${t.faltas === 1 ? 'faltou' : 'faltaram'}</span>` : ''}`
+      : '';
+    const grpFix = `<div class="gr-grp"><div class="gr-grp-t">Fixas (${nf})${cab}</div><ul>${liFix || '<li class="gr-vazio2">sem fixas</li>'}</ul></div>`;
+    const grpRepo = (t.reposicao || []).length ? `<div class="gr-grp"><div class="gr-grp-t gr-grp-repo">↻ Reposição (${t.reposicao.length})</div><ul>${t.reposicao.map(n => `<li>${escH(n)}</li>`).join('')}</ul></div>` : '';
+    const grpFree = (t.free || []).length ? `<div class="gr-grp"><div class="gr-grp-t gr-grp-free">◇ FREE (${t.free.length})</div><ul>${t.free.map(n => `<li>${escH(n)}</li>`).join('')}</ul></div>` : '';
+    const det = `<details class="gr-det"><summary>👥 ${nf} fixas${extraNum}</summary>${grpFix}${grpRepo}${grpFree}</details>`;
     return { bar, prof, det };
   };
 
@@ -4915,13 +4932,13 @@ function paginaGrade() {
     const horas = [...new Set(turmas.map(t => t.hora))].sort();
     const cel = {};
     for (const t of turmas) cel[t.hora + '|' + t.weekday] = t;
-    const th = wds.map(w => `<th>${WD[w]}</th>`).join('');
+    const th = wds.map(w => `<th>${WD[w]}<span class="gr-th-d">${fmtDia(diaPorWd[w])}</span></th>`).join('');
     const linhas = horas.map(h => {
       const tds = wds.map(w => {
         const t = cel[h + '|' + w];
         if (!t) return '<td class="gr-empty"></td>';
         const ti = tierOf(t), c = conteudo(t);
-        return `<td class="gr-cel t-${ti.k}" data-fx="${escH((t.fixas || []).map(nrmFx).join('|'))}"><span class="gr-vg">${ti.txt}</span>${c.bar}${c.prof}${c.det}</td>`;
+        return `<td class="gr-cel t-${ti.k}" data-fx="${fxData(t)}"><span class="gr-vg">${ti.txt}</span>${c.bar}${c.prof}${c.det}</td>`;
       }).join('');
       return `<tr><th class="h">${escH(h)}</th>${tds}</tr>`;
     }).join('');
@@ -4932,7 +4949,7 @@ function paginaGrade() {
     const mob = `<div class="gr-mob">` + byDay.map(([data, wd, arr]) => {
       const items = arr.map(t => {
         const ti = tierOf(t), c = conteudo(t);
-        return `<div class="gr-item t-${ti.k}" data-fx="${escH((t.fixas || []).map(nrmFx).join('|'))}"><div class="gr-item-h"><span class="gr-hora">${escH(t.hora)}</span><span class="gr-vg">${ti.txt}</span></div>${c.prof}${c.bar}${c.det}</div>`;
+        return `<div class="gr-item t-${ti.k}" data-fx="${fxData(t)}"><div class="gr-item-h"><span class="gr-hora">${escH(t.hora)}</span><span class="gr-vg">${ti.txt}</span></div>${c.prof}${c.bar}${c.det}</div>`;
       }).join('');
       return `<div class="gr-day"><div class="gr-day-h">${WD[wd]} · ${fmtDia(data)}</div>${items}</div>`;
     }).join('') + `</div>`;
@@ -4956,10 +4973,10 @@ function paginaGrade() {
     <p class="quando" style="display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:4px 0 8px">
       <span>Período <b>${fmtDia(snap.inicio)}–${fmtDia(snap.fim)}</b></span>
       <span style="color:var(--faint)">gerado ${escH(snap.gerado_em || '')} · fixa = matrícula do contrato (EVO)</span>
-      <span class="gr-leg"><i><b class="lg-livre"></b>vaga</i><i><b class="lg-quase"></b>quase (1-2)</i><i><b class="lg-cheia"></b>lotada</i></span>
+      <span class="gr-leg"><i><b class="lg-livre"></b>vaga matríc.</i><i><b class="lg-quase"></b>quase (1-2)</i><i><b class="lg-cheia"></b>lotada</i><i><b class="lg-repo"></b>repô/FREE</i></span>
     </p>
     <div class="gr-search">
-      <input id="grBusca" type="search" placeholder="🔍 Buscar aluna — ver em quais turmas ela é fixa" autocomplete="off">
+      <input id="grBusca" type="search" placeholder="🔍 Buscar aluna — ver em quais turmas ela está (fixa, repô ou FREE)" autocomplete="off">
       <span id="grBuscaInfo" class="gr-busca-info"></span>
     </div>
     ${desk}${mob}`;
@@ -4972,14 +4989,27 @@ function paginaGrade() {
     .gr-leg i{display:inline-flex;align-items:center;gap:5px;font-style:normal;color:var(--cinza);font-weight:600;font-size:var(--fs-xs)}
     .gr-leg b{width:10px;height:10px;border-radius:3px;display:inline-block}
     .lg-livre{background:var(--ok)}.lg-quase{background:var(--warn)}.lg-cheia{background:var(--erro)}
+    .lg-repo{background:#5b7cc2;opacity:.75;background-image:repeating-linear-gradient(45deg,transparent,transparent 2px,rgba(255,255,255,.6) 2px,rgba(255,255,255,.6) 4px)}
     .gr-vg{display:inline-block;font-size:var(--fs-xs);font-weight:800;border-radius:999px;padding:3px 10px;border:1px solid transparent;white-space:nowrap}
     .t-livre .gr-vg{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-bd)}
     .t-quase .gr-vg{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-bd)}
     .t-cheia .gr-vg{background:var(--erro-bg);color:var(--erro);border-color:var(--erro-bd)}
     .t-nd .gr-vg{background:var(--linha-soft);color:var(--cinza)}
-    .gr-bar{height:5px;border-radius:3px;background:var(--linha-soft);margin:7px 0 6px;overflow:hidden}
-    .gr-bar span{display:block;height:100%;border-radius:3px;background:var(--teal)}
-    .t-livre .gr-bar span{background:var(--ok)}.t-quase .gr-bar span{background:var(--warn)}.t-cheia .gr-bar span{background:var(--erro)}.t-nd .gr-bar span{background:var(--faint)}
+    .gr-bar{height:6px;border-radius:3px;background:var(--linha-soft);margin:7px 0 6px;overflow:hidden;display:flex}
+    .gr-bar span{display:block;height:100%}
+    .t-livre .gr-bar .fx{background:var(--ok)}.t-quase .gr-bar .fx{background:var(--warn)}.t-cheia .gr-bar .fx{background:var(--erro)}.t-nd .gr-bar .fx{background:var(--faint)}
+    .gr-bar .rp{background:#5b7cc2;opacity:.62;background-image:repeating-linear-gradient(45deg,transparent,transparent 2px,rgba(255,255,255,.5) 2px,rgba(255,255,255,.5) 4px)}
+    .gr-real{color:#3f5e9e;font-weight:800}
+    /* grupos no "expandir": fixas (com presença ✓/✗/⚠), reposição, FREE */
+    .gr-grp{margin-top:7px}.gr-grp:first-child{margin-top:3px}
+    .gr-grp-t{font-size:var(--fs-xs);font-weight:800;color:var(--tinta);margin-bottom:1px}
+    .gr-grp-repo{color:#3f5e9e}.gr-grp-free{color:var(--warn)}
+    .gr-grp ul{margin:1px 0 0;padding-left:16px}
+    .gr-grp li{font-size:var(--fs-xs);color:var(--tinta);line-height:1.5}
+    .pres{display:inline-block;width:1.15em;font-weight:800;margin-left:-2px}
+    .pres-foi{color:var(--ok)}.pres-faltou{color:var(--erro)}.pres-justif{color:var(--warn)}
+    .gr-vazio2{color:var(--faint);list-style:none;margin-left:-16px}
+    .gr-th-d{display:block;font-size:.64rem;font-weight:600;opacity:.82;letter-spacing:0;text-transform:none;margin-top:1px}
     .gr-prof{font-size:var(--fs-xs);color:var(--cinza);margin-bottom:3px}
     .gr-det summary{cursor:pointer;font-size:var(--fs-xs);font-weight:700;color:var(--tinta);list-style:none;user-select:none}
     .gr-det summary::-webkit-details-marker{display:none}
@@ -5033,7 +5063,7 @@ function paginaGrade() {
     <div class="gr-top">
       <div>
         <div class="sec-t" style="margin:0" data-nosec>📋 Grade de Matrículas Fixas</div>
-        <p class="quando" style="margin:3px 0 0;max-width:660px">Alunas <b>matriculadas fixas</b> em cada turma — <b>contadas mesmo se faltarem</b>. Ficam de fora experimentais, <b>reposições</b> e planos <b>FREE</b>. Use para ver <b>vaga de matrícula</b>. O <b>sábado</b> aparece na grade, mas <b>não entra</b> na taxa de ocupação nem na ocupação por professora (é considerado <b>escala</b>).</p>
+        <p class="quando" style="margin:3px 0 0;max-width:720px">Visão da <b>semana</b>. O selo e a barra cheia são a <b>vaga de matrícula</b> (fixas) — contadas mesmo se faltarem. A faixa listrada e o "<b>na turma</b>" mostram a ocupação <b>real</b> (fixas + <b>reposição</b> + <b>FREE</b>). Clique numa turma para ver os nomes separados e, nas aulas que <b>já aconteceram</b>, quem <b>foi (✓)</b> e quem <b>faltou (✗)</b>. O <b>sábado</b> não entra na taxa de ocupação (é <b>escala</b>).</p>
       </div>
       <button id="btnAt" class="save" onclick="atualizar()" style="white-space:nowrap"${g ? ' disabled' : ''}>${g ? '⏳ gerando…' : '🔄 Atualizar'}</button>
     </div>
@@ -5935,7 +5965,7 @@ const server = http.createServer((req, res) => {
       const cp = require('child_process');
       const { py, dir } = _gradePyBin();
       _gradeGerando = true; _gradeDesde = Date.now();
-      const child = cp.spawn(py, ['run_grade_fixas.py', '--dias', '7'], { cwd: dir, detached: true, stdio: 'ignore' });
+      const child = cp.spawn(py, ['run_grade_fixas.py'], { cwd: dir, detached: true, stdio: 'ignore' });
       child.on('exit', () => { _gradeGerando = false; });
       child.on('error', () => { _gradeGerando = false; });
       try { child.unref(); } catch (_) {}
