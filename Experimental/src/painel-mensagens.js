@@ -413,7 +413,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/auto-tag-alunas') return has('sofia_contatos') || has('sofia_config'); // auto-tag Aluna/Ex-aluna (aba Tags)
   if (url === '/sofia/midia-upload' || url === '/sofia/midia') return has('sofia_config'); // upload/preview das imagens (preços/grade)
   if (url === '/sofia/msgs-anuncio') return has('sofia_config'); // boas-vindas do anúncio que não pausam a SoFIA
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/prompt/download') return has('sofia_config');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/parear' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/prompt/download') return has('sofia_config');
   return false;
 }
 // WhatsApp é dividido em sub-abas: Configuração, Agendamento, Express e Log.
@@ -4288,6 +4288,19 @@ function paginaSofia(aviso, erro) {
       </div>
     </div>
 
+    <details class="acc-sec">
+      <summary class="sec-t" style="cursor:pointer;padding:4px 0">🔢 Conectar a SoFIA por código (sem QR)</summary>
+      <div class="card">
+        <p class="quando" style="margin:0 0 10px">Não conseguiu ler o QR? Conecte digitando um <b>código de 8 dígitos</b> no celular da SoFIA. Informe o <b>número do WhatsApp da SoFIA</b> (DDI + DDD + número, só dígitos) e clique em <b>Gerar código</b> — ele aparece no quadro de conexão acima em ~20s. (Funciona quando a SoFIA está <b>desconectada</b>/pedindo QR.)</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="sofPairNum" type="tel" inputmode="numeric" placeholder="5561999998010" autocomplete="off" style="max-width:220px">
+          <button type="button" class="save" id="sofPairBtn" onclick="pedirCodigoSofia()" style="padding:8px 18px">Gerar código</button>
+          <span id="sofPairMsg" class="quando" style="margin:0"></span>
+        </div>
+        <p class="quando" style="margin:10px 0 0">Depois, no celular da SoFIA: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → <b>Conectar com número de telefone</b> → digite o código que aparecer acima.</p>
+      </div>
+    </details>
+
     ${(_navSess && _navSess.admin) ? `
     <details class="acc-sec">
       <summary class="sec-t" style="cursor:pointer;padding:4px 0">🔑 Credenciais da unidade <small style="font-weight:400;color:var(--cinza)">— login do EVO e chaves de IA (só admin), sem abrir o .env</small></summary>
@@ -4770,6 +4783,20 @@ function paginaSofia(aviso, erro) {
     }).catch(function(){});
   }
   atualizaSofiaWa(); setInterval(atualizaSofiaWa, 5000);
+
+  // Conectar a SoFIA por CÓDIGO (sem QR): manda o número; o código sai no quadro acima.
+  function pedirCodigoSofia(){
+    var inp=document.getElementById('sofPairNum'), msg=document.getElementById('sofPairMsg'), btn=document.getElementById('sofPairBtn');
+    var num=(inp.value||'').replace(/\\D/g,'');
+    if(num.length<10){ msg.style.color='#c0392b'; msg.textContent='Informe o número completo (DDI+DDD+número).'; return; }
+    btn.disabled=true; msg.style.color=''; msg.textContent='gerando…';
+    fetch('/sofia/parear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero:num})})
+      .then(function(r){return r.json();}).then(function(j){
+        btn.disabled=false;
+        if(j&&j.ok){ msg.style.color='#0a7a52'; msg.textContent='Pedido enviado — o código aparece acima em ~20s.'; atualizaSofiaWa(); }
+        else { msg.style.color='#c0392b'; msg.textContent=(j&&j.erro)||'Não consegui pedir o código.'; }
+      }).catch(function(){ btn.disabled=false; msg.style.color='#c0392b'; msg.textContent='Falha de conexão.'; });
+  }
 
   // Editar seções do prompt: recolher/expandir, reordenar (↑↓), remover, adicionar.
   function toggleSecao(btn){
@@ -6962,6 +6989,20 @@ const server = http.createServer((req, res) => {
       try { sofia.enviarComando('logout'); } catch (_) {}
       try { auditoria.registrar(sess.usuario, 'sofia.desconectar', 'WhatsApp da SoFIA', ''); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?dcon=1' }); res.end();
+    });
+  }
+  // Conectar a SoFIA por CÓDIGO (sem QR): manda o número pro listener gerar o código.
+  if (req.method === 'POST' && url === '/sofia/parear') {
+    return lerCorpo(req, 1e5, corpo => {
+      let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      const numero = String(d.numero || '').replace(/\D/g, '');
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      if (numero.length < 10) return res.end(JSON.stringify({ ok: false, erro: 'número inválido (use DDI+DDD+número)' }));
+      try {
+        sofia.enviarComando('parear', { numero });
+        try { auditoria.registrar(sess.usuario, 'sofia.parear', 'WhatsApp da SoFIA', numero); } catch (_) {}
+        return res.end(JSON.stringify({ ok: true }));
+      } catch (e) { return res.end(JSON.stringify({ ok: false, erro: String((e && e.message) || e) })); }
     });
   }
   // Reiniciar a SoFIA (pm2 restart sofia-listener) — aplica modelo/transcrição e

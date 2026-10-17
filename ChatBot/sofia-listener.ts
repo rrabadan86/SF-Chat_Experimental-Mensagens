@@ -226,7 +226,9 @@ const WA_DEVICE_NAME = process.env.WA_DEVICE_NAME || "";
 // SoFIA (só dígitos, com DDI, ex.: 5562999999999). Aí, em vez de QR, geramos um
 // código de 8 caracteres para você digitar no celular: WhatsApp → Aparelhos
 // conectados → Conectar um aparelho → "Conectar com número de telefone".
-const PAIR_NUMBER = (process.env.SOFIA_PAIR_NUMBER || "").replace(/\D/g, "");
+// `let` (não const): o painel pode definir/limpar o número em tempo real pelo comando
+// "parear"/"qr" (sofia-comando.json), sem editar o .env nem reiniciar.
+let PAIR_NUMBER = (process.env.SOFIA_PAIR_NUMBER || "").replace(/\D/g, "");
 let codigoPareamento = "";   // último código emitido (mantido estável p/ dar tempo de digitar)
 let codigoEm = 0;            // quando foi emitido
 let modoPareamento = false;  // enquanto true, NÃO reiniciamos por watchdog (esperando você digitar)
@@ -1849,6 +1851,24 @@ setInterval(async () => {
   if (cmd && cmd.cmd === "importar-historico") {
     log("📥 comando do painel: importar histórico do WhatsApp…");
     importarHistorico(parseInt(cmd.porChat, 10) || INBOX_MAX_MSGS); // async, não bloqueia
+    return;
+  }
+  // Conectar por CÓDIGO (sem QR): o painel manda o número; passamos a pedir o código
+  // de pareamento em vez do QR. O código sai no próximo evento "qr" (~20s), que roda
+  // enquanto a sessão está desconectada. (Botão "Gerar código" na aba 🤖 Sofia.)
+  if (cmd && cmd.cmd === "parear") {
+    const num = String(cmd.numero || "").replace(/\D/g, "");
+    if (!num) { log("comando 'parear' sem número — ignorado."); return; }
+    PAIR_NUMBER = num;
+    codigoPareamento = ""; codigoEm = 0;   // força gerar um código NOVO no próximo "qr"
+    modoPareamento = true;
+    log(`🔢 comando do painel: conectar por CÓDIGO (número ${num}). O código aparece no painel em ~20s.`);
+    return;
+  }
+  // Voltar ao QR (cancelar o modo código).
+  if (cmd && cmd.cmd === "qr") {
+    PAIR_NUMBER = ""; modoPareamento = false; codigoPareamento = ""; codigoEm = 0;
+    log("comando do painel: voltar ao QR (cancelar o código).");
     return;
   }
   if (!cmd || cmd.cmd !== "logout") return;
