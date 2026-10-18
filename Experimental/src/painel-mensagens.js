@@ -4988,7 +4988,11 @@ function paginaGrade() {
     }).join('') : '<p class="quando" style="margin:0">Clique em <b>🔄 Atualizar</b> para gerar a ocupação por professora.</p>';
 
     // Modal do FATURAMENTO (lançamentos do mês) e do TKM (ativas sem contrato)
-    const sitLbl = (s) => { s = String(s || '').toLowerCase(); return s.indexOf('receiv') >= 0 ? 'pago' : (s.indexOf('pend') >= 0 ? 'a vencer' : (s.indexOf('over') >= 0 ? 'vencido' : (s || '—'))); };
+    const sitLbl = (s) => { s = String(s || '').toLowerCase();
+      if (s === 'pago' || s.indexOf('receiv') >= 0) return 'pago';
+      if (s === 'vencido' || s.indexOf('expir') >= 0 || s.indexOf('over') >= 0) return 'vencido';
+      if (s === 'a receber' || s.indexOf('open') >= 0 || s.indexOf('pend') >= 0 || s.indexOf('provision') >= 0) return 'a receber';
+      return s || '—'; };
     const fatRows = fatIt.map(it => `<tr><td>${escH(it.aluna)}</td><td>${escH(it.contrato || '—')}</td><td>${fmtDia(it.venc)}</td><td class="v">${fmtBRL(it.valor)}</td><td class="v">${it.pago != null ? fmtBRL(it.pago) : '—'}</td><td><span class="gr-sit">${escH(sitLbl(it.sit))}</span></td></tr>`).join('');
     const fatTotPago = fatIt.reduce((a, it) => a + (Number(it.pago) || 0), 0);
     const mFat = (fatMes == null) ? '' : `<div class="gr-ov" id="ov-fat" onclick="if(event.target===this)fecharM('fat')"><div class="gr-md">

@@ -168,14 +168,24 @@ def _faturamento_mes(evo, now, branch_id=None):
                 pago = float(pago) if pago is not None else None
             except (TypeError, ValueError):
                 pago = None
+            # "pago" = só o que CAIU DE FATO (receivingDate <= hoje). Cartão
+            # provisionado com recebimento futuro ainda não entrou no caixa, então
+            # não conta como pago — vira "a receber" (ou "vencido" se passou o venc).
+            receb = _parse_date(str(r.get("receivingDate") or "")[:10])
+            recebido = bool(receb and receb <= hoje)
+            if recebido:
+                sit, pago_real = "pago", (round(pago, 2) if pago is not None else None)
+            else:
+                dd = _parse_date(str(r.get("dueDate") or "")[:10])
+                sit, pago_real = ("vencido" if (dd and dd < hoje) else "a receber"), None
             soma += v
             itens.append({
                 "idm": r.get("idMemberPayer"),
                 "aluna": (r.get("payerName") or "—").strip(),
                 "valor": round(v, 2),
-                "pago": round(pago, 2) if pago is not None else None,
+                "pago": pago_real,
                 "venc": str(r.get("dueDate") or "")[:10],
-                "sit": str((r.get("status") or {}).get("name") or ""),
+                "sit": sit,
             })
         if len(rows) < take:
             break
