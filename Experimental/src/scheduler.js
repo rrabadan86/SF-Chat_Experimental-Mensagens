@@ -46,7 +46,11 @@ function runGradeFixas(motivo) {
   _gradeFixasRunning = true;
   const dir = path.resolve(__dirname, 'agendamento_evo');
   const script = path.join(dir, 'run_grade_fixas.py');
-  const py = process.env.PYTHON_BIN || 'python3';
+  // usa o .venv do agendamento_evo se existir (mesma regra do painel) — senão o
+  // cron das 05:40 falharia por falta das libs do EVO em unidade com venv-only.
+  const venv = path.join(dir, '.venv', 'bin', 'python');
+  let py = process.env.PYTHON_BIN || 'python3';
+  try { if (fs.existsSync(venv)) py = venv; } catch (_) {}
   const tag = motivo ? ` (${motivo})` : '';
   // sem args: semana atual + financeiro (TKM/faturamento) — igual ao botão Atualizar.
   // timeout 15 min: com o financeiro a geração lê o contrato de cada aluna ativa.
