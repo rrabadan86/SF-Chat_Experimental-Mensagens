@@ -4870,10 +4870,11 @@ function paginaGrade() {
   const fmtDia = (d) => { const p = String(d || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] : (d || ''); };
   const tierOf = (t) => {
     const cap = t.capacity, nf = t.nFixas, vagas = t.vagas;
-    if (cap == null) return { k: 'nd', txt: nf + ' fixas' };
-    if (nf >= cap || vagas === 0) return { k: 'cheia', txt: 'lotada' };
-    if (vagas <= 2) return { k: 'quase', txt: vagas + (vagas === 1 ? ' vaga' : ' vagas') };
-    return { k: 'livre', txt: vagas + ' vagas' };
+    if (cap == null) return { k: 'nd', txt: nf + ' fixas', tip: nf + ' matrículas fixas' };
+    const base = `Vaga de matrícula fixa: ${nf} de ${cap} ocupadas`;
+    if (nf >= cap || vagas === 0) return { k: 'cheia', txt: 'lotada', tip: `${base}. Lotada — sem vaga para nova aluna fixa.` };
+    if (vagas <= 2) return { k: 'quase', txt: vagas + (vagas === 1 ? ' vaga' : ' vagas'), tip: `${base}. ${vagas} ${vagas === 1 ? 'vaga livre' : 'vagas livres'} para nova matrícula fixa (quase cheia).` };
+    return { k: 'livre', txt: vagas + ' vagas', tip: `${base}. ${vagas} vagas livres para nova matrícula fixa.` };
   };
   const icPres = { foi: '✓', faltou: '✗', justif: '⚠', trancada: '🔒' };
   const titPres = { foi: 'foi à aula', faltou: 'faltou (sem justificar)', justif: 'falta justificada', trancada: 'trancada/suspensa' };
@@ -4887,11 +4888,13 @@ function paginaGrade() {
     const occF = Math.max(0, nReal - nRepo - nFree);     // fixas que de fato ocuparam
     const pctF = (cap && cap > 0) ? Math.min(100, Math.round(occF / cap * 100)) : 0;
     const pctR = (cap && cap > 0) ? Math.max(0, Math.min(100 - pctF, Math.round((nRepo + nFree) / cap * 100))) : 0;
+    const titBar = `Ocupação real da aula (de ${cap}): verde = ${occF} fixa(s) presente(s); listrado azul = ${nRepo + nFree} reposição/FREE. Total na aula: ${nReal}.`;
     const bar = (cap != null)
-      ? `<div class="gr-bar"><span class="fx" style="width:${pctF}%"></span><span class="rp" style="width:${pctR}%"></span></div>`
+      ? `<div class="gr-bar" title="${escH(titBar)}"><span class="fx" style="width:${pctF}%"></span><span class="rp" style="width:${pctR}%"></span></div>`
       : '';
-    const prof = t.professora ? `<div class="gr-prof">${escH(t.professora)}</div>` : '';
+    const prof = t.professora ? `<div class="gr-prof" title="Professora da turma">${escH(t.professora)}</div>` : '';
     const extraNum = ` · <span class="gr-real">${nReal} presença</span>`;
+    const titDet = `Fixas = ${nf} matrícula(s) fixa(s) da turma (vaga de matrícula). Presença = ${nReal} na aula = quem de fato ocupou a vaga (fixas presentes + reposição + FREE). Clique para ver os nomes.`;
     const liFix = (t.fixas || []).map(x => {
       const nome = (x && x.nome != null) ? x.nome : x, p = x && x.pres;
       const ic = p ? `<span class="pres pres-${p}" title="${titPres[p] || ''}">${icPres[p] || ''}</span>` : '';
@@ -4904,7 +4907,7 @@ function paginaGrade() {
     const grpFix = `<div class="gr-grp"><div class="gr-grp-t">Fixas (${nf})${cab}</div><ul>${liFix || '<li class="gr-vazio2">sem fixas</li>'}</ul></div>`;
     const grpRepo = (t.reposicao || []).length ? `<div class="gr-grp"><div class="gr-grp-t gr-grp-repo">↻ Reposição (${t.reposicao.length})</div><ul>${t.reposicao.map(n => `<li>${escH(n)}</li>`).join('')}</ul></div>` : '';
     const grpFree = (t.free || []).length ? `<div class="gr-grp"><div class="gr-grp-t gr-grp-free">◇ FREE (${t.free.length})</div><ul>${t.free.map(n => `<li>${escH(n)}</li>`).join('')}</ul></div>` : '';
-    const det = `<details class="gr-det"><summary>👥 ${nf} fixas${extraNum}</summary>${grpFix}${grpRepo}${grpFree}</details>`;
+    const det = `<details class="gr-det"><summary title="${escH(titDet)}">👥 ${nf} fixas${extraNum}</summary>${grpFix}${grpRepo}${grpFree}</details>`;
     return { bar, prof, det };
   };
 
@@ -4952,7 +4955,7 @@ function paginaGrade() {
         const t = cel[h + '|' + w];
         if (!t) return '<td class="gr-empty"></td>';
         const ti = tierOf(t), c = conteudo(t);
-        return `<td class="gr-cel t-${ti.k}" data-fx="${fxData(t)}"><span class="gr-vg">${ti.txt}</span>${c.bar}${c.prof}${c.det}</td>`;
+        return `<td class="gr-cel t-${ti.k}" data-fx="${fxData(t)}"><span class="gr-vg" title="${escH(ti.tip || '')}">${ti.txt}</span>${c.bar}${c.prof}${c.det}</td>`;
       }).join('');
       return `<tr><th class="h">${escH(h)}</th>${tds}</tr>`;
     }).join('');
@@ -4963,7 +4966,7 @@ function paginaGrade() {
     const mob = `<div class="gr-mob">` + byDay.map(([data, wd, arr]) => {
       const items = arr.map(t => {
         const ti = tierOf(t), c = conteudo(t);
-        return `<div class="gr-item t-${ti.k}" data-fx="${fxData(t)}"><div class="gr-item-h"><span class="gr-hora">${escH(t.hora)}</span><span class="gr-vg">${ti.txt}</span></div>${c.prof}${c.bar}${c.det}</div>`;
+        return `<div class="gr-item t-${ti.k}" data-fx="${fxData(t)}"><div class="gr-item-h"><span class="gr-hora">${escH(t.hora)}</span><span class="gr-vg" title="${escH(ti.tip || '')}">${ti.txt}</span></div>${c.prof}${c.bar}${c.det}</div>`;
       }).join('');
       return `<div class="gr-day"><div class="gr-day-h">${WD[wd]} · ${fmtDia(data)}</div>${items}</div>`;
     }).join('') + `</div>`;
