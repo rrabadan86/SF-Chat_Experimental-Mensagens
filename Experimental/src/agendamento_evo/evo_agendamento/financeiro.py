@@ -1,24 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-Dados financeiros por aluna, para o TKM (ticket médio) da grade.
+Dados financeiros do studio, para o TKM (ticket médio) e o faturamento da grade.
 
-Dois indicadores, porque significam coisas diferentes:
+Base de cálculo = TODAS as alunas ATIVAS do EVO (fixas + FREE), listadas por
+/api/v1/members com o filtro status=1 (o único que o EVO respeita — os outros
+devolvem inativas). No Bueno isso bate com as ~81 alunas da tag "0. Aluna".
 
-1) TICKET MENSAL DO CONTRATO — valor "de tabela" que a aluna paga por mês.
-   Fonte: a VENDA do contrato vigente (/api/v1/sales → saleItens → saleValue,
-   casada pelo idMemberMembership da matrícula ativa), dividida pelo nº de meses
-   de duração do contrato (datas de início/fim da matrícula ativa). Assim um anual
-   de R$7.320 vira ~R$610/mês e fica comparável com um mensal. Funciona inclusive
-   para contratos CUSTOMIZADOS (C.C.), que não existem no catálogo de planos.
+Dois indicadores (coisas diferentes):
 
-2) FATURAMENTO DO MÊS (vencimento) — o quanto está previsto receber no mês.
-   Fonte: os RECEBÍVEIS com vencimento no mês corrente (/api/v1/receivables,
-   filtro memberId/dueDate), somando `ammount` e ignorando os cancelados. É o
-   dinheiro do mês (oscila: pagamento anual à vista, boletos, etc.).
+1) TKM médio — valor MENSAL "de tabela" por aluna.
+   Para cada aluna ativa: o contrato VIGENTE (saleValue da venda, casado pelo
+   idMemberMembership da matrícula ativa) ÷ nº de meses de duração do contrato.
+   Assim um anual de R$7.320 vira ~R$610/mês e fica comparável com um mensal.
+   Funciona inclusive em contrato CUSTOMIZADO (C.C.), que não está no catálogo.
 
-Best-effort: uma falha numa aluna (ou no bloco de recebíveis) nunca derruba a
-grade — o indicador só fica em branco (None). Custo no EVO: ~2 chamadas por aluna
-(detalhe + venda) + algumas páginas de recebíveis do mês (em bloco, não por aluna).
+2) Faturamento do mês — o quanto vence no mês corrente.
+   Soma de TODOS os recebíveis com vencimento no mês (/api/v1/receivables,
+   filtro dueDate), ignorando os cancelados. É o caixa previsto do studio
+   (independe do TKM: quem pagou o anual à vista não tem parcela vencendo).
+
+Best-effort: uma falha numa aluna (ou num bloco) nunca derruba a grade — o
+indicador só fica em branco. Custo no EVO: 1 página de membros ativos + ~2
+chamadas por aluna ativa (detalhe + venda) + algumas páginas de recebíveis.
 """
 from datetime import datetime, timedelta
 import logging
@@ -50,6 +53,62 @@ def _fim_do_mes(d):
     return prox - timedelta(days=prox.day)
 
 
+def membros_ativos(evo, branch_id=None):
+    """Lista os registros de membros ATIVOS (status=1). Confirma pelo campo
+    membershipStatus pra não contar inativo por engano."""
+    out, take, skip = [], 100, 0
+    for _ in range(40):                                # teto de páginas (segurança)
+        try:
+            rows = evo._request("GET", "/api/v1/members",
+                               params={"status": 1, "take": take, "skip": skip}) or []
+        except Exception as e:
+            log.warning("financeiro: lista de ativos falhou (%s)", e)
+            break
+        if not isinstance(rows, list) or not rows:
+            break
+        for m in rows:
+            if str(m.get("membershipStatus") or "").lower() == "active":
+                out.append(m)
+        if len(rows) < take:
+            break
+        skip += take
+    return out
+
+
+def _ativa_na_lista(lst):
+    """Da lista `memberships` de uma aluna, a matrícula ATIVA mais recente."""
+    if not isinstance(lst, list):
+        return None
+    cand = [x for x in lst
+            if str(x.get("membershipStatus") or "").lower() == "active"
+            and x.get("idMemberMembership")]
+    if not cand:
+        return None
+    cand.sort(key=lambda x: str(x.get("startDate") or ""), reverse=True)
+    return cand[0]
+
+
+def _membership_ativa(evo, idm, m=None, branch_id=None):
+    """Matrícula ATIVA da aluna (idMemberMembership + datas): tenta o que já veio
+    inline no registro da lista; se não, busca o detalhe da aluna."""
+    if isinstance(m, dict):
+        mb = m.get("membership")
+        if isinstance(mb, dict) and mb.get("idMemberMembership") and mb.get("startDate"):
+            return mb
+        best = _ativa_na_lista(m.get("memberships"))
+        if best:
+            return best
+    try:
+        det = evo._request("GET", f"/api/v1/members/{int(idm)}") or {}
+        mb = det.get("membership")
+        if isinstance(mb, dict) and mb.get("idMemberMembership"):
+            return mb
+        return _ativa_na_lista(det.get("memberships"))
+    except Exception as e:
+        log.warning("financeiro: detalhe da aluna %s falhou (%s)", idm, e)
+        return None
+
+
 def _valor_contrato(evo, idm, id_member_membership, branch_id=None):
     """saleValue (líquido) do contrato vigente da aluna, casado pelo
     idMemberMembership na venda. Cai pra itemValue se saleValue vier nulo."""
@@ -72,15 +131,13 @@ def _valor_contrato(evo, idm, id_member_membership, branch_id=None):
     return None
 
 
-def _faturamento_do_mes(evo, now, ids, branch_id=None):
-    """Recebíveis com VENCIMENTO no mês corrente, somados por aluna (idMemberPayer).
-    Ignora cancelados. Busca em BLOCO (filtro de período), não por aluna."""
-    out = {}
+def _faturamento_mes(evo, now, branch_id=None):
+    """Soma de TODOS os recebíveis a vencer no mês corrente (não cancelados).
+    Retorna (total, nº de lançamentos)."""
     hoje = now.date()
-    ini = hoje.replace(day=1)
-    fim = _fim_do_mes(hoje)
-    take, skip = 100, 0
-    for _ in range(80):                                # teto de páginas (segurança)
+    ini, fim = hoje.replace(day=1), _fim_do_mes(hoje)
+    take, skip, soma, n = 100, 0, 0.0, 0
+    for _ in range(100):                               # teto de páginas (segurança)
         try:
             rows = evo._request("GET", "/api/v1/receivables",
                                params={"dueDateStart": ini.strftime("%Y-%m-%d"),
@@ -92,44 +149,40 @@ def _faturamento_do_mes(evo, now, ids, branch_id=None):
         if not isinstance(rows, list) or not rows:
             break
         for r in rows:
-            pid = r.get("idMemberPayer")
-            if pid not in ids:
+            if "cancel" in str((r.get("status") or {}).get("name") or "").lower():
                 continue
-            nome_status = str((r.get("status") or {}).get("name") or "").lower()
-            if "cancel" in nome_status:                # cancelado não conta
-                continue
-            val = r.get("ammount")
-            if val is None:
-                val = r.get("ammountPaid")
-            if val is None:
+            v = r.get("ammount")
+            if v is None:
                 continue
             try:
-                out[pid] = round(out.get(pid, 0.0) + float(val), 2)
+                soma += float(v); n += 1
             except (TypeError, ValueError):
                 pass
         if len(rows) < take:
             break
         skip += take
-    return out
+    return (round(soma, 2) if n else None), n
 
 
-def carregar_financeiro(evo, idmembers, now, branch_id=None):
-    """Para cada aluna (idMember), devolve
-        {idm: {"ticket": <mensal do contrato>|None,
-               "fatura": <a receber no mês>|None,
-               "plano": <nome do contrato vigente>|None}}
+def carregar_financeiro(evo, now, branch_id=None):
+    """Calcula o financeiro do studio sobre TODAS as alunas ativas.
+    Retorna (por_aluna, resumo):
+      por_aluna = {idMember: {"ticket": <mensal>|None, "plano": <nome>|None}}
+      resumo    = {ativas, tkm_medio, tkm_alunas, tkm_total, fatura_mes, fatura_n}
     Best-effort — nunca levanta exceção."""
-    ids = {int(i) for i in idmembers if i}
-    if not ids:
-        return {}
-    # Faturamento do mês em bloco (uma varredura, não por aluna).
-    fatura = _faturamento_do_mes(evo, now, ids, branch_id)
-    out = {}
-    for idm in ids:
-        info = {"ticket": None, "fatura": fatura.get(idm), "plano": None}
+    try:
+        ativos = membros_ativos(evo, branch_id)
+    except Exception as e:
+        log.warning("financeiro: não consegui listar ativos (%s)", e)
+        ativos = []
+    por = {}
+    for m in ativos:
+        idm = m.get("idMember")
+        if not idm:
+            continue
+        info = {"ticket": None, "plano": None}
         try:
-            det = evo._request("GET", f"/api/v1/members/{int(idm)}") or {}
-            mb = det.get("membership") or {}           # matrícula ATIVA
+            mb = _membership_ativa(evo, idm, m, branch_id) or {}
             info["plano"] = (mb.get("name") or "").strip() or None
             imm = mb.get("idMemberMembership")
             meses = _meses_contrato(mb.get("startDate"), mb.get("endDate"))
@@ -139,18 +192,16 @@ def carregar_financeiro(evo, idmembers, now, branch_id=None):
                     info["ticket"] = round(val / meses, 2)
         except Exception as e:
             log.warning("financeiro: aluna %s falhou (%s)", idm, e)
-        out[idm] = info
-    return out
+        por[idm] = info
 
-
-def resumir(fin):
-    """Agrega o dicionário de carregar_financeiro em totais/médias."""
-    tickets = [v["ticket"] for v in fin.values() if v.get("ticket")]
-    faturas = [v["fatura"] for v in fin.values() if v.get("fatura")]
-    return {
+    fatura_mes, fatura_n = _faturamento_mes(evo, now, branch_id)
+    tickets = [v["ticket"] for v in por.values() if v.get("ticket")]
+    resumo = {
+        "ativas": len(por),
         "tkm_medio": round(sum(tickets) / len(tickets), 2) if tickets else None,
         "tkm_alunas": len(tickets),
         "tkm_total": round(sum(tickets), 2) if tickets else None,
-        "fatura_mes": round(sum(faturas), 2) if faturas else None,
-        "fatura_alunas": len(faturas),
+        "fatura_mes": fatura_mes,
+        "fatura_n": fatura_n,
     }
+    return por, resumo

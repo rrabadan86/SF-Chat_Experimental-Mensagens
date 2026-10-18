@@ -4923,14 +4923,17 @@ function paginaGrade() {
     const presPct = (r.presenca_pct != null) ? r.presenca_pct : null;
     const tkmMed = (r.tkm_medio != null) ? r.tkm_medio : null;
     const fatMes = (r.fatura_mes != null) ? r.fatura_mes : null;
-    // Total de alunas matriculadas: contagem da tag "0. Aluna" no CRM (sem tocar o EVO).
-    let totalAlunas = null;
-    try {
-      const tagAl = (autoTagAlunas.ler().tagAluna || '0. Aluna');
-      const nrm = (s) => String(s || '').trim().toLowerCase();
-      const found = contatos.tagsDistintas().find(x => nrm(x.tag) === nrm(tagAl));
-      if (found) totalAlunas = found.n;
-    } catch (_) {}
+    // Total de alunas ATIVAS: do EVO (status=1) quando o financeiro rodou — mesma
+    // fonte das fixas, evita o >100%. Senão, cai pra contagem da tag "0. Aluna" no CRM.
+    let totalAlunas = (r.ativas != null) ? r.ativas : null;
+    if (totalAlunas == null) {
+      try {
+        const tagAl = (autoTagAlunas.ler().tagAluna || '0. Aluna');
+        const nrm = (s) => String(s || '').trim().toLowerCase();
+        const found = contatos.tagsDistintas().find(x => nrm(x.tag) === nrm(tagAl));
+        if (found) totalAlunas = found.n;
+      } catch (_) {}
+    }
     const pctAlunasFixas = (totalAlunas && alunasFixas != null) ? Math.round(alunasFixas / totalAlunas * 100) : null;
     const porProf = Array.isArray(snap.por_professora) ? snap.por_professora : [];
     const profTier = (pc) => (pc == null ? 'nd' : (pc >= 90 ? 'cheia' : (pc >= 70 ? 'quase' : 'livre')));
@@ -4987,8 +4990,8 @@ function paginaGrade() {
       <div class="stat"><div class="n">${alunasFixas != null ? alunasFixas : '—'}</div><div class="l">alunas fixas</div><div class="gr-sub">${alunasFixas == null ? 'atualize a grade' : (pctAlunasFixas != null ? `${pctAlunasFixas}% de ${totalAlunas} alunas` : (r.fixas != null ? `${r.fixas} matrículas fixas` : ''))}</div></div>
       <div class="stat ok"><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação FIXAS</div><div class="gr-sub">${ocupPct == null ? 'atualize a grade' : (r.ocupacao_vagas ? `${r.ocupacao_fixas}/${r.ocupacao_vagas} vagas · sem sáb` : '')}</div></div>
       <div class="stat prez"><div class="n">${presPct != null ? presPct + '%' : '—'}</div><div class="l">presença na turma</div><div class="gr-sub">${presPct == null ? 'aulas já realizadas' : (r.presenca_vagas ? `${r.presenca_real}/${r.presenca_vagas} vagas · realizadas` : '')}</div></div>
-      ${tkmMed != null ? `<div class="stat tkm"><div class="n">${fmtBRL(tkmMed)}</div><div class="l">TKM médio</div><div class="gr-sub">contrato mensalizado · ${r.tkm_alunas || 0} alunas</div></div>` : ''}
-      ${fatMes != null ? `<div class="stat fat"><div class="n">${fmtBRL(fatMes)}</div><div class="l">faturamento do mês</div><div class="gr-sub">a vencer no mês · ${r.fatura_alunas || 0} alunas</div></div>` : ''}
+      ${tkmMed != null ? `<div class="stat tkm"><div class="n">${fmtBRL(tkmMed)}</div><div class="l">TKM médio</div><div class="gr-sub">contrato mensalizado · ${r.tkm_alunas || 0} alunas ativas</div></div>` : ''}
+      ${fatMes != null ? `<div class="stat fat"><div class="n">${fmtBRL(fatMes)}</div><div class="l">faturamento do mês</div><div class="gr-sub">a vencer no mês${r.fatura_n ? ` · ${r.fatura_n} lançamentos` : ''}</div></div>` : ''}
     </div>
     <div class="sec-t" data-nosec>Ocupação &amp; presença por professora</div>
     <p class="quando" style="margin:0 0 6px">
