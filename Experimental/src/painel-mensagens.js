@@ -4923,6 +4923,8 @@ function paginaGrade() {
     const presPct = (r.presenca_pct != null) ? r.presenca_pct : null;
     const tkmMed = (r.tkm_medio != null) ? r.tkm_medio : null;
     const fatMes = (r.fatura_mes != null) ? r.fatura_mes : null;
+    const semCont = Array.isArray(r.sem_contrato) ? r.sem_contrato : [];
+    const fatIt = Array.isArray(r.fatura_itens) ? r.fatura_itens : [];
     // Total de alunas ATIVAS: do EVO (status=1) quando o financeiro rodou — mesma
     // fonte das fixas, evita o >100%. Senão, cai pra contagem da tag "0. Aluna" no CRM.
     let totalAlunas = (r.ativas != null) ? r.ativas : null;
@@ -4985,13 +4987,26 @@ function paginaGrade() {
       </div>`;
     }).join('') : '<p class="quando" style="margin:0">Clique em <b>🔄 Atualizar</b> para gerar a ocupação por professora.</p>';
 
+    // Modal do FATURAMENTO (lançamentos do mês) e do TKM (ativas sem contrato)
+    const sitLbl = (s) => { s = String(s || '').toLowerCase(); return s.indexOf('receiv') >= 0 ? 'pago' : (s.indexOf('pend') >= 0 ? 'a vencer' : (s.indexOf('over') >= 0 ? 'vencido' : (s || '—'))); };
+    const fatRows = fatIt.map(it => `<tr><td>${escH(it.aluna)}</td><td>${escH(it.contrato || '—')}</td><td>${fmtDia(it.venc)}</td><td class="v">${fmtBRL(it.valor)}</td><td class="v">${it.pago != null ? fmtBRL(it.pago) : '—'}</td><td><span class="gr-sit">${escH(sitLbl(it.sit))}</span></td></tr>`).join('');
+    const mFat = (fatMes == null) ? '' : `<div class="gr-ov" id="ov-fat" onclick="if(event.target===this)fecharM('fat')"><div class="gr-md">
+      <div class="gr-md-h"><b>Faturamento do mês</b><span>${r.fatura_n || 0} lançamentos · a vencer</span><button type="button" onclick="fecharM('fat')" aria-label="Fechar">✕</button></div>
+      <div class="gr-md-b"><table class="gr-md-t"><thead><tr><th>Aluna</th><th>Contrato</th><th>Vence</th><th class="v">Cobrado</th><th class="v">Pago</th><th>Situação</th></tr></thead><tbody>${fatRows || '<tr><td colspan="6" class="gr-md-vz">sem lançamentos no mês</td></tr>'}</tbody></table></div>
+      <div class="gr-md-foot"><span>Total a vencer no mês</span><span>${fmtBRL(fatMes)}</span></div></div></div>`;
+    const scRows = semCont.map(x => `<tr><td>${escH(x.nome)}</td><td>${escH(x.plano || '—')}</td></tr>`).join('');
+    const mTkm = (tkmMed == null) ? '' : `<div class="gr-ov" id="ov-tkm" onclick="if(event.target===this)fecharM('tkm')"><div class="gr-md" style="max-width:520px">
+      <div class="gr-md-h"><b>Ativas sem valor de contrato</b><span>${semCont.length} de ${r.ativas || 0}</span><button type="button" onclick="fecharM('tkm')" aria-label="Fechar">✕</button></div>
+      <div class="gr-md-b"><table class="gr-md-t"><thead><tr><th>Aluna</th><th>Plano</th></tr></thead><tbody>${scRows || '<tr><td colspan="2" class="gr-md-vz">Todas as ativas têm valor de contrato 🎉</td></tr>'}</tbody></table></div>
+      <p class="gr-md-nota">Estas alunas ficam fora da média do TKM — normalmente <b>cortesia/VIP</b> (R$ 0) ou contrato sem venda casável no EVO.</p></div></div>`;
+
     corpo = `<div class="stats">
       <div class="stat tot"><div class="n">${r.turmas != null ? r.turmas : turmas.length}</div><div class="l">turmas</div></div>
       <div class="stat"><div class="n">${alunasFixas != null ? alunasFixas : '—'}</div><div class="l">alunas fixas</div><div class="gr-sub">${alunasFixas == null ? 'atualize a grade' : (pctAlunasFixas != null ? `${pctAlunasFixas}% de ${totalAlunas} alunas` : (r.fixas != null ? `${r.fixas} matrículas fixas` : ''))}</div></div>
       <div class="stat ok"><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação FIXAS</div><div class="gr-sub">${ocupPct == null ? 'atualize a grade' : (r.ocupacao_vagas ? `${r.ocupacao_fixas}/${r.ocupacao_vagas} vagas · sem sáb` : '')}</div></div>
       <div class="stat prez"><div class="n">${presPct != null ? presPct + '%' : '—'}</div><div class="l">presença na turma</div><div class="gr-sub">${presPct == null ? 'aulas já realizadas' : (r.presenca_vagas ? `${r.presenca_real}/${r.presenca_vagas} vagas · realizadas` : '')}</div></div>
-      ${tkmMed != null ? `<div class="stat tkm"><div class="n">${fmtBRL(tkmMed)}</div><div class="l">TKM médio</div><div class="gr-sub">contrato mensalizado · ${r.tkm_alunas || 0}${r.ativas ? ` de ${r.ativas}` : ''} ativas</div></div>` : ''}
-      ${fatMes != null ? `<div class="stat fat"><div class="n">${fmtBRL(fatMes)}</div><div class="l">faturamento do mês</div><div class="gr-sub">a vencer no mês${r.fatura_n ? ` · ${r.fatura_n} lançamentos` : ''}</div></div>` : ''}
+      ${tkmMed != null ? `<div class="stat tkm gr-click" onclick="abrirM('tkm')" title="ver as alunas ativas sem valor de contrato"><div class="n">${fmtBRL(tkmMed)}</div><div class="l">TKM médio</div><div class="gr-sub">contrato mensalizado · ${r.tkm_alunas || 0}${r.ativas ? ` de ${r.ativas}` : ''} ativas${semCont.length ? ` <span class="gr-md-hint">▸ ${semCont.length} sem contrato</span>` : ''}</div></div>` : ''}
+      ${fatMes != null ? `<div class="stat fat gr-click" onclick="abrirM('fat')" title="ver os lançamentos do mês"><div class="n">${fmtBRL(fatMes)}</div><div class="l">faturamento do mês</div><div class="gr-sub">a vencer no mês${r.fatura_n ? ` · ${r.fatura_n} lançamentos` : ''} <span class="gr-md-hint">▸ ver lista</span></div></div>` : ''}
     </div>
     <div class="sec-t" data-nosec>Ocupação &amp; presença por professora</div>
     <p class="quando" style="margin:0 0 6px">
@@ -5006,7 +5021,7 @@ function paginaGrade() {
       <input id="grBusca" type="search" placeholder="🔍 Buscar aluna — ver em quais turmas ela está (fixa, repô ou FREE)" autocomplete="off">
       <span id="grBuscaInfo" class="gr-busca-info"></span>
     </div>
-    ${desk}${mob}`;
+    ${desk}${mob}${mFat}${mTkm}`;
   }
 
   const corpoWrap = `<div class="wrap">
@@ -5096,6 +5111,29 @@ function paginaGrade() {
     .stat.fat .n{color:#9a6b00}
     /* valor mensal por aluna no expandir */
     .gr-tk{margin-left:7px;font-size:.66rem;font-weight:700;color:var(--teal);font-variant-numeric:tabular-nums}
+    /* KPIs clicáveis + modais (faturamento / sem contrato) */
+    .gr-click{cursor:pointer;transition:border-color .12s,box-shadow .12s}
+    .gr-click:hover{border-color:var(--teal);box-shadow:0 2px 10px rgba(14,110,107,.14)}
+    .gr-md-hint{display:inline-block;color:var(--teal);font-weight:800;white-space:nowrap}
+    .gr-ov{display:none;position:fixed;inset:0;background:rgba(16,24,40,.5);z-index:120;align-items:flex-start;justify-content:center;padding:36px 14px;overflow:auto}
+    .gr-ov.open{display:flex}
+    .gr-md{background:var(--card);border:1px solid var(--linha);border-radius:16px;width:100%;max-width:740px;box-shadow:0 18px 50px rgba(16,24,40,.35);display:flex;flex-direction:column;max-height:86vh}
+    .gr-md-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--linha)}
+    .gr-md-h b{font-size:1rem;color:var(--tinta)}
+    .gr-md-h span{color:var(--cinza);font-size:var(--fs-xs);font-weight:700}
+    .gr-md-h button{margin-left:auto;border:none;background:var(--linha-soft);color:var(--tinta);border-radius:9px;width:32px;height:32px;cursor:pointer;font-size:1rem;line-height:1}
+    .gr-md-h button:hover{background:var(--erro-bg);color:var(--erro)}
+    .gr-md-b{overflow:auto}
+    .gr-md-t{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
+    .gr-md-t th{position:sticky;top:0;background:var(--teal-soft);color:var(--teal-esc);text-align:left;padding:9px 16px;font-size:var(--fs-xs);font-weight:800;text-transform:uppercase;letter-spacing:.03em;z-index:1}
+    .gr-md-t th.v,.gr-md-t td.v{text-align:right;font-variant-numeric:tabular-nums}
+    .gr-md-t td{padding:8px 16px;border-top:1px solid var(--linha-soft);color:var(--tinta)}
+    .gr-md-t td.v{font-weight:700}
+    .gr-md-t tbody tr:hover{background:var(--teal-soft)}
+    .gr-md-vz{color:var(--faint);text-align:center;padding:20px}
+    .gr-sit{font-size:var(--fs-xs);font-weight:700;color:var(--cinza)}
+    .gr-md-foot{display:flex;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--linha);font-weight:800;font-size:1rem;color:var(--tinta)}
+    .gr-md-nota{margin:0;padding:12px 18px;color:var(--cinza);font-size:var(--fs-xs);border-top:1px solid var(--linha-soft)}
     @media(max-width:760px){ .gr-desk{display:none} .gr-mob{display:block} }
     </style>
     <div class="gr-top">
@@ -5113,6 +5151,10 @@ function paginaGrade() {
         fetch('/grade/atualizar',{method:'POST'}).then(function(r){return r.json();}).then(function(){gerando=true;setTimeout(poll,4000);}).catch(function(){b.disabled=false;b.textContent='🔄 Atualizar';});}
       function poll(){fetch('/grade/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){if(s.gerando){setTimeout(poll,4000);}else{location.reload();}}).catch(function(){setTimeout(poll,5000);});}
       if(gerando) setTimeout(poll,4000);
+      // Modais do faturamento / TKM (ativas sem contrato)
+      function abrirM(id){var e=document.getElementById('ov-'+id);if(e)e.classList.add('open');}
+      function fecharM(id){var e=document.getElementById('ov-'+id);if(e)e.classList.remove('open');}
+      document.addEventListener('keydown',function(e){if(e.key==='Escape'){fecharM('fat');fecharM('tkm');}});
       // Busca de aluna: destaca as turmas em que ela é fixa e esmaece as demais.
       (function(){
         var inp=document.getElementById('grBusca'); if(!inp) return;

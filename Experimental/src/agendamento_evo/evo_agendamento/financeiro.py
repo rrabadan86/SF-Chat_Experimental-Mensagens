@@ -132,11 +132,11 @@ def _valor_contrato(evo, idm, id_member_membership, branch_id=None):
 
 
 def _faturamento_mes(evo, now, branch_id=None):
-    """Soma de TODOS os recebíveis a vencer no mês corrente (não cancelados).
-    Retorna (total, nº de lançamentos)."""
+    """TODOS os recebíveis a vencer no mês corrente (não cancelados).
+    Retorna (total, nº de lançamentos, itens) — itens com aluna/valor/pago/venc."""
     hoje = now.date()
     ini, fim = hoje.replace(day=1), _fim_do_mes(hoje)
-    take, skip, soma, n = 100, 0, 0.0, 0
+    take, skip, soma, itens = 100, 0, 0.0, []
     for _ in range(100):                               # teto de páginas (segurança)
         try:
             rows = evo._request("GET", "/api/v1/receivables",
@@ -155,13 +155,27 @@ def _faturamento_mes(evo, now, branch_id=None):
             if v is None:
                 continue
             try:
-                soma += float(v); n += 1
+                v = float(v)
             except (TypeError, ValueError):
-                pass
+                continue
+            pago = r.get("ammountPaid")
+            try:
+                pago = float(pago) if pago is not None else None
+            except (TypeError, ValueError):
+                pago = None
+            soma += v
+            itens.append({
+                "idm": r.get("idMemberPayer"),
+                "aluna": (r.get("payerName") or "—").strip(),
+                "valor": round(v, 2),
+                "pago": round(pago, 2) if pago is not None else None,
+                "venc": str(r.get("dueDate") or "")[:10],
+                "sit": str((r.get("status") or {}).get("name") or ""),
+            })
         if len(rows) < take:
             break
         skip += take
-    return (round(soma, 2) if n else None), n
+    return (round(soma, 2) if itens else None), len(itens), itens
 
 
 def carregar_financeiro(evo, now, branch_id=None):
@@ -180,7 +194,8 @@ def carregar_financeiro(evo, now, branch_id=None):
         idm = m.get("idMember")
         if not idm:
             continue
-        info = {"ticket": None, "plano": None}
+        nome = ((m.get("firstName") or "") + " " + (m.get("lastName") or "")).strip()
+        info = {"nome": nome or f"id {idm}", "ticket": None, "plano": None}
         try:
             mb = _membership_ativa(evo, idm, m, branch_id) or {}
             info["plano"] = (mb.get("name") or "").strip() or None
@@ -194,7 +209,19 @@ def carregar_financeiro(evo, now, branch_id=None):
             log.warning("financeiro: aluna %s falhou (%s)", idm, e)
         por[idm] = info
 
-    fatura_mes, fatura_n = _faturamento_mes(evo, now, branch_id)
+    fatura_mes, fatura_n, fatura_itens = _faturamento_mes(evo, now, branch_id)
+    # nome do contrato de cada linha = plano da matrícula ativa do pagador (quando ele
+    # é uma aluna ativa); senão fica em branco.
+    for it in fatura_itens:
+        it["contrato"] = (por.get(it.pop("idm"), {}) or {}).get("plano") or ""
+    fatura_itens.sort(key=lambda x: x.get("valor") or 0, reverse=True)
+
+    # alunas ATIVAS sem valor de contrato (as que ficam fora da média do TKM).
+    sem_contrato = sorted(
+        ({"nome": v["nome"], "plano": v.get("plano") or "—"}
+         for v in por.values() if not v.get("ticket")),
+        key=lambda x: x["nome"].lower())
+
     tickets = [v["ticket"] for v in por.values() if v.get("ticket")]
     resumo = {
         "ativas": len(por),
@@ -203,5 +230,7 @@ def carregar_financeiro(evo, now, branch_id=None):
         "tkm_total": round(sum(tickets), 2) if tickets else None,
         "fatura_mes": fatura_mes,
         "fatura_n": fatura_n,
+        "fatura_itens": fatura_itens,
+        "sem_contrato": sem_contrato,
     }
     return por, resumo
