@@ -91,13 +91,16 @@ def _ocupa(info, aconteceu):
 
 
 def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
-                 financeiro=False, **_ignored):
+                 financeiro=False, fin_cache=None, **_ignored):
     """Grade da semana (semana_offset: 0 = atual). Cada turma traz a vaga de matrícula
     (fixas), a ocupação real (fixas + reposição + FREE) e a presença das fixas nas
     aulas que já aconteceram.
 
-    financeiro=True calcula também o TKM (ticket mensal do contrato) e o faturamento
-    do mês por aluna — custa ~2 chamadas EVO a mais por aluna fixa (ver financeiro.py)."""
+    financeiro=True calcula o TKM/faturamento agora (lê o contrato de cada aluna ativa
+    no EVO — ~2 chamadas por aluna). Alternativamente, fin_cache (o bloco financeiro de
+    uma geração anterior: {gerado_em, por_aluna, resumo}) REAPROVEITA o TKM/faturamento
+    sem tocar no EVO — usado pelo "Atualizar grade" leve. Sem nenhum dos dois, a grade
+    vai sem os números financeiros."""
     evo = evo or EvoClient()
     now = now or agora_brasilia()
     hoje = now.date()
@@ -224,14 +227,22 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
 
     turmas.sort(key=lambda t: (t["data"], t["hora"]))
 
-    # Financeiro / TKM (opcional) — calculado sobre TODAS as alunas ATIVAS do EVO
-    # (fixas + FREE), não só as da grade. Custa chamadas EVO a mais.
-    fin_por, fin_resumo = (fin_mod.carregar_financeiro(evo, now, branch_id)
-                           if financeiro else ({}, {}))
+    # Financeiro / TKM — calcula agora (financeiro=True, sobre TODAS as alunas ativas
+    # do EVO), ou REAPROVEITA o cache (fin_cache) sem tocar no EVO.
+    fin_por, fin_resumo, financeiro_em = {}, {}, None
+    if financeiro:
+        fin_por, fin_resumo = fin_mod.carregar_financeiro(evo, now, branch_id)
+        financeiro_em = now.strftime("%Y-%m-%d %H:%M")
+    elif fin_cache:
+        fin_por = fin_cache.get("por_aluna") or {}
+        fin_resumo = fin_cache.get("resumo") or {}
+        financeiro_em = fin_cache.get("gerado_em")
     if fin_por:
         for t in turmas:                       # anexa o ticket de cada fixa p/ o "expandir"
             for x in t["fixas"]:
-                f = fin_por.get(x.get("idm"))
+                idm = x.get("idm")
+                # cache vindo do JSON tem chaves string; o cálculo ao vivo tem int.
+                f = fin_por.get(idm) or fin_por.get(str(idm))
                 if f:
                     x["ticket"] = f.get("ticket")
                     x["plano"] = f.get("plano")
@@ -273,6 +284,7 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
 
     return {
         "gerado_em": now.strftime("%Y-%m-%d %H:%M"),
+        "financeiro_em": financeiro_em,           # quando o TKM/faturamento foi calculado
         "semana_offset": off,
         "inicio": inicio.strftime("%Y-%m-%d"),
         "fim": fim.strftime("%Y-%m-%d"),
@@ -293,4 +305,8 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
             "presenca_vagas": pres_vagas_tot,
             **fin_resumo,
         },
+        # bloco interno p/ o run_grade_fixas gravar o cache financeiro (só quando
+        # calculado ao vivo). Não vai pro snapshot servido ao painel.
+        "_fin_cache": ({"gerado_em": financeiro_em, "por_aluna": fin_por, "resumo": fin_resumo}
+                       if financeiro and fin_por else None),
     }

@@ -33,19 +33,44 @@ def main():
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr,
                         format="%(levelname)s %(name)s: %(message)s")
 
+    data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data"))
+    fin_cache_path = os.path.join(data_dir, "grade-financeiro.json")
+    full = not args.sem_financeiro
+
+    # "Atualizar grade" (leve): não recalcula o financeiro — reaproveita o cache da
+    # última geração completa (05:40 ou "Atualizar tudo"), sem tocar no EVO.
+    fin_cache = None
+    if not full:
+        try:
+            with open(fin_cache_path, encoding="utf-8") as f:
+                fin_cache = json.load(f)
+        except Exception:
+            fin_cache = None            # sem cache ainda → grade vai sem financeiro
+
     from evo_agendamento.grade_fixas import montar_grade
-    res = montar_grade(semana_offset=args.semana, financeiro=(not args.sem_financeiro))
+    res = montar_grade(semana_offset=args.semana, financeiro=full, fin_cache=fin_cache)
+
+    # separa o bloco interno de cache (não vai pro snapshot do painel)
+    fin_block = res.pop("_fin_cache", None)
 
     # snapshot servido pela página /grade. Semana atual = grade-fixas.json; outras
     # semanas = grade-fixas.s<off>.json (para a navegação de semanas).
     base = "grade-fixas.json" if args.semana == 0 else f"grade-fixas.s{args.semana}.json"
-    out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", base))
+    out = os.path.join(data_dir, base)
     try:
-        os.makedirs(os.path.dirname(out), exist_ok=True)
+        os.makedirs(data_dir, exist_ok=True)
         with open(out, "w", encoding="utf-8") as f:
             json.dump(res, f, ensure_ascii=False)
     except Exception as e:
         print(f"ERRO ao gravar {out}: {e}", file=sys.stderr)
+
+    # grava o cache financeiro só quando foi calculado ao vivo (geração completa)
+    if full and fin_block:
+        try:
+            with open(fin_cache_path, "w", encoding="utf-8") as f:
+                json.dump(fin_block, f, ensure_ascii=False)
+        except Exception as e:
+            print(f"ERRO ao gravar {fin_cache_path}: {e}", file=sys.stderr)
 
     if args.imprimir:
         r = res["resumo"]
@@ -71,6 +96,11 @@ def main():
         if r.get('fatura_mes') is not None:
             print(f"   faturamento do mês (a vencer): R$ {r['fatura_mes']:.2f} "
                   f"({r.get('fatura_n', '?')} lançamentos)")
+        if r.get('tkm_medio') is not None:
+            print("   financeiro: " + ("calculado agora (leu o EVO)" if full
+                  else f"reaproveitado de {res.get('financeiro_em', '?')} (sem tocar no EVO)"))
+        elif not full:
+            print("   financeiro: sem cache ainda — rode uma geração completa (sem --sem-financeiro)")
         print(f"   arquivo: {out}\n")
         _WD = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
         _IC = {"foi": "✓", "faltou": "✗", "justif": "⚠"}
