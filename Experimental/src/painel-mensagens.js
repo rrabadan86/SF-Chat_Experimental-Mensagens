@@ -4990,10 +4990,11 @@ function paginaGrade() {
     // Modal do FATURAMENTO (lançamentos do mês) e do TKM (ativas sem contrato)
     const sitLbl = (s) => { s = String(s || '').toLowerCase(); return s.indexOf('receiv') >= 0 ? 'pago' : (s.indexOf('pend') >= 0 ? 'a vencer' : (s.indexOf('over') >= 0 ? 'vencido' : (s || '—'))); };
     const fatRows = fatIt.map(it => `<tr><td>${escH(it.aluna)}</td><td>${escH(it.contrato || '—')}</td><td>${fmtDia(it.venc)}</td><td class="v">${fmtBRL(it.valor)}</td><td class="v">${it.pago != null ? fmtBRL(it.pago) : '—'}</td><td><span class="gr-sit">${escH(sitLbl(it.sit))}</span></td></tr>`).join('');
+    const fatTotPago = fatIt.reduce((a, it) => a + (Number(it.pago) || 0), 0);
     const mFat = (fatMes == null) ? '' : `<div class="gr-ov" id="ov-fat" onclick="if(event.target===this)fecharM('fat')"><div class="gr-md">
-      <div class="gr-md-h"><b>Faturamento do mês</b><span>${r.fatura_n || 0} lançamentos · a vencer</span><button type="button" onclick="fecharM('fat')" aria-label="Fechar">✕</button></div>
-      <div class="gr-md-b"><table class="gr-md-t"><thead><tr><th>Aluna</th><th>Contrato</th><th>Vence</th><th class="v">Cobrado</th><th class="v">Pago</th><th>Situação</th></tr></thead><tbody>${fatRows || '<tr><td colspan="6" class="gr-md-vz">sem lançamentos no mês</td></tr>'}</tbody></table></div>
-      <div class="gr-md-foot"><span>Total a vencer no mês</span><span>${fmtBRL(fatMes)}</span></div></div></div>`;
+      <div class="gr-md-h"><b>Faturamento do mês</b><span>${r.fatura_n || 0} lançamentos</span><button type="button" onclick="fecharM('fat')" aria-label="Fechar">✕</button></div>
+      <div class="gr-md-b"><table class="gr-md-t"><thead><tr><th>Aluna</th><th>Contrato</th><th>Vence</th><th class="v">Cobrado</th><th class="v">Pago</th><th>Situação</th></tr></thead><tbody>${fatRows || '<tr><td colspan="6" class="gr-md-vz">sem lançamentos no mês</td></tr>'}<tr class="gr-md-tot"><td colspan="3">Total do mês</td><td class="v">${fmtBRL(fatMes)}</td><td class="v">${fmtBRL(fatTotPago)}</td><td></td></tr></tbody></table></div>
+      <div class="gr-md-foot"><span>Cobrado no mês</span><span>${fmtBRL(fatMes)} · pago ${fmtBRL(fatTotPago)}</span></div></div></div>`;
     const scRows = semCont.map(x => `<tr><td>${escH(x.nome)}</td><td>${escH(x.plano || '—')}</td></tr>`).join('');
     const mTkm = (tkmMed == null) ? '' : `<div class="gr-ov" id="ov-tkm" onclick="if(event.target===this)fecharM('tkm')"><div class="gr-md" style="max-width:520px">
       <div class="gr-md-h"><b>Ativas sem valor de contrato</b><span>${semCont.length} de ${r.ativas || 0}</span><button type="button" onclick="fecharM('tkm')" aria-label="Fechar">✕</button></div>
@@ -5132,6 +5133,7 @@ function paginaGrade() {
     .gr-md-t tbody tr:hover{background:var(--teal-soft)}
     .gr-md-vz{color:var(--faint);text-align:center;padding:20px}
     .gr-sit{font-size:var(--fs-xs);font-weight:700;color:var(--cinza)}
+    .gr-md-t tr.gr-md-tot td{border-top:2px solid var(--linha);font-weight:800;background:var(--teal-soft);position:sticky;bottom:0}
     .gr-md-foot{display:flex;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--linha);font-weight:800;font-size:1rem;color:var(--tinta)}
     .gr-md-nota{margin:0;padding:12px 18px;color:var(--cinza);font-size:var(--fs-xs);border-top:1px solid var(--linha-soft)}
     @media(max-width:760px){ .gr-desk{display:none} .gr-mob{display:block} }
