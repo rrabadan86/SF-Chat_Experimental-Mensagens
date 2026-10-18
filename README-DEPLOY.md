@@ -29,8 +29,17 @@ pm2 restart <unidade>-exp <unidade>-painel
 > (em `data/` e no `.env`), então não são afetados.
 
 Mudanças que mexem em **dados da /grade** (presença, TKM, faturamento) só aparecem
-depois de **regenerar o snapshot**: clique **🔄 Atualizar** na página, ou espere o
+depois de **regenerar o snapshot**: use um dos botões da página (abaixo), ou espere o
 cron das 05:40. Mudanças só de **exibição** (tooltips, rótulos) aparecem no restart.
+
+**Dois botões de atualização** (economia de chamadas ao EVO):
+- **🔄 Atualizar grade** (leve): refaz a grade da semana (presença/ocupação) e
+  **reaproveita** o TKM/faturamento e as matrículas em cache (`data/grade-financeiro.json`
+  e `data/grade-enroll.json`). Consulta o EVO só para a presença das turmas e alunas novas.
+- **💰 Atualizar tudo**: recalcula também o TKM/faturamento e relê todas as matrículas
+  no EVO. Mais demorado — use quando quiser forçar os números financeiros na hora.
+- O **cron das 05:40 roda completo** todo dia (atualiza os dois caches), então o botão
+  leve fica fiel o dia todo. O rodapé da página mostra **"TKM/faturamento de &lt;hora&gt;"**.
 
 ---
 
