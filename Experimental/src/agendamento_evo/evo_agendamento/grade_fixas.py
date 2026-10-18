@@ -91,7 +91,8 @@ def _ocupa(info, aconteceu):
 
 
 def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
-                 financeiro=False, fin_cache=None, **_ignored):
+                 financeiro=False, fin_cache=None,
+                 enroll_cache=None, refresh_enroll=True, **_ignored):
     """Grade da semana (semana_offset: 0 = atual). Cada turma traz a vaga de matrícula
     (fixas), a ocupação real (fixas + reposição + FREE) e a presença das fixas nas
     aulas que já aconteceram.
@@ -151,15 +152,21 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
         return det_cache[key]
 
     # matrículas FIXAS (idConfiguration) de cada aluna — 1 chamada por aluna, em cache.
+    # refresh_enroll=False reaproveita o enroll_cache (de uma geração anterior) e só
+    # consulta o EVO para alunas NOVAS (não no cache) — corta a maior parte das chamadas.
     fix_cache = {}
     def _fixset(idm):
         if idm not in fix_cache:
-            try:
-                data = evo.member_enrollments(idm, branch_id=branch_id) or []
-                fix_cache[idm] = {e["idConfiguration"] for e in data
-                                  if e.get("idConfiguration") and _matricula_ativa(e, hoje)}
-            except Exception:
-                fix_cache[idm] = None     # erro de leitura → desconhecido
+            cached = (enroll_cache or {}).get(str(idm)) if not refresh_enroll else None
+            if cached is not None:
+                fix_cache[idm] = {c for c in cached}      # do cache, sem tocar no EVO
+            else:
+                try:
+                    data = evo.member_enrollments(idm, branch_id=branch_id) or []
+                    fix_cache[idm] = {e["idConfiguration"] for e in data
+                                      if e.get("idConfiguration") and _matricula_ativa(e, hoje)}
+                except Exception:
+                    fix_cache[idm] = None     # erro de leitura → desconhecido
         return fix_cache[idm]
 
     turmas = []
@@ -309,4 +316,8 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
         # calculado ao vivo). Não vai pro snapshot servido ao painel.
         "_fin_cache": ({"gerado_em": financeiro_em, "por_aluna": fin_por, "resumo": fin_resumo}
                        if financeiro and fin_por else None),
+        # mapa de matrículas (idMember -> [idConfiguration]) p/ o cache de enrollment.
+        # Em geração completa reseta ao roster atual; em leve mescla cache + novas.
+        "_enroll": {**({} if refresh_enroll else (enroll_cache or {})),
+                    **{str(k): sorted(v) for k, v in fix_cache.items() if v is not None}},
     }

@@ -35,23 +35,32 @@ def main():
 
     data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data"))
     fin_cache_path = os.path.join(data_dir, "grade-financeiro.json")
+    enroll_cache_path = os.path.join(data_dir, "grade-enroll.json")
     full = not args.sem_financeiro
 
-    # "Atualizar grade" (leve): não recalcula o financeiro — reaproveita o cache da
-    # última geração completa (05:40 ou "Atualizar tudo"), sem tocar no EVO.
-    fin_cache = None
+    # "Atualizar grade" (leve): não recalcula o financeiro nem relê as matrículas —
+    # reaproveita os caches da última geração completa (05:40 ou "Atualizar tudo"),
+    # consultando o EVO só para a presença das turmas e alunas novas.
+    fin_cache, enroll_cache = None, None
     if not full:
         try:
             with open(fin_cache_path, encoding="utf-8") as f:
                 fin_cache = json.load(f)
         except Exception:
             fin_cache = None            # sem cache ainda → grade vai sem financeiro
+        try:
+            with open(enroll_cache_path, encoding="utf-8") as f:
+                enroll_cache = (json.load(f) or {}).get("fix")
+        except Exception:
+            enroll_cache = None
 
     from evo_agendamento.grade_fixas import montar_grade
-    res = montar_grade(semana_offset=args.semana, financeiro=full, fin_cache=fin_cache)
+    res = montar_grade(semana_offset=args.semana, financeiro=full, fin_cache=fin_cache,
+                       enroll_cache=enroll_cache, refresh_enroll=full)
 
-    # separa o bloco interno de cache (não vai pro snapshot do painel)
+    # separa os blocos internos de cache (não vão pro snapshot do painel)
     fin_block = res.pop("_fin_cache", None)
+    enroll_out = res.pop("_enroll", None)
 
     # snapshot servido pela página /grade. Semana atual = grade-fixas.json; outras
     # semanas = grade-fixas.s<off>.json (para a navegação de semanas).
@@ -71,6 +80,14 @@ def main():
                 json.dump(fin_block, f, ensure_ascii=False)
         except Exception as e:
             print(f"ERRO ao gravar {fin_cache_path}: {e}", file=sys.stderr)
+
+    # grava o cache de matrículas (completa reseta; leve mescla) — só p/ a semana atual
+    if enroll_out is not None and args.semana == 0:
+        try:
+            with open(enroll_cache_path, "w", encoding="utf-8") as f:
+                json.dump({"gerado_em": res.get("gerado_em"), "fix": enroll_out}, f, ensure_ascii=False)
+        except Exception as e:
+            print(f"ERRO ao gravar {enroll_cache_path}: {e}", file=sys.stderr)
 
     if args.imprimir:
         r = res["resumo"]
