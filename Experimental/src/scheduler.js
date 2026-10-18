@@ -48,7 +48,9 @@ function runGradeFixas(motivo) {
   const script = path.join(dir, 'run_grade_fixas.py');
   const py = process.env.PYTHON_BIN || 'python3';
   const tag = motivo ? ` (${motivo})` : '';
-  execFile(py, [script, '--dias', '7'], { cwd: dir, timeout: 600000 }, (err, stdout, stderr) => {
+  // sem args: semana atual + financeiro (TKM/faturamento) — igual ao botão Atualizar.
+  // timeout 15 min: com o financeiro a geração lê o contrato de cada aluna ativa.
+  execFile(py, [script], { cwd: dir, timeout: 900000 }, (err, stdout, stderr) => {
     _gradeFixasRunning = false;
     const out = (stdout || stderr || '').trim();
     if (err) { logError('Grade de fixas (run_grade_fixas)' + tag, err); if (out) console.log('   ' + out); return; }
