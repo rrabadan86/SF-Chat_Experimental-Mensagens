@@ -5009,12 +5009,12 @@ function paginaGrade() {
       <p class="gr-md-nota">Ficam fora da média do TKM — <b>trancada</b> (plano congelado) ou contrato sem venda casável no EVO. <b>VIP/cortesia</b> (R$ 0) já são excluídas da base de alunas.</p></div></div>`;
 
     corpo = `<div class="stats">
-      <div class="stat tot"><div class="n">${r.turmas != null ? r.turmas : turmas.length}</div><div class="l">turmas</div></div>
-      <div class="stat"><div class="n">${alunasFixas != null ? alunasFixas : '—'}</div><div class="l">alunas fixas</div><div class="gr-sub">${alunasFixas == null ? 'atualize a grade' : (pctAlunasFixas != null ? `${pctAlunasFixas}% de ${totalAlunas} alunas` : (r.fixas != null ? `${r.fixas} matrículas fixas` : ''))}</div></div>
-      <div class="stat ok"><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação FIXAS</div><div class="gr-sub">${ocupPct == null ? 'atualize a grade' : (r.ocupacao_vagas ? `${r.ocupacao_fixas}/${r.ocupacao_vagas} vagas · sem sáb` : '')}</div></div>
-      <div class="stat prez"><div class="n">${presPct != null ? presPct + '%' : '—'}</div><div class="l">presença na turma</div><div class="gr-sub">${presPct == null ? 'aulas já realizadas' : (r.presenca_vagas ? `${r.presenca_real}/${r.presenca_vagas} vagas · realizadas` : '')}</div></div>
-      ${tkmMed != null ? `<div class="stat tkm gr-click" onclick="abrirM('tkm')" title="ver as alunas ativas sem valor de contrato"><div class="n">${fmtBRL(tkmMed)}</div><div class="l">TKM médio</div><div class="gr-sub">contrato mensalizado · ${r.tkm_alunas || 0}${r.ativas ? ` de ${r.ativas}` : ''} ativas${r.trancadas ? ` · ${r.trancadas} trancada${r.trancadas === 1 ? '' : 's'}` : ''}${semCont.length ? ` <span class="gr-md-hint">▸ ${semCont.length} sem contrato</span>` : ''}</div></div>` : ''}
-      ${fatMes != null ? `<div class="stat fat gr-click" onclick="abrirM('fat')" title="ver os lançamentos do mês"><div class="n">${fmtBRL(fatMes)}</div><div class="l">faturamento do mês</div><div class="gr-sub">a vencer no mês${r.fatura_n ? ` · ${r.fatura_n} lançamentos` : ''} <span class="gr-md-hint">▸ ver lista</span></div></div>` : ''}
+      <div class="stat tot" title="Total de turmas na semana (Seg a Sáb)."><div class="n">${r.turmas != null ? r.turmas : turmas.length}</div><div class="l">turmas</div></div>
+      <div class="stat" title="Alunas com matrícula FIXA (recorrente) em alguma turma da semana, e o quanto representam das alunas ativas do EVO."><div class="n">${alunasFixas != null ? alunasFixas : '—'}</div><div class="l">alunas fixas</div><div class="gr-sub">${alunasFixas == null ? 'atualize a grade' : (pctAlunasFixas != null ? `${pctAlunasFixas}% de ${totalAlunas} alunas` : (r.fixas != null ? `${r.fixas} matrículas fixas` : ''))}</div></div>
+      <div class="stat ok" title="Ocupação por matrículas fixas = fixas ÷ vagas (sem sábado/escala). Mede quanto da agenda já está vendida."><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação FIXAS</div><div class="gr-sub">${ocupPct == null ? 'atualize a grade' : (r.ocupacao_vagas ? `${r.ocupacao_fixas}/${r.ocupacao_vagas} vagas · sem sáb` : '')}</div></div>
+      <div class="stat prez" title="Presença real média = quem de fato ocupou a aula (fixas presentes + reposição + FREE) ÷ vagas, só nas aulas já realizadas da semana. Sem sábado (escala)."><div class="n">${presPct != null ? presPct + '%' : '—'}</div><div class="l">presença na turma</div><div class="gr-sub">${presPct == null ? 'aulas já realizadas' : (r.presenca_vagas ? `${r.presenca_real}/${r.presenca_vagas} vagas · realizadas` : '')}</div></div>
+      ${tkmMed != null ? `<div class="stat tkm gr-click" onclick="abrirM('tkm')" title="Ticket médio mensal = média do valor mensalizado do contrato vigente de cada aluna ativa (valor do contrato ÷ meses de duração). Inclui trancadas; exclui VIP/cortesia. Clique para ver quem está sem valor de contrato."><div class="n">${fmtBRL(tkmMed)}</div><div class="l">TKM médio</div><div class="gr-sub">contrato mensalizado · ${r.tkm_alunas || 0}${r.ativas ? ` de ${r.ativas}` : ''} ativas${r.trancadas ? ` · ${r.trancadas} trancada${r.trancadas === 1 ? '' : 's'}` : ''}${semCont.length ? ` <span class="gr-md-hint">▸ ${semCont.length} sem contrato</span>` : ''}</div></div>` : ''}
+      ${fatMes != null ? `<div class="stat fat gr-click" onclick="abrirM('fat')" title="Soma dos recebíveis a vencer no mês (todas as alunas). Clique para ver linha a linha: aluna, contrato, cobrado, pago (só o que já caiu) e situação."><div class="n">${fmtBRL(fatMes)}</div><div class="l">faturamento do mês</div><div class="gr-sub">a vencer no mês${r.fatura_n ? ` · ${r.fatura_n} lançamentos` : ''} <span class="gr-md-hint">▸ ver lista</span></div></div>` : ''}
     </div>
     <div class="sec-t" data-nosec>Ocupação &amp; presença por professora</div>
     <p class="quando" style="margin:0 0 6px">
@@ -5117,6 +5117,7 @@ function paginaGrade() {
     .stat.prez .n{color:#3f5e9e}
     .stat.tkm .n{color:var(--teal)}
     .stat.fat .n{color:#9a6b00}
+    .stat[title]:not(.gr-click){cursor:help}
     /* valor mensal por aluna no expandir */
     .gr-tk{margin-left:7px;font-size:.66rem;font-weight:700;color:var(--teal);font-variant-numeric:tabular-nums}
     /* KPIs clicáveis + modais (faturamento / sem contrato) */
