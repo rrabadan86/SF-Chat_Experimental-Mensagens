@@ -4995,18 +4995,18 @@ function paginaGrade() {
       <div class="gr-md-h"><b>Faturamento do mês</b><span>${r.fatura_n || 0} lançamentos</span><button type="button" onclick="fecharM('fat')" aria-label="Fechar">✕</button></div>
       <div class="gr-md-b"><table class="gr-md-t"><thead><tr><th>Aluna</th><th>Contrato</th><th>Vence</th><th class="v">Cobrado</th><th class="v">Pago</th><th>Situação</th></tr></thead><tbody>${fatRows || '<tr><td colspan="6" class="gr-md-vz">sem lançamentos no mês</td></tr>'}<tr class="gr-md-tot"><td colspan="3">Total do mês</td><td class="v">${fmtBRL(fatMes)}</td><td class="v">${fmtBRL(fatTotPago)}</td><td></td></tr></tbody></table></div>
       <div class="gr-md-foot"><span>Cobrado no mês</span><span>${fmtBRL(fatMes)} · pago ${fmtBRL(fatTotPago)}</span></div></div></div>`;
-    const scRows = semCont.map(x => `<tr><td>${escH(x.nome)}</td><td>${escH(x.plano || '—')}</td></tr>`).join('');
+    const scRows = semCont.map(x => `<tr><td>${escH(x.nome)}${x.trancada ? ' <span class="gr-trc">🔒 trancada</span>' : ''}</td><td>${escH(x.plano || '—')}</td></tr>`).join('');
     const mTkm = (tkmMed == null) ? '' : `<div class="gr-ov" id="ov-tkm" onclick="if(event.target===this)fecharM('tkm')"><div class="gr-md" style="max-width:520px">
       <div class="gr-md-h"><b>Ativas sem valor de contrato</b><span>${semCont.length} de ${r.ativas || 0}</span><button type="button" onclick="fecharM('tkm')" aria-label="Fechar">✕</button></div>
       <div class="gr-md-b"><table class="gr-md-t"><thead><tr><th>Aluna</th><th>Plano</th></tr></thead><tbody>${scRows || '<tr><td colspan="2" class="gr-md-vz">Todas as ativas têm valor de contrato 🎉</td></tr>'}</tbody></table></div>
-      <p class="gr-md-nota">Estas alunas ficam fora da média do TKM — normalmente <b>cortesia/VIP</b> (R$ 0) ou contrato sem venda casável no EVO.</p></div></div>`;
+      <p class="gr-md-nota">Ficam fora da média do TKM — <b>trancada</b> (plano congelado) ou contrato sem venda casável no EVO. <b>VIP/cortesia</b> (R$ 0) já são excluídas da base de alunas.</p></div></div>`;
 
     corpo = `<div class="stats">
       <div class="stat tot"><div class="n">${r.turmas != null ? r.turmas : turmas.length}</div><div class="l">turmas</div></div>
       <div class="stat"><div class="n">${alunasFixas != null ? alunasFixas : '—'}</div><div class="l">alunas fixas</div><div class="gr-sub">${alunasFixas == null ? 'atualize a grade' : (pctAlunasFixas != null ? `${pctAlunasFixas}% de ${totalAlunas} alunas` : (r.fixas != null ? `${r.fixas} matrículas fixas` : ''))}</div></div>
       <div class="stat ok"><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação FIXAS</div><div class="gr-sub">${ocupPct == null ? 'atualize a grade' : (r.ocupacao_vagas ? `${r.ocupacao_fixas}/${r.ocupacao_vagas} vagas · sem sáb` : '')}</div></div>
       <div class="stat prez"><div class="n">${presPct != null ? presPct + '%' : '—'}</div><div class="l">presença na turma</div><div class="gr-sub">${presPct == null ? 'aulas já realizadas' : (r.presenca_vagas ? `${r.presenca_real}/${r.presenca_vagas} vagas · realizadas` : '')}</div></div>
-      ${tkmMed != null ? `<div class="stat tkm gr-click" onclick="abrirM('tkm')" title="ver as alunas ativas sem valor de contrato"><div class="n">${fmtBRL(tkmMed)}</div><div class="l">TKM médio</div><div class="gr-sub">contrato mensalizado · ${r.tkm_alunas || 0}${r.ativas ? ` de ${r.ativas}` : ''} ativas${semCont.length ? ` <span class="gr-md-hint">▸ ${semCont.length} sem contrato</span>` : ''}</div></div>` : ''}
+      ${tkmMed != null ? `<div class="stat tkm gr-click" onclick="abrirM('tkm')" title="ver as alunas ativas sem valor de contrato"><div class="n">${fmtBRL(tkmMed)}</div><div class="l">TKM médio</div><div class="gr-sub">contrato mensalizado · ${r.tkm_alunas || 0}${r.ativas ? ` de ${r.ativas}` : ''} ativas${r.trancadas ? ` · ${r.trancadas} trancada${r.trancadas === 1 ? '' : 's'}` : ''}${semCont.length ? ` <span class="gr-md-hint">▸ ${semCont.length} sem contrato</span>` : ''}</div></div>` : ''}
       ${fatMes != null ? `<div class="stat fat gr-click" onclick="abrirM('fat')" title="ver os lançamentos do mês"><div class="n">${fmtBRL(fatMes)}</div><div class="l">faturamento do mês</div><div class="gr-sub">a vencer no mês${r.fatura_n ? ` · ${r.fatura_n} lançamentos` : ''} <span class="gr-md-hint">▸ ver lista</span></div></div>` : ''}
     </div>
     <div class="sec-t" data-nosec>Ocupação &amp; presença por professora</div>
@@ -5136,6 +5136,7 @@ function paginaGrade() {
     .gr-md-t tr.gr-md-tot td{border-top:2px solid var(--linha);font-weight:800;background:var(--teal-soft);position:sticky;bottom:0}
     .gr-md-foot{display:flex;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--linha);font-weight:800;font-size:1rem;color:var(--tinta)}
     .gr-md-nota{margin:0;padding:12px 18px;color:var(--cinza);font-size:var(--fs-xs);border-top:1px solid var(--linha-soft)}
+    .gr-trc{font-size:.66rem;font-weight:700;color:var(--cinza)}
     @media(max-width:760px){ .gr-desk{display:none} .gr-mob{display:block} }
     </style>
     <div class="gr-top">

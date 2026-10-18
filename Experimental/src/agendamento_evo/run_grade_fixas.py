@@ -60,7 +60,11 @@ def main():
             print(f"   presença na turma (aulas realizadas): {pr}% "
                   f"({r.get('presenca_real', '?')}/{r.get('presenca_vagas', '?')} vagas)")
         if r.get('ativas') is not None:
-            print(f"   alunas ativas (EVO status=1): {r['ativas']}")
+            tr = r.get('trancadas') or 0
+            vp = r.get('vips') or 0
+            print(f"   alunas ativas (Active + trancadas, sem VIP): {r['ativas']}"
+                  + (f" ({tr} trancadas)" if tr else "")
+                  + (f" · {vp} VIP excluídas" if vp else ""))
         if r.get('tkm_medio') is not None:
             print(f"   TKM médio (contrato mensalizado): R$ {r['tkm_medio']:.2f} "
                   f"(de {r.get('tkm_alunas', '?')} alunas com contrato)")
