@@ -224,17 +224,17 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
 
     turmas.sort(key=lambda t: (t["data"], t["hora"]))
 
-    # Financeiro / TKM (opcional — custa chamadas EVO a mais por aluna fixa).
-    fin = (fin_mod.carregar_financeiro(evo, alunas_fixas_ids, now, branch_id)
-           if financeiro else {})
-    if fin:
+    # Financeiro / TKM (opcional) — calculado sobre TODAS as alunas ATIVAS do EVO
+    # (fixas + FREE), não só as da grade. Custa chamadas EVO a mais.
+    fin_por, fin_resumo = (fin_mod.carregar_financeiro(evo, now, branch_id)
+                           if financeiro else ({}, {}))
+    if fin_por:
         for t in turmas:                       # anexa o ticket de cada fixa p/ o "expandir"
             for x in t["fixas"]:
-                f = fin.get(x.get("idm"))
+                f = fin_por.get(x.get("idm"))
                 if f:
                     x["ticket"] = f.get("ticket")
                     x["plano"] = f.get("plano")
-    fin_resumo = fin_mod.resumir(fin) if fin else {}
 
     # Métricas agregadas — por FIXAS, excluindo o SÁBADO (escala) da ocupação.
     total_vagas = sum(t["capacity"] for t in turmas if t["capacity"])

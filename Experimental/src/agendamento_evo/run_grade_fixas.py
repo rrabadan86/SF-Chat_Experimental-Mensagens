@@ -59,12 +59,14 @@ def main():
         if pr is not None:
             print(f"   presença na turma (aulas realizadas): {pr}% "
                   f"({r.get('presenca_real', '?')}/{r.get('presenca_vagas', '?')} vagas)")
+        if r.get('ativas') is not None:
+            print(f"   alunas ativas (EVO status=1): {r['ativas']}")
         if r.get('tkm_medio') is not None:
             print(f"   TKM médio (contrato mensalizado): R$ {r['tkm_medio']:.2f} "
-                  f"(de {r.get('tkm_alunas', '?')} alunas)")
+                  f"(de {r.get('tkm_alunas', '?')} alunas com contrato)")
         if r.get('fatura_mes') is not None:
-            print(f"   faturamento do mês (vencimento): R$ {r['fatura_mes']:.2f} "
-                  f"({r.get('fatura_alunas', '?')} alunas)")
+            print(f"   faturamento do mês (a vencer): R$ {r['fatura_mes']:.2f} "
+                  f"({r.get('fatura_n', '?')} lançamentos)")
         print(f"   arquivo: {out}\n")
         _WD = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
         _IC = {"foi": "✓", "faltou": "✗", "justif": "⚠"}
