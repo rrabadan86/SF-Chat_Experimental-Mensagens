@@ -54,20 +54,24 @@ def _fim_do_mes(d):
 
 
 def membros_ativos(evo, branch_id=None):
-    """Lista os registros de membros ATIVOS (status=1). Confirma pelo campo
-    membershipStatus pra não contar inativo por engano."""
+    """Membros com matrícula VIGENTE: Active + Suspended (trancadas). A trancada é
+    uma aluna congelada temporariamente (viagem, etc.) — continua aluna. O EVO não
+    tem filtro para 'Suspended' (status=1 só traz Active), então varre todos os
+    membros e fica com os dois. Cada registro ganha a flag _trancada."""
     out, take, skip = [], 100, 0
-    for _ in range(40):                                # teto de páginas (segurança)
+    for _ in range(60):                                # teto de páginas (segurança)
         try:
             rows = evo._request("GET", "/api/v1/members",
-                               params={"status": 1, "take": take, "skip": skip}) or []
+                               params={"take": take, "skip": skip}) or []
         except Exception as e:
-            log.warning("financeiro: lista de ativos falhou (%s)", e)
+            log.warning("financeiro: lista de membros falhou (%s)", e)
             break
         if not isinstance(rows, list) or not rows:
             break
         for m in rows:
-            if str(m.get("membershipStatus") or "").lower() == "active":
+            st = str(m.get("membershipStatus") or "").lower()
+            if st in ("active", "suspended"):
+                m["_trancada"] = (st == "suspended")
                 out.append(m)
         if len(rows) < take:
             break
@@ -76,11 +80,12 @@ def membros_ativos(evo, branch_id=None):
 
 
 def _ativa_na_lista(lst):
-    """Da lista `memberships` de uma aluna, a matrícula ATIVA mais recente."""
+    """Da lista `memberships` de uma aluna, a matrícula VIGENTE mais recente
+    (ativa OU trancada/suspensa — a trancada ainda tem contrato em vigor)."""
     if not isinstance(lst, list):
         return None
     cand = [x for x in lst
-            if str(x.get("membershipStatus") or "").lower() == "active"
+            if str(x.get("membershipStatus") or "").lower() in ("active", "suspended")
             and x.get("idMemberMembership")]
     if not cand:
         return None
@@ -190,12 +195,14 @@ def carregar_financeiro(evo, now, branch_id=None):
         log.warning("financeiro: não consegui listar ativos (%s)", e)
         ativos = []
     por = {}
+    vips = 0
     for m in ativos:
         idm = m.get("idMember")
         if not idm:
             continue
         nome = ((m.get("firstName") or "") + " " + (m.get("lastName") or "")).strip()
-        info = {"nome": nome or f"id {idm}", "ticket": None, "plano": None}
+        info = {"nome": nome or f"id {idm}", "ticket": None, "plano": None,
+                "trancada": bool(m.get("_trancada"))}
         try:
             mb = _membership_ativa(evo, idm, m, branch_id) or {}
             info["plano"] = (mb.get("name") or "").strip() or None
@@ -207,6 +214,11 @@ def carregar_financeiro(evo, now, branch_id=None):
                     info["ticket"] = round(val / meses, 2)
         except Exception as e:
             log.warning("financeiro: aluna %s falhou (%s)", idm, e)
+        # VIP / cortesia (plano "VIP" ou contrato R$0): não é aluna pagante —
+        # fica fora da contagem de alunas E da média do TKM.
+        if "vip" in (info["plano"] or "").lower() or info["ticket"] == 0:
+            vips += 1
+            continue
         por[idm] = info
 
     fatura_mes, fatura_n, fatura_itens = _faturamento_mes(evo, now, branch_id)
@@ -218,13 +230,15 @@ def carregar_financeiro(evo, now, branch_id=None):
 
     # alunas ATIVAS sem valor de contrato (as que ficam fora da média do TKM).
     sem_contrato = sorted(
-        ({"nome": v["nome"], "plano": v.get("plano") or "—"}
+        ({"nome": v["nome"], "plano": v.get("plano") or "—", "trancada": v.get("trancada", False)}
          for v in por.values() if not v.get("ticket")),
         key=lambda x: x["nome"].lower())
 
     tickets = [v["ticket"] for v in por.values() if v.get("ticket")]
     resumo = {
         "ativas": len(por),
+        "trancadas": sum(1 for v in por.values() if v.get("trancada")),
+        "vips": vips,
         "tkm_medio": round(sum(tickets) / len(tickets), 2) if tickets else None,
         "tkm_alunas": len(tickets),
         "tkm_total": round(sum(tickets), 2) if tickets else None,
