@@ -254,6 +254,16 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
                     x["ticket"] = f.get("ticket")
                     x["plano"] = f.get("plano")
 
+    # "Alunas fixas" para o KPI: conta só quem está na base de ATIVAS (mesma do
+    # denominador), pra não contar VIP/cortesia nem contrato vencido com turma fixa
+    # ainda no EVO — assim o "% de ativas" nunca passa de 100%. Sem base financeira
+    # (sem cache), cai na contagem crua.
+    if fin_por:
+        alunas_fixas_n = sum(1 for i in alunas_fixas_ids
+                             if i in fin_por or str(i) in fin_por)
+    else:
+        alunas_fixas_n = len(alunas_fixas_ids)
+
     # Métricas agregadas — por FIXAS, excluindo o SÁBADO (escala) da ocupação.
     total_vagas = sum(t["capacity"] for t in turmas if t["capacity"])
     uteis = [t for t in turmas if t["weekday"] != 5]
@@ -301,7 +311,7 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
         "por_professora": por_professora,
         "resumo": {
             "fixas": total_fixas,
-            "alunas_fixas": len(alunas_fixas_ids),
+            "alunas_fixas": alunas_fixas_n,
             "turmas": len(turmas),
             "total_vagas": total_vagas,
             "ocupacao_pct": ocupacao_pct,
