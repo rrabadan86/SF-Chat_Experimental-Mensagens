@@ -46,10 +46,11 @@ function dataAlvoD7() {
     return alvo;
   }
 
-  // Quantos dias ANTES do vencimento avisar. Padrão 7; editável por unidade no
-  // .env (RENOVACAO_DIAS_ANTES=30). O segmento do EVO já traz o mês inteiro, então
-  // dá para usar 30 sem mexer no segmento. Avisa quem vence EXATAMENTE nesse dia.
-  const dias = parseInt(process.env.RENOVACAO_DIAS_ANTES || '7', 10) || 7;
+  // Quantos dias ANTES do vencimento avisar. Editável no painel (prioridade),
+  // senão .env (RENOVACAO_DIAS_ANTES), senão 7. O segmento do EVO já traz o mês
+  // inteiro, então dá para usar até 30 sem mexer no segmento. Avisa quem vence
+  // EXATAMENTE nesse dia. Lido a cada disparo — vale sem reiniciar o robô.
+  const dias = require('./renovacao-config').diasAntes();
   const alvo = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
   alvo.setDate(alvo.getDate() + dias);
   alvo.setHours(0, 0, 0, 0);

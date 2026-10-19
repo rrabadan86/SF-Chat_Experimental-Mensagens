@@ -20,6 +20,7 @@ const mensagens = require('./mensagens');
 const ag = require('./agendamentos');
 const waStatus = require('./wa-status');
 const horarios = require('./horarios');
+const renovacaoConfig = require('./renovacao-config');
 const atividade = require('./atividade');
 const teste = require('./teste-envio');
 const igcfg = require('./instagram-config');
@@ -1794,7 +1795,21 @@ function cardDeMsg(m, hmap, voltar) {
   }
   const sw = switchEnvio(jobsDoCard(m.chave));
   const opts = /^cobranca_/.test(m.chave) ? { cobranca: true } : undefined;
-  return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar, opts)}${hbloco}</div>`;
+  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : '';
+  return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar, opts)}${hbloco}${extra}</div>`;
+}
+
+// Campo "dias de antecedência" da Renovação (editável no painel; vale sem reiniciar).
+function blocoRenovDias() {
+  const d = renovacaoConfig.diasAntes();
+  return `<div class="hsec"><div class="hsec-t">Antecedência do aviso</div>
+    <form method="POST" action="/renovacao/dias" class="hrow" style="align-items:flex-end">
+      <div><div class="lbl">Dias antes do vencimento</div>
+        <input type="number" name="dias" min="${renovacaoConfig.MIN}" max="${renovacaoConfig.MAX}" value="${d}" required style="width:92px">
+      </div>
+      <button type="submit" class="save">Salvar</button>
+    </form>
+    <p class="quando" style="margin:6px 0 0">Avisa a aluna cujo plano vence daqui a <b>${d}</b> dia(s). Vale na hora, <b>sem reiniciar</b> o robô.</p></div>`;
 }
 
 // Jobs sem texto editável, na seção "Outros envios" da aba Mensagens.
@@ -6414,6 +6429,15 @@ const server = http.createServer((req, res) => {
         const sep = voltar.includes('?') ? '&' : '?';
         res.writeHead(303, { Location: voltar + sep + (err ? 'errh=1' : 'okh=1') }); res.end();
       });
+    });
+  }
+
+  // Antecedência da Renovação (dias antes do vencimento) — não precisa reiniciar.
+  if (req.method === 'POST' && url === '/renovacao/dias') {
+    return lerCorpo(req, 1e4, corpo => {
+      const n = renovacaoConfig.salvarDias(new URLSearchParams(corpo).get('dias'));
+      try { if (n != null) auditoria.registrar(sess.usuario, 'renovacao.dias', String(n), ''); } catch (_) {}
+      res.writeHead(303, { Location: '/?view=config' + (n != null ? '&ok=1' : '&erro=dias') }); res.end();
     });
   }
 
