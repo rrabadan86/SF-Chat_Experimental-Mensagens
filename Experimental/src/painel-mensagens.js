@@ -4954,7 +4954,7 @@ function paginaGrade() {
         if (found) totalAlunas = found.n;
       } catch (_) {}
     }
-    const pctAlunasFixas = (totalAlunas && alunasFixas != null) ? Math.round(alunasFixas / totalAlunas * 100) : null;
+    const pctAlunasFixas = (totalAlunas && alunasFixas != null) ? Math.min(100, Math.round(alunasFixas / totalAlunas * 100)) : null;
     const porProf = Array.isArray(snap.por_professora) ? snap.por_professora : [];
     const profTier = (pc) => (pc == null ? 'nd' : (pc >= 90 ? 'cheia' : (pc >= 70 ? 'quase' : 'livre')));
     // DESKTOP — grade semanal (colunas = dias; linhas = horários)
