@@ -236,10 +236,15 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
 
     # Financeiro / TKM — calcula agora (financeiro=True, sobre TODAS as alunas ativas
     # do EVO), ou REAPROVEITA o cache (fin_cache) sem tocar no EVO.
-    fin_por, fin_resumo, financeiro_em = {}, {}, None
+    fin_por, fin_resumo, financeiro_em, fin_live_ok = {}, {}, None, False
     if financeiro:
         fin_por, fin_resumo = fin_mod.carregar_financeiro(evo, now, branch_id)
-        financeiro_em = now.strftime("%Y-%m-%d %H:%M")
+        if fin_por:
+            financeiro_em, fin_live_ok = now.strftime("%Y-%m-%d %H:%M"), True
+        elif fin_cache:                    # leitura ao vivo falhou (ex.: 429) →
+            fin_por = fin_cache.get("por_aluna") or {}   # reaproveita o último cache
+            fin_resumo = fin_cache.get("resumo") or {}
+            financeiro_em = fin_cache.get("gerado_em")
     elif fin_cache:
         fin_por = fin_cache.get("por_aluna") or {}
         fin_resumo = fin_cache.get("resumo") or {}
@@ -325,7 +330,7 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
         # bloco interno p/ o run_grade_fixas gravar o cache financeiro (só quando
         # calculado ao vivo). Não vai pro snapshot servido ao painel.
         "_fin_cache": ({"gerado_em": financeiro_em, "por_aluna": fin_por, "resumo": fin_resumo}
-                       if financeiro and fin_por else None),
+                       if fin_live_ok else None),
         # mapa de matrículas (idMember -> [idConfiguration]) p/ o cache de enrollment.
         # Em geração completa reseta ao roster atual; em leve mescla cache + novas.
         "_enroll": {**({} if refresh_enroll else (enroll_cache or {})),

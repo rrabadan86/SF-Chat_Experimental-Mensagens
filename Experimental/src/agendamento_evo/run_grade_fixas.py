@@ -41,13 +41,15 @@ def main():
     # "Atualizar grade" (leve): não recalcula o financeiro nem relê as matrículas —
     # reaproveita os caches da última geração completa (05:40 ou "Atualizar tudo"),
     # consultando o EVO só para a presença das turmas e alunas novas.
+    # O financeiro em cache é reaproveitado no modo leve E serve de FALLBACK na
+    # geração completa (se a leitura ao vivo falhar por 429, o TKM não some).
     fin_cache, enroll_cache = None, None
+    try:
+        with open(fin_cache_path, encoding="utf-8") as f:
+            fin_cache = json.load(f)
+    except Exception:
+        fin_cache = None            # sem cache ainda → grade vai sem financeiro
     if not full:
-        try:
-            with open(fin_cache_path, encoding="utf-8") as f:
-                fin_cache = json.load(f)
-        except Exception:
-            fin_cache = None            # sem cache ainda → grade vai sem financeiro
         try:
             with open(enroll_cache_path, encoding="utf-8") as f:
                 enroll_cache = (json.load(f) or {}).get("fix")
