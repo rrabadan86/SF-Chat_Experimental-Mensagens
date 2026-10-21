@@ -52,9 +52,10 @@ function runGradeFixas(motivo) {
   let py = process.env.PYTHON_BIN || 'python3';
   try { if (fs.existsSync(venv)) py = venv; } catch (_) {}
   const tag = motivo ? ` (${motivo})` : '';
-  // sem args: semana atual + financeiro (TKM/faturamento) — igual ao botão Atualizar.
+  // semana atual + financeiro (igual ao botão), e --refresh-outras reatualiza (leve)
+  // as outras semanas que já têm snapshot (as abertas na navegação).
   // timeout 15 min: com o financeiro a geração lê o contrato de cada aluna ativa.
-  execFile(py, [script], { cwd: dir, timeout: 900000 }, (err, stdout, stderr) => {
+  execFile(py, [script, '--refresh-outras'], { cwd: dir, timeout: 900000 }, (err, stdout, stderr) => {
     _gradeFixasRunning = false;
     const out = (stdout || stderr || '').trim();
     if (err) { logError('Grade de fixas (run_grade_fixas)' + tag, err); if (out) console.log('   ' + out); return; }
