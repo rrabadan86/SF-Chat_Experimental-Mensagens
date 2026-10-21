@@ -4940,7 +4940,7 @@ function paginaGrade(off) {
 
   let corpo;
   if (!snap || !Array.isArray(snap.turmas) || !snap.turmas.length) {
-    corpo = `<div class="card" style="text-align:center;padding:34px 20px">
+    corpo = `<div class="gr-wk-center">${navSem}</div><div class="card" style="text-align:center;padding:34px 20px">
       <div style="font-size:1.6rem;margin-bottom:6px">📋</div>
       <p style="margin:0 0 4px;font-weight:600">${off === 0 ? 'Nenhuma grade gerada ainda.' : 'Esta semana ainda não foi gerada.'}</p>
       <p class="quando" style="margin:0">${off === 0
@@ -5066,6 +5066,7 @@ function paginaGrade(off) {
       <input id="grBusca" type="search" placeholder="🔍 Buscar aluna — ver em quais turmas ela está (fixa, repô ou FREE)" autocomplete="off">
       <span id="grBuscaInfo" class="gr-busca-info"></span>
     </div>
+    <div class="gr-wk-center">${navSem}</div>
     ${desk}${mob}${mFat}${mTkm}`;
   }
 
@@ -5083,6 +5084,7 @@ function paginaGrade(off) {
     .gr-wk-b:hover{background:var(--teal-soft);border-color:var(--teal)}
     .gr-wk-b.off{opacity:.35;pointer-events:none;color:var(--faint)}
     .gr-wk-lbl{font-size:var(--fs-xs);font-weight:700;color:var(--cinza);min-width:140px;text-align:center;font-variant-numeric:tabular-nums}
+    .gr-wk-center{display:flex;justify-content:center;margin:10px 0 6px}
     .gr-leg{display:inline-flex;gap:12px;align-items:center;flex-wrap:wrap}
     .gr-leg i{display:inline-flex;align-items:center;gap:5px;font-style:normal;color:var(--cinza);font-weight:600;font-size:var(--fs-xs)}
     .gr-leg b{width:10px;height:10px;border-radius:3px;display:inline-block}
@@ -5210,12 +5212,9 @@ function paginaGrade(off) {
         <div class="sec-t" style="margin:0" data-nosec>📋 Grade de Matrículas Fixas</div>
         <p class="quando" style="margin:3px 0 0;max-width:740px">Visão da <b>semana</b>. O selo é a <b>vaga de matrícula</b> (fixas, contadas mesmo faltando). A "<b>presença</b>" é a ocupação <b>real</b> da aula (quem ocupou a vaga: fixas presentes + reposição/FREE) — <b>falta</b>, <b>falta justificada</b> e <b>trancado</b> liberam a vaga e não contam (por isso nunca passa da capacidade). Clique numa turma para ver os nomes: <b>✓ foi</b> · <b>✗ faltou</b> · <b>⚠ falta justificada</b> · <b>🔒 trancada</b>. O <b>sábado</b> não entra na taxa de ocupação (<b>escala</b>).</p>
       </div>
-      <div class="gr-btns-wrap">
-        ${navSem}
-        <div class="gr-btns">
-          <button id="btnAt" class="save" onclick="atualizar('/grade/atualizar')"${g ? ' disabled' : ''} title="Atualiza a grade da semana vista (presença/ocupação) reaproveitando o TKM/faturamento da última geração completa. Rápido — poucas chamadas ao EVO.">${g ? '⏳ gerando…' : '🔄 Atualizar grade'}</button>
-          <button id="btnAtTudo" class="gr-btn2" onclick="atualizar('/grade/atualizar-tudo')"${g ? ' disabled' : ''} title="Recalcula também o TKM e o faturamento lendo o contrato de cada aluna no EVO. Mais demorado (vários minutos).">💰 Atualizar tudo</button>
-        </div>
+      <div class="gr-btns">
+        <button id="btnAt" class="save" onclick="atualizar('/grade/atualizar')"${g ? ' disabled' : ''} title="Atualiza a grade da semana vista (presença/ocupação) reaproveitando o TKM/faturamento da última geração completa. Rápido — poucas chamadas ao EVO.">${g ? '⏳ gerando…' : '🔄 Atualizar grade'}</button>
+        <button id="btnAtTudo" class="gr-btn2" onclick="atualizar('/grade/atualizar-tudo')"${g ? ' disabled' : ''} title="Recalcula também o TKM e o faturamento lendo o contrato de cada aluna no EVO. Mais demorado (vários minutos).">💰 Atualizar tudo</button>
       </div>
     </div>
     <div id="aviso" class="aviso" style="display:${g ? 'block' : 'none'}">⏳ Gerando a grade a partir do EVO… pode levar alguns minutos. A página recarrega sozinha ao terminar.</div>

@@ -28,6 +28,9 @@ def main():
                     help="imprime um resumo legível (além de gravar o JSON)")
     ap.add_argument("--sem-financeiro", dest="sem_financeiro", action="store_true",
                     help="NÃO calcula o TKM/faturamento (mais rápido, menos chamadas ao EVO)")
+    ap.add_argument("--refresh-outras", dest="refresh_outras", action="store_true",
+                    help="após a semana atual, reatualiza (modo leve) as outras semanas que "
+                         "JÁ têm snapshot — usado pelo cron p/ manter frescas as semanas já abertas")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr,
@@ -90,6 +93,29 @@ def main():
                 json.dump({"gerado_em": res.get("gerado_em"), "fix": enroll_out}, f, ensure_ascii=False)
         except Exception as e:
             print(f"ERRO ao gravar {enroll_cache_path}: {e}", file=sys.stderr)
+
+    # Reatualiza, em modo LEVE, as outras semanas que JÁ têm snapshot (as que foram
+    # abertas na navegação). Reaproveita o financeiro e as matrículas recém-calculados
+    # — só lê a agenda de cada semana. Nunca GERA semana nova (só refaz as existentes).
+    if args.refresh_outras and args.semana == 0:
+        fin_para_outras = fin_block or fin_cache          # o fresco; senão o cache lido
+        enroll_para_outras = enroll_out                   # mapa recém-montado (str keys)
+        for n in (-2, -1, 1, 2):
+            p = os.path.join(data_dir, f"grade-fixas.s{n}.json")
+            if not os.path.exists(p):
+                continue
+            try:
+                r2 = montar_grade(semana_offset=n, financeiro=False,
+                                  fin_cache=fin_para_outras,
+                                  enroll_cache=enroll_para_outras, refresh_enroll=False)
+                r2.pop("_fin_cache", None)
+                r2.pop("_enroll", None)
+                with open(p, "w", encoding="utf-8") as f:
+                    json.dump(r2, f, ensure_ascii=False)
+                if args.imprimir:
+                    print(f"   semana {n:+d} reatualizada (leve): {p}")
+            except Exception as e:
+                print(f"ERRO ao reatualizar semana {n}: {e}", file=sys.stderr)
 
     if args.imprimir:
         r = res["resumo"]
