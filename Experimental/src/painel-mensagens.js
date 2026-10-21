@@ -4970,7 +4970,7 @@ function paginaGrade() {
         const t = cel[h + '|' + w];
         if (!t) return '<td class="gr-empty"></td>';
         const ti = tierOf(t), c = conteudo(t);
-        return `<td class="gr-cel t-${ti.k}" data-fx="${fxData(t)}"><span class="gr-vg" title="${escH(ti.tip || '')}">${ti.txt}</span>${c.bar}${c.prof}${c.det}</td>`;
+        return `<td class="gr-cel t-${ti.k}" data-fx="${fxData(t)}" data-prof="${nrmFx(t.professora || '')}"><span class="gr-vg" title="${escH(ti.tip || '')}">${ti.txt}</span>${c.bar}${c.prof}${c.det}</td>`;
       }).join('');
       return `<tr><th class="h">${escH(h)}</th>${tds}</tr>`;
     }).join('');
@@ -4981,7 +4981,7 @@ function paginaGrade() {
     const mob = `<div class="gr-mob">` + byDay.map(([data, wd, arr]) => {
       const items = arr.map(t => {
         const ti = tierOf(t), c = conteudo(t);
-        return `<div class="gr-item t-${ti.k}" data-fx="${fxData(t)}"><div class="gr-item-h"><span class="gr-hora">${escH(t.hora)}</span><span class="gr-vg" title="${escH(ti.tip || '')}">${ti.txt}</span></div>${c.prof}${c.bar}${c.det}</div>`;
+        return `<div class="gr-item t-${ti.k}" data-fx="${fxData(t)}" data-prof="${nrmFx(t.professora || '')}"><div class="gr-item-h"><span class="gr-hora">${escH(t.hora)}</span><span class="gr-vg" title="${escH(ti.tip || '')}">${ti.txt}</span></div>${c.prof}${c.bar}${c.det}</div>`;
       }).join('');
       return `<div class="gr-day"><div class="gr-day-h">${WD[wd]} · ${fmtDia(data)}</div>${items}</div>`;
     }).join('') + `</div>`;
@@ -4999,7 +4999,7 @@ function paginaGrade() {
         <div class="gr-prof-bar"><span class="prez" style="width:${presPc != null ? Math.min(100, presPc) : 0}%"></span></div>
         <span class="gr-prof-pc prez">${presPc != null ? presPc + '%' : '—'}</span>
       </div>`;
-      return `<div class="gr-prof-row">
+      return `<div class="gr-prof-row" data-prof="${nrmFx(p.professora || '')}">
         <div class="gr-prof-nm">${escH(p.professora)}<span class="gr-prof-sub">${p.turmas} turma${p.turmas === 1 ? '' : 's'} · ${p.fixas}/${p.vagas} vagas fixas${p.pres_turmas ? ` · ${p.pres_turmas} realizada${p.pres_turmas === 1 ? '' : 's'}` : ''}</span></div>
         <div class="gr-prof-bars">${linhaFix}${linhaPres}</div>
       </div>`;
@@ -5011,11 +5011,11 @@ function paginaGrade() {
       if (s === 'vencido' || s.indexOf('expir') >= 0 || s.indexOf('over') >= 0) return 'vencido';
       if (s === 'a receber' || s.indexOf('open') >= 0 || s.indexOf('pend') >= 0 || s.indexOf('provision') >= 0) return 'a receber';
       return s || '—'; };
-    const fatRows = fatIt.map(it => `<tr><td>${escH(it.aluna)}</td><td>${escH(it.contrato || '—')}</td><td>${fmtDia(it.venc)}</td><td class="v">${fmtBRL(it.valor)}</td><td class="v">${it.pago != null ? fmtBRL(it.pago) : '—'}</td><td><span class="gr-sit">${escH(sitLbl(it.sit))}</span></td></tr>`).join('');
+    const fatRows = fatIt.map(it => `<tr><td data-s="${nrmFx(it.aluna)}">${escH(it.aluna)}</td><td data-s="${nrmFx(it.contrato || '')}">${escH(it.contrato || '—')}</td><td data-s="${escH(it.venc || '')}">${fmtDia(it.venc)}</td><td class="v" data-s="${Number(it.valor) || 0}">${fmtBRL(it.valor)}</td><td class="v" data-s="${it.pago != null ? Number(it.pago) : -1}">${it.pago != null ? fmtBRL(it.pago) : '—'}</td><td data-s="${escH(sitLbl(it.sit))}"><span class="gr-sit">${escH(sitLbl(it.sit))}</span></td></tr>`).join('');
     const fatTotPago = fatIt.reduce((a, it) => a + (Number(it.pago) || 0), 0);
     const mFat = (fatMes == null) ? '' : `<div class="gr-ov" id="ov-fat" onclick="if(event.target===this)fecharM('fat')"><div class="gr-md">
       <div class="gr-md-h"><b>Faturamento do mês</b><span>${r.fatura_n || 0} lançamentos</span><button type="button" onclick="fecharM('fat')" aria-label="Fechar">✕</button></div>
-      <div class="gr-md-b"><table class="gr-md-t"><thead><tr><th>Aluna</th><th>Contrato</th><th>Vence</th><th class="v">Cobrado</th><th class="v">Pago</th><th>Situação</th></tr></thead><tbody>${fatRows || '<tr><td colspan="6" class="gr-md-vz">sem lançamentos no mês</td></tr>'}<tr class="gr-md-tot"><td colspan="3">Total do mês</td><td class="v">${fmtBRL(fatMes)}</td><td class="v">${fmtBRL(fatTotPago)}</td><td></td></tr></tbody></table></div>
+      <div class="gr-md-b"><table class="gr-md-t gr-md-sort"><thead><tr><th data-type="t">Aluna</th><th data-type="t">Contrato</th><th data-type="d">Vence</th><th class="v" data-type="n">Cobrado</th><th class="v" data-type="n">Pago</th><th data-type="t">Situação</th></tr></thead><tbody>${fatRows || '<tr><td colspan="6" class="gr-md-vz">sem lançamentos no mês</td></tr>'}<tr class="gr-md-tot"><td colspan="3">Total do mês</td><td class="v">${fmtBRL(fatMes)}</td><td class="v">${fmtBRL(fatTotPago)}</td><td></td></tr></tbody></table></div>
       <div class="gr-md-foot"><span>Cobrado no mês</span><span>${fmtBRL(fatMes)} · pago ${fmtBRL(fatTotPago)}</span></div></div></div>`;
     const scRows = semCont.map(x => `<tr><td>${escH(x.nome)}${x.trancada ? ' <span class="gr-trc">🔒 trancada</span>' : ''}</td><td>${escH(x.plano || '—')}</td></tr>`).join('');
     const mTkm = (tkmMed == null) ? '' : `<div class="gr-ov" id="ov-tkm" onclick="if(event.target===this)fecharM('tkm')"><div class="gr-md" style="max-width:520px">
@@ -5042,6 +5042,13 @@ function paginaGrade() {
       <span class="gr-leg"><i><b class="lg-livre"></b>vaga matríc.</i><i><b class="lg-quase"></b>quase (1-2)</i><i><b class="lg-cheia"></b>lotada</i><i><b class="lg-repo"></b>repô/FREE</i></span>
     </p>
     <div class="gr-search">
+      ${(() => {
+        const nomes = [...new Set(turmas.map(t => t.professora).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt'));
+        if (!nomes.length) return '';
+        const ops = ['<option value="">👩‍🏫 Todas as professoras</option>']
+          .concat(nomes.map(p => `<option value="${escH(nrmFx(p))}">${escH(p)}</option>`)).join('');
+        return `<select id="grProf" class="gr-sel" title="Filtrar a grade e o card por professora">${ops}</select>`;
+      })()}
       <input id="grBusca" type="search" placeholder="🔍 Buscar aluna — ver em quais turmas ela está (fixa, repô ou FREE)" autocomplete="off">
       <span id="grBuscaInfo" class="gr-busca-info"></span>
     </div>
@@ -5112,6 +5119,12 @@ function paginaGrade() {
     .gr-search{display:flex;align-items:center;gap:10px;margin:6px 0 10px;flex-wrap:wrap}
     .gr-search input{flex:1 1 300px;max-width:480px;border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
     .gr-search input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(14,110,107,.16)}
+    .gr-sel{border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff;color:var(--tinta);max-width:280px;cursor:pointer}
+    .gr-sel:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(14,110,107,.16)}
+    /* filtro por professora: esconde linhas/células/itens que não são dela */
+    .gr-prof-hide{display:none !important}
+    td.gr-cel.gr-off{background:#fafafa}
+    td.gr-cel.gr-off>*{visibility:hidden}
     .gr-busca-info{font-size:var(--fs-xs);color:var(--cinza);font-weight:700;white-space:nowrap}
     .gr-dim{opacity:.24;transition:opacity .12s}
     .gr-cel.gr-hit{box-shadow:inset 0 0 0 2px var(--teal)}
@@ -5163,6 +5176,10 @@ function paginaGrade() {
     .gr-md-vz{color:var(--faint);text-align:center;padding:20px}
     .gr-sit{font-size:var(--fs-xs);font-weight:700;color:var(--cinza)}
     .gr-md-t tr.gr-md-tot td{border-top:2px solid var(--linha);font-weight:800;background:var(--teal-soft);position:sticky;bottom:0}
+    .gr-md-sort th{cursor:pointer;user-select:none;white-space:nowrap}
+    .gr-md-sort th:hover{filter:brightness(.96)}
+    .gr-md-sort th.up::after{content:" ▲";font-size:.7em;opacity:.85}
+    .gr-md-sort th.down::after{content:" ▼";font-size:.7em;opacity:.85}
     .gr-md-foot{display:flex;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--linha);font-weight:800;font-size:1rem;color:var(--tinta)}
     .gr-md-nota{margin:0;padding:12px 18px;color:var(--cinza);font-size:var(--fs-xs);border-top:1px solid var(--linha-soft)}
     .gr-trc{font-size:.66rem;font-weight:700;color:var(--cinza)}
@@ -5191,6 +5208,51 @@ function paginaGrade() {
       function abrirM(id){var e=document.getElementById('ov-'+id);if(e)e.classList.add('open');}
       function fecharM(id){var e=document.getElementById('ov-'+id);if(e)e.classList.remove('open');}
       document.addEventListener('keydown',function(e){if(e.key==='Escape'){fecharM('fat');fecharM('tkm');}});
+      // Filtro por PROFESSORA: mostra só as turmas dela na grade e a linha dela no card.
+      (function(){
+        var sel=document.getElementById('grProf'); if(!sel) return;
+        function qa(s){return [].slice.call(document.querySelectorAll(s));}
+        function aplicar(){
+          var v=sel.value;
+          qa('td.gr-cel[data-prof]').forEach(function(td){ td.classList.toggle('gr-off', !!v && td.getAttribute('data-prof')!==v); });
+          qa('table.gr tbody tr').forEach(function(tr){
+            var tem=[].slice.call(tr.querySelectorAll('td.gr-cel[data-prof]')).some(function(td){ return !v||td.getAttribute('data-prof')===v; });
+            tr.classList.toggle('gr-prof-hide', !!v && !tem);
+          });
+          qa('.gr-item[data-prof]').forEach(function(it){ it.classList.toggle('gr-prof-hide', !!v && it.getAttribute('data-prof')!==v); });
+          qa('.gr-day').forEach(function(d){
+            var vis=[].slice.call(d.querySelectorAll('.gr-item[data-prof]')).some(function(it){ return !it.classList.contains('gr-prof-hide'); });
+            d.classList.toggle('gr-prof-hide', !!v && !vis);
+          });
+          qa('.gr-prof-row[data-prof]').forEach(function(r){ r.classList.toggle('gr-prof-hide', !!v && r.getAttribute('data-prof')!==v); });
+        }
+        sel.addEventListener('change', aplicar);
+      })();
+      // Ordenar colunas do popup de faturamento ao clicar no cabeçalho.
+      (function(){
+        [].slice.call(document.querySelectorAll('table.gr-md-sort')).forEach(function(tbl){
+          if(!tbl.tHead) return;
+          var ths=[].slice.call(tbl.tHead.rows[0].cells);
+          ths.forEach(function(th,idx){
+            th.addEventListener('click', function(){
+              var type=th.getAttribute('data-type')||'t';
+              var asc=th.getAttribute('data-dir')!=='asc';
+              ths.forEach(function(h){ h.removeAttribute('data-dir'); h.classList.remove('up','down'); });
+              th.setAttribute('data-dir', asc?'asc':'desc'); th.classList.add(asc?'up':'down');
+              var tb=tbl.tBodies[0]; var tot=tb.querySelector('tr.gr-md-tot');
+              var rows=[].slice.call(tb.rows).filter(function(r){ return r!==tot && r.cells.length>idx; });
+              rows.sort(function(a,b){
+                var va=a.cells[idx].getAttribute('data-s'); if(va==null) va=a.cells[idx].textContent;
+                var vb=b.cells[idx].getAttribute('data-s'); if(vb==null) vb=b.cells[idx].textContent;
+                if(type==='n') return asc?(parseFloat(va)||0)-(parseFloat(vb)||0):(parseFloat(vb)||0)-(parseFloat(va)||0);
+                return asc?String(va).localeCompare(String(vb),'pt'):String(vb).localeCompare(String(va),'pt');
+              });
+              rows.forEach(function(r){ tb.appendChild(r); });
+              if(tot) tb.appendChild(tot);
+            });
+          });
+        });
+      })();
       // Busca de aluna: destaca as turmas em que ela é fixa e esmaece as demais.
       (function(){
         var inp=document.getElementById('grBusca'); if(!inp) return;
