@@ -4869,18 +4869,30 @@ function _gradePyBin() {
   try { if (fs.existsSync(venv)) py = venv; } catch (_) {}
   return { py, dir };
 }
-function _gradeSnapshot() {
-  try { return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'grade-fixas.json'), 'utf8')); }
+function _gradeSnapshot(off) {
+  off = parseInt(off, 10) || 0;
+  const base = (off === 0) ? 'grade-fixas.json' : `grade-fixas.s${off}.json`;
+  try { return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', base), 'utf8')); }
   catch (_) { return null; }
 }
-function paginaGrade() {
+function paginaGrade(off) {
+  off = Math.max(-2, Math.min(2, parseInt(off, 10) || 0));
   const escH = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   // nome normalizado (sem acento, minúsculo) para a busca de aluna
   const nrmFx = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
   // R$ com separador de milhar (sem depender de toLocaleString/ICU no servidor)
   const fmtBRL = (v) => (v == null) ? '—' : ('R$ ' + String(Math.round(Number(v))).replace(/\B(?=(\d{3})+(?!\d))/g, '.'));
-  const snap = _gradeSnapshot();
+  const snap = _gradeSnapshot(off);
   const g = _gradeGerando;
+  // navegação de semanas: ‹ ‹ -2 … 0 … +2 › ›. Rótulo = período da semana vista.
+  const semLabel = (off === 0) ? 'Esta semana' : (off === -1 ? 'Semana passada' : off === 1 ? 'Próxima semana' : (off < 0 ? `${-off} semanas atrás` : `Em ${off} semanas`));
+  const navSem = (() => {
+    const btn = (o, txt, tit) => (o < -2 || o > 2)
+      ? `<span class="gr-wk-b off">${txt}</span>`
+      : `<a class="gr-wk-b" href="/grade?semana=${o}" title="${tit}">${txt}</a>`;
+    const per = snap ? `${(snap.inicio || '').split('-').reverse().slice(0, 2).join('/')}–${(snap.fim || '').split('-').reverse().slice(0, 2).join('/')}` : '';
+    return `<div class="gr-wk">${btn(off - 1, '‹', 'semana anterior')}<span class="gr-wk-lbl">${semLabel}${per ? ` · ${per}` : ''}</span>${btn(off + 1, '›', 'próxima semana')}</div>`;
+  })();
   const WD = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
   const fmtDia = (d) => { const p = String(d || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] : (d || ''); };
   const tierOf = (t) => {
@@ -4930,8 +4942,10 @@ function paginaGrade() {
   if (!snap || !Array.isArray(snap.turmas) || !snap.turmas.length) {
     corpo = `<div class="card" style="text-align:center;padding:34px 20px">
       <div style="font-size:1.6rem;margin-bottom:6px">📋</div>
-      <p style="margin:0 0 4px;font-weight:600">Nenhuma grade gerada ainda.</p>
-      <p class="quando" style="margin:0">Clique em <b>💰 Atualizar tudo</b> para montar a grade e calcular o TKM/faturamento a partir do EVO.<br>Na primeira vez demora alguns minutos (lê a matrícula e o contrato de cada aluna).</p>
+      <p style="margin:0 0 4px;font-weight:600">${off === 0 ? 'Nenhuma grade gerada ainda.' : 'Esta semana ainda não foi gerada.'}</p>
+      <p class="quando" style="margin:0">${off === 0
+        ? 'Clique em <b>💰 Atualizar tudo</b> para montar a grade e calcular o TKM/faturamento a partir do EVO.<br>Na primeira vez demora alguns minutos (lê a matrícula e o contrato de cada aluna).'
+        : 'Clique em <b>🔄 Atualizar grade</b> para gerar esta semana (reaproveita o TKM/faturamento — rápido).'}</p>
     </div>`;
   } else {
     const turmas = snap.turmas, r = snap.resumo || {};
@@ -5063,6 +5077,12 @@ function paginaGrade() {
     .gr-btn2{white-space:nowrap;border:1px solid var(--teal);background:transparent;color:var(--teal);border-radius:10px;padding:9px 14px;font-weight:700;font-size:var(--fs-sm);cursor:pointer;font-family:inherit}
     .gr-btn2:hover{background:var(--teal-soft)}
     .gr-btn2:disabled{opacity:.5;cursor:default}
+    .gr-btns-wrap{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+    .gr-wk{display:flex;align-items:center;gap:5px}
+    .gr-wk-b{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--linha);border-radius:8px;color:var(--teal);font-weight:800;text-decoration:none;font-size:1.15rem;line-height:1;background:var(--card)}
+    .gr-wk-b:hover{background:var(--teal-soft);border-color:var(--teal)}
+    .gr-wk-b.off{opacity:.35;pointer-events:none;color:var(--faint)}
+    .gr-wk-lbl{font-size:var(--fs-xs);font-weight:700;color:var(--cinza);min-width:140px;text-align:center;font-variant-numeric:tabular-nums}
     .gr-leg{display:inline-flex;gap:12px;align-items:center;flex-wrap:wrap}
     .gr-leg i{display:inline-flex;align-items:center;gap:5px;font-style:normal;color:var(--cinza);font-weight:600;font-size:var(--fs-xs)}
     .gr-leg b{width:10px;height:10px;border-radius:3px;display:inline-block}
@@ -5190,18 +5210,22 @@ function paginaGrade() {
         <div class="sec-t" style="margin:0" data-nosec>📋 Grade de Matrículas Fixas</div>
         <p class="quando" style="margin:3px 0 0;max-width:740px">Visão da <b>semana</b>. O selo é a <b>vaga de matrícula</b> (fixas, contadas mesmo faltando). A "<b>presença</b>" é a ocupação <b>real</b> da aula (quem ocupou a vaga: fixas presentes + reposição/FREE) — <b>falta</b>, <b>falta justificada</b> e <b>trancado</b> liberam a vaga e não contam (por isso nunca passa da capacidade). Clique numa turma para ver os nomes: <b>✓ foi</b> · <b>✗ faltou</b> · <b>⚠ falta justificada</b> · <b>🔒 trancada</b>. O <b>sábado</b> não entra na taxa de ocupação (<b>escala</b>).</p>
       </div>
-      <div class="gr-btns">
-        <button id="btnAt" class="save" onclick="atualizar('/grade/atualizar')"${g ? ' disabled' : ''} title="Atualiza a grade da semana (presença/ocupação) reaproveitando o TKM/faturamento da última geração completa. Rápido — poucas chamadas ao EVO.">${g ? '⏳ gerando…' : '🔄 Atualizar grade'}</button>
-        <button id="btnAtTudo" class="gr-btn2" onclick="atualizar('/grade/atualizar-tudo')"${g ? ' disabled' : ''} title="Recalcula também o TKM e o faturamento lendo o contrato de cada aluna no EVO. Mais demorado (vários minutos).">💰 Atualizar tudo</button>
+      <div class="gr-btns-wrap">
+        ${navSem}
+        <div class="gr-btns">
+          <button id="btnAt" class="save" onclick="atualizar('/grade/atualizar')"${g ? ' disabled' : ''} title="Atualiza a grade da semana vista (presença/ocupação) reaproveitando o TKM/faturamento da última geração completa. Rápido — poucas chamadas ao EVO.">${g ? '⏳ gerando…' : '🔄 Atualizar grade'}</button>
+          <button id="btnAtTudo" class="gr-btn2" onclick="atualizar('/grade/atualizar-tudo')"${g ? ' disabled' : ''} title="Recalcula também o TKM e o faturamento lendo o contrato de cada aluna no EVO. Mais demorado (vários minutos).">💰 Atualizar tudo</button>
+        </div>
       </div>
     </div>
     <div id="aviso" class="aviso" style="display:${g ? 'block' : 'none'}">⏳ Gerando a grade a partir do EVO… pode levar alguns minutos. A página recarrega sozinha ao terminar.</div>
     ${corpo}
     <script>
       var gerando = ${g ? 'true' : 'false'};
+      var grSemana = ${off};
       function atualizar(path){var b=document.getElementById('btnAt'),b2=document.getElementById('btnAtTudo');
         b.disabled=true;b2.disabled=true;b.textContent='⏳ gerando…';document.getElementById('aviso').style.display='block';
-        fetch(path,{method:'POST'}).then(function(r){return r.json();}).then(function(){gerando=true;setTimeout(poll,4000);}).catch(function(){b.disabled=false;b2.disabled=false;b.textContent='🔄 Atualizar grade';});}
+        fetch(path+'?semana='+grSemana,{method:'POST'}).then(function(r){return r.json();}).then(function(){gerando=true;setTimeout(poll,4000);}).catch(function(){b.disabled=false;b2.disabled=false;b.textContent='🔄 Atualizar grade';});}
       function poll(){fetch('/grade/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){if(s.gerando){setTimeout(poll,4000);}else{location.reload();}}).catch(function(){setTimeout(poll,5000);});}
       if(gerando) setTimeout(poll,4000);
       // Modais do faturamento / TKM (ativas sem contrato)
@@ -6133,8 +6157,9 @@ const server = http.createServer((req, res) => {
 
   // ── Grade de matrículas FIXAS (/grade) — qualquer usuário logado ───────────
   if (req.method === 'GET' && url === '/grade') {
+    const semana = new URLSearchParams(req.url.split('?')[1] || '').get('semana');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(paginaGrade());
+    return res.end(paginaGrade(semana));
   }
   if (req.method === 'POST' && (url === '/grade/atualizar' || url === '/grade/atualizar-tudo')) {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -6142,11 +6167,16 @@ const server = http.createServer((req, res) => {
     // /grade/atualizar = leve (só a grade, reaproveita o financeiro em cache).
     // /grade/atualizar-tudo = completo (recalcula TKM/faturamento no EVO).
     const tudo = (url === '/grade/atualizar-tudo');
+    // semana vista (0 = atual, -2..+2) — gera o snapshot daquela semana.
+    let semN = parseInt(new URLSearchParams(req.url.split('?')[1] || '').get('semana'), 10);
+    semN = Number.isFinite(semN) ? Math.max(-2, Math.min(2, semN)) : 0;
     try {
       const cp = require('child_process');
       const { py, dir } = _gradePyBin();
       _gradeGerando = true; _gradeDesde = Date.now();
-      const args = tudo ? ['run_grade_fixas.py'] : ['run_grade_fixas.py', '--sem-financeiro'];
+      const args = ['run_grade_fixas.py'];
+      if (semN !== 0) args.push('--semana', String(semN));
+      if (!tudo) args.push('--sem-financeiro');
       const child = cp.spawn(py, args, { cwd: dir, detached: true, stdio: 'ignore' });
       child.on('exit', () => { _gradeGerando = false; });
       child.on('error', () => { _gradeGerando = false; });
