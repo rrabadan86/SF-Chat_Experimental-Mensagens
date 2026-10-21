@@ -5051,8 +5051,8 @@ function paginaGrade(off) {
     <div class="card" style="padding:10px 15px">${profRows}</div>
     <p class="quando" style="display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:4px 0 8px">
       <span>Período <b>${fmtDia(snap.inicio)}–${fmtDia(snap.fim)}</b></span>
-      <span style="color:var(--faint)">grade gerada ${escH(snap.gerado_em || '')}</span>
-      <span style="color:var(--faint)">${snap.financeiro_em ? `TKM/faturamento de ${escH(snap.financeiro_em)}` : 'TKM/faturamento: clique “Atualizar tudo”'}</span>
+      <span class="gr-fresh">🕒 grade gerada <b>${escH(snap.gerado_em || '')}</b></span>
+      <span class="gr-fresh gr-fresh-fin">${snap.financeiro_em ? `💰 TKM/faturamento de <b>${escH(snap.financeiro_em)}</b>` : '💰 TKM/faturamento: clique “Atualizar tudo”'}</span>
       <span class="gr-leg"><i><b class="lg-livre"></b>vaga matríc.</i><i><b class="lg-quase"></b>quase (1-2)</i><i><b class="lg-cheia"></b>lotada</i><i><b class="lg-repo"></b>repô/FREE</i></span>
     </p>
     <div class="gr-search">
@@ -5085,6 +5085,9 @@ function paginaGrade(off) {
     .gr-wk-b.off{opacity:.35;pointer-events:none;color:var(--faint)}
     .gr-wk-lbl{font-size:var(--fs-xs);font-weight:700;color:var(--cinza);min-width:140px;text-align:center;font-variant-numeric:tabular-nums}
     .gr-wk-center{display:flex;justify-content:center;margin:10px 0 6px}
+    .gr-fresh{display:inline-flex;align-items:center;gap:5px;color:var(--teal-esc);background:var(--teal-soft);border:1px solid var(--teal);border-radius:999px;padding:3px 11px;font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
+    .gr-fresh b{font-weight:800;font-variant-numeric:tabular-nums}
+    .gr-fresh-fin{color:#9a6b00;background:#fdf5e6;border-color:#e9d8ac}
     .gr-leg{display:inline-flex;gap:12px;align-items:center;flex-wrap:wrap}
     .gr-leg i{display:inline-flex;align-items:center;gap:5px;font-style:normal;color:var(--cinza);font-weight:600;font-size:var(--fs-xs)}
     .gr-leg b{width:10px;height:10px;border-radius:3px;display:inline-block}
