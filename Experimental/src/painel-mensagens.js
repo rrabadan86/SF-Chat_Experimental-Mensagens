@@ -1289,10 +1289,11 @@ function paginaMensagens(aviso, erro) {
     <div class="sec-t">Planos FREE — desmarcação por antecedência <small style="font-weight:600;color:var(--cinza)">(robô desmarca quem marcou cedo demais e avisa a Equipe)</small></div>
     <div class="card" style="position:relative;border-left:4px solid var(--teal);background:#f6fbf9">
       ${switchEnvio(['freeAntecedencia'])}
-      <p class="quando" style="margin:0 0 10px;padding-right:100px">As alunas de plano <b>FREE … GRUPO 2</b> só podem marcar a aula com, no máximo, <b>1 dia de antecedência</b>. O robô varre a grade de tempos em tempos, <b>desmarca</b> quem marcou com <b>2+ dias</b> (falta justificada — libera a vaga e a aluna pode remarcar) e <b>avisa no grupo da Equipe</b>. Só conta plano FREE com <b>contrato ativo</b>. A aluna <b>não</b> recebe mensagem direta. Ligue/desligue no <b>botão acima</b>.</p>
+      <p class="quando" style="margin:0 0 10px;padding-right:100px">As alunas de plano <b>FREE … GRUPO 2</b> só podem marcar a aula com, no máximo, <b>1 dia de antecedência</b>. O robô varre a grade em <b>horas fixas, no minuto :02</b> (a cada N horas, o dia todo — ex.: 6h → 00:02, 06:02, 12:02, 18:02), <b>desmarca</b> quem marcou com <b>2+ dias</b> (falta justificada — libera a vaga e a aluna pode remarcar) e <b>avisa no grupo da Equipe</b>. Só conta plano FREE com <b>contrato ativo</b>. A aluna <b>não</b> recebe mensagem direta. Ligue/desligue no <b>botão acima</b>.</p>
       <form method="POST" action="/free/config" style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
         <label style="font-weight:700">Verificar a cada
           <input type="number" name="freeHoras" min="${freeCfg.HORAS_MIN}" max="${freeCfg.HORAS_MAX}" step="1" value="${(function(){try{return freeCfg.lerHoras();}catch(_){return freeCfg.HORAS_PADRAO;}})()}" style="width:64px;margin:0 6px;padding:6px;border:1px solid var(--linha);border-radius:8px;text-align:center"> horas
+          <span class="quando" style="display:block;margin:3px 0 0;font-weight:400">em horas fixas no minuto :02 — mudar aqui exige reiniciar o robô</span>
         </label>
         <label style="font-weight:700">Janela
           <input type="number" name="freeDias" min="${freeCfg.DIAS_MIN}" max="${freeCfg.DIAS_MAX}" step="1" value="${(function(){try{return freeCfg.lerDias();}catch(_){return freeCfg.DIAS_PADRAO;}})()}" style="width:64px;margin:0 6px;padding:6px;border:1px solid var(--linha);border-radius:8px;text-align:center"> dias (a partir de hoje+2)
