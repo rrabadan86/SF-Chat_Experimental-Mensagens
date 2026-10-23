@@ -26,6 +26,17 @@
 #         --check · --domain <subdominio> · --port <n> · --evo-tenant <slug>
 #         --evo-branch <n> · --start · --no-git-pull (não atualizar do Git)
 #
+#  TUDO DE UMA VEZ (sem editar .env à mão) — faz prep + --check + --start num comando:
+#    bash setup-novo-studio.sh --tudo --slug lagosul --studio "Studio SlimFit Lago Sul" \
+#       --install-deps --evo-tenant slimfitlagosul --evo-branch 22 --port 8080 \
+#       --domain painel-lagosul.exemplo.com \
+#       --evo-dns <dns> --evo-token <token> --evo-email <email> --evo-password <senha> \
+#       --evo-activity "<atividade>" --evo-service "<servico>" --anthropic-key <chave>
+#    Os segredos que você NÃO passar por flag, o script PERGUNTA no terminal (passo a
+#    passo). O --tudo exige --domain. Segredos por flag:
+#       --evo-dns --evo-token --evo-email --evo-password
+#       --evo-activity --evo-service --anthropic-key --grupo-equipe
+#
 #  EVO POR UNIDADE: --evo-tenant e --evo-branch montam os caminhos que o robô usa
 #  para LER o EVO (grade, faltantes, suspensões). Ache os dois na URL do EVO da
 #  unidade: .../app/<tenant>/<branch>/... . Sem passar, cai no padrão da unidade
@@ -56,6 +67,15 @@ EVO_TENANT=""      # --evo-tenant <slug> identificador da rede no EVO (na URL; e
 EVO_BRANCH=""      # --evo-branch <n> número da unidade no EVO (aparece no caminho; ex.: 15)
 CHECK=0            # --check valida os .env preenchidos (antes do --start)
 AUTO_PULL=1        # atualiza o repo do Git antes de preparar; --no-git-pull desliga
+TUDO=0             # --tudo: preparação + --check + --start num comando só (pede/recebe os segredos)
+EVO_DNS_IN=""      # --evo-dns      (ou perguntado no --tudo)
+EVO_TOKEN_IN=""    # --evo-token
+EVO_EMAIL_IN=""    # --evo-email
+EVO_PASSWORD_IN="" # --evo-password
+EVO_ACTIVITY_IN="" # --evo-activity (nome da atividade da experimental no EVO)
+EVO_SERVICE_IN=""  # --evo-service  (nome do serviço da experimental no EVO)
+ANTHROPIC_IN=""    # --anthropic-key (chave da IA da SoFIA)
+GRUPO_EQUIPE_IN="" # --grupo-equipe (nome EXATO do grupo da equipe no WhatsApp)
 ORIG_ARGS=("$@")   # guardado p/ reexecutar após a auto-atualização do Git
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -71,6 +91,15 @@ while [ $# -gt 0 ]; do
     --form-port)    FORM_PORT="${2:-}"; shift 2 ;;
     --evo-tenant)   EVO_TENANT="${2:-}"; shift 2 ;;
     --evo-branch)   EVO_BRANCH="${2:-}"; shift 2 ;;
+    --tudo)          TUDO=1; shift ;;
+    --evo-dns)       EVO_DNS_IN="${2:-}"; shift 2 ;;
+    --evo-token)     EVO_TOKEN_IN="${2:-}"; shift 2 ;;
+    --evo-email)     EVO_EMAIL_IN="${2:-}"; shift 2 ;;
+    --evo-password)  EVO_PASSWORD_IN="${2:-}"; shift 2 ;;
+    --evo-activity)  EVO_ACTIVITY_IN="${2:-}"; shift 2 ;;
+    --evo-service)   EVO_SERVICE_IN="${2:-}"; shift 2 ;;
+    --anthropic-key) ANTHROPIC_IN="${2:-}"; shift 2 ;;
+    --grupo-equipe)  GRUPO_EQUIPE_IN="${2:-}"; shift 2 ;;
     -h|--help)
       grep -E '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Argumento desconhecido: $1"; exit 1 ;;
@@ -84,6 +113,12 @@ echo "$SLUG" | grep -qE '^[a-z0-9][a-z0-9-]{1,30}$' \
 echo "$PAINEL_PORT" | grep -qE '^[0-9]{2,5}$' || { echo "❌ --port deve ser um número (ex.: --port 8081)"; exit 1; }
 [ -n "$FORM_PORT" ] || FORM_PORT=$((PAINEL_PORT + 10))   # form na porta do painel + 10 (8080→8090)
 echo "$FORM_PORT" | grep -qE '^[0-9]{2,5}$' || { echo "❌ --form-port deve ser um número (ex.: --form-port 8090)"; exit 1; }
+
+# --tudo exige o domínio: sem ele o formulário/SoFIA ficam com URL placeholder (SEU-PAINEL)
+# e o --check reprova. Passe --domain painel-<slug>.seudominio.com.
+if [ "$TUDO" = "1" ] && [ -z "$DOMAIN" ]; then
+  echo "❌ --tudo precisa de --domain (ex.: --domain painel-novaloja.seudominio.com)"; exit 1
+fi
 
 # EVO: identificador da rede (tenant) e número da unidade (branch). O robô loga no
 # EVO pelo NAVEGADOR e lê a grade/faltantes/suspensões nesses caminhos — que embutem
@@ -159,6 +194,46 @@ segredo() {
 
 # roda um comando como root (sudo se não for root já)
 _sudo() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi; }
+
+# ---- segredos via flag / perguntados (modo --tudo) --------------------------
+# set_env CHAVE VALOR ARQUIVO → grava/atualiza a chave no .env (só se VALOR não vazio).
+set_env() {
+  local k="$1" v="$2" f="$3" esc
+  [ -n "$v" ] || return 0
+  [ -f "$f" ] || return 0
+  esc=$(printf '%s' "$v" | sed -e 's/[\\|&]/\\&/g')
+  if grep -qE "^$k=" "$f"; then sed -i "s|^$k=.*|$k=$esc|" "$f"
+  else printf '%s=%s\n' "$k" "$v" >> "$f"; fi
+}
+
+# Pergunta no terminal cada segredo ainda vazio (passo a passo do --tudo).
+prompt_secrets() {
+  echo "📝 Credenciais desta unidade — Enter deixa em branco (dá p/ preencher depois no painel):"
+  [ -n "$EVO_DNS_IN" ]      || read -r  -p "   EVO_DNS (DNS da integração EVO): " EVO_DNS_IN || true
+  [ -n "$EVO_TOKEN_IN" ]    || read -r  -p "   EVO_TOKEN (secret key da API EVO): " EVO_TOKEN_IN || true
+  [ -n "$EVO_EMAIL_IN" ]    || read -r  -p "   EVO_EMAIL (login do robô no EVO): " EVO_EMAIL_IN || true
+  [ -n "$EVO_PASSWORD_IN" ] || { read -r -s -p "   EVO_PASSWORD (senha do EVO): " EVO_PASSWORD_IN || true; echo; }
+  [ -n "$EVO_ACTIVITY_IN" ] || read -r  -p "   EVO_ACTIVITY (atividade da experimental; Enter p/ achar depois com --evo-ids): " EVO_ACTIVITY_IN || true
+  [ -n "$EVO_SERVICE_IN" ]  || read -r  -p "   EVO_SERVICE (serviço da experimental; Enter p/ depois): " EVO_SERVICE_IN || true
+  [ -n "$ANTHROPIC_IN" ]    || { read -r -s -p "   ANTHROPIC_API_KEY (chave da IA da SoFIA): " ANTHROPIC_IN || true; echo; }
+  [ -n "$GRUPO_EQUIPE_IN" ] || read -r  -p "   GRUPO_EQUIPE (nome EXATO do grupo da equipe no WhatsApp; Enter p/ depois): " GRUPO_EQUIPE_IN || true
+}
+
+# Grava os segredos recebidos (flag/perguntados) nos .env já criados.
+aplicar_segredos() {
+  set_env EVO_DNS           "$EVO_DNS_IN"      "$EXP_DIR/.env"
+  set_env EVO_TOKEN         "$EVO_TOKEN_IN"    "$EXP_DIR/.env"
+  set_env EVO_EMAIL         "$EVO_EMAIL_IN"    "$EXP_DIR/.env"
+  set_env EVO_PASSWORD      "$EVO_PASSWORD_IN" "$EXP_DIR/.env"
+  set_env EVO_ACTIVITY      "$EVO_ACTIVITY_IN" "$EXP_DIR/.env"
+  set_env EVO_SERVICE       "$EVO_SERVICE_IN"  "$EXP_DIR/.env"
+  set_env GRUPO_EQUIPE      "$GRUPO_EQUIPE_IN" "$EXP_DIR/.env"
+  set_env ANTHROPIC_API_KEY "$ANTHROPIC_IN"    "$CHATBOT_DIR/.env"
+  if [ -n "$DOMAIN" ]; then
+    set_env FORM_CLOUD_URL "https://$DOMAIN$FORM_PREFIX"                "$EXP_DIR/.env"
+    set_env SOFIA_BOOK_URL "https://$DOMAIN$FORM_PREFIX/api/book-sofia" "$CHATBOT_DIR/.env"
+  fi
+}
 
 # ---- --install-deps: instala os pré-requisitos do sistema (apt/Debian/Ubuntu) --
 install_system_deps() {
@@ -379,6 +454,10 @@ run_check() {
     exit 0
   fi
 }
+
+# --tudo: no modo "tudo de uma vez", pergunta os segredos LOGO (antes das instalações
+# demoradas), pra você preencher e deixar o resto rodar sozinho.
+if [ "$TUDO" = "1" ]; then prompt_secrets; fi
 
 # ---- --install-deps: instala os pré-requisitos ANTES de qualquer fase --------
 if [ "$INSTALL_DEPS" = "1" ]; then install_system_deps || true; fi
@@ -809,6 +888,22 @@ CONTATOS_FILE=$EXP_DIR/data/contatos.json
 EOF
 fi
 
+# aplica os segredos recebidos por flag / perguntados (--tudo) nos .env recém-criados
+aplicar_segredos
+
+# --tudo: emenda --check e --start no MESMO comando (sem abrir o nano).
+if [ "$TUDO" = "1" ]; then
+  echo
+  echo "▶️  --tudo: validando a configuração e subindo tudo…"
+  env SETUP_JA_ATUALIZOU=1 bash "$0" --slug "$SLUG" --check || {
+    echo "❌ Validação falhou — ajuste o que faltou e rode:"
+    echo "     bash setup-novo-studio.sh --slug $SLUG --start --domain $DOMAIN"
+    exit 1
+  }
+  exec env SETUP_JA_ATUALIZOU=1 bash "$0" --slug "$SLUG" --start \
+       --port "$PAINEL_PORT" --form-port "$FORM_PORT" ${DOMAIN:+--domain "$DOMAIN"}
+fi
+
 echo
 echo "✅ Preparação concluída. AGORA edite os campos [POR STUDIO]:"
 echo "   • $EXP_DIR/.env      → EVO_EMAIL + EVO_PASSWORD (login do robô no EVO — SEM eles os jobs diários falham),"
@@ -838,3 +933,10 @@ echo "     bash setup-novo-studio.sh --slug $SLUG --check"
 echo
 echo "   E para subir tudo (com HTTPS automático):"
 echo "     bash setup-novo-studio.sh --slug $SLUG --start --domain painel-$SLUG.SEU-DOMINIO"
+echo
+echo "   ⚡ Atalho — fazer TUDO num comando só (sem editar .env à mão):"
+echo "     bash setup-novo-studio.sh --tudo --slug $SLUG --studio \"${STUDIO_NOME:-Studio SlimFit $SLUG}\" \\"
+echo "          --install-deps --evo-tenant $EVO_TENANT --evo-branch $EVO_BRANCH --port $PAINEL_PORT \\"
+echo "          --domain painel-$SLUG.SEU-DOMINIO \\"
+echo "          --evo-dns ... --evo-token ... --evo-email ... --evo-password ... --anthropic-key ..."
+echo "     (Os segredos que você NÃO passar por flag, ele pergunta na hora.)"
