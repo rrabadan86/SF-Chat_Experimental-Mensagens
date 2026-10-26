@@ -3,10 +3,74 @@
 Guia prático para **atualizar uma unidade existente** e para os detalhes que os guias
 de instalação do zero ainda não cobriam (a página **/grade** e o **TKM/faturamento**).
 
-- Instalação do zero (servidor, Node, PM2, WhatsApp, SoFIA, formulário):
-  ver **`docs/GUIA-INSTALACAO-FRANQUIA.md`** e **`ONBOARDING-NOVO-STUDIO.md`**.
-- Este arquivo foca em: **atualizar versão**, **módulo /grade**, **`GRADE_FIXAS_CRON`** e
-  **cheat-sheet por unidade**.
+- **Instalar uma unidade nova do zero:** seção **"0. Instalar uma unidade nova"** abaixo
+  (instalador `setup-novo-studio.sh --tudo`). Guias antigos: `docs/GUIA-INSTALACAO-FRANQUIA.md`.
+- Este arquivo foca em: **instalar unidade nova**, **atualizar versão**, **módulo /grade**,
+  **`GRADE_FIXAS_CRON`** e **cheat-sheet por unidade**.
+
+---
+
+## 0. Instalar uma unidade nova (do zero) — `setup-novo-studio.sh`
+
+Um comando (`--tudo`) instala o sistema, clona o formulário, cria os `.env`, sobe os
+**4 processos** (`<slug>-painel/exp/sofia/form`) e **configura o Caddy (HTTPS) sozinho**.
+O **único** passo manual é apontar o **DNS**.
+
+**Antes de começar:** VPS Ubuntu/Debian com **portas 80/443 abertas**, subdomínio no
+DuckDNS, dados do EVO (`tenant`, `branch`, `DNS`, `token`, `email`, `senha`) e a **chave
+da Anthropic**. ⚠️ Nunca use `< >` nos valores — são redirecionamento no shell
+(`--evo-dns slimfit`, nunca `--evo-dns <slimfit>`).
+
+**1. Clonar:**
+```bash
+git clone https://github.com/rrabadan86/SF-Chat_Experimental-Mensagens.git
+cd SF-Chat_Experimental-Mensagens/Experimental
+```
+
+**2. Instalar (sem os ids do EVO — entram no passo 5):**
+```bash
+bash setup-novo-studio.sh --tudo \
+     --slug <slug> \
+     --studio "Studio SlimFit <Nome>" \
+     --install-deps \
+     --evo-tenant <tenant> --evo-branch <branch> \
+     --port 8080 \
+     --domain painelsf<slug>.duckdns.org \
+     --evo-email <email-do-robô>
+```
+Os segredos que faltarem (`EVO_DNS`, `EVO_TOKEN`, `EVO_PASSWORD`, `ANTHROPIC_API_KEY`,
+`GRUPO_EQUIPE`) ele **pergunta** no terminal (senha/chave ocultas). Ao fim, instala e
+configura o **Caddy** e **imprime o IP do VPS**.
+
+**3. Apontar o DNS:** no DuckDNS, `painelsf<slug>` → o IP impresso (ou `curl -s -4 ifconfig.me`).
+Em ~1 min o `https://painelsf<slug>.duckdns.org` abre com cadeado (certificado automático).
+Se ficar "não seguro" por mais de uns minutos: confira a **porta 80** aberta e
+`sudo journalctl -u caddy -n 50 --no-pager | grep -iE "certificate|challenge|error"`.
+
+**4. Conectar os WhatsApp + persistir no reboot:**
+```bash
+pm2 logs <slug>-exp     # QR do robô
+pm2 logs <slug>-sofia   # QR da SoFIA (ou pela aba WhatsApp do painel)
+pm2 startup             # rode a linha impressa — sobe tudo após reboot
+```
+
+**5. IDs do EVO da aula experimental (Opção B — descobrir e preencher depois):**
+```bash
+bash setup-novo-studio.sh --slug <slug> --evo-ids
+```
+Lista **atividades** (idActivity → nome) e **serviços** (idService → nome). Ache a
+atividade **SlimFit** e o serviço **"Aula experimental"** e grave os ids — no `nano` —
+**nos DOIS .env** (o formulário é quem agenda):
+- `~/SF-Chat_Experimental-Mensagens/Experimental/.env` → `EVO_ACTIVITY_ID=` / `EVO_SERVICE_ID=`
+- `/root/sf-form-<slug>/.env` → idem; depois `pm2 restart <slug>-form`
+
+> Não é urgente: a experimental só usa esses ids **quando alguém agenda**.
+
+**6. Trocar os textos padrão (são do Bueno!):** no painel → **SoFIA → Configuração**
+(roteiro, endereço, promoção, professoras) e **WhatsApp → Configuração** (mensagens).
+
+**2 lojas no mesmo VPS:** dois clones em pastas diferentes, cada um com `--slug` e
+`--port` próprios (ex.: 8080 e 8081). O Caddy acrescenta o 2º bloco sozinho.
 
 ---
 
@@ -123,14 +187,19 @@ Confirme no log do `-exp`: `📅 Job GRADE DE FIXAS agendado: 47 5 * * *`.
 > Os nomes dos processos variam um pouco por unidade (herança histórica). **Confirme
 > sempre com `pm2 ls`** antes de reiniciar.
 
-| Unidade      | Servidor            | Pasta do repo                      | Processos principais                                   |
-|--------------|---------------------|------------------------------------|--------------------------------------------------------|
-| **Bueno**    | VPS próprio         | `/root/SF-Chat_Experimental-Mensagens` | `slimfit-exp`, `slimfit-painel`, `slimfit-form`, `sofia-listener` |
-| **Park Sul** | VPS próprio         | `/root/SF-Chat_Experimental-Mensagens` | `parksul-exp`, `parksul-painel`, `parksul-form`, `parksul-sofia`  |
-| **Lago Sul 1** | compartilhado     | `/root/SF-Chat_Experimental-Mensagens` | `lagosul1-exp`, `lagosul1-painel`, `lagosul1-form`, `lagosul1-sofia` |
-| **Lago Sul 2** | (mesmo do LS1)    | `/root/slimfit-lagosul2`           | `lagosul2-exp`, `lagosul2-painel`, `lagosul2-form`, `lagosul2-sofia` |
+| Unidade      | Servidor            | Pasta do repo                      | Pasta do formulário            | Processos principais                                   |
+|--------------|---------------------|------------------------------------|--------------------------------|--------------------------------------------------------|
+| **Bueno**    | VPS próprio         | `/root/SF-Chat_Experimental-Mensagens` | `/root/sf-form-real` ⚠️        | `slimfit-exp`, `slimfit-painel`, `slimfit-form`, `sofia-listener` |
+| **Park Sul** | VPS próprio         | `/root/SF-Chat_Experimental-Mensagens` | `/root/sf-form-parksul` ⚠️     | `parksul-exp`, `parksul-painel`, `parksul-form`, `parksul-sofia`  |
+| **Lago Sul 1** | compartilhado     | `/root/SF-Chat_Experimental-Mensagens` | (roda do próprio repo)         | `lagosul1-exp`, `lagosul1-painel`, `lagosul1-form`, `lagosul1-sofia` |
+| **Lago Sul 2** | (mesmo do LS1)    | `/root/slimfit-lagosul2`           | (roda do próprio repo)         | `lagosul2-exp`, `lagosul2-painel`, `lagosul2-form`, `lagosul2-sofia` |
+| **Guará**    | VPS próprio         | `/root/SF-Chat_Experimental-Mensagens` | `/root/sf-form-guara`          | `guara-exp`, `guara-painel`, `guara-form`, `guara-sofia` |
 
 - `-exp` = scheduler (crons). `-painel` = páginas. `-form` = formulário. `-sofia` = SoFIA (WhatsApp).
+- A SoFIA do **Bueno** se chama `sofia-listener`; nas demais é `<unidade>-sofia`.
+- ⚠️ **Bueno e Park Sul** rodam o formulário de um **clone separado** do repo
+  `sf-formularioexperimental` (`/root/sf-form-<unidade>`) — para atualizar o form, dê o
+  `git` **naquela pasta** também (`cd /root/sf-form-<unidade> && git fetch origin main && git reset --hard FETCH_HEAD && pm2 restart <unidade>-form`). **Lago Sul** roda o form do próprio repo principal. Instalações novas (via `--tudo`) usam o clone separado `/root/sf-form-<slug>`.
 - **Lago Sul 2** roda com `GRADE_FIXAS_CRON=47 5 * * *` (05:47) para não concorrer com o Lago Sul 1 (05:40).
 
 ---
