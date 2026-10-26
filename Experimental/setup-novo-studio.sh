@@ -74,6 +74,8 @@ EVO_EMAIL_IN=""    # --evo-email
 EVO_PASSWORD_IN="" # --evo-password
 EVO_ACTIVITY_IN="" # --evo-activity (nome da atividade da experimental no EVO)
 EVO_SERVICE_IN=""  # --evo-service  (nome do serviço da experimental no EVO)
+EVO_ACTIVITY_ID_IN="" # --evo-activity-id (id da atividade, alternativa ao nome)
+EVO_SERVICE_ID_IN=""  # --evo-service-id  (id do serviço, alternativa ao nome)
 ANTHROPIC_IN=""    # --anthropic-key (chave da IA da SoFIA)
 GRUPO_EQUIPE_IN="" # --grupo-equipe (nome EXATO do grupo da equipe no WhatsApp)
 ORIG_ARGS=("$@")   # guardado p/ reexecutar após a auto-atualização do Git
@@ -98,6 +100,8 @@ while [ $# -gt 0 ]; do
     --evo-password)  EVO_PASSWORD_IN="${2:-}"; shift 2 ;;
     --evo-activity)  EVO_ACTIVITY_IN="${2:-}"; shift 2 ;;
     --evo-service)   EVO_SERVICE_IN="${2:-}"; shift 2 ;;
+    --evo-activity-id) EVO_ACTIVITY_ID_IN="${2:-}"; shift 2 ;;
+    --evo-service-id)  EVO_SERVICE_ID_IN="${2:-}"; shift 2 ;;
     --anthropic-key) ANTHROPIC_IN="${2:-}"; shift 2 ;;
     --grupo-equipe)  GRUPO_EQUIPE_IN="${2:-}"; shift 2 ;;
     -h|--help)
@@ -227,6 +231,8 @@ aplicar_segredos() {
   set_env EVO_PASSWORD      "$EVO_PASSWORD_IN" "$EXP_DIR/.env"
   set_env EVO_ACTIVITY      "$EVO_ACTIVITY_IN" "$EXP_DIR/.env"
   set_env EVO_SERVICE       "$EVO_SERVICE_IN"  "$EXP_DIR/.env"
+  set_env EVO_ACTIVITY_ID   "$EVO_ACTIVITY_ID_IN" "$EXP_DIR/.env"
+  set_env EVO_SERVICE_ID    "$EVO_SERVICE_ID_IN"  "$EXP_DIR/.env"
   set_env GRUPO_EQUIPE      "$GRUPO_EQUIPE_IN" "$EXP_DIR/.env"
   set_env ANTHROPIC_API_KEY "$ANTHROPIC_IN"    "$CHATBOT_DIR/.env"
   if [ -n "$DOMAIN" ]; then
