@@ -160,7 +160,7 @@ const CATALOGO = [
   {
     chave: 'cobranca_boleto_hoje',
     titulo: 'Cobrança — boleto vence HOJE (com boleto)',
-    quando: 'Enviada pela SoFIA para a aluna com BOLETO em aberto que VENCE HOJE. Lembra que vence hoje e leva o boleto no {link}. Horário/dias também na aba Cobrança.',
+    quando: 'Enviada pela SoFIA para a aluna com BOLETO em aberto que VENCE HOJE. Lembra que vence hoje e leva o boleto no {link}. Tem horário/dias PRÓPRIOS (independentes das outras cobranças), editáveis no card abaixo.',
     vars: [['nome', 'primeiro nome da aluna'], ['vencimento', 'data de vencimento (hoje), ex.: 07/10/2026'], ['link', 'link do boleto dela — mantenha o {link} no texto'], ['valor', 'valor do boleto, ex.: R$ 647,00 (opcional)']],
     padrao: 'Oi, {nome}! 💜 Passando pra lembrar que o boleto da sua mensalidade do {studio} *vence hoje* ({vencimento}).\n\nPara manter tudo em dia, segue o boleto:\n{link}\n\nSe já pagou, é só desconsiderar. Qualquer dúvida, é só me chamar! 😊',
   },

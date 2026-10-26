@@ -104,7 +104,8 @@ const config = {
     agendadosManha:   '45 10 * * *',    // 10:45 todos os dias (envios agendados no painel — turno manhã)
     agendadosTarde:   '45 15 * * *',    // 15:45 todos os dias (envios agendados no painel — turno tarde)
     comparecimento:   '0 16 * * 6',     // 16:00 sábado (cruza presença da semana no EVO → troca tags)
-    inadimplentes:    '20 10 * * 1-6',  // 10:20 seg-sáb (cobra quem está com débito vencido há 2+ dias)
+    inadimplentes:    '20 10 * * 1-6',  // 10:20 seg-sáb (recorrente + boleto VENCIDO há 2+ dias)
+    inadimplentesHoje: '20 10 * * 1-6', // "boleto vence HOJE" — horário/dias PRÓPRIOS (independentes da cobrança acima), editáveis no painel
     // 05:40 todo dia — atualiza a grade de MATRÍCULAS FIXAS (página /grade), em horário calmo do EVO.
     // Escalonável por unidade com GRADE_FIXAS_CRON no .env (ex.: 2 lojas no mesmo servidor →
     // lagosul2 GRADE_FIXAS_CRON='47 5 * * *' pra rodar 7 min depois e não concorrer).

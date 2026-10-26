@@ -1753,8 +1753,8 @@ const HORARIOS_DA_MSG = {
   circuito_convocacao: [['circuitoConvoca', '']],
   circuito_lembrete:   [['circuitoLembrete', '']],
   cobranca_recorrente: [['inadimplentes', '']],
-  cobranca_boleto:      'compartilha:cobranca', // mesmo disparo da cobrança — só nota
-  cobranca_boleto_hoje: 'compartilha:cobranca', // mesmo disparo da cobrança — só nota
+  cobranca_boleto:      'compartilha:cobranca', // mesmo disparo da cobrança (recorrente) — só nota
+  cobranca_boleto_hoje: [['inadimplentesHoje', '']], // horário/dias PRÓPRIOS (independentes das outras cobranças)
 };
 // Mensagens de GRUPO que têm job agendado próprio (não estão no HORARIOS_DA_MSG
 // porque o horário delas é dia-do-mês/semana fixo, não editável aqui) — mas o
@@ -1787,7 +1787,7 @@ function cardDeMsg(m, hmap, voltar) {
       <p class="quando" style="margin:0">Segue o <b>mesmo horário do Follow-up pós-aula (ainda não fechou)</b>, logo acima — é o mesmo disparo, muda só o texto conforme a lead.</p></div>`;
   } else if (mapa === 'compartilha:cobranca') {
     hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
-      <p class="quando" style="margin:0">Segue o <b>mesmo horário da Cobrança — recorrente</b>, logo acima — é o mesmo disparo, muda só o texto conforme o caso (recorrente = link de pagamento; boleto vencido = boleto; boleto que vence hoje = aviso + boleto).</p></div>`;
+      <p class="quando" style="margin:0">Segue o <b>mesmo horário da Cobrança — recorrente</b>, logo acima — é o mesmo disparo, muda só o texto conforme o caso (recorrente = link de pagamento; boleto vencido = boleto). A <b>"boleto vence HOJE"</b> tem horário/dias próprios (no card dela).</p></div>`;
   } else if (Array.isArray(mapa)) {
     const linhas = mapa.map(([chave, sub]) => hmap[chave] ? blocoHorario(hmap[chave], sub) : '').join('');
     const editouHora = mapa.some(([chave]) => hmap[chave] && hmap[chave].editado);
