@@ -1099,8 +1099,9 @@ async function importarHistorico(porChat: number) {
     let feitos = 0, novos = 0;
     for (const chat of alvos) {
       try {
-        const tel = String(chat.id).replace(/\D/g, "");
-        if (tel && tel.length >= 8) {
+        const telCru = String(chat.id).replace(/\D/g, "");
+        if (telCru && telCru.length >= 8) {
+          const tel = chaveInboxExistente(telCru); // casa a variante do 9º dígito já existente (NÃO duplica o card)
           const ex = inbox.get(tel);
           const acc: InboxMsg[] = ex ? ex.msgs.slice() : [];
           const seen = new Set(acc.map((m) => m.em + "|" + m.autor));
@@ -1129,6 +1130,7 @@ async function importarHistorico(porChat: number) {
       feitos++;
       if (feitos % 50 === 0) { gravarImportStatus({ rodando: true, feitos, total: alvos.length, novos, em: Date.now() }); salvarInbox(); }
     }
+    try { reconciliar9Duplicados(); } catch {} // segurança: funde qualquer par 9-com/sem que tenha entrado no import
     salvarInbox();
     gravarImportStatus({ rodando: false, feitos, total: alvos.length, novos, terminadoEm: Date.now() });
     log(`✅ histórico importado: ${feitos} conversas lidas, ${novos} com dados.`);
