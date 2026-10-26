@@ -33,7 +33,8 @@ const CATALOGO = [
   { chave: 'comparecimento',    titulo: 'Presença da experimental (troca de tags)', padrao: '0 16 * * 6' },
   { chave: 'agendadosManha',    titulo: 'Envios agendados — manhã',     padrao: '45 10 * * *' },
   { chave: 'agendadosTarde',    titulo: 'Envios agendados — tarde',     padrao: '45 15 * * *' },
-  { chave: 'inadimplentes',     titulo: 'Cobrança de inadimplentes',    padrao: '20 10 * * 1-6' },
+  { chave: 'inadimplentes',     titulo: 'Cobrança — recorrente + boleto vencido', padrao: '20 10 * * 1-6' },
+  { chave: 'inadimplentesHoje', titulo: 'Cobrança — boleto vence hoje',  padrao: '20 10 * * 1-6' },
 ];
 const PADROES = Object.fromEntries(CATALOGO.map(j => [j.chave, j.padrao]));
 

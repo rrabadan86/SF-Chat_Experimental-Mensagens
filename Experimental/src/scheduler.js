@@ -115,17 +115,17 @@ function agendarCircuitoLembrete(tentativa = 1) {
 // Cobrança de inadimplentes: usa o scraper do EVO (lê débitos vencidos + gera o
 // link) e depois envia pelo WhatsApp. Como usa o EVO, respeita o jobRunning; se
 // outro job estiver rodando, espera e tenta de novo (não loga no EVO em paralelo).
-function agendarInadimplentes(tentativa = 1) {
+function agendarInadimplentes(tentativa = 1, modo = 'regular') {
   if (jobRunning) {
     if (tentativa > 6) { logError('Inadimplentes', new Error('scraper ocupado — desisti após ~9 min')); return; }
     log(`⏳ Inadimplentes: outro job em execução — tento de novo em 90s (tentativa ${tentativa})`);
-    setTimeout(() => agendarInadimplentes(tentativa + 1), 90000);
+    setTimeout(() => agendarInadimplentes(tentativa + 1, modo), 90000);
     return;
   }
   jobRunning = true;
-  atividade.setContexto('Cobrança de inadimplentes');
+  atividade.setContexto(modo === 'hoje' ? 'Cobrança — boleto vence hoje' : 'Cobrança de inadimplentes');
   const start = new Date();
-  require('./inadimplentes').runInadimplentes({ dry: false })
+  require('./inadimplentes').runInadimplentes({ dry: false, modo })
     .then(r => log(`✅ Inadimplentes concluído — ${r.enfileirados} enfileirada(s) p/ a SoFIA, ${r.skipped} pulada(s), ${r.failed} falha(s)`))
     .catch(err => logError('Inadimplentes', err))
     .finally(() => {
@@ -986,14 +986,27 @@ async function main() {
   // Desligável por unidade (JOBS_OFF).
   if (!config.jobAtivo('inadimplentes')) {
     log('📅 Job INADIMPLENTES DESATIVADO nesta unidade (JOBS_OFF).');
-  } else if (config.schedule.inadimplentes) {
-    cron.schedule(config.schedule.inadimplentes, () => {
-      log('⏰ Cron disparado: Cobrança de inadimplentes');
-      if (!jobsAtivos.ativo('inadimplentes')) { log('⏸️  Cobrança de inadimplentes desligada no painel — pulando'); return; }
-      agendarInadimplentes();
-    }, { timezone: 'America/Sao_Paulo' });
-    log(`📅 Job INADIMPLENTES agendado: ${config.schedule.inadimplentes} (10:20 seg-sáb)`);
-    console.log('   → Cobra quem está com débito vencido há 2+ dias (recorrente: link; boleto: contato)');
+  } else {
+    // Cobrança "regular": recorrente (cartão) + boleto VENCIDO — NÃO inclui a "boleto vence hoje".
+    if (config.schedule.inadimplentes) {
+      cron.schedule(config.schedule.inadimplentes, () => {
+        log('⏰ Cron disparado: Cobrança (recorrente + boleto vencido)');
+        if (!jobsAtivos.ativo('inadimplentes')) { log('⏸️  Cobrança desligada no painel — pulando'); return; }
+        agendarInadimplentes(1, 'regular');
+      }, { timezone: 'America/Sao_Paulo' });
+      log(`📅 Job INADIMPLENTES agendado: ${config.schedule.inadimplentes} (recorrente + boleto vencido)`);
+      console.log('   → Cobra quem está com débito vencido há 2+ dias (recorrente: link; boleto vencido: boleto)');
+    }
+    // Cobrança "boleto vence HOJE": horário/dias PRÓPRIOS (independentes), editáveis no painel.
+    if (config.schedule.inadimplentesHoje) {
+      cron.schedule(config.schedule.inadimplentesHoje, () => {
+        log('⏰ Cron disparado: Cobrança — boleto vence hoje');
+        if (!jobsAtivos.ativo('inadimplentes')) { log('⏸️  Cobrança desligada no painel — pulando'); return; }
+        agendarInadimplentes(1, 'hoje');
+      }, { timezone: 'America/Sao_Paulo' });
+      log(`📅 Job BOLETO VENCE HOJE agendado: ${config.schedule.inadimplentesHoje} (independente)`);
+      console.log('   → Lembra a aluna com boleto que vence HOJE (aviso + boleto)');
+    }
   }
 
   // Planos FREE — desmarcação por antecedência. Roda em horas FIXAS no minuto :02,

@@ -395,7 +395,7 @@ async function lerInadimplentes() {
 // Lê os inadimplentes e ENFILEIRA a mensagem certa na fila de cobrança. Quem ENVIA
 // é a SoFIA, pelo NÚMERO dela. dry=true: só imprime. Reenvia TODO DIA enquanto o
 // débito segue em aberto, no máximo 1x por dia (dedup por idCliente+dia).
-async function runInadimplentes({ dry = false } = {}) {
+async function runInadimplentes({ dry = false, modo = 'todos' } = {}) {
   const mensagens = require('./mensagens');
   const diasMin = cfg.lerDias();
   const lista = await lerInadimplentes();
@@ -439,6 +439,11 @@ async function runInadimplentes({ dry = false } = {}) {
       chaveMsg = r.venceHoje ? 'cobranca_boleto_hoje' : 'cobranca_boleto';
       texto = mensagens.render(chaveMsg, { nome: primeiroNome(nome), vencimento: r.vencimentoFmt, link: r.link, valor: valorFmt });
     }
+
+    // Crons separados: a "boleto vence HOJE" tem horário/dias próprios.
+    //   modo 'regular' → tudo MENOS vence-hoje ; 'hoje' → só vence-hoje ; 'todos' → tudo (manual/CLI).
+    if (modo === 'regular' && chaveMsg === 'cobranca_boleto_hoje') continue;
+    if (modo === 'hoje'    && chaveMsg !== 'cobranca_boleto_hoje') continue;
 
     if (dry) {
       res.details.push({ name: nome, status: 'simulado' });
