@@ -439,8 +439,8 @@ function agendarReconciliacaoLids() {
   if (reconAgendada) return; reconAgendada = true;
   setTimeout(() => { reconciliarLidsDormentes().catch(() => {}); }, 45000);            // uma vez, ~45s após conectar (Store já carregado)
   setInterval(() => { reconciliarLidsDormentes().catch(() => {}); }, 3 * 3600 * 1000); // de leve, a cada 3h — pega as que ainda escaparem
-  setTimeout(() => { try { reconciliar9Duplicados(); } catch {} }, 8000);              // funde dupes do 9º dígito logo no boot (não depende do WhatsApp)
-  setInterval(() => { try { reconciliar9Duplicados(); } catch {} }, 3 * 3600 * 1000);  // e de leve, a cada 3h
+  setTimeout(() => { try { reconciliar9Duplicados(); dedupMensagensInbox(); } catch {} }, 8000);              // funde dupes do 9º dígito + limpa mensagens duplicadas logo no boot (não depende do WhatsApp)
+  setInterval(() => { try { reconciliar9Duplicados(); dedupMensagensInbox(); } catch {} }, 3 * 3600 * 1000);  // e de leve, a cada 3h
 }
 
 // Chave de inbox para uma mensagem que NÓS iniciamos (campanha): usa a identidade
@@ -1104,15 +1104,18 @@ async function importarHistorico(porChat: number) {
           const tel = chaveInboxExistente(telCru); // casa a variante do 9º dígito já existente (NÃO duplica o card)
           const ex = inbox.get(tel);
           const acc: InboxMsg[] = ex ? ex.msgs.slice() : [];
-          const seen = new Set(acc.map((m) => m.em + "|" + m.autor));
+          // Dedup robusto: NÃO reimporta uma mensagem que já existe (mesmo texto num
+          // horário próximo), INDEPENDENTE do autor. Ao vivo a SoFIA grava 'sofia', mas
+          // o import só sabe 'humano'; e os horários diferem (segundo x milissegundo),
+          // então o antigo dedup por "em|autor" deixava a mesma mensagem entrar 2x.
+          const existe = (texto: string, em: number) =>
+            acc.some((m) => String(m.texto || "") === texto && Math.abs((m.em || 0) - em) < 15000);
           for (const m of chat.msgs) {
             const em = m.t ? m.t * 1000 : 0;
             const texto = String(m.body || "").trim();
             if (!em || !texto) continue;
+            if (existe(texto, em)) continue;
             const autor: InboxMsg["autor"] = m.fromMe ? "humano" : "aluna";
-            const k = em + "|" + autor;
-            if (seen.has(k)) continue;
-            seen.add(k);
             acc.push({ autor, texto, em });
           }
           acc.sort((a, b) => a.em - b.em);
@@ -1268,6 +1271,36 @@ function reconciliar9Duplicados() {
     }
     if (unidas) log(`🔗 9º dígito: ${unidas} par(es) de conversa unidos (mesmo número com/sem o 9).`);
   } catch (e: any) { log("aviso: reconciliação do 9º dígito falhou: " + (e?.message || e)); }
+}
+
+// Remove mensagens DUPLICADAS dentro de cada conversa (mesmo texto num horário
+// próximo), independente do autor. Conserta o estrago do reimportar histórico:
+// ao vivo a SoFIA grava 'sofia', mas o import grava a MESMA mensagem como 'humano'
+// num horário levemente diferente → apareciam duas bolhas iguais (SoFIA + Atendente).
+// Mantém UMA, preferindo a versão ao vivo ('sofia'/'aluna') à importada ('humano').
+function dedupMensagensInbox() {
+  try {
+    let removidas = 0;
+    for (const [, c] of inbox) {
+      if (!c || !Array.isArray(c.msgs) || c.msgs.length < 2) continue;
+      c.msgs.sort((a, b) => (a.em || 0) - (b.em || 0));
+      const mantidas: InboxMsg[] = [];
+      for (const m of c.msgs) {
+        const txt = String(m.texto || "");
+        const em = m.em || 0;
+        const dup = mantidas.find((x) => String(x.texto || "") === txt && Math.abs((x.em || 0) - em) < 15000);
+        if (dup) {
+          // Se a mantida era a importada ('humano') e esta é ao vivo, promove o autor.
+          if (dup.autor === "humano" && m.autor !== "humano") { dup.autor = m.autor; if (m.tipo) dup.tipo = m.tipo; }
+          removidas++;
+          continue;
+        }
+        mantidas.push(m);
+      }
+      if (mantidas.length !== c.msgs.length) c.msgs = mantidas;
+    }
+    if (removidas) { log(`🧹 mensagens duplicadas removidas: ${removidas}`); agendarSalvarInbox(); }
+  } catch (e: any) { log("aviso: dedup de mensagens falhou: " + (e?.message || e)); }
 }
 
 function registrarSessao(chave: string, nome: string, autor: string, texto: string, em: number) {
