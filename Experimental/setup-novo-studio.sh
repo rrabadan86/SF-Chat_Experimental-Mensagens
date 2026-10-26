@@ -300,29 +300,38 @@ wire_caddy() {
     printf '}\n'
   } > "$snippet"
   echo "📝 Bloco do Caddy (form na subpasta + painel) gerado em: $snippet"
-  # instala o Caddy se pedimos --install-deps e ele não existe
-  if [ "$INSTALL_DEPS" = "1" ] && ! command -v caddy >/dev/null 2>&1; then
+  # Instala o Caddy se faltar (precisamos dele p/ o HTTPS do --domain — independe de --install-deps).
+  if ! command -v caddy >/dev/null 2>&1; then
     echo "   ⬇️  instalando Caddy…"
     _sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl || true
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | _sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null || true
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | _sudo tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null 2>&1 || true
     _sudo apt-get update -y || true; _sudo apt-get install -y caddy || true
   fi
-  # tenta ligar automaticamente no /etc/caddy/Caddyfile (best-effort)
+  _sudo systemctl enable --now caddy >/dev/null 2>&1 || true   # garante o serviço no ar
+  # Liga o bloco desta unidade no /etc/caddy/Caddyfile automaticamente:
   if [ -f /etc/caddy/Caddyfile ]; then
     if _sudo grep -qF "$dom" /etc/caddy/Caddyfile 2>/dev/null; then
       echo "   ✔ o domínio já está no /etc/caddy/Caddyfile — nada a fazer."
-    else
+    elif _sudo grep -q "reverse_proxy" /etc/caddy/Caddyfile 2>/dev/null; then
+      # Já há config real (outra unidade no mesmo VPS) → ACRESCENTA o bloco desta.
       { echo ""; echo "# --- $SLUG (SlimFit) ---"; cat "$snippet"; } | _sudo tee -a /etc/caddy/Caddyfile >/dev/null \
         && echo "   ✔ bloco acrescentado ao /etc/caddy/Caddyfile"
-      _sudo systemctl reload caddy 2>/dev/null || _sudo systemctl restart caddy 2>/dev/null \
-        || echo "   ⚠️  recarregue o Caddy à mão: sudo systemctl reload caddy"
+    else
+      # Só há o EXEMPLO padrão do pacote (sem reverse_proxy) → SUBSTITUI pelo bloco desta unidade.
+      { echo "# --- $SLUG (SlimFit) ---"; cat "$snippet"; } | _sudo tee /etc/caddy/Caddyfile >/dev/null \
+        && echo "   ✔ /etc/caddy/Caddyfile (padrão) substituído pelo bloco do $SLUG"
+    fi
+    if _sudo systemctl reload caddy 2>/dev/null || _sudo systemctl restart caddy 2>/dev/null; then
+      echo "   ✔ Caddy recarregado — o HTTPS de $dom sobe sozinho assim que o DNS apontar pra este VPS."
+    else
+      echo "   ⚠️  não consegui recarregar o Caddy — rode à mão: sudo systemctl reload caddy"
     fi
   else
-    echo "   ℹ️  Caddy não configurado ainda. Para ligar o HTTPS, coloque o bloco de"
-    echo "      $snippet no seu Caddyfile e recarregue (sudo systemctl reload caddy)."
+    echo "   ⚠️  Caddy não instalou (/etc/caddy/Caddyfile ausente). Instale à mão e use o bloco: $snippet"
   fi
-  echo "   🌐 Aponte o DNS de $dom para o IP deste VPS (o Caddy emite o certificado sozinho)."
+  local ip4; ip4="$(curl -s -4 --max-time 5 ifconfig.me 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
+  echo "   🌐 Aponte o DNS de $dom para o IP deste VPS: ${ip4:-(rode: curl -s -4 ifconfig.me)}"
 }
 
 # ---- --evo-ids: descobre os ids da aula experimental no EVO ------------------
