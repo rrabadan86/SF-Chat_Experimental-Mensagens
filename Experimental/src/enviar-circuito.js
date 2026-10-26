@@ -44,6 +44,14 @@ function msgConvocacao(professora, horaFmt) { return mensagens.render('circuito_
 function partesLembrete(horaFmt) { return mensagens.partes('circuito_lembrete', { hora: horaFmt }, 'professora'); }
 function msgLembrete(professora, horaFmt) { return mensagens.render('circuito_lembrete', { professora, hora: horaFmt }); }
 
+// O partes() quebra o texto no PRIMEIRO {professora} (que vira a @menção nativa).
+// Se o texto (editado no painel) tiver MAIS de um {professora}, os restantes ficam
+// literais em "antes/depois" — aqui trocamos esses pelo NOME da professora (não se
+// @marca a mesma pessoa várias vezes). Corrige o 2º {professora} saindo "{professora}".
+function trocarRestoProfessora(parte, professora) {
+  return String(parte || '').split('{professora}').join(professora || '');
+}
+
 // ─── Telefone da professora (para @marcar) ────────────────────────────────
 // PROFESSORAS_TEL no .env (JSON: {"raissa":"5562...","taynara":"..."}), buscado
 // pelo PRIMEIRO nome (minúsculo). Sem telefone → mensagem com o nome, sem @.
@@ -202,8 +210,10 @@ async function runCircuitoConvocacao({ dry = false } = {}) {
     const g = await wa.acharGrupo(GRUPO);
     if (!g) throw new Error('Grupo não encontrado: ' + GRUPO);
     const { antes, depois } = partesConvocacao(horaFmt);
-    if (foto) await wa.sendGrupoMidiaComMencao(g.id, foto, antes, depois, tel);
-    else await wa.sendGrupoComMencao(g.id, antes, depois, tel);
+    const antesN = trocarRestoProfessora(antes, professora);
+    const depoisN = trocarRestoProfessora(depois, professora);
+    if (foto) await wa.sendGrupoMidiaComMencao(g.id, foto, antesN, depoisN, tel);
+    else await wa.sendGrupoComMencao(g.id, antesN, depoisN, tel);
     console.log(`✅ Convocatória enviada no grupo "${GRUPO}" com @menção da professora${foto ? ' + foto' : ''}.`);
   } else {
     if (foto) await wa.sendGrupoMidia(GRUPO, foto, msg);
@@ -258,8 +268,10 @@ async function runCircuitoLembrete({ dry = false } = {}) {
     const grp = await wa.acharGrupo(GRUPO);
     if (!grp) throw new Error('Grupo não encontrado: ' + GRUPO);
     const { antes, depois } = partesLembrete(horaFmt);
-    if (foto) await wa.sendGrupoMidiaComMencao(grp.id, foto, antes, depois, tel);
-    else await wa.sendGrupoComMencao(grp.id, antes, depois, tel);
+    const antesN = trocarRestoProfessora(antes, professora);
+    const depoisN = trocarRestoProfessora(depois, professora);
+    if (foto) await wa.sendGrupoMidiaComMencao(grp.id, foto, antesN, depoisN, tel);
+    else await wa.sendGrupoComMencao(grp.id, antesN, depoisN, tel);
     console.log(`✅ Lembrete enviado no grupo "${GRUPO}" com @menção da professora${foto ? ' + foto' : ''}.`);
   } else {
     if (foto) await wa.sendGrupoMidia(GRUPO, foto, msg);
