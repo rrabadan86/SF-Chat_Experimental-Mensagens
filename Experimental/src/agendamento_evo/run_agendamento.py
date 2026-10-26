@@ -38,12 +38,22 @@ def _setup_log(verbose):
 
 def cmd_services(args):
     evo = EvoClient()
+    print("=== ATIVIDADES (copie o id p/ EVO_ACTIVITY_ID) ===")
+    try:
+        ativs = evo.list_activities()
+        for a in ativs:
+            print(f"  idActivity={a.get('idActivity')}  {a.get('name')!r}")
+        if not ativs:
+            print("  (nenhuma atividade encontrada)")
+    except Exception as e:
+        print(f"  (não consegui listar atividades: {e})")
+    print("\n=== SERVIÇOS (copie o id p/ EVO_SERVICE_ID) ===")
     servicos = evo.list_services(experimental_only=not args.all)
     for s in servicos:
         print(f"  idService={s.get('idService')}  {s.get('nameService')!r}  "
               f"experimentalClass={s.get('experimentalClass')}  valor={s.get('value')}")
     if not servicos:
-        print("Nenhum serviço encontrado (tente --all).")
+        print("  Nenhum serviço experimental (tente --all para ver todos).")
 
 
 def cmd_slots(args):
