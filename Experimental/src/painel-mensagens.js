@@ -2413,7 +2413,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   const corpo =`<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('conversas')}
-    <div class="sec-t" id="conv-head" data-nosec="1">Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span></div>
+    <div class="sec-t" id="conv-head" data-nosec="1">Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span><button type="button" id="btnReimport" onclick="reimportarHistorico()" title="Relê o WhatsApp e repovoa as conversas no painel (recupera trechos perdidos, ex.: após um reinício da SoFIA). Pesado — faça num momento calmo." style="float:right;vertical-align:middle;font-size:.74rem;font-weight:700;padding:5px 11px;border:1px solid var(--linha);border-radius:999px;background:#fff;color:var(--cinza);cursor:pointer">↻ Reimportar histórico</button></div>
     <style>
       .inbox-grid{display:grid;grid-template-columns:288px minmax(0,1fr);gap:14px;align-items:start}
       .inbox-grid>div{min-width:0}
@@ -3035,6 +3035,20 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     if(e==='conectado'){ b.classList.remove('wa-off'); } else { b.classList.add('wa-off'); }
   }
   function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){ j=j||{}; if(j.lockMin){ LOCK_MIN=j.lockMin; LOCK_MS=LOCK_MIN*60000; } atualizaWa(j.wa); renderInbox(j.conv||{}); }).catch(function(){}); }
+  // Reimportar histórico: pede ao listener para reler o WhatsApp e repovoar o inbox
+  // (recupera trechos perdidos, ex.: após um reinício da SoFIA). Pesado — por isso confirma.
+  function reimportarHistorico(){
+    var b=document.getElementById('btnReimport'); if(!b) return;
+    if(b.dataset.busy==='1') return;
+    if(!confirm('Reimportar o histórico do WhatsApp para o painel?\\n\\nRelê as últimas mensagens de cada conversa e repovoa a lista (recupera trechos perdidos). Pode levar 1–2 min e é pesado — faça num momento calmo.')) return;
+    var txt=b.textContent; b.dataset.busy='1'; b.disabled=true; b.textContent='↻ Reimportando…';
+    function restaura(){ b.dataset.busy='0'; b.disabled=false; b.textContent=txt; }
+    fetch('/sofia/importar',{method:'POST'}).then(function(r){return r.json();}).then(function(j){
+      if(j && j.ok){ b.textContent='✓ Reimportando…';
+        setTimeout(function(){ try{atualizaInbox();}catch(e){} restaura(); alert('Reimportação disparada. As conversas vão se completar nos próximos minutos — se faltar algo, aguarde um pouco e recarregue a página.'); }, 8000);
+      } else { restaura(); alert('Não consegui disparar: '+((j&&j.erro)||'erro')); }
+    }).catch(function(e){ restaura(); alert('Falha ao disparar: '+e); });
+  }
   atualizaInbox(); setInterval(atualizaInbox, ${refreshMs});
   try { if(localStorage.getItem('convFiltrosOpen')==='1'){ var _d=document.getElementById('convFiltrosDet'); if(_d)_d.open=true; } } catch(e){}
 </script>`;
