@@ -68,6 +68,7 @@ input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible,.al
 .msg.ok{background:var(--ok-soft);color:var(--ok)}
 .pronto{text-align:center;padding:30px 18px}
 .pronto .ic{width:56px;height:56px;border-radius:50%;background:var(--ok-soft);color:var(--ok);display:grid;place-items:center;margin:0 auto 12px;font-size:1.6rem;font-weight:800}
+.fixo{background:var(--bg);border:1px solid var(--linha);border-radius:10px;padding:11px 12px;font-weight:600}
 .rodape{text-align:center;font-size:.85rem;color:var(--cinza);margin-top:26px}
 /* listagem */
 .busca{display:flex;flex-direction:column;gap:10px;margin:0 0 18px}
@@ -116,7 +117,7 @@ ${script}
 }
 
 // ── /SlimClubCadastro ───────────────────────────────────────────────────────
-function paginaCadastro({ studio, categorias, avisar }) {
+function paginaCadastro({ studio, categorias, avisar, comprovacao }) {
   const opts = categorias.map(c => `<option>${esc(c)}</option>`).join('') + '<option value="__outra">Outra</option>';
   const corpo = `
   <p class="eyebrow">Para alunas empreendedoras</p>
@@ -138,7 +139,8 @@ function paginaCadastro({ studio, categorias, avisar }) {
           <div class="av" id="av">sem foto</div>
           <div style="display:flex;flex-direction:column;gap:6px">
             <button type="button" class="btn2" id="btFoto">Escolher foto</button>
-            <p class="dica">Para as alunas reconhecerem você na listagem.</p>
+            <p class="dica">Para as alunas reconhecerem você. JPG ou PNG, tamanho máximo de <b>1 MB</b> — fotos maiores do celular são reduzidas automaticamente.</p>
+            <p class="dica" id="tamFoto" aria-live="polite"></p>
           </div>
           <input type="file" id="arq" accept="image/*" hidden>
         </div>
@@ -174,8 +176,9 @@ function paginaCadastro({ studio, categorias, avisar }) {
           <label><input type="radio" name="alcance" value="local"><span><b>Local</b>Vale só no seu negócio aqui da cidade</span></label>
           <label><input type="radio" name="alcance" value="nacional"><span><b>Nacional</b>Vale em todas as unidades do seu negócio no Brasil</span></label>
         </div></div>
-      <div class="campo"><label for="validacao">Como a aluna comprova que é do Studio</label>
-        <input type="text" id="validacao" maxlength="300" required placeholder="Ex.: nome na lista de alunas, carteirinha, perfil do Instagram"></div>
+      <div class="campo"><span class="rot">Como a aluna comprova que é do Studio</span>
+        <div class="fixo">${esc(comprovacao)}</div>
+        <p class="dica">Vale para todos os negócios do Slim Club.</p></div>
       <div class="campo"><label for="fim">Término da promoção <span class="opc">(opcional)</span></label>
         <input type="date" id="fim">
         <p class="dica">Deixe em branco se a oferta não tiver prazo.</p></div>
@@ -199,19 +202,29 @@ function paginaCadastro({ studio, categorias, avisar }) {
   var cat=document.getElementById('categoria'), catO=document.getElementById('categoriaOutra');
   cat.onchange=function(){ catO.hidden = cat.value!=='__outra'; if(!catO.hidden) catO.focus(); };
   function mostrarErro(t){ erro.textContent=t; erro.hidden=false; erro.scrollIntoView({block:'center',behavior:'smooth'}); }
-  // Reduz a foto no próprio celular (máx. 800px, JPEG) antes de enviar.
+  // Reduz a foto no próprio celular (JPEG, até 800px) para caber no limite de 1 MB.
+  var MAX=1024*1024, tam=document.getElementById('tamFoto');
+  function bytes(d){ return Math.floor((d.length-d.indexOf(',')-1)*3/4); }
+  function fmt(n){ return n<MAX ? Math.max(1,Math.round(n/1024))+' KB' : (n/MAX).toFixed(1).replace('.',',')+' MB'; }
   arq.onchange=function(){
     var file=arq.files&&arq.files[0]; if(!file) return;
+    erro.hidden=true;
     var img=new Image(), url=URL.createObjectURL(file);
     img.onload=function(){
-      var max=800, w=img.naturalWidth, h=img.naturalHeight, k=Math.min(1,max/Math.max(w,h));
-      var c=document.createElement('canvas'); c.width=Math.round(w*k); c.height=Math.round(h*k);
-      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-      var q=.85, d=c.toDataURL('image/jpeg',q);
-      while(d.length>1.3e6*1.37 && q>.4){ q-=.1; d=c.toDataURL('image/jpeg',q); }
+      URL.revokeObjectURL(url);
+      var lado=800, d='';
+      for(var t=0;t<4;t++){ // baixa a qualidade e, se ainda não couber, as dimensões
+        var k=Math.min(1,lado/Math.max(img.naturalWidth,img.naturalHeight));
+        var c=document.createElement('canvas'); c.width=Math.round(img.naturalWidth*k); c.height=Math.round(img.naturalHeight*k);
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        for(var q=.85;q>=.45;q-=.1){ d=c.toDataURL('image/jpeg',q); if(bytes(d)<=MAX) break; }
+        if(bytes(d)<=MAX) break;
+        lado=Math.round(lado*.75);
+      }
+      if(d.indexOf('data:image/jpeg')!==0 || bytes(d)>MAX){ foto=''; tam.textContent=''; return mostrarErro('Essa foto passa de 1 MB mesmo reduzida. Escolha outra foto.'); }
       foto=d; av.style.backgroundImage='url('+d+')'; av.textContent=''; av.classList.add('tem');
       document.getElementById('btFoto').textContent='Trocar foto';
-      URL.revokeObjectURL(url);
+      tam.textContent='Foto pronta: '+fmt(bytes(d))+(file.size>MAX ? ' (reduzida de '+fmt(file.size)+')' : '')+'.';
     };
     img.onerror=function(){ mostrarErro('Não consegui abrir essa imagem. Tente outra foto (JPG ou PNG).'); };
     img.src=url;
@@ -223,7 +236,7 @@ function paginaCadastro({ studio, categorias, avisar }) {
     var dados={ nome:v('nome'), telefone:v('telefone'), negocio:v('negocio'),
       categoria: cat.value==='__outra' ? catO.value : cat.value,
       documento:v('documento'), instagram:v('instagram'), beneficio:v('beneficio'),
-      alcance: alc?alc.value:'', validacao:v('validacao'), fimVigencia:v('fim'),
+      alcance: alc?alc.value:'', fimVigencia:v('fim'),
       consentimento: document.getElementById('consent').checked, foto: foto };
     if(!foto) return mostrarErro('Escolha uma foto sua.');
     bt.disabled=true; bt.textContent='Enviando…';
@@ -261,7 +274,7 @@ function paginaEntrar({ studio, erro, nome, telefone }) {
 }
 
 // ── /slimclub (aluna conectada): listagem ───────────────────────────────────
-function paginaListagem({ studio, aluna, empresas, fmtData, primeiroNome }) {
+function paginaListagem({ studio, aluna, empresas, fmtData, primeiroNome, comprovacao }) {
   const cats = [...new Set(empresas.map(e => e.categoria))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   const chips = cats.length > 1
     ? `<div class="chips" role="group" aria-label="Filtrar por categoria"><button type="button" class="chip on" data-cat="">Todas</button>${cats.map(c => `<button type="button" class="chip" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>`
@@ -274,7 +287,7 @@ function paginaListagem({ studio, aluna, empresas, fmtData, primeiroNome }) {
       <h3>${esc(e.negocio)}</h3>
       <div class="tags"><span class="tg">${esc(e.categoria)}</span>${e.alcance === 'nacional' ? '<span class="tg nac">Nacional · todas as unidades</span>' : '<span class="tg">Local · só nesta cidade</span>'}</div>
       <div class="beneficio">${esc(e.beneficio)}</div>
-      <p class="det"><b>Como comprovar:</b> ${esc(e.validacao)}</p>
+      <p class="det"><b>Como comprovar:</b> ${esc(comprovacao)}</p>
       <div class="rodp"><span>${e.fimVigencia ? 'Válido até ' + esc(fmtData(e.fimVigencia)) : 'Sem prazo de término'}</span>
         ${e.instagram ? `<a href="https://instagram.com/${encodeURIComponent(e.instagram)}" target="_blank" rel="noopener">@${esc(e.instagram)}</a>` : ''}</div>
     </article>`;

@@ -28,8 +28,11 @@ const CFG_ARQ = path.join(DATA_DIR, 'slimclub-config.json');
 const SEGREDO_ARQ = path.join(DATA_DIR, '.slimclub-segredo');
 
 const SESSAO_DIAS = 30;                       // aluna fica conectada 30 dias no aparelho
-const FOTO_MAX_BYTES = 1.5 * 1024 * 1024;     // a página reduz a foto antes de enviar
+const FOTO_MAX_BYTES = 1024 * 1024;           // 1 MB (a página reduz a foto do celular antes de enviar)
 const COOKIE = 'sc_aluna';
+
+// Como a aluna comprova que é do Studio: fixo para todos os negócios.
+const COMPROVACAO = 'Apresentando a carteira SlimClub';
 
 const CATEGORIAS = ['Saúde', 'Beleza', 'Alimentação', 'Moda', 'Serviços', 'Consultoria'];
 
@@ -110,14 +113,16 @@ function fotoPath(id) {
 }
 
 // A página converte a foto para JPEG (canvas) antes de enviar; aqui só aceitamos
-// JPEG de verdade (assinatura FF D8 FF) e de tamanho razoável.
+// JPEG de verdade (assinatura FF D8 FF) de até 1 MB. Devolve { buf } ou { erro }.
 function decodificarFoto(dataUrl) {
   const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
-  if (!m) return null;
+  if (!m) return { erro: 'Envie uma foto sua (JPG ou PNG).' };
   const buf = Buffer.from(m[1], 'base64');
-  if (buf.length < 1000 || buf.length > FOTO_MAX_BYTES) return null;
-  if (!(buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF)) return null;
-  return buf;
+  if (buf.length > FOTO_MAX_BYTES) return { erro: 'A foto passa de 1 MB. Escolha uma foto menor.' };
+  if (buf.length < 1000 || !(buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF)) {
+    return { erro: 'Não consegui ler essa foto. Tente outra (JPG ou PNG, até 1 MB).' };
+  }
+  return { buf };
 }
 
 // ── Cadastro (página pública) ───────────────────────────────────────────────
@@ -130,7 +135,7 @@ function validar(c) {
   const documento = normDocumento(c.documento);
   const beneficio = texto(c.beneficio, 600);
   const alcance = c.alcance === 'nacional' ? 'nacional' : (c.alcance === 'local' ? 'local' : '');
-  const validacao = texto(c.validacao, 300);
+  const validacao = COMPROVACAO;
   const fimVigencia = String(c.fimVigencia || '').trim();
   const instagram = normInstagram(c.instagram);
 
@@ -141,17 +146,16 @@ function validar(c) {
   if (!documento) return { erro: 'Informe o CNPJ do negócio (o MEI também tem CNPJ): 14 caracteres.' };
   if (beneficio.length < 10) return { erro: 'Descreva o benefício de forma específica (ex.: "15% de desconto em qualquer serviço").' };
   if (!alcance) return { erro: 'Escolha o alcance: local ou nacional.' };
-  if (validacao.length < 3) return { erro: 'Explique como a aluna comprova que é do Studio (ex.: nome na lista de alunas).' };
   if (fimVigencia && !dataValida(fimVigencia)) return { erro: 'Data de término inválida.' };
   if (fimVigencia && fimVigencia < hojeSP()) return { erro: 'A data de término já passou. Deixe em branco se a oferta não tiver prazo.' };
   if (instagram === null) return { erro: 'Instagram inválido. Use só o @ do perfil (ex.: @minhaloja).' };
   if (!c.consentimento) return { erro: 'Para participar, autorize a exibição do seu nome e foto para as alunas.' };
   const foto = decodificarFoto(c.foto);
-  if (!foto) return { erro: 'Envie uma foto sua (o envio falhou ou a imagem é inválida — tente outra).' };
+  if (foto.erro) return { erro: foto.erro };
 
   return {
     dados: { nome, telefone, negocio, categoria, documento, beneficio, alcance, validacao, fimVigencia, instagram },
-    foto,
+    foto: foto.buf,
   };
 }
 
@@ -322,7 +326,7 @@ function permitir(chave, max, janelaMs) {
 }
 
 module.exports = {
-  COOKIE, SESSAO_DIAS, CATEGORIAS, MSG_APROVADO_PADRAO,
+  COOKIE, SESSAO_DIAS, CATEGORIAS, MSG_APROVADO_PADRAO, COMPROVACAO, FOTO_MAX_BYTES,
   criar, obter, avaliar, marcarAviso, excluir, listarPainel, publicos, situacao,
   entrar, alunaDaSessao, fotoPath,
   lerConfig, gravarConfig, mensagemAprovado,
