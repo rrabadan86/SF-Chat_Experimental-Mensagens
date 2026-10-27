@@ -4,7 +4,8 @@
  * A aluna que tem um negócio se cadastra em /SlimClubCadastro (página pública).
  * A recepção valida no painel (aba "Slim Club"). As empresas APROVADAS aparecem
  * em /slimclub, que só abre para quem tem a tag de aluna ativa ("0. Aluna" — a
- * mesma do auto-tag, editável no painel). A tag é conferida a CADA acesso:
+ * mesma do auto-tag, editável no painel) ou a da equipe ("0. Equipe"). A tag é
+ * conferida a CADA acesso:
  *   - quem vira ex-aluna perde o acesso à listagem na hora;
  *   - a empresa só aparece enquanto a DONA também for aluna ativa;
  *   - e enquanto a promoção estiver vigente (data de término em branco = sem prazo).
@@ -86,9 +87,12 @@ function contatoDoTel(tel, map) {
   const r = contatos.acharPorTel(tel, map);
   return r ? r.contato : null;
 }
+// A equipe do Studio ("0. Equipe") tem o mesmo acesso de uma aluna ativa:
+// cadastra o próprio negócio, vê a listagem e gera a carteira.
+const TAG_EQUIPE = '0. Equipe';
 function temTagAluna(ct) {
-  const alvo = chaveTag(tagAluna());
-  return !!(ct && (ct.tags || []).some(t => chaveTag(t) === alvo));
+  const alvos = [chaveTag(tagAluna()), chaveTag(TAG_EQUIPE)];
+  return !!(ct && (ct.tags || []).some(t => alvos.includes(chaveTag(t))));
 }
 function ehAluna(tel, map) { return temTagAluna(contatoDoTel(tel, map)); }
 
