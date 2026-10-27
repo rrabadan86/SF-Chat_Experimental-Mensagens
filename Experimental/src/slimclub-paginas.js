@@ -1,0 +1,310 @@
+/**
+ * slimclub-paginas.js — páginas PÚBLICAS do Slim Club (sem login do painel):
+ *   /SlimClubCadastro → a aluna empresária cadastra o negócio (vai para validação)
+ *   /slimclub         → login da aluna (nome + telefone) e listagem dos negócios
+ *
+ * Páginas independentes do layout do painel (sem menu da equipe), pensadas para
+ * o celular. Mesma identidade visual do painel (verde-petróleo + Inter).
+ */
+const esc = s => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+const LOGO = 'https://drive.google.com/thumbnail?id=1pl1mh709FGcitG9uHo0J6nzMUKFYqg-w&sz=w400';
+
+const CSS = `
+:root{
+  color-scheme:light;
+  --teal:#0e6e6b;--teal-esc:#0a5250;--teal-soft:#e4efee;--teal-linha:#c6dedc;
+  --tinta:#1d1d1f;--cinza:#5f6066;--faint:#8e8e95;--bg:#f4f5f5;--card:#fff;--linha:#e2e4e4;
+  --erro:#a12626;--erro-soft:#fbecec;--ok:#1a7f37;--ok-soft:#e8f5ec;--ambar:#8a5a00;--ambar-soft:#fdf3dc;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tinta);font:16px/1.5 "Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+a{color:var(--teal)}
+.topo{background:var(--card);border-bottom:1px solid var(--linha)}
+.topo .in{max-width:960px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
+.topo img{height:26px;width:auto}
+.topo .marca{font-weight:800;letter-spacing:.02em;color:var(--teal);font-size:.95rem}
+.topo .sep{width:1px;height:20px;background:var(--linha)}
+.topo .dir{margin-left:auto;font-size:.88rem;color:var(--cinza);display:flex;gap:12px;align-items:center}
+.wrap{max-width:640px;margin:0 auto;padding:22px 16px 48px}
+.wrap.largo{max-width:960px}
+.eyebrow{font-size:.74rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--teal)}
+h1{font-size:1.65rem;line-height:1.2;margin:6px 0 8px;text-wrap:balance}
+.lead{color:var(--cinza);margin:0 0 22px;max-width:62ch}
+.card{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:18px 16px;margin-bottom:14px}
+.card h2{font-size:1rem;margin:0 0 14px;display:flex;align-items:center;gap:8px}
+.card h2 .n{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--teal-soft);color:var(--teal-esc);font-size:.75rem;font-weight:800}
+.campo{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.campo:last-child{margin-bottom:0}
+label,.rot{font-weight:600;font-size:.9rem}
+.opc{font-weight:400;color:var(--faint)}
+.dica{font-size:.8rem;color:var(--cinza);margin:0}
+input[type=text],input[type=tel],input[type=date],select,textarea{
+  width:100%;font:inherit;font-size:1rem;color:var(--tinta);background:#fff;border:1px solid #cfd3d3;border-radius:10px;padding:11px 12px}
+textarea{min-height:84px;resize:vertical}
+input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible,.alc input:focus-visible+span{outline:3px solid var(--teal-linha);outline-offset:1px;border-color:var(--teal)}
+.ig{display:flex;align-items:stretch}
+.ig span{display:grid;place-items:center;padding:0 12px;border:1px solid #cfd3d3;border-right:0;border-radius:10px 0 0 10px;background:var(--bg);color:var(--cinza)}
+.ig input{border-radius:0 10px 10px 0}
+.foto{display:flex;align-items:center;gap:14px}
+.foto .av{width:84px;height:84px;border-radius:50%;background:var(--teal-soft) center/cover no-repeat;border:2px dashed var(--teal-linha);flex:0 0 auto;display:grid;place-items:center;color:var(--teal);font-size:.72rem;text-align:center;line-height:1.2}
+.foto .av.tem{border-style:solid;border-color:var(--teal)}
+.btn2{font:inherit;font-weight:600;font-size:.9rem;color:var(--teal-esc);background:var(--teal-soft);border:1px solid var(--teal-linha);border-radius:999px;padding:9px 16px;cursor:pointer}
+.alc{display:grid;gap:10px}
+@media(min-width:520px){.alc{grid-template-columns:1fr 1fr}}
+.alc label{display:block;cursor:pointer}
+.alc input{position:absolute;opacity:0;pointer-events:none}
+.alc span{display:block;border:1px solid #cfd3d3;border-radius:12px;padding:12px;font-weight:400;font-size:.88rem;color:var(--cinza)}
+.alc span b{display:block;color:var(--tinta);font-size:.95rem;margin-bottom:2px}
+.alc input:checked+span{border-color:var(--teal);background:var(--teal-soft);box-shadow:inset 0 0 0 1px var(--teal)}
+.consent{display:flex;gap:10px;align-items:flex-start;font-weight:400;font-size:.9rem;color:var(--cinza)}
+.consent input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--teal);flex:0 0 auto}
+.btn{display:block;width:100%;font:inherit;font-weight:700;font-size:1rem;color:#fff;background:var(--teal);border:0;border-radius:12px;padding:14px 18px;cursor:pointer}
+.btn:hover{background:var(--teal-esc)}
+.btn[disabled]{opacity:.6;cursor:progress}
+.msg{border-radius:10px;padding:11px 13px;font-size:.92rem;margin:0 0 14px}
+.msg.erro{background:var(--erro-soft);color:var(--erro)}
+.msg.ok{background:var(--ok-soft);color:var(--ok)}
+.pronto{text-align:center;padding:30px 18px}
+.pronto .ic{width:56px;height:56px;border-radius:50%;background:var(--ok-soft);color:var(--ok);display:grid;place-items:center;margin:0 auto 12px;font-size:1.6rem;font-weight:800}
+.rodape{text-align:center;font-size:.85rem;color:var(--cinza);margin-top:26px}
+/* listagem */
+.busca{display:flex;flex-direction:column;gap:10px;margin:0 0 18px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;font:inherit;font-size:.84rem;font-weight:600;color:var(--cinza);background:var(--card);border:1px solid var(--linha);border-radius:999px;padding:7px 14px;cursor:pointer}
+.chip.on{color:#fff;background:var(--teal);border-color:var(--teal)}
+.grade{display:grid;gap:14px}
+@media(min-width:760px){.grade{grid-template-columns:1fr 1fr}}
+.emp{background:var(--card);border:1px solid var(--linha);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.emp .dona{display:flex;align-items:center;gap:12px}
+.emp .dona img{width:56px;height:56px;border-radius:50%;object-fit:cover;background:var(--teal-soft);flex:0 0 auto}
+.emp .dona .q{font-size:.78rem;color:var(--faint)}
+.emp .dona .nm{font-weight:600;font-size:.92rem}
+.emp h3{margin:0;font-size:1.15rem;line-height:1.25}
+.emp .tags{display:flex;flex-wrap:wrap;gap:6px}
+.tg{font-size:.74rem;font-weight:600;border-radius:999px;padding:3px 10px;background:var(--bg);color:var(--cinza);border:1px solid var(--linha)}
+.tg.nac{background:var(--ambar-soft);color:var(--ambar);border-color:#f0dcae}
+.beneficio{background:var(--teal-soft);border-radius:12px;padding:12px 13px;color:var(--teal-esc);font-weight:600;white-space:pre-line}
+.det{font-size:.88rem;color:var(--cinza);margin:0;white-space:pre-line}
+.det b{color:var(--tinta);font-weight:600}
+.emp .rodp{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:1px solid var(--linha);padding-top:10px;font-size:.84rem;color:var(--cinza)}
+.emp .rodp a{font-weight:600;text-decoration:none}
+.vazio{text-align:center;color:var(--cinza);padding:34px 16px;background:var(--card);border:1px dashed var(--linha);border-radius:16px}
+@media (prefers-reduced-motion:no-preference){.btn,.chip,.btn2{transition:background-color .15s,border-color .15s}}
+`;
+
+function casca({ titulo, studio, dir = '', corpo, largo = false, script = '' }) {
+  return `<!doctype html><html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>${esc(titulo)}</title>
+<link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<style>${CSS}</style></head><body>
+<header class="topo"><div class="in">
+  <img src="${LOGO}" alt="SlimFit">
+  <span class="sep" aria-hidden="true"></span>
+  <span class="marca">SLIM CLUB</span>
+  <div class="dir">${dir || esc(studio)}</div>
+</div></header>
+<main class="wrap${largo ? ' largo' : ''}">${corpo}</main>
+${script}
+</body></html>`;
+}
+
+// ── /SlimClubCadastro ───────────────────────────────────────────────────────
+function paginaCadastro({ studio, categorias, avisar }) {
+  const opts = categorias.map(c => `<option>${esc(c)}</option>`).join('') + '<option value="__outra">Outra</option>';
+  const corpo = `
+  <p class="eyebrow">Para alunas empreendedoras</p>
+  <h1>Cadastre seu negócio no Slim Club</h1>
+  <p class="lead">Ofereça um benefício exclusivo para as alunas do ${esc(studio)}. A recepção confere o cadastro e, depois de aprovado, seu negócio aparece para as alunas.</p>
+
+  <div id="ok" class="card pronto" hidden>
+    <div class="ic" aria-hidden="true">✓</div>
+    <h2 style="justify-content:center;font-size:1.2rem">Cadastro enviado!</h2>
+    <p class="lead" style="margin:0 auto">A recepção vai conferir as informações. ${avisar ? 'Você recebe um aviso no WhatsApp quando for aprovado.' : 'Assim que for aprovado, seu negócio aparece no Slim Club.'}</p>
+  </div>
+
+  <form id="f" novalidate>
+    <section class="card">
+      <h2><span class="n">1</span>Sobre você</h2>
+      <div class="campo">
+        <span class="rot">Sua foto</span>
+        <div class="foto">
+          <div class="av" id="av">sem foto</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <button type="button" class="btn2" id="btFoto">Escolher foto</button>
+            <p class="dica">Para as alunas reconhecerem você na listagem.</p>
+          </div>
+          <input type="file" id="arq" accept="image/*" hidden>
+        </div>
+      </div>
+      <div class="campo"><label for="nome">Nome completo</label>
+        <input type="text" id="nome" autocomplete="name" maxlength="120" required></div>
+      <div class="campo"><label for="telefone">Telefone (WhatsApp)</label>
+        <input type="tel" id="telefone" autocomplete="tel" inputmode="tel" placeholder="(00) 90000-0000" maxlength="20" required>
+        <p class="dica">Use o mesmo telefone cadastrado no Studio — é por ele que confirmamos que você é aluna.</p></div>
+    </section>
+
+    <section class="card">
+      <h2><span class="n">2</span>Seu negócio</h2>
+      <div class="campo"><label for="negocio">Nome do negócio</label>
+        <input type="text" id="negocio" maxlength="80" required></div>
+      <div class="campo"><label for="categoria">Categoria</label>
+        <select id="categoria" required><option value="">Escolha…</option>${opts}</select>
+        <input type="text" id="categoriaOutra" maxlength="40" placeholder="Qual categoria?" hidden></div>
+      <div class="campo"><label for="documento">CNPJ</label>
+        <input type="text" id="documento" maxlength="20" autocapitalize="characters" placeholder="00.000.000/0000-00" required>
+        <p class="dica">O MEI também tem CNPJ.</p></div>
+      <div class="campo"><label for="instagram">Instagram do negócio <span class="opc">(opcional)</span></label>
+        <div class="ig"><span>@</span><input type="text" id="instagram" maxlength="60" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="seunegocio" oninput="if(this.value.charAt(0)==='@')this.value=this.value.slice(1)"></div></div>
+    </section>
+
+    <section class="card">
+      <h2><span class="n">3</span>O benefício</h2>
+      <div class="campo"><label for="beneficio">Benefício oferecido</label>
+        <textarea id="beneficio" maxlength="600" required placeholder="Ex.: 15% de desconto em qualquer serviço"></textarea>
+        <p class="dica">Seja específica. Evite "condições especiais".</p></div>
+      <div class="campo"><span class="rot" id="rotAlc">Alcance</span>
+        <div class="alc" role="radiogroup" aria-labelledby="rotAlc">
+          <label><input type="radio" name="alcance" value="local"><span><b>Local</b>Vale só no seu negócio aqui da cidade</span></label>
+          <label><input type="radio" name="alcance" value="nacional"><span><b>Nacional</b>Vale em todas as unidades do seu negócio no Brasil</span></label>
+        </div></div>
+      <div class="campo"><label for="validacao">Como a aluna comprova que é do Studio</label>
+        <input type="text" id="validacao" maxlength="300" required placeholder="Ex.: nome na lista de alunas, carteirinha, perfil do Instagram"></div>
+      <div class="campo"><label for="fim">Término da promoção <span class="opc">(opcional)</span></label>
+        <input type="date" id="fim">
+        <p class="dica">Deixe em branco se a oferta não tiver prazo.</p></div>
+    </section>
+
+    <section class="card">
+      <label class="consent"><input type="checkbox" id="consent"><span>Autorizo exibir meu nome, minha foto e as informações do meu negócio para as alunas do ${esc(studio)}.</span></label>
+    </section>
+
+    <div id="erro" class="msg erro" role="alert" hidden></div>
+    <button class="btn" id="enviar" type="submit">Enviar para validação</button>
+  </form>
+  <p class="rodape">Já é aluna? <a href="/slimclub">Veja os negócios do Slim Club</a></p>`;
+
+  const script = `<script>
+(function(){
+  var foto='', f=document.getElementById('f'), erro=document.getElementById('erro'), bt=document.getElementById('enviar');
+  var arq=document.getElementById('arq'), av=document.getElementById('av');
+  document.getElementById('btFoto').onclick=function(){ arq.click(); };
+  av.onclick=function(){ arq.click(); };
+  var cat=document.getElementById('categoria'), catO=document.getElementById('categoriaOutra');
+  cat.onchange=function(){ catO.hidden = cat.value!=='__outra'; if(!catO.hidden) catO.focus(); };
+  function mostrarErro(t){ erro.textContent=t; erro.hidden=false; erro.scrollIntoView({block:'center',behavior:'smooth'}); }
+  // Reduz a foto no próprio celular (máx. 800px, JPEG) antes de enviar.
+  arq.onchange=function(){
+    var file=arq.files&&arq.files[0]; if(!file) return;
+    var img=new Image(), url=URL.createObjectURL(file);
+    img.onload=function(){
+      var max=800, w=img.naturalWidth, h=img.naturalHeight, k=Math.min(1,max/Math.max(w,h));
+      var c=document.createElement('canvas'); c.width=Math.round(w*k); c.height=Math.round(h*k);
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      var q=.85, d=c.toDataURL('image/jpeg',q);
+      while(d.length>1.3e6*1.37 && q>.4){ q-=.1; d=c.toDataURL('image/jpeg',q); }
+      foto=d; av.style.backgroundImage='url('+d+')'; av.textContent=''; av.classList.add('tem');
+      document.getElementById('btFoto').textContent='Trocar foto';
+      URL.revokeObjectURL(url);
+    };
+    img.onerror=function(){ mostrarErro('Não consegui abrir essa imagem. Tente outra foto (JPG ou PNG).'); };
+    img.src=url;
+  };
+  f.onsubmit=function(ev){
+    ev.preventDefault(); erro.hidden=true;
+    var v=function(id){ return document.getElementById(id).value; };
+    var alc=document.querySelector('input[name=alcance]:checked');
+    var dados={ nome:v('nome'), telefone:v('telefone'), negocio:v('negocio'),
+      categoria: cat.value==='__outra' ? catO.value : cat.value,
+      documento:v('documento'), instagram:v('instagram'), beneficio:v('beneficio'),
+      alcance: alc?alc.value:'', validacao:v('validacao'), fimVigencia:v('fim'),
+      consentimento: document.getElementById('consent').checked, foto: foto };
+    if(!foto) return mostrarErro('Escolha uma foto sua.');
+    bt.disabled=true; bt.textContent='Enviando…';
+    fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
+      .then(function(r){ return r.json().catch(function(){ return {erro:'Falha no envio (código '+r.status+').'}; }); })
+      .then(function(j){
+        if(j&&j.ok){ f.hidden=true; var ok=document.getElementById('ok'); ok.hidden=false; ok.scrollIntoView({block:'start'}); return; }
+        mostrarErro((j&&j.erro)||'Não consegui enviar. Tente de novo.');
+      })
+      .catch(function(){ mostrarErro('Sem conexão. Confira a internet e tente de novo.'); })
+      .then(function(){ bt.disabled=false; bt.textContent='Enviar para validação'; });
+  };
+})();
+</script>`;
+  return casca({ titulo: 'Cadastro · Slim Club', studio, corpo, script });
+}
+
+// ── /slimclub (sem sessão): entrar com nome + telefone ─────────────────────
+function paginaEntrar({ studio, erro, nome, telefone }) {
+  const corpo = `
+  <p class="eyebrow">Exclusivo para alunas</p>
+  <h1>Benefícios de alunas para alunas</h1>
+  <p class="lead">Descontos e vantagens oferecidos por alunas do ${esc(studio)} que têm o próprio negócio. Entre com seus dados para ver.</p>
+  <form class="card" method="POST" action="/slimclub/entrar">
+    ${erro ? `<div class="msg erro" role="alert">${esc(erro)}</div>` : ''}
+    <div class="campo"><label for="nome">Nome completo</label>
+      <input type="text" id="nome" name="nome" autocomplete="name" maxlength="120" value="${esc(nome)}" required></div>
+    <div class="campo"><label for="telefone">Telefone (WhatsApp)</label>
+      <input type="tel" id="telefone" name="telefone" autocomplete="tel" inputmode="tel" placeholder="(00) 90000-0000" maxlength="20" value="${esc(telefone)}" required>
+      <p class="dica">O mesmo telefone cadastrado no Studio.</p></div>
+    <button class="btn" type="submit">Entrar</button>
+  </form>
+  <p class="rodape">Tem um negócio? <a href="/SlimClubCadastro">Cadastre no Slim Club</a></p>`;
+  return casca({ titulo: 'Slim Club', studio, corpo });
+}
+
+// ── /slimclub (aluna conectada): listagem ───────────────────────────────────
+function paginaListagem({ studio, aluna, empresas, fmtData, primeiroNome }) {
+  const cats = [...new Set(empresas.map(e => e.categoria))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const chips = cats.length > 1
+    ? `<div class="chips" role="group" aria-label="Filtrar por categoria"><button type="button" class="chip on" data-cat="">Todas</button>${cats.map(c => `<button type="button" class="chip" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>`
+    : '';
+  const cards = empresas.map(e => {
+    const busca = [e.negocio, e.nome, e.categoria, e.beneficio].join(' ').toLowerCase();
+    return `<article class="emp" data-cat="${esc(e.categoria)}" data-busca="${esc(busca)}">
+      <div class="dona"><img src="/slimclub/foto/${esc(e.id)}" alt="Foto de ${esc(e.nome)}" loading="lazy" width="56" height="56">
+        <div><div class="q">Aluna</div><div class="nm">${esc(e.nome)}</div></div></div>
+      <h3>${esc(e.negocio)}</h3>
+      <div class="tags"><span class="tg">${esc(e.categoria)}</span>${e.alcance === 'nacional' ? '<span class="tg nac">Nacional · todas as unidades</span>' : '<span class="tg">Local · só nesta cidade</span>'}</div>
+      <div class="beneficio">${esc(e.beneficio)}</div>
+      <p class="det"><b>Como comprovar:</b> ${esc(e.validacao)}</p>
+      <div class="rodp"><span>${e.fimVigencia ? 'Válido até ' + esc(fmtData(e.fimVigencia)) : 'Sem prazo de término'}</span>
+        ${e.instagram ? `<a href="https://instagram.com/${encodeURIComponent(e.instagram)}" target="_blank" rel="noopener">@${esc(e.instagram)}</a>` : ''}</div>
+    </article>`;
+  }).join('');
+  const corpo = `
+  <p class="eyebrow">Exclusivo para alunas</p>
+  <h1>Olá, ${esc(primeiroNome(aluna.nome) || 'aluna')}!</h1>
+  <p class="lead">Benefícios oferecidos por alunas do ${esc(studio)}. Para usar, mostre que é aluna do jeito que cada negócio pede.</p>
+  ${empresas.length ? `<div class="busca">
+    <input type="text" id="q" placeholder="Buscar por negócio, aluna ou benefício" aria-label="Buscar">
+    ${chips}</div>
+  <div class="grade" id="grade">${cards}</div>
+  <div class="vazio" id="nada" hidden>Nenhum negócio encontrado com esse filtro.</div>`
+    : '<div class="vazio">Ainda não há negócios no Slim Club.<br><a href="/SlimClubCadastro">Tem um negócio? Cadastre o seu</a></div>'}
+  <p class="rodape">Tem um negócio? <a href="/SlimClubCadastro">Cadastre no Slim Club</a></p>`;
+  const script = empresas.length ? `<script>
+(function(){
+  var q=document.getElementById('q'), cat='', cards=[].slice.call(document.querySelectorAll('.emp')), nada=document.getElementById('nada');
+  function filtra(){
+    var t=(q.value||'').toLowerCase().trim(), n=0;
+    cards.forEach(function(c){ var ok=(!cat||c.getAttribute('data-cat')===cat)&&(!t||c.getAttribute('data-busca').indexOf(t)>=0); c.hidden=!ok; if(ok)n++; });
+    nada.hidden=n>0;
+  }
+  q.oninput=filtra;
+  [].forEach.call(document.querySelectorAll('.chip'),function(b){ b.onclick=function(){
+    cat=b.getAttribute('data-cat'); [].forEach.call(document.querySelectorAll('.chip'),function(x){ x.classList.toggle('on',x===b); }); filtra(); }; });
+})();
+</script>` : '';
+  const dir = `<a href="/slimclub/sair">Sair</a>`;
+  return casca({ titulo: 'Slim Club', studio, dir, corpo, largo: true, script });
+}
+
+module.exports = { paginaCadastro, paginaEntrar, paginaListagem };

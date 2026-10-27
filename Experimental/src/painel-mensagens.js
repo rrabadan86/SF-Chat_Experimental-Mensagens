@@ -23,6 +23,8 @@ const horarios = require('./horarios');
 const renovacaoConfig = require('./renovacao-config');
 const atividade = require('./atividade');
 const teste = require('./teste-envio');
+const slimclub = require('./slimclub');               // Slim Club: benefícios de alunas para alunas
+const slimclubPaginas = require('./slimclub-paginas'); // páginas públicas do Slim Club (cadastro e listagem)
 const igcfg = require('./instagram-config');
 const igApi = require('./instagram-api'); // integração OFICIAL (Graph API): webhook comentário/DM → resposta
 const igcookies = require('./instagram-cookies');
@@ -390,6 +392,7 @@ function telaDaUrl(u) {
   if (u === '/perfis' || u.startsWith('/perfis/')) return 'perfis';
   if (u === '/saude') return 'saude'; // liberável por usuário (checkbox em Perfis) — a checagem genérica cobre
   if (u === '/grade' || u.startsWith('/grade/')) return 'grade'; // idem (checkbox em Perfis)
+  if (u === '/clube' || u.startsWith('/clube/')) return 'slimclub'; // validação do Slim Club (checkbox em Perfis)
   return 'msg';
 }
 // Sofia é dividida em três sub-abas com permissão própria.
@@ -443,6 +446,7 @@ function primeiraTela(sess) {
   if (sess.telas.includes('ind')) return '/indicadores';
   if (sess.telas.includes('ig')) return '/instagram';
   if (temSofia(sess)) return sofiaHref(sess);
+  if (sess.telas.includes('slimclub')) return '/clube';
   return '';
 }
 
@@ -494,7 +498,7 @@ const ESTILO = `
   @media(max-width:560px){.wrap{padding:14px 16px}}
   /* Barra superior ÚNICA e FIXA: logo + menu + login (sem a faixa branca separada). */
   .topbar{position:sticky;top:0;z-index:60;background:var(--card);border-bottom:1px solid var(--linha)}
-  .topbar .in{max-width:900px;margin:0 auto;padding:4px 24px;display:flex;align-items:center;gap:16px}
+  .topbar .in{max-width:1080px;margin:0 auto;padding:4px 24px;display:flex;align-items:center;gap:16px} /* mais largo que o conteúdo: cabem as 8 abas do admin numa linha */
   .tb-logo{height:50px;width:auto;flex:none;display:block}
   .hdr-user{display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-size:.82rem;white-space:nowrap;flex:none;margin-left:auto}
   .hdr-user-row{display:flex;align-items:center;gap:12px}
@@ -503,7 +507,7 @@ const ESTILO = `
   .hdr-user a:hover{text-decoration:underline}
   .hdr-studio{font-size:.72rem;color:var(--faint);font-weight:500}
   .tabs{display:flex;flex-wrap:wrap;gap:6px;flex:1 1 auto;justify-content:center;margin:0;padding:0}
-  .tabs a{flex:0 1 auto;display:flex;align-items:center;justify-content:center;line-height:1.1;text-decoration:none;font-weight:500;color:var(--cinza);background:transparent;border:1px solid transparent;border-radius:10px;padding:9px 14px}
+  .tabs a{flex:0 1 auto;display:flex;align-items:center;justify-content:center;line-height:1.1;text-decoration:none;font-weight:500;color:var(--cinza);background:transparent;border:1px solid transparent;border-radius:10px;padding:9px 12px}
   .tabs a .tic{display:none}
   .tabs a .ttx{font-size:.86rem}
   .tabs a:hover{color:var(--tinta);background:var(--linha-soft)}
@@ -517,6 +521,7 @@ const ESTILO = `
   .tabs .nav-perfis{order:5}
   .tabs .nav-grade{order:6}
   .tabs .nav-saude{order:7}
+  .tabs .nav-slimclub{order:8}
   /* Mobile: logo + login na 1ª linha; o menu ocupa a linha inteira logo abaixo.
      A barra inteira continua fixa ao rolar. */
   @media(max-width:760px){
@@ -843,6 +848,7 @@ function navTabs(ativo) {
   if (sess.admin) html += cel('/perfis', ativo === 'perfis', '👤', 'Perfis', 'perfis');
   html += item('grade', '/grade', '📋', 'Grade');
   if (sess.admin || (sess.telas || []).includes('saude')) html += cel('/saude', ativo === 'saude', '🩺', 'Saúde', 'saude');
+  html += item('slimclub', '/clube', '🤝', 'Slim Club');
   if (temSofia(sess)) html += cel(sofiaHref(sess), ativo === 'sofia', '🤖', 'SoFIA', 'sofia');
   return html;
 }
@@ -5526,6 +5532,8 @@ function paginaPerfis(aviso, erro, view) {
     'perfil.criar': '👤 Criou usuário', 'perfil.excluir': '🗑️ Excluiu usuário', 'perfil.telas': '🔑 Mudou telas de acesso',
     'perfil.senha': '🔑 Redefiniu senha', 'perfil.email': '📧 Alterou e-mail', 'perfil.admin': '👑 Mudou administrador',
     'perfil.sessao': '⏲️ Mudou duração da sessão', 'perfil.sessao-encerrar': '🚪 Encerrou uma sessão',
+    'slimclub.aprovar': '🤝 Aprovou cadastro do Slim Club', 'slimclub.recusar': '🚫 Recusou cadastro do Slim Club', 'slimclub.pendente': '↩️ Voltou cadastro do Slim Club para pendente',
+    'slimclub.excluir': '🗑️ Excluiu cadastro do Slim Club', 'slimclub.config': '⚙️ Mudou o aviso do Slim Club',
   };
   const fmtAlvo = (acao, alvo) => { const d = String(alvo || '').replace(/\D/g, ''); return (/^conversa\.|^contato\./.test(acao) && d.length >= 10) ? fmtTel(alvo) : alvo; };
   const auditoriaLinhas = logsAud.map(l => `<tr style="border-bottom:1px solid var(--linha)">
@@ -6050,6 +6058,227 @@ function paginaSaude(list, extra = {}) {
   return chrome({ tab: 'Saúde', h1: 'Saúde', p: 'Estado de robô, SoFIA, painel, Instagram e formulário.' }, 'saude', corpo);
 }
 
+// ── Slim Club ───────────────────────────────────────────────────────────────
+// Páginas PÚBLICAS: /SlimClubCadastro (a aluna empresária cadastra o negócio) e
+// /slimclub (as alunas entram com nome + telefone e veem os negócios). A aba
+// "Slim Club" do painel (/clube) é onde a recepção valida os cadastros.
+function scIp(req) { return String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || ''; }
+function scBaseUrl(req) { return (ehHttps(req) ? 'https' : 'http') + '://' + String(req.headers.host || '').replace(/[^\w.:-]/g, ''); }
+function scStudio() { return config.STUDIO_NOME || process.env.STUDIO_NOME || 'Studio SlimFit'; }
+function scHtml(res, status, html) { res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(html); }
+function scJson(res, status, obj) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); }
+function scSetCookie(req, res, valor, maxAgeSec) {
+  const partes = [`${slimclub.COOKIE}=${encodeURIComponent(valor)}`, 'Path=/slimclub', 'HttpOnly', 'SameSite=Lax', `Max-Age=${maxAgeSec}`];
+  if (ehHttps(req)) partes.push('Secure');
+  res.setHeader('Set-Cookie', partes.join('; '));
+}
+function scFmtQuando(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? '' : d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function rotaSlimClubCadastro(req, res) {
+  if (req.method === 'GET') {
+    return scHtml(res, 200, slimclubPaginas.paginaCadastro({ studio: scStudio(), categorias: slimclub.CATEGORIAS, avisar: slimclub.lerConfig().avisar }));
+  }
+  if (req.method !== 'POST') { res.writeHead(405, { 'Content-Type': 'text/plain' }); return res.end('method not allowed'); }
+  if (!slimclub.permitir('cad:' + scIp(req), 10, 3600e3)) return scJson(res, 429, { erro: 'Muitos envios seguidos. Aguarde um pouco e tente de novo.' });
+  return lerCorpo(req, 3.5e6, corpo => {
+    let d = null; try { d = JSON.parse(corpo); } catch (_) {}
+    if (!d || typeof d !== 'object') return scJson(res, 400, { erro: 'Envio inválido. Recarregue a página e tente de novo.' });
+    let r;
+    try { r = slimclub.criar(d); } catch (e) { console.log('[slimclub] erro ao salvar cadastro:', e.message); r = { erro: 'Não consegui salvar agora. Tente de novo em instantes.' }; }
+    if (r.ok) console.log(`[slimclub] novo cadastro ${r.id} — aguardando validação no painel`);
+    return scJson(res, r.ok ? 200 : 400, r.ok ? { ok: true } : { erro: r.erro });
+  });
+}
+
+function rotaSlimClubPublico(req, res, rota) {
+  const studio = scStudio();
+  if (rota === '/slimclub' && req.method === 'GET') {
+    const aluna = slimclub.alunaDaSessao(lerCookie(req, slimclub.COOKIE));
+    if (!aluna) return scHtml(res, 200, slimclubPaginas.paginaEntrar({ studio }));
+    return scHtml(res, 200, slimclubPaginas.paginaListagem({
+      studio, aluna, empresas: slimclub.publicos(), fmtData: slimclub.fmtData, primeiroNome: slimclub.primeiroNome,
+    }));
+  }
+  if (rota === '/slimclub/entrar' && req.method === 'POST') {
+    return lerCorpo(req, 1e4, corpo => {
+      const p = new URLSearchParams(corpo);
+      const nome = p.get('nome') || '', telefone = p.get('telefone') || '';
+      if (!slimclub.permitir('login:' + scIp(req), 15, 15 * 60e3)) {
+        return scHtml(res, 429, slimclubPaginas.paginaEntrar({ studio, nome, telefone, erro: 'Muitas tentativas. Aguarde 15 minutos e tente de novo.' }));
+      }
+      const r = slimclub.entrar(nome, telefone);
+      if (!r.ok) return scHtml(res, 200, slimclubPaginas.paginaEntrar({ studio, nome, telefone, erro: r.erro }));
+      scSetCookie(req, res, r.token, slimclub.SESSAO_DIAS * 86400);
+      res.writeHead(303, { Location: '/slimclub' }); return res.end();
+    });
+  }
+  if (rota === '/slimclub/sair') { scSetCookie(req, res, '', 0); res.writeHead(303, { Location: '/slimclub' }); return res.end(); }
+  // Foto da aluna: a equipe (com acesso ao Slim Club) vê todas; a aluna conectada
+  // só as dos negócios que estão na listagem.
+  const mf = /^\/slimclub\/foto\/([a-f0-9]{16})$/.exec(rota);
+  if (mf && req.method === 'GET') {
+    const id = mf[1];
+    const st = usuarioDaReq(req);
+    const equipe = !!(st && (st.admin || (st.telas || []).includes('slimclub')));
+    const pode = equipe || (!!slimclub.alunaDaSessao(lerCookie(req, slimclub.COOKIE)) && slimclub.publicos().some(e => e.id === id));
+    const arq = pode ? slimclub.fotoPath(id) : null;
+    if (!arq) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('foto não encontrada'); }
+    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=300' });
+    return fs.createReadStream(arq).pipe(res);
+  }
+  res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('não encontrado');
+}
+
+// Aviso de aprovação: o robô (que tem o WhatsApp) envia pela ponte do teste-envio.
+function scAvisarAprovado(r, req) {
+  try {
+    const id = teste.solicitar({ telefone: r.telefone, texto: slimclub.mensagemAprovado(r, scBaseUrl(req) + '/slimclub'), contexto: 'Slim Club' });
+    slimclub.marcarAviso(r.id, id, '');
+    return { ok: true };
+  } catch (e) {
+    slimclub.marcarAviso(r.id, '', e.message);
+    return { ok: false, erro: e.message };
+  }
+}
+function scStatusAviso(r) {
+  if (r.avisoErro) return `⚠️ O aviso no WhatsApp não saiu: ${esc(r.avisoErro)}`;
+  if (!r.avisoId) return '';
+  const t = teste.ler(r.avisoId);
+  if (!t) return '';
+  if (t.status === 'enviado') return '✅ Aviso de aprovação enviado no WhatsApp.';
+  if (t.status === 'falha') return `⚠️ O aviso no WhatsApp falhou: ${esc(t.erro || 'erro')}. Use "Reenviar aviso" quando o WhatsApp do robô estiver conectado.`;
+  return '⏳ Aviso de aprovação na fila do robô.';
+}
+
+function paginaSlimClub(view, base, aviso) {
+  const cfg = slimclub.lerConfig();
+  const todos = slimclub.listarPainel();
+  const por = { pendente: [], aprovado: [], recusado: [] };
+  for (const r of todos) (por[r.status] || por.pendente).push(r);
+  const VIEWS = { pendentes: 'pendente', aprovados: 'aprovado', recusados: 'recusado' };
+  if (!VIEWS[view] && view !== 'config') view = 'pendentes';
+  const sub = (v, rot) => `<a href="/clube?view=${v}"${view === v ? ' class="on"' : ''}>${rot}</a>`;
+  const subtabs = `<div class="subtabs">${sub('pendentes', `Pendentes (${por.pendente.length})`)}${sub('aprovados', `Aprovados (${por.aprovado.length})`)}${sub('recusados', `Recusados (${por.recusado.length})`)}${sub('config', 'Configuração')}</div>`;
+
+  const linkCad = base + '/SlimClubCadastro', linkAlunas = base + '/slimclub';
+  const links = `<div class="card">
+    <div class="chead"><h2>Links para divulgar</h2></div>
+    <div class="sc-link"><div><b>Cadastro das empresárias</b><br><code>${esc(linkCad)}</code></div><button type="button" class="reset" onclick="scCopiar('${esc(linkCad)}',this)">Copiar</button></div>
+    <div class="sc-link"><div><b>Listagem para as alunas</b><br><code>${esc(linkAlunas)}</code></div><button type="button" class="reset" onclick="scCopiar('${esc(linkAlunas)}',this)">Copiar</button></div>
+    <p class="quando" style="margin:8px 0 0">Só entra na listagem quem tem a tag <b>${esc(slimclub.tagAluna())}</b> nos contatos. A empresa só aparece enquanto a dona também tiver essa tag e a promoção estiver vigente.</p>
+  </div>`;
+
+  const item = (r) => {
+    const st = r.situacao;
+    const nomeCrm = r.nomeNoCadastro && slimclub.primeiroNome(r.nomeNoCadastro) !== slimclub.primeiroNome(r.nome)
+      ? `<div class="sc-sub">Nome nos contatos: ${esc(r.nomeNoCadastro)}</div>` : '';
+    let estado = '';
+    if (r.status === 'pendente' && !r.alunaAgora) estado = '<div class="sc-al">⚠️ Este telefone não está com a tag de aluna ativa agora. Mesmo aprovado, o negócio não aparece para as alunas.</div>';
+    if (r.status === 'aprovado') {
+      estado = (st.visivel ? '<div class="sc-okl">✅ Aparece na listagem das alunas.</div>' : `<div class="sc-al">⚠️ Fora da listagem: ${esc(st.motivo)}.</div>`)
+        + (scStatusAviso(r) ? `<div class="sc-sub" style="margin-top:4px">${scStatusAviso(r)}</div>` : '')
+        + `<div class="sc-sub" style="margin-top:4px">Aprovado por ${esc(r.avaliadoPor || '—')} em ${esc(scFmtQuando(r.avaliadoEm))}.</div>`;
+    }
+    if (r.status === 'recusado') {
+      estado = `<div class="sc-sub">Recusado por ${esc(r.avaliadoPor || '—')} em ${esc(scFmtQuando(r.avaliadoEm))}${r.motivo ? ` — motivo: ${esc(r.motivo)}` : ''}.</div>`;
+    }
+    const bt = (acao, rot, cls) => `<button type="button" class="${cls}" onclick="scAcao('${r.id}','${acao}')">${rot}</button>`;
+    let acoes = '';
+    if (r.status === 'pendente') acoes = bt('aprovar', 'Aprovar', 'save') + bt('recusar', 'Recusar', 'reset');
+    if (r.status === 'aprovado') acoes = (cfg.avisar ? bt('reenviar-aviso', 'Reenviar aviso', 'reset') : '') + bt('pendente', 'Voltar para pendente', 'reset') + bt('excluir', 'Excluir', 'reset sc-rm');
+    if (r.status === 'recusado') acoes = bt('aprovar', 'Aprovar', 'save') + bt('excluir', 'Excluir', 'reset sc-rm');
+    return `<div class="card sc-it">
+      <div class="sc-top">
+        <a href="/slimclub/foto/${r.id}" target="_blank" rel="noopener"><img class="sc-av" src="/slimclub/foto/${r.id}" alt="Foto de ${esc(r.nome)}" width="64" height="64" loading="lazy"></a>
+        <div>
+          <div class="sc-neg">${esc(r.negocio)}</div>
+          <div class="sc-sub">${esc(r.categoria)} · ${r.alcance === 'nacional' ? 'Nacional (todas as unidades)' : 'Local (só nesta cidade)'}</div>
+          <div class="sc-sub">👤 ${esc(r.nome)} · <span style="white-space:nowrap">${esc(fmtTel(r.telefone))}</span> ${r.alunaAgora ? '<span class="sc-tag ok">aluna ativa</span>' : '<span class="sc-tag no">não é aluna ativa</span>'}</div>
+          ${nomeCrm}
+        </div>
+      </div>
+      <dl class="sc-dl">
+        <dt>Benefício</dt><dd>${esc(r.beneficio)}</dd>
+        <dt>Como comprovar</dt><dd>${esc(r.validacao)}</dd>
+        <dt>CNPJ</dt><dd>${esc(slimclub.fmtDocumento(r.documento))}</dd>
+        <dt>Término</dt><dd>${r.fimVigencia ? esc(fmtData(r.fimVigencia)) : 'Sem prazo'}</dd>
+        <dt>Instagram</dt><dd>${r.instagram ? `<a href="https://instagram.com/${encodeURIComponent(r.instagram)}" target="_blank" rel="noopener">@${esc(r.instagram)}</a>` : '—'}</dd>
+        <dt>Enviado em</dt><dd>${esc(scFmtQuando(r.criadoEm))}</dd>
+      </dl>
+      ${estado}
+      <div class="acts">${acoes}</div>
+    </div>`;
+  };
+
+  let conteudo;
+  if (view === 'config') {
+    conteudo = `<form class="card" method="POST" action="/clube/config">
+      <div class="chead"><h2>Aviso de aprovação no WhatsApp</h2></div>
+      <p class="quando">Quando a recepção aprova um cadastro, o robô manda esta mensagem para a empresária.</p>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" name="avisar" value="1"${cfg.avisar ? ' checked' : ''} style="width:18px;height:18px;accent-color:var(--teal)"> Enviar o aviso ao aprovar</label>
+      <label for="scMsg">Mensagem</label>
+      <p class="vars">Use: <span class="var">{nome}</span> primeiro nome · <span class="var">{negocio}</span> nome do negócio · <span class="var">{link}</span> link da listagem · <span class="var">{studio}</span> nome do Studio</p>
+      <textarea id="scMsg" name="msg" rows="8">${esc(cfg.msgAprovado)}</textarea>
+      <div class="acts"><button class="save" type="submit">Salvar</button>
+        <button class="reset" type="submit" name="restaurar" value="1" onclick="return confirm('Voltar a mensagem para o texto padrão?')">Restaurar padrão</button></div>
+    </form>`;
+  } else {
+    const lista = por[VIEWS[view]];
+    const vazio = { pendentes: 'Nenhum cadastro aguardando validação.', aprovados: 'Nenhum cadastro aprovado ainda.', recusados: 'Nenhum cadastro recusado.' }[view];
+    conteudo = lista.length ? lista.map(item).join('') : `<div class="card" style="text-align:center;color:var(--cinza)">${vazio}</div>`;
+  }
+
+  const corpo = `<div class="wrap">
+    <style>
+      .sc-link{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--linha-soft)}
+      .sc-link:first-of-type{border-top:0}
+      .sc-link code{font-size:.82rem;word-break:break-all;color:var(--teal-esc)}
+      .sc-top{display:flex;gap:14px;align-items:flex-start}
+      .sc-av{width:64px;height:64px;border-radius:50%;object-fit:cover;background:var(--teal-soft);display:block}
+      .sc-neg{font-weight:700;font-size:1.05rem}
+      .sc-sub{color:var(--cinza);font-size:var(--fs-sm)}
+      .sc-tag{display:inline-block;border-radius:999px;padding:1px 8px;font-size:var(--fs-xs);font-weight:700;margin-left:4px}
+      .sc-tag.ok{background:#e8f5ec;color:#1a7f37}
+      .sc-tag.no{background:var(--erro-bg);color:var(--erro)}
+      .sc-dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:14px 0 10px;font-size:var(--fs-sm)}
+      .sc-dl dt{color:var(--cinza);font-weight:600}
+      .sc-dl dd{margin:0;white-space:pre-line;overflow-wrap:anywhere}
+      .sc-al{background:var(--avi-bg);border:1px solid var(--avi-bd);color:var(--avi-tx);border-radius:10px;padding:8px 12px;font-size:var(--fs-sm)}
+      .sc-okl{color:#1a7f37;font-weight:600;font-size:var(--fs-sm)}
+      .sc-rm{color:var(--erro)!important}
+      @media(max-width:560px){.sc-dl{grid-template-columns:1fr}.sc-dl dd{margin-bottom:6px}.sc-link{flex-direction:column;align-items:flex-start}}
+    </style>
+    ${subtabs}
+    ${aviso ? `<div class="aviso">${esc(aviso)}</div>` : ''}
+    ${view === 'pendentes' ? links : ''}
+    ${conteudo}
+  </div>
+  <script>
+  function scAcao(id, acao){
+    var motivo='';
+    if(acao==='recusar'){ motivo=prompt('Motivo da recusa (opcional, fica registrado aqui no painel):',''); if(motivo===null) return; }
+    if(acao==='excluir' && !confirm('Excluir este cadastro e a foto? Não dá para desfazer.')) return;
+    fetch('/clube/acao',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,acao:acao,motivo:motivo})})
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if(!j||!j.ok){ alert('❌ '+((j&&j.erro)||'Não consegui concluir.')); return; }
+        if(j.aviso && !j.aviso.ok) alert('Cadastro atualizado, mas o aviso no WhatsApp não saiu: '+(j.aviso.erro||'erro'));
+        location.reload();
+      })
+      .catch(function(){ alert('❌ Erro de rede.'); });
+  }
+  function scCopiar(t,b){
+    var ok=function(){ b.textContent='Copiado!'; setTimeout(function(){ b.textContent='Copiar'; },1500); };
+    if(navigator.clipboard) navigator.clipboard.writeText(t).then(ok,function(){ prompt('Copie o link:',t); });
+    else prompt('Copie o link:',t);
+  }
+  </script>`;
+  return chrome({ tab: 'Slim Club', h1: 'Slim Club', p: 'Validação dos negócios das alunas.' }, 'slimclub', corpo);
+}
+
 function lerCorpo(req, limite, cb) {
   let corpo = '';
   req.on('data', c => { corpo += c; if (corpo.length > limite) req.destroy(); });
@@ -6167,6 +6396,14 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ── Slim Club: páginas PÚBLICAS (sem login do painel) ─────────────────────
+  // Endereços aceitos com qualquer combinação de maiúsculas (/SlimClubCadastro, /slimclub).
+  {
+    const rotaSc = url.toLowerCase().replace(/\/+$/, '');
+    if (rotaSc === '/slimclubcadastro') return rotaSlimClubCadastro(req, res);
+    if (rotaSc === '/slimclub' || rotaSc.startsWith('/slimclub/')) return rotaSlimClubPublico(req, res, rotaSc);
+  }
+
   // ── Exige login ──────────────────────────────────────────────────────────
   const sess = usuarioDaReq(req);
   if (!sess) {
@@ -6238,6 +6475,46 @@ const server = http.createServer((req, res) => {
     }
   }
   else if (tela && !sess.admin && !(sess.telas || []).includes(tela)) return negarAcesso(res, sess);
+
+  // ── Slim Club: validação pela recepção (permissão "slimclub" — barrada acima) ──
+  if (tela === 'slimclub') {
+    if (req.method === 'GET' && url === '/clube') {
+      const q = new URLSearchParams(req.url.split('?')[1] || '');
+      return scHtml(res, 200, paginaSlimClub(q.get('view') || 'pendentes', scBaseUrl(req), q.get('ok') === 'config' ? 'Configuração salva.' : ''));
+    }
+    if (req.method === 'POST' && url === '/clube/acao') {
+      return lerCorpo(req, 1e4, corpo => {
+        let d = {}; try { d = JSON.parse(corpo) || {}; } catch (_) {}
+        const id = String(d.id || ''), acao = String(d.acao || '');
+        const antes = slimclub.obter(id);
+        if (!antes) return scJson(res, 404, { erro: 'Cadastro não encontrado.' });
+        const alvo = antes.negocio + ' (' + antes.nome + ')';
+        if (acao === 'excluir') {
+          slimclub.excluir(id);
+          try { auditoria.registrar(sess.usuario, 'slimclub.excluir', alvo, ''); } catch (_) {}
+          return scJson(res, 200, { ok: true });
+        }
+        if (acao === 'reenviar-aviso') {
+          if (antes.status !== 'aprovado') return scJson(res, 400, { erro: 'Só dá para avisar cadastros aprovados.' });
+          return scJson(res, 200, { ok: true, aviso: scAvisarAprovado(antes, req) });
+        }
+        const status = { aprovar: 'aprovado', recusar: 'recusado', pendente: 'pendente' }[acao];
+        if (!status) return scJson(res, 400, { erro: 'Ação inválida.' });
+        const r = slimclub.avaliar(id, status, sess.usuario, d.motivo);
+        try { auditoria.registrar(sess.usuario, 'slimclub.' + acao, alvo, status === 'recusado' ? String(d.motivo || '') : ''); } catch (_) {}
+        const aviso = (status === 'aprovado' && antes.status !== 'aprovado' && slimclub.lerConfig().avisar) ? scAvisarAprovado(r, req) : null;
+        return scJson(res, 200, { ok: true, aviso });
+      });
+    }
+    if (req.method === 'POST' && url === '/clube/config') {
+      return lerCorpo(req, 1e4, corpo => {
+        const p = new URLSearchParams(corpo);
+        slimclub.gravarConfig({ avisar: p.get('avisar') === '1', msgAprovado: p.get('restaurar') === '1' ? '' : (p.get('msg') || '') });
+        try { auditoria.registrar(sess.usuario, 'slimclub.config', 'Aviso de aprovação', ''); } catch (_) {}
+        res.writeHead(303, { Location: '/clube?view=config&ok=config' }); return res.end();
+      });
+    }
+  }
 
   // ── Perfis (só admin — já barrado acima) ─────────────────────────────────
   if (tela === 'perfis') {
