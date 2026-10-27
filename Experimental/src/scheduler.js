@@ -177,7 +177,7 @@ function logError(msg, err) {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
-  const line = `[${ts}] ❌ ${msg}: ${err?.message || err}`;
+  const line = `[${ts}] ❌ ${msg}: ${err?.message || err} — ⚠️ NADA foi enviado neste job.`;
   console.error(line);
   if (err?.stack) console.error(err.stack);
   // Alerta push (ntfy) — best-effort, nunca derruba nada. O anti-spam do módulo
@@ -189,6 +189,26 @@ function logError(msg, err) {
       { prioridade: 'high', tags: 'warning' },
     );
   } catch (_) { /* alerta é opcional */ }
+  // Registra a FALHA na atividade (aba "Log" do painel) para ficar VISÍVEL que o
+  // job não concluiu e NADA foi enviado — não só no push/pm2 logs. Antes, quando
+  // um job quebrava no login/WhatsApp (ex.: "Waiting failed: 30000ms"), nenhum
+  // envio acontecia e nada aparecia no painel; agora fica um registro ⚠️.
+  try {
+    const ctx = atividade.contextoAtual()
+      || String(msg || '')
+        .replace(/^Erro no job\s+/i, '')
+        .replace(/^TIMEOUT:\s*Job\s+/i, '')
+        .replace(/\s+excedeu.*$/i, '')
+        .trim()
+      || 'Job';
+    atividade.registrar({
+      ok: false,
+      destino: '—',
+      contexto: ctx,
+      preview: '⚠️ Execução falhou — nada enviado',
+      erro: (err?.message || String(err) || 'erro'),
+    });
+  } catch (_) { /* registro é opcional, nunca derruba */ }
 }
 
 // ─── Helpers ───────────────────────────────────────────────
