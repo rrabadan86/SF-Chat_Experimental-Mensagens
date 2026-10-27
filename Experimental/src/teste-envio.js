@@ -26,7 +26,7 @@ function salvar(arr) {
 }
 
 // Painel: cria um pedido de teste. Retorna o id para consulta.
-function solicitar({ telefone, texto, chaveFoto }) {
+function solicitar({ telefone, texto, chaveFoto, contexto }) {
   const tel = String(telefone || '').replace(/\D/g, '');
   if (tel.length < 10) throw new Error('Número inválido (informe DDD + número).');
   if (!String(texto || '').trim()) throw new Error('Mensagem vazia.');
@@ -34,7 +34,8 @@ function solicitar({ telefone, texto, chaveFoto }) {
   const id = crypto.randomBytes(6).toString('hex');
   // chaveFoto (opcional): se a mensagem tem flyer salvo, o robô envia junto (mesma
   // foto e comportamento do envio real). Sem ela, envia só o texto.
-  arr.push({ id, telefone: tel, texto: String(texto), chaveFoto: String(chaveFoto || ''), status: 'pendente', erro: '', criadoEm: new Date().toISOString() });
+  // contexto (opcional): como o envio aparece no Log do painel (padrão: "Teste (painel)").
+  arr.push({ id, telefone: tel, texto: String(texto), chaveFoto: String(chaveFoto || ''), contexto: String(contexto || ''), status: 'pendente', erro: '', criadoEm: new Date().toISOString() });
   salvar(arr);
   return id;
 }

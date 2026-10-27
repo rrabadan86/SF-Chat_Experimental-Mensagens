@@ -110,3 +110,9 @@ data/inadimplentes-config.json
 data/diag-boleto.json
 data/diag-boleto.html
 data/diag-boleto-*.html
+# Slim Club (cadastros, fotos das alunas, config e segredo do acesso) — dado pessoal, por VPS
+data/slimclub.json
+data/slimclub.json.tmp
+data/slimclub-fotos/
+data/slimclub-config.json
+data/.slimclub-segredo

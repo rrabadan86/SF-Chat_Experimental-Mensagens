@@ -664,9 +664,9 @@ function iniciarTesteWatcher(wa) {
     teste.marcar(p.id, 'enviando');
     try {
       if (!wa.isReady()) throw new Error('WhatsApp não está conectado no momento.');
-      await wa.sendTexto(p.telefone, p.texto, 'Teste (painel)', p.chaveFoto || undefined);
+      await wa.sendTexto(p.telefone, p.texto, p.contexto || 'Teste (painel)', p.chaveFoto || undefined);
       teste.marcar(p.id, 'enviado');
-      log(`🧪 Teste enviado para ${p.telefone} (pedido do painel)`);
+      log(`🧪 ${p.contexto || 'Teste'} enviado para ${p.telefone} (pedido do painel)`);
     } catch (e) {
       teste.marcar(p.id, 'falha', e && e.message);
       log(`🧪 Teste falhou para ${p.telefone}: ${e && e.message}`);
