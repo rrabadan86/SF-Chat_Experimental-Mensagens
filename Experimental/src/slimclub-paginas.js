@@ -2,6 +2,7 @@
  * slimclub-paginas.js — páginas PÚBLICAS do Slim Club (sem login do painel):
  *   /SlimClubCadastro → a aluna empresária cadastra o negócio (vai para validação)
  *   /slimclub         → login da aluna (nome + telefone) e listagem dos negócios
+ *   /slimclub/meu-anuncio → a dona edita o próprio anúncio (mesmo formulário)
  *
  * Páginas independentes do layout do painel (sem menu da equipe), pensadas para
  * o celular. Mesma identidade visual do painel (verde-petróleo + Inter).
@@ -98,6 +99,17 @@ input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible,.al
 .vazio{text-align:center;color:var(--cinza);padding:34px 16px;background:var(--card);border:1px dashed var(--linha);border-radius:16px}
 .btn-cart{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:.95rem;color:var(--teal-esc);background:var(--card);border:1.5px solid var(--teal);border-radius:12px;padding:11px 16px;text-decoration:none;margin:0 0 20px}
 .btn-cart svg{flex:0 0 auto}
+.meu{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--card);border:1px solid var(--linha);border-radius:16px;padding:14px 16px;margin:0 0 22px}
+.meu img{width:48px;height:48px;border-radius:50%;object-fit:cover;background:var(--teal-soft);flex:0 0 auto}
+.meu .info{flex:1 1 220px;min-width:0}
+.meu .q{font-size:.74rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
+.meu .neg{font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.meu .txt{font-size:.88rem;color:var(--cinza);margin:2px 0 0}
+.pill{font-size:.72rem;font-weight:700;border-radius:999px;padding:2px 9px}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.esp{background:var(--ambar-soft);color:var(--ambar)}
+.pill.no{background:var(--erro-soft);color:var(--erro)}
+.meu .btn2{text-decoration:none;flex:0 0 auto}
 /* carteira */
 .cart{position:relative;overflow:hidden;color:#fff;border-radius:22px;padding:20px 20px 16px;max-width:440px;margin:0 auto;
   background:radial-gradient(120% 90% at 100% 0%,#14908b 0%,rgba(20,144,139,0) 55%),linear-gradient(160deg,#0e6e6b 0%,#09504e 100%);
@@ -166,18 +178,37 @@ ${script}
 </body></html>`;
 }
 
-// ── /SlimClubCadastro ───────────────────────────────────────────────────────
-function paginaCadastro({ studio, categorias, avisar, comprovacao }) {
-  const opts = categorias.map(c => `<option>${esc(c)}</option>`).join('') + '<option value="__outra">Outra</option>';
-  const corpo = `
+// ── /SlimClubCadastro (e /slimclub/meu-anuncio, com `edicao`) ───────────────
+// edicao = { r, fotoUrl, telefone }: r é o anúncio atual (ou a alteração em
+// análise, se houver), para o formulário já vir preenchido.
+function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao }) {
+  const r = edicao ? edicao.r : {};
+  const val = k => esc(r[k] || '');
+  const outra = !!(r.categoria && !categorias.includes(r.categoria));
+  const opts = categorias.map(c => `<option${r.categoria === c ? ' selected' : ''}>${esc(c)}</option>`).join('')
+    + `<option value="__outra"${outra ? ' selected' : ''}>Outra</option>`;
+  const marca = v => (r.alcance === v ? ' checked' : '');
+  const aprovado = edicao && edicao.aprovado;
+  const topo = edicao ? `
+  <p class="eyebrow">Meu anúncio</p>
+  <h1>Editar meu anúncio</h1>
+  <p class="lead">${aprovado
+    ? 'Seu anúncio está no ar. As mudanças vão para a recepção aprovar e, até lá, as alunas continuam vendo a versão atual.'
+    : 'Corrija o que precisar e envie de novo. A recepção confere antes de o anúncio aparecer para as alunas.'}</p>` : `
   <p class="eyebrow">Para alunas empreendedoras</p>
   <h1>Cadastre seu negócio no Slim Club</h1>
-  <p class="lead">Ofereça um benefício exclusivo para as alunas do ${esc(studio)}. A recepção confere o cadastro e, depois de aprovado, seu negócio aparece para as alunas.</p>
+  <p class="lead">Ofereça um benefício exclusivo para as alunas do ${esc(studio)}. A recepção confere o cadastro e, depois de aprovado, seu negócio aparece para as alunas.</p>`;
+  const okTxt = edicao
+    ? `<h2 style="justify-content:center;font-size:1.2rem">Alterações enviadas!</h2>
+    <p class="lead" style="margin:0 auto">A recepção vai conferir. ${aprovado ? 'Até a aprovação, as alunas continuam vendo a versão atual do seu anúncio.' : (avisar ? 'Você recebe um aviso no WhatsApp quando for aprovado.' : 'Assim que for aprovado, seu negócio aparece no Slim Club.')}</p>
+    <p style="margin:14px 0 0"><a href="/slimclub">Voltar ao Slim Club</a></p>`
+    : `<h2 style="justify-content:center;font-size:1.2rem">Cadastro enviado!</h2>
+    <p class="lead" style="margin:0 auto">A recepção vai conferir as informações. ${avisar ? 'Você recebe um aviso no WhatsApp quando for aprovado.' : 'Assim que for aprovado, seu negócio aparece no Slim Club.'}</p>`;
+  const corpo = `${topo}
 
   <div id="ok" class="card pronto" hidden>
     <div class="ic" aria-hidden="true">✓</div>
-    <h2 style="justify-content:center;font-size:1.2rem">Cadastro enviado!</h2>
-    <p class="lead" style="margin:0 auto">A recepção vai conferir as informações. ${avisar ? 'Você recebe um aviso no WhatsApp quando for aprovado.' : 'Assim que for aprovado, seu negócio aparece no Slim Club.'}</p>
+    ${okTxt}
   </div>
 
   <form id="f" novalidate>
@@ -186,9 +217,9 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao }) {
       <div class="campo">
         <span class="rot">Sua foto</span>
         <div class="foto">
-          <div class="av" id="av">sem foto</div>
+          ${edicao && edicao.fotoUrl ? `<div class="av tem" id="av" style="background-image:url('${esc(edicao.fotoUrl)}')"></div>` : '<div class="av" id="av">sem foto</div>'}
           <div style="display:flex;flex-direction:column;gap:6px">
-            <button type="button" class="btn2" id="btFoto">Escolher foto</button>
+            <button type="button" class="btn2" id="btFoto">${edicao ? 'Trocar foto' : 'Escolher foto'}</button>
             <p class="dica">Para as alunas reconhecerem você. JPG ou PNG, tamanho máximo de <b>1 MB</b> — fotos maiores do celular são reduzidas automaticamente.</p>
             <p class="dica" id="tamFoto" aria-live="polite"></p>
           </div>
@@ -196,55 +227,57 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao }) {
         </div>
       </div>
       <div class="campo"><label for="nome">Nome completo</label>
-        <input type="text" id="nome" autocomplete="name" maxlength="120" required></div>
+        <input type="text" id="nome" autocomplete="name" maxlength="120" value="${val('nome')}" required></div>
       <div class="campo"><label for="telefone">Telefone (WhatsApp)</label>
-        <input type="tel" id="telefone" autocomplete="tel" inputmode="tel" placeholder="(00) 90000-0000" maxlength="20" required>
-        <p class="dica">Use o mesmo telefone cadastrado no Studio — é por ele que confirmamos que você é aluna.</p></div>
+        ${edicao ? `<input type="tel" id="telefone" value="${esc(edicao.telefone)}" readonly aria-describedby="dicaTel">
+        <p class="dica" id="dicaTel">O telefone identifica o seu anúncio e não pode ser trocado aqui. Se mudou de número, fale com a recepção.</p>` : `<input type="tel" id="telefone" autocomplete="tel" inputmode="tel" placeholder="(00) 90000-0000" maxlength="20" required>
+        <p class="dica">Use o mesmo telefone cadastrado no Studio — é por ele que confirmamos que você é aluna.</p>`}</div>
     </section>
 
     <section class="card">
       <h2><span class="n">2</span>Seu negócio</h2>
       <div class="campo"><label for="negocio">Nome do negócio</label>
-        <input type="text" id="negocio" maxlength="80" required></div>
+        <input type="text" id="negocio" maxlength="80" value="${val('negocio')}" required></div>
       <div class="campo"><label for="categoria">Categoria</label>
         <select id="categoria" required><option value="">Escolha…</option>${opts}</select>
-        <input type="text" id="categoriaOutra" maxlength="40" placeholder="Qual categoria?" hidden></div>
+        <input type="text" id="categoriaOutra" maxlength="40" placeholder="Qual categoria?" value="${outra ? val('categoria') : ''}"${outra ? '' : ' hidden'}></div>
       <div class="campo"><label for="documento">CNPJ</label>
-        <input type="text" id="documento" maxlength="20" autocapitalize="characters" placeholder="00.000.000/0000-00" required>
+        <input type="text" id="documento" maxlength="20" autocapitalize="characters" placeholder="00.000.000/0000-00" value="${edicao ? esc(edicao.documento) : ''}" required>
         <p class="dica">O MEI também tem CNPJ.</p></div>
       <div class="campo"><label for="instagram">Instagram do negócio <span class="opc">(opcional)</span></label>
-        <div class="ig"><span>@</span><input type="text" id="instagram" maxlength="60" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="seunegocio" oninput="if(this.value.charAt(0)==='@')this.value=this.value.slice(1)"></div></div>
+        <div class="ig"><span>@</span><input type="text" id="instagram" maxlength="60" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="seunegocio" value="${val('instagram')}" oninput="if(this.value.charAt(0)==='@')this.value=this.value.slice(1)"></div></div>
     </section>
 
     <section class="card">
       <h2><span class="n">3</span>O benefício</h2>
       <div class="campo"><label for="beneficio">Benefício exclusivo para alunas SlimFit</label>
-        <textarea id="beneficio" maxlength="600" required aria-describedby="dicaBeneficio" placeholder="Ex.: 15% de desconto em qualquer serviço, só para alunas SlimFit"></textarea>
+        <textarea id="beneficio" maxlength="600" required aria-describedby="dicaBeneficio" placeholder="Ex.: 15% de desconto em qualquer serviço, só para alunas SlimFit">${val('beneficio')}</textarea>
         <p class="dica" id="dicaBeneficio">O benefício precisa ser <b>real e exclusivo</b>: uma vantagem que só as alunas SlimFit recebem, e não a mesma promoção que qualquer cliente já tem. É isso que fortalece a nossa comunidade. Benefícios genéricos (como "condições especiais") não entram na listagem.</p></div>
       <div class="campo"><span class="rot" id="rotAlc">Alcance</span>
         <div class="alc" role="radiogroup" aria-labelledby="rotAlc">
-          <label><input type="radio" name="alcance" value="local"><span><b>Local</b>Vale só no seu negócio aqui da cidade</span></label>
-          <label><input type="radio" name="alcance" value="nacional"><span><b>Nacional</b>Vale em todas as unidades do seu negócio no Brasil</span></label>
+          <label><input type="radio" name="alcance" value="local"${marca('local')}><span><b>Local</b>Vale só no seu negócio aqui da cidade</span></label>
+          <label><input type="radio" name="alcance" value="nacional"${marca('nacional')}><span><b>Nacional</b>Vale em todas as unidades do seu negócio no Brasil</span></label>
         </div></div>
       <div class="campo"><span class="rot">Como a aluna comprova que é do Studio</span>
         <div class="fixo">${esc(comprovacao)}</div>
         <p class="dica">Vale para todos os negócios do Slim Club.</p></div>
       <div class="campo"><label for="fim">Término da promoção <span class="opc">(opcional)</span></label>
-        <input type="date" id="fim">
+        <input type="date" id="fim" value="${val('fimVigencia')}">
         <p class="dica">Deixe em branco se a oferta não tiver prazo.</p></div>
     </section>
 
     <section class="card">
-      <label class="consent"><input type="checkbox" id="consent"><span>Autorizo exibir meu nome, minha foto e as informações do meu negócio para as alunas do ${esc(studio)}.</span></label>
+      <label class="consent"><input type="checkbox" id="consent"${edicao ? ' checked' : ''}><span>Autorizo exibir meu nome, minha foto e as informações do meu negócio para as alunas do ${esc(studio)}.</span></label>
     </section>
 
     <div id="erro" class="msg erro" role="alert" hidden></div>
-    <button class="btn" id="enviar" type="submit">Enviar para validação</button>
+    <button class="btn" id="enviar" type="submit">${edicao ? 'Enviar alterações' : 'Enviar para validação'}</button>
   </form>
-  <p class="rodape">Já é aluna? <a href="/slimclub">Veja os negócios do Slim Club</a></p>`;
+  <p class="rodape">${edicao ? '<a href="/slimclub">Voltar sem alterar</a>' : 'Já é aluna? <a href="/slimclub">Veja os negócios do Slim Club</a>'}</p>`;
 
   const script = `<script>
 (function(){
+  var EDICAO=${edicao ? 'true' : 'false'}, ROTULO=${edicao ? "'Enviar alterações'" : "'Enviar para validação'"};
   var foto='', f=document.getElementById('f'), erro=document.getElementById('erro'), bt=document.getElementById('enviar');
   var arq=document.getElementById('arq'), av=document.getElementById('av');
   document.getElementById('btFoto').onclick=function(){ arq.click(); };
@@ -288,7 +321,7 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao }) {
       documento:v('documento'), instagram:v('instagram'), beneficio:v('beneficio'),
       alcance: alc?alc.value:'', fimVigencia:v('fim'),
       consentimento: document.getElementById('consent').checked, foto: foto };
-    if(!foto) return mostrarErro('Escolha uma foto sua.');
+    if(!foto && !EDICAO) return mostrarErro('Escolha uma foto sua.'); // na edição, sem foto nova fica a atual
     bt.disabled=true; bt.textContent='Enviando…';
     fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
       .then(function(r){ return r.json().catch(function(){ return {erro:'Falha no envio (código '+r.status+').'}; }); })
@@ -297,11 +330,12 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao }) {
         mostrarErro((j&&j.erro)||'Não consegui enviar. Tente de novo.');
       })
       .catch(function(){ mostrarErro('Sem conexão. Confira a internet e tente de novo.'); })
-      .then(function(){ bt.disabled=false; bt.textContent='Enviar para validação'; });
+      .then(function(){ bt.disabled=false; bt.textContent=ROTULO; });
   };
 })();
 </script>`;
-  return casca({ titulo: 'Cadastro · Slim Club', studio, corpo, script });
+  return casca({ titulo: edicao ? 'Meu anúncio · Slim Club' : 'Cadastro · Slim Club', studio, corpo, script,
+    dir: edicao ? '<a href="/slimclub/sair">Sair</a>' : '' });
 }
 
 // ── /slimclub (sem sessão): entrar com nome + telefone ─────────────────────
@@ -331,7 +365,7 @@ const ICONE_IG = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="t
   + '<circle cx="16.4" cy="7.6" r="1.15" fill="#fff"/></svg>';
 
 // ── /slimclub (aluna conectada): listagem ───────────────────────────────────
-function paginaListagem({ studio, aluna, empresas, fmtData, fmtDocumento, primeiroNome, comprovacao }) {
+function paginaListagem({ studio, aluna, empresas, fmtData, fmtDocumento, primeiroNome, comprovacao, meu }) {
   const cats = [...new Set(empresas.map(e => e.categoria))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   const chips = cats.length > 1
     ? `<div class="chips" role="group" aria-label="Filtrar por categoria"><button type="button" class="chip on" data-cat="">Todas</button>${cats.map(c => `<button type="button" class="chip" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>`
@@ -354,6 +388,13 @@ function paginaListagem({ studio, aluna, empresas, fmtData, fmtDocumento, primei
   <p class="eyebrow">Exclusivo para alunas</p>
   <h1>Olá, ${esc(primeiroNome(aluna.nome) || 'aluna')}!</h1>
   <p class="lead">Benefícios oferecidos por alunas do ${esc(studio)}. Para usar, apresente a sua carteira SlimClub no negócio.</p>
+  ${meu ? `<section class="meu" aria-label="Meu anúncio">
+    <img src="/slimclub/foto/${esc(meu.r.id)}" alt="" width="48" height="48">
+    <div class="info"><div class="q">Meu anúncio</div>
+      <div class="neg">${esc(meu.r.negocio)} <span class="pill ${meu.estado.cls}">${esc(meu.estado.titulo)}</span></div>
+      <p class="txt">${esc(meu.estado.texto)}</p></div>
+    <a class="btn2" href="/slimclub/meu-anuncio">${esc(meu.estado.botao)}</a>
+  </section>` : ''}
   <a class="btn-cart" href="/slimclub/carteira"><svg width="20" height="16" viewBox="0 0 20 16" fill="none" aria-hidden="true"><rect x="1" y="1" width="18" height="14" rx="3" stroke="currentColor" stroke-width="2"/><path d="M5 6h6M5 10h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Minha carteira SlimClub</a>
   ${empresas.length ? `<div class="busca">
     <input type="text" id="q" placeholder="Buscar por negócio, aluna ou benefício" aria-label="Buscar">
@@ -361,8 +402,8 @@ function paginaListagem({ studio, aluna, empresas, fmtData, fmtDocumento, primei
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><radialGradient id="igGrad" cx="30%" cy="107%" r="150%"><stop offset="0" stop-color="#fdf497"/><stop offset=".05" stop-color="#fdf497"/><stop offset=".45" stop-color="#fd5949"/><stop offset=".6" stop-color="#d6249f"/><stop offset=".9" stop-color="#285aeb"/></radialGradient></defs></svg>
   <div class="grade" id="grade">${cards}</div>
   <div class="vazio" id="nada" hidden>Nenhum negócio encontrado com esse filtro.</div>`
-    : '<div class="vazio">Ainda não há negócios no Slim Club.<br><a href="/SlimClubCadastro">Tem um negócio? Cadastre o seu</a></div>'}
-  <p class="rodape">Tem um negócio? <a href="/SlimClubCadastro">Cadastre no Slim Club</a></p>`;
+    : `<div class="vazio">Ainda não há negócios no Slim Club.${meu ? '' : '<br><a href="/SlimClubCadastro">Tem um negócio? Cadastre o seu</a>'}</div>`}
+  ${meu ? '' : '<p class="rodape">Tem um negócio? <a href="/SlimClubCadastro">Cadastre no Slim Club</a></p>'}`;
   const script = empresas.length ? `<script>
 (function(){
   var q=document.getElementById('q'), cat='', cards=[].slice.call(document.querySelectorAll('.emp')), nada=document.getElementById('nada');
