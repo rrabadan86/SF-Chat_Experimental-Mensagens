@@ -10,6 +10,11 @@
  *   - a empresa só aparece enquanto a DONA também for aluna ativa;
  *   - e enquanto a promoção estiver vigente (data de término em branco = sem prazo).
  *
+ * Cada telefone tem UM anúncio. A dona edita o dela em /slimclub/meu-anuncio:
+ *   - pendente ou recusado → a edição substitui o anúncio e ele volta a "pendente";
+ *   - aprovado → a edição fica guardada em `alteracao` e vai para a recepção
+ *     aprovar; até lá as alunas continuam vendo a versão já aprovada.
+ *
  * O telefone é a chave: é o mesmo cadastrado no EVO (o auto-tag casa as alunas
  * ativas do EVO com os contatos por telefone, tolerando o 9º dígito).
  *
@@ -110,10 +115,17 @@ function salvar(arr) {
   fs.renameSync(tmp, ARQ); // troca atômica: nunca fica um JSON pela metade
 }
 function obter(id) { return carregar().find(r => r.id === id) || null; }
-function fotoPath(id) {
+// nova=true → a foto de uma alteração que ainda aguarda aprovação.
+function arqFoto(id, nova) { return path.join(FOTOS_DIR, id + (nova ? '-nova' : '') + '.jpg'); }
+function fotoPath(id, nova) {
   if (!/^[a-f0-9]{16}$/.test(String(id || ''))) return null;
-  const p = path.join(FOTOS_DIR, id + '.jpg');
+  const p = arqFoto(id, nova);
   return fs.existsSync(p) ? p : null;
+}
+function apagarFoto(id, nova) { try { fs.unlinkSync(arqFoto(id, nova)); } catch (_) {} }
+function gravarFoto(id, buf, nova) {
+  fs.mkdirSync(FOTOS_DIR, { recursive: true });
+  fs.writeFileSync(arqFoto(id, nova), buf);
 }
 
 // A página converte a foto para JPEG (canvas) antes de enviar; aqui só aceitamos
@@ -130,7 +142,8 @@ function decodificarFoto(dataUrl) {
 }
 
 // ── Cadastro (página pública) ───────────────────────────────────────────────
-function validar(c) {
+// fotoOpcional: na edição, sem foto nova fica a que já está no anúncio.
+function validar(c, { fotoOpcional = false } = {}) {
   c = c || {};
   const nome = linha(c.nome, 120);
   const telefone = contatos.normTel(c.telefone);
@@ -154,7 +167,7 @@ function validar(c) {
   if (fimVigencia && fimVigencia < hojeSP()) return { erro: 'A data de término já passou. Deixe em branco se a oferta não tiver prazo.' };
   if (instagram === null) return { erro: 'Instagram inválido. Use só o @ do perfil (ex.: @minhaloja).' };
   if (!c.consentimento) return { erro: 'Para participar, autorize a exibição do seu nome e foto para as alunas.' };
-  const foto = decodificarFoto(c.foto);
+  const foto = (fotoOpcional && !c.foto) ? { buf: null } : decodificarFoto(c.foto);
   if (foto.erro) return { erro: foto.erro };
 
   return {
@@ -162,22 +175,87 @@ function validar(c) {
     foto: foto.buf,
   };
 }
+// Campos que a dona pode alterar (o telefone é a chave e não muda).
+const CAMPOS_EDITAVEIS = ['nome', 'negocio', 'categoria', 'documento', 'beneficio', 'alcance', 'fimVigencia', 'instagram'];
+
+// O anúncio deste telefone (tolerando o 9º dígito). Se houver mais de um (de antes
+// da regra de um por aluna), vale o mais recente.
+function meuAnuncio(tel) {
+  const vs = contatos.variantes9(tel);
+  if (!vs.length) return null;
+  const meus = carregar().filter(r => vs.includes(contatos.normTel(r.telefone)));
+  meus.sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
+  return meus[0] || null;
+}
 
 const MSG_NAO_ALUNA = 'Não encontramos uma aluna ativa com este telefone. Use o mesmo telefone cadastrado no Studio (no EVO). '
   + 'Se o número estiver certo, fale com a recepção.';
 
+const MSG_JA_TEM = 'Você já tem um anúncio no Slim Club (cada aluna pode ter um). Para alterar, entre em /slimclub '
+  + 'com seu nome e telefone e toque em "Editar meu anúncio".';
+
 function criar(campos) {
+  const tel = contatos.normTel(campos && campos.telefone);
+  if (tel && meuAnuncio(tel)) return { erro: MSG_JA_TEM, jaTem: true };
   const v = validar(campos);
   if (v.erro) return v;
   const ct = contatoDoTel(v.dados.telefone);
   if (!temTagAluna(ct)) return { erro: MSG_NAO_ALUNA };
   const id = crypto.randomBytes(8).toString('hex');
-  fs.mkdirSync(FOTOS_DIR, { recursive: true });
-  fs.writeFileSync(path.join(FOTOS_DIR, id + '.jpg'), v.foto);
+  gravarFoto(id, v.foto);
   const arr = carregar();
   arr.push(Object.assign({ id, status: 'pendente', criadoEm: new Date().toISOString(), nomeNoCadastro: (ct && ct.nome) || '' }, v.dados));
   salvar(arr);
   return { ok: true, id };
+}
+
+// Edição pela dona (sessão da aluna). `tel` vem da sessão, nunca do formulário.
+function editar(tel, campos) {
+  const atual = meuAnuncio(tel);
+  if (!atual) return { erro: 'Não encontramos um anúncio seu. Cadastre o seu negócio em /SlimClubCadastro.' };
+  const v = validar(Object.assign({}, campos, { telefone: atual.telefone }), { fotoOpcional: true });
+  if (v.erro) return v;
+  const arr = carregar();
+  const r = arr.find(x => x.id === atual.id);
+  const agora = new Date().toISOString();
+  const novos = {};
+  for (const k of CAMPOS_EDITAVEIS) novos[k] = v.dados[k];
+  if (r.status === 'aprovado') {
+    // Já está no ar: a mudança espera a recepção; a versão aprovada continua valendo.
+    r.alteracao = Object.assign(novos, { fotoNova: !!v.foto, enviadoEm: agora });
+    if (v.foto) gravarFoto(r.id, v.foto, true); else apagarFoto(r.id, true);
+    delete r.alteracaoRecusada;
+    salvar(arr);
+    return { ok: true, id: r.id, emAnalise: 'alteracao' };
+  }
+  // Pendente ou recusado: corrige o próprio anúncio, que volta para a fila.
+  if (r.status === 'recusado') { r.motivoAnterior = r.motivo || ''; r.reenviadoEm = agora; }
+  Object.assign(r, novos, { status: 'pendente', motivo: '', editadoEm: agora });
+  if (v.foto) gravarFoto(r.id, v.foto);
+  salvar(arr);
+  return { ok: true, id: r.id, emAnalise: 'anuncio' };
+}
+
+// Recepção decide sobre a alteração de um anúncio já aprovado.
+function avaliarAlteracao(id, aprovar, usuario, motivo) {
+  const arr = carregar();
+  const r = arr.find(x => x.id === id);
+  if (!r || !r.alteracao) return null;
+  const alt = r.alteracao;
+  const agora = new Date().toISOString();
+  if (aprovar) {
+    for (const k of CAMPOS_EDITAVEIS) if (k in alt) r[k] = alt[k];
+    if (alt.fotoNova && fotoPath(r.id, true)) fs.renameSync(arqFoto(r.id, true), arqFoto(r.id));
+    r.alteradoEm = agora;
+    r.alteracaoAvaliadaPor = String(usuario || '');
+    delete r.alteracaoRecusada;
+  } else {
+    apagarFoto(r.id, true);
+    r.alteracaoRecusada = { motivo: linha(motivo, 300), por: String(usuario || ''), em: agora };
+  }
+  delete r.alteracao;
+  salvar(arr);
+  return r;
 }
 
 // ── Validação pela recepção (painel) ────────────────────────────────────────
@@ -186,6 +264,13 @@ function avaliar(id, status, usuario, motivo) {
   const arr = carregar();
   const r = arr.find(x => x.id === id);
   if (!r) return null;
+  // Saindo de "aprovado" com uma alteração em espera: a alteração vira o anúncio
+  // (é a versão mais nova da dona, e ele volta a ser avaliado por inteiro).
+  if (r.alteracao && status !== 'aprovado') {
+    for (const k of CAMPOS_EDITAVEIS) if (k in r.alteracao) r[k] = r.alteracao[k];
+    if (r.alteracao.fotoNova && fotoPath(r.id, true)) fs.renameSync(arqFoto(r.id, true), arqFoto(r.id));
+    delete r.alteracao;
+  }
   r.status = status;
   r.avaliadoPor = String(usuario || '');
   r.avaliadoEm = new Date().toISOString();
@@ -208,8 +293,8 @@ function excluir(id) {
   if (i < 0) return false;
   arr.splice(i, 1);
   salvar(arr);
-  const p = fotoPath(id);
-  if (p) { try { fs.unlinkSync(p); } catch (_) {} }
+  if (fotoPath(id)) apagarFoto(id);
+  if (fotoPath(id, true)) apagarFoto(id, true);
   return true;
 }
 
@@ -237,6 +322,26 @@ function publicos() {
   return carregar()
     .filter(r => situacao(r, map, hoje).visivel)
     .sort((a, b) => a.negocio.localeCompare(b.negocio, 'pt-BR', { sensitivity: 'base' }));
+}
+
+// "Meu anúncio": o que a dona vê no topo da listagem. cls: ok | esp | no.
+function estadoMeuAnuncio(r) {
+  if (r.status === 'pendente') {
+    return { cls: 'esp', titulo: 'Aguardando aprovação', botao: 'Editar anúncio',
+      texto: r.reenviadoEm ? 'Você reenviou o anúncio. A recepção vai conferir.' : 'A recepção vai conferir o seu anúncio antes de ele aparecer para as alunas.' };
+  }
+  if (r.status === 'recusado') {
+    return { cls: 'no', titulo: 'Não aprovado', botao: 'Corrigir e reenviar',
+      texto: (r.motivo ? `Motivo: ${r.motivo}. ` : '') + 'Corrija o anúncio e envie de novo para a recepção.' };
+  }
+  const st = situacao(r);
+  const extra = r.alteracao
+    ? ' Sua alteração está com a recepção para aprovar. Até lá, vale a versão atual.'
+    : (r.alteracaoRecusada ? ` Sua última alteração não foi aprovada${r.alteracaoRecusada.motivo ? ` (motivo: ${r.alteracaoRecusada.motivo})` : ''}.` : '');
+  if (st.visivel) return { cls: 'ok', titulo: 'No ar', botao: 'Editar anúncio', texto: 'Seu anúncio aparece para as alunas.' + extra };
+  const venceu = r.fimVigencia && r.fimVigencia < hojeSP();
+  return { cls: 'no', titulo: 'Fora do ar', botao: 'Editar anúncio',
+    texto: (venceu ? `A promoção terminou em ${fmtData(r.fimVigencia)}. Atualize a data de término para voltar à listagem.` : `Motivo: ${st.motivo}.`) + extra };
 }
 
 // ── Acesso da aluna à listagem (cookie assinado, 30 dias) ───────────────────
@@ -361,6 +466,7 @@ function permitir(chave, max, janelaMs) {
 module.exports = {
   COOKIE, SESSAO_DIAS, CATEGORIAS, MSG_APROVADO_PADRAO, COMPROVACAO, FOTO_MAX_BYTES,
   criar, obter, avaliar, marcarAviso, excluir, listarPainel, publicos, situacao,
+  meuAnuncio, editar, avaliarAlteracao, estadoMeuAnuncio, CAMPOS_EDITAVEIS,
   entrar, alunaDaSessao, fotoPath,
   tokenVerificacao, verificar, ultimaSincronizacaoEvo,
   lerConfig, gravarConfig, mensagemAprovado,
