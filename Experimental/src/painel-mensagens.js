@@ -6079,11 +6079,11 @@ function scFmtQuando(iso) {
 
 function rotaSlimClubCadastro(req, res) {
   if (req.method === 'GET') {
-    return scHtml(res, 200, slimclubPaginas.paginaCadastro({ studio: scStudio(), categorias: slimclub.CATEGORIAS, avisar: slimclub.lerConfig().avisar }));
+    return scHtml(res, 200, slimclubPaginas.paginaCadastro({ studio: scStudio(), categorias: slimclub.CATEGORIAS, avisar: slimclub.lerConfig().avisar, comprovacao: slimclub.COMPROVACAO }));
   }
   if (req.method !== 'POST') { res.writeHead(405, { 'Content-Type': 'text/plain' }); return res.end('method not allowed'); }
   if (!slimclub.permitir('cad:' + scIp(req), 10, 3600e3)) return scJson(res, 429, { erro: 'Muitos envios seguidos. Aguarde um pouco e tente de novo.' });
-  return lerCorpo(req, 3.5e6, corpo => {
+  return lerCorpo(req, 2e6, corpo => { // foto de até 1 MB (~1,4 MB em base64) + campos
     let d = null; try { d = JSON.parse(corpo); } catch (_) {}
     if (!d || typeof d !== 'object') return scJson(res, 400, { erro: 'Envio inválido. Recarregue a página e tente de novo.' });
     let r;
@@ -6099,7 +6099,7 @@ function rotaSlimClubPublico(req, res, rota) {
     const aluna = slimclub.alunaDaSessao(lerCookie(req, slimclub.COOKIE));
     if (!aluna) return scHtml(res, 200, slimclubPaginas.paginaEntrar({ studio }));
     return scHtml(res, 200, slimclubPaginas.paginaListagem({
-      studio, aluna, empresas: slimclub.publicos(), fmtData: slimclub.fmtData, primeiroNome: slimclub.primeiroNome,
+      studio, aluna, empresas: slimclub.publicos(), fmtData: slimclub.fmtData, primeiroNome: slimclub.primeiroNome, comprovacao: slimclub.COMPROVACAO,
     }));
   }
   if (rota === '/slimclub/entrar' && req.method === 'POST') {
@@ -6202,7 +6202,7 @@ function paginaSlimClub(view, base, aviso) {
       </div>
       <dl class="sc-dl">
         <dt>Benefício</dt><dd>${esc(r.beneficio)}</dd>
-        <dt>Como comprovar</dt><dd>${esc(r.validacao)}</dd>
+        <dt>Como comprovar</dt><dd>${esc(slimclub.COMPROVACAO)}</dd>
         <dt>CNPJ</dt><dd>${esc(slimclub.fmtDocumento(r.documento))}</dd>
         <dt>Término</dt><dd>${r.fimVigencia ? esc(fmtData(r.fimVigencia)) : 'Sem prazo'}</dd>
         <dt>Instagram</dt><dd>${r.instagram ? `<a href="https://instagram.com/${encodeURIComponent(r.instagram)}" target="_blank" rel="noopener">@${esc(r.instagram)}</a>` : '—'}</dd>
