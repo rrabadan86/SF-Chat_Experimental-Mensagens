@@ -245,10 +245,29 @@ class EvoScraper {
     try { await preencher2FA(this.page); } catch (_) {}
 
     // Aguarda navegação para dashboard
-    await this.page.waitForFunction(
-      () => window.location.hash.includes('/inicio/') || window.location.hash.includes('/app/'),
-      { timeout: 30000 }
-    );
+    try {
+      await this.page.waitForFunction(
+        () => window.location.hash.includes('/inicio/') || window.location.hash.includes('/app/'),
+        { timeout: 30000 }
+      );
+    } catch (e) {
+      // DIAGNÓSTICO: o login não chegou ao painel em 30s. Antes de propagar o
+      // erro, despeja no log O QUE a tela está mostrando (URL + texto visível) e
+      // salva um print — assim dá pra saber se é código 2FA inválido/expirado,
+      // "muitas tentativas", captcha, "dispositivo não confiável", etc., direto
+      // no `pm2 logs` (sem abrir imagem no VPS).
+      try {
+        const urlTravado = this.page.url();
+        const txt = await this.page.evaluate(
+          () => (document.body && document.body.innerText || '').replace(/\s+/g, ' ').trim()
+        ).catch(() => '');
+        console.log('   🔎 [login-travado] URL: ' + urlTravado);
+        console.log('   🔎 [login-travado] Tela: ' + String(txt).slice(0, 900));
+        await this.page.screenshot({ path: 'debug-login-travado.png' }).catch(() => {});
+        console.log('   📸 [login-travado] print salvo em debug-login-travado.png');
+      } catch (_) { /* diagnóstico é best-effort */ }
+      throw e;
+    }
 
     await this.sleep(3000);
 
