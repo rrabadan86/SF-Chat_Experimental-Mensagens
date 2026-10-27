@@ -6102,7 +6102,7 @@ function rotaSlimClubPublico(req, res, rota, urlOriginal) {
     const aluna = slimclub.alunaDaSessao(lerCookie(req, slimclub.COOKIE));
     if (!aluna) return scHtml(res, 200, slimclubPaginas.paginaEntrar({ studio }));
     return scHtml(res, 200, slimclubPaginas.paginaListagem({
-      studio, aluna, empresas: slimclub.publicos(), fmtData: slimclub.fmtData, primeiroNome: slimclub.primeiroNome, comprovacao: slimclub.COMPROVACAO,
+      studio, aluna, empresas: slimclub.publicos(), fmtData: slimclub.fmtData, fmtDocumento: slimclub.fmtDocumento, primeiroNome: slimclub.primeiroNome, comprovacao: slimclub.COMPROVACAO,
     }));
   }
   if (rota === '/slimclub/entrar' && req.method === 'POST') {

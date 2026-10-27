@@ -92,6 +92,9 @@ input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible,.al
 .det b{color:var(--tinta);font-weight:600}
 .emp .rodp{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:1px solid var(--linha);padding-top:10px;font-size:.84rem;color:var(--cinza)}
 .emp .rodp a{font-weight:600;text-decoration:none}
+.ig-link{display:inline-flex;align-items:center;gap:7px;color:var(--teal-esc);overflow-wrap:anywhere}
+.ig-link svg{flex:0 0 auto}
+.ig-link:hover span{text-decoration:underline}
 .vazio{text-align:center;color:var(--cinza);padding:34px 16px;background:var(--card);border:1px dashed var(--linha);border-radius:16px}
 .btn-cart{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:.95rem;color:var(--teal-esc);background:var(--card);border:1.5px solid var(--teal);border-radius:12px;padding:11px 16px;text-decoration:none;margin:0 0 20px}
 .btn-cart svg{flex:0 0 auto}
@@ -215,9 +218,9 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao }) {
 
     <section class="card">
       <h2><span class="n">3</span>O benefício</h2>
-      <div class="campo"><label for="beneficio">Benefício oferecido</label>
-        <textarea id="beneficio" maxlength="600" required placeholder="Ex.: 15% de desconto em qualquer serviço"></textarea>
-        <p class="dica">Seja específica. Evite "condições especiais".</p></div>
+      <div class="campo"><label for="beneficio">Benefício exclusivo para alunas SlimFit</label>
+        <textarea id="beneficio" maxlength="600" required aria-describedby="dicaBeneficio" placeholder="Ex.: 15% de desconto em qualquer serviço, só para alunas SlimFit"></textarea>
+        <p class="dica" id="dicaBeneficio">O benefício precisa ser <b>real e exclusivo</b>: uma vantagem que só as alunas SlimFit recebem, e não a mesma promoção que qualquer cliente já tem. É isso que fortalece a nossa comunidade. Benefícios genéricos (como "condições especiais") não entram na listagem.</p></div>
       <div class="campo"><span class="rot" id="rotAlc">Alcance</span>
         <div class="alc" role="radiogroup" aria-labelledby="rotAlc">
           <label><input type="radio" name="alcance" value="local"><span><b>Local</b>Vale só no seu negócio aqui da cidade</span></label>
@@ -320,23 +323,31 @@ function paginaEntrar({ studio, erro, nome, telefone }) {
   return casca({ titulo: 'Slim Club', studio, corpo });
 }
 
+// Ícone do Instagram (gradiente da marca, definido uma vez na página: #igGrad).
+const ICONE_IG = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+  + '<rect width="24" height="24" rx="6.5" fill="url(#igGrad)"/>'
+  + '<rect x="5" y="5" width="14" height="14" rx="4.2" fill="none" stroke="#fff" stroke-width="1.9"/>'
+  + '<circle cx="12" cy="12" r="3.4" fill="none" stroke="#fff" stroke-width="1.9"/>'
+  + '<circle cx="16.4" cy="7.6" r="1.15" fill="#fff"/></svg>';
+
 // ── /slimclub (aluna conectada): listagem ───────────────────────────────────
-function paginaListagem({ studio, aluna, empresas, fmtData, primeiroNome, comprovacao }) {
+function paginaListagem({ studio, aluna, empresas, fmtData, fmtDocumento, primeiroNome, comprovacao }) {
   const cats = [...new Set(empresas.map(e => e.categoria))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   const chips = cats.length > 1
     ? `<div class="chips" role="group" aria-label="Filtrar por categoria"><button type="button" class="chip on" data-cat="">Todas</button>${cats.map(c => `<button type="button" class="chip" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>`
     : '';
   const cards = empresas.map(e => {
-    const busca = [e.negocio, e.nome, e.categoria, e.beneficio].join(' ').toLowerCase();
+    const busca = [e.negocio, e.nome, e.categoria, e.beneficio, e.documento].join(' ').toLowerCase();
     return `<article class="emp" data-cat="${esc(e.categoria)}" data-busca="${esc(busca)}">
       <div class="dona"><img src="/slimclub/foto/${esc(e.id)}" alt="Foto de ${esc(e.nome)}" loading="lazy" width="56" height="56">
-        <div><div class="q">Aluna</div><div class="nm">${esc(e.nome)}</div></div></div>
+        <div><div class="q">Empresa da aluna</div><div class="nm">${esc(e.nome)}</div></div></div>
       <h3>${esc(e.negocio)}</h3>
       <div class="tags"><span class="tg">${esc(e.categoria)}</span>${e.alcance === 'nacional' ? '<span class="tg nac">Nacional · todas as unidades</span>' : '<span class="tg">Local · só nesta cidade</span>'}</div>
       <div class="beneficio">${esc(e.beneficio)}</div>
       <p class="det"><b>Como comprovar:</b> ${esc(comprovacao)}</p>
+      <p class="det"><b>CNPJ:</b> ${esc(fmtDocumento(e.documento))}</p>
       <div class="rodp"><span>${e.fimVigencia ? 'Válido até ' + esc(fmtData(e.fimVigencia)) : 'Sem prazo de término'}</span>
-        ${e.instagram ? `<a href="https://instagram.com/${encodeURIComponent(e.instagram)}" target="_blank" rel="noopener">@${esc(e.instagram)}</a>` : ''}</div>
+        ${e.instagram ? `<a class="ig-link" href="https://instagram.com/${encodeURIComponent(e.instagram)}" target="_blank" rel="noopener" aria-label="Instagram de ${esc(e.negocio)}: @${esc(e.instagram)}">${ICONE_IG}<span>@${esc(e.instagram)}</span></a>` : ''}</div>
     </article>`;
   }).join('');
   const corpo = `
@@ -347,6 +358,7 @@ function paginaListagem({ studio, aluna, empresas, fmtData, primeiroNome, compro
   ${empresas.length ? `<div class="busca">
     <input type="text" id="q" placeholder="Buscar por negócio, aluna ou benefício" aria-label="Buscar">
     ${chips}</div>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><radialGradient id="igGrad" cx="30%" cy="107%" r="150%"><stop offset="0" stop-color="#fdf497"/><stop offset=".05" stop-color="#fdf497"/><stop offset=".45" stop-color="#fd5949"/><stop offset=".6" stop-color="#d6249f"/><stop offset=".9" stop-color="#285aeb"/></radialGradient></defs></svg>
   <div class="grade" id="grade">${cards}</div>
   <div class="vazio" id="nada" hidden>Nenhum negócio encontrado com esse filtro.</div>`
     : '<div class="vazio">Ainda não há negócios no Slim Club.<br><a href="/SlimClubCadastro">Tem um negócio? Cadastre o seu</a></div>'}
