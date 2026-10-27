@@ -218,9 +218,9 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao }) {
 
     <section class="card">
       <h2><span class="n">3</span>O benefício</h2>
-      <div class="campo"><label for="beneficio">Benefício oferecido</label>
-        <textarea id="beneficio" maxlength="600" required placeholder="Ex.: 15% de desconto em qualquer serviço"></textarea>
-        <p class="dica">Seja específica. Evite "condições especiais".</p></div>
+      <div class="campo"><label for="beneficio">Benefício exclusivo para alunas SlimFit</label>
+        <textarea id="beneficio" maxlength="600" required aria-describedby="dicaBeneficio" placeholder="Ex.: 15% de desconto em qualquer serviço, só para alunas SlimFit"></textarea>
+        <p class="dica" id="dicaBeneficio">O benefício precisa ser <b>real e exclusivo</b>: uma vantagem que só as alunas SlimFit recebem, e não a mesma promoção que qualquer cliente já tem. É isso que fortalece a nossa comunidade. Benefícios genéricos (como "condições especiais") não entram na listagem.</p></div>
       <div class="campo"><span class="rot" id="rotAlc">Alcance</span>
         <div class="alc" role="radiogroup" aria-labelledby="rotAlc">
           <label><input type="radio" name="alcance" value="local"><span><b>Local</b>Vale só no seu negócio aqui da cidade</span></label>
