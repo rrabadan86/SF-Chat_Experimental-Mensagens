@@ -6072,9 +6072,12 @@ function scSetCookie(req, res, valor, maxAgeSec) {
   if (ehHttps(req)) partes.push('Secure');
   res.setHeader('Set-Cookie', partes.join('; '));
 }
-function scFmtQuando(iso) {
+function scFmtQuando(iso, comSegundos) {
   const d = new Date(iso);
-  return isNaN(d) ? '' : d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  if (isNaN(d)) return '';
+  const o = { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+  if (comSegundos) o.second = '2-digit';
+  return d.toLocaleString('pt-BR', o).replace(',', ' às');
 }
 
 function rotaSlimClubCadastro(req, res) {
@@ -6093,7 +6096,7 @@ function rotaSlimClubCadastro(req, res) {
   });
 }
 
-function rotaSlimClubPublico(req, res, rota) {
+function rotaSlimClubPublico(req, res, rota, urlOriginal) {
   const studio = scStudio();
   if (rota === '/slimclub' && req.method === 'GET') {
     const aluna = slimclub.alunaDaSessao(lerCookie(req, slimclub.COOKIE));
@@ -6116,6 +6119,30 @@ function rotaSlimClubPublico(req, res, rota) {
     });
   }
   if (rota === '/slimclub/sair') { scSetCookie(req, res, '', 0); res.writeHead(303, { Location: '/slimclub' }); return res.end(); }
+  // Carteira SlimClub: só a aluna ATIVA conectada gera. O QR leva o parceiro à
+  // conferência pública (/slimclub/v/<código>), que mostra o status de AGORA.
+  if (rota === '/slimclub/carteira' && req.method === 'GET') {
+    const aluna = slimclub.alunaDaSessao(lerCookie(req, slimclub.COOKIE));
+    if (!aluna) { res.writeHead(303, { Location: '/slimclub' }); return res.end(); }
+    const agora = Date.now();
+    const sync = slimclub.ultimaSincronizacaoEvo();
+    const link = scBaseUrl(req) + '/slimclub/v/' + slimclub.tokenVerificacao(aluna.telefone, agora);
+    return require('qrcode').toDataURL(link, { margin: 1, width: 360, errorCorrectionLevel: 'M' })
+      .catch((e) => { console.log('[slimclub] QR da carteira:', e.message); return ''; })
+      .then(qr => scHtml(res, 200, slimclubPaginas.paginaCarteira({
+        studio, nome: aluna.nome, telefone: fmtTel(aluna.telefone), qr,
+        geradaEm: scFmtQuando(agora, true),
+        verificadaEm: sync ? scFmtQuando(sync) : scFmtQuando(agora),
+        verificadaNoEvo: !!sync,
+      })));
+  }
+  const mv = /^\/slimclub\/v\/([A-Za-z0-9_-]+\.[a-f0-9]{32})\/?$/.exec(urlOriginal || '');
+  if (mv && req.method === 'GET') {
+    const r = slimclub.verificar(mv[1]);
+    return scHtml(res, 200, slimclubPaginas.paginaVerificacao({
+      studio, r, conferidoEm: scFmtQuando(Date.now(), true), geradaEm: r ? scFmtQuando(r.geradaEm, true) : '',
+    }));
+  }
   // Foto da aluna: a equipe (com acesso ao Slim Club) vê todas; a aluna conectada
   // só as dos negócios que estão na listagem.
   const mf = /^\/slimclub\/foto\/([a-f0-9]{16})$/.exec(rota);
@@ -6401,7 +6428,7 @@ const server = http.createServer((req, res) => {
   {
     const rotaSc = url.toLowerCase().replace(/\/+$/, '');
     if (rotaSc === '/slimclubcadastro') return rotaSlimClubCadastro(req, res);
-    if (rotaSc === '/slimclub' || rotaSc.startsWith('/slimclub/')) return rotaSlimClubPublico(req, res, rotaSc);
+    if (rotaSc === '/slimclub' || rotaSc.startsWith('/slimclub/')) return rotaSlimClubPublico(req, res, rotaSc, url);
   }
 
   // ── Exige login ──────────────────────────────────────────────────────────

@@ -313,6 +313,35 @@ function mensagemAprovado(r, link) {
   return t;
 }
 
+// ── Carteira SlimClub ───────────────────────────────────────────────────────
+// A aluna ativa gera a carteira em /slimclub/carteira. O QR leva o parceiro a
+// /slimclub/v/<código>, que mostra o status AGORA (ativa / ex-aluna) — um print
+// antigo de quem virou ex-aluna é desmascarado na hora. O código é assinado
+// (não dá para inventar um) e só carrega o telefone e a hora em que foi gerado.
+function tagExAluna() { try { return autoTagAlunas.ler().tagExAluna || '0. Ex Aluna'; } catch (_) { return '0. Ex Aluna'; } }
+function statusDoTel(tel, map) {
+  const ct = contatoDoTel(tel, map);
+  if (temTagAluna(ct)) return { status: 'ativa', contato: ct };
+  const ex = chaveTag(tagExAluna());
+  if (ct && (ct.tags || []).some(t => chaveTag(t) === ex)) return { status: 'ex-aluna', contato: ct };
+  return { status: 'inativa', contato: ct };
+}
+function tokenVerificacao(tel, geradaEm) {
+  const payload = b64url(JSON.stringify({ v: tel, g: geradaEm }));
+  return payload + '.' + assinar('carteira:' + payload).slice(0, 32); // 128 bits: QR mais simples de ler
+}
+function verificar(tok) {
+  const [payload, sig] = String(tok || '').split('.');
+  if (!payload || !/^[a-f0-9]{32}$/.test(sig || '')) return null;
+  const esperado = assinar('carteira:' + payload).slice(0, 32);
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(esperado))) return null;
+  let o; try { o = JSON.parse(Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')); } catch (_) { return null; }
+  if (!o || !o.v || !o.g) return null;
+  const st = statusDoTel(o.v);
+  return { status: st.status, nome: (st.contato && st.contato.nome) || '', telefone: o.v, geradaEm: o.g };
+}
+function ultimaSincronizacaoEvo() { try { return autoTagAlunas.ultimaSincronizacao() || ''; } catch (_) { return ''; } }
+
 // ── Limite de tentativas por IP (cadastro/login públicos) ───────────────────
 const _tentativas = new Map();
 function permitir(chave, max, janelaMs) {
@@ -329,6 +358,7 @@ module.exports = {
   COOKIE, SESSAO_DIAS, CATEGORIAS, MSG_APROVADO_PADRAO, COMPROVACAO, FOTO_MAX_BYTES,
   criar, obter, avaliar, marcarAviso, excluir, listarPainel, publicos, situacao,
   entrar, alunaDaSessao, fotoPath,
+  tokenVerificacao, verificar, ultimaSincronizacaoEvo,
   lerConfig, gravarConfig, mensagemAprovado,
   permitir, primeiroNome, fmtData, fmtDocumento, hojeSP, tagAluna,
   // expostos para testes

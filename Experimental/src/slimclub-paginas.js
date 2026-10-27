@@ -93,7 +93,52 @@ input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible,.al
 .emp .rodp{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:1px solid var(--linha);padding-top:10px;font-size:.84rem;color:var(--cinza)}
 .emp .rodp a{font-weight:600;text-decoration:none}
 .vazio{text-align:center;color:var(--cinza);padding:34px 16px;background:var(--card);border:1px dashed var(--linha);border-radius:16px}
-@media (prefers-reduced-motion:no-preference){.btn,.chip,.btn2{transition:background-color .15s,border-color .15s}}
+.btn-cart{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:.95rem;color:var(--teal-esc);background:var(--card);border:1.5px solid var(--teal);border-radius:12px;padding:11px 16px;text-decoration:none;margin:0 0 20px}
+.btn-cart svg{flex:0 0 auto}
+/* carteira */
+.cart{position:relative;overflow:hidden;color:#fff;border-radius:22px;padding:20px 20px 16px;max-width:440px;margin:0 auto;
+  background:radial-gradient(120% 90% at 100% 0%,#14908b 0%,rgba(20,144,139,0) 55%),linear-gradient(160deg,#0e6e6b 0%,#09504e 100%);
+  box-shadow:0 14px 30px -14px rgba(9,80,78,.55)}
+.cart::after{content:"";position:absolute;right:-60px;bottom:-60px;width:200px;height:200px;border-radius:50%;border:28px solid rgba(255,255,255,.05);pointer-events:none}
+.cart-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.cart-marca{font-weight:800;letter-spacing:.12em;font-size:.95rem}
+.cart-tipo{font-size:.66rem;font-weight:700;letter-spacing:.12em;opacity:.75;text-transform:uppercase}
+.cart-studio{font-size:.82rem;opacity:.8;margin-top:2px}
+.cart-nome{font-size:1.45rem;font-weight:700;line-height:1.2;margin:22px 0 4px;text-wrap:balance}
+.cart-tel{font-size:1.02rem;opacity:.9;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.cart-meio{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;margin-top:20px}
+.cart-rot{font-size:.66rem;font-weight:700;letter-spacing:.12em;opacity:.75;text-transform:uppercase;margin-bottom:6px}
+.cart-status{display:inline-flex;align-items:center;gap:7px;background:#d6f5df;color:#0b5d2a;font-weight:800;letter-spacing:.06em;border-radius:999px;padding:6px 13px;font-size:.92rem}
+.cart-status i{width:9px;height:9px;border-radius:50%;background:#1a9e48;display:block}
+.cart-qr{background:#fff;border-radius:12px;padding:6px;width:112px;height:112px;flex:0 0 auto}
+.cart-qr img{width:100%;height:100%;display:block}
+.cart-datas{margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,.18);font-size:.8rem;line-height:1.55;font-variant-numeric:tabular-nums}
+.cart-datas b{font-weight:600}
+.cart-agora{display:flex;align-items:center;gap:8px;margin-top:6px;font-weight:700}
+.cart-agora i,.ver-agora i{width:8px;height:8px;border-radius:50%;background:#7ef0a8;display:block;flex:0 0 auto}
+.cart-dica{text-align:center;font-size:.86rem;color:var(--cinza);margin:16px auto 0;max-width:440px}
+/* conferência do parceiro */
+.ver{max-width:440px;margin:0 auto;text-align:center}
+.ver-sel{width:84px;height:84px;border-radius:50%;display:grid;place-items:center;margin:4px auto 14px;font-size:2.4rem;font-weight:800}
+.ver.ok .ver-sel{background:var(--ok-soft);color:var(--ok)}
+.ver.no .ver-sel{background:var(--erro-soft);color:var(--erro)}
+.ver-st{font-size:1.7rem;font-weight:800;letter-spacing:.04em;margin:0}
+.ver.ok .ver-st{color:var(--ok)}
+.ver.no .ver-st{color:var(--erro)}
+.ver-nome{font-size:1.15rem;font-weight:600;margin:6px 0 14px}
+.ver-txt{color:var(--cinza);margin:0 0 18px}
+.ver-dl{text-align:left;background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:12px 14px;margin:0;font-size:.9rem;font-variant-numeric:tabular-nums}
+.ver-dl div{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--linha)}
+.ver-dl div:first-child{border-top:0}
+.ver-dl dt{color:var(--cinza)}
+.ver-dl dd{margin:0;font-weight:600;text-align:right}
+.ver-agora{display:inline-flex;align-items:center;gap:8px;margin-top:14px;font-size:.9rem;color:var(--cinza);font-variant-numeric:tabular-nums}
+.ver-agora i{background:var(--ok)}
+@media (prefers-reduced-motion:no-preference){
+  .btn,.chip,.btn2{transition:background-color .15s,border-color .15s}
+  .cart-agora i,.ver-agora i{animation:pulso 1.6s ease-in-out infinite}
+  @keyframes pulso{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
+}
 `;
 
 function casca({ titulo, studio, dir = '', corpo, largo = false, script = '' }) {
@@ -103,7 +148,9 @@ function casca({ titulo, studio, dir = '', corpo, largo = false, script = '' }) 
 <title>${esc(titulo)}</title>
 <link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<!-- fonte sem bloquear: se o Google Fonts demorar (rede ruim), os scripts e o relógio não esperam -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
 <style>${CSS}</style></head><body>
 <header class="topo"><div class="in">
   <img src="${LOGO}" alt="SlimFit">
@@ -295,7 +342,8 @@ function paginaListagem({ studio, aluna, empresas, fmtData, primeiroNome, compro
   const corpo = `
   <p class="eyebrow">Exclusivo para alunas</p>
   <h1>Olá, ${esc(primeiroNome(aluna.nome) || 'aluna')}!</h1>
-  <p class="lead">Benefícios oferecidos por alunas do ${esc(studio)}. Para usar, mostre que é aluna do jeito que cada negócio pede.</p>
+  <p class="lead">Benefícios oferecidos por alunas do ${esc(studio)}. Para usar, apresente a sua carteira SlimClub no negócio.</p>
+  <a class="btn-cart" href="/slimclub/carteira"><svg width="20" height="16" viewBox="0 0 20 16" fill="none" aria-hidden="true"><rect x="1" y="1" width="18" height="14" rx="3" stroke="currentColor" stroke-width="2"/><path d="M5 6h6M5 10h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Minha carteira SlimClub</a>
   ${empresas.length ? `<div class="busca">
     <input type="text" id="q" placeholder="Buscar por negócio, aluna ou benefício" aria-label="Buscar">
     ${chips}</div>
@@ -320,4 +368,65 @@ function paginaListagem({ studio, aluna, empresas, fmtData, primeiroNome, compro
   return casca({ titulo: 'Slim Club', studio, dir, corpo, largo: true, script });
 }
 
-module.exports = { paginaCadastro, paginaEntrar, paginaListagem };
+// Relógio ao vivo (horário de Brasília). Um print fica com a hora parada.
+const RELOGIO = `<script>
+(function(){
+  var els=[].slice.call(document.querySelectorAll('[data-agora]'));
+  function t(){ var s=new Date().toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}).replace(',',' às');
+    els.forEach(function(e){ e.textContent=s; }); }
+  t(); setInterval(t,1000);
+})();
+</script>`;
+
+// ── /slimclub/carteira (aluna ativa conectada) ──────────────────────────────
+function paginaCarteira({ studio, nome, telefone, geradaEm, verificadaEm, verificadaNoEvo, qr }) {
+  const corpo = `
+  <p class="eyebrow">Exclusivo para alunas</p>
+  <h1>Sua carteira SlimClub</h1>
+  <p class="lead">Mostre esta tela no negócio parceiro para usar o benefício.</p>
+  <section class="cart" aria-label="Carteira SlimClub">
+    <div class="cart-top"><span class="cart-marca">SLIM CLUB</span><span class="cart-tipo">Carteira de aluna</span></div>
+    <div class="cart-studio">${esc(studio)}</div>
+    <div class="cart-nome">${esc(nome)}</div>
+    <div class="cart-tel">${esc(telefone)}</div>
+    <div class="cart-meio">
+      <div><div class="cart-rot">Status</div><span class="cart-status"><i></i>ATIVA</span></div>
+      ${qr ? `<div class="cart-qr"><img src="${qr}" alt="QR code para o parceiro conferir o status"></div>` : ''}
+    </div>
+    <div class="cart-datas">
+      <div>Gerada em <b>${esc(geradaEm)}</b></div>
+      <div>${verificadaNoEvo ? 'Status verificado no EVO em' : 'Status verificado em'} <b>${esc(verificadaEm)}</b></div>
+      <div class="cart-agora"><i></i><span>Agora: <span data-agora>${esc(geradaEm)}</span></span></div>
+    </div>
+  </section>
+  <p class="cart-dica">${qr ? 'Parceiro: aponte a câmera do celular para o QR code para conferir o status na hora.' : 'Parceiro: confira se o relógio da carteira está andando.'}</p>
+  <p class="rodape"><a href="/slimclub">Voltar aos benefícios</a></p>`;
+  return casca({ titulo: 'Carteira · Slim Club', studio, dir: '<a href="/slimclub/sair">Sair</a>', corpo, script: RELOGIO });
+}
+
+// ── /slimclub/v/<código> (o parceiro escaneou o QR) ─────────────────────────
+function paginaVerificacao({ studio, r, conferidoEm, geradaEm }) {
+  const V = {
+    'ativa': ['ok', '✓', 'ATIVA', 'Aluna ativa do Studio. Pode aplicar o benefício do Slim Club.'],
+    'ex-aluna': ['no', '✕', 'INATIVA', 'Não é mais aluna do Studio (ex-aluna). O benefício do Slim Club não vale.'],
+    'inativa': ['no', '✕', 'INATIVA', 'Não consta como aluna ativa do Studio. O benefício do Slim Club não vale.'],
+  };
+  const [cls, ic, st, txt] = r ? V[r.status] : ['no', '✕', 'CARTEIRA INVÁLIDA', 'Este QR code não é uma carteira SlimClub válida.'];
+  const corpo = `
+  <div class="ver ${cls}">
+    <p class="eyebrow">Conferência da carteira SlimClub</p>
+    <div class="ver-sel" aria-hidden="true">${ic}</div>
+    <p class="ver-st">${st}</p>
+    ${r && r.nome ? `<p class="ver-nome">${esc(r.nome)}</p>` : ''}
+    <p class="ver-txt">${txt}</p>
+    <dl class="ver-dl">
+      <div><dt>Studio</dt><dd>${esc(studio)}</dd></div>
+      <div><dt>Status conferido em</dt><dd>${esc(conferidoEm)}</dd></div>
+      ${r ? `<div><dt>Carteira gerada em</dt><dd>${esc(geradaEm)}</dd></div>` : ''}
+    </dl>
+    <div class="ver-agora"><i></i><span>Agora: <span data-agora>${esc(conferidoEm)}</span></span></div>
+  </div>`;
+  return casca({ titulo: 'Conferência · Slim Club', studio, corpo, script: RELOGIO });
+}
+
+module.exports = { paginaCadastro, paginaEntrar, paginaListagem, paginaCarteira, paginaVerificacao };
