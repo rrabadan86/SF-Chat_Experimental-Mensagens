@@ -1,5 +1,16 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
 
+// Login do EVO: vale SEMPRE o que está no .env (é o que o painel grava em
+// "Credenciais"). O dotenv não sobrescreve variável que já existe no ambiente, e
+// o "Reiniciar robô" do painel faz `pm2 restart --update-env` — que repassava ao
+// robô a senha ANTIGA que o painel tinha carregado no boot dele. Resultado: senha
+// trocada no EVO e o robô insistindo na velha (até estourar "excedeu tentativas").
+try {
+  const envArquivo = require('dotenv').parse(
+    require('fs').readFileSync(require('path').resolve(__dirname, '..', '.env')));
+  for (const k of ['EVO_EMAIL', 'EVO_PASSWORD']) if (envArquivo[k]) process.env[k] = envArquivo[k];
+} catch (_) { /* sem .env legível → fica o que veio do ambiente */ }
+
 // Cofre central de textos editáveis (padrão + edições do painel em data/mensagens.json).
 const mensagens = require('./mensagens');
 

@@ -89,17 +89,47 @@ async function pareceEmail(page) {
   } catch (_) { return false; }
 }
 
-// Digita o código no campo e clica em ENTRAR/CONFIRMAR/VALIDAR/ACESSAR.
+// Tela "Código de acesso" (o EVO trava após muitas tentativas): além do código,
+// ela pede a "Senha atual" de novo. Sem a senha o ENTRAR fica desabilitado e o
+// login nunca sai. Preenche a senha que estiver VAZIA na mesma caixa do código.
+async function preencherSenhaDaCaixa(page, sel) {
+  const senha = (require('./config').evo || {}).password || '';
+  if (!senha) return false;
+  const achou = await page.evaluate((s) => {
+    const cod = document.querySelector(s); if (!cod) return false;
+    const caixa = cod.closest('mat-dialog-container, [role="dialog"], .cdk-overlay-pane, form') || document;
+    for (const i of caixa.querySelectorAll('input[type="password"]')) {
+      const r = i.getBoundingClientRect();
+      if (r.width && r.height && !i.value) { i.setAttribute('data-robo-senha', '1'); return true; }
+    }
+    return false;
+  }, sel).catch(() => false);
+  if (!achou) return false;
+  await page.click('[data-robo-senha="1"]', { clickCount: 3 });
+  await page.type('[data-robo-senha="1"]', senha, { delay: 60 });
+  console.log('   🔑 Tela "excedeu tentativas": senha atual preenchida junto com o código.');
+  return true;
+}
+
+// Digita o código no campo e clica em ENTRAR/CONFIRMAR/VALIDAR/ACESSAR — de
+// preferência o botão da MESMA caixa do código: com a caixa aberta por cima do
+// login, o primeiro "ENTRAR" da página é o do formulário de trás.
 async function digitarEConfirmar(page, sel, codigo) {
+  await preencherSenhaDaCaixa(page, sel).catch(() => false);
   await page.click(sel, { clickCount: 3 });
   await page.type(sel, codigo, { delay: 60 });
-  await page.evaluate(() => {
-    for (const b of document.querySelectorAll('button')) {
+  await page.evaluate((s) => {
+    const casa = (b) => {
       const t = (b.textContent || '').trim().toUpperCase();
-      if (t.includes('ENTRAR') || t.includes('CONFIRMAR') || t.includes('VALIDAR') || t.includes('ACESSAR')) { b.click(); return; }
-    }
-    const p = document.querySelector('button[type="submit"], button.primary'); if (p) p.click();
-  });
+      return !b.disabled && (t.includes('ENTRAR') || t.includes('CONFIRMAR') || t.includes('VALIDAR') || t.includes('ACESSAR'));
+    };
+    const cod = document.querySelector(s);
+    const caixa = cod && cod.closest('mat-dialog-container, [role="dialog"], .cdk-overlay-pane');
+    const alvo = (caixa && [...caixa.querySelectorAll('button')].find(casa))
+      || [...document.querySelectorAll('button')].find(casa)
+      || document.querySelector('button[type="submit"], button.primary');
+    if (alvo) alvo.click();
+  }, sel);
   await espera(1800);
 }
 

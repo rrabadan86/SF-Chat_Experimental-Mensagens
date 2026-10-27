@@ -198,6 +198,10 @@ function gravarEvoCredenciais(email, senha) {
   if (email) ok = gravarEnvVar('EVO_EMAIL', email, EXPERIMENTAL_ENV_FILE) && ok;
   senha = String(senha || '').trim();
   if (senha) ok = gravarEnvVar('EVO_PASSWORD', senha, EXPERIMENTAL_ENV_FILE) && ok; // em branco: mantém a atual
+  // Atualiza também o ambiente DESTE processo: o "Reiniciar robô" usa
+  // `pm2 restart --update-env`, que copia este ambiente para o robô.
+  if (email) process.env.EVO_EMAIL = email;
+  if (senha) process.env.EVO_PASSWORD = senha;
   return { ok };
 }
 
