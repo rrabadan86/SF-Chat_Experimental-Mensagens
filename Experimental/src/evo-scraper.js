@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const config = require('./config');
-const { preencher2FA } = require('./evo-totp'); // MFA do EVO (autenticador/TOTP)
+const { preencher2FA, lerAvisos } = require('./evo-totp'); // MFA do EVO (autenticador/TOTP)
 
 // Ativa o plugin stealth para evitar detecção Cloudflare
 puppeteer.use(StealthPlugin());
@@ -238,6 +238,12 @@ class EvoScraper {
     }
 
     console.log('⏳ Aguardando login...');
+
+    // Aviso do EVO logo após o ENTRAR (ex.: "usuário ou senha inválidos") — some
+    // em segundos, então é lido agora para ir ao log.
+    await this.sleep(2500);
+    const avisoLogin = await lerAvisos(this.page);
+    if (avisoLogin) console.log(`   💬 [login] aviso do EVO: "${avisoLogin}"`);
 
     // MFA do EVO (a partir de 30/10/2026): se a tela do autenticador (2FA)
     // aparecer, digita o código gerado do EVO_TOTP_SECRET e confirma. No-op se

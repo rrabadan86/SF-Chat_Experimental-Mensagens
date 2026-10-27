@@ -89,6 +89,19 @@ async function pareceEmail(page) {
   } catch (_) { return false; }
 }
 
+// Avisos que o EVO mostra por poucos segundos (snackbar/toast/erro de campo) —
+// ex.: "código inválido", "usuário ou senha inválidos". Somem antes do timeout
+// de 30s, então são lidos logo após cada clique para irem ao log.
+async function lerAvisos(page) {
+  return page.evaluate(() => {
+    const sels = 'mat-snack-bar-container, .mat-mdc-snack-bar-container, simple-snack-bar, [role="alert"], '
+      + '.toast, .toast-message, mat-error, .mat-error, .mat-mdc-form-field-error';
+    return [...document.querySelectorAll(sels)]
+      .map((e) => (e.innerText || '').replace(/\s+/g, ' ').trim()).filter(Boolean)
+      .join(' | ').slice(0, 300);
+  }).catch(() => '');
+}
+
 // Tela "Código de acesso" (o EVO trava após muitas tentativas): além do código,
 // ela pede a "Senha atual" de novo. Sem a senha o ENTRAR fica desabilitado e o
 // login nunca sai. Preenche a senha que estiver VAZIA na mesma caixa do código.
@@ -130,7 +143,10 @@ async function digitarEConfirmar(page, sel, codigo) {
       || document.querySelector('button[type="submit"], button.primary');
     if (alvo) alvo.click();
   }, sel);
-  await espera(1800);
+  await espera(2500);
+  const aviso = await lerAvisos(page);
+  const aberta = await page.$(sel).then((el) => el && el.boundingBox()).catch(() => null);
+  console.log(`   💬 [2FA] após enviar: ${aviso ? 'aviso do EVO: "' + aviso + '"' : 'sem aviso'} · caixa do código ${aberta ? 'AINDA ABERTA' : 'fechou'}`);
 }
 
 // ── Handshake com o painel (arquivos em data/) ──────────────────────────────
@@ -240,4 +256,4 @@ async function preencher2FA(page, { timeoutMs = 8000, permitirPainel, esperaPain
   return false;
 }
 
-module.exports = { gerarTOTP, preencher2FA, PEDIDO_FILE, CODIGO_FILE, limparHandshake };
+module.exports = { gerarTOTP, preencher2FA, lerAvisos, PEDIDO_FILE, CODIGO_FILE, limparHandshake };
