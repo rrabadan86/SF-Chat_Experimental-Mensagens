@@ -3,6 +3,7 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const config = require('./config');
 const { fecharPopupNovaTela } = require('./evo-popup');
+const { coletarTodasPaginas } = require('./evo-paginas');
 puppeteer.use(StealthPlugin());
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -113,11 +114,12 @@ async function buscarContratosDoPeriodo(inicio, fim) {
 
   // Intercepta a lista da segmentação (obter-clientes) — traz nome + dataVencimento.
   let clientesIntercept = [];
+  const estadoSeg = { seq: 0, lista: null }; // respostas da lista (para ler TODAS as páginas)
   page.on('response', async (res) => {
     try {
       if (res.url().includes('obter-clientes') && res.status() === 200) {
         const data = JSON.parse(await res.text());
-        if (data && Array.isArray(data.retorno) && data.retorno.length > 0) clientesIntercept = data.retorno;
+        if (data && Array.isArray(data.retorno) && data.retorno.length > 0) { clientesIntercept = data.retorno; estadoSeg.lista = data.retorno; estadoSeg.seq++; }
       }
     } catch (_) { /* corpo não-JSON */ }
   });
@@ -317,12 +319,15 @@ async function buscarContratosDoPeriodo(inicio, fim) {
     //    (o filtro de data do EVO não é 100% confiável). Então conferimos AQUI:
     //    só entram os que vencem DENTRO do intervalo do mês-alvo [inicio, fim].
     await sleep(6000);
+    // A segmentação pagina de 20 em 20: junta todas as páginas (antes só a 1ª).
+    estadoSeg.lista = clientesIntercept;
+    const pag = await coletarTodasPaginas(page, { estado: estadoSeg, log: (m) => console.log('   · ' + m) });
     const ini0 = new Date(inicio); ini0.setHours(0, 0, 0, 0);
     const fim0 = new Date(fim); fim0.setHours(0, 0, 0, 0);
     const vistos = new Set();
     const alunas = [];
     let foraDoMes = 0, semData = 0;
-    for (const c of clientesIntercept) {
+    for (const c of pag.linhas) {
       const id = String(c.idCliente ?? c.id ?? c.nome);
       if (vistos.has(id)) continue;
       vistos.add(id);
