@@ -1652,6 +1652,34 @@ function marcarCobrancaEnviada(idCliente: any, nome: string, tipo: string) {
     fs.writeFileSync(ENVIADOS_COBRANCA, JSON.stringify(o, null, 2), "utf8");
   } catch {}
 }
+// Registra a cobrança no Log do painel (💬 WhatsApp → Log). O robô grava o dele
+// em atividade.json; a SoFIA só ACRESCENTA linhas num arquivo próprio (sem
+// disputar o arquivo do robô) e o painel junta os dois.
+const ATIVIDADE_SOFIA = COBRANCA_OUTBOX.replace(/cobranca-outbox\.jsonl.*$/, "atividade-sofia.jsonl");
+const CONTEXTO_COBRANCA: Record<string, string> = {
+  recorrente: "Cobrança — recorrente", boleto: "Cobrança — boleto", saldo: "Cobrança — saldo devedor", teste: "Cobrança — teste",
+};
+function registrarAtividadeCobranca(ent: any, telefone: string, texto: string, ok: boolean, erro?: string) {
+  try {
+    const agora = new Date();
+    const linha = {
+      data: agora.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }),
+      ts: agora.toISOString(),
+      quando: agora.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }),
+      contexto: CONTEXTO_COBRANCA[String(ent?.tipo || "")] || "Cobrança",
+      destino: telefone, grupo: false, midia: false, ok,
+      erro: erro ? String(erro).slice(0, 160) : "",
+      preview: texto.replace(/\s+/g, " ").trim().slice(0, 80),
+      texto: texto.trim().slice(0, 2000),
+    };
+    fs.appendFileSync(ATIVIDADE_SOFIA, JSON.stringify(linha) + "\n", "utf8");
+    // não deixa o arquivo crescer para sempre: guarda as últimas ~1000 linhas
+    if (fs.statSync(ATIVIDADE_SOFIA).size > 1_500_000) {
+      const ult = fs.readFileSync(ATIVIDADE_SOFIA, "utf8").split("\n").filter(Boolean).slice(-1000);
+      fs.writeFileSync(ATIVIDADE_SOFIA, ult.join("\n") + "\n", "utf8");
+    }
+  } catch {}
+}
 let processandoCobranca = false;
 async function processarCobranca() {
   if (processandoCobranca || !pronta) return;
@@ -1679,6 +1707,7 @@ async function processarCobranca() {
         await enviar(alvo, texto);
         registrarInbox(chaveInbox, alvo, String(ent?.nome || ""), "sofia", texto); // cai na conversa da aluna
         marcarCobrancaEnviada(ent?.idCliente, String(ent?.nome || ""), String(ent?.tipo || "")); // só marca "avisada" após confirmar
+        registrarAtividadeCobranca(ent, telefone, texto, true);
         log(`cobrança enviada para ${ent?.nome || telefone}.`);
         await new Promise((r) => setTimeout(r, 10000 + Math.floor(Math.random() * 3000))); // 10-13s entre cobranças
       } catch (e: any) {
@@ -1687,6 +1716,7 @@ async function processarCobranca() {
           try { fs.appendFileSync(COBRANCA_OUTBOX, JSON.stringify({ ...ent, tentativas: tentativas + 1 }) + "\n", "utf8"); } catch {}
         } else {
           log(`cobrança p/ ${ent?.nome || telefone} descartada após ${COBRANCA_MAX_TENTATIVAS} tentativas.`);
+          registrarAtividadeCobranca(ent, telefone, texto, false, e?.message || String(e));
         }
       }
     });
