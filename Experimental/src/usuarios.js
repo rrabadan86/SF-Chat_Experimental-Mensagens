@@ -20,7 +20,8 @@ const ARQUIVO = path.join(DATA_DIR, 'usuarios.json');
 // Telas que dá para liberar por usuário. A Sofia é dividida em três (Conversas,
 // Configuração e Contatos) para dar acesso fino. "Perfis" é só do admin.
 const TELAS = [
-  { key: 'ind', rot: '📈 Formulário' },
+  { key: 'ind', rot: '📈 Formulário (agendamento)' },
+  { key: 'formularios', rot: '📝 Formulários de campanha' },
   { key: 'msg_config', rot: '⚙️ Configuração', grupo: '💬 WhatsApp' },
   { key: 'msg_express', rot: '📅 Express e Agendamentos', grupo: '💬 WhatsApp' }, // tela unificada (cadastro no EVO + agendar mensagem)
   { key: 'msg_hoje', rot: '📊 Log', grupo: '💬 WhatsApp' },

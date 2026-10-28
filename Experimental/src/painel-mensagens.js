@@ -25,6 +25,8 @@ const atividade = require('./atividade');
 const teste = require('./teste-envio');
 const slimclub = require('./slimclub');               // Slim Club: benefícios de alunas para alunas
 const slimclubPaginas = require('./slimclub-paginas'); // páginas públicas do Slim Club (cadastro e listagem)
+const formularios = require('./formularios');               // formulários de campanha (ex.: lista da Black Friday)
+const formulariosPaginas = require('./formularios-paginas'); // página pública /formulario/<endereço>
 const igcfg = require('./instagram-config');
 const igApi = require('./instagram-api'); // integração OFICIAL (Graph API): webhook comentário/DM → resposta
 const igcookies = require('./instagram-cookies');
@@ -393,6 +395,7 @@ function telaDaUrl(u) {
   if (u === '/saude') return 'saude'; // liberável por usuário (checkbox em Perfis) — a checagem genérica cobre
   if (u === '/grade' || u.startsWith('/grade/')) return 'grade'; // idem (checkbox em Perfis)
   if (u === '/clube' || u.startsWith('/clube/')) return 'slimclub'; // validação do Slim Club (checkbox em Perfis)
+  if (u === '/formularios' || u.startsWith('/formularios/')) return 'formularios'; // formulários de campanha (checkbox em Perfis)
   return 'msg';
 }
 // Sofia é dividida em três sub-abas com permissão própria.
@@ -447,6 +450,7 @@ function primeiraTela(sess) {
   if (sess.telas.includes('ig')) return '/instagram';
   if (temSofia(sess)) return sofiaHref(sess);
   if (sess.telas.includes('slimclub')) return '/clube';
+  if (sess.telas.includes('formularios')) return '/formularios';
   return '';
 }
 
@@ -843,7 +847,8 @@ function navTabs(ativo) {
   // Ordem no HTML mantém a SoFIA por ÚLTIMO: no mobile ela cai sozinha na 2ª
   // linha ocupando a largura toda (destaque). No DESKTOP, o CSS (order) exibe na
   // ordem pedida: SoFIA → WhatsApp → Instagram → Formulário → Perfis.
-  let html = item('ind', '/indicadores', '📈', 'Formulário');
+  // Formulário = Agendamento (indicadores) + Campanhas (formulários editáveis), cada um com permissão própria.
+  let html = pode('ind') ? item('ind', '/indicadores', '📈', 'Formulário') : pode('formularios') ? cel('/formularios', ativo === 'ind', '📈', 'Formulário', 'ind') : '';
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp', 'msg');
   html += item('ig', '/instagram', '📸', 'Instagram');
   if (sess.admin) html += cel('/perfis', ativo === 'perfis', '👤', 'Perfis', 'perfis');
@@ -2320,6 +2325,7 @@ function paginaIndicadores(dias, aviso) {
   const funilAgendOrig = funilPorOrigem('agendamentos');
 
   const corpo = `<div class="wrap">
+    ${subnavFormulario('agendamento')}
     ${aviso ? `<div class="aviso err">${esc(aviso)}</div>` : ''}
     <div class="segs">${segs}</div>
     <div class="stats">
@@ -6554,6 +6560,426 @@ function paginaSlimClub(view, base, aviso) {
   return chrome({ tab: 'Slim Club', h1: 'Slim Club', p: 'Validação dos negócios das alunas.' }, 'slimclub', corpo);
 }
 
+// ── Formulários de campanha (Formulário → Campanhas) ─────────────────────────
+// A recepção monta o formulário (perguntas, capa, tag) e divulga o link
+// /formulario/<endereço>. As respostas ficam aqui, com planilha para baixar.
+function subnavFormulario(view) {
+  const sess = _navSess || { admin: true, telas: [] };
+  const pode = k => sess.admin || (sess.telas || []).includes(k);
+  if (!(pode('ind') && pode('formularios'))) return '';
+  return `<div class="subtabs"><a href="/indicadores"${view === 'agendamento' ? ' class="on"' : ''}>Agendamento</a><a href="/formularios"${view === 'campanhas' ? ' class="on"' : ''}>Campanhas</a></div>`;
+}
+function fmLink(base, f) { return base + '/formulario/' + f.slug; }
+const FM_CSS = `<style>
+  .fm-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 4px}
+  .fm-top h1{font-size:var(--fs-h1);margin:0}
+  .fm-top .acts{margin:0 0 0 auto}
+  .fm-card{display:flex;flex-direction:column;gap:8px}
+  .fm-card h2{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .fm-nums{display:flex;gap:16px;flex-wrap:wrap;font-size:var(--fs-sm);color:var(--cinza)}
+  .fm-nums b{color:var(--tinta);font-variant-numeric:tabular-nums}
+  .fm-link{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--bg);border:1px solid var(--linha);border-radius:10px;padding:7px 10px;font-size:var(--fs-sm)}
+  .fm-link code{overflow-wrap:anywhere;flex:1 1 220px}
+  .fm-link button,.fm-btns button,.fm-btns a{padding:6px 13px;font-size:var(--fs-sm)}
+  .fm-btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .fm-btns a{display:inline-block;border-radius:999px;text-decoration:none;font-weight:700}
+  .fm-btns a.save{color:#fff}
+  .fm-btns a.reset{color:var(--cinza)}
+  .fm-del{color:var(--erro)!important;border-color:var(--erro-bd)!important}
+  .st-aberto{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-bd)}
+  .st-pausado{background:#eee;color:#6e6e73}
+  .st-encerrado{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-bd)}
+  .fm-vazio{text-align:center;padding:28px 18px}
+  .fm-vazio p{max-width:52ch;margin:6px auto 14px;color:var(--cinza)}
+  .fm-q{border:1px solid var(--linha);border-radius:12px;padding:12px;margin:10px 0;background:var(--bg)}
+  .fm-q-h{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .fm-q-h .n{font-weight:800;color:var(--teal-esc);font-size:var(--fs-sm);min-width:22px}
+  .fm-q-h select{width:auto;flex:0 1 210px}
+  .fm-q-h .sp{flex:1}
+  .fm-q-h button{padding:5px 10px;font-size:var(--fs-sm);background:#fff;color:var(--cinza);border:1px solid #dcdcdc}
+  .fm-q-h button:disabled{opacity:.35;cursor:default}
+  .fm-q label{margin:10px 0 4px}
+  .fm-fixos{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 2px}
+  .fm-fixo{border:1px dashed var(--linha);border-radius:999px;padding:4px 12px;font-size:var(--fs-sm);color:var(--cinza);background:#fff}
+  .fm-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+  @media(max-width:600px){.fm-grid{grid-template-columns:1fr}}
+  .fm-slug{display:flex;align-items:stretch}
+  .fm-slug span{display:flex;align-items:center;padding:0 10px;border:1px solid #dcdcdc;border-right:0;border-radius:10px 0 0 10px;background:var(--bg);color:var(--cinza);font-size:var(--fs-sm);white-space:nowrap}
+  .fm-slug input{border-radius:0 10px 10px 0!important}
+  .fm-capa{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .fm-capa img{max-width:220px;max-height:120px;border-radius:10px;border:1px solid var(--linha);object-fit:cover}
+  .fm-barra{position:sticky;bottom:0;z-index:20;background:var(--bg);padding:10px 0 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--linha)}
+  .fm-barra .msg{font-size:var(--fs-sm);color:var(--cinza)}
+  .fm-tabw{overflow-x:auto;border:1px solid var(--linha);border-radius:12px;background:#fff}
+  .fm-tab{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
+  .fm-tab th,.fm-tab td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--linha-soft);vertical-align:top}
+  .fm-tab th{color:var(--cinza);font-weight:700;white-space:nowrap;background:var(--bg)}
+  .fm-tab td{max-width:260px;overflow-wrap:anywhere}
+  .fm-tab td.nw{white-space:nowrap;font-variant-numeric:tabular-nums}
+  .fm-tab td.nm{min-width:150px;font-weight:600}
+  .fm-tab tr:last-child td{border-bottom:0}
+  .fm-tab a{color:var(--teal-esc);font-weight:600}
+  .fm-tab .x{background:none;border:0;color:var(--faint);padding:2px 6px;font-size:1rem}
+  .fm-tab .x:hover{color:var(--erro)}
+  .fm-busca{max-width:320px}
+</style>`;
+const FM_JS_COPIAR = `function fmCopiar(t,b){ var ok=function(){ var o=b.textContent; b.textContent='Copiado!'; setTimeout(function(){ b.textContent=o; },1500); }; if(navigator.clipboard) navigator.clipboard.writeText(t).then(ok,function(){ prompt('Copie o link:',t); }); else prompt('Copie o link:',t); }`;
+
+function paginaFormularios(base, aviso) {
+  const lista = formularios.listar();
+  const ST = { aberto: 'Recebendo respostas', pausado: 'Pausado', encerrado: 'Encerrado (passou da data)' };
+  const cards = lista.map(f => {
+    const link = fmLink(base, f);
+    const ult = formularios.respostas(f.id)[0];
+    return `<div class="card fm-card">
+      <h2>${esc(f.titulo)} <span class="pill st-${f.situacao}">${ST[f.situacao]}</span></h2>
+      <div class="fm-nums"><span><b>${f.total}</b> resposta${f.total === 1 ? '' : 's'}</span>${ult ? `<span>última: ${esc(formularios.fmtQuando(ult.atualizadoEm || ult.em))}</span>` : ''}${f.tag ? `<span>tag nos contatos: <b>${esc(f.tag)}</b></span>` : ''}${f.encerraEm ? `<span>encerra em ${esc(fmtData(f.encerraEm))}</span>` : ''}</div>
+      <div class="fm-link"><code>${esc(link)}</code><button type="button" class="reset" onclick="fmCopiar('${esc(link)}',this)">Copiar link</button></div>
+      <div class="fm-btns">
+        <a class="save" href="/formularios/respostas?id=${f.id}">Ver respostas</a>
+        <a class="reset" href="/formularios/editar?id=${f.id}">Editar</a>
+        <a class="reset" href="${esc(link)}" target="_blank" rel="noopener">Abrir página</a>
+        <button type="button" class="reset" onclick="fmAcao('${f.id}','${f.ativo ? 'pausar' : 'abrir'}')">${f.ativo ? 'Pausar' : 'Abrir para respostas'}</button>
+        <button type="button" class="reset" onclick="fmAcao('${f.id}','duplicar')">Duplicar</button>
+        <button type="button" class="reset fm-del" onclick="fmAcao('${f.id}','excluir',${f.total})">Excluir</button>
+      </div>
+    </div>`;
+  }).join('');
+  const vazio = `<div class="card fm-vazio"><h2>Nenhum formulário ainda</h2>
+    <p>Monte um formulário com as perguntas que quiser, divulgue o link no Instagram ou no WhatsApp e acompanhe aqui quem se interessou. Comece pelo modelo da Black Friday e ajuste o que precisar.</p>
+    <div class="fm-btns" style="justify-content:center"><a class="save" href="/formularios/editar?modelo=blackfriday">Usar modelo Black Friday</a><a class="reset" href="/formularios/editar">Começar em branco</a></div></div>`;
+  const corpo = `<div class="wrap">${FM_CSS}
+    ${subnavFormulario('campanhas')}
+    <div class="fm-top"><h1>Formulários de campanha</h1>${lista.length ? `<div class="acts"><a class="reset" style="padding:9px 16px;border-radius:999px;text-decoration:none;font-weight:700;color:var(--cinza)" href="/formularios/editar?modelo=blackfriday">Modelo Black Friday</a><button type="button" class="save" onclick="location.href='/formularios/editar'">+ Novo formulário</button></div>` : ''}</div>
+    <p class="quando">Listas de interessadas para promoções e eventos. Quem responde com o mesmo WhatsApp de novo só atualiza a resposta, sem duplicar.</p>
+    ${aviso ? `<div class="aviso">${esc(aviso)}</div>` : ''}
+    ${cards || vazio}
+  </div>
+  <script>
+  ${FM_JS_COPIAR}
+  function fmAcao(id, acao, total){
+    if(acao==='excluir' && !confirm('Excluir este formulário'+(total?' e as '+total+' respostas':'')+'? O link para de funcionar. Não dá para desfazer.\\n\\nDica: se só quer parar de receber respostas, use "Pausar".')) return;
+    fetch('/formularios/acao',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,acao:acao})})
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(!j||!j.ok){ alert('❌ '+((j&&j.erro)||'Não consegui concluir.')); return; } if(j.ir) location.href=j.ir; else location.reload(); })
+      .catch(function(){ alert('❌ Erro de rede.'); });
+  }
+  </script>`;
+  return chrome({ tab: 'Formulários de campanha' }, 'ind', corpo);
+}
+
+function paginaFormularioEditar(base, f, modelo) {
+  const novo = !f;
+  const d = f || (modelo ? Object.assign({ ativo: true }, formularios.MODELO_BLACK_FRIDAY) : { titulo: '', descricao: '', campos: [], botao: 'Enviar', msgFinal: 'Recebemos sua resposta. Obrigada!', tag: '', ativo: true, slug: '' });
+  const ini = { id: f ? f.id : '', campos: d.campos || [], capaUrl: f && f.capa ? `/formulario/${f.slug}/capa.jpg?v=${f.capaV || ''}` : '' };
+  let tags = []; try { tags = contatos.tagsDistintas().map(t => t.tag).filter(Boolean); } catch (_) {}
+  const tiposOpts = Object.entries(formularios.TIPOS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
+  const corpo = `<div class="wrap">${FM_CSS}
+    ${subnavFormulario('campanhas')}
+    <div class="fm-top"><h1>${novo ? 'Novo formulário' : 'Editar formulário'}</h1><div class="acts"><a href="/formularios" style="color:var(--teal-esc);font-weight:600;text-decoration:none">← Voltar para a lista</a></div></div>
+    ${f ? `<div class="fm-link" style="margin:8px 0"><span>Link:</span><code>${esc(fmLink(base, f))}</code><button type="button" class="reset" onclick="fmCopiar('${esc(fmLink(base, f))}',this)">Copiar link</button><a href="${esc(fmLink(base, f))}" target="_blank" rel="noopener" style="color:var(--teal-esc);font-weight:600">Abrir</a></div>` : ''}
+    ${modelo && novo ? '<div class="aviso">Modelo da Black Friday carregado. Troque os textos e as perguntas como quiser e clique em <b>Salvar</b>.</div>' : ''}
+    <form id="fm" onsubmit="return false">
+    <div class="card">
+      <h2>Página</h2>
+      <label for="titulo">Título</label>
+      <input id="titulo" type="text" maxlength="120" value="${esc(d.titulo)}" placeholder="Ex.: Black Friday SlimFit">
+      <label for="descricao">Texto de apresentação <span class="quando" style="font-weight:400">(opcional)</span></label>
+      <textarea id="descricao" rows="4" maxlength="2000" placeholder="Explique a campanha em poucas linhas.">${esc(d.descricao)}</textarea>
+      <label>Imagem de capa <span class="quando" style="font-weight:400">(opcional — aparece no topo, ex.: o flyer da campanha)</span></label>
+      <div class="fm-capa"><img id="capaImg" alt="" hidden><button type="button" class="reset" id="capaBt">Escolher imagem</button><button type="button" class="reset fm-del" id="capaRm" hidden>Remover</button><span id="capaMsg" class="quando"></span><input id="capaArq" type="file" accept="image/*" hidden></div>
+      <label for="slug">Endereço do link</label>
+      <div class="fm-slug"><span>${esc(base)}/formulario/</span><input id="slug" type="text" maxlength="40" value="${esc(d.slug || '')}" placeholder="blackfriday"></div>
+      <p class="quando">Só letras, números e hífen. Se ficar vazio, usamos o título.</p>
+    </div>
+    <div class="card">
+      <h2>Perguntas</h2>
+      <p class="quando">Todo formulário já pede estes dois, obrigatórios:</p>
+      <div class="fm-fixos"><span class="fm-fixo">Seu nome</span><span class="fm-fixo">Seu WhatsApp</span></div>
+      <div id="qs"></div>
+      <button type="button" class="reset" id="addQ" style="margin-top:6px">+ Adicionar pergunta</button>
+    </div>
+    <div class="card">
+      <h2>Envio</h2>
+      <div class="fm-grid">
+        <div><label for="botao">Texto do botão</label><input id="botao" type="text" maxlength="40" value="${esc(d.botao)}"></div>
+        <div><label for="tag">Tag nos Contatos da SoFIA <span class="quando" style="font-weight:400">(opcional)</span></label><input id="tag" type="text" maxlength="40" list="tagsLista" value="${esc(d.tag)}" placeholder="Ex.: Black Friday"><datalist id="tagsLista">${tags.map(t => `<option value="${esc(t)}">`).join('')}</datalist></div>
+      </div>
+      <p class="quando">Com tag, quem responde entra nos Contatos da SoFIA marcado com ela. Depois é só criar uma campanha em SoFIA → Campanhas para essa tag.</p>
+      <label for="msgFinal">Mensagem depois de enviar</label>
+      <textarea id="msgFinal" rows="2" maxlength="500">${esc(d.msgFinal)}</textarea>
+      <div class="fm-grid">
+        <div><label class="chk" style="margin-top:16px"><input id="ativo" type="checkbox"${d.ativo !== false ? ' checked' : ''}> Recebendo respostas</label></div>
+        <div><label for="encerraEm">Parar de receber em <span class="quando" style="font-weight:400">(opcional)</span></label><input id="encerraEm" type="date" value="${esc(d.encerraEm || '')}"></div>
+      </div>
+      <p class="quando">Na data escolhida o formulário ainda aceita respostas até 23h59; no dia seguinte, a página mostra "não está recebendo respostas".</p>
+    </div>
+    <div class="fm-barra"><button type="button" class="save" id="salvar">Salvar</button><span class="msg" id="msg"></span></div>
+    </form>
+  </div>
+  <script>
+  ${FM_JS_COPIAR}
+  (function(){
+    var INI=${JSON.stringify(ini).replace(/</g, '\\u003c')};
+    var TIPOS_OPTS=${JSON.stringify(tiposOpts).replace(/</g, '\\u003c')};
+    var COM_OPCOES={unica:1,varias:1};
+    var C=INI.campos.map(function(c){ return {id:c.id||'',tipo:c.tipo,rotulo:c.rotulo,obrigatorio:!!c.obrigatorio,opcoes:(c.opcoes||[]).join('\\n')}; });
+    var qs=document.getElementById('qs'), sujo=false;
+    function marcarSujo(){ sujo=true; }
+    document.getElementById('fm').addEventListener('input',marcarSujo);
+    window.addEventListener('beforeunload',function(e){ if(sujo){ e.preventDefault(); e.returnValue=''; } });
+    function el(tag,attrs,html){ var e=document.createElement(tag); for(var k in attrs) e.setAttribute(k,attrs[k]); if(html!=null) e.innerHTML=html; return e; }
+    function render(){
+      qs.innerHTML='';
+      if(!C.length) qs.appendChild(el('p',{'class':'quando'},'Nenhuma pergunta extra. Clique em <b>+ Adicionar pergunta</b> para incluir.'));
+      C.forEach(function(c,i){
+        var box=el('div',{'class':'fm-q'});
+        var h=el('div',{'class':'fm-q-h'});
+        h.appendChild(el('span',{'class':'n'},String(i+1)));
+        var sel=el('select',{'aria-label':'Tipo da pergunta'},TIPOS_OPTS); sel.value=c.tipo;
+        sel.onchange=function(){ c.tipo=sel.value; marcarSujo(); render(); };
+        h.appendChild(sel);
+        var ob=el('label',{'class':'chk',style:'margin:0;font-size:var(--fs-sm)'}); var obi=el('input',{type:'checkbox'}); obi.checked=c.obrigatorio; obi.onchange=function(){ c.obrigatorio=obi.checked; marcarSujo(); }; ob.appendChild(obi); ob.appendChild(document.createTextNode(' Obrigatória'));
+        h.appendChild(ob);
+        h.appendChild(el('span',{'class':'sp'}));
+        var up=el('button',{type:'button',title:'Subir','aria-label':'Subir'},'↑'); up.disabled=i===0; up.onclick=function(){ C.splice(i-1,0,C.splice(i,1)[0]); marcarSujo(); render(); };
+        var dn=el('button',{type:'button',title:'Descer','aria-label':'Descer'},'↓'); dn.disabled=i===C.length-1; dn.onclick=function(){ C.splice(i+1,0,C.splice(i,1)[0]); marcarSujo(); render(); };
+        var rm=el('button',{type:'button',title:'Remover pergunta'},'Remover'); rm.onclick=function(){ if(c.rotulo && !confirm('Remover a pergunta "'+c.rotulo+'"? As respostas já recebidas continuam na planilha.')) return; C.splice(i,1); marcarSujo(); render(); };
+        h.appendChild(up); h.appendChild(dn); h.appendChild(rm);
+        box.appendChild(h);
+        var lid='q'+i;
+        box.appendChild(el('label',{'for':lid},'Pergunta'));
+        var inp=el('input',{type:'text',id:lid,maxlength:'200',placeholder:'Ex.: Qual plano te interessa?'}); inp.value=c.rotulo; inp.oninput=function(){ c.rotulo=inp.value; };
+        box.appendChild(inp);
+        if(COM_OPCOES[c.tipo]){
+          box.appendChild(el('label',{'for':lid+'o'},'Opções <span class="quando" style="font-weight:400">(uma por linha)</span>'));
+          var ta=el('textarea',{id:lid+'o',rows:'4',placeholder:'Opção 1\\nOpção 2'}); ta.value=c.opcoes; ta.oninput=function(){ c.opcoes=ta.value; };
+          box.appendChild(ta);
+        }
+        qs.appendChild(box);
+      });
+    }
+    document.getElementById('addQ').onclick=function(){ C.push({id:'',tipo:'texto',rotulo:'',obrigatorio:false,opcoes:''}); marcarSujo(); render(); var all=qs.querySelectorAll('input[type=text]'); if(all.length) all[all.length-1].focus(); };
+    render();
+
+    // Capa: reduz no navegador (JPEG, até 1200px, máx. 1 MB) antes de enviar.
+    var capa='', capaImg=document.getElementById('capaImg'), capaRm=document.getElementById('capaRm'), capaMsg=document.getElementById('capaMsg'), arq=document.getElementById('capaArq');
+    function mostrarCapa(src){ if(src){ capaImg.src=src; capaImg.hidden=false; capaRm.hidden=false; document.getElementById('capaBt').textContent='Trocar imagem'; } else { capaImg.hidden=true; capaRm.hidden=true; document.getElementById('capaBt').textContent='Escolher imagem'; } }
+    mostrarCapa(INI.capaUrl);
+    document.getElementById('capaBt').onclick=function(){ arq.click(); };
+    capaRm.onclick=function(){ capa='remover'; mostrarCapa(''); capaMsg.textContent='A capa sai quando você salvar.'; marcarSujo(); };
+    var MAX=1024*1024; function bytes(d){ return Math.floor((d.length-d.indexOf(',')-1)*3/4); }
+    arq.onchange=function(){
+      var file=arq.files&&arq.files[0]; if(!file) return;
+      var img=new Image(), url=URL.createObjectURL(file);
+      img.onload=function(){
+        URL.revokeObjectURL(url);
+        var lado=1200, d='';
+        for(var t=0;t<4;t++){
+          var k=Math.min(1,lado/Math.max(img.naturalWidth,img.naturalHeight));
+          var cv=document.createElement('canvas'); cv.width=Math.round(img.naturalWidth*k); cv.height=Math.round(img.naturalHeight*k);
+          var cx=cv.getContext('2d'); cx.fillStyle='#fff'; cx.fillRect(0,0,cv.width,cv.height); cx.drawImage(img,0,0,cv.width,cv.height);
+          for(var q=.85;q>=.45;q-=.1){ d=cv.toDataURL('image/jpeg',q); if(bytes(d)<=MAX) break; }
+          if(bytes(d)<=MAX) break;
+          lado=Math.round(lado*.75);
+        }
+        if(d.indexOf('data:image/jpeg')!==0||bytes(d)>MAX){ capaMsg.textContent='Essa imagem é grande demais mesmo reduzida. Escolha outra.'; return; }
+        capa=d; mostrarCapa(d); capaMsg.textContent='Imagem pronta ('+Math.round(bytes(d)/1024)+' KB). Ela entra quando você salvar.'; marcarSujo();
+      };
+      img.onerror=function(){ capaMsg.textContent='Não consegui abrir essa imagem. Tente JPG ou PNG.'; };
+      img.src=url;
+    };
+
+    var bt=document.getElementById('salvar'), msg=document.getElementById('msg');
+    bt.onclick=function(){
+      var v=function(id){ return document.getElementById(id).value; };
+      var d={ id:INI.id, titulo:v('titulo'), descricao:v('descricao'), slug:v('slug'), botao:v('botao'), tag:v('tag'), msgFinal:v('msgFinal'), encerraEm:v('encerraEm'), ativo:document.getElementById('ativo').checked,
+        campos:C.map(function(c){ return {id:c.id,tipo:c.tipo,rotulo:c.rotulo,obrigatorio:c.obrigatorio,opcoes:c.opcoes.split('\\n')}; }) };
+      if(capa) d.capa=capa;
+      bt.disabled=true; msg.textContent='Salvando…';
+      fetch('/formularios/salvar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          bt.disabled=false;
+          if(!j||!j.ok){ msg.textContent='❌ '+((j&&j.erro)||'Não consegui salvar.'); return; }
+          sujo=false; location.href='/formularios/editar?id='+j.id+'&ok=1';
+        })
+        .catch(function(){ bt.disabled=false; msg.textContent='❌ Erro de rede. Tente de novo.'; });
+    };
+  })();
+  </script>`;
+  return chrome({ tab: novo ? 'Novo formulário' : 'Editar formulário' }, 'ind', corpo);
+}
+
+function paginaFormularioRespostas(base, f) {
+  const lista = formularios.respostas(f.id);
+  const cols = formularios.colunas(f, lista);
+  const link = fmLink(base, f);
+  const linhas = lista.map(r => {
+    const wa = 'https://wa.me/' + String(r.telefone).replace(/\D/g, '');
+    const busca = [r.nome, r.telefone, formularios.fmtTel(r.telefone), ...cols.map(c => formularios.valorTexto(r, c.id))].join(' ').toLowerCase();
+    return `<tr data-b="${esc(busca)}">
+      <td class="nw">${esc(formularios.fmtQuando(r.atualizadoEm || r.em))}${r.vezes > 1 ? ` <span class="pill" title="Respondeu ${r.vezes} vezes; vale a última">${r.vezes}×</span>` : ''}</td>
+      <td class="nm">${esc(r.nome)}</td>
+      <td class="nw"><a href="${wa}" target="_blank" rel="noopener">${esc(formularios.fmtTel(r.telefone))}</a></td>
+      ${cols.map(c => `<td>${esc(formularios.valorTexto(r, c.id)) || '<span style="color:var(--faint)">—</span>'}</td>`).join('')}
+      <td><button type="button" class="x" title="Apagar esta resposta" aria-label="Apagar resposta de ${esc(r.nome)}" data-id="${r.id}" data-nome="${esc(r.nome)}" onclick="fmApagar(this)">×</button></td>
+    </tr>`;
+  }).join('');
+  const corpo = `<div class="wrap" style="max-width:1080px">${FM_CSS}
+    ${subnavFormulario('campanhas')}
+    <div class="fm-top"><h1>${esc(f.titulo)}</h1><div class="acts"><a href="/formularios" style="color:var(--teal-esc);font-weight:600;text-decoration:none">← Voltar para a lista</a></div></div>
+    <div class="fm-nums" style="margin:4px 0 10px"><span><b>${lista.length}</b> resposta${lista.length === 1 ? '' : 's'}</span>${f.tag ? `<span>todas entram nos Contatos da SoFIA com a tag <b>${esc(f.tag)}</b></span>` : ''}</div>
+    <div class="fm-link"><code>${esc(link)}</code><button type="button" class="reset" onclick="fmCopiar('${esc(link)}',this)">Copiar link</button></div>
+    <div class="fm-btns" style="margin:12px 0">
+      ${lista.length ? `<a class="save" href="/formularios/exportar?id=${f.id}">Baixar planilha</a>` : ''}
+      <a class="reset" href="/formularios/editar?id=${f.id}">Editar formulário</a>
+      ${lista.length > 5 ? '<input id="busca" class="fm-busca" type="text" placeholder="Buscar nome, telefone ou resposta" aria-label="Buscar nas respostas">' : ''}
+    </div>
+    ${f.tag && lista.length ? `<p class="quando">Para mandar a oferta para esta lista: SoFIA → Campanhas → nova campanha para a tag <b>${esc(f.tag)}</b>.</p>` : ''}
+    ${lista.length ? `<div class="fm-tabw"><table class="fm-tab"><thead><tr><th>Data</th><th>Nome</th><th>WhatsApp</th>${cols.map(c => `<th>${esc(c.rotulo)}</th>`).join('')}<th></th></tr></thead><tbody id="tb">${linhas}</tbody></table></div>`
+    : `<div class="card fm-vazio"><h2>Ainda sem respostas</h2><p>Divulgue o link acima. As respostas aparecem aqui assim que chegam (atualize a página).</p></div>`}
+  </div>
+  <script>
+  ${FM_JS_COPIAR}
+  var busca=document.getElementById('busca');
+  if(busca) busca.oninput=function(){ var q=busca.value.trim().toLowerCase(); [].forEach.call(document.querySelectorAll('#tb tr'),function(tr){ tr.hidden=!!q && tr.getAttribute('data-b').indexOf(q)<0; }); };
+  function fmApagar(b){
+    if(!confirm('Apagar a resposta de '+b.getAttribute('data-nome')+'? Não dá para desfazer.')) return;
+    fetch('/formularios/resposta/excluir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({form:${JSON.stringify(f.id)},id:b.getAttribute('data-id')})})
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(!j||!j.ok){ alert('❌ '+((j&&j.erro)||'Não consegui apagar.')); return; } location.reload(); })
+      .catch(function(){ alert('❌ Erro de rede.'); });
+  }
+  </script>`;
+  return chrome({ tab: 'Respostas · ' + f.titulo }, 'ind', corpo);
+}
+
+// Página pública /formulario[/<endereço>] — sem login. Logado no painel e com o
+// formulário pausado, mostra uma prévia (não grava).
+function rotaFormularioPublico(req, res, rota) {
+  const studio = scStudio();
+  const partes = rota.split('/').filter(Boolean); // ['formulario', slug?, 'capa.jpg'?]
+  if (partes.length === 3 && partes[2] === 'capa.jpg' && req.method === 'GET') {
+    const f = formularios.porSlug(partes[1]);
+    const p = f && f.capa ? formularios.capaPath(f.id) : null;
+    if (!p) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('não encontrada'); }
+    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=300' });
+    return fs.createReadStream(p).pipe(res);
+  }
+  if (partes.length > 2) return scHtml(res, 404, formulariosPaginas.paginaFechada({ studio, f: null }));
+  const f = partes[1] ? formularios.porSlug(partes[1]) : formularios.unicoAberto();
+  if (req.method === 'GET') {
+    if (!f) return scHtml(res, 404, formulariosPaginas.paginaFechada({ studio, f: null }));
+    const aberto = formularios.estaAberto(f);
+    let previa = false;
+    if (!aberto) {
+      const s = usuarioDaReq(req);
+      previa = !!(s && (s.admin || (s.telas || []).includes('formularios')));
+      if (!previa) return scHtml(res, 200, formulariosPaginas.paginaFechada({ studio, f }));
+    }
+    return scHtml(res, 200, formulariosPaginas.paginaFormulario({
+      studio, f, previa, acao: '/formulario/' + f.slug,
+      capaUrl: f.capa ? `/formulario/${f.slug}/capa.jpg?v=${f.capaV || ''}` : '',
+    }));
+  }
+  if (req.method !== 'POST') { res.writeHead(405, { 'Content-Type': 'text/plain' }); return res.end('method not allowed'); }
+  if (!scSoJson(req)) return scJson(res, 415, { erro: 'Envio inválido. Recarregue a página e tente de novo.' });
+  if (!f || !formularios.estaAberto(f)) return scJson(res, 410, { erro: 'Este formulário não está recebendo respostas no momento.' });
+  if (!formularios.permitir('fm:' + scIp(req), 20, 3600e3)) return scJson(res, 429, { erro: 'Muitos envios seguidos. Aguarde um pouco e tente de novo.' });
+  return lerCorpo(req, 6e4, corpo => {
+    let d = null; try { d = JSON.parse(corpo); } catch (_) {}
+    if (!d || typeof d !== 'object') return scJson(res, 400, { erro: 'Envio inválido. Recarregue a página e tente de novo.' });
+    if (d.site) return scJson(res, 200, { ok: true }); // campo invisível preenchido = robô; finge que deu certo
+    let r;
+    try { r = formularios.responder(f, d); } catch (e) { console.log('[formularios] erro ao salvar resposta:', e.message); r = { erro: 'Não consegui salvar agora. Tente de novo em instantes.' }; }
+    if (!r.ok) return scJson(res, 400, { erro: r.erro });
+    if (f.tag) { try { contatos.adicionarTag(r.telefone, r.nome, f.tag); } catch (e) { console.log('[formularios] tag no contato falhou:', e.message); } }
+    console.log(`[formularios] ${r.novo ? 'nova resposta' : 'resposta atualizada'} em "${f.titulo}"`);
+    return scJson(res, 200, { ok: true, atualizada: !r.novo });
+  });
+}
+
+// Rotas do painel (permissão "formularios" — barrada antes de chegar aqui).
+function rotaFormulariosPainel(req, res, url, sess) {
+  const q = new URLSearchParams(req.url.split('?')[1] || '');
+  const base = scBaseUrl(req);
+  if (req.method === 'GET' && url === '/formularios') return scHtml(res, 200, paginaFormularios(base, ''));
+  if (req.method === 'GET' && url === '/formularios/editar') {
+    const id = q.get('id');
+    const f = id ? formularios.obter(id) : null;
+    if (id && !f) { res.writeHead(303, { Location: '/formularios' }); return res.end(); }
+    let html = paginaFormularioEditar(base, f, !f && q.get('modelo') === 'blackfriday');
+    if (q.get('ok') === '1') html = html.replace('<form id="fm"', '<div class="aviso">Formulário salvo.</div><form id="fm"');
+    return scHtml(res, 200, html);
+  }
+  if (req.method === 'GET' && url === '/formularios/respostas') {
+    const f = formularios.obter(q.get('id') || '');
+    if (!f) { res.writeHead(303, { Location: '/formularios' }); return res.end(); }
+    return scHtml(res, 200, paginaFormularioRespostas(base, f));
+  }
+  if (req.method === 'GET' && url === '/formularios/exportar') {
+    const f = formularios.obter(q.get('id') || '');
+    const csv = f ? formularios.csv(f.id) : null;
+    if (!csv) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Formulário não encontrado.'); }
+    try { auditoria.registrar(sess.usuario, 'formularios.exportar', f.titulo, ''); } catch (_) {}
+    const nome = (formularios.normSlug(f.titulo) || 'formulario') + '-' + hojeSP() + '.csv';
+    res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${nome}"`, 'Cache-Control': 'no-store' });
+    return res.end(csv);
+  }
+  if (req.method === 'POST' && url === '/formularios/salvar') {
+    if (!scSoJson(req)) return scJson(res, 415, { erro: 'Envio inválido.' });
+    return lerCorpo(req, 2e6, corpo => {
+      let d = null; try { d = JSON.parse(corpo); } catch (_) {}
+      if (!d || typeof d !== 'object') return scJson(res, 400, { erro: 'Envio inválido.' });
+      let r;
+      try { r = formularios.salvar(d, d.id || null, sess.usuario); } catch (e) { console.log('[formularios] erro ao salvar:', e.message); r = { erro: 'Não consegui salvar agora.' }; }
+      if (!r.ok) return scJson(res, 400, { erro: r.erro });
+      try { auditoria.registrar(sess.usuario, d.id ? 'formularios.editar' : 'formularios.criar', r.form.titulo, ''); } catch (_) {}
+      return scJson(res, 200, { ok: true, id: r.form.id });
+    });
+  }
+  if (req.method === 'POST' && url === '/formularios/acao') {
+    if (!scSoJson(req)) return scJson(res, 415, { erro: 'Envio inválido.' });
+    return lerCorpo(req, 1e4, corpo => {
+      let d = {}; try { d = JSON.parse(corpo) || {}; } catch (_) {}
+      const f = formularios.obter(String(d.id || ''));
+      if (!f) return scJson(res, 404, { erro: 'Formulário não encontrado.' });
+      const acao = String(d.acao || '');
+      if (acao === 'pausar' || acao === 'abrir') {
+        formularios.definirAtivo(f.id, acao === 'abrir');
+        try { auditoria.registrar(sess.usuario, 'formularios.' + acao, f.titulo, ''); } catch (_) {}
+        return scJson(res, 200, { ok: true });
+      }
+      if (acao === 'duplicar') {
+        const r = formularios.duplicar(f.id, sess.usuario);
+        if (!r.ok) return scJson(res, 400, { erro: r.erro });
+        try { auditoria.registrar(sess.usuario, 'formularios.duplicar', f.titulo, ''); } catch (_) {}
+        return scJson(res, 200, { ok: true, ir: '/formularios/editar?id=' + r.form.id });
+      }
+      if (acao === 'excluir') {
+        const n = formularios.respostas(f.id).length;
+        formularios.excluir(f.id);
+        try { auditoria.registrar(sess.usuario, 'formularios.excluir', f.titulo, n + ' resposta(s)'); } catch (_) {}
+        return scJson(res, 200, { ok: true });
+      }
+      return scJson(res, 400, { erro: 'Ação desconhecida.' });
+    });
+  }
+  if (req.method === 'POST' && url === '/formularios/resposta/excluir') {
+    if (!scSoJson(req)) return scJson(res, 415, { erro: 'Envio inválido.' });
+    return lerCorpo(req, 1e4, corpo => {
+      let d = {}; try { d = JSON.parse(corpo) || {}; } catch (_) {}
+      const f = formularios.obter(String(d.form || ''));
+      const r = f ? formularios.excluirResposta(f.id, String(d.id || '')) : null;
+      if (!r) return scJson(res, 404, { erro: 'Resposta não encontrada.' });
+      try { auditoria.registrar(sess.usuario, 'formularios.apagar-resposta', f.titulo, r.nome + ' ' + fmtTel(r.telefone)); } catch (_) {}
+      return scJson(res, 200, { ok: true });
+    });
+  }
+  res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Não encontrado.');
+}
+
 function lerCorpo(req, limite, cb) {
   let corpo = '';
   req.on('data', c => { corpo += c; if (corpo.length > limite) req.destroy(); });
@@ -6678,6 +7104,7 @@ const server = http.createServer((req, res) => {
     if (rotaSc === '/slimclubcadastro') return rotaSlimClubCadastro(req, res);
     if (rotaSc === '/slimclubcadastroexterno') return rotaSlimClubCadastro(req, res, true);
     if (rotaSc === '/slimclub' || rotaSc.startsWith('/slimclub/')) return rotaSlimClubPublico(req, res, rotaSc, url);
+    if (rotaSc === '/formulario' || rotaSc.startsWith('/formulario/')) return rotaFormularioPublico(req, res, rotaSc); // formulários de campanha
   }
 
   // ── Exige login ──────────────────────────────────────────────────────────
@@ -6751,6 +7178,9 @@ const server = http.createServer((req, res) => {
     }
   }
   else if (tela && !sess.admin && !(sess.telas || []).includes(tela)) return negarAcesso(res, sess);
+
+  // ── Formulários de campanha (permissão "formularios" — barrada acima) ──
+  if (tela === 'formularios') return rotaFormulariosPainel(req, res, url, sess);
 
   // ── Slim Club: validação pela recepção (permissão "slimclub" — barrada acima) ──
   if (tela === 'slimclub') {
