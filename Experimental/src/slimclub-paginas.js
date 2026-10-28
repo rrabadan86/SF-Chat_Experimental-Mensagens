@@ -52,6 +52,10 @@ input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible,.al
 .foto{display:flex;align-items:center;gap:14px}
 .foto .av{width:84px;height:84px;border-radius:50%;background:var(--teal-soft) center/cover no-repeat;border:2px dashed var(--teal-linha);flex:0 0 auto;display:grid;place-items:center;color:var(--teal);font-size:.72rem;text-align:center;line-height:1.2}
 .foto .av.tem{border-style:solid;border-color:var(--teal)}
+.perigo{border-color:#f0d4d4;margin-top:32px}
+.perigo h2{color:var(--erro)}
+.btn-perigo{font:inherit;font-weight:600;font-size:.9rem;color:var(--erro);background:var(--card);border:1px solid #e9bcbc;border-radius:999px;padding:9px 16px;cursor:pointer}
+.btn-perigo:hover{background:var(--erro-soft)}
 .btn2{font:inherit;font-weight:600;font-size:.9rem;color:var(--teal-esc);background:var(--teal-soft);border:1px solid var(--teal-linha);border-radius:999px;padding:9px 16px;cursor:pointer}
 .alc{display:grid;gap:10px}
 @media(min-width:520px){.alc{grid-template-columns:1fr 1fr}}
@@ -316,6 +320,12 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao, parce
     <div id="erro" class="msg erro" role="alert" hidden></div>
     <button class="btn" id="enviar" type="submit">${ROTULO}</button>
   </form>
+  ${edicao && !parceira && !painel ? `<section class="card perigo" id="zonaExcluir">
+    <h2>Excluir meu anúncio</h2>
+    <p class="dica" style="margin:0 0 12px">O anúncio sai da listagem na hora e as recomendações dele são apagadas. Não dá para desfazer, mas você pode cadastrar o negócio de novo quando quiser.</p>
+    <div id="erroExcluir" class="msg erro" role="alert" hidden></div>
+    <button type="button" class="btn-perigo" id="btExcluir">Excluir meu anúncio</button>
+  </section>` : ''}
   <p class="rodape">${painel ? '<a href="/clube?view=aprovados">Voltar ao painel sem salvar</a>'
     : parceira ? 'É aluna do Studio e tem um negócio? <a href="/SlimClubCadastro">Use o cadastro das alunas</a>'
     : edicao ? '<a href="/slimclub">Voltar sem alterar</a>' : logada ? '<a href="/slimclub">Voltar ao Slim Club</a>' : 'Já é aluna? <a href="/slimclub">Veja os negócios do Slim Club</a>'}</p>`;
@@ -357,6 +367,20 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao, parce
     };
     img.onerror=function(){ mostrarErro('Não consegui abrir essa imagem. Tente outra foto (JPG ou PNG).'); };
     img.src=url;
+  };
+  var btEx=document.getElementById('btExcluir');
+  if(btEx) btEx.onclick=function(){
+    if(!confirm('Excluir o seu anúncio do Slim Club? Ele sai da listagem na hora e não dá para desfazer.')) return;
+    var erEx=document.getElementById('erroExcluir'); erEx.hidden=true;
+    btEx.disabled=true; btEx.textContent='Excluindo…';
+    fetch('/slimclub/meu-anuncio/excluir',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+      .then(function(r){ return r.json().catch(function(){ return {erro:'Falha (código '+r.status+').'}; }); })
+      .then(function(j){
+        if(j&&j.ok){ location.href='/slimclub?excluido=1'; return; }
+        erEx.textContent=(j&&j.erro)||'Não consegui excluir. Tente de novo.'; erEx.hidden=false;
+        btEx.disabled=false; btEx.textContent='Excluir meu anúncio';
+      })
+      .catch(function(){ erEx.textContent='Sem conexão. Tente de novo.'; erEx.hidden=false; btEx.disabled=false; btEx.textContent='Excluir meu anúncio'; });
   };
   f.onsubmit=function(ev){
     ev.preventDefault(); erro.hidden=true;
@@ -414,7 +438,7 @@ const ICONE_IG = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="t
 // ── /slimclub (aluna conectada): listagem ───────────────────────────────────
 // aval = { usos: {empresaId: 'AAAA-MM-DD'}, recs: Set(empresaId) } da aluna conectada;
 // recs = { empresaId: total de 👍 }.
-function paginaListagem({ studio, aluna, empresas, fmtData, fmtDocumento, primeiroNome, comprovacao, meu, aval, recs }) {
+function paginaListagem({ studio, aluna, empresas, fmtData, fmtDocumento, primeiroNome, comprovacao, meu, aval, recs, aviso }) {
   aval = aval || { usos: {}, recs: new Set() };
   recs = recs || {};
   const cats = [...new Set(empresas.map(e => e.categoria))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
@@ -460,6 +484,7 @@ function paginaListagem({ studio, aluna, empresas, fmtData, fmtDocumento, primei
   <p class="eyebrow">Exclusivo para alunas</p>
   <h1>Olá, ${esc(primeiroNome(aluna.nome) || 'aluna')}!</h1>
   <p class="lead">Benefícios oferecidos por alunas do ${esc(studio)}. Para usar, apresente a sua carteira SlimClub no negócio.</p>
+  ${aviso ? `<div class="msg ok" role="status">${esc(aviso)}</div>` : ''}
   ${meu ? `<section class="meu" aria-label="Meu anúncio">
     <img src="/slimclub/foto/${esc(meu.r.id)}" alt="" width="48" height="48">
     <div class="info"><div class="q">Meu anúncio</div>
