@@ -9,11 +9,16 @@
  * scheduler chama setContexto() no início de cada job; como os jobs pesados são
  * serializados (jobRunning), o contexto vale para todos os envios daquele job.
  * Se o contexto estiver velho (>6 min), cai para "Outros".
+ *
+ * A SoFIA (outro processo) envia as COBRANÇAS pelo número dela e registra em
+ * data/atividade-sofia.jsonl (só acrescenta linhas — sem disputar este arquivo
+ * com o robô). O painel junta os dois ao mostrar o Log.
  */
 const fs = require('fs');
 const path = require('path');
 
 const ARQUIVO = path.resolve(__dirname, '..', 'data', 'atividade.json');
+const ARQUIVO_SOFIA = path.resolve(__dirname, '..', 'data', 'atividade-sofia.jsonl');
 const MAX = 1200;               // mantém os últimos N eventos (rotaciona sozinho)
 const FRESCOR_MS = 6 * 60 * 1000; // contexto vale por até 6 min após setContexto
 
@@ -60,7 +65,17 @@ function registrar(ev) {
   } catch (_) { /* registro nunca derruba o envio */ }
 }
 
-function doDia(dia) { const d = dia || hojeSP(); return carregar().filter(e => e.data === d); }
+function carregarSofia() {
+  try {
+    return fs.readFileSync(ARQUIVO_SOFIA, 'utf8').split('\n').map(l => l.trim()).filter(Boolean)
+      .map(l => { try { return JSON.parse(l); } catch (_) { return null; } }).filter(Boolean);
+  } catch (_) { return []; }
+}
+function doDia(dia) {
+  const d = dia || hojeSP();
+  return carregar().concat(carregarSofia()).filter(e => e.data === d)
+    .sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+}
 
 // Resumo agrupado por job (contexto), para os cards do topo.
 function resumoHoje(dia) {
@@ -82,4 +97,4 @@ function resumoHoje(dia) {
 
 function listarHoje(dia, limite = 120) { return doDia(dia).slice(-limite).reverse(); }
 
-module.exports = { setContexto, contextoAtual, registrar, resumoHoje, listarHoje, doDia, hojeSP, ARQUIVO };
+module.exports = { setContexto, contextoAtual, registrar, resumoHoje, listarHoje, doDia, hojeSP, ARQUIVO, ARQUIVO_SOFIA };
