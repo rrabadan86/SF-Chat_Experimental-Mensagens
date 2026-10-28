@@ -14,6 +14,11 @@
  *       - `cobranca_boleto_hoje` se vence HOJE.
  *     ⚠️ Nunca clica em excluir/lixeira/cancelar/estornar/baixar.
  *
+ *   • SALDO DEVEDOR (nem recorrente, nem boleto — ex.: plano pago na recepção por
+ *     PIX) → quem sobrou da "Com débito": abre o perfil, pega a parcela vencida mais
+ *     antiga e a soma das vencidas e manda `cobranca_saldo` (sem link; o texto diz
+ *     como pagar). Mesmo limite de "vencido há X+ dias".
+ *
  * Fonte dos dados (tudo interceptando a API interna do EVO, como os outros jobs).
  *
  * Uso:
@@ -103,7 +108,7 @@ async function lerInadimplentes() {
   console.log('\n═══════════════════════════════════════════════════');
   console.log('💳 Inadimplentes — lendo débitos vencidos no EVO...');
   console.log('═══════════════════════════════════════════════════');
-  console.log(`   Recorrente: vencido há ${diasMin}+ dia(s). Boleto: vencido há ${diasMin}+ dia(s) OU vence hoje.\n`);
+  console.log(`   Recorrente e saldo devedor: vencido há ${diasMin}+ dia(s). Boleto: vencido há ${diasMin}+ dia(s) OU vence hoje.\n`);
 
   const browser = await puppeteer.launch({
     headless: 'new',
@@ -162,10 +167,15 @@ async function lerInadimplentes() {
           if (typeof o.vencimento === 'string' && /\d{4}-\d{2}-\d{2}/.test(o.vencimento)) itens.push(o);
           for (const v of Object.values(o)) if (v && typeof v === 'object') walk(v);
         })(d);
+        // Parcelas de saldo devedor (as que têm valor). O perfil lista também as que
+        // AINDA vão vencer (ex.: 8 parcelas mensais): {valor} soma só as já vencidas.
+        const debitos = itens.filter(it => typeof it.valorSaldoDevedor === 'number' && it.valorSaldoDevedor > 0);
+        const base = debitos.length ? debitos : itens;
         let vmin = null, valor = 0;
-        for (const it of itens) {
+        for (const it of base) {
           if (!vmin || it.vencimento < vmin) vmin = it.vencimento;
-          if (typeof it.valorSaldoDevedor === 'number') valor += it.valorSaldoDevedor;
+          const atraso = diasDeAtraso(it.vencimento);
+          if (typeof it.valorSaldoDevedor === 'number' && atraso != null && atraso >= 0) valor += it.valorSaldoDevedor;
         }
         perfilAtual = vmin ? { vencimento: vmin, valor } : { vencimento: null, valor: 0 };
         const tel = acharTelefone(d); if (tel) telefoneAtual = tel;
@@ -265,7 +275,7 @@ async function lerInadimplentes() {
     console.log(`👥 "Com débito": ${candidatas.length} candidata(s).`);
 
     for (const c of candidatas) {
-      if (!ehRecorrente(c.contrato)) { console.log(`   ⏭️  ${c.nome}: não é recorrente — cai no passo de boleto.`); continue; }
+      if (!ehRecorrente(c.contrato)) { console.log(`   ⏭️  ${c.nome}: não é recorrente (${c.contrato || 'contrato sem nome'}) — vai para boleto/saldo devedor.`); continue; }
       perfilAtual = null; linkAtual = null;
       await abrirComDebito();
       const achou = await abrirFichaPorNome(c.nome);
@@ -381,13 +391,39 @@ async function lerInadimplentes() {
       vistos.add(String(idCliente));
       console.log(`   🧾 ${b.NOME} | venc. ${fmtData(b.DT_VENCIMENTO)} (${dias === 0 ? 'HOJE' : dias + 'd'}) | boleto | ${celular ? 'tel OK' : 'SEM TEL'} | link OK`);
     }
+
+    // ════════ PASSO C — SALDO DEVEDOR (nem recorrente, nem boleto) ════════
+    // Quem sobrou da "Com débito" (ex.: plano pago na recepção, por PIX): lê no
+    // perfil a parcela vencida mais antiga e a soma das vencidas. Sem link.
+    const restantes = candidatas.filter(c => !ehRecorrente(c.contrato) && !vistos.has(String(c.idCliente)));
+    console.log(`\n💰 Saldo devedor (sem boleto/recorrente): ${restantes.length} para conferir...`);
+    for (const c of restantes) {
+      perfilAtual = null; telefoneAtual = null;
+      // Atalho: abre a ficha direto pelo ID; se o perfil não vier, vai pela lista "Com débito".
+      await irPara(`clientes/cadastro/${c.idCliente}//perfil`, 5000);
+      for (let i = 0; i < 16 && !perfilAtual; i++) await sleep(500);
+      if (!perfilAtual) {
+        await abrirComDebito();
+        if (await abrirFichaPorNome(c.nome)) for (let i = 0; i < 20 && !perfilAtual; i++) await sleep(500);
+      }
+      await fecharPopupNovaTela(page);
+      if (!perfilAtual || !perfilAtual.vencimento) { console.log(`   ⚠️  ${c.nome}: não li o saldo devedor no perfil (pulando).`); continue; }
+      const dias = diasDeAtraso(perfilAtual.vencimento);
+      if (dias == null || dias < diasMin) { console.log(`   ⏭️  ${c.nome}: próxima parcela ${fmtData(perfilAtual.vencimento)} (atraso ${dias}d) — < ${diasMin}d.`); continue; }
+      if (!(perfilAtual.valor > 0)) { console.log(`   ⏭️  ${c.nome}: sem valor vencido no perfil (pulando).`); continue; }
+      const celular = c.celular || telefoneAtual || '';
+      resultados.push({ idCliente: c.idCliente, nome: c.nome, celular, tipo: 'saldo', vencimento: perfilAtual.vencimento, vencimentoFmt: fmtData(perfilAtual.vencimento), diasAtraso: dias, valor: perfilAtual.valor, link: '' });
+      vistos.add(String(c.idCliente));
+      console.log(`   💰 ${c.nome} | venc. ${fmtData(perfilAtual.vencimento)} (${dias}d) | ${fmtBRL(perfilAtual.valor)} | saldo devedor | ${celular ? 'tel OK' : 'SEM TEL'}`);
+    }
   } finally {
     try { await browser.close(); } catch (_) {}
   }
 
   const nRec = resultados.filter(r => r.tipo === 'recorrente').length;
   const nBol = resultados.filter(r => r.tipo === 'boleto').length;
-  console.log(`\n📋 Total a notificar: ${resultados.length} (recorrente: ${nRec}, boleto: ${nBol}).`);
+  const nSal = resultados.filter(r => r.tipo === 'saldo').length;
+  console.log(`\n📋 Total a notificar: ${resultados.length} (recorrente: ${nRec}, boleto: ${nBol}, saldo devedor: ${nSal}).`);
   return resultados;
 }
 
@@ -434,6 +470,9 @@ async function runInadimplentes({ dry = false, modo = 'todos' } = {}) {
       if (!r.link) { res.failed++; res.details.push({ name: nome, status: 'failed', reason: 'link não gerado' }); console.log(`   ❌ ${nome}: recorrente sem link — não enfileiro.`); continue; }
       chaveMsg = 'cobranca_recorrente';
       texto = mensagens.render(chaveMsg, { nome: primeiroNome(nome), link: r.link, valor: valorFmt });
+    } else if (r.tipo === 'saldo') {
+      chaveMsg = 'cobranca_saldo'; // sem link: o texto diz como pagar (ex.: PIX)
+      texto = mensagens.render(chaveMsg, { nome: primeiroNome(nome), vencimento: r.vencimentoFmt, valor: valorFmt });
     } else {
       if (!r.link) { res.failed++; res.details.push({ name: nome, status: 'failed', reason: 'boleto não gerado' }); console.log(`   ❌ ${nome}: boleto sem link — não enfileiro.`); continue; }
       chaveMsg = r.venceHoje ? 'cobranca_boleto_hoje' : 'cobranca_boleto';
