@@ -6771,13 +6771,14 @@ function paginaFormularioEditar(base, f, modelo) {
     mostrarCapa(INI.capaUrl);
     document.getElementById('capaBt').onclick=function(){ arq.click(); };
     capaRm.onclick=function(){ capa='remover'; mostrarCapa(''); capaMsg.textContent='A capa sai quando você salvar.'; marcarSujo(); };
-    var MAX=1024*1024; function bytes(d){ return Math.floor((d.length-d.indexOf(',')-1)*3/4); }
+    var MAX=500*1024; function bytes(d){ // capa leve: sobe rápido mesmo na internet do celular
+     return Math.floor((d.length-d.indexOf(',')-1)*3/4); }
     arq.onchange=function(){
       var file=arq.files&&arq.files[0]; if(!file) return;
       var img=new Image(), url=URL.createObjectURL(file);
       img.onload=function(){
         URL.revokeObjectURL(url);
-        var lado=1200, d='';
+        var lado=1080, d='';
         for(var t=0;t<4;t++){
           var k=Math.min(1,lado/Math.max(img.naturalWidth,img.naturalHeight));
           var cv=document.createElement('canvas'); cv.width=Math.round(img.naturalWidth*k); cv.height=Math.round(img.naturalHeight*k);
@@ -6799,15 +6800,22 @@ function paginaFormularioEditar(base, f, modelo) {
       var d={ id:INI.id, titulo:v('titulo'), descricao:v('descricao'), tema:v('tema'), slug:v('slug'), botao:v('botao'), tag:v('tag'), msgFinal:v('msgFinal'), encerraEm:v('encerraEm'), ativo:document.getElementById('ativo').checked,
         campos:C.map(function(c){ return {id:c.id,tipo:c.tipo,rotulo:c.rotulo,obrigatorio:c.obrigatorio,opcoes:c.opcoes.split('\\n')}; }) };
       if(capa) d.capa=capa;
-      bt.disabled=true; msg.textContent='Salvando…';
-      fetch('/formularios/salvar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
-        .then(function(r){ return r.json(); })
-        .then(function(j){
-          bt.disabled=false;
-          if(!j||!j.ok){ msg.textContent='❌ '+((j&&j.erro)||'Não consegui salvar.'); return; }
-          sujo=false; location.href='/formularios/editar?id='+j.id+'&ok=1';
-        })
-        .catch(function(){ bt.disabled=false; msg.textContent='❌ Erro de rede. Tente de novo.'; });
+      bt.disabled=true; msg.textContent=capa&&capa!=='remover' ? 'Enviando a imagem…' : 'Salvando…';
+      // XHR (e não fetch) para mostrar o andamento do envio da imagem e desistir
+      // com aviso claro se a conexão travar, em vez de ficar em "Salvando…".
+      var x=new XMLHttpRequest();
+      x.open('POST','/formularios/salvar'); x.setRequestHeader('Content-Type','application/json'); x.timeout=90000;
+      if(x.upload) x.upload.onprogress=function(e){ if(e.lengthComputable && capa && capa!=='remover'){ var p=Math.round(e.loaded*100/e.total); msg.textContent=p<100 ? 'Enviando a imagem… '+p+'%' : 'Salvando…'; } };
+      function erro(t){ bt.disabled=false; msg.textContent='❌ '+t; }
+      x.onload=function(){
+        var j=null; try{ j=JSON.parse(x.responseText); }catch(e){}
+        if(!j) return erro(x.status===413 ? 'A imagem ficou grande demais para o servidor. Escolha uma menor.' : 'O servidor não respondeu direito (código '+x.status+'). Tente de novo.');
+        if(!j.ok) return erro(j.erro||'Não consegui salvar.');
+        sujo=false; location.href='/formularios/editar?id='+j.id+'&ok=1';
+      };
+      x.onerror=function(){ erro('Sem conexão com o painel. Confira a internet e tente de novo.'); };
+      x.ontimeout=function(){ erro('Demorou demais e eu desisti. Confira a internet e tente de novo — se repetir, use uma imagem menor.'); };
+      x.send(JSON.stringify(d));
     };
   })();
   </script>`;
