@@ -297,184 +297,216 @@ async function buscarContratosVencendoEm7Dias() {
     console.log('🖱️  Executando clique nativo (simulando mouse humano)...');
     await page.click('#target-segment-menu');
     
-    console.log('⏳ Aguardando a tela da segmentação carregar...');
-    let chipApareceu = false;
-    for(let i = 0; i < 15; i++) { 
-        await sleep(1000);
-        chipApareceu = await page.evaluate(() => {
-            const spans = Array.from(document.querySelectorAll('span, div, .md-chip-content'));
-            return spans.some(e => e.textContent && e.textContent.toLowerCase().includes('vencimento do contrato:'));
-        });
-        if(chipApareceu) break;
-    }
+    // O chip do filtro de vencimento às vezes não aparece (tela lenta / popup do
+    // EVO). Antes o robô seguia SEM o filtro e o resultado saía errado (ex.:
+    // "nenhum contrato"). Agora tenta 3 vezes, reabrindo a segmentação; se não
+    // conseguir, o job FALHA (fica no Log do painel + alerta) e nada é enviado.
+    const reabrirSegmento = async () => {
+      try { await page.keyboard.press('Escape'); } catch (_) {}
+      await page.reload({ waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
+      await sleep(4000);
+      await fecharPopupNovaTela(page);
+      await page.evaluate((h) => { window.location.hash = h; }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
+      await sleep(5000);
+      await fecharPopupNovaTela(page);
+      let m = null;
+      for (let i = 0; i < 15 && !m; i++) { m = await procurarMenu(); if (!m) await sleep(3000); }
+      if (!m) throw new Error('Menu da Segmentação não encontrado ao tentar de novo.');
+      await sleep(1500);
+      await page.click('#target-segment-menu');
+    };
+    let resultadoFiltro = '';
+    for (let tentativa = 1; tentativa <= 3; tentativa++) {
+      if (tentativa > 1) {
+        console.log(`🔁 Filtro não aplicado (${resultadoFiltro}) — tentativa ${tentativa}/3: reabrindo a segmentação...`);
+        await reabrirSegmento();
+      }
+      await fecharPopupNovaTela(page); // o popup pode cobrir o chip
+      console.log('⏳ Aguardando a tela da segmentação carregar...');
+      let chipApareceu = false;
+      for(let i = 0; i < 30; i++) { 
+          await sleep(1000);
+          chipApareceu = await page.evaluate(() => {
+              const spans = Array.from(document.querySelectorAll('span, div, .md-chip-content'));
+              return spans.some(e => e.textContent && e.textContent.toLowerCase().includes('vencimento do contrato:'));
+          });
+          if(chipApareceu) break;
+      }
     
-    if(!chipApareceu) {
-        console.log('⚠️ Aviso: O chip de data demorou muito para aparecer. Tentando continuar mesmo assim...');
-    } else {
-        console.log('✅ Segmentação carregada com sucesso na tela!');
-    }
-    await sleep(2000);
-
-    // 3. Automação do Calendário do EVO (Visão Humana - Com Duplo Clique)
-    const alvo = dataAlvoD7();
-    console.log(`📅 Ajustando calendário do EVO para a data: ${formatarData(alvo)}...`);
-
-    const resultadoFiltro = await page.evaluate(async (d, m, y) => {
-      const wait = (ms) => new Promise(r => setTimeout(r, ms));
-
-      // PASSO 1: Clicar no Chip "Vencimento do contrato:..."
-      const elementos = Array.from(document.querySelectorAll('span, div, md-chip'));
-      const chipNodes = elementos.filter(el => {
-          const txt = el.textContent || '';
-          return txt.toLowerCase().includes('vencimento do contrato:') && el.offsetWidth > 0;
-      });
-      
-      if (chipNodes.length > 0) {
-          const chipVencimento = chipNodes[chipNodes.length - 1];
-          const clickable = chipVencimento.closest('md-chip') || chipVencimento.closest('.md-chip-content') || chipVencimento;
-          clickable.click();
-          await wait(1500);
+      if(!chipApareceu) {
+          console.log('⚠️ Aviso: O chip de data demorou muito para aparecer. Tentando continuar mesmo assim...');
       } else {
-          return '⚠️ Chip de vencimento não encontrado.';
+          console.log('✅ Segmentação carregada com sucesso na tela!');
       }
+      await sleep(2000);
 
-      // PASSO 2: Clicar na opção "Período personalizado"
-      const opcoes = Array.from(document.querySelectorAll('md-list-item, div, span'));
-      const itemPeriodo = opcoes.find(el => {
-          const txt = (el.textContent || '').trim().toLowerCase();
-          return txt.includes('período personalizado') && txt.length < 30 && el.offsetWidth > 0;
-      });
-      
-      if (itemPeriodo) {
-          itemPeriodo.click();
-          await wait(1500);
-      } else {
-          return '⚠️ Opção "Período personalizado" não encontrada.';
-      }
+      // 3. Automação do Calendário do EVO (Visão Humana - Com Duplo Clique)
+      const alvo = dataAlvoD7();
+      console.log(`📅 Ajustando calendário do EVO para a data: ${formatarData(alvo)}...`);
 
-      // PASSO 3: Clicar no campo "Selecionar data"
-      const inputs = Array.from(document.querySelectorAll('input'));
-      const inputData = inputs.find(i => (i.placeholder || '').toLowerCase().includes('selecionar data'));
-      
-      if (inputData) {
-          inputData.click();
-          await wait(1500);
-      } else {
-          return '⚠️ Campo "Selecionar data" não encontrado.';
-      }
+      resultadoFiltro = await page.evaluate(async (d, m, y) => {
+        const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
-      // PASSO 4: Ao clicar em "Selecionar data" abre um CALENDÁRIO. Como o mês atual
-      // (ex.: julho) pode ser diferente do mês-alvo (ex.: agosto, quando D+7 cai no mês
-      // seguinte), precisamos AVANÇAR o calendário até o mês certo e então clicar no dia.
-      // O componente pode ser Angular Material (mat-calendar, com seta "próximo mês")
-      // OU AngularJS (md-calendar, rolável). Tratamos os dois.
-      const mesesFull = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
-      const mesesAbbr = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-      const mesAlvoFull = mesesFull[m];
-      const mesAlvoAbbr = mesesAbbr[m];
-      const anoAlvo = String(y);
-
-      // Espera algum calendário abrir de fato.
-      for (let i = 0; i < 20; i++) {
-        if (document.querySelector('mat-calendar, .mat-calendar, md-calendar, .md-calendar')) break;
-        await wait(250);
-      }
-
-      const isDisabled = (el) =>
-        el.classList.contains('md-calendar-date-disabled') ||
-        el.classList.contains('mat-calendar-body-disabled') ||
-        el.getAttribute('aria-disabled') === 'true' ||
-        (el.className || '').toLowerCase().includes('disabled');
-
-      // Acha o dia-alvo garantindo MÊS + ANO corretos (evita pegar "3" do mês errado).
-      const acharDiaNoMesAlvo = () => {
-        // 1) células com aria-label completo (vale p/ mat e md): "3 de agosto de 2026"
-        const cand = document.querySelectorAll('td[aria-label], .mat-calendar-body-cell[aria-label], button[aria-label]');
-        for (const el of cand) {
-          const al = (el.getAttribute('aria-label') || '').toLowerCase();
-          if (!al) continue;
-          const okMes = al.includes(mesAlvoFull) || al.includes(mesAlvoAbbr);
-          const okAno = al.includes(anoAlvo);
-          const okDia = new RegExp('(^|[^0-9])' + d + '([^0-9]|$)').test(al);
-          if (okMes && okAno && okDia && el.offsetWidth > 0 && !isDisabled(el)) return el;
-        }
-        // 2) por seção de mês (AngularJS md-calendar: tbody.md-calendar-month rotula o mês)
-        const months = document.querySelectorAll('tbody.md-calendar-month, .md-calendar-month');
-        for (const mesEl of months) {
-          const label = (mesEl.textContent || '').toLowerCase();
-          if (!label.includes(mesAlvoFull) && !label.includes(mesAlvoAbbr)) continue;
-          for (const td of mesEl.querySelectorAll('td')) {
-            if ((td.textContent || '').trim() !== String(d)) continue;
-            if (td.offsetWidth > 0 && !isDisabled(td)) return td;
-          }
-        }
-        return null;
-      };
-
-      // Botão "próximo mês" do Angular Material (ou variações genéricas).
-      const acharBotaoProximo = () =>
-        document.querySelector('.mat-calendar-next-button:not([disabled])') ||
-        Array.from(document.querySelectorAll('button')).find(b => {
-          if (b.offsetWidth <= 0 || b.disabled) return false;
-          const lbl = ((b.getAttribute('aria-label') || '') + ' ' + (b.title || '')).toLowerCase();
-          const ic = (b.textContent || '').toLowerCase();
-          return lbl.includes('próximo') || lbl.includes('proximo') || lbl.includes('next')
-            || ic.includes('keyboard_arrow_right') || ic.includes('chevron_right');
+        // PASSO 1: Clicar no Chip "Vencimento do contrato:..."
+        const elementos = Array.from(document.querySelectorAll('span, div, md-chip'));
+        const chipNodes = elementos.filter(el => {
+            const txt = el.textContent || '';
+            return txt.toLowerCase().includes('vencimento do contrato:') && el.offsetWidth > 0;
         });
-
-      const scroller = document.querySelector('.md-virtual-repeat-scroller')
-        || document.querySelector('.md-calendar-scroll-mask');
-
-      // Navega até o dia-alvo aparecer: clica "próximo mês" (mat) OU rola (md).
-      let diaEl = acharDiaNoMesAlvo();
-      for (let passo = 0; passo < 18 && !diaEl; passo++) {
-        const btnProx = acharBotaoProximo();
-        if (btnProx) {
-          btnProx.click();
-        } else if (scroller) {
-          scroller.scrollTop += 300;
-          scroller.dispatchEvent(new Event('scroll', { bubbles: true }));
+      
+        if (chipNodes.length > 0) {
+            const chipVencimento = chipNodes[chipNodes.length - 1];
+            const clickable = chipVencimento.closest('md-chip') || chipVencimento.closest('.md-chip-content') || chipVencimento;
+            clickable.click();
+            await wait(1500);
         } else {
-          break; // não há como navegar de mês
+            return '⚠️ Chip de vencimento não encontrado.';
         }
-        await wait(400);
-        diaEl = acharDiaNoMesAlvo();
-      }
 
-      if (!diaEl) {
-        // Diagnóstico: se ainda falhar, o log diz qual é o componente real.
-        const temMat = !!document.querySelector('mat-calendar, .mat-calendar');
-        const temMd = !!document.querySelector('md-calendar, .md-calendar');
-        const periodo = (document.querySelector('.mat-calendar-period-button, .mat-calendar-period-button-text')?.textContent || '').trim();
-        const amostra = Array.from(document.querySelectorAll('td[aria-label], .mat-calendar-body-cell[aria-label]'))
-          .slice(0, 4).map(e => e.getAttribute('aria-label')).join(' | ');
-        return `⚠️ Dia ${d} de ${mesAlvoFull}/${y} não encontrado. [mat=${temMat} md=${temMd} proximo=${!!acharBotaoProximo()} scroller=${!!scroller} periodo="${periodo}" amostra="${amostra}"]`;
-      }
+        // PASSO 2: Clicar na opção "Período personalizado"
+        const opcoes = Array.from(document.querySelectorAll('md-list-item, div, span'));
+        const itemPeriodo = opcoes.find(el => {
+            const txt = (el.textContent || '').trim().toLowerCase();
+            return txt.includes('período personalizado') && txt.length < 30 && el.offsetWidth > 0;
+        });
+      
+        if (itemPeriodo) {
+            itemPeriodo.click();
+            await wait(1500);
+        } else {
+            return '⚠️ Opção "Período personalizado" não encontrada.';
+        }
 
-      const clicaDia = (el) => {
-        el.scrollIntoView({ block: 'center' });
-        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-        el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-        el.click();
-      };
+        // PASSO 3: Clicar no campo "Selecionar data"
+        const inputs = Array.from(document.querySelectorAll('input'));
+        const inputData = inputs.find(i => (i.placeholder || '').toLowerCase().includes('selecionar data'));
+      
+        if (inputData) {
+            inputData.click();
+            await wait(1500);
+        } else {
+            return '⚠️ Campo "Selecionar data" não encontrado.';
+        }
 
-      // Seletor de intervalo: 1º clique = data início, 2º clique = data fim (mesmo dia).
-      clicaDia(diaEl);
-      await wait(1000);
-      clicaDia(acharDiaNoMesAlvo() || diaEl);
-      await wait(1500);
+        // PASSO 4: Ao clicar em "Selecionar data" abre um CALENDÁRIO. Como o mês atual
+        // (ex.: julho) pode ser diferente do mês-alvo (ex.: agosto, quando D+7 cai no mês
+        // seguinte), precisamos AVANÇAR o calendário até o mês certo e então clicar no dia.
+        // O componente pode ser Angular Material (mat-calendar, com seta "próximo mês")
+        // OU AngularJS (md-calendar, rolável). Tratamos os dois.
+        const mesesFull = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+        const mesesAbbr = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+        const mesAlvoFull = mesesFull[m];
+        const mesAlvoAbbr = mesesAbbr[m];
+        const anoAlvo = String(y);
 
-      // Clica em APLICAR
-      const btnAplicar = Array.from(document.querySelectorAll('button')).find(b =>
-        (b.textContent || '').trim().toLowerCase() === 'aplicar' && b.offsetWidth > 0);
-      if (btnAplicar) {
-          btnAplicar.click();
-          return '✓ Filtro de data aplicado com sucesso!';
-      }
-      return '⚠️ Botão APLICAR não encontrado.';
-    }, alvo.getDate(), alvo.getMonth(), alvo.getFullYear());
+        // Espera algum calendário abrir de fato.
+        for (let i = 0; i < 20; i++) {
+          if (document.querySelector('mat-calendar, .mat-calendar, md-calendar, .md-calendar')) break;
+          await wait(250);
+        }
 
-    console.log(`   👉 ${resultadoFiltro}`);
+        const isDisabled = (el) =>
+          el.classList.contains('md-calendar-date-disabled') ||
+          el.classList.contains('mat-calendar-body-disabled') ||
+          el.getAttribute('aria-disabled') === 'true' ||
+          (el.className || '').toLowerCase().includes('disabled');
+
+        // Acha o dia-alvo garantindo MÊS + ANO corretos (evita pegar "3" do mês errado).
+        const acharDiaNoMesAlvo = () => {
+          // 1) células com aria-label completo (vale p/ mat e md): "3 de agosto de 2026"
+          const cand = document.querySelectorAll('td[aria-label], .mat-calendar-body-cell[aria-label], button[aria-label]');
+          for (const el of cand) {
+            const al = (el.getAttribute('aria-label') || '').toLowerCase();
+            if (!al) continue;
+            const okMes = al.includes(mesAlvoFull) || al.includes(mesAlvoAbbr);
+            const okAno = al.includes(anoAlvo);
+            const okDia = new RegExp('(^|[^0-9])' + d + '([^0-9]|$)').test(al);
+            if (okMes && okAno && okDia && el.offsetWidth > 0 && !isDisabled(el)) return el;
+          }
+          // 2) por seção de mês (AngularJS md-calendar: tbody.md-calendar-month rotula o mês)
+          const months = document.querySelectorAll('tbody.md-calendar-month, .md-calendar-month');
+          for (const mesEl of months) {
+            const label = (mesEl.textContent || '').toLowerCase();
+            if (!label.includes(mesAlvoFull) && !label.includes(mesAlvoAbbr)) continue;
+            for (const td of mesEl.querySelectorAll('td')) {
+              if ((td.textContent || '').trim() !== String(d)) continue;
+              if (td.offsetWidth > 0 && !isDisabled(td)) return td;
+            }
+          }
+          return null;
+        };
+
+        // Botão "próximo mês" do Angular Material (ou variações genéricas).
+        const acharBotaoProximo = () =>
+          document.querySelector('.mat-calendar-next-button:not([disabled])') ||
+          Array.from(document.querySelectorAll('button')).find(b => {
+            if (b.offsetWidth <= 0 || b.disabled) return false;
+            const lbl = ((b.getAttribute('aria-label') || '') + ' ' + (b.title || '')).toLowerCase();
+            const ic = (b.textContent || '').toLowerCase();
+            return lbl.includes('próximo') || lbl.includes('proximo') || lbl.includes('next')
+              || ic.includes('keyboard_arrow_right') || ic.includes('chevron_right');
+          });
+
+        const scroller = document.querySelector('.md-virtual-repeat-scroller')
+          || document.querySelector('.md-calendar-scroll-mask');
+
+        // Navega até o dia-alvo aparecer: clica "próximo mês" (mat) OU rola (md).
+        let diaEl = acharDiaNoMesAlvo();
+        for (let passo = 0; passo < 18 && !diaEl; passo++) {
+          const btnProx = acharBotaoProximo();
+          if (btnProx) {
+            btnProx.click();
+          } else if (scroller) {
+            scroller.scrollTop += 300;
+            scroller.dispatchEvent(new Event('scroll', { bubbles: true }));
+          } else {
+            break; // não há como navegar de mês
+          }
+          await wait(400);
+          diaEl = acharDiaNoMesAlvo();
+        }
+
+        if (!diaEl) {
+          // Diagnóstico: se ainda falhar, o log diz qual é o componente real.
+          const temMat = !!document.querySelector('mat-calendar, .mat-calendar');
+          const temMd = !!document.querySelector('md-calendar, .md-calendar');
+          const periodo = (document.querySelector('.mat-calendar-period-button, .mat-calendar-period-button-text')?.textContent || '').trim();
+          const amostra = Array.from(document.querySelectorAll('td[aria-label], .mat-calendar-body-cell[aria-label]'))
+            .slice(0, 4).map(e => e.getAttribute('aria-label')).join(' | ');
+          return `⚠️ Dia ${d} de ${mesAlvoFull}/${y} não encontrado. [mat=${temMat} md=${temMd} proximo=${!!acharBotaoProximo()} scroller=${!!scroller} periodo="${periodo}" amostra="${amostra}"]`;
+        }
+
+        const clicaDia = (el) => {
+          el.scrollIntoView({ block: 'center' });
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+          el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+          el.click();
+        };
+
+        // Seletor de intervalo: 1º clique = data início, 2º clique = data fim (mesmo dia).
+        clicaDia(diaEl);
+        await wait(1000);
+        clicaDia(acharDiaNoMesAlvo() || diaEl);
+        await wait(1500);
+
+        // Clica em APLICAR
+        const btnAplicar = Array.from(document.querySelectorAll('button')).find(b =>
+          (b.textContent || '').trim().toLowerCase() === 'aplicar' && b.offsetWidth > 0);
+        if (btnAplicar) {
+            btnAplicar.click();
+            return '✓ Filtro de data aplicado com sucesso!';
+        }
+        return '⚠️ Botão APLICAR não encontrado.';
+      }, alvo.getDate(), alvo.getMonth(), alvo.getFullYear());
+
+      console.log(`   👉 ${resultadoFiltro}`);
+      if (String(resultadoFiltro).startsWith('✓')) break;
+    }
+    if (!String(resultadoFiltro).startsWith('✓')) {
+      try { await page.screenshot({ path: require('path').resolve(__dirname, '..', 'data', 'renovacao-debug.png'), fullPage: true }); } catch (_) {}
+      throw new Error(`Não consegui aplicar o período no filtro do EVO depois de 3 tentativas (${String(resultadoFiltro).replace(/^⚠️\s*/, '')}). Tela salva em data/renovacao-debug.png.`);
+    }
+
 	
     // 4. Extrai dados e telefones abrindo os painéis
     const clientesCompletos = [];

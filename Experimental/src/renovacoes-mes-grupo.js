@@ -173,112 +173,144 @@ async function buscarContratosDoPeriodo(inicio, fim) {
     await sleep(1500);
     await page.click('#target-segment-menu');
 
-    console.log('⏳ Aguardando a tela da segmentação carregar...');
-    let chipApareceu = false;
-    for (let i = 0; i < 15; i++) {
-      await sleep(1000);
-      chipApareceu = await page.evaluate(() =>
-        Array.from(document.querySelectorAll('span, div, .md-chip-content'))
-          .some(e => e.textContent && e.textContent.toLowerCase().includes('vencimento do contrato:')));
-      if (chipApareceu) break;
-    }
-    if (!chipApareceu) console.log('⚠️  O chip de data demorou para aparecer — tento continuar.');
-    await sleep(2000);
-
-    // 3. Chip "Vencimento do contrato:" → "Período personalizado" → intervalo do mês-alvo
-    clientesIntercept = []; // captura só o resultado JÁ filtrado
-    const resultadoFiltro = await page.evaluate(async (diaIni, diaFim, mesIndex, ano) => {
-      const wait = (ms) => new Promise(r => setTimeout(r, ms));
-      const mesesFull = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-      const mesesAbbr = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-      const mesAlvoFull = mesesFull[mesIndex], mesAlvoAbbr = mesesAbbr[mesIndex], anoAlvo = String(ano);
-
-      // PASSO 1: abrir o chip
-      const chipNodes = Array.from(document.querySelectorAll('span, div, md-chip'))
-        .filter(el => (el.textContent || '').toLowerCase().includes('vencimento do contrato:') && el.offsetWidth > 0);
-      if (!chipNodes.length) return '⚠️ Chip de vencimento não encontrado.';
-      const chip = chipNodes[chipNodes.length - 1];
-      (chip.closest('md-chip') || chip.closest('.md-chip-content') || chip).click();
-      await wait(1500);
-
-      // PASSO 2: "Período personalizado"
-      const itemPeriodo = Array.from(document.querySelectorAll('md-list-item, div, span'))
-        .find(el => { const t = (el.textContent || '').trim().toLowerCase(); return t.includes('período personalizado') && t.length < 30 && el.offsetWidth > 0; });
-      if (!itemPeriodo) return '⚠️ Opção "Período personalizado" não encontrada.';
-      itemPeriodo.click();
-      await wait(1500);
-
-      // PASSO 3: abrir o calendário
-      const inputData = Array.from(document.querySelectorAll('input')).find(i => (i.placeholder || '').toLowerCase().includes('selecionar data'));
-      if (!inputData) return '⚠️ Campo "Selecionar data" não encontrado.';
-      inputData.click();
-      await wait(1500);
-      for (let i = 0; i < 20; i++) { if (document.querySelector('mat-calendar, .mat-calendar, md-calendar, .md-calendar')) break; await wait(250); }
-
-      const isDisabled = (el) =>
-        el.classList.contains('md-calendar-date-disabled') ||
-        el.classList.contains('mat-calendar-body-disabled') ||
-        el.getAttribute('aria-disabled') === 'true' ||
-        (el.className || '').toLowerCase().includes('disabled');
-
-      // Acha um dia específico GARANTINDO mês + ano corretos (evita pegar o dia do mês errado).
-      const acharDia = (dia) => {
-        for (const el of document.querySelectorAll('td[aria-label], .mat-calendar-body-cell[aria-label], button[aria-label]')) {
-          const al = (el.getAttribute('aria-label') || '').toLowerCase();
-          if (!al) continue;
-          const okMes = al.includes(mesAlvoFull) || al.includes(mesAlvoAbbr);
-          const okAno = al.includes(anoAlvo);
-          const okDia = new RegExp('(^|[^0-9])' + dia + '([^0-9]|$)').test(al);
-          if (okMes && okAno && okDia && el.offsetWidth > 0 && !isDisabled(el)) return el;
-        }
-        const months = document.querySelectorAll('tbody.md-calendar-month, .md-calendar-month');
-        for (const mesEl of months) {
-          const label = (mesEl.textContent || '').toLowerCase();
-          if (!label.includes(mesAlvoFull) && !label.includes(mesAlvoAbbr)) continue;
-          for (const td of mesEl.querySelectorAll('td')) {
-            if ((td.textContent || '').trim() !== String(dia)) continue;
-            if (td.offsetWidth > 0 && !isDisabled(td)) return td;
-          }
-        }
-        return null;
-      };
-      const acharBotaoProximo = () =>
-        document.querySelector('.mat-calendar-next-button:not([disabled])') ||
-        Array.from(document.querySelectorAll('button')).find(b => {
-          if (b.offsetWidth <= 0 || b.disabled) return false;
-          const lbl = ((b.getAttribute('aria-label') || '') + ' ' + (b.title || '')).toLowerCase();
-          const ic = (b.textContent || '').toLowerCase();
-          return lbl.includes('próximo') || lbl.includes('proximo') || lbl.includes('next') || ic.includes('keyboard_arrow_right') || ic.includes('chevron_right');
-        });
-      const scroller = document.querySelector('.md-virtual-repeat-scroller') || document.querySelector('.md-calendar-scroll-mask');
-      const clica = (el) => { el.scrollIntoView({ block: 'center' }); el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); el.click(); };
-
-      // PASSO 4: navega até o mês-alvo e clica no DIA INÍCIO
-      let elIni = acharDia(diaIni);
-      for (let passo = 0; passo < 18 && !elIni; passo++) {
-        const btn = acharBotaoProximo();
-        if (btn) btn.click(); else if (scroller) { scroller.scrollTop += 300; scroller.dispatchEvent(new Event('scroll', { bubbles: true })); } else break;
-        await wait(400);
-        elIni = acharDia(diaIni);
+    // O chip do filtro de vencimento às vezes não aparece (tela lenta / popup do
+    // EVO). Antes o robô seguia SEM o filtro e o resultado saía errado (ex.:
+    // "nenhum contrato"). Agora tenta 3 vezes, reabrindo a segmentação; se não
+    // conseguir, o job FALHA (fica no Log do painel + alerta) e nada é enviado.
+    const reabrirSegmento = async () => {
+      try { await page.keyboard.press('Escape'); } catch (_) {}
+      await page.reload({ waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
+      await sleep(4000);
+      await fecharPopupNovaTela(page);
+      await page.evaluate((h) => { window.location.hash = h; }, `${config.evo.appBase}/clientes/segmentacao/clientes`);
+      await sleep(5000);
+      await fecharPopupNovaTela(page);
+      let m = null;
+      for (let i = 0; i < 15 && !m; i++) { m = await procurarMenu(); if (!m) await sleep(3000); }
+      if (!m) throw new Error('Menu da Segmentação não encontrado ao tentar de novo.');
+      await sleep(1500);
+      await page.click('#target-segment-menu');
+    };
+    let resultadoFiltro = '';
+    for (let tentativa = 1; tentativa <= 3; tentativa++) {
+      if (tentativa > 1) {
+        console.log(`🔁 Filtro não aplicado (${resultadoFiltro}) — tentativa ${tentativa}/3: reabrindo a segmentação...`);
+        await reabrirSegmento();
       }
-      if (!elIni) return `⚠️ Dia ${diaIni} de ${mesAlvoFull}/${ano} (início) não encontrado.`;
-      clica(elIni);
-      await wait(800);
+      await fecharPopupNovaTela(page); // o popup pode cobrir o chip
+      console.log('⏳ Aguardando a tela da segmentação carregar...');
+      let chipApareceu = false;
+      for (let i = 0; i < 30; i++) {
+        await sleep(1000);
+        chipApareceu = await page.evaluate(() =>
+          Array.from(document.querySelectorAll('span, div, .md-chip-content'))
+            .some(e => e.textContent && e.textContent.toLowerCase().includes('vencimento do contrato:')));
+        if (chipApareceu) break;
+      }
+      if (!chipApareceu) console.log('⚠️  O chip de data demorou para aparecer — tento continuar.');
+      await sleep(2000);
 
-      // PASSO 5: clica no DIA FIM (mesmo mês-alvo)
-      let elFim = acharDia(diaFim);
-      for (let passo = 0; passo < 6 && !elFim; passo++) { await wait(300); elFim = acharDia(diaFim); }
-      if (!elFim) return `⚠️ Dia ${diaFim} de ${mesAlvoFull}/${ano} (fim) não encontrado.`;
-      clica(elFim);
-      await wait(1200);
+      // 3. Chip "Vencimento do contrato:" → "Período personalizado" → intervalo do mês-alvo
+      clientesIntercept = []; // captura só o resultado JÁ filtrado
+      resultadoFiltro = await page.evaluate(async (diaIni, diaFim, mesIndex, ano) => {
+        const wait = (ms) => new Promise(r => setTimeout(r, ms));
+        const mesesFull = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+        const mesesAbbr = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+        const mesAlvoFull = mesesFull[mesIndex], mesAlvoAbbr = mesesAbbr[mesIndex], anoAlvo = String(ano);
 
-      // PASSO 6: APLICAR
-      const btnAplicar = Array.from(document.querySelectorAll('button')).find(b => (b.textContent || '').trim().toLowerCase() === 'aplicar' && b.offsetWidth > 0);
-      if (!btnAplicar) return '⚠️ Botão APLICAR não encontrado.';
-      btnAplicar.click();
-      return '✓ Filtro de período aplicado.';
-    }, inicio.getDate(), fim.getDate(), inicio.getMonth(), inicio.getFullYear());
-    console.log(`   👉 ${resultadoFiltro}`);
+        // PASSO 1: abrir o chip
+        const chipNodes = Array.from(document.querySelectorAll('span, div, md-chip'))
+          .filter(el => (el.textContent || '').toLowerCase().includes('vencimento do contrato:') && el.offsetWidth > 0);
+        if (!chipNodes.length) return '⚠️ Chip de vencimento não encontrado.';
+        const chip = chipNodes[chipNodes.length - 1];
+        (chip.closest('md-chip') || chip.closest('.md-chip-content') || chip).click();
+        await wait(1500);
+
+        // PASSO 2: "Período personalizado"
+        const itemPeriodo = Array.from(document.querySelectorAll('md-list-item, div, span'))
+          .find(el => { const t = (el.textContent || '').trim().toLowerCase(); return t.includes('período personalizado') && t.length < 30 && el.offsetWidth > 0; });
+        if (!itemPeriodo) return '⚠️ Opção "Período personalizado" não encontrada.';
+        itemPeriodo.click();
+        await wait(1500);
+
+        // PASSO 3: abrir o calendário
+        const inputData = Array.from(document.querySelectorAll('input')).find(i => (i.placeholder || '').toLowerCase().includes('selecionar data'));
+        if (!inputData) return '⚠️ Campo "Selecionar data" não encontrado.';
+        inputData.click();
+        await wait(1500);
+        for (let i = 0; i < 20; i++) { if (document.querySelector('mat-calendar, .mat-calendar, md-calendar, .md-calendar')) break; await wait(250); }
+
+        const isDisabled = (el) =>
+          el.classList.contains('md-calendar-date-disabled') ||
+          el.classList.contains('mat-calendar-body-disabled') ||
+          el.getAttribute('aria-disabled') === 'true' ||
+          (el.className || '').toLowerCase().includes('disabled');
+
+        // Acha um dia específico GARANTINDO mês + ano corretos (evita pegar o dia do mês errado).
+        const acharDia = (dia) => {
+          for (const el of document.querySelectorAll('td[aria-label], .mat-calendar-body-cell[aria-label], button[aria-label]')) {
+            const al = (el.getAttribute('aria-label') || '').toLowerCase();
+            if (!al) continue;
+            const okMes = al.includes(mesAlvoFull) || al.includes(mesAlvoAbbr);
+            const okAno = al.includes(anoAlvo);
+            const okDia = new RegExp('(^|[^0-9])' + dia + '([^0-9]|$)').test(al);
+            if (okMes && okAno && okDia && el.offsetWidth > 0 && !isDisabled(el)) return el;
+          }
+          const months = document.querySelectorAll('tbody.md-calendar-month, .md-calendar-month');
+          for (const mesEl of months) {
+            const label = (mesEl.textContent || '').toLowerCase();
+            if (!label.includes(mesAlvoFull) && !label.includes(mesAlvoAbbr)) continue;
+            for (const td of mesEl.querySelectorAll('td')) {
+              if ((td.textContent || '').trim() !== String(dia)) continue;
+              if (td.offsetWidth > 0 && !isDisabled(td)) return td;
+            }
+          }
+          return null;
+        };
+        const acharBotaoProximo = () =>
+          document.querySelector('.mat-calendar-next-button:not([disabled])') ||
+          Array.from(document.querySelectorAll('button')).find(b => {
+            if (b.offsetWidth <= 0 || b.disabled) return false;
+            const lbl = ((b.getAttribute('aria-label') || '') + ' ' + (b.title || '')).toLowerCase();
+            const ic = (b.textContent || '').toLowerCase();
+            return lbl.includes('próximo') || lbl.includes('proximo') || lbl.includes('next') || ic.includes('keyboard_arrow_right') || ic.includes('chevron_right');
+          });
+        const scroller = document.querySelector('.md-virtual-repeat-scroller') || document.querySelector('.md-calendar-scroll-mask');
+        const clica = (el) => { el.scrollIntoView({ block: 'center' }); el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); el.click(); };
+
+        // PASSO 4: navega até o mês-alvo e clica no DIA INÍCIO
+        let elIni = acharDia(diaIni);
+        for (let passo = 0; passo < 18 && !elIni; passo++) {
+          const btn = acharBotaoProximo();
+          if (btn) btn.click(); else if (scroller) { scroller.scrollTop += 300; scroller.dispatchEvent(new Event('scroll', { bubbles: true })); } else break;
+          await wait(400);
+          elIni = acharDia(diaIni);
+        }
+        if (!elIni) return `⚠️ Dia ${diaIni} de ${mesAlvoFull}/${ano} (início) não encontrado.`;
+        clica(elIni);
+        await wait(800);
+
+        // PASSO 5: clica no DIA FIM (mesmo mês-alvo)
+        let elFim = acharDia(diaFim);
+        for (let passo = 0; passo < 6 && !elFim; passo++) { await wait(300); elFim = acharDia(diaFim); }
+        if (!elFim) return `⚠️ Dia ${diaFim} de ${mesAlvoFull}/${ano} (fim) não encontrado.`;
+        clica(elFim);
+        await wait(1200);
+
+        // PASSO 6: APLICAR
+        const btnAplicar = Array.from(document.querySelectorAll('button')).find(b => (b.textContent || '').trim().toLowerCase() === 'aplicar' && b.offsetWidth > 0);
+        if (!btnAplicar) return '⚠️ Botão APLICAR não encontrado.';
+        btnAplicar.click();
+        return '✓ Filtro de período aplicado.';
+      }, inicio.getDate(), fim.getDate(), inicio.getMonth(), inicio.getFullYear());
+      console.log(`   👉 ${resultadoFiltro}`);
+      if (String(resultadoFiltro).startsWith('✓')) break;
+    }
+    if (!String(resultadoFiltro).startsWith('✓')) {
+      try { await page.screenshot({ path: require('path').resolve(__dirname, '..', 'data', 'renovacoes-mes-debug.png'), fullPage: true }); } catch (_) {}
+      throw new Error(`Não consegui aplicar o período no filtro do EVO depois de 3 tentativas (${String(resultadoFiltro).replace(/^⚠️\s*/, '')}). Tela salva em data/renovacoes-mes-debug.png.`);
+    }
+
 
     // 4. Lê a lista (obter-clientes) — só nome + vencimento.
     //    IMPORTANTE: o segmento do EVO às vezes devolve contratos FORA do período
@@ -307,7 +339,7 @@ async function buscarContratosDoPeriodo(inicio, fim) {
   } catch (err) {
     console.error('❌ Erro ao ler contratos:', err.message);
     try { await page.screenshot({ path: require('path').resolve(__dirname, '..', 'data', 'renovacoes-mes-debug.png'), fullPage: true }); } catch (_) {}
-    return null;
+    throw err; // o job falha (Log do painel + alerta) em vez de mandar "nenhum contrato"
   } finally {
     await sleep(2000);
     await browser.close();
@@ -324,11 +356,7 @@ async function runRenovacoesMesGrupo(opts = {}) {
   console.log('╚═══════════════════════════════════════════════════╝');
   console.log(`   Mês-alvo: ${MESES[mesIndex]}/${ano}  |  Grupo: ${GRUPO}\n`);
 
-  const alunas = await buscarContratosDoPeriodo(inicio, fim);
-  if (alunas === null) {
-    console.log('\n⚠️  Não consegui ler os contratos no EVO — nada foi enviado.');
-    return { mes: mesIndex + 1, total: 0, enviado: false, erro: true };
-  }
+  const alunas = await buscarContratosDoPeriodo(inicio, fim); // erro → o job falha e nada é enviado
 
   const mensagem = montarMensagem(alunas, mesIndex, ano);
   console.log('\n─── Mensagem ───────────────────────────────────────');
