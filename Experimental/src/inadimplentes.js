@@ -37,6 +37,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('./config');
 const { fecharPopupNovaTela } = require('./evo-popup');
+const { coletarTodasPaginas } = require('./evo-paginas');
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -126,6 +127,7 @@ async function lerInadimplentes() {
 
   // ── Interceptação das respostas que interessam ──────────────────────────
   let listaDevedoras = null;   // snapshot da segmentação "Com débito"
+  const estadoSeg = { seq: 0, lista: null }; // respostas da lista (para ler TODAS as páginas)
   let perfilAtual = null;      // {vencimento, valor} do cliente em foco
   let linkAtual = null;        // link de cobrança (recorrente) do cliente em foco
   let listaBoletos = null;     // snapshot da tela global de boletos
@@ -141,7 +143,7 @@ async function lerInadimplentes() {
       if (/clientes-segmentacao\/obter-clientes/i.test(url)) {
         const d = JSON.parse(await res.text());
         const l = Array.isArray(d) ? d : (d.retorno || d.data || d.lista || []);
-        if (Array.isArray(l) && l.length && l.length <= 80) listaDevedoras = l;
+        if (Array.isArray(l) && l.length && l.length <= 80) { listaDevedoras = l; estadoSeg.lista = l; estadoSeg.seq++; }
         return;
       }
       if (/CarregarListaBoletos/i.test(url)) {
@@ -246,6 +248,21 @@ async function lerInadimplentes() {
     return /cadastro\/\d+/.test(page.url());
   };
 
+  // Perfil da aluna (vencimento + saldo devedor): direto pelo ID — funciona para
+  // quem está em qualquer página da segmentação. Se o perfil não vier, tenta pela
+  // lista "Com débito" (só acha quem está na 1ª página).
+  const abrirPerfil = async (c) => {
+    perfilAtual = null;
+    await irPara(`clientes/cadastro/${c.idCliente}//perfil`, 5000);
+    for (let i = 0; i < 16 && !perfilAtual; i++) await sleep(500);
+    if (!perfilAtual) {
+      await abrirComDebito();
+      if (await abrirFichaPorNome(c.nome)) for (let i = 0; i < 20 && !perfilAtual; i++) await sleep(500);
+    }
+    await fecharPopupNovaTela(page);
+    return !!perfilAtual;
+  };
+
   const resultados = [];
   const vistos = new Set(); // idCliente já incluído (dedup entre passes)
   try {
@@ -271,22 +288,19 @@ async function lerInadimplentes() {
       if (ok) break; await sleep(1500);
     }
     await sleep(6000);
-    const candidatas = (listaDevedoras || []).map(r => ({
+    // A segmentação pagina de 20 em 20: junta todas as páginas (antes só a 1ª).
+    const pag = await coletarTodasPaginas(page, { estado: estadoSeg, log: (m) => console.log('   · ' + m) });
+    const candidatas = pag.linhas.map(r => ({
       idCliente: r.idCliente, nome: r.nome,
       celular: soDigitos(r.celular || r.telefone || ''),
       contrato: String(r.contrato || '').replace(/\s+/g, ' ').trim(),
     })).filter(c => c.idCliente);
-    console.log(`👥 "Com débito": ${candidatas.length} candidata(s).`);
+    console.log(`👥 "Com débito": ${candidatas.length} candidata(s)${pag.total ? ` (EVO informa ${pag.total})` : ''}.`);
 
     for (const c of candidatas) {
       if (!ehRecorrente(c.contrato)) { console.log(`   ⏭️  ${c.nome}: não é recorrente (${c.contrato || 'contrato sem nome'}) — vai para boleto/saldo devedor.`); continue; }
-      perfilAtual = null; linkAtual = null;
-      await abrirComDebito();
-      const achou = await abrirFichaPorNome(c.nome);
-      if (!achou) { console.log(`   ⚠️  ${c.nome}: não achei o nome na lista (pulando).`); continue; }
-      for (let i = 0; i < 20 && !perfilAtual; i++) await sleep(500);
-      await fecharPopupNovaTela(page);
-      if (!perfilAtual) { console.log(`   ⚠️  ${c.nome}: não li o perfil (pulando).`); continue; }
+      linkAtual = null;
+      if (!(await abrirPerfil(c))) { console.log(`   ⚠️  ${c.nome}: não li o perfil (pulando).`); continue; }
 
       const dias = diasDeAtraso(perfilAtual.vencimento);
       if (dias == null || dias < diasMin) { console.log(`   ⏭️  ${c.nome}: venc. ${fmtData(perfilAtual.vencimento)} (atraso ${dias}d) — < ${diasMin}d.`); continue; }
@@ -402,15 +416,8 @@ async function lerInadimplentes() {
     const restantes = candidatas.filter(c => !ehRecorrente(c.contrato) && !vistos.has(String(c.idCliente)));
     console.log(`\n💰 Saldo devedor (sem boleto/recorrente): ${restantes.length} para conferir...`);
     for (const c of restantes) {
-      perfilAtual = null; telefoneAtual = null;
-      // Atalho: abre a ficha direto pelo ID; se o perfil não vier, vai pela lista "Com débito".
-      await irPara(`clientes/cadastro/${c.idCliente}//perfil`, 5000);
-      for (let i = 0; i < 16 && !perfilAtual; i++) await sleep(500);
-      if (!perfilAtual) {
-        await abrirComDebito();
-        if (await abrirFichaPorNome(c.nome)) for (let i = 0; i < 20 && !perfilAtual; i++) await sleep(500);
-      }
-      await fecharPopupNovaTela(page);
+      telefoneAtual = null;
+      await abrirPerfil(c);
       if (!perfilAtual || !perfilAtual.vencimento) { console.log(`   ⚠️  ${c.nome}: não li o saldo devedor no perfil (pulando).`); continue; }
       const dias = diasDeAtraso(perfilAtual.vencimento);
       if (dias == null || dias < diasMin) { console.log(`   ⏭️  ${c.nome}: próxima parcela ${fmtData(perfilAtual.vencimento)} (atraso ${dias}d) — < ${diasMin}d.`); continue; }
