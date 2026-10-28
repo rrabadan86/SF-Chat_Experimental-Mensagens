@@ -6112,7 +6112,9 @@ function rotaSlimClubPublico(req, res, rota, urlOriginal) {
   if (rota === '/slimclub' && req.method === 'GET') {
     const aluna = slimclub.alunaDaSessao(lerCookie(req, slimclub.COOKIE));
     if (!aluna) return scHtml(res, 200, slimclubPaginas.paginaEntrar({ studio }));
-    const meu = slimclub.meuAnuncio(aluna.telefone);
+    let meu = slimclub.meuAnuncio(aluna.telefone);
+    // Aprovada antes do código existir: ganha o código já aqui (para aparecer no "Meu anúncio").
+    if (meu && meu.status === 'aprovado' && !meu.codigo) { slimclub.garantirCodigos(); meu = slimclub.meuAnuncio(aluna.telefone); }
     const est = slimclub.estatisticas();
     const empresas = slimclub.publicos();
     const recs = {};
@@ -6146,7 +6148,13 @@ function rotaSlimClubPublico(req, res, rota, urlOriginal) {
     if (req.method === 'GET') {
       if (!aluna) { res.writeHead(303, { Location: '/slimclub' }); return res.end(); }
       const meu = slimclub.meuAnuncio(aluna.telefone);
-      if (!meu) { res.writeHead(303, { Location: '/SlimClubCadastro' }); return res.end(); }
+      // Ainda sem anúncio: o cadastro abre aqui dentro, com nome e telefone da sessão.
+      if (!meu) {
+        return scHtml(res, 200, slimclubPaginas.paginaCadastro({
+          studio, categorias: slimclub.CATEGORIAS, avisar: slimclub.lerConfig().avisar, comprovacao: slimclub.COMPROVACAO,
+          logada: { nome: aluna.nome, telefone: fmtTel(aluna.telefone) },
+        }));
+      }
       // Com uma alteração em análise, o formulário mostra a versão enviada por último.
       const r = meu.alteracao ? Object.assign({}, meu, meu.alteracao) : meu;
       return scHtml(res, 200, slimclubPaginas.paginaCadastro({
@@ -6164,8 +6172,10 @@ function rotaSlimClubPublico(req, res, rota, urlOriginal) {
       let d = null; try { d = JSON.parse(corpo); } catch (_) {}
       if (!d || typeof d !== 'object') return scJson(res, 400, { erro: 'Envio inválido. Recarregue a página e tente de novo.' });
       let r;
-      try { r = slimclub.editar(aluna.telefone, d); } catch (e) { console.log('[slimclub] erro ao editar anúncio:', e.message); r = { erro: 'Não consegui salvar agora. Tente de novo em instantes.' }; }
-      if (r.ok) console.log(`[slimclub] anúncio ${r.id} editado pela dona — ${r.emAnalise === 'alteracao' ? 'alteração' : 'anúncio'} aguardando validação`);
+      const novo = !slimclub.meuAnuncio(aluna.telefone);
+      try { r = novo ? slimclub.criar(Object.assign({}, d, { telefone: aluna.telefone })) : slimclub.editar(aluna.telefone, d); } catch (e) { console.log('[slimclub] erro ao salvar anúncio:', e.message); r = { erro: 'Não consegui salvar agora. Tente de novo em instantes.' }; }
+      if (r.ok) console.log(novo ? `[slimclub] novo cadastro ${r.id} (pela área da aluna) — aguardando validação no painel`
+        : `[slimclub] anúncio ${r.id} editado pela dona — ${r.emAnalise === 'alteracao' ? 'alteração' : 'anúncio'} aguardando validação`);
       return scJson(res, r.ok ? 200 : 400, r.ok ? { ok: true } : { erro: r.erro });
     });
   }
