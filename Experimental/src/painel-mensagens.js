@@ -6400,6 +6400,7 @@ function paginaSlimClub(view, base, aviso) {
         <dt>CNPJ</dt><dd>${esc(slimclub.fmtDocumento(r.documento))}</dd>
         <dt>Término</dt><dd>${r.fimVigencia ? esc(fmtData(r.fimVigencia)) : 'Sem prazo'}</dd>
         <dt>Instagram</dt><dd>${r.instagram ? `<a href="https://instagram.com/${encodeURIComponent(r.instagram)}" target="_blank" rel="noopener">@${esc(r.instagram)}</a>` : '—'}</dd>
+        <dt>WhatsApp do negócio</dt><dd>${r.whatsapp ? `<a href="https://wa.me/${esc(String(r.whatsapp).replace(/\D/g, ''))}" target="_blank" rel="noopener">${esc(fmtTel(r.whatsapp))}</a>` : '—'}</dd>
         <dt>Enviado em</dt><dd>${esc(scFmtQuando(r.criadoEm))}</dd>
       </dl>
       ${estado}
@@ -6411,12 +6412,13 @@ function paginaSlimClub(view, base, aviso) {
   // o valor que está no ar hoje.
   const itemAlteracao = (r) => {
     const a = r.alteracao;
-    const ROT = { nome: 'Nome', negocio: 'Negócio', categoria: 'Categoria', alcance: 'Alcance', beneficio: 'Benefício', documento: 'CNPJ', fimVigencia: 'Término', instagram: 'Instagram' };
+    const ROT = { nome: 'Nome', negocio: 'Negócio', categoria: 'Categoria', alcance: 'Alcance', beneficio: 'Benefício', documento: 'CNPJ', fimVigencia: 'Término', instagram: 'Instagram', whatsapp: 'WhatsApp do negócio' };
     const fmt = (k, v) => {
       if (k === 'documento') return slimclub.fmtDocumento(v);
       if (k === 'fimVigencia') return v ? fmtData(v) : 'Sem prazo';
       if (k === 'alcance') return v === 'nacional' ? 'Nacional (todas as unidades)' : 'Local (só nesta cidade)';
       if (k === 'instagram') return v ? '@' + v : '—';
+      if (k === 'whatsapp') return v ? fmtTel(v) : '—';
       return v || '—';
     };
     const linhas = Object.keys(ROT).map(k => {
