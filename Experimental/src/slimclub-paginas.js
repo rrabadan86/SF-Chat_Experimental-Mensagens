@@ -101,6 +101,7 @@ input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible,.al
 .ig-link{display:inline-flex;align-items:center;gap:7px;color:var(--teal-esc);overflow-wrap:anywhere}
 .ig-link svg{flex:0 0 auto}
 .ig-link:hover span{text-decoration:underline}
+.det .ig-link{text-decoration:none;font-weight:600}
 .vazio{text-align:center;color:var(--cinza);padding:34px 16px;background:var(--card);border:1px dashed var(--linha);border-radius:16px}
 .btn-cart{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:.95rem;color:var(--teal-esc);background:var(--card);border:1.5px solid var(--teal);border-radius:12px;padding:11px 16px;text-decoration:none;margin:0 0 20px}
 .btn-cart svg{flex:0 0 auto}
@@ -291,6 +292,9 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao, parce
         <p class="dica">O MEI também tem CNPJ.</p></div>
       <div class="campo"><label for="instagram">Instagram do negócio <span class="opc">(opcional)</span></label>
         <div class="ig"><span>@</span><input type="text" id="instagram" maxlength="60" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="seunegocio" value="${val('instagram')}" oninput="if(this.value.charAt(0)==='@')this.value=this.value.slice(1)"></div></div>
+      <div class="campo"><label for="whatsapp">WhatsApp ${parceira ? 'da empresa' : 'do negócio'} <span class="opc">(opcional)</span></label>
+        <input type="tel" id="whatsapp" inputmode="tel" placeholder="(00) 90000-0000" maxlength="20" value="${r.whatsapp ? esc(fmtTelBR(r.whatsapp)) : ''}">
+        <p class="dica">Aparece no cartão para as alunas falarem com ${parceira ? 'a empresa' : 'o negócio'}.${parceira ? '' : ' Pode ser diferente do seu telefone.'}</p></div>
     </section>
 
     <section class="card">
@@ -388,7 +392,7 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao, parce
     var alc=document.querySelector('input[name=alcance]:checked');
     var dados={ nome:v('nome'), telefone:v('telefone'), negocio:v('negocio'),
       categoria: cat.value==='__outra' ? catO.value : cat.value,
-      documento:v('documento'), instagram:v('instagram'), beneficio:v('beneficio'),
+      documento:v('documento'), instagram:v('instagram'), whatsapp:v('whatsapp'), beneficio:v('beneficio'),
       alcance: alc?alc.value:'', fimVigencia:v('fim'),
       consentimento: document.getElementById('consent').checked, foto: foto };
     if(!foto && !EDICAO) return mostrarErro(SEM_FOTO); // na edição, sem foto nova fica a atual
@@ -429,6 +433,18 @@ function paginaEntrar({ studio, erro, nome, telefone }) {
 }
 
 // Ícone do Instagram (gradiente da marca, definido uma vez na página: #igGrad).
+// 5562999990000 → (62) 99999-0000
+function fmtTelBR(t) {
+  const d = String(t || '').replace(/\D/g, '');
+  const m = /^55(\d{2})(\d{8,9})$/.exec(d);
+  if (!m) return d;
+  const n = m[2];
+  return `(${m[1]}) ${n.slice(0, n.length - 4)}-${n.slice(-4)}`;
+}
+// Ícone do WhatsApp (verde da marca).
+const ICONE_WPP = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect width="24" height="24" rx="6.5" fill="#25D366"/>'
+  + '<path fill="#fff" d="M12 5.2a6.7 6.7 0 0 0-5.8 10.1l-.9 3.3 3.4-.9A6.7 6.7 0 1 0 12 5.2zm0 12.2c-1 0-2-.3-2.9-.8l-.2-.1-2 .5.5-1.9-.1-.2a5.5 5.5 0 1 1 4.7 2.5zm3-4.1c-.2-.1-1-.5-1.1-.5-.2-.1-.3-.1-.4.1l-.5.6c-.1.1-.2.1-.4 0a4.5 4.5 0 0 1-2.2-1.9c-.2-.3.2-.3.5-1 .1-.1 0-.2 0-.3l-.5-1.2c-.1-.3-.3-.3-.4-.3h-.3c-.1 0-.3 0-.5.2-.2.2-.6.6-.6 1.5s.7 1.8.8 1.9c.1.1 1.3 2 3.2 2.8 1.2.5 1.6.5 2.2.4.4-.1 1-.4 1.2-.8.1-.4.1-.7.1-.8l-.3-.2z"/></svg>';
+
 const ICONE_IG = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
   + '<rect width="24" height="24" rx="6.5" fill="url(#igGrad)"/>'
   + '<rect x="5" y="5" width="14" height="14" rx="4.2" fill="none" stroke="#fff" stroke-width="1.9"/>'
@@ -475,6 +491,7 @@ function paginaListagem({ studio, aluna, empresas, fmtData, fmtDocumento, primei
       <div class="beneficio">${esc(e.beneficio)}</div>
       <p class="det"><b>Como comprovar:</b> ${esc(comprovacao)}</p>
       <p class="det"><b>CNPJ:</b> ${esc(fmtDocumento(e.documento))}</p>
+      ${e.whatsapp ? `<p class="det"><a class="ig-link" href="https://wa.me/${esc(String(e.whatsapp).replace(/\D/g, ''))}" target="_blank" rel="noopener" aria-label="WhatsApp de ${esc(e.negocio)}: ${esc(fmtTelBR(e.whatsapp))}">${ICONE_WPP}<span>${esc(fmtTelBR(e.whatsapp))}</span></a></p>` : ''}
       <div class="rodp"><span>${e.fimVigencia ? 'Válido até ' + esc(fmtData(e.fimVigencia)) : 'Sem prazo de término'}</span>
         ${e.instagram ? `<a class="ig-link" href="https://instagram.com/${encodeURIComponent(e.instagram)}" target="_blank" rel="noopener" aria-label="Instagram de ${esc(e.negocio)}: @${esc(e.instagram)}">${ICONE_IG}<span>@${esc(e.instagram)}</span></a>` : ''}</div>
       ${avalHtml}

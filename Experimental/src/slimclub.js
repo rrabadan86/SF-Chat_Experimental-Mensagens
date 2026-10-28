@@ -61,8 +61,9 @@ const CATEGORIAS = ['Saúde', 'Beleza', 'Alimentação', 'Moda', 'Serviços', 'C
 const MSG_APROVADO_PADRAO = 'Oi, {nome}! 💜 Aqui é do {studio}.\n\n'
   + 'Seu cadastro no *Slim Club* foi aprovado! 🎉 A partir de agora, *{negocio}* aparece para as alunas do Studio.\n\n'
   + 'Veja a listagem: {link}\n\n'
-  + 'Para registrar o uso do benefício, leia o QR code da carteira SlimClub da aluna e, na primeira vez, digite o código de conferência: *{codigo}*. '
-  + 'Guarde este código; ele pode ser passado para quem atende.\n\nObrigada por fazer parte! ✨';
+  + '📲 *Importante: encaminhe esta mensagem para a recepção do seu negócio* (ou para quem atende as alunas). '
+  + 'Na hora de dar o benefício, a pessoa lê com a câmera do celular o QR code da carteira SlimClub da aluna e, na primeira vez, '
+  + 'digita o código de conferência: *{codigo}*. Assim o uso do benefício fica registrado.\n\nObrigada por fazer parte! ✨';
 
 // ── Utilidades ──────────────────────────────────────────────────────────────
 function semAcento(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, ''); }
@@ -178,6 +179,9 @@ function validar(c, { fotoOpcional = false } = {}) {
   const validacao = COMPROVACAO;
   const fimVigencia = String(c.fimVigencia || '').trim();
   const instagram = normInstagram(c.instagram);
+  // WhatsApp do negócio (opcional): pode ser diferente do telefone da dona.
+  const whatsappTxt = String(c.whatsapp || '').trim();
+  const whatsapp = whatsappTxt ? contatos.normTel(whatsappTxt) : '';
 
   if (palavrasNome(nome).length < 2) return { erro: 'Informe seu nome completo.' };
   if (!telefone) return { erro: 'Informe o telefone com DDD (o mesmo cadastrado no Studio).' };
@@ -189,17 +193,18 @@ function validar(c, { fotoOpcional = false } = {}) {
   if (fimVigencia && !dataValida(fimVigencia)) return { erro: 'Data de término inválida.' };
   if (fimVigencia && fimVigencia < hojeSP()) return { erro: 'A data de término já passou. Deixe em branco se a oferta não tiver prazo.' };
   if (instagram === null) return { erro: 'Instagram inválido. Use só o @ do perfil (ex.: @minhaloja).' };
+  if (whatsappTxt && !whatsapp) return { erro: 'WhatsApp do negócio inválido. Informe com DDD, ex.: (62) 99999-0000 — ou deixe em branco.' };
   if (!c.consentimento) return { erro: 'Para participar, autorize a exibição do seu nome e foto para as alunas.' };
   const foto = (fotoOpcional && !c.foto) ? { buf: null } : decodificarFoto(c.foto);
   if (foto.erro) return { erro: foto.erro };
 
   return {
-    dados: { nome, telefone, negocio, categoria, documento, beneficio, alcance, validacao, fimVigencia, instagram },
+    dados: { nome, telefone, negocio, categoria, documento, beneficio, alcance, validacao, fimVigencia, instagram, whatsapp },
     foto: foto.buf,
   };
 }
 // Campos que a dona pode alterar (o telefone é a chave e não muda).
-const CAMPOS_EDITAVEIS = ['nome', 'negocio', 'categoria', 'documento', 'beneficio', 'alcance', 'fimVigencia', 'instagram'];
+const CAMPOS_EDITAVEIS = ['nome', 'negocio', 'categoria', 'documento', 'beneficio', 'alcance', 'fimVigencia', 'instagram', 'whatsapp'];
 
 // O anúncio deste telefone (tolerando o 9º dígito). Se houver mais de um (de antes
 // da regra de um por aluna), vale o mais recente.
@@ -544,7 +549,7 @@ function mensagemAprovado(r, link) {
   };
   let t = lerConfig().msgAprovado;
   // Mensagem personalizada de antes do código: acrescenta o código no fim.
-  if (r.codigo && t.indexOf('{codigo}') < 0) t += '\n\nCódigo de conferência do Slim Club: *{codigo}* (digite ao ler o QR da carteira da aluna para registrar o uso do benefício).';
+  if (r.codigo && t.indexOf('{codigo}') < 0) t += '\n\n📲 Encaminhe esta mensagem para a recepção do seu negócio. Código de conferência do Slim Club: *{codigo}* (digite ao ler o QR da carteira da aluna para registrar o uso do benefício).';
   for (const [k, v] of Object.entries(vars)) t = t.split('{' + k + '}').join(v);
   return t;
 }
