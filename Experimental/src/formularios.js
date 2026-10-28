@@ -37,7 +37,7 @@ const COM_OPCOES = new Set(['unica', 'varias']);
 
 const MODELO_BLACK_FRIDAY = {
   titulo: 'Black Friday SlimFit',
-  descricao: 'Entre na lista VIP e receba as ofertas da Black Friday antes de todo mundo, direto no seu WhatsApp.\nAs vagas com desconto são limitadas.',
+  descricao: 'Entre na lista VIP e receba as ofertas da *Black Friday* antes de todo mundo, direto no seu WhatsApp.\n\n- Condições especiais só para quem estiver na lista\n- *Vagas com desconto limitadas*',
   campos: [
     { tipo: 'unica', rotulo: 'Você já é aluna da SlimFit?', obrigatorio: true, opcoes: ['Sou aluna', 'Já fui aluna', 'Ainda não'] },
     { tipo: 'varias', rotulo: 'O que te interessa?', obrigatorio: false, opcoes: ['Plano mensal', 'Plano semestral', 'Plano anual', 'Avaliação física'] },
@@ -47,6 +47,7 @@ const MODELO_BLACK_FRIDAY = {
   msgFinal: 'Pronto, você está na lista! Assim que as ofertas forem liberadas, a gente te chama no WhatsApp.',
   tag: 'Black Friday',
   slug: 'blackfriday',
+  tema: 'escuro',
 };
 
 const novoId = () => crypto.randomBytes(8).toString('hex');
@@ -167,6 +168,7 @@ function salvar(d, id, por) {
     botao: corta(d.botao, 40) || 'Enviar',
     msgFinal: corta(d.msgFinal, 500) || 'Recebemos sua resposta. Obrigada!',
     tag: corta(d.tag, 40).replace(/[,;]/g, ' ').trim(),
+    tema: d.tema === 'escuro' ? 'escuro' : 'claro',
     ativo: d.ativo !== false,
     encerraEm,
     slug: slugLivre(slugPedido, fid, forms),

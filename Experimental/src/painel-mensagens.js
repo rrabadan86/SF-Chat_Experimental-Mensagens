@@ -6685,7 +6685,10 @@ function paginaFormularioEditar(base, f, modelo) {
       <label for="titulo">Título</label>
       <input id="titulo" type="text" maxlength="120" value="${esc(d.titulo)}" placeholder="Ex.: Black Friday SlimFit">
       <label for="descricao">Texto de apresentação <span class="quando" style="font-weight:400">(opcional)</span></label>
-      <textarea id="descricao" rows="4" maxlength="2000" placeholder="Explique a campanha em poucas linhas.">${esc(d.descricao)}</textarea>
+      <textarea id="descricao" rows="5" maxlength="2000" placeholder="Explique a campanha em poucas linhas.">${esc(d.descricao)}</textarea>
+      <p class="quando">Dica: <b>*texto*</b> fica em negrito (como no WhatsApp); linhas começando com <b>-</b> viram lista; linha em branco separa parágrafos.</p>
+      <label for="tema">Visual da página</label>
+      <select id="tema" style="max-width:340px"><option value="claro"${d.tema !== 'escuro' ? ' selected' : ''}>Claro — verde SlimFit</option><option value="escuro"${d.tema === 'escuro' ? ' selected' : ''}>Escuro — preto e vermelho (Black Friday)</option></select>
       <label>Imagem de capa <span class="quando" style="font-weight:400">(opcional — aparece no topo, ex.: o flyer da campanha)</span></label>
       <div class="fm-capa"><img id="capaImg" alt="" hidden><button type="button" class="reset" id="capaBt">Escolher imagem</button><button type="button" class="reset fm-del" id="capaRm" hidden>Remover</button><span id="capaMsg" class="quando"></span><input id="capaArq" type="file" accept="image/*" hidden></div>
       <label for="slug">Endereço do link</label>
@@ -6793,7 +6796,7 @@ function paginaFormularioEditar(base, f, modelo) {
     var bt=document.getElementById('salvar'), msg=document.getElementById('msg');
     bt.onclick=function(){
       var v=function(id){ return document.getElementById(id).value; };
-      var d={ id:INI.id, titulo:v('titulo'), descricao:v('descricao'), slug:v('slug'), botao:v('botao'), tag:v('tag'), msgFinal:v('msgFinal'), encerraEm:v('encerraEm'), ativo:document.getElementById('ativo').checked,
+      var d={ id:INI.id, titulo:v('titulo'), descricao:v('descricao'), tema:v('tema'), slug:v('slug'), botao:v('botao'), tag:v('tag'), msgFinal:v('msgFinal'), encerraEm:v('encerraEm'), ativo:document.getElementById('ativo').checked,
         campos:C.map(function(c){ return {id:c.id,tipo:c.tipo,rotulo:c.rotulo,obrigatorio:c.obrigatorio,opcoes:c.opcoes.split('\\n')}; }) };
       if(capa) d.capa=capa;
       bt.disabled=true; msg.textContent='Salvando…';
@@ -6871,17 +6874,15 @@ function rotaFormularioPublico(req, res, rota) {
   const f = partes[1] ? formularios.porSlug(partes[1]) : formularios.unicoAberto();
   if (req.method === 'GET') {
     if (!f) return scHtml(res, 404, formulariosPaginas.paginaFechada({ studio, f: null }));
-    const aberto = formularios.estaAberto(f);
-    let previa = false;
-    if (!aberto) {
+    const capaUrl = f.capa ? `/formulario/${f.slug}/capa.jpg?v=${f.capaV || ''}` : '';
+    let previa = '';
+    if (!formularios.estaAberto(f)) {
+      // Fechado: o público vê o aviso; quem está logado no painel vê a prévia (botão travado).
       const s = usuarioDaReq(req);
-      previa = !!(s && (s.admin || (s.telas || []).includes('formularios')));
-      if (!previa) return scHtml(res, 200, formulariosPaginas.paginaFechada({ studio, f }));
+      if (!(s && (s.admin || (s.telas || []).includes('formularios')))) return scHtml(res, 200, formulariosPaginas.paginaFechada({ studio, f, capaUrl }));
+      previa = formularios.situacao(f);
     }
-    return scHtml(res, 200, formulariosPaginas.paginaFormulario({
-      studio, f, previa, acao: '/formulario/' + f.slug,
-      capaUrl: f.capa ? `/formulario/${f.slug}/capa.jpg?v=${f.capaV || ''}` : '',
-    }));
+    return scHtml(res, 200, formulariosPaginas.paginaFormulario({ studio, f, previa, capaUrl, acao: '/formulario/' + f.slug }));
   }
   if (req.method !== 'POST') { res.writeHead(405, { 'Content-Type': 'text/plain' }); return res.end('method not allowed'); }
   if (!scSoJson(req)) return scJson(res, 415, { erro: 'Envio inválido. Recarregue a página e tente de novo.' });
