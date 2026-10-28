@@ -178,6 +178,7 @@ function salvar(d, id, por) {
   else if (d.capa === 'remover') { try { fs.unlinkSync(arqCapa(fid)); } catch (_) {} f.capa = false; }
   if (!atual) forms.push(f);
   salvarForms(forms);
+  console.log(`[formularios] "${f.titulo}" ${atual ? 'editado' : 'criado'}${capa ? ` (capa nova, ${Math.round(capa.buf.length / 1024)} KB)` : ''}`);
   return { ok: true, form: f };
 }
 
