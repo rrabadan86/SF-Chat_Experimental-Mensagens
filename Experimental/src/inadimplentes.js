@@ -66,7 +66,11 @@ function lerPendentesOutbox() {
   } catch (_) {}
   return set;
 }
-const primeiroNome = (nome) => String(nome || '').trim().split(/\s+/)[0] || '';
+// O EVO costuma guardar o nome TODO EM MAIÚSCULAS ("PATRICIA N M TORRES") → "Patricia".
+const primeiroNome = (nome) => {
+  const p = String(nome || '').trim().split(/\s+/)[0] || '';
+  return p && p === p.toUpperCase() ? p.charAt(0) + p.slice(1).toLowerCase() : p;
+};
 const soDigitos = (s) => String(s || '').replace(/\D/g, '');
 // Valor em Real (ex.: 647 -> "R$ 647,00"). Vazio se não houver valor.
 const fmtBRL = (n) => {
