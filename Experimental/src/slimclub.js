@@ -206,7 +206,7 @@ const CAMPOS_EDITAVEIS = ['nome', 'negocio', 'categoria', 'documento', 'benefici
 function meuAnuncio(tel) {
   const vs = contatos.variantes9(tel);
   if (!vs.length) return null;
-  const meus = carregar().filter(r => !ehParceira(r) && vs.includes(contatos.normTel(r.telefone)));
+  const meus = carregar().filter(r => !ehParceira(r) && r.status !== 'excluido' && vs.includes(contatos.normTel(r.telefone)));
   meus.sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
   return meus[0] || null;
 }
@@ -246,7 +246,7 @@ function validarParceira(c, { fotoOpcional = false } = {}) {
   return v;
 }
 function cnpjEmUso(documento, menosId) {
-  return carregar().find(r => r.documento === documento && r.id !== menosId) || null;
+  return carregar().find(r => r.documento === documento && r.id !== menosId && r.status !== 'excluido') || null;
 }
 const MSG_CNPJ = 'Já existe um cadastro com este CNPJ no Slim Club. Se precisar alterar, fale com a recepção do Studio.';
 // porRecepcao: cadastrada no painel → já entra aprovada (quem cadastrou é quem valida).
@@ -390,16 +390,34 @@ function marcarAviso(id, avisoId, erro) {
   r.avisoEm = new Date().toISOString();
   salvar(arr);
 }
-function excluir(id) {
+// Excluir = tirar do Slim Club, mas guardar no painel (aba "Excluídos") quem
+// excluiu e quando. O código para de valer e as recomendações são apagadas;
+// a dona pode cadastrar de novo. pelaDona: a própria aluna excluiu.
+function excluir(id, { por = '', pelaDona = false } = {}) {
   const arr = carregar();
-  const i = arr.findIndex(x => x.id === id);
+  const r = arr.find(x => x.id === id);
+  if (!r || r.status === 'excluido') return false;
+  r.statusAntes = r.status;
+  r.status = 'excluido';
+  r.excluidoEm = new Date().toISOString();
+  r.excluidoPor = String(por || '');
+  r.excluidoPelaDona = !!pelaDona;
+  if (r.alteracao) { delete r.alteracao; apagarFoto(id, true); }
+  delete r.codigo;
+  salvar(arr);
+  const av = lerAval();
+  if (av.recs[id]) { delete av.recs[id]; gravarJson(AVAL_ARQ, av); }
+  return true;
+}
+// Apagar de vez (só na aba Excluídos): some o registro e a foto.
+function apagarDeVez(id) {
+  const arr = carregar();
+  const i = arr.findIndex(x => x.id === id && x.status === 'excluido');
   if (i < 0) return false;
   arr.splice(i, 1);
   salvar(arr);
-  if (fotoPath(id)) apagarFoto(id);
-  if (fotoPath(id, true)) apagarFoto(id, true);
-  const av = lerAval();
-  if (av.recs[id]) { delete av.recs[id]; gravarJson(AVAL_ARQ, av); }
+  apagarFoto(id);
+  apagarFoto(id, true);
   return true;
 }
 
@@ -408,6 +426,7 @@ function situacao(r, map, hoje) {
   hoje = hoje || hojeSP();
   if (r.status === 'pendente') return { visivel: false, motivo: 'aguardando validação' };
   if (r.status === 'recusado') return { visivel: false, motivo: 'recusado' };
+  if (r.status === 'excluido') return { visivel: false, motivo: 'excluído' };
   if (r.fimVigencia && r.fimVigencia < hoje) return { visivel: false, motivo: `promoção encerrada em ${fmtData(r.fimVigencia)}` };
   if (!ehParceira(r) && !ehAluna(r.telefone, map)) return { visivel: false, motivo: 'a dona não é mais aluna ativa' };
   return { visivel: true, motivo: '' };
@@ -688,7 +707,7 @@ module.exports = {
   COOKIE_EMPRESA, EMPRESA_DIAS, CARTEIRA_VALE_H, ehParceira,
   criarParceira, editarParceira, garantirCodigos, trocarCodigo, empresaPorCodigo, tokenEmpresa, empresaDoAparelho,
   registrarUso, minhasAvaliacoes, totalRecs, recomendar, reclamar, listarReclamacoes, tratarReclamacao, estatisticas, reclamacoesAbertas, pendenciasRecepcao,
-  criar, obter, avaliar, marcarAviso, excluir, listarPainel, publicos, situacao,
+  criar, obter, avaliar, marcarAviso, excluir, apagarDeVez, listarPainel, publicos, situacao,
   meuAnuncio, editar, avaliarAlteracao, estadoMeuAnuncio, CAMPOS_EDITAVEIS,
   entrar, alunaDaSessao, fotoPath,
   tokenVerificacao, verificar, ultimaSincronizacaoEvo,

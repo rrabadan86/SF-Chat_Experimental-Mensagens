@@ -5537,7 +5537,7 @@ function paginaPerfis(aviso, erro, view) {
     'perfil.senha': '🔑 Redefiniu senha', 'perfil.email': '📧 Alterou e-mail', 'perfil.admin': '👑 Mudou administrador',
     'perfil.sessao': '⏲️ Mudou duração da sessão', 'perfil.sessao-encerrar': '🚪 Encerrou uma sessão',
     'slimclub.aprovar': '🤝 Aprovou cadastro do Slim Club', 'slimclub.recusar': '🚫 Recusou cadastro do Slim Club', 'slimclub.pendente': '↩️ Voltou cadastro do Slim Club para pendente',
-    'slimclub.excluir': '🗑️ Excluiu cadastro do Slim Club', 'slimclub.excluir-dona': '🗑️ Aluna excluiu o próprio anúncio do Slim Club',
+    'slimclub.excluir': '🗑️ Excluiu cadastro do Slim Club', 'slimclub.apagar': '🧹 Apagou de vez cadastro excluído do Slim Club', 'slimclub.excluir-dona': '🗑️ Aluna excluiu o próprio anúncio do Slim Club',
     'slimclub.aprovar-alteracao': '✏️ Aprovou alteração no Slim Club', 'slimclub.recusar-alteracao': '🚫 Recusou alteração no Slim Club',
     'slimclub.parceira-nova': '🤝 Cadastrou empresa parceira no Slim Club', 'slimclub.parceira-editar': '✏️ Editou empresa parceira no Slim Club',
     'slimclub.novo-codigo': '🔑 Gerou outro código de conferência do Slim Club',
@@ -6135,7 +6135,7 @@ function rotaSlimClubPublico(req, res, rota, urlOriginal) {
     return lerCorpo(req, 1e3, () => {
       const meu = slimclub.meuAnuncio(aluna.telefone);
       if (!meu) return scJson(res, 404, { erro: 'Não encontramos um anúncio seu.' });
-      slimclub.excluir(meu.id);
+      slimclub.excluir(meu.id, { por: aluna.nome || fmtTel(aluna.telefone), pelaDona: true });
       try { auditoria.registrar(aluna.nome || fmtTel(aluna.telefone), 'slimclub.excluir-dona', meu.negocio + ' (' + meu.nome + ')', 'pela própria aluna'); } catch (_) {}
       console.log(`[slimclub] anúncio ${meu.id} (${meu.negocio}) excluído pela própria dona`);
       return scJson(res, 200, { ok: true });
@@ -6321,16 +6321,17 @@ function paginaSlimClub(view, base, aviso) {
   const est = slimclub.estatisticas();
   const reclamacoes = slimclub.listarReclamacoes();
   const abertas = reclamacoes.filter(r => r.status === 'aberta').length;
-  const por = { pendente: [], aprovado: [], recusado: [] };
+  const por = { pendente: [], aprovado: [], recusado: [], excluido: [] };
   for (const r of todos) (por[r.status] || por.pendente).push(r);
   // Alteração de anúncio já aprovado: aparece em Pendentes (a recepção decide) e
   // continua em Aprovados (é a versão que está no ar).
   const alteracoes = por.aprovado.filter(r => r.alteracao)
     .sort((a, b) => String(b.alteracao.enviadoEm).localeCompare(String(a.alteracao.enviadoEm)));
-  const VIEWS = { pendentes: 'pendente', aprovados: 'aprovado', recusados: 'recusado' };
+  const VIEWS = { pendentes: 'pendente', aprovados: 'aprovado', recusados: 'recusado', excluidos: 'excluido' };
+  por.excluido.sort((a, b) => String(b.excluidoEm).localeCompare(String(a.excluidoEm)));
   if (!VIEWS[view] && view !== 'config' && view !== 'reclamacoes') view = 'pendentes';
   const sub = (v, rot) => `<a href="/clube?view=${v}"${view === v ? ' class="on"' : ''}>${rot}</a>`;
-  const subtabs = `<div class="subtabs">${sub('pendentes', `Pendentes (${por.pendente.length + alteracoes.length})`)}${sub('aprovados', `Aprovados (${por.aprovado.length})`)}${sub('recusados', `Recusados (${por.recusado.length})`)}${sub('reclamacoes', `Reclamações${abertas ? ` <span class="sc-badge">${abertas}</span>` : ' (0)'}`)}${sub('config', 'Configuração')}</div>`;
+  const subtabs = `<div class="subtabs">${sub('pendentes', `Pendentes (${por.pendente.length + alteracoes.length})`)}${sub('aprovados', `Aprovados (${por.aprovado.length})`)}${sub('recusados', `Recusados (${por.recusado.length})`)}${sub('excluidos', `Excluídos (${por.excluido.length})`)}${sub('reclamacoes', `Reclamações${abertas ? ` <span class="sc-badge">${abertas}</span>` : ' (0)'}`)}${sub('config', 'Configuração')}</div>`;
 
   const linkCad = base + '/SlimClubCadastro', linkAlunas = base + '/slimclub', linkExt = base + '/SlimClubCadastroExterno';
   const links = `<div class="card">
@@ -6376,6 +6377,13 @@ function paginaSlimClub(view, base, aviso) {
     if (r.status === 'pendente') acoes = bt('aprovar', 'Aprovar', 'save') + bt('recusar', 'Recusar', 'reset') + btEditar;
     if (r.status === 'aprovado') acoes = btEditar + (cfg.avisar ? bt('reenviar-aviso', 'Reenviar aviso', 'reset') : '') + bt('novo-codigo', 'Gerar outro código', 'reset') + bt('pendente', 'Voltar para pendente', 'reset') + bt('excluir', 'Excluir', 'reset sc-rm');
     if (r.status === 'recusado') acoes = bt('aprovar', 'Aprovar', 'save') + btEditar + bt('excluir', 'Excluir', 'reset sc-rm');
+    if (r.status === 'excluido') {
+      const antes = { aprovado: 'estava aprovado', pendente: 'estava pendente', recusado: 'estava recusado' }[r.statusAntes] || '';
+      estado = `<div class="sc-al">🗑️ ${r.excluidoPelaDona
+        ? `Excluído pela própria ${parc ? 'empresa' : 'aluna'}${r.excluidoPor ? ` (${esc(r.excluidoPor)})` : ''}`
+        : `Excluído por ${esc(r.excluidoPor || '—')}`} em ${esc(scFmtQuando(r.excluidoEm))}${antes ? ` · ${antes}` : ''}.</div>`;
+      acoes = bt('apagar', 'Apagar de vez', 'reset sc-rm');
+    }
     return `<div class="card sc-it">
       <div class="sc-top">
         <a href="/slimclub/foto/${r.id}" target="_blank" rel="noopener"><img class="sc-av${slimclub.ehParceira(r) ? ' logo' : ''}" src="/slimclub/foto/${r.id}" alt="${slimclub.ehParceira(r) ? 'Logo' : 'Foto'} de ${esc(r.negocio)}" width="64" height="64" loading="lazy"></a>
@@ -6467,7 +6475,7 @@ function paginaSlimClub(view, base, aviso) {
     </form>`;
   } else {
     const lista = por[VIEWS[view]];
-    const vazio = { pendentes: 'Nenhum cadastro aguardando validação.', aprovados: 'Nenhum cadastro aprovado ainda.', recusados: 'Nenhum cadastro recusado.' }[view];
+    const vazio = { pendentes: 'Nenhum cadastro aguardando validação.', aprovados: 'Nenhum cadastro aprovado ainda.', recusados: 'Nenhum cadastro recusado.', excluidos: 'Nenhum anúncio excluído.' }[view];
     const extra = view === 'pendentes' ? alteracoes.map(itemAlteracao).join('') : '';
     conteudo = (lista.length || extra) ? extra + lista.map(item).join('') : `<div class="card" style="text-align:center;color:var(--cinza)">${vazio}</div>`;
   }
@@ -6513,7 +6521,8 @@ function paginaSlimClub(view, base, aviso) {
   function scAcao(id, acao){
     var motivo='';
     if(acao==='recusar'||acao==='recusar-alteracao'){ motivo=prompt('Motivo da recusa (opcional). A aluna vê este motivo em "Meu anúncio":',''); if(motivo===null) return; }
-    if(acao==='excluir' && !confirm('Excluir este cadastro e a foto? Não dá para desfazer.')) return;
+    if(acao==='excluir' && !confirm('Excluir este anúncio? Ele sai da listagem das alunas, o código de conferência para de valer e ele vai para a aba Excluídos.')) return;
+    if(acao==='apagar' && !confirm('Apagar de vez este cadastro e a foto? Não dá para desfazer.')) return;
     if(acao==='novo-codigo' && !confirm('Gerar outro código? O código atual para de funcionar e os celulares conectados com ele precisam digitar o novo.')) return;
     fetch('/clube/acao',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,acao:acao,motivo:motivo})})
       .then(function(r){ return r.json(); })
@@ -6754,8 +6763,13 @@ const server = http.createServer((req, res) => {
         if (!antes) return scJson(res, 404, { erro: 'Cadastro não encontrado.' });
         const alvo = antes.negocio + ' (' + antes.nome + ')';
         if (acao === 'excluir') {
-          slimclub.excluir(id);
+          slimclub.excluir(id, { por: sess.usuario });
           try { auditoria.registrar(sess.usuario, 'slimclub.excluir', alvo, ''); } catch (_) {}
+          return scJson(res, 200, { ok: true });
+        }
+        if (acao === 'apagar') {
+          if (!slimclub.apagarDeVez(id)) return scJson(res, 400, { erro: 'Só dá para apagar de vez o que já está em Excluídos.' });
+          try { auditoria.registrar(sess.usuario, 'slimclub.apagar', alvo, ''); } catch (_) {}
           return scJson(res, 200, { ok: true });
         }
         if (acao === 'aprovar-alteracao' || acao === 'recusar-alteracao') {
@@ -6777,6 +6791,7 @@ const server = http.createServer((req, res) => {
         }
         const status = { aprovar: 'aprovado', recusar: 'recusado', pendente: 'pendente' }[acao];
         if (!status) return scJson(res, 400, { erro: 'Ação inválida.' });
+        if (antes.status === 'excluido') return scJson(res, 400, { erro: 'Este anúncio foi excluído. Peça para cadastrarem de novo.' });
         const r = slimclub.avaliar(id, status, sess.usuario, d.motivo);
         try { auditoria.registrar(sess.usuario, 'slimclub.' + acao, alvo, status === 'recusado' ? String(d.motivo || '') : ''); } catch (_) {}
         const aviso = (status === 'aprovado' && antes.status !== 'aprovado' && slimclub.lerConfig().avisar) ? scAvisarAprovado(r, req) : null;
