@@ -18,8 +18,19 @@
  * O telefone é a chave: é o mesmo cadastrado no EVO (o auto-tag casa as alunas
  * ativas do EVO com os contatos por telefone, tolerando o 9º dígito).
  *
- * Dados desta unidade (gitignored): data/slimclub.json, data/slimclub-fotos/ e
- * data/slimclub-config.json (aviso de aprovação por WhatsApp).
+ * EMPRESA PARCEIRA (tipo "parceira"): empresa que não é de aluna. Entra pelo
+ * link /SlimClubCadastroExterno (vai para validação) ou é cadastrada direto pela
+ * recepção no painel. Não depende de tag: fica no ar enquanto aprovada e vigente.
+ * Uma por CNPJ; quem edita é a recepção.
+ *
+ * USO DO BENEFÍCIO: cada empresa aprovada tem um CÓDIGO DE CONFERÊNCIA (6 dígitos).
+ * Ao ler o QR da carteira, a empresa digita o código uma vez (o aparelho fica
+ * lembrado) e registra o uso. Quem usou pode RECOMENDAR (👍, contado no cartão);
+ * qualquer aluna ativa pode RECLAMAR (👎), e só a recepção lê.
+ *
+ * Dados desta unidade (gitignored): data/slimclub.json, data/slimclub-fotos/,
+ * data/slimclub-config.json (aviso de aprovação por WhatsApp), data/slimclub-usos.json
+ * e data/slimclub-avaliacoes.json (recomendações e reclamações).
  */
 const fs = require('fs');
 const path = require('path');
@@ -32,10 +43,15 @@ const ARQ = path.join(DATA_DIR, 'slimclub.json');
 const FOTOS_DIR = path.join(DATA_DIR, 'slimclub-fotos');
 const CFG_ARQ = path.join(DATA_DIR, 'slimclub-config.json');
 const SEGREDO_ARQ = path.join(DATA_DIR, '.slimclub-segredo');
+const USOS_ARQ = path.join(DATA_DIR, 'slimclub-usos.json');
+const AVAL_ARQ = path.join(DATA_DIR, 'slimclub-avaliacoes.json');
 
 const SESSAO_DIAS = 30;                       // aluna fica conectada 30 dias no aparelho
 const FOTO_MAX_BYTES = 1024 * 1024;           // 1 MB (a página reduz a foto do celular antes de enviar)
 const COOKIE = 'sc_aluna';
+const COOKIE_EMPRESA = 'sc_empresa';           // aparelho da empresa que confere as carteiras
+const EMPRESA_DIAS = 365;
+const CARTEIRA_VALE_H = 24;                    // registro de uso só com carteira aberta nas últimas 24 h
 
 // Como a aluna comprova que é do Studio: fixo para todos os negócios.
 const COMPROVACAO = 'Apresentando a carteira SlimClub';
@@ -44,7 +60,9 @@ const CATEGORIAS = ['Saúde', 'Beleza', 'Alimentação', 'Moda', 'Serviços', 'C
 
 const MSG_APROVADO_PADRAO = 'Oi, {nome}! 💜 Aqui é do {studio}.\n\n'
   + 'Seu cadastro no *Slim Club* foi aprovado! 🎉 A partir de agora, *{negocio}* aparece para as alunas do Studio.\n\n'
-  + 'Veja a listagem: {link}\n\nObrigada por fazer parte! ✨';
+  + 'Veja a listagem: {link}\n\n'
+  + 'Para registrar o uso do benefício, leia o QR code da carteira SlimClub da aluna e, na primeira vez, digite o código de conferência: *{codigo}*. '
+  + 'Guarde este código; ele pode ser passado para quem atende.\n\nObrigada por fazer parte! ✨';
 
 // ── Utilidades ──────────────────────────────────────────────────────────────
 function semAcento(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, ''); }
@@ -108,12 +126,17 @@ function carregar() {
     return Array.isArray(o && o.cadastros) ? o.cadastros : [];
   } catch (_) { return []; }
 }
-function salvar(arr) {
+function gravarJson(arq, obj) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  const tmp = ARQ + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify({ cadastros: arr }, null, 2), 'utf8');
-  fs.renameSync(tmp, ARQ); // troca atômica: nunca fica um JSON pela metade
+  const tmp = arq + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  fs.renameSync(tmp, arq); // troca atômica: nunca fica um JSON pela metade
 }
+function lerJson(arq, padrao) {
+  try { const o = JSON.parse(fs.readFileSync(arq, 'utf8')); return (o && typeof o === 'object') ? o : padrao; } catch (_) { return padrao; }
+}
+function salvar(arr) { gravarJson(ARQ, { cadastros: arr }); }
+const ehParceira = r => !!(r && r.tipo === 'parceira');
 function obter(id) { return carregar().find(r => r.id === id) || null; }
 // nova=true → a foto de uma alteração que ainda aguarda aprovação.
 function arqFoto(id, nova) { return path.join(FOTOS_DIR, id + (nova ? '-nova' : '') + '.jpg'); }
@@ -183,7 +206,7 @@ const CAMPOS_EDITAVEIS = ['nome', 'negocio', 'categoria', 'documento', 'benefici
 function meuAnuncio(tel) {
   const vs = contatos.variantes9(tel);
   if (!vs.length) return null;
-  const meus = carregar().filter(r => vs.includes(contatos.normTel(r.telefone)));
+  const meus = carregar().filter(r => !ehParceira(r) && vs.includes(contatos.normTel(r.telefone)));
   meus.sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
   return meus[0] || null;
 }
@@ -207,6 +230,85 @@ function criar(campos) {
   arr.push(Object.assign({ id, status: 'pendente', criadoEm: new Date().toISOString(), nomeNoCadastro: (ct && ct.nome) || '' }, v.dados));
   salvar(arr);
   return { ok: true, id };
+}
+
+// ── Empresa parceira (não é de aluna) ───────────────────────────────────────
+// Mesmos campos do negócio; `nome` é o responsável e `telefone`, o WhatsApp de
+// contato (recebe o aviso de aprovação com o código de conferência).
+function validarParceira(c, { fotoOpcional = false } = {}) {
+  c = c || {};
+  if (linha(c.nome, 120).length < 3) return { erro: 'Informe o nome do responsável pela empresa.' };
+  if (!contatos.normTel(c.telefone)) return { erro: 'Informe o WhatsApp de contato da empresa, com DDD.' };
+  // Reaproveita a validação do negócio (o nome do responsável pode ter uma palavra só).
+  const v = validar(Object.assign({}, c, { nome: 'Responsavel Empresa', foto: c.foto }), { fotoOpcional });
+  if (v.erro) return { erro: v.erro.replace('Envie uma foto sua', 'Envie o logo da empresa').replace('autorize a exibição do seu nome e foto', 'autorize a exibição do logo e das informações da empresa') };
+  v.dados.nome = linha(c.nome, 120);
+  return v;
+}
+function cnpjEmUso(documento, menosId) {
+  return carregar().find(r => r.documento === documento && r.id !== menosId) || null;
+}
+const MSG_CNPJ = 'Já existe um cadastro com este CNPJ no Slim Club. Se precisar alterar, fale com a recepção do Studio.';
+// porRecepcao: cadastrada no painel → já entra aprovada (quem cadastrou é quem valida).
+function criarParceira(campos, { porRecepcao = false, usuario = '' } = {}) {
+  const v = validarParceira(campos);
+  if (v.erro) return v;
+  if (cnpjEmUso(v.dados.documento)) return { erro: MSG_CNPJ };
+  const id = crypto.randomBytes(8).toString('hex');
+  gravarFoto(id, v.foto);
+  const arr = carregar();
+  const agora = new Date().toISOString();
+  const r = Object.assign({ id, tipo: 'parceira', origem: porRecepcao ? 'recepcao' : 'externo', status: 'pendente', criadoEm: agora }, v.dados);
+  if (porRecepcao) Object.assign(r, { status: 'aprovado', avaliadoPor: String(usuario || ''), avaliadoEm: agora, codigo: novoCodigo(arr), codigoVer: 1 });
+  arr.push(r);
+  salvar(arr);
+  return { ok: true, id, r };
+}
+// Edição da parceira pela recepção: vale na hora (sem nova aprovação).
+function editarParceira(id, campos, usuario) {
+  const arr = carregar();
+  const r = arr.find(x => x.id === id && ehParceira(x));
+  if (!r) return { erro: 'Empresa parceira não encontrada.' };
+  const v = validarParceira(campos, { fotoOpcional: true });
+  if (v.erro) return v;
+  if (cnpjEmUso(v.dados.documento, id)) return { erro: MSG_CNPJ };
+  for (const k of CAMPOS_EDITAVEIS) r[k] = v.dados[k];
+  r.telefone = v.dados.telefone;
+  r.editadoEm = new Date().toISOString();
+  r.editadoPor = String(usuario || '');
+  if (v.foto) gravarFoto(id, v.foto);
+  salvar(arr);
+  return { ok: true, id, r };
+}
+
+// ── Código de conferência (6 dígitos, um por empresa aprovada) ──────────────
+function novoCodigo(arr) {
+  const usados = new Set((arr || carregar()).map(r => r.codigo).filter(Boolean));
+  let c;
+  do { c = String(crypto.randomInt(0, 1e6)).padStart(6, '0'); } while (usados.has(c));
+  return c;
+}
+// Empresas aprovadas de antes do código ganham um na primeira vez que o painel abre.
+function garantirCodigos() {
+  const arr = carregar();
+  let mudou = false;
+  for (const r of arr) if (r.status === 'aprovado' && !r.codigo) { r.codigo = novoCodigo(arr); r.codigoVer = 1; mudou = true; }
+  if (mudou) salvar(arr);
+}
+// Gera outro código e desconecta os aparelhos que usavam o anterior.
+function trocarCodigo(id) {
+  const arr = carregar();
+  const r = arr.find(x => x.id === id);
+  if (!r) return null;
+  r.codigo = novoCodigo(arr);
+  r.codigoVer = (r.codigoVer || 0) + 1;
+  salvar(arr);
+  return r;
+}
+function empresaPorCodigo(codigo) {
+  const c = String(codigo || '').replace(/\D/g, '');
+  if (c.length !== 6) return null;
+  return carregar().find(r => r.status === 'aprovado' && r.codigo === c) || null;
 }
 
 // Edição pela dona (sessão da aluna). `tel` vem da sessão, nunca do formulário.
@@ -272,6 +374,7 @@ function avaliar(id, status, usuario, motivo) {
     delete r.alteracao;
   }
   r.status = status;
+  if (status === 'aprovado' && !r.codigo) { r.codigo = novoCodigo(arr); r.codigoVer = 1; }
   r.avaliadoPor = String(usuario || '');
   r.avaliadoEm = new Date().toISOString();
   r.motivo = status === 'recusado' ? linha(motivo, 300) : '';
@@ -295,6 +398,8 @@ function excluir(id) {
   salvar(arr);
   if (fotoPath(id)) apagarFoto(id);
   if (fotoPath(id, true)) apagarFoto(id, true);
+  const av = lerAval();
+  if (av.recs[id]) { delete av.recs[id]; gravarJson(AVAL_ARQ, av); }
   return true;
 }
 
@@ -304,7 +409,7 @@ function situacao(r, map, hoje) {
   if (r.status === 'pendente') return { visivel: false, motivo: 'aguardando validação' };
   if (r.status === 'recusado') return { visivel: false, motivo: 'recusado' };
   if (r.fimVigencia && r.fimVigencia < hoje) return { visivel: false, motivo: `promoção encerrada em ${fmtData(r.fimVigencia)}` };
-  if (!ehAluna(r.telefone, map)) return { visivel: false, motivo: 'a dona não é mais aluna ativa' };
+  if (!ehParceira(r) && !ehAluna(r.telefone, map)) return { visivel: false, motivo: 'a dona não é mais aluna ativa' };
   return { visivel: true, motivo: '' };
 }
 // Painel: todos os cadastros, mais recentes primeiro, com a situação calculada.
@@ -312,7 +417,7 @@ function listarPainel() {
   const map = contatos.carregar();
   const hoje = hojeSP();
   return carregar()
-    .map(r => Object.assign({}, r, { situacao: situacao(r, map, hoje), alunaAgora: ehAluna(r.telefone, map) }))
+    .map(r => Object.assign({}, r, { situacao: situacao(r, map, hoje), alunaAgora: !ehParceira(r) && ehAluna(r.telefone, map) }))
     .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
 }
 // Listagem das alunas: só aprovados, vigentes e com a dona ainda aluna.
@@ -416,8 +521,11 @@ function mensagemAprovado(r, link) {
     negocio: r.negocio,
     link: link || '',
     studio: process.env.STUDIO_NOME || 'Studio SlimFit',
+    codigo: r.codigo || '',
   };
   let t = lerConfig().msgAprovado;
+  // Mensagem personalizada de antes do código: acrescenta o código no fim.
+  if (r.codigo && t.indexOf('{codigo}') < 0) t += '\n\nCódigo de conferência do Slim Club: *{codigo}* (digite ao ler o QR da carteira da aluna para registrar o uso do benefício).';
   for (const [k, v] of Object.entries(vars)) t = t.split('{' + k + '}').join(v);
   return t;
 }
@@ -451,6 +559,118 @@ function verificar(tok) {
 }
 function ultimaSincronizacaoEvo() { try { return autoTagAlunas.ultimaSincronizacao() || ''; } catch (_) { return ''; } }
 
+// ── Aparelho da empresa (cookie assinado, 1 ano) ────────────────────────────
+// Guarda a empresa e a "versão" do código: gerar outro código desconecta o aparelho.
+function tokenEmpresa(r) {
+  const payload = b64url(JSON.stringify({ e: r.id, v: r.codigoVer || 1, exp: Date.now() + EMPRESA_DIAS * 864e5 }));
+  return payload + '.' + assinar('empresa:' + payload);
+}
+function empresaDoAparelho(tok) {
+  const [payload, sig] = String(tok || '').split('.');
+  if (!payload || !sig) return null;
+  const esperado = assinar('empresa:' + payload);
+  if (sig.length !== esperado.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(esperado))) return null;
+  let o; try { o = JSON.parse(Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')); } catch (_) { return null; }
+  if (!o || !o.e || !o.exp || Date.now() > o.exp) return null;
+  const r = obter(o.e);
+  if (!r || r.status !== 'aprovado' || (r.codigoVer || 1) !== o.v) return null;
+  return r;
+}
+
+// ── Uso do benefício (a empresa registra ao ler o QR da carteira) ───────────
+function mesmoTel(a, b) { const va = contatos.variantes9(a); return va.length > 0 && va.includes(contatos.normTel(b)); }
+function lerUsos() { const o = lerJson(USOS_ARQ, {}); return Array.isArray(o.usos) ? o.usos : []; }
+// Devolve { ok, uso } ou { erro: 'velha' | 'inativa' | 'dona' | 'dia' | 'invalida' }.
+function registrarUso(empresa, tokCarteira) {
+  const c = verificar(tokCarteira);
+  if (!c) return { erro: 'invalida' };
+  if (c.status !== 'ativa') return { erro: 'inativa' };
+  if (Date.now() - Number(c.geradaEm) > CARTEIRA_VALE_H * 3600e3) return { erro: 'velha' };
+  if (!ehParceira(empresa) && mesmoTel(empresa.telefone, c.telefone)) return { erro: 'dona' };
+  const dia = hojeSP();
+  const usos = lerUsos();
+  const ja = usos.find(u => u.empresaId === empresa.id && u.dia === dia && mesmoTel(u.tel, c.telefone));
+  if (ja) return { erro: 'dia', uso: ja };
+  const uso = { empresaId: empresa.id, tel: contatos.normTel(c.telefone), nome: c.nome, em: new Date().toISOString(), dia };
+  usos.push(uso);
+  gravarJson(USOS_ARQ, { usos });
+  return { ok: true, uso };
+}
+
+// ── Recomendações (👍) e reclamações (👎) ───────────────────────────────────
+function lerAval() {
+  const o = lerJson(AVAL_ARQ, {});
+  return { recs: (o.recs && typeof o.recs === 'object') ? o.recs : {}, reclamacoes: Array.isArray(o.reclamacoes) ? o.reclamacoes : [] };
+}
+// O que a aluna da sessão já fez: { usos: {empresaId: últimoDia}, recs: Set(empresaId) }.
+function minhasAvaliacoes(tel) {
+  const usos = {};
+  for (const u of lerUsos()) if (mesmoTel(u.tel, tel) && (!usos[u.empresaId] || u.dia > usos[u.empresaId])) usos[u.empresaId] = u.dia;
+  const av = lerAval();
+  const recs = new Set(Object.keys(av.recs).filter(id => (av.recs[id] || []).some(t => mesmoTel(t, tel))));
+  return { usos, recs };
+}
+function totalRecs(id) { return (lerAval().recs[id] || []).length; }
+// 👍 liga/desliga. Só quem tem uso registrado naquela empresa.
+function recomendar(tel, empresaId) {
+  const r = publicos().find(e => e.id === empresaId);
+  if (!r) return { erro: 'Empresa não encontrada.' };
+  if (!minhasAvaliacoes(tel).usos[empresaId]) return { erro: 'Você pode recomendar depois de usar o benefício (a empresa registra o uso ao ler o QR da sua carteira).' };
+  const av = lerAval();
+  const lista = (av.recs[empresaId] || []).filter(t => !mesmoTel(t, tel));
+  const recomendou = lista.length === (av.recs[empresaId] || []).length; // não estava → passa a estar
+  if (recomendou) lista.push(contatos.normTel(tel));
+  av.recs[empresaId] = lista;
+  gravarJson(AVAL_ARQ, av);
+  return { ok: true, recomendou, total: lista.length };
+}
+// 👎 Qualquer aluna ativa (ex.: a empresa não quis dar o desconto). Só a recepção lê.
+function reclamar(tel, nome, empresaId, textoLivre) {
+  const r = publicos().find(e => e.id === empresaId);
+  if (!r) return { erro: 'Empresa não encontrada.' };
+  if (!ehParceira(r) && mesmoTel(r.telefone, tel)) return { erro: 'Este é o seu próprio negócio.' };
+  const t = texto(textoLivre, 1500);
+  if (t.length < 10) return { erro: 'Conte o que aconteceu (pelo menos algumas palavras).' };
+  const av = lerAval();
+  const rec = { id: crypto.randomBytes(6).toString('hex'), empresaId, empresa: r.negocio, tel: contatos.normTel(tel), nome: nome || '',
+    texto: t, em: new Date().toISOString(), status: 'aberta' };
+  av.reclamacoes.push(rec);
+  gravarJson(AVAL_ARQ, av);
+  return { ok: true, id: rec.id };
+}
+function listarReclamacoes() {
+  return lerAval().reclamacoes.slice().sort((a, b) => String(b.em).localeCompare(String(a.em)));
+}
+function tratarReclamacao(id, resolver, usuario, nota) {
+  const av = lerAval();
+  const r = av.reclamacoes.find(x => x.id === id);
+  if (!r) return null;
+  r.status = resolver ? 'resolvida' : 'aberta';
+  r.nota = resolver ? texto(nota, 600) : (r.nota || '');
+  r.tratadaPor = String(usuario || '');
+  r.tratadaEm = new Date().toISOString();
+  gravarJson(AVAL_ARQ, av);
+  return r;
+}
+// Números por empresa para o painel: usos (mês/total), 👍 e reclamações.
+function estatisticas() {
+  const mes = hojeSP().slice(0, 7);
+  const out = {};
+  const de = id => (out[id] = out[id] || { usosMes: 0, usos: 0, recs: 0, reclAbertas: 0, recl: 0, ultimosUsos: [] });
+  for (const u of lerUsos()) { const e = de(u.empresaId); e.usos++; if (u.dia.slice(0, 7) === mes) e.usosMes++; e.ultimosUsos.push(u); }
+  const av = lerAval();
+  for (const id of Object.keys(av.recs)) de(id).recs = (av.recs[id] || []).length;
+  for (const r of av.reclamacoes) { const e = de(r.empresaId); e.recl++; if (r.status === 'aberta') e.reclAbertas++; }
+  for (const id of Object.keys(out)) out[id].ultimosUsos = out[id].ultimosUsos.sort((a, b) => String(b.em).localeCompare(String(a.em))).slice(0, 5);
+  return out;
+}
+function reclamacoesAbertas() { return lerAval().reclamacoes.filter(r => r.status === 'aberta').length; }
+// O que espera a recepção (número no menu do painel): cadastros e alterações para
+// validar + reclamações em aberto.
+function pendenciasRecepcao() {
+  try { return carregar().filter(r => r.status === 'pendente' || r.alteracao).length + reclamacoesAbertas(); } catch (_) { return 0; }
+}
+
 // ── Limite de tentativas por IP (cadastro/login públicos) ───────────────────
 const _tentativas = new Map();
 function permitir(chave, max, janelaMs) {
@@ -465,6 +685,9 @@ function permitir(chave, max, janelaMs) {
 
 module.exports = {
   COOKIE, SESSAO_DIAS, CATEGORIAS, MSG_APROVADO_PADRAO, COMPROVACAO, FOTO_MAX_BYTES,
+  COOKIE_EMPRESA, EMPRESA_DIAS, CARTEIRA_VALE_H, ehParceira,
+  criarParceira, editarParceira, garantirCodigos, trocarCodigo, empresaPorCodigo, tokenEmpresa, empresaDoAparelho,
+  registrarUso, minhasAvaliacoes, totalRecs, recomendar, reclamar, listarReclamacoes, tratarReclamacao, estatisticas, reclamacoesAbertas, pendenciasRecepcao,
   criar, obter, avaliar, marcarAviso, excluir, listarPainel, publicos, situacao,
   meuAnuncio, editar, avaliarAlteracao, estadoMeuAnuncio, CAMPOS_EDITAVEIS,
   entrar, alunaDaSessao, fotoPath,

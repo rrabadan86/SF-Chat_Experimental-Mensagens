@@ -20,6 +20,7 @@ const CSS = `
   --erro:#a12626;--erro-soft:#fbecec;--ok:#1a7f37;--ok-soft:#e8f5ec;--ambar:#8a5a00;--ambar-soft:#fdf3dc;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important} /* cartões e formulários com display próprio também somem no filtro */
 body{margin:0;background:var(--bg);color:var(--tinta);font:16px/1.5 "Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
 a{color:var(--teal)}
 .topo{background:var(--card);border-bottom:1px solid var(--linha)}
@@ -110,6 +111,30 @@ input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible,.al
 .pill.esp{background:var(--ambar-soft);color:var(--ambar)}
 .pill.no{background:var(--erro-soft);color:var(--erro)}
 .meu .btn2{text-decoration:none;flex:0 0 auto}
+.meu .nums{font-size:.82rem;color:var(--teal-esc);font-weight:600;margin:4px 0 0}
+.emp .dona img.logo{object-fit:contain;background:#fff;border:1px solid var(--linha)}
+.selo-parc{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.04em;color:#5b3a8c;background:#efe8f8;border-radius:999px;padding:2px 9px}
+.chip.parc{border-color:#d9cdee;color:#5b3a8c}
+.chip.parc.on{background:#5b3a8c;border-color:#5b3a8c;color:#fff}
+.ordem{display:flex;align-items:center;gap:8px;font-size:.84rem;color:var(--cinza)}
+.ordem select{width:auto;padding:6px 10px;font-size:.84rem}
+.aval{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.rec{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:.86rem;font-weight:700;color:var(--teal-esc);background:var(--card);border:1.5px solid var(--teal-linha);border-radius:999px;padding:6px 13px;cursor:pointer}
+.rec.on{background:var(--teal);border-color:var(--teal);color:#fff}
+.rec[disabled]{cursor:default;opacity:1;color:var(--cinza);border-color:var(--linha)}
+.usou{font-size:.8rem;color:var(--ok);font-weight:600}
+.prob{font:inherit;font-size:.82rem;color:var(--cinza);background:none;border:0;padding:4px 0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.reclama{border-top:1px solid var(--linha);padding-top:10px;display:flex;flex-direction:column;gap:8px}
+.reclama textarea{min-height:90px}
+.reclama .acts{display:flex;gap:8px}
+.reclama .btn{width:auto;padding:9px 16px;font-size:.9rem}
+.reclama .msg{margin:0}
+/* conferência: registro de uso */
+.uso{text-align:left;background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:14px;margin:16px 0 0}
+.uso h2{font-size:1rem;margin:0 0 6px}
+.uso p{margin:0 0 10px;font-size:.9rem;color:var(--cinza)}
+.uso input{font-size:1.4rem;letter-spacing:.3em;text-align:center;font-variant-numeric:tabular-nums}
+.uso .troca{display:block;margin-top:10px;font-size:.84rem;background:none;border:0;color:var(--teal);text-decoration:underline;cursor:pointer;padding:0;font-family:inherit}
 /* carteira */
 .cart{position:relative;overflow:hidden;color:#fff;border-radius:22px;padding:20px 20px 16px;max-width:440px;margin:0 auto;
   background:radial-gradient(120% 90% at 100% 0%,#14908b 0%,rgba(20,144,139,0) 55%),linear-gradient(160deg,#0e6e6b 0%,#09504e 100%);
@@ -181,7 +206,9 @@ ${script}
 // ── /SlimClubCadastro (e /slimclub/meu-anuncio, com `edicao`) ───────────────
 // edicao = { r, fotoUrl, telefone }: r é o anúncio atual (ou a alteração em
 // análise, se houver), para o formulário já vir preenchido.
-function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao }) {
+// parceira=true: empresa que não é de aluna (/SlimClubCadastroExterno, ou o
+// painel da recepção com painel=true — aí já salva aprovado e volta ao painel).
+function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao, parceira = false, painel = false }) {
   const r = edicao ? edicao.r : {};
   const val = k => esc(r[k] || '');
   const outra = !!(r.categoria && !categorias.includes(r.categoria));
@@ -189,7 +216,13 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao }) {
     + `<option value="__outra"${outra ? ' selected' : ''}>Outra</option>`;
   const marca = v => (r.alcance === v ? ' checked' : '');
   const aprovado = edicao && edicao.aprovado;
-  const topo = edicao ? `
+  const topo = parceira ? (painel ? `
+  <p class="eyebrow">Recepção · empresa parceira</p>
+  <h1>${edicao ? 'Editar empresa parceira' : 'Nova empresa parceira'}</h1>
+  <p class="lead">${edicao ? 'As mudanças valem na hora para as alunas.' : 'Para empresas que não são de alunas. Cadastrada por aqui, a empresa já entra aprovada e recebe o código de conferência.'}</p>` : `
+  <p class="eyebrow">Para empresas parceiras</p>
+  <h1>Cadastre sua empresa no Slim Club</h1>
+  <p class="lead">Ofereça um benefício exclusivo para as alunas do ${esc(studio)}. A recepção confere o cadastro e, depois de aprovada, sua empresa aparece para as alunas.</p>`) : edicao ? `
   <p class="eyebrow">Meu anúncio</p>
   <h1>Editar meu anúncio</h1>
   <p class="lead">${aprovado
@@ -198,12 +231,16 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao }) {
   <p class="eyebrow">Para alunas empreendedoras</p>
   <h1>Cadastre seu negócio no Slim Club</h1>
   <p class="lead">Ofereça um benefício exclusivo para as alunas do ${esc(studio)}. A recepção confere o cadastro e, depois de aprovado, seu negócio aparece para as alunas.</p>`;
-  const okTxt = edicao
+  const okTxt = parceira
+    ? `<h2 style="justify-content:center;font-size:1.2rem">Cadastro enviado!</h2>
+    <p class="lead" style="margin:0 auto">A recepção vai conferir as informações. ${avisar ? 'A empresa recebe um aviso no WhatsApp de contato quando for aprovada, com o código de conferência.' : 'Assim que for aprovada, a empresa aparece no Slim Club.'}</p>`
+    : edicao
     ? `<h2 style="justify-content:center;font-size:1.2rem">Alterações enviadas!</h2>
     <p class="lead" style="margin:0 auto">A recepção vai conferir. ${aprovado ? 'Até a aprovação, as alunas continuam vendo a versão atual do seu anúncio.' : (avisar ? 'Você recebe um aviso no WhatsApp quando for aprovado.' : 'Assim que for aprovado, seu negócio aparece no Slim Club.')}</p>
     <p style="margin:14px 0 0"><a href="/slimclub">Voltar ao Slim Club</a></p>`
     : `<h2 style="justify-content:center;font-size:1.2rem">Cadastro enviado!</h2>
     <p class="lead" style="margin:0 auto">A recepção vai conferir as informações. ${avisar ? 'Você recebe um aviso no WhatsApp quando for aprovado.' : 'Assim que for aprovado, seu negócio aparece no Slim Club.'}</p>`;
+  const ROTULO = painel ? 'Salvar empresa' : edicao ? 'Enviar alterações' : 'Enviar para validação';
   const corpo = `${topo}
 
   <div id="ok" class="card pronto" hidden>
@@ -213,30 +250,31 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao }) {
 
   <form id="f" novalidate>
     <section class="card">
-      <h2><span class="n">1</span>Sobre você</h2>
+      <h2><span class="n">1</span>${parceira ? 'Sobre a empresa' : 'Sobre você'}</h2>
       <div class="campo">
-        <span class="rot">Sua foto</span>
+        <span class="rot">${parceira ? 'Logo da empresa' : 'Sua foto'}</span>
         <div class="foto">
           ${edicao && edicao.fotoUrl ? `<div class="av tem" id="av" style="background-image:url('${esc(edicao.fotoUrl)}')"></div>` : '<div class="av" id="av">sem foto</div>'}
           <div style="display:flex;flex-direction:column;gap:6px">
-            <button type="button" class="btn2" id="btFoto">${edicao ? 'Trocar foto' : 'Escolher foto'}</button>
-            <p class="dica">Para as alunas reconhecerem você. JPG ou PNG, tamanho máximo de <b>1 MB</b> — fotos maiores do celular são reduzidas automaticamente.</p>
+            <button type="button" class="btn2" id="btFoto">${edicao ? (parceira ? 'Trocar logo' : 'Trocar foto') : (parceira ? 'Escolher logo' : 'Escolher foto')}</button>
+            <p class="dica">${parceira ? 'Aparece no cartão da empresa.' : 'Para as alunas reconhecerem você.'} JPG ou PNG, tamanho máximo de <b>1 MB</b> — fotos maiores do celular são reduzidas automaticamente.</p>
             <p class="dica" id="tamFoto" aria-live="polite"></p>
           </div>
           <input type="file" id="arq" accept="image/*" hidden>
         </div>
       </div>
-      <div class="campo"><label for="nome">Nome completo</label>
-        <input type="text" id="nome" autocomplete="name" maxlength="120" value="${val('nome')}" required></div>
-      <div class="campo"><label for="telefone">Telefone (WhatsApp)</label>
-        ${edicao ? `<input type="tel" id="telefone" value="${esc(edicao.telefone)}" readonly aria-describedby="dicaTel">
+      <div class="campo"><label for="nome">${parceira ? 'Nome do responsável' : 'Nome completo'}</label>
+        <input type="text" id="nome" autocomplete="name" maxlength="120" value="${val('nome')}" required>${parceira ? '<p class="dica">Fica só com a recepção; para as alunas aparece o nome da empresa.</p>' : ''}</div>
+      <div class="campo"><label for="telefone">${parceira ? 'WhatsApp de contato' : 'Telefone (WhatsApp)'}</label>
+        ${parceira ? `<input type="tel" id="telefone" autocomplete="tel" inputmode="tel" placeholder="(00) 90000-0000" maxlength="20" value="${edicao ? esc(edicao.telefone) : ''}" required>
+        <p class="dica">Recebe o aviso de aprovação e o código de conferência do Slim Club.</p>` : edicao ? `<input type="tel" id="telefone" value="${esc(edicao.telefone)}" readonly aria-describedby="dicaTel">
         <p class="dica" id="dicaTel">O telefone identifica o seu anúncio e não pode ser trocado aqui. Se mudou de número, fale com a recepção.</p>` : `<input type="tel" id="telefone" autocomplete="tel" inputmode="tel" placeholder="(00) 90000-0000" maxlength="20" required>
         <p class="dica">Use o mesmo telefone cadastrado no Studio — é por ele que confirmamos que você é aluna.</p>`}</div>
     </section>
 
     <section class="card">
-      <h2><span class="n">2</span>Seu negócio</h2>
-      <div class="campo"><label for="negocio">Nome do negócio</label>
+      <h2><span class="n">2</span>${parceira ? 'O negócio' : 'Seu negócio'}</h2>
+      <div class="campo"><label for="negocio">${parceira ? 'Nome da empresa' : 'Nome do negócio'}</label>
         <input type="text" id="negocio" maxlength="80" value="${val('negocio')}" required></div>
       <div class="campo"><label for="categoria">Categoria</label>
         <select id="categoria" required><option value="">Escolha…</option>${opts}</select>
@@ -255,8 +293,8 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao }) {
         <p class="dica" id="dicaBeneficio">O benefício precisa ser <b>real e exclusivo</b>: uma vantagem que só as alunas SlimFit recebem, e não a mesma promoção que qualquer cliente já tem. É isso que fortalece a nossa comunidade. Benefícios genéricos (como "condições especiais") não entram na listagem.</p></div>
       <div class="campo"><span class="rot" id="rotAlc">Alcance</span>
         <div class="alc" role="radiogroup" aria-labelledby="rotAlc">
-          <label><input type="radio" name="alcance" value="local"${marca('local')}><span><b>Local</b>Vale só no seu negócio aqui da cidade</span></label>
-          <label><input type="radio" name="alcance" value="nacional"${marca('nacional')}><span><b>Nacional</b>Vale em todas as unidades do seu negócio no Brasil</span></label>
+          <label><input type="radio" name="alcance" value="local"${marca('local')}><span><b>Local</b>Vale só ${parceira ? 'na empresa' : 'no seu negócio'} aqui da cidade</span></label>
+          <label><input type="radio" name="alcance" value="nacional"${marca('nacional')}><span><b>Nacional</b>Vale em todas as unidades ${parceira ? 'da empresa' : 'do seu negócio'} no Brasil</span></label>
         </div></div>
       <div class="campo"><span class="rot">Como a aluna comprova que é do Studio</span>
         <div class="fixo">${esc(comprovacao)}</div>
@@ -267,17 +305,21 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao }) {
     </section>
 
     <section class="card">
-      <label class="consent"><input type="checkbox" id="consent"${edicao ? ' checked' : ''}><span>Autorizo exibir meu nome, minha foto e as informações do meu negócio para as alunas do ${esc(studio)}.</span></label>
+      <label class="consent"><input type="checkbox" id="consent"${edicao ? ' checked' : ''}><span>${parceira
+        ? (painel ? `A empresa autorizou exibir o logo e as informações dela para as alunas do ${esc(studio)}.` : `Autorizo exibir o logo e as informações da empresa para as alunas do ${esc(studio)}.`)
+        : `Autorizo exibir meu nome, minha foto e as informações do meu negócio para as alunas do ${esc(studio)}.`}</span></label>
     </section>
 
     <div id="erro" class="msg erro" role="alert" hidden></div>
-    <button class="btn" id="enviar" type="submit">${edicao ? 'Enviar alterações' : 'Enviar para validação'}</button>
+    <button class="btn" id="enviar" type="submit">${ROTULO}</button>
   </form>
-  <p class="rodape">${edicao ? '<a href="/slimclub">Voltar sem alterar</a>' : 'Já é aluna? <a href="/slimclub">Veja os negócios do Slim Club</a>'}</p>`;
+  <p class="rodape">${painel ? '<a href="/clube?view=aprovados">Voltar ao painel sem salvar</a>'
+    : parceira ? 'É aluna do Studio e tem um negócio? <a href="/SlimClubCadastro">Use o cadastro das alunas</a>'
+    : edicao ? '<a href="/slimclub">Voltar sem alterar</a>' : 'Já é aluna? <a href="/slimclub">Veja os negócios do Slim Club</a>'}</p>`;
 
   const script = `<script>
 (function(){
-  var EDICAO=${edicao ? 'true' : 'false'}, ROTULO=${edicao ? "'Enviar alterações'" : "'Enviar para validação'"};
+  var EDICAO=${edicao ? 'true' : 'false'}, ROTULO='${ROTULO}', SEM_FOTO='${parceira ? 'Escolha o logo da empresa.' : 'Escolha uma foto sua.'}';
   var foto='', f=document.getElementById('f'), erro=document.getElementById('erro'), bt=document.getElementById('enviar');
   var arq=document.getElementById('arq'), av=document.getElementById('av');
   document.getElementById('btFoto').onclick=function(){ arq.click(); };
@@ -299,7 +341,8 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao }) {
       for(var t=0;t<4;t++){ // baixa a qualidade e, se ainda não couber, as dimensões
         var k=Math.min(1,lado/Math.max(img.naturalWidth,img.naturalHeight));
         var c=document.createElement('canvas'); c.width=Math.round(img.naturalWidth*k); c.height=Math.round(img.naturalHeight*k);
-        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        var cx=c.getContext('2d'); cx.fillStyle='#fff'; cx.fillRect(0,0,c.width,c.height); // logo com fundo transparente não fica preto no JPEG
+        cx.drawImage(img,0,0,c.width,c.height);
         for(var q=.85;q>=.45;q-=.1){ d=c.toDataURL('image/jpeg',q); if(bytes(d)<=MAX) break; }
         if(bytes(d)<=MAX) break;
         lado=Math.round(lado*.75);
@@ -321,11 +364,12 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao }) {
       documento:v('documento'), instagram:v('instagram'), beneficio:v('beneficio'),
       alcance: alc?alc.value:'', fimVigencia:v('fim'),
       consentimento: document.getElementById('consent').checked, foto: foto };
-    if(!foto && !EDICAO) return mostrarErro('Escolha uma foto sua.'); // na edição, sem foto nova fica a atual
+    if(!foto && !EDICAO) return mostrarErro(SEM_FOTO); // na edição, sem foto nova fica a atual
     bt.disabled=true; bt.textContent='Enviando…';
-    fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
+    fetch(location.pathname+location.search,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
       .then(function(r){ return r.json().catch(function(){ return {erro:'Falha no envio (código '+r.status+').'}; }); })
       .then(function(j){
+        if(j&&j.ok&&j.ir){ location.href=j.ir; return; } // painel: volta para a lista
         if(j&&j.ok){ f.hidden=true; var ok=document.getElementById('ok'); ok.hidden=false; ok.scrollIntoView({block:'start'}); return; }
         mostrarErro((j&&j.erro)||'Não consegui enviar. Tente de novo.');
       })
@@ -334,8 +378,8 @@ function paginaCadastro({ studio, categorias, avisar, comprovacao, edicao }) {
   };
 })();
 </script>`;
-  return casca({ titulo: edicao ? 'Meu anúncio · Slim Club' : 'Cadastro · Slim Club', studio, corpo, script,
-    dir: edicao ? '<a href="/slimclub/sair">Sair</a>' : '' });
+  return casca({ titulo: parceira ? 'Empresa parceira · Slim Club' : edicao ? 'Meu anúncio · Slim Club' : 'Cadastro · Slim Club', studio, corpo, script,
+    dir: painel ? '<a href="/clube?view=aprovados">Voltar ao painel</a>' : (edicao && !parceira) ? '<a href="/slimclub/sair">Sair</a>' : '' });
 }
 
 // ── /slimclub (sem sessão): entrar com nome + telefone ─────────────────────
@@ -365,16 +409,40 @@ const ICONE_IG = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="t
   + '<circle cx="16.4" cy="7.6" r="1.15" fill="#fff"/></svg>';
 
 // ── /slimclub (aluna conectada): listagem ───────────────────────────────────
-function paginaListagem({ studio, aluna, empresas, fmtData, fmtDocumento, primeiroNome, comprovacao, meu }) {
+// aval = { usos: {empresaId: 'AAAA-MM-DD'}, recs: Set(empresaId) } da aluna conectada;
+// recs = { empresaId: total de 👍 }.
+function paginaListagem({ studio, aluna, empresas, fmtData, fmtDocumento, primeiroNome, comprovacao, meu, aval, recs }) {
+  aval = aval || { usos: {}, recs: new Set() };
+  recs = recs || {};
   const cats = [...new Set(empresas.map(e => e.categoria))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  const chips = cats.length > 1
-    ? `<div class="chips" role="group" aria-label="Filtrar por categoria"><button type="button" class="chip on" data-cat="">Todas</button>${cats.map(c => `<button type="button" class="chip" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>`
+  const temParc = empresas.some(e => e.tipo === 'parceira');
+  const chips = (cats.length > 1 || temParc)
+    ? `<div class="chips" role="group" aria-label="Filtrar"><button type="button" class="chip on" data-cat="">Todas</button>${temParc ? '<button type="button" class="chip parc" data-cat="__parc">Parceiras</button>' : ''}${cats.length > 1 ? cats.map(c => `<button type="button" class="chip" data-cat="${esc(c)}">${esc(c)}</button>`).join('') : ''}</div>`
     : '';
+  const meuId = meu && meu.r && meu.r.id;
   const cards = empresas.map(e => {
-    const busca = [e.negocio, e.nome, e.categoria, e.beneficio, e.documento].join(' ').toLowerCase();
-    return `<article class="emp" data-cat="${esc(e.categoria)}" data-busca="${esc(busca)}">
-      <div class="dona"><img src="/slimclub/foto/${esc(e.id)}" alt="Foto de ${esc(e.nome)}" loading="lazy" width="56" height="56">
-        <div><div class="q">Empresa da aluna</div><div class="nm">${esc(e.nome)}</div></div></div>
+    const parc = e.tipo === 'parceira';
+    const busca = [e.negocio, parc ? 'parceira' : e.nome, e.categoria, e.beneficio, e.documento].join(' ').toLowerCase();
+    const n = recs[e.id] || 0, usou = aval.usos[e.id], recomendou = aval.recs.has(e.id), meuNeg = e.id === meuId;
+    const btRec = meuNeg
+      ? `<span class="rec" aria-label="${n} recomendações">👍 <span data-n>${n}</span></span>`
+      : `<button type="button" class="rec${recomendou ? ' on' : ''}" data-rec="${esc(e.id)}"${usou ? '' : ' disabled title="Você pode recomendar depois de usar o benefício"'} aria-pressed="${recomendou}" aria-label="Recomendo (${n})">👍 ${usou ? 'Recomendo' : ''} <span data-n>${n}</span></button>`;
+    const avalHtml = `<div class="aval">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${btRec}${usou && !meuNeg ? `<span class="usou">Você usou em ${esc(fmtData(usou))}${recomendou ? '' : '. Recomenda?'}</span>` : ''}</div>
+        ${meuNeg ? '' : `<button type="button" class="prob" data-prob="${esc(e.id)}">👎 Tive um problema</button>`}
+      </div>
+      ${meuNeg ? '' : `<form class="reclama" data-form="${esc(e.id)}" hidden>
+        <label for="rt-${esc(e.id)}">Conte o que aconteceu em ${esc(e.negocio)}. Só a recepção do Studio vai ler.</label>
+        <textarea id="rt-${esc(e.id)}" maxlength="1500" placeholder="Ex.: não aceitaram a carteira, o desconto foi diferente do anunciado…"></textarea>
+        <div class="msg erro" role="alert" hidden></div>
+        <div class="acts"><button class="btn" type="submit">Enviar para a recepção</button><button class="btn2" type="button" data-cancela>Cancelar</button></div>
+      </form>`}`;
+    return `<article class="emp" data-cat="${esc(e.categoria)}" data-tipo="${parc ? 'parceira' : 'aluna'}" data-recs="${n}" data-nome="${esc(e.negocio.toLowerCase())}" data-busca="${esc(busca)}">
+      <div class="dona">${parc
+        ? `<img class="logo" src="/slimclub/foto/${esc(e.id)}" alt="Logo de ${esc(e.negocio)}" loading="lazy" width="56" height="56">
+        <div><span class="selo-parc">Empresa parceira</span></div></div>`
+        : `<img src="/slimclub/foto/${esc(e.id)}" alt="Foto de ${esc(e.nome)}" loading="lazy" width="56" height="56">
+        <div><div class="q">Empresa da aluna</div><div class="nm">${esc(e.nome)}</div></div></div>`}
       <h3>${esc(e.negocio)}</h3>
       <div class="tags"><span class="tg">${esc(e.categoria)}</span>${e.alcance === 'nacional' ? '<span class="tg nac">Nacional · todas as unidades</span>' : '<span class="tg">Local · só nesta cidade</span>'}</div>
       <div class="beneficio">${esc(e.beneficio)}</div>
@@ -382,6 +450,7 @@ function paginaListagem({ studio, aluna, empresas, fmtData, fmtDocumento, primei
       <p class="det"><b>CNPJ:</b> ${esc(fmtDocumento(e.documento))}</p>
       <div class="rodp"><span>${e.fimVigencia ? 'Válido até ' + esc(fmtData(e.fimVigencia)) : 'Sem prazo de término'}</span>
         ${e.instagram ? `<a class="ig-link" href="https://instagram.com/${encodeURIComponent(e.instagram)}" target="_blank" rel="noopener" aria-label="Instagram de ${esc(e.negocio)}: @${esc(e.instagram)}">${ICONE_IG}<span>@${esc(e.instagram)}</span></a>` : ''}</div>
+      ${avalHtml}
     </article>`;
   }).join('');
   const corpo = `
@@ -392,13 +461,14 @@ function paginaListagem({ studio, aluna, empresas, fmtData, fmtDocumento, primei
     <img src="/slimclub/foto/${esc(meu.r.id)}" alt="" width="48" height="48">
     <div class="info"><div class="q">Meu anúncio</div>
       <div class="neg">${esc(meu.r.negocio)} <span class="pill ${meu.estado.cls}">${esc(meu.estado.titulo)}</span></div>
-      <p class="txt">${esc(meu.estado.texto)}</p></div>
+      <p class="txt">${esc(meu.estado.texto)}</p>${meu.nums ? `<p class="nums">👍 ${meu.nums.recs} recomendaç${meu.nums.recs === 1 ? 'ão' : 'ões'} · ${meu.nums.usos} uso${meu.nums.usos === 1 ? '' : 's'} registrado${meu.nums.usos === 1 ? '' : 's'}${meu.r.codigo ? ` · código de conferência: <b>${esc(meu.r.codigo)}</b>` : ''}</p>` : ''}</div>
     <a class="btn2" href="/slimclub/meu-anuncio">${esc(meu.estado.botao)}</a>
   </section>` : ''}
   <a class="btn-cart" href="/slimclub/carteira"><svg width="20" height="16" viewBox="0 0 20 16" fill="none" aria-hidden="true"><rect x="1" y="1" width="18" height="14" rx="3" stroke="currentColor" stroke-width="2"/><path d="M5 6h6M5 10h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Minha carteira SlimClub</a>
   ${empresas.length ? `<div class="busca">
     <input type="text" id="q" placeholder="Buscar por negócio, aluna ou benefício" aria-label="Buscar">
-    ${chips}</div>
+    ${chips}
+    <label class="ordem">Ordenar por <select id="ordem"><option value="nome">Nome (A–Z)</option><option value="recs">Mais recomendadas</option></select></label></div>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><radialGradient id="igGrad" cx="30%" cy="107%" r="150%"><stop offset="0" stop-color="#fdf497"/><stop offset=".05" stop-color="#fdf497"/><stop offset=".45" stop-color="#fd5949"/><stop offset=".6" stop-color="#d6249f"/><stop offset=".9" stop-color="#285aeb"/></radialGradient></defs></svg>
   <div class="grade" id="grade">${cards}</div>
   <div class="vazio" id="nada" hidden>Nenhum negócio encontrado com esse filtro.</div>`
@@ -406,15 +476,55 @@ function paginaListagem({ studio, aluna, empresas, fmtData, fmtDocumento, primei
   ${meu ? '' : '<p class="rodape">Tem um negócio? <a href="/SlimClubCadastro">Cadastre no Slim Club</a></p>'}`;
   const script = empresas.length ? `<script>
 (function(){
-  var q=document.getElementById('q'), cat='', cards=[].slice.call(document.querySelectorAll('.emp')), nada=document.getElementById('nada');
+  var q=document.getElementById('q'), cat='', cards=[].slice.call(document.querySelectorAll('.emp')), nada=document.getElementById('nada'), grade=document.getElementById('grade');
   function filtra(){
     var t=(q.value||'').toLowerCase().trim(), n=0;
-    cards.forEach(function(c){ var ok=(!cat||c.getAttribute('data-cat')===cat)&&(!t||c.getAttribute('data-busca').indexOf(t)>=0); c.hidden=!ok; if(ok)n++; });
+    cards.forEach(function(c){ var okCat=!cat||(cat==='__parc'?c.getAttribute('data-tipo')==='parceira':c.getAttribute('data-cat')===cat);
+      var ok=okCat&&(!t||c.getAttribute('data-busca').indexOf(t)>=0); c.hidden=!ok; if(ok)n++; });
     nada.hidden=n>0;
   }
   q.oninput=filtra;
   [].forEach.call(document.querySelectorAll('.chip'),function(b){ b.onclick=function(){
     cat=b.getAttribute('data-cat'); [].forEach.call(document.querySelectorAll('.chip'),function(x){ x.classList.toggle('on',x===b); }); filtra(); }; });
+  var ordem=document.getElementById('ordem');
+  function ordena(){
+    var porRecs=ordem.value==='recs';
+    cards.slice().sort(function(a,b){
+      var d=porRecs ? (+b.getAttribute('data-recs'))-(+a.getAttribute('data-recs')) : 0;
+      return d || a.getAttribute('data-nome').localeCompare(b.getAttribute('data-nome'),'pt-BR');
+    }).forEach(function(c){ grade.appendChild(c); });
+  }
+  ordem.onchange=ordena;
+  function post(url,dados){
+    return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)})
+      .then(function(r){ if(r.status===401){ location.reload(); throw 0; } return r.json(); });
+  }
+  [].forEach.call(document.querySelectorAll('button[data-rec]'),function(b){ b.onclick=function(){
+    if(b.disabled) return;
+    b.disabled=true;
+    post('/slimclub/recomendar',{empresa:b.getAttribute('data-rec')}).then(function(j){
+      b.disabled=false;
+      if(!j||!j.ok){ alert((j&&j.erro)||'Não consegui registrar agora.'); return; }
+      b.classList.toggle('on',j.recomendou); b.setAttribute('aria-pressed',j.recomendou);
+      b.querySelector('[data-n]').textContent=j.total; b.closest('.emp').setAttribute('data-recs',j.total);
+      var u=b.parentNode.querySelector('.usou'); if(u) u.textContent=u.textContent.replace(/\\. Recomenda\\?$/,'')+(j.recomendou?'':'. Recomenda?');
+    }).catch(function(e){ b.disabled=false; if(e!==0) alert('Sem conexão. Tente de novo.'); });
+  }; });
+  [].forEach.call(document.querySelectorAll('button[data-prob]'),function(b){
+    var id=b.getAttribute('data-prob'), f=document.querySelector('form[data-form="'+id+'"]'), ta=f.querySelector('textarea'), er=f.querySelector('.msg');
+    b.onclick=function(){ f.hidden=!f.hidden; if(!f.hidden) ta.focus(); };
+    f.querySelector('[data-cancela]').onclick=function(){ f.hidden=true; };
+    f.onsubmit=function(ev){
+      ev.preventDefault(); er.hidden=true;
+      var bt=f.querySelector('button[type=submit]'); bt.disabled=true; bt.textContent='Enviando…';
+      post('/slimclub/reclamar',{empresa:id,texto:ta.value}).then(function(j){
+        bt.disabled=false; bt.textContent='Enviar para a recepção';
+        if(!j||!j.ok){ er.textContent=(j&&j.erro)||'Não consegui enviar.'; er.hidden=false; return; }
+        f.innerHTML='<div class="msg ok" role="status">Recebemos. A recepção do Studio vai avaliar. Obrigada por avisar!</div>';
+        b.hidden=true;
+      }).catch(function(e){ bt.disabled=false; bt.textContent='Enviar para a recepção'; if(e!==0){ er.textContent='Sem conexão. Tente de novo.'; er.hidden=false; } });
+    };
+  });
 })();
 </script>` : '';
   const dir = `<a href="/slimclub/sair">Sair</a>`;
@@ -458,7 +568,9 @@ function paginaCarteira({ studio, nome, telefone, geradaEm, verificadaEm, verifi
 }
 
 // ── /slimclub/v/<código> (o parceiro escaneou o QR) ─────────────────────────
-function paginaVerificacao({ studio, r, conferidoEm, geradaEm }) {
+// registro (só com carteira ATIVA): { empresa: {negocio}|null, msg: {cls, texto}|null,
+// acao: URL do POST }. Com empresa (aparelho lembrado) → botão; sem → pede o código.
+function paginaVerificacao({ studio, r, conferidoEm, geradaEm, registro }) {
   const V = {
     'ativa': ['ok', '✓', 'ATIVA', 'Aluna ativa do Studio. Pode aplicar o benefício do Slim Club.'],
     'ex-aluna': ['no', '✕', 'INATIVA', 'Não é mais aluna do Studio (ex-aluna). O benefício do Slim Club não vale.'],
@@ -478,8 +590,28 @@ function paginaVerificacao({ studio, r, conferidoEm, geradaEm }) {
       ${r ? `<div><dt>Carteira gerada em</dt><dd>${esc(geradaEm)}</dd></div>` : ''}
     </dl>
     <div class="ver-agora"><i></i><span>Agora: <span data-agora>${esc(conferidoEm)}</span></span></div>
+    ${registro ? blocoRegistro(registro) : ''}
   </div>`;
   return casca({ titulo: 'Conferência · Slim Club', studio, corpo, script: RELOGIO });
+}
+function blocoRegistro({ empresa, msg, acao }) {
+  const aviso = msg ? `<div class="msg ${msg.cls}" role="${msg.cls === 'erro' ? 'alert' : 'status'}">${esc(msg.texto)}</div>` : '';
+  if (empresa) {
+    return `<form class="uso" method="POST" action="${esc(acao)}">
+      <h2>Empresa parceira</h2>
+      ${aviso}
+      <button class="btn" type="submit" name="acao" value="registrar">Registrar uso na ${esc(empresa.negocio)}</button>
+      <button class="troca" type="submit" name="acao" value="trocar">Não é a ${esc(empresa.negocio)}? Trocar empresa</button>
+    </form>`;
+  }
+  return `<form class="uso" method="POST" action="${esc(acao)}">
+    <h2>É a empresa parceira? Registre o uso do benefício</h2>
+    <p>Digite o código de conferência de 6 dígitos que a empresa recebeu na aprovação. Este celular fica lembrado e, nas próximas vezes, é só um toque.</p>
+    ${aviso}
+    <label class="rot" for="codigo" style="display:block;margin-bottom:6px">Código de conferência</label>
+    <input type="text" id="codigo" name="codigo" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+    <button class="btn" type="submit" name="acao" value="registrar" style="margin-top:10px">Registrar uso</button>
+  </form>`;
 }
 
 module.exports = { paginaCadastro, paginaEntrar, paginaListagem, paginaCarteira, paginaVerificacao };
