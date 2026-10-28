@@ -766,7 +766,8 @@ SOFIA_DIR=$SOFIA_DIR
 # domínio do painel desta unidade (o mesmo do --domain).
 FORM_CLOUD_URL=https://SEU-PAINEL/agendamentoexperimental
 # DUAS lojas no MESMO VPS? Escalone o minuto do envio da grade p/ não estourarem
-# juntas o limite de 40 req/min do EVO. Ex.: loja 1 = 0, loja 2 = 30. (Só 1 loja: deixe 0.)
+# juntas o limite de 40 req/min do EVO. Ex.: loja 1 = 0, loja 2 = 15 (NÃO 30: o envio é no minuto
+# e 30 min depois, então 0 e 30 caem juntos em :00/:30). (Só 1 loja: deixe 0.)
 # FORM_SLOTS_MINUTO=0
 # Token que o robô ENVIA a grade ao formulário (mesmo valor no form: FORM_SLOTS_TOKEN):
 FORM_SLOTS_TOKEN=$TOK_FORM
