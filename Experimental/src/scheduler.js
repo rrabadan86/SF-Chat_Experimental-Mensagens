@@ -259,7 +259,7 @@ let jobRunning = false;
  * causava conflito: o init() do WhatsApp matava o Edge que o executor
  * do Instagram/Aniversariantes ia usar, e vice-versa.
  */
-async function runJob(jobName, jobFn) {
+async function runJob(jobName, jobFn, timeoutMs) {
   if (jobRunning) {
     log(`⚠️  Job ${jobName} ignorado — outro job ainda está em execução`);
     return;
@@ -269,8 +269,8 @@ async function runJob(jobName, jobFn) {
   atividade.setContexto(jobName); // marca de quem são os envios deste job
   const startTime = new Date();
 
-  // Timeout de segurança: 5 minutos para qualquer job
-  const JOB_TIMEOUT = 5 * 60 * 1000;
+  // Timeout de segurança: 5 minutos por padrão (o job pode pedir mais)
+  const JOB_TIMEOUT = timeoutMs || 5 * 60 * 1000;
   let timedOut = false;
   const timeoutHandle = setTimeout(() => {
     timedOut = true;
@@ -632,7 +632,8 @@ function iniciarRodarJobWatcher() {
     resumoDia:         { nome: 'Resumo do dia [manual]',        fn: () => require('./resumo-dia').runResumoDia() },
     ausentes:          { nome: 'Ausentes 10 dias [manual]',     fn: () => require('./ausentes-10-dias').runAusentes10Dias() },
     planilha:          { nome: 'Planilha de aniversários [manual]', fn: () => require('./planilha-aniversarios').runPlanilhaAniversarios() },
-    inadimplentes:     { nome: 'Cobrança de inadimplentes [manual]', fn: () => require('./inadimplentes').runInadimplentes({ dry: false }) },
+    // abre a ficha de cada devedora no EVO (pode passar dos 5 min padrão)
+    inadimplentes:     { nome: 'Cobrança de inadimplentes [manual]', fn: () => require('./inadimplentes').runInadimplentes({ dry: false }), timeoutMs: 20 * 60 * 1000 },
     freeAntecedencia:  { nome: 'Planos FREE — antecedência [manual]', fn: (pedido) => require('./free-antecedencia').runFreeAntecedencia({ dry: !!(pedido && pedido.dry) }) },
   };
   const t = setInterval(() => {
@@ -644,7 +645,7 @@ function iniciarRodarJobWatcher() {
     if (!alvo) { log(`▶️  pedido de job desconhecido: "${chave}" — ignorado. Opções: ${Object.keys(EXEC).join(', ')}`); return; }
     if (jobRunning) { log(`▶️  ${alvo.nome}: outro job em execução — tento de novo em 30s.`); setTimeout(() => { try { fs.writeFileSync(ARQ, JSON.stringify({ job: chave })); } catch (_) {} }, 30000); return; }
     log(`▶️  Rodando job manual: ${alvo.nome}`);
-    runJob(alvo.nome, () => alvo.fn(pedido)).catch(err => logError(alvo.nome, err));
+    runJob(alvo.nome, () => alvo.fn(pedido), alvo.timeoutMs).catch(err => logError(alvo.nome, err));
   }, 4000);
   if (t.unref) t.unref();
   log('▶️  Watcher de "rodar job manual" ativo (a cada 4s).');

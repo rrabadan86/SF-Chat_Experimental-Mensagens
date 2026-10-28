@@ -164,6 +164,13 @@ const CATALOGO = [
     vars: [['nome', 'primeiro nome da aluna'], ['vencimento', 'data de vencimento (hoje), ex.: 07/10/2026'], ['link', 'link do boleto dela — mantenha o {link} no texto'], ['valor', 'valor do boleto, ex.: R$ 647,00 (opcional)']],
     padrao: 'Oi, {nome}! 💜 Passando pra lembrar que o boleto da sua mensalidade do {studio} *vence hoje* ({vencimento}).\n\nPara manter tudo em dia, segue o boleto:\n{link}\n\nSe já pagou, é só desconsiderar. Qualquer dúvida, é só me chamar! 😊',
   },
+  {
+    chave: 'cobranca_saldo',
+    titulo: 'Cobrança — saldo devedor (sem boleto e sem cartão recorrente)',
+    quando: 'Enviada pela SoFIA para a aluna com SALDO DEVEDOR vencido há X+ dias no EVO cujo contrato NÃO é recorrente e que não tem boleto (ex.: plano pago na recepção, por PIX). Não leva link — ponha no texto como pagar (ex.: a chave PIX). {valor} = soma das parcelas já vencidas. Mesmo disparo da Cobrança — recorrente.',
+    vars: [['nome', 'primeiro nome da aluna'], ['valor', 'valor vencido, ex.: R$ 877,00'], ['vencimento', 'vencimento da parcela mais antiga em aberto, ex.: 01/10/2026']],
+    padrao: 'Olá, {nome}! Tudo bem? 💜\n\nIdentificamos que ficou um valor de {valor} em aberto no seu plano do {studio}, com vencimento em {vencimento}.\n\nPara regularizar, é só responder por aqui que te passamos as formas de pagamento.\n\nSe já tiver pago, pode desconsiderar. Qualquer dúvida, é só me chamar! 😊',
+  },
 ];
 
 const PADROES = Object.fromEntries(CATALOGO.map(m => [m.chave, m.padrao]));
@@ -312,7 +319,7 @@ function removerFoto(chave) {
 // Todas as mensagens de WhatsApp aceitam foto (flyer), MENOS as text-only:
 //  • 'instagram' — DM do Instagram (canal diferente, tratado na aba Instagram);
 //  • 'ausentes'  — listagem de texto no grupo da equipe (enviada sem mídia).
-const SEM_FOTO = new Set(['instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje']);
+const SEM_FOTO = new Set(['instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje', 'cobranca_saldo']);
 function aceitaFoto(chave) { const m = CATALOGO.find(x => x.chave === chave); return !!(m && !SEM_FOTO.has(m.chave)); }
 function salvarFoto(chave, dataUrl) {
   if (!aceitaFoto(chave)) throw new Error('Esta mensagem não aceita foto.');
