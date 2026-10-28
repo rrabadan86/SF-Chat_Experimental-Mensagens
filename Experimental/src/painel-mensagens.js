@@ -5537,7 +5537,7 @@ function paginaPerfis(aviso, erro, view) {
     'perfil.senha': '🔑 Redefiniu senha', 'perfil.email': '📧 Alterou e-mail', 'perfil.admin': '👑 Mudou administrador',
     'perfil.sessao': '⏲️ Mudou duração da sessão', 'perfil.sessao-encerrar': '🚪 Encerrou uma sessão',
     'slimclub.aprovar': '🤝 Aprovou cadastro do Slim Club', 'slimclub.recusar': '🚫 Recusou cadastro do Slim Club', 'slimclub.pendente': '↩️ Voltou cadastro do Slim Club para pendente',
-    'slimclub.excluir': '🗑️ Excluiu cadastro do Slim Club',
+    'slimclub.excluir': '🗑️ Excluiu cadastro do Slim Club', 'slimclub.excluir-dona': '🗑️ Aluna excluiu o próprio anúncio do Slim Club',
     'slimclub.aprovar-alteracao': '✏️ Aprovou alteração no Slim Club', 'slimclub.recusar-alteracao': '🚫 Recusou alteração no Slim Club',
     'slimclub.parceira-nova': '🤝 Cadastrou empresa parceira no Slim Club', 'slimclub.parceira-editar': '✏️ Editou empresa parceira no Slim Club',
     'slimclub.novo-codigo': '🔑 Gerou outro código de conferência do Slim Club',
@@ -6124,7 +6124,22 @@ function rotaSlimClubPublico(req, res, rota, urlOriginal) {
       studio, aluna, empresas, fmtData: slimclub.fmtData, fmtDocumento: slimclub.fmtDocumento, primeiroNome: slimclub.primeiroNome, comprovacao: slimclub.COMPROVACAO,
       meu: meu ? { r: meu, estado: slimclub.estadoMeuAnuncio(meu), nums } : null,
       aval: slimclub.minhasAvaliacoes(aluna.telefone), recs,
+      aviso: !meu && /(?:^|&)excluido=1(?:&|$)/.test(req.url.split('?')[1] || '') ? 'Seu anúncio foi excluído.' : '',
     }));
+  }
+  // A dona exclui o próprio anúncio (de aluna; o de parceira só a recepção exclui).
+  if (rota === '/slimclub/meu-anuncio/excluir' && req.method === 'POST') {
+    if (!scSoJson(req)) return scJson(res, 415, { erro: 'Envio inválido.' });
+    const aluna = slimclub.alunaDaSessao(lerCookie(req, slimclub.COOKIE));
+    if (!aluna) return scJson(res, 401, { erro: 'Sua sessão expirou. Entre de novo em /slimclub e tente outra vez.' });
+    return lerCorpo(req, 1e3, () => {
+      const meu = slimclub.meuAnuncio(aluna.telefone);
+      if (!meu) return scJson(res, 404, { erro: 'Não encontramos um anúncio seu.' });
+      slimclub.excluir(meu.id);
+      try { auditoria.registrar(aluna.nome || fmtTel(aluna.telefone), 'slimclub.excluir-dona', meu.negocio + ' (' + meu.nome + ')', 'pela própria aluna'); } catch (_) {}
+      console.log(`[slimclub] anúncio ${meu.id} (${meu.negocio}) excluído pela própria dona`);
+      return scJson(res, 200, { ok: true });
+    });
   }
   // 👍 (liga/desliga) e 👎 (reclamação para a recepção) — aluna conectada.
   if ((rota === '/slimclub/recomendar' || rota === '/slimclub/reclamar') && req.method === 'POST') {
