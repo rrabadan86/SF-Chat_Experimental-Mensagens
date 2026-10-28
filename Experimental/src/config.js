@@ -21,7 +21,8 @@ const STUDIO_NOME = process.env.STUDIO_NOME || 'Studio SlimFit';
 // Minuto (0-59) em que ESTA unidade envia a grade ao formulário. Serve para
 // ESCALONAR duas lojas no mesmo VPS (mesma conta EVO): cada uma empurra a grade
 // num minuto diferente e elas NÃO estouram juntas o limite de 40 req/min do EVO.
-// Padrão 0. Ex.: lagosul1 FORM_SLOTS_MINUTO=0 · lagosul2 FORM_SLOTS_MINUTO=30.
+// Padrão 0. Ex.: lagosul1 FORM_SLOTS_MINUTO=0 · lagosul2 FORM_SLOTS_MINUTO=15. NÃO use 30:
+// o envio é no minuto E 30 min depois, então 0 e 30 caem nos mesmos minutos (:00/:30).
 const FORM_SLOTS_MINUTO = (() => {
   const m = parseInt(process.env.FORM_SLOTS_MINUTO || '0', 10);
   return (Number.isFinite(m) && m >= 0 && m <= 59) ? m : 0;
