@@ -115,5 +115,10 @@ data/slimclub.json
 data/slimclub.json.tmp
 data/slimclub-fotos/
 data/slimclub-config.json
+# Formulários de campanha (respostas = dado pessoal; por VPS)
+data/formularios.json
+data/formularios-respostas.json
+data/formularios-capas/
+data/*.tmp
 data/.slimclub-segredo
 data/auto-tag-ultimo.json
