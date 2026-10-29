@@ -728,6 +728,19 @@ class EvoScraper {
   async extractClassList() {
     console.log('📊 Extraindo lista de aulas experimentais...');
 
+    // Espera a tabela CARREGAR antes de ler. Com o servidor lento (ex.: Guará), os
+    // 4 s fixos depois da navegação não bastavam: a lista ainda vinha vazia e o job
+    // dizia "Sem experimental para o período" com aulas marcadas. Espera até 25 s
+    // por linhas na tabela; se o dia realmente não tem aula, segue com 0.
+    const temLinhas = () => this.page.evaluate(() =>
+      [...document.querySelectorAll('table tbody tr, tr.mat-row, tr[class*="row"]')].some(r => r.querySelectorAll('td, td.mat-cell').length >= 3)
+    ).catch(() => false);
+    const ate = Date.now() + 25000;
+    let carregou = await temLinhas();
+    while (!carregou && Date.now() < ate) { await this.sleep(1000); carregou = await temLinhas(); }
+    if (carregou) await this.sleep(1500); // deixa terminar de preencher as linhas
+    else console.log('   (nenhuma linha na tabela depois de 25 s — o dia pode não ter experimental)');
+
     // Screenshot para debug
     await this.page.screenshot({ path: 'debug-table.png' });
 
