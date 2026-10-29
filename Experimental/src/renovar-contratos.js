@@ -214,7 +214,7 @@ async function buscarContratosVencendoEm7Dias() {
     await page.goto(`${config.evo.url}/${config.evo.loginPath}`, { waitUntil: 'networkidle2', timeout: 45000 });
     await sleep(3000);
 
-    await page.waitForSelector('input#usuario, input[type="email"], input[type="text"]', { timeout: 15000 });
+    await require('./evo-login').esperarFormLogin(page); // espera a tela de login (recarrega se o EVO demorar)
     await page.click('input#usuario, input[type="email"], input[type="text"]', { clickCount: 3 });
     await page.type('input#usuario, input[type="email"], input[type="text"]', config.evo.email, { delay: 80 });
     await page.click('input#senha, input[type="password"]', { clickCount: 3 });
