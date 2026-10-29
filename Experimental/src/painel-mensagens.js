@@ -5389,7 +5389,7 @@ function paginaLogin(erro) {
 
 // ── Páginas legais (públicas): Política de Privacidade e Termos de Serviço ───
 // Precisam ser acessíveis SEM login (o Google lê ao publicar o app OAuth).
-function docLegal(titulo, atualizacao, corpo) {
+function docLegal(titulo, atualizacao, corpo, { voltar = true } = {}) {
   const studio = esc(config.STUDIO_NOME || 'o Studio');
   const contato = ADMIN_EMAIL ? esc(ADMIN_EMAIL) : 'o administrador do Studio';
   return `<!doctype html><html lang="pt-BR"><head>
@@ -5407,9 +5407,10 @@ function docLegal(titulo, atualizacao, corpo) {
   .legal ul{margin:0 0 10px;padding-left:20px;color:var(--tinta);font-size:.95rem;line-height:1.6}
   .legal a{color:var(--teal)}
   .legal .back{display:inline-block;margin-bottom:16px;color:var(--cinza);text-decoration:none;font-size:.9rem}
+  @media(max-width:560px){.legal{margin:16px auto;padding:0 12px 40px}.legal .card{padding:22px 18px}}
 </style></head><body>
 <div class="legal">
-  <a class="back" href="/login">← Voltar ao login</a>
+  ${voltar ? '<a class="back" href="/login">← Voltar ao login</a>' : ''}
   <div class="card">
     <h1>${esc(titulo)}</h1>
     <p class="quando">Última atualização: ${esc(atualizacao)} · ${studio}</p>
@@ -5417,39 +5418,91 @@ function docLegal(titulo, atualizacao, corpo) {
   </div>
 </div></body></html>`;
 }
+// Política pública (LGPD): vale para alunas, leads e para a equipe. Servida em
+// /politicadeprivacidade (link usado em formulários, Meta e Google) e /privacidade.
 function paginaPrivacidade() {
-  return docLegal('Política de Privacidade', '02/09/2026', (studio, contato) => `
-    <p>Este painel (“Painel do Studio”) é uma ferramenta <b>interna de gestão</b> usada por ${studio} para operar o atendimento e a comunicação com alunas e leads. Esta política explica quais dados tratamos e como.</p>
-    <h2>1. Quem opera</h2>
-    <p>O painel é operado por ${studio}. Contato: ${contato}.</p>
-    <h2>2. Quem acessa</h2>
-    <p>O acesso é <b>restrito a usuários autorizados</b> (a equipe do Studio). Não é um serviço aberto ao público.</p>
-    <h2>3. Dados que tratamos</h2>
+  return docLegal('Política de Privacidade', '29/10/2026', (studio, contato) => `
+    <p>Esta política explica como ${studio} (“Studio”, “nós”) coleta, usa, guarda e protege os dados pessoais de alunas, ex-alunas, interessadas (leads), empresas parceiras e da própria equipe, conforme a <b>Lei Geral de Proteção de Dados (Lei nº 13.709/2018 — LGPD)</b>.</p>
+
+    <h2>1. Quem é o responsável pelos seus dados</h2>
+    <p>O controlador dos dados é ${studio}, unidade franqueada da rede SlimFit. Para qualquer assunto sobre seus dados, fale com a gente pelo WhatsApp ou pela recepção do Studio, ou pelo e-mail ${contato}.</p>
+
+    <h2>2. Quais dados coletamos</h2>
     <ul>
-      <li><b>Login com Google:</b> recebemos seu <b>e-mail</b> e o <b>nome do perfil</b>, usados apenas para identificar você e liberar as telas autorizadas. <b>Não</b> acessamos sua caixa de e-mail, arquivos ou contatos do Google.</li>
-      <li><b>Dados operacionais do Studio:</b> contatos (nome, telefone, etiquetas), mensagens trocadas com alunas/leads e configurações — inseridos e gerenciados pela própria equipe para operar o atendimento.</li>
+      <li><b>Dados que você informa:</b> nome, telefone/WhatsApp, e-mail e as respostas que você der nos nossos formulários (agendamento de aula experimental, listas de campanhas e promoções, cadastro no Slim Club) e no atendimento.</li>
+      <li><b>Dados de matrícula:</b> quando você se torna aluna, os dados do contrato ficam no nosso sistema de gestão (por exemplo: nome, CPF, data de nascimento, contato, plano, horários, frequência e situação de pagamentos).</li>
+      <li><b>Conversas:</b> mensagens trocadas com o Studio pelo WhatsApp (inclusive com a SoFIA, nossa assistente virtual) e pelo Instagram (comentários e mensagens no Direct), incluindo áudios e imagens que você enviar.</li>
+      <li><b>Slim Club:</b> se você cadastrar o seu negócio, os dados do anúncio (nome do negócio, categoria, CPF/CNPJ, benefício oferecido, Instagram, WhatsApp e foto ou logo), além do registro de uso dos benefícios e das avaliações.</li>
+      <li><b>Dados técnicos:</b> endereço IP e dados básicos de acesso às nossas páginas, usados para segurança e para evitar envios automáticos (robôs).</li>
+      <li><b>Equipe do Studio:</b> quem usa o painel interno tem nome de usuário, e-mail e registro de acessos. No login com Google recebemos apenas o e-mail e o nome do perfil; <b>não</b> acessamos caixa de e-mail, arquivos ou contatos.</li>
     </ul>
-    <h2>4. Para que usamos</h2>
-    <p>Autenticação e controle de acesso; e para operar as funções do painel (atendimento, agendamento, campanhas e indicadores).</p>
-    <h2>5. Com quem compartilhamos</h2>
-    <p>Não vendemos dados. Compartilhamos apenas com os serviços necessários ao funcionamento: o <b>Google</b> (login), o <b>WhatsApp</b> (envio das mensagens), o <b>Instagram/Meta</b> (integração oficial de mensagens e comentários) e o <b>provedor de IA</b> (respostas automáticas). Cada um trata os dados conforme as próprias políticas.</p>
-    <h2>6. Integração com o Instagram (API oficial da Meta)</h2>
-    <p>${studio} conecta o painel à sua <b>própria conta profissional do Instagram</b>, pela <b>API oficial da Meta</b>, para responder automaticamente a quem demonstra interesse:</p>
+
+    <h2>3. Para que usamos e com qual base legal</h2>
     <ul>
-      <li><b>O que recebemos:</b> quando alguém <b>comenta</b> em um post/reel do Studio ou <b>envia um Direct (DM)</b>, a Meta nos envia esse conteúdo — o texto e o identificador público de quem enviou.</li>
-      <li><b>Para que usamos:</b> identificar interesse (por exemplo, um comentário com uma palavra-chave) e <b>responder no Direct</b> com uma saudação e o <b>link para agendar uma aula experimental</b>.</li>
-      <li><b>O que NÃO fazemos:</b> não enviamos mensagens a quem não interagiu, não coletamos sua lista de seguidores, não publicamos em seu nome e <b>não vendemos</b> esses dados.</li>
-      <li><b>Como parar:</b> a pessoa pode pedir para não receber mensagens, bloquear a conta ou simplesmente não responder — e paramos de enviar.</li>
+      <li><b>Agendar e confirmar aulas, responder dúvidas e fazer o atendimento</b> — procedimentos preliminares e execução de contrato (art. 7º, V).</li>
+      <li><b>Gerir a matrícula:</b> horários, frequência, renovações, avisos de vencimento e cobrança de valores em aberto — execução de contrato (art. 7º, V) e exercício regular de direitos (art. 7º, VI).</li>
+      <li><b>Enviar novidades, promoções e campanhas</b> (por exemplo, para quem entrou numa lista de interesse) — consentimento (art. 7º, I) ou legítimo interesse (art. 7º, IX), sempre com a opção de parar de receber.</li>
+      <li><b>Mensagens de relacionamento</b>, como aniversário e lembretes — legítimo interesse (art. 7º, IX).</li>
+      <li><b>Funcionar o Slim Club</b> (exibir o anúncio para as alunas e conferir o uso dos benefícios) — consentimento dado no cadastro (art. 7º, I).</li>
+      <li><b>Segurança, prevenção a fraudes e cumprimento de obrigações legais</b> — art. 7º, II e IX.</li>
     </ul>
-    <p>Esse tratamento segue as <b>Políticas da Plataforma da Meta</b>; os dados do Instagram são usados apenas para o atendimento descrito acima.</p>
-    <h2>7. Segurança</h2>
-    <p>Acesso por <b>HTTPS</b>; senhas guardadas com <b>hash</b> (nunca em texto); sessão por <b>cookie assinado</b>. O acesso é limitado aos usuários cadastrados.</p>
-    <h2>8. Retenção</h2>
-    <p>Os dados ficam enquanto forem necessários à operação do Studio. O histórico de conversas tem um período de retenção configurável no painel.</p>
-    <h2>9. Seus direitos</h2>
-    <p>Você pode solicitar acesso, correção ou remoção dos seus dados pelo contato acima.</p>
-    <h2>10. Alterações</h2>
-    <p>Podemos atualizar esta política; a data no topo indica a última versão.</p>`);
+
+    <h2>4. Mensagens no WhatsApp e como parar de receber</h2>
+    <p>Podemos enviar pelo WhatsApp confirmações e lembretes de aula, avisos sobre a matrícula e os pagamentos e, para quem demonstrou interesse, ofertas e campanhas. <b>Para não receber mais mensagens promocionais, basta nos pedir pelo próprio WhatsApp</b> (ou na recepção) — atendemos o pedido e deixamos de enviar. Avisos indispensáveis do contrato (por exemplo, sobre a sua matrícula) podem continuar enquanto ele estiver ativo.</p>
+
+    <h2>5. Assistente virtual com inteligência artificial (SoFIA)</h2>
+    <p>Parte do atendimento no WhatsApp é feita pela SoFIA, uma assistente virtual. Para responder, o conteúdo da conversa é processado por um <b>provedor de inteligência artificial</b> contratado, apenas para gerar a resposta. Áudios podem ser transcritos automaticamente para o mesmo fim. Você pode pedir para falar com uma pessoa da equipe a qualquer momento.</p>
+
+    <h2>6. Instagram (API oficial da Meta)</h2>
+    <p>O Studio conecta sua <b>própria conta profissional do Instagram</b> ao painel pela <b>API oficial da Meta</b>:</p>
+    <ul>
+      <li><b>O que recebemos:</b> quando alguém comenta em um post do Studio ou envia uma mensagem no Direct, a Meta nos envia o texto e o identificador público de quem enviou.</li>
+      <li><b>Para que usamos:</b> identificar interesse (por exemplo, um comentário com uma palavra-chave) e responder no Direct com uma saudação e o link para agendar uma aula experimental.</li>
+      <li><b>O que não fazemos:</b> não enviamos mensagens a quem não interagiu, não coletamos sua lista de seguidores, não publicamos em seu nome e não vendemos esses dados.</li>
+    </ul>
+    <p>Esse uso segue as Políticas da Plataforma da Meta.</p>
+
+    <h2>7. Com quem compartilhamos</h2>
+    <p><b>Não vendemos nem alugamos dados pessoais.</b> Compartilhamos apenas o necessário com quem nos ajuda a prestar o serviço:</p>
+    <ul>
+      <li><b>Sistema de gestão de academias</b> (cadastro, contratos, agenda e pagamentos);</li>
+      <li><b>Meta</b> (WhatsApp e Instagram) para enviar e receber mensagens;</li>
+      <li><b>Google</b> (login da equipe e planilhas internas);</li>
+      <li><b>Provedores de inteligência artificial</b> (respostas da assistente virtual e transcrição de áudios);</li>
+      <li><b>Provedor de hospedagem</b> onde ficam o painel e os formulários;</li>
+      <li><b>Bancos e meios de pagamento</b>, para boletos e cobranças;</li>
+      <li><b>Autoridades públicas</b>, quando exigido por lei ou ordem judicial.</li>
+    </ul>
+    <p>No Slim Club, os dados do anúncio que você cadastrou ficam visíveis para as alunas do Studio que acessam a listagem.</p>
+    <p>Alguns desses fornecedores podem guardar dados fora do Brasil; nesses casos exigimos que sigam regras de proteção compatíveis com a LGPD.</p>
+
+    <h2>8. Por quanto tempo guardamos</h2>
+    <p>Guardamos os dados enquanto forem necessários para a finalidade de cada um: durante o atendimento e a matrícula e, depois disso, pelo prazo exigido por lei (por exemplo, obrigações fiscais e para defesa em eventuais processos). Respostas de formulários de campanha ficam até o fim da campanha ou até você pedir a exclusão. O histórico de conversas tem prazo de retenção definido no painel.</p>
+
+    <h2>9. Como protegemos</h2>
+    <p>As páginas e o painel usam conexão segura (<b>HTTPS</b>). O acesso ao painel é restrito à equipe autorizada, com senha guardada de forma protegida (hash), sessão por cookie assinado e registro de acessos. Formulários públicos têm proteção contra envios automáticos.</p>
+
+    <h2>10. Cookies</h2>
+    <p>Usamos apenas cookies <b>essenciais</b>: para manter a equipe conectada ao painel e as alunas conectadas ao Slim Club. Não usamos cookies de publicidade nem de rastreamento de terceiros nessas páginas.</p>
+
+    <h2>11. Seus direitos</h2>
+    <p>Pela LGPD (art. 18), você pode, a qualquer momento e sem custo:</p>
+    <ul>
+      <li>confirmar se tratamos seus dados e ter acesso a eles;</li>
+      <li>corrigir dados incompletos, inexatos ou desatualizados;</li>
+      <li>pedir a anonimização, o bloqueio ou a eliminação de dados desnecessários ou tratados em desacordo com a lei;</li>
+      <li>pedir a portabilidade dos dados;</li>
+      <li>saber com quem compartilhamos seus dados;</li>
+      <li>revogar o consentimento e pedir a eliminação dos dados tratados com base nele;</li>
+      <li>se opor a um tratamento feito com base em legítimo interesse.</li>
+    </ul>
+    <p>Para exercer seus direitos, fale com a gente pelos canais do item 1. Também é possível reclamar à <b>Autoridade Nacional de Proteção de Dados (ANPD)</b>.</p>
+
+    <h2>12. Menores de idade</h2>
+    <p>Dados de menores de 18 anos só são tratados com autorização e acompanhamento do responsável legal.</p>
+
+    <h2>13. Alterações</h2>
+    <p>Esta política pode ser atualizada; a data no topo indica a versão em vigor. Mudanças importantes serão comunicadas pelos nossos canais.</p>`, { voltar: false });
 }
 function paginaTermos() {
   return docLegal('Termos de Serviço', '28/08/2026', (studio, contato) => `
@@ -5461,7 +5514,7 @@ function paginaTermos() {
     <h2>3. Uso aceitável</h2>
     <p>O painel deve ser usado apenas para as atividades legítimas do Studio. É proibido tentar acessar dados sem autorização, burlar o controle de acesso ou usar o sistema para fins ilícitos.</p>
     <h2>4. Dados</h2>
-    <p>O tratamento de dados segue a <a href="/privacidade">Política de Privacidade</a>.</p>
+    <p>O tratamento de dados segue a <a href="/politicadeprivacidade">Política de Privacidade</a>.</p>
     <h2>5. Disponibilidade</h2>
     <p>O serviço é fornecido “no estado em que se encontra”. Buscamos manter o painel disponível, mas não garantimos funcionamento ininterrupto.</p>
     <h2>6. Contato</h2>
@@ -7030,7 +7083,10 @@ const server = http.createServer((req, res) => {
     res.writeHead(303, { Location: '/login' }); return res.end();
   }
   // Páginas legais públicas (o Google lê ao publicar o app OAuth).
-  if (url === '/privacidade') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(paginaPrivacidade()); }
+  { // /politicadeprivacidade (o link divulgado) e /privacidade (o do Google), com qualquer maiúscula
+    const u = url.toLowerCase().replace(/\/+$/, '');
+    if (u === '/privacidade' || u === '/politicadeprivacidade' || u === '/politica-de-privacidade') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(paginaPrivacidade()); }
+  }
   if (url === '/termos') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(paginaTermos()); }
   // Imagem PÚBLICA (preços/grade) — o link que a SoFIA manda pra aluna ABRIR pelo
   // WhatsApp (sem login). Só serve os campos conhecidos (precos_imagem/grade_imagem),

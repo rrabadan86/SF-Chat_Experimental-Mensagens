@@ -85,6 +85,7 @@ input:focus,textarea:focus,button:focus-visible,.op input:focus-visible+span{out
 .msg{border-radius:10px;padding:11px 13px;font-size:.92rem;margin:0}
 .msg.erro{background:var(--erro-soft);color:var(--erro)}
 .lgpd{font-size:.78rem;color:var(--faint);margin:14px 8px 0;text-align:center}
+.lgpd a{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .pote{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
 .pronto{padding:30px 22px 34px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px;border-top:1px solid var(--linha);margin-top:12px}
 .pronto .ic{width:60px;height:60px;border-radius:50%;background:var(--ok-soft);color:var(--ok);display:grid;place-items:center}
@@ -175,7 +176,7 @@ function paginaFormulario({ studio, f, capaUrl, acao, previa }) {
   </form>
   <div id="ok" class="pronto" hidden role="status"><div class="ic"><svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div><h2 id="okTit">Tudo certo!</h2><p>${esc(f.msgFinal)}</p></div>
 </article>
-<p class="lgpd">Ao enviar, você autoriza o ${esc(studio)} a falar com você pelo WhatsApp sobre esta campanha.</p>
+<p class="lgpd">Ao enviar, você autoriza o ${esc(studio)} a falar com você pelo WhatsApp sobre esta campanha. <a href="/politicadeprivacidade" target="_blank" rel="noopener">Política de Privacidade</a></p>
 ${previa ? '' : `<script>
 (function(){
   var f=document.getElementById('f'), erro=document.getElementById('erro'), bt=document.getElementById('enviar'), tel=document.getElementById('tel');
