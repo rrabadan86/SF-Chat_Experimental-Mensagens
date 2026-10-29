@@ -11,7 +11,8 @@
  * com ela — dá para disparar uma Campanha só para essa lista depois.
  *
  * Dados desta unidade (gitignored): data/formularios.json,
- * data/formularios-respostas.json e data/formularios-capas/<id>.jpg.
+ * data/formularios-respostas.json, data/formularios-acessos.json e
+ * data/formularios-capas/<id>.jpg.
  */
 const fs = require('fs');
 const path = require('path');
@@ -20,6 +21,7 @@ const crypto = require('crypto');
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
 const ARQ_FORMS = path.join(DATA_DIR, 'formularios.json');
 const ARQ_RESP = path.join(DATA_DIR, 'formularios-respostas.json');
+const ARQ_ACESSOS = path.join(DATA_DIR, 'formularios-acessos.json');
 const CAPAS_DIR = path.join(DATA_DIR, 'formularios-capas');
 const CAPA_MAX_BYTES = 1024 * 1024; // a página do painel reduz a imagem antes de enviar
 const MAX_CAMPOS = 30, MAX_OPCOES = 30;
@@ -209,6 +211,7 @@ function excluir(id) {
   if (!f) return null;
   salvarForms(forms.filter(x => x.id !== id));
   const resp = carregarResp(); delete resp[id]; salvarResp(resp);
+  const ac = carregarAcessos(); if (ac[id]) { delete ac[id]; gravarAcessos(ac, true); }
   try { fs.unlinkSync(arqCapa(id)); } catch (_) {}
   return f;
 }
@@ -313,6 +316,49 @@ function csv(id) {
   return '﻿' + linhas.join('\r\n') + '\r\n';
 }
 
+// ── Acessos (aberturas e pessoas) ────────────────────────────────────────────
+// aberturas = cada vez que a página abre; pessoas = visitantes únicos (cookie
+// anônimo do navegador). Tudo também por origem (?origem=instagram no link).
+// Guardado em memória e gravado em disco a cada poucos segundos (a página pode
+// abrir muitas vezes seguidas numa campanha).
+const MAX_VISITANTES = 20000; // por formulário (depois só soma aberturas)
+let _acessos = null, _acessosTimer = null;
+function carregarAcessos() { if (!_acessos) _acessos = lerJson(ARQ_ACESSOS, {}); return _acessos; }
+function gravarAcessos(map, ja) {
+  _acessos = map;
+  if (ja) { if (_acessosTimer) { clearTimeout(_acessosTimer); _acessosTimer = null; } try { gravarJson(ARQ_ACESSOS, map); } catch (_) {} return; }
+  if (_acessosTimer) return;
+  _acessosTimer = setTimeout(() => { _acessosTimer = null; try { gravarJson(ARQ_ACESSOS, _acessos); } catch (_) {} }, 3000);
+  if (_acessosTimer.unref) _acessosTimer.unref();
+}
+const normOrigem = o => normSlug(o).slice(0, 30);
+function registrarAcesso(formId, visitante, origem) {
+  const map = carregarAcessos();
+  const a = map[formId] || (map[formId] = { aberturas: 0, visitantes: {}, origens: {} });
+  const o = normOrigem(origem) || '';
+  a.aberturas++;
+  const og = a.origens[o] || (a.origens[o] = { aberturas: 0, pessoas: 0 });
+  og.aberturas++;
+  const v = String(visitante || '');
+  if (v && !a.visitantes[v] && Object.keys(a.visitantes).length < MAX_VISITANTES) {
+    a.visitantes[v] = Date.now();
+    og.pessoas++;
+  }
+  gravarAcessos(map);
+}
+// { aberturas, pessoas, respostas, conversao, porOrigem: [{ origem, aberturas, pessoas, respostas }] }
+function acessos(formId) {
+  const a = carregarAcessos()[formId] || { aberturas: 0, visitantes: {}, origens: {} };
+  const lista = carregarResp()[formId] || [];
+  const pessoas = Object.keys(a.visitantes || {}).length;
+  const respPorOrigem = {};
+  for (const r of lista) { const o = normOrigem(r.origem) || ''; respPorOrigem[o] = (respPorOrigem[o] || 0) + 1; }
+  const nomes = new Set([...Object.keys(a.origens || {}), ...Object.keys(respPorOrigem)]);
+  const porOrigem = [...nomes].map(o => ({ origem: o, aberturas: (a.origens[o] || {}).aberturas || 0, pessoas: (a.origens[o] || {}).pessoas || 0, respostas: respPorOrigem[o] || 0 }))
+    .sort((x, y) => (y.pessoas - x.pessoas) || (y.respostas - x.respostas));
+  return { aberturas: a.aberturas || 0, pessoas, respostas: lista.length, conversao: pessoas ? Math.round(lista.length * 1000 / pessoas) / 10 : 0, porOrigem };
+}
+
 // Limite simples de envios por IP (protege a página pública de robôs).
 const _tent = new Map();
 function permitir(chave, max, janelaMs) {
@@ -328,4 +374,5 @@ module.exports = {
   TIPOS, COM_OPCOES, MODELO_BLACK_FRIDAY, MAX_CAMPOS,
   listar, obter, porSlug, unicoAberto, estaAberto, situacao, salvar, definirAtivo, duplicar, excluir,
   capaPath, responder, respostas, excluirResposta, colunas, valorTexto, fmtTel, fmtQuando, csv, normSlug, permitir,
+  registrarAcesso, acessos,
 };

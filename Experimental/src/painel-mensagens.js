@@ -6718,6 +6718,11 @@ const FM_CSS = `<style>
   .fm-tab .x{background:none;border:0;color:var(--faint);padding:2px 6px;font-size:1rem}
   .fm-tab .x:hover{color:var(--erro)}
   .fm-busca{max-width:320px}
+  .fm-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:8px 0 6px}
+  .fm-stats div{background:#fff;border:1px solid var(--linha);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column}
+  .fm-stats b{font-size:1.35rem;font-variant-numeric:tabular-nums;color:var(--teal-esc);line-height:1.2}
+  .fm-stats span{font-size:var(--fs-sm);color:var(--cinza)}
+  @media(max-width:560px){.fm-stats{grid-template-columns:1fr 1fr}}
 </style>`;
 const FM_JS_COPIAR = `function fmCopiar(t,b){ var ok=function(){ var o=b.textContent; b.textContent='Copiado!'; setTimeout(function(){ b.textContent=o; },1500); }; if(navigator.clipboard) navigator.clipboard.writeText(t).then(ok,function(){ prompt('Copie o link:',t); }); else prompt('Copie o link:',t); }`;
 
@@ -6729,7 +6734,7 @@ function paginaFormularios(base, aviso) {
     const ult = formularios.respostas(f.id)[0];
     return `<div class="card fm-card">
       <h2>${esc(f.titulo)} <span class="pill st-${f.situacao}">${ST[f.situacao]}</span></h2>
-      <div class="fm-nums"><span><b>${f.total}</b> resposta${f.total === 1 ? '' : 's'}</span>${ult ? `<span>última: ${esc(formularios.fmtQuando(ult.atualizadoEm || ult.em))}</span>` : ''}${f.tag ? `<span>tag nos contatos: <b>${esc(f.tag)}</b></span>` : ''}${f.encerraEm ? `<span>encerra em ${esc(fmtData(f.encerraEm))}</span>` : ''}</div>
+      <div class="fm-nums">${(() => { const a = formularios.acessos(f.id); return `<span><b>${a.aberturas}</b> abertura${a.aberturas === 1 ? '' : 's'}</span><span><b>${a.pessoas}</b> pessoa${a.pessoas === 1 ? '' : 's'}</span><span><b>${f.total}</b> resposta${f.total === 1 ? '' : 's'}</span>${a.pessoas ? `<span>conversão <b>${String(a.conversao).replace('.', ',')}%</b></span>` : ''}`; })()}${ult ? `<span>última: ${esc(formularios.fmtQuando(ult.atualizadoEm || ult.em))}</span>` : ''}${f.tag ? `<span>tag nos contatos: <b>${esc(f.tag)}</b></span>` : ''}${f.encerraEm ? `<span>encerra em ${esc(fmtData(f.encerraEm))}</span>` : ''}</div>
       <div class="fm-link"><code>${esc(link)}</code><button type="button" class="reset" onclick="fmCopiar('${esc(link)}',this)">Copiar link</button></div>
       <div class="fm-btns">
         <a class="save" href="/formularios/respostas?id=${f.id}">Ver respostas</a>
@@ -6936,7 +6941,17 @@ function paginaFormularioRespostas(base, f) {
   const corpo = `<div class="wrap" style="max-width:1080px">${FM_CSS}
     ${subnavFormulario('campanhas')}
     <div class="fm-top"><h1>${esc(f.titulo)}</h1><div class="acts"><a href="/formularios" style="color:var(--teal-esc);font-weight:600;text-decoration:none">← Voltar para a lista</a></div></div>
-    <div class="fm-nums" style="margin:4px 0 10px"><span><b>${lista.length}</b> resposta${lista.length === 1 ? '' : 's'}</span>${f.tag ? `<span>todas entram nos Contatos da SoFIA com a tag <b>${esc(f.tag)}</b></span>` : ''}</div>
+    ${(() => {
+      const a = formularios.acessos(f.id);
+      const pct = (n, d) => d ? String(Math.round(n * 1000 / d) / 10).replace('.', ',') + '%' : '—';
+      const rotOrig = o => o ? esc(o) : '<span style="color:var(--faint)">link sem origem</span>';
+      const origens = a.porOrigem.filter(o => o.aberturas || o.respostas);
+      const tabOrig = (origens.length > 1 || (origens.length === 1 && origens[0].origem)) ? `<div class="fm-tabw" style="margin:10px 0 4px"><table class="fm-tab"><thead><tr><th>Origem</th><th>Aberturas</th><th>Pessoas</th><th>Respostas</th><th>Conversão</th></tr></thead><tbody>${origens.map(o => `<tr><td>${rotOrig(o.origem)}</td><td class="nw">${o.aberturas}</td><td class="nw">${o.pessoas}</td><td class="nw">${o.respostas}</td><td class="nw">${pct(o.respostas, o.pessoas)}</td></tr>`).join('')}</tbody></table></div>` : '';
+      return `<div class="fm-stats"><div><b>${a.aberturas}</b><span>aberturas</span></div><div><b>${a.pessoas}</b><span>pessoas</span></div><div><b>${a.respostas}</b><span>respostas</span></div><div><b>${pct(a.respostas, a.pessoas)}</b><span>conversão</span></div></div>
+      ${tabOrig}
+      <p class="quando">Aberturas = vezes que a página abriu; pessoas = celulares/computadores diferentes; conversão = respostas ÷ pessoas. A equipe logada no painel e as prévias de link do WhatsApp/Instagram não contam. Para saber de onde vieram, divulgue o link com a origem no final, ex.: <code>${esc(link)}?origem=instagram</code> ou <code>?origem=whatsapp</code>.</p>
+      ${f.tag ? `<p class="quando">Todas as respostas entram nos Contatos da SoFIA com a tag <b>${esc(f.tag)}</b>.</p>` : ''}`;
+    })()}
     <div class="fm-link"><code>${esc(link)}</code><button type="button" class="reset" onclick="fmCopiar('${esc(link)}',this)">Copiar link</button></div>
     <div class="fm-btns" style="margin:12px 0">
       ${lista.length ? `<a class="save" href="/formularios/exportar?id=${f.id}">Baixar planilha</a>` : ''}
@@ -6960,6 +6975,24 @@ function paginaFormularioRespostas(base, f) {
   }
   </script>`;
   return chrome({ tab: 'Respostas · ' + f.titulo }, 'ind', corpo);
+}
+
+// Conta a abertura da página pública. Não conta: a equipe logada no painel (que
+// testa o formulário) e os robôs de prévia de link (WhatsApp, Instagram/Facebook,
+// Telegram…), que abrem a página para montar o cartão do link e não são pessoas.
+const FM_ROBO = /bot|crawl|spider|slurp|facebookexternalhit|meta-externalagent|whatsapp|telegram|discord|skype|preview|embedly|curl|wget|python|node-fetch|headless/i;
+function fmContarAcesso(req, res, f) {
+  try {
+    if (usuarioDaReq(req)) return;
+    if (FM_ROBO.test(String(req.headers['user-agent'] || ''))) return;
+    let vid = lerCookie(req, 'fm_v');
+    if (!/^[a-f0-9]{16}$/.test(vid || '')) {
+      vid = crypto.randomBytes(8).toString('hex');
+      res.setHeader('Set-Cookie', `fm_v=${vid}; Path=/formulario; HttpOnly; SameSite=Lax; Max-Age=${400 * 86400}${ehHttps(req) ? '; Secure' : ''}`);
+    }
+    const origem = new URLSearchParams(req.url.split('?')[1] || '').get('origem') || '';
+    formularios.registrarAcesso(f.id, vid, origem);
+  } catch (e) { console.log('[formularios] contador de acesso falhou:', e.message); }
 }
 
 // Página pública /formulario[/<endereço>] — sem login. Logado no painel e com o
@@ -6986,6 +7019,7 @@ function rotaFormularioPublico(req, res, rota) {
       if (!(s && (s.admin || (s.telas || []).includes('formularios')))) return scHtml(res, 200, formulariosPaginas.paginaFechada({ studio, f, capaUrl }));
       previa = formularios.situacao(f);
     }
+    if (!previa) fmContarAcesso(req, res, f);
     return scHtml(res, 200, formulariosPaginas.paginaFormulario({ studio, f, previa, capaUrl, acao: '/formulario/' + f.slug }));
   }
   if (req.method !== 'POST') { res.writeHead(405, { 'Content-Type': 'text/plain' }); return res.end('method not allowed'); }
