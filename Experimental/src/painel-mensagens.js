@@ -2599,6 +2599,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   function fmtTel(k){ var d=String(k||'').replace(/\\D/g,''); if(/^55\\d{10,11}$/.test(d)){ var ddd=d.slice(2,4), r=d.slice(4); return '+55 ('+ddd+') '+(r.length===9?r.slice(0,5)+'-'+r.slice(5):r.slice(0,4)+'-'+r.slice(4)); } return k; }
   // Só a hora (o dia já aparece no separador de dia da lista).
   function soHora(ts){ try{ return new Date(ts).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
+  function fmtTelCurto(t){ var d=String(t||'').replace(/\D/g,'').replace(/^55/,''); return d.length===11?'('+d.slice(0,2)+') '+d.slice(2,7)+'-'+d.slice(7):(d.length===10?'('+d.slice(0,2)+') '+d.slice(2,6)+'-'+d.slice(6):d); }
   // Avatar: cor estável por contato + iniciais do nome (sem nome, os últimos 2 dígitos).
   function corAv(seed){ var s=String(seed||''); var h=0; for(var i=0;i<s.length;i++){ h=(h*31+s.charCodeAt(i))>>>0; } var cores=['#e07a3f','#3f9e8f','#7b61c9','#c94f8a','#4a90d9','#5aa469','#d9873f','#5b8def','#c9695a','#2fa39b','#b3792f','#8a6cd1']; return cores[h%cores.length]; }
   function iniciais(nome,key){ var n=String(nome||'').trim(); if(n){ var p=n.split(/\\s+/).filter(Boolean); var a=(p[0]||'')[0]||''; var b=(p.length>1?(p[p.length-1][0]||''):''); return (a+b).toUpperCase(); } var d=String(key||'').replace(/\\D/g,''); return d?d.slice(-2):'?'; }
@@ -2661,6 +2662,11 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
         var ln  = rem ? '#e6cfcf' : '#e3d5ef';
         return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:'+ln+'"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:'+cor+';background:'+bg+';border-radius:999px;padding:2px 11px">🏷️ '+verbo+': "'+escH(e.tag)+'"'+suf+' · '+soHora(e.em)+'</span><span style="flex:1;height:1px;background:'+ln+'"></span></div>';
       }
+      if(e.acao==='aviso'){
+        var dst=fmtTelCurto(e.destino);
+        if(e.ok) return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#f0dcc2"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#9a5b00;background:#fff4e5;border-radius:999px;padding:2px 11px">🔔 Recepção avisada'+(dst?' · '+escH(dst):'')+' · '+soHora(e.em)+'</span><span style="flex:1;height:1px;background:#f0dcc2"></span></div>';
+        return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#e6cfcf"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#a12626;background:#f7ecec;border-radius:999px;padding:2px 11px" title="'+escH(e.erro||'')+'">⚠️ Aviso para a recepção não saiu'+(dst?' ('+escH(dst)+')':'')+' · '+soHora(e.em)+'</span><span style="flex:1;height:1px;background:#e6cfcf"></span></div>';
+      }
       if(e.acao==='assumir') return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cdeadd"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#1f7a4d;background:#e7f6ec;border-radius:999px;padding:2px 11px">🙋 Conversa assumida por '+(quem||'atendente')+'</span><span style="flex:1;height:1px;background:#cdeadd"></span></div>';
       // Fim do prazo de pausa da resposta manual pelo celular (computado por horário).
       if(e.acao==='wpp-fim'){
@@ -2682,7 +2688,8 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       pauseEvts.push({em:endEm, acao:'wpp-fim', ativo:(endEm>Date.now())});
     }
     var tagEvts=(c.tagLog||[]).map(function(t){return {em:(t.em||0), acao:'tag', tag:t.tag, motivo:t.motivo, por:t.por, tacao:t.acao};});
-    var evts=(c.humanoLog||[]).concat(pauseEvts).concat(tagEvts).slice().sort(function(a,b){return (a.em||0)-(b.em||0);});
+    var avisoEvts=(c.avisos||[]).map(function(a){return {em:(a.em||0), acao:'aviso', ok:a.ok, destino:a.destino, erro:a.erro};});
+    var evts=(c.humanoLog||[]).concat(pauseEvts).concat(tagEvts).concat(avisoEvts).slice().sort(function(a,b){return (a.em||0)-(b.em||0);});
     var out=[], ei=0;
     for(var mi=0; mi<itensMsg.length; mi++){
       while(ei<evts.length && (evts[ei].em||0) <= itensMsg[mi].em){ out.push(evtDivisor(evts[ei])); ei++; }
@@ -7954,6 +7961,7 @@ const server = http.createServer((req, res) => {
     try { const em = sofia.lerEncerradas() || {}; for (const k in obj) { const v = em[k]; const isObj = v && typeof v === 'object'; obj[k].encEm = isObj ? (Number(v.em) || 0) : (Number(v) || 0); obj[k].encPor = isObj ? String(v.por || '') : ''; } } catch (_) {} // instante + autor do encerramento manual (p/ a divisória)
     try { const hl = sofia.lerHumanoLog() || {}; for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].humanoLog = hl[l8] || []; } } catch (_) {} // histórico assumiu/devolveu (para o timeline)
     try { const tl = sofia.lerTagLog() || {}; for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].tagLog = tl[l8] || []; } } catch (_) {} // histórico de tags aplicadas por automação (para o timeline)
+    try { const av = avisosPorAluna(); for (const k in obj) obj[k].avisos = av[String(k).replace(/\D/g, '').slice(-8)] || []; } catch (_) {} // avisos para a recepção sobre esta aluna (marca "🔔 Recepção avisada")
     try { for (const k in obj) obj[k].fuEspera = fuEsperando[k] || ''; } catch (_) {} // follow-up pronto, segurando pelo horário?
     try { const at = sofia.lerAtencao() || {}; const a8 = {}; for (const kk in at) a8[String(kk).replace(/\D/g, '').slice(-8)] = 1; for (const k in obj) obj[k].atencao = !!(at[k] || a8[String(k).replace(/\D/g, '').slice(-8)]); } catch (_) {} // pediu atendimento humano?
     try { const agSet = new Set((fuLerJson(FU_AGENDOU_FILE, []) || []).map(x => String(x).replace(/\D/g, '').slice(-8))); let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {} for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].agendou = agSet.has(l8) || (obj[k].tagsContato || []).some(t => agTags.includes(t)); } } catch (_) {} // agendou aula experimental? (mesma lógica do follow-up)
@@ -8934,7 +8942,7 @@ function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra, canal
     // Diferencia por QUAL canal veio o agendamento (só faz sentido no 'agendou').
     const canalRot = { formulario: '📲 via Formulário', sofia: '🤖 via SoFIA' }[String(canal || '').toLowerCase()] || '';
     const texto = `${cab}\n👤 ${nome || '(sem nome)'}\n📱 ${fmtTelAviso(tel)}${extra ? `\n${extra}` : ''}\n🏷️ ${tag}${canalRot ? `\n${canalRot}` : ''}`;
-    try { sofia.enfileirarAviso(avisarWpp, texto); } catch (_) {}
+    try { sofia.enfileirarAviso(avisarWpp, texto, { sobre: tel, tag, motivo }); } catch (_) {}
   }
 }
 // Publica as regras que o LISTENER precisa (só os gatilhos dele).
@@ -9136,6 +9144,17 @@ function processarEventos() {
     if (!extra && ev.motivo === 'mensagem') extra = ultimaMsgDaAluna(tel, ev.em); // o recado mostra o que ela escreveu
     aplicarAutomacao({ telefone: tel, nome, tag: ev.tag, avisarWpp: ev.avisarWpp, motivo: ev.motivo, extra });
   }
+}
+// Avisos para a recepção já enviados (ou que falharam), agrupados pelos 8 últimos
+// dígitos da aluna de quem eles falam — vêm do Log da SoFIA (atividade-sofia.jsonl).
+function avisosPorAluna() {
+  const out = {};
+  for (const e of atividade.carregarSofia()) {
+    if (e.contexto !== 'Aviso para a recepção' || !e.sobre) continue;
+    const l8 = String(e.sobre).replace(/\D/g, '').slice(-8);
+    (out[l8] || (out[l8] = [])).push({ em: Date.parse(e.ts) || 0, ok: e.ok !== false, destino: e.destino || '', erro: e.erro || '' });
+  }
+  return out;
 }
 // Texto da mensagem que disparou o evento (a última da aluna, de até 2 min antes),
 // para o aviso no WhatsApp dizer O QUE ela escreveu. '' se não achar.

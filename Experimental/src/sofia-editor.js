@@ -448,10 +448,13 @@ function consumirEventos() {
   return out;
 }
 // Enfileira um recado para o listener enviar por WhatsApp a um número.
-function enfileirarAviso(numero, texto) {
+// meta (opcional): { sobre: telefone da aluna, tag, motivo } — a SoFIA devolve no
+// Log e o painel marca "🔔 Recepção avisada" na conversa dessa aluna.
+function enfileirarAviso(numero, texto, meta) {
   const n = String(numero || '').replace(/\D/g, '');
   if (!n || !texto) return false;
-  fs.appendFileSync(F.avisos, JSON.stringify({ numero: n, texto: String(texto), em: Date.now() }) + '\n', 'utf8');
+  const m = meta || {};
+  fs.appendFileSync(F.avisos, JSON.stringify({ numero: n, texto: String(texto), em: Date.now(), sobre: String(m.sobre || '').replace(/\D/g, ''), tag: String(m.tag || ''), motivo: String(m.motivo || '') }) + '\n', 'utf8');
   return true;
 }
 
