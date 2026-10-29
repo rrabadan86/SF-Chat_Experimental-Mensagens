@@ -3274,6 +3274,11 @@ function paginaSofiaContatos(aviso, erro, params) {
         <input type="tel" id="tgWpp" placeholder="(62) 99999-9999" inputmode="tel">
         <p class="quando" style="margin:6px 0 0">Deixe em branco para só etiquetar, sem avisar ninguém.</p>
       </div>
+      <div id="tgExigeBox" style="margin-top:16px;display:none">
+        <label>Só para quem já tem a tag <span class="sub" style="font-weight:400;color:var(--cinza)">— opcional; vale se tiver qualquer uma das marcadas</span></label>
+        <div id="tgExige" class="ct-tglist" style="max-height:150px;overflow:auto"></div>
+        <p class="quando" style="margin:6px 0 0">Sem nenhuma marcada, vale para qualquer pessoa. Ex.: marque <b>0. Aluna</b> e <b>0. Ex Aluna</b> para avisar a recepção só quando uma aluna escrever (com o gatilho "qualquer mensagem").</p>
+      </div>
       <div id="tgEncBox" style="margin-top:16px;display:none">
         <label class="chk" style="margin:0"><input type="checkbox" id="tgEncerrar"> 🔒 Encerrar a conversa ao aplicar esta tag</label>
         <p class="quando" style="margin:6px 0 0">A SoFIA <b>fecha a conversa</b> (como o cadeado): o <b>follow-up para de incomodar</b> e, se a aluna voltar a escrever, a SoFIA <b>recomeça do zero</b>. Ideal para "Sem interesse", "Já treina em outro lugar" etc.</p>
@@ -3308,10 +3313,10 @@ function paginaSofiaContatos(aviso, erro, params) {
   </div>
 <script>
   var CONTATOS = ${JSON.stringify(r.itens.map(c => ({ tel: c.tel, telFmt: fmtTelP(c.tel), nome: c.nome || '', tags: c.tags || [], ini: iniciais(c.nome, c.tel), cor: corAv(c.nome || c.tel), bloq: sofia.estaBloqueado(c.tel) })))};
-  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, camp: c.campanhaId, wpp: c.avisarWpp, remove: c.remove, enc: c.encerrar }; }))};
+  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, camp: c.campanhaId, wpp: c.avisarWpp, remove: c.remove, exige: c.exige, enc: c.encerrar }; }))};
   var TODAS_TAGS_LISTA = ${JSON.stringify(tags.map(t => t.tag))};
   var CAMPS_LISTA = ${JSON.stringify((() => { try { return sofia.lerCampanhas().map(c => ({ id: String(c.id), nome: String(c.nome || 'Campanha') })); } catch (_) { return []; } })())};
-  var tgRemove = [];
+  var tgRemove = [], tgExige = [];
   var tgSel=null;
   function abrirTagCfg(i){
     var c=TAGS_CFG[i]; if(!c) return; tgSel=c;
@@ -3324,6 +3329,8 @@ function paginaSofiaContatos(aviso, erro, params) {
     tgFillCamps(c.camp||'');
     tgRemove=(c.remove||[]).slice();
     tgRenderRemove();
+    tgExige=(c.exige||[]).slice();
+    tgRenderExige();
     tgSync();
     document.getElementById('tgModal').style.display='flex';
   }
@@ -3337,6 +3344,16 @@ function paginaSofiaContatos(aviso, erro, params) {
     }).join('');
   }
   function tgToggleRemove(btn,t){ var i=tgRemove.indexOf(t); if(i>=0)tgRemove.splice(i,1); else tgRemove.push(t); tgRenderRemove(); }
+  function tgRenderExige(){
+    var box=document.getElementById('tgExige');
+    var outras=TODAS_TAGS_LISTA.filter(function(t){return !tgSel||t!==tgSel.tag;});
+    if(!outras.length){ box.innerHTML='<span class="quando">Nenhuma outra tag ainda.</span>'; return; }
+    box.innerHTML=outras.map(function(t,i){
+      var on=tgExige.indexOf(t)>=0;
+      return '<button type="button" class="ct-tg'+(on?' on':'')+'" data-i="'+i+'" style="'+(on?'background:var(--teal-soft);color:var(--teal-esc);border-color:var(--teal)':'background:#fff;color:#5c5960;border-color:#e8e8ea')+'">'+(on?'✓ ':'')+esc(t)+'</button>';
+    }).join('');
+    [].forEach.call(box.querySelectorAll('button'),function(b){ b.onclick=function(){ var t=outras[+b.getAttribute('data-i')], k=tgExige.indexOf(t); if(k>=0)tgExige.splice(k,1); else tgExige.push(t); tgRenderExige(); }; });
+  }
   function tgFillCamps(sel){
     var s=document.getElementById('tgCampanha'); if(!s) return;
     var opts='<option value="">— qualquer campanha (comportamento antigo) —</option>';
@@ -3352,6 +3369,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     document.getElementById('tgCampBox').style.display=(g==='campanha')?'block':'none';
     document.getElementById('tgWppBox').style.display=g?'block':'none';
     document.getElementById('tgEncBox').style.display=g?'block':'none';
+    document.getElementById('tgExigeBox').style.display=g?'block':'none';
   }
   function fecharTagCfg(){ document.getElementById('tgModal').style.display='none'; tgSel=null; }
   function salvarTagCfg(){
@@ -3361,7 +3379,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     if(g==='ia' && !document.getElementById('tgInstrucao').value.trim()){ alert('Descreva a intenção na instrução (ex.: quando a aluna perguntar sobre preço).'); return; }
     var b=document.getElementById('tgSalvar'); b.disabled=true; b.textContent='Salvando…';
     var pals=document.getElementById('tgPalavras').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
-    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, instrucao:document.getElementById('tgInstrucao').value, campanhaId:(g==='campanha'?document.getElementById('tgCampanha').value:''), avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove, encerrar:document.getElementById('tgEncerrar').checked };
+    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, instrucao:document.getElementById('tgInstrucao').value, campanhaId:(g==='campanha'?document.getElementById('tgCampanha').value:''), avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove, exige:tgExige, encerrar:document.getElementById('tgEncerrar').checked };
     fetch('/sofia/contatos/tagcfg',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
       .then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.reload(); } else { b.disabled=false; b.textContent='Salvar'; alert('❌ '+(j.erro||'falha ao salvar')); } })
       .catch(function(){ b.disabled=false; b.textContent='Salvar'; alert('❌ erro de rede'); });
@@ -3770,6 +3788,11 @@ function paginaSofiaTags(aviso, erro) {
         <input type="tel" id="tgWpp" placeholder="(62) 99999-9999" inputmode="tel">
         <p class="quando" style="margin:6px 0 0">Deixe em branco para só etiquetar, sem avisar ninguém.</p>
       </div>
+      <div id="tgExigeBox" style="margin-top:16px;display:none">
+        <label>Só para quem já tem a tag <span class="sub" style="font-weight:400;color:var(--cinza)">— opcional; vale se tiver qualquer uma das marcadas</span></label>
+        <div id="tgExige" class="ct-tglist" style="max-height:150px;overflow:auto"></div>
+        <p class="quando" style="margin:6px 0 0">Sem nenhuma marcada, vale para qualquer pessoa. Ex.: marque <b>0. Aluna</b> e <b>0. Ex Aluna</b> para avisar a recepção só quando uma aluna escrever (com o gatilho "qualquer mensagem").</p>
+      </div>
       <div id="tgEncBox" style="margin-top:16px;display:none">
         <label class="chk" style="margin:0"><input type="checkbox" id="tgEncerrar"> 🔒 Encerrar a conversa ao aplicar esta tag</label>
         <p class="quando" style="margin:6px 0 0">A SoFIA <b>fecha a conversa</b> (como o cadeado): o <b>follow-up para de incomodar</b> e, se a aluna voltar a escrever, a SoFIA <b>recomeça do zero</b>. Ideal para "Sem interesse", "Já treina em outro lugar" etc.</p>
@@ -3786,10 +3809,10 @@ function paginaSofiaTags(aviso, erro) {
   </div>
 <script>
   function esc(s){return String(s).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];});}
-  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, camp: c.campanhaId, wpp: c.avisarWpp, remove: c.remove, enc: c.encerrar }; }))};
+  var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, camp: c.campanhaId, wpp: c.avisarWpp, remove: c.remove, exige: c.exige, enc: c.encerrar }; }))};
   var TODAS_TAGS_LISTA = ${JSON.stringify(tags.map(t => t.tag))};
   var CAMPS_LISTA = ${JSON.stringify((() => { try { return sofia.lerCampanhas().map(c => ({ id: String(c.id), nome: String(c.nome || 'Campanha') })); } catch (_) { return []; } })())};
-  var tgRemove = [];
+  var tgRemove = [], tgExige = [];
   var tgSel=null;
   function abrirTagCfg(i){
     var c=TAGS_CFG[i]; if(!c) return; tgSel=c;
@@ -3802,6 +3825,8 @@ function paginaSofiaTags(aviso, erro) {
     tgFillCamps(c.camp||'');
     tgRemove=(c.remove||[]).slice();
     tgRenderRemove();
+    tgExige=(c.exige||[]).slice();
+    tgRenderExige();
     tgSync();
     document.getElementById('tgModal').style.display='flex';
   }
@@ -3815,6 +3840,16 @@ function paginaSofiaTags(aviso, erro) {
     }).join('');
   }
   function tgToggleRemove(btn,t){ var i=tgRemove.indexOf(t); if(i>=0)tgRemove.splice(i,1); else tgRemove.push(t); tgRenderRemove(); }
+  function tgRenderExige(){
+    var box=document.getElementById('tgExige');
+    var outras=TODAS_TAGS_LISTA.filter(function(t){return !tgSel||t!==tgSel.tag;});
+    if(!outras.length){ box.innerHTML='<span class="quando">Nenhuma outra tag ainda.</span>'; return; }
+    box.innerHTML=outras.map(function(t,i){
+      var on=tgExige.indexOf(t)>=0;
+      return '<button type="button" class="ct-tg'+(on?' on':'')+'" data-i="'+i+'" style="'+(on?'background:var(--teal-soft);color:var(--teal-esc);border-color:var(--teal)':'background:#fff;color:#5c5960;border-color:#e8e8ea')+'">'+(on?'✓ ':'')+esc(t)+'</button>';
+    }).join('');
+    [].forEach.call(box.querySelectorAll('button'),function(b){ b.onclick=function(){ var t=outras[+b.getAttribute('data-i')], k=tgExige.indexOf(t); if(k>=0)tgExige.splice(k,1); else tgExige.push(t); tgRenderExige(); }; });
+  }
   function tgFillCamps(sel){
     var s=document.getElementById('tgCampanha'); if(!s) return;
     var opts='<option value="">— qualquer campanha (comportamento antigo) —</option>';
@@ -3830,6 +3865,7 @@ function paginaSofiaTags(aviso, erro) {
     document.getElementById('tgCampBox').style.display=(g==='campanha')?'block':'none';
     document.getElementById('tgWppBox').style.display=g?'block':'none';
     document.getElementById('tgEncBox').style.display=g?'block':'none';
+    document.getElementById('tgExigeBox').style.display=g?'block':'none';
   }
   function fecharTagCfg(){ document.getElementById('tgModal').style.display='none'; tgSel=null; }
   function salvarTagCfg(){
@@ -3839,7 +3875,7 @@ function paginaSofiaTags(aviso, erro) {
     if(g==='ia' && !document.getElementById('tgInstrucao').value.trim()){ alert('Descreva a intenção na instrução (ex.: quando a aluna perguntar sobre preço).'); return; }
     var b=document.getElementById('tgSalvar'); b.disabled=true; b.textContent='Salvando…';
     var pals=document.getElementById('tgPalavras').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
-    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, instrucao:document.getElementById('tgInstrucao').value, campanhaId:(g==='campanha'?document.getElementById('tgCampanha').value:''), avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove, encerrar:document.getElementById('tgEncerrar').checked };
+    var d={ tag:tgSel.tag, gatilho:g, palavras:pals, instrucao:document.getElementById('tgInstrucao').value, campanhaId:(g==='campanha'?document.getElementById('tgCampanha').value:''), avisarWpp:document.getElementById('tgWpp').value, remove:tgRemove, exige:tgExige, encerrar:document.getElementById('tgEncerrar').checked };
     fetch('/sofia/contatos/tagcfg',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
       .then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.reload(); } else { b.disabled=false; b.textContent='Salvar'; alert('❌ '+(j.erro||'falha ao salvar')); } })
       .catch(function(){ b.disabled=false; b.textContent='Salvar'; alert('❌ erro de rede'); });
@@ -7856,7 +7892,7 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e5, corpo => {
       try {
         const d = JSON.parse(corpo || '{}');
-        contatos.definirTagConfig(d.tag, { gatilho: d.gatilho || '', palavras: d.palavras || [], instrucao: d.instrucao || '', campanhaId: d.campanhaId || '', avisarWpp: d.avisarWpp || '', remove: d.remove || [], encerrar: !!d.encerrar });
+        contatos.definirTagConfig(d.tag, { gatilho: d.gatilho || '', palavras: d.palavras || [], instrucao: d.instrucao || '', campanhaId: d.campanhaId || '', avisarWpp: d.avisarWpp || '', remove: d.remove || [], exige: d.exige || [], encerrar: !!d.encerrar });
         try { publicarRegras(); } catch (_) {} // atualiza o listener na hora
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true }));
       } catch (e) {
@@ -9087,8 +9123,37 @@ function processarEventos() {
         if (c && (c.tags || []).some(t => provasAgendou.has(String(t || '').trim().toLowerCase()))) continue;
       } catch (_) {}
     }
-    aplicarAutomacao({ telefone: tel, nome: ev.nome, tag: ev.tag, avisarWpp: ev.avisarWpp, motivo: ev.motivo, extra: ev.extra || '' });
+    // "Só para quem já tem a tag…": sem nenhuma delas, nem etiqueta nem avisa
+    // (ex.: avisar a recepção só quando uma 0. Aluna / 0. Ex Aluna escrever).
+    let exige = []; try { exige = contatos.tagConfig(ev.tag).exige || []; } catch (_) {}
+    let nome = ev.nome;
+    if (exige.length) {
+      let c = null; try { const r = contatos.acharPorTel(tel); c = r && r.contato; } catch (_) {}
+      if (!(c && (c.tags || []).some(t => exige.includes(t)))) continue;
+      if (c.nome) nome = c.nome; // aluna cadastrada: o recado leva o nome do cadastro, não o do perfil do WhatsApp
+    }
+    let extra = ev.extra || '';
+    if (!extra && ev.motivo === 'mensagem') extra = ultimaMsgDaAluna(tel, ev.em); // o recado mostra o que ela escreveu
+    aplicarAutomacao({ telefone: tel, nome, tag: ev.tag, avisarWpp: ev.avisarWpp, motivo: ev.motivo, extra });
   }
+}
+// Texto da mensagem que disparou o evento (a última da aluna, de até 2 min antes),
+// para o aviso no WhatsApp dizer O QUE ela escreveu. '' se não achar.
+function ultimaMsgDaAluna(tel, em) {
+  try {
+    const conv = sofia.conversas() || {};
+    const l8 = String(tel).slice(-8);
+    const k = Object.keys(conv).find(x => String(x).replace(/\D/g, '').slice(-8) === l8);
+    const msgs = (k && Array.isArray(conv[k].msgs)) ? conv[k].msgs : [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (!m || m.autor !== 'aluna') continue;
+      if (em && Number(m.em) && Math.abs(Number(m.em) - Number(em)) > 120000) return '';
+      const t = String(m.texto || '').replace(/\s+/g, ' ').trim();
+      return t ? '💬 "' + (t.length > 300 ? t.slice(0, 300) + '…' : t) + '"' : '';
+    }
+  } catch (_) {}
+  return '';
 }
 // Reconcilia a tag de "Atendimento humano" (gatilho 'humano') com o estado real
 // do controle humano. A tag entra ao ASSUMIR e deve sair ao voltar para a SoFIA —
