@@ -109,7 +109,7 @@ function sincronizarTags(ativas, { dry = false } = {}) {
       // dígitos; senão, cria em forma canônica com "55" — evita a duplicata do 9º díg.
       const alvo = achou ? achou.key : normBR(tel);
       // forcarNome: o nome OFICIAL do EVO sobrepõe o pushname do WhatsApp na conversa.
-      try { contatos.adicionarTag(alvo, a.nome || (achou && achou.c.nome) || '', cfg.tagAluna, { forcarNome: !!(a.nome && a.nome.trim()) }); } catch (_) {}
+      try { contatos.adicionarTag(alvo, a.nome || (achou && achou.c.nome) || '', cfg.tagAluna, { forcarNome: !!(a.nome && a.nome.trim()), idEvo: a.id }); } catch (_) {}
       if (achou && (achou.c.tags || []).some(t => norm(t) === exLc)) { try { contatos.removerTag(alvo, cfg.tagExAluna); } catch (_) {} }
     }
   }
