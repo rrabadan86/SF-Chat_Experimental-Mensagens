@@ -79,7 +79,7 @@ function agendarCircuitoConvocacao(tentativa = 1) {
   jobRunning = true;
   atividade.setContexto('Circuito — convocatória');
   const start = new Date();
-  require('./enviar-circuito').runCircuitoConvocacao()
+  comRetry('Circuito convocatória', () => require('./enviar-circuito').runCircuitoConvocacao())
     .then(() => log('✅ Circuito convocatória concluída'))
     .catch(err => logError('Circuito convocatória', err))
     .finally(() => {
@@ -103,7 +103,7 @@ function agendarCircuitoLembrete(tentativa = 1) {
   jobRunning = true;
   atividade.setContexto('Circuito — lembrete');
   const start = new Date();
-  require('./enviar-circuito').runCircuitoLembrete()
+  comRetry('Circuito lembrete', () => require('./enviar-circuito').runCircuitoLembrete())
     .then(() => log('✅ Circuito lembrete concluído'))
     .catch(err => logError('Circuito lembrete', err))
     .finally(() => {
@@ -125,7 +125,7 @@ function agendarInadimplentes(tentativa = 1, modo = 'regular') {
   jobRunning = true;
   atividade.setContexto(modo === 'hoje' ? 'Cobrança — boleto vence hoje' : 'Cobrança de inadimplentes');
   const start = new Date();
-  require('./inadimplentes').runInadimplentes({ dry: false, modo })
+  comRetry('Inadimplentes', () => require('./inadimplentes').runInadimplentes({ dry: false, modo })) // a fila não duplica quem já está nela
     .then(r => log(`✅ Inadimplentes concluído — ${r.enfileirados} enfileirada(s) p/ a SoFIA, ${r.skipped} pulada(s), ${r.failed} falha(s)`))
     .catch(err => logError('Inadimplentes', err))
     .finally(() => {
@@ -147,7 +147,7 @@ function agendarFreeAntecedencia(tentativa = 1) {
   jobRunning = true;
   atividade.setContexto('Planos FREE — antecedência');
   const start = new Date();
-  require('./free-antecedencia').runFreeAntecedencia({ dry: false })
+  comRetry('Planos FREE (antecedência)', () => require('./free-antecedencia').runFreeAntecedencia({ dry: false }))
     .then(r => {
       // Marca a rodada só no SUCESSO — se falhar (EVO instável), o tick de hora em
       // hora tenta de novo em vez de esperar o intervalo inteiro.
@@ -185,7 +185,7 @@ function logError(msg, err) {
   try {
     notif.alertar(
       'Job com erro: ' + msg,
-      (err?.message || String(err) || 'erro sem mensagem') + ' — veja pm2 logs slimfit-exp.',
+      (err?.message || String(err) || 'erro sem mensagem') + ` — veja pm2 logs ${process.env.name || 'slimfit-exp'}.`,
       { prioridade: 'high', tags: 'warning' },
     );
   } catch (_) { /* alerta é opcional */ }
@@ -252,6 +252,46 @@ process.on('unhandledRejection', (reason) => {
 // ─── Job lock to prevent overlapping runs ──────────────────
 let jobRunning = false;
 
+// ─── Nova tentativa quando o job falha por instabilidade ───────────────────
+// O EVO às vezes demora a abrir uma página ("Navigation timeout of 90000 ms
+// exceeded") ou o navegador cai no meio. Antes o job morria e só mandava o alerta.
+// Agora, se o erro é desse tipo E nada foi enviado na tentativa, esperamos e
+// tentamos de novo (2 min, depois 5 min). Se algo já saiu, NÃO repetimos — o job
+// mandaria de novo para quem já recebeu; aí vale o alerta de sempre. Durante a
+// espera o robô fica livre para os outros jobs (senão eles seriam "ignorados").
+const ERRO_PASSAGEIRO = /navigation timeout|timeout of \d+ ?ms exceeded|net::err_|detached|target closed|protocol error|session closed|execution context was destroyed|waiting failed|econnreset|econnrefused|etimedout|socket hang up|connection closed|most likely because of a navigation|browser has disconnected/i;
+const RETRY_ESPERAS_MS = [2 * 60 * 1000, 5 * 60 * 1000];
+const dormir = (ms) => new Promise(r => setTimeout(r, ms));
+async function comRetry(nome, fn, { antesDeEsperar, depoisDeEsperar } = {}) {
+  const ctx = atividade.contextoAtual();
+  for (let t = 0; ; t++) {
+    const enviosAntes = atividade.enviosOk();
+    try {
+      const r = await fn();
+      if (t > 0) log(`🔁 ${nome}: deu certo na tentativa ${t + 1}.`);
+      return r;
+    } catch (err) {
+      const msg = (err && err.message) || String(err);
+      const enviou = atividade.enviosOk() - enviosAntes;
+      const passageiro = ERRO_PASSAGEIRO.test(msg);
+      if (t >= RETRY_ESPERAS_MS.length || !passageiro || enviou > 0) {
+        if (passageiro && enviou > 0) log(`🔁 ${nome}: falhou depois de enviar ${enviou} mensagem(ns) — não repito para não mandar em dobro.`);
+        if (t > 0 && err && typeof err === 'object') { try { err.message = `${msg} (falhou nas ${t + 1} tentativas)`; } catch (_) {} }
+        throw err;
+      }
+      const espera = RETRY_ESPERAS_MS[t];
+      log(`🔁 ${nome}: falhou por instabilidade (${msg.slice(0, 140)}) e nada foi enviado — tento de novo em ${espera / 60000} min (tentativa ${t + 2}/${RETRY_ESPERAS_MS.length + 1}).`);
+      if (antesDeEsperar) try { antesDeEsperar(); } catch (_) {}
+      jobRunning = false;                         // libera o robô durante a espera
+      await dormir(espera);
+      while (jobRunning) await dormir(15000);     // outro job pegou o robô: espera ele terminar
+      jobRunning = true;
+      if (ctx) atividade.setContexto(ctx);        // os envios da nova tentativa contam para este job
+      if (depoisDeEsperar) try { depoisDeEsperar(); } catch (_) {}
+    }
+  }
+}
+
 /**
  * Executa um job com proteção contra execução simultânea e timeout.
  * NÃO inicializa o WhatsApp aqui — cada executor abre a própria conexão
@@ -259,7 +299,7 @@ let jobRunning = false;
  * causava conflito: o init() do WhatsApp matava o Edge que o executor
  * do Instagram/Aniversariantes ia usar, e vice-versa.
  */
-async function runJob(jobName, jobFn, timeoutMs) {
+async function runJob(jobName, jobFn, timeoutMs, { retry = true } = {}) {
   if (jobRunning) {
     log(`⚠️  Job ${jobName} ignorado — outro job ainda está em execução`);
     return;
@@ -272,13 +312,15 @@ async function runJob(jobName, jobFn, timeoutMs) {
   // Timeout de segurança: 5 minutos por padrão (o job pode pedir mais)
   const JOB_TIMEOUT = timeoutMs || 5 * 60 * 1000;
   let timedOut = false;
-  const timeoutHandle = setTimeout(() => {
+  const armarTimeout = () => setTimeout(() => {
     timedOut = true;
     logError(`TIMEOUT: Job ${jobName} excedeu ${JOB_TIMEOUT / 1000}s`, new Error('Job timeout'));
   }, JOB_TIMEOUT);
+  let timeoutHandle = armarTimeout();
 
   try {
-    await jobFn();
+    if (retry) await comRetry(jobName, jobFn, { antesDeEsperar: () => clearTimeout(timeoutHandle), depoisDeEsperar: () => { timeoutHandle = armarTimeout(); } });
+    else await jobFn();
     log(`✅ Job ${jobName} concluído com sucesso`);
   } catch (error) {
     logError(`Erro no job ${jobName}`, error);
@@ -831,7 +873,7 @@ async function main() {
     jobRunning = true;
     atividade.setContexto('Follow-up (manhã)');
     const start = new Date();
-    runFollowupMorning()
+    comRetry('Follow-up Manhã', () => runFollowupMorning())
       .then(() => log('✅ Follow-up Manhã concluído'))
       .catch(err => logError('Follow-up Manhã', err))
       .finally(() => {
@@ -851,7 +893,7 @@ async function main() {
     jobRunning = true;
     atividade.setContexto('Follow-up (tarde)');
     const start = new Date();
-    runFollowupAfternoon()
+    comRetry('Follow-up Tarde', () => runFollowupAfternoon())
       .then(() => log('✅ Follow-up Tarde concluído'))
       .catch(err => logError('Follow-up Tarde', err))
       .finally(() => {
@@ -871,7 +913,7 @@ async function main() {
     jobRunning = true;
     atividade.setContexto('Faltas / no-show (manhã)');
     const start = new Date();
-    runNoShowMorning()
+    comRetry('Faltas Manhã', () => runNoShowMorning())
       .then(() => log('✅ Faltas Manhã concluído'))
       .catch(err => logError('No-show Manhã', err))
       .finally(() => {
@@ -891,7 +933,7 @@ async function main() {
     jobRunning = true;
     atividade.setContexto('Faltas / no-show (tarde)');
     const start = new Date();
-    runNoShowAfternoon()
+    comRetry('Faltas Tarde/Noite', () => runNoShowAfternoon())
       .then(() => log('✅ Faltas Tarde/Noite concluído'))
       .catch(err => logError('No-show Tarde/Noite', err))
       .finally(() => {
@@ -911,7 +953,7 @@ async function main() {
     jobRunning = true;
     atividade.setContexto('Renovação de contrato');
     const start = new Date();
-    require('./renovar-contratos').runRenovacao()
+    comRetry('Renovação de contratos', () => require('./renovar-contratos').runRenovacao())
       .then(() => log('✅ Renovação de contratos concluída'))
       .catch(err => logError('Renovação de contratos', err))
       .finally(() => {
@@ -963,7 +1005,7 @@ async function main() {
       atividade.setContexto('Presença da experimental (tags)');
       try {
         const comp = require('./comparecimento');
-        await comp.rodarAgendado((num, txt) => wa.sendTexto(num, txt, 'Relatório de presença'));
+        await comRetry('Comparecimento', () => comp.rodarAgendado((num, txt) => wa.sendTexto(num, txt, 'Relatório de presença')));
         log('✅ Comparecimento processado');
       } catch (err) { logError('Comparecimento', err); }
       finally { jobRunning = false; }
@@ -991,7 +1033,7 @@ async function main() {
       jobRunning = true;
       atividade.setContexto('Envio agendado (painel)');
       const start = new Date();
-      require('./enviar-agendados').runAgendados(turno)
+      comRetry(`Envios agendados (${turno})`, () => require('./enviar-agendados').runAgendados(turno))
         .then(r => log(`✅ Envios agendados (${turno}) concluído — ${r.enviados} enviado(s), ${r.falhas} falha(s)`))
         .catch(err => logError(`Envios agendados (${turno})`, err))
         .finally(() => { jobRunning = false; log(`⏱️  Agendados (${turno}) em ${((new Date() - start) / 1000).toFixed(1)}s\n`); });
@@ -1100,7 +1142,7 @@ async function main() {
     jobRunning = true;
     atividade.setContexto('Instagram (boas-vindas)');
     const start = new Date();
-    require('./instagram-boasvindas').runBoasVindas()
+    comRetry('Instagram boas-vindas', () => require('./instagram-boasvindas').runBoasVindas())
       .then(() => log('✅ Instagram boas-vindas concluído'))
       .catch(err => logError('Instagram boas-vindas', err))
       .finally(() => {
@@ -1119,7 +1161,7 @@ async function main() {
     jobRunning = true;
     atividade.setContexto('Aniversário (grupos)');
     const start = new Date();
-    require('./aniversariantes').runAniversariantes()
+    comRetry('Aniversariantes', () => require('./aniversariantes').runAniversariantes())
       .then(() => log('✅ Aniversariantes concluído'))
       .catch(err => logError('Aniversariantes', err))
       .finally(() => {
@@ -1139,7 +1181,7 @@ async function main() {
     jobRunning = true;
     atividade.setContexto('Aniversário ex-alunas');
     const start = new Date();
-    require('./aniversario-ex').runAniversarioEx()
+    comRetry('Aniversário ex-alunas', () => require('./aniversario-ex').runAniversarioEx())
       .then(() => log('✅ Aniversário ex-alunas concluído'))
       .catch(err => logError('Aniversário ex-alunas', err))
       .finally(() => {
@@ -1158,7 +1200,7 @@ async function main() {
     if (jobRunning) { log('⚠️  Planilha ignorada — outro job em execução'); return; }
     jobRunning = true;
     const start = new Date();
-    require('./planilha-aniversarios').runPlanilhaAniversarios()
+    comRetry('Planilha de aniversários', () => require('./planilha-aniversarios').runPlanilhaAniversarios())
       .then(() => log('✅ Planilha de aniversários concluída'))
       .catch(err => logError('Planilha de aniversários', err))
       .finally(() => {
@@ -1177,7 +1219,7 @@ async function main() {
     if (jobRunning) { log('⚠️  Aniversariantes-mês ignorado — outro job em execução'); return; }
     jobRunning = true;
     const start = new Date();
-    require('./aniversariantes-mes-grupo').runEquipeAniversariantesMes()
+    comRetry('Aniversariantes do mês (grupo)', () => require('./aniversariantes-mes-grupo').runEquipeAniversariantesMes())
       .then(() => log('✅ Aniversariantes do mês (grupo) concluído'))
       .catch(err => logError('Aniversariantes do mês (grupo)', err))
       .finally(() => {
@@ -1196,7 +1238,7 @@ async function main() {
     if (jobRunning) { log('⚠️  Renovações-mês ignorado — outro job em execução'); return; }
     jobRunning = true;
     const start = new Date();
-    require('./renovacoes-mes-grupo').runRenovacoesMesGrupo()
+    comRetry('Contratos a vencer no mês (grupo)', () => require('./renovacoes-mes-grupo').runRenovacoesMesGrupo())
       .then(() => log('✅ Contratos a vencer no mês (grupo) concluído'))
       .catch(err => logError('Contratos a vencer no mês (grupo)', err))
       .finally(() => {
@@ -1218,7 +1260,7 @@ async function main() {
       if (jobRunning) { log('⚠️  Presentes pendentes ignorado — outro job em execução'); return; }
       jobRunning = true;
       const start = new Date();
-      require('./presentes-pendentes-grupo').runPresentesPendentes()
+      comRetry('Presentes pendentes', () => require('./presentes-pendentes-grupo').runPresentesPendentes())
         .then(() => log('✅ Presentes pendentes concluído'))
         .catch(err => logError('Presentes pendentes', err))
         .finally(() => {
@@ -1238,7 +1280,7 @@ async function main() {
     if (jobRunning) { log('⚠️  Resumo da semana ignorado — outro job em execução'); return; }
     jobRunning = true;
     const start = new Date();
-    require('./resumo-semana').runResumoSemana()
+    comRetry('Resumo da semana', () => require('./resumo-semana').runResumoSemana())
       .then(() => log('✅ Resumo da semana concluído'))
       .catch(err => logError('Resumo da semana', err))
       .finally(() => {
@@ -1257,7 +1299,7 @@ async function main() {
     if (jobRunning) { log('⚠️  Ausentes 10 dias ignorado — outro job em execução'); return; }
     jobRunning = true;
     const start = new Date();
-    require('./ausentes-10-dias').runAusentes10Dias()
+    comRetry('Ausentes 10 dias', () => require('./ausentes-10-dias').runAusentes10Dias())
       .then(() => log('✅ Ausentes 10 dias concluído'))
       .catch(err => logError('Ausentes 10 dias', err))
       .finally(() => {
@@ -1276,7 +1318,7 @@ async function main() {
     if (jobRunning) { log('⚠️  Resumo do dia ignorado — outro job em execução'); return; }
     jobRunning = true;
     const start = new Date();
-    require('./resumo-dia').runResumoDia()
+    comRetry('Resumo do dia', () => require('./resumo-dia').runResumoDia())
       .then(() => log('✅ Resumo do dia concluído'))
       .catch(err => logError('Resumo do dia', err))
       .finally(() => {
@@ -1291,7 +1333,7 @@ async function main() {
   // A cada 15 min → envia as confirmações de aula experimental (fila ZEE/EVO + formulário)
   cron.schedule('*/15 * * * *', () => {
     log('⏰ Cron disparado: Confirmação Aula Experimental');
-    runJob('Confirmação Aula Experimental', executeExperimentalConfirmJob).catch(err => {
+    runJob('Confirmação Aula Experimental', executeExperimentalConfirmJob, undefined, { retry: false }).catch(err => { // roda a cada 15 min: a próxima rodada já é a nova tentativa
       logError('Falha crítica no job Confirmação Aula Experimental', err);
     });
   }, { timezone: 'America/Sao_Paulo' });

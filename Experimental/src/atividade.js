@@ -42,8 +42,15 @@ function salvar(arr) {
   } catch (_) { /* não é crítico */ }
 }
 
+// Quantos envios deram certo desde que o processo subiu. O scheduler compara antes
+// e depois de uma tentativa de job: se algo saiu, NÃO repete o job (evita mandar
+// a mesma mensagem duas vezes).
+let _enviosOk = 0;
+function enviosOk() { return _enviosOk; }
+
 // ev: { destino, preview, ok, erro, grupo, midia, contexto? }
 function registrar(ev) {
+  if (ev && ev.ok !== false) _enviosOk++;
   try {
     const arr = carregar();
     arr.push({
@@ -97,4 +104,4 @@ function resumoHoje(dia) {
 
 function listarHoje(dia, limite = 120) { return doDia(dia).slice(-limite).reverse(); }
 
-module.exports = { setContexto, contextoAtual, registrar, resumoHoje, listarHoje, doDia, hojeSP, carregarSofia, ARQUIVO, ARQUIVO_SOFIA };
+module.exports = { setContexto, contextoAtual, registrar, enviosOk, resumoHoje, listarHoje, doDia, hojeSP, carregarSofia, ARQUIVO, ARQUIVO_SOFIA };
