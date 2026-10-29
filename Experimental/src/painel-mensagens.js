@@ -5863,16 +5863,41 @@ function paginaSofiaFunil(params) {
     const nome = nomeDe(k, c);
     if (canalEf === 'express') { detExp.push({ nome, canal: 'express', em: ag.em }); continue; } // Express não conta
     agend++;
-    detAg.push({ nome, canal: canalEf, em: ag.em });
+    detAg.push({ nome, canal: canalEf, em: ag.em, tel: k });
   }
   const naoAg = Math.max(0, convs - agend);
   const conv = convs ? Math.round((agend / convs) * 1000) / 10 : 0;
+  // Depois do agendamento: fez a aula? fechou contrato? Lido das TAGS atuais do
+  // contato — "Presença da experimental" troca para Fez aula / Sem presença (lendo
+  // o EVO) e a sincronização de alunas põe "0. Aluna" em quem tem contrato ativo.
+  // Quem fechou conta também como "fez a aula" (a tag de aluna pode ter tirado a de presença).
+  let compCfg = {}; try { compCfg = lerCompCfg(); } catch (_) {}
+  let atCfg = {}; try { atCfg = autoTagAlunas.ler(); } catch (_) {}
+  const tFez = String(compCfg.tagCompareceu || '').trim(), tFaltou = String(compCfg.tagFaltou || '').trim(), tAluna = String(atCfg.tagAluna || '0. Aluna').trim();
+  const situacaoDe = (d) => {
+    let tags = [];
+    try { const r = contatos.acharPorTel(d.tel, contatosMap); tags = (r && r.contato && r.contato.tags) || []; } catch (_) {}
+    if (tAluna && tags.includes(tAluna)) return 'fechou';
+    if (tFez && tags.includes(tFez)) return 'fez';
+    if (tFaltou && tags.includes(tFaltou)) return 'faltou';
+    return 'aguardando';
+  };
+  let fez = 0, fechou = 0, faltou = 0, aguardando = 0;
+  for (const d of detAg) {
+    d.sit = situacaoDe(d);
+    if (d.sit === 'fechou') { fechou++; fez++; }
+    else if (d.sit === 'fez') fez++;
+    else if (d.sit === 'faltou') faltou++;
+    else aguardando++;
+  }
+  const pct = (n, d) => d ? String(Math.round(n * 1000 / d) / 10).replace('.', ',') + '%' : '—';
+  const SIT = { fechou: ['💰 fechou contrato', 'var(--ok)'], fez: ['✅ fez a aula', 'var(--teal-esc)'], faltou: ['❌ faltou', 'var(--erro)'], aguardando: ['⏳ aguardando', 'var(--cinza)'] };
   const barra = (rot, n, max, cor) => `<div style="display:flex;align-items:center;gap:10px;margin:9px 0"><span style="width:150px;flex:none;color:var(--tinta);font-weight:600;font-size:.86rem">${rot}</span><span style="flex:1;height:26px;background:var(--linha-soft);border-radius:8px;overflow:hidden"><span style="display:block;height:100%;width:${(max && n > 0) ? Math.max(3, Math.round(n / max * 100)) : 0}%;background:${cor}"></span></span><span style="width:44px;flex:none;text-align:right;font-weight:700;color:var(--tinta)">${n}</span></div>`;
   const segs = janelas.map(([v, l]) => `<a href="/sofia?view=funil&per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
   // Lista de quem agendou no período (com canal) + os Express que ficaram de fora —
   // ajuda a conferir quem contou e por quê.
   const fmtDtCurta = (ms) => { try { return new Date(Number(ms)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
-  const linhaDet = (d) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--linha-soft);font-size:.82rem"><span style="font-weight:600;color:var(--tinta)">${esc(d.nome)}</span><span class="quando" style="white-space:nowrap">${rotCanal(d.canal)} · ${esc(fmtDtCurta(d.em))}</span></div>`;
+  const linhaDet = (d) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--linha-soft);font-size:.82rem;flex-wrap:wrap"><span style="font-weight:600;color:var(--tinta)">${esc(d.nome)}${d.sit ? ` <span style="font-weight:700;font-size:.74rem;color:${SIT[d.sit][1]}">${SIT[d.sit][0]}</span>` : ''}</span><span class="quando" style="white-space:nowrap">${rotCanal(d.canal)} · ${esc(fmtDtCurta(d.em))}</span></div>`;
   const detalheHtml = (detAg.length || detExp.length) ? `<details class="card" style="padding:10px 15px;margin-top:10px"><summary style="cursor:pointer;font-weight:700">🔎 Quem agendou no período (${detAg.length})${detExp.length ? ` · ${detExp.length} fora da conta` : ''}</summary>`
     + (detAg.length ? `<div style="margin-top:8px">${detAg.sort((a, b) => b.em - a.em).map(linhaDet).join('')}</div>` : '<p class="quando" style="margin:8px 0 0">Ninguém agendou neste período.</p>')
     + (detExp.length ? `<p class="quando" style="margin:12px 0 2px"><b>Não contados — cadastro Express / sem conversa com a SoFIA:</b></p>${detExp.sort((a, b) => b.em - a.em).map(linhaDet).join('')}` : '')
@@ -5892,17 +5917,19 @@ function paginaSofiaFunil(params) {
     </form>
     <div class="stats">
       <div class="stat tot"><div class="n">${convs}</div><div class="l">conversas · ${esc(rotulo)}</div></div>
-      <div class="stat ok"><div class="n">${agend}</div><div class="l">agendaram</div></div>
-      <div class="stat"><div class="n" style="color:var(--cinza)">${naoAg}</div><div class="l">não agendaram</div></div>
-      <div class="stat"><div class="n" style="color:var(--coral-esc)">${conv}%</div><div class="l">conversão</div></div>
+      <div class="stat ok"><div class="n">${agend}</div><div class="l">agendaram · <b style="color:var(--coral-esc)">${conv}%</b> das conversas</div></div>
+      <div class="stat"><div class="n" style="color:var(--teal-esc)">${fez}</div><div class="l">fizeram a aula · ${pct(fez, agend)} das agendadas</div></div>
+      <div class="stat ok"><div class="n">${fechou}</div><div class="l">fecharam contrato · ${pct(fechou, fez)} de quem fez</div></div>
     </div>
     <div class="sec-t">Funil</div>
     <div class="card">
-      ${convs ? barra('Conversaram', convs, convs, 'var(--teal)') + barra('Agendaram', agend, convs, 'var(--ok)') + barra('Não agendaram', naoAg, convs, 'var(--cinza)')
+      ${convs ? barra('Conversaram', convs, convs, 'var(--teal)') + barra('Agendaram', agend, convs, 'var(--ok)') + barra('Fizeram a aula', fez, convs, 'var(--teal-esc)') + barra('Fecharam contrato', fechou, convs, '#0b5e33') + barra('Não agendaram', naoAg, convs, 'var(--cinza)')
       : '<div class="vazio">Sem conversas no período.</div>'}
+      ${agend ? `<p class="quando" style="margin:10px 0 0">Das <b>${agend}</b> que agendaram: <b>${fez}</b> fizeram a aula (${fechou} já ${fechou === 1 ? 'fechou' : 'fecharam'} contrato), <b>${faltou}</b> ${faltou === 1 ? 'faltou' : 'faltaram'} e <b>${aguardando}</b> ainda ${aguardando === 1 ? 'aguarda' : 'aguardam'} — aula futura ou presença ainda não lida no EVO.</p>` : ''}
+      ${(!compCfg.on || !atCfg.on) ? `<p class="quando" style="margin:8px 0 0;color:var(--warn)">⚠️ ${!compCfg.on ? '“Presença da experimental” está desligada (SoFIA → Tags) — sem ela, ninguém sai de “aguardando”. ' : ''}${!atCfg.on ? '“Alunas / Ex-alunas automáticas” está desligado (SoFIA → Tags) — sem ele, o fechamento de contrato não aparece.' : ''}</p>` : ''}
     </div>
     ${detalheHtml}
-    <p class="quando" style="text-align:center">O funil conta só quem <b>realmente conversou</b> com a SoFIA e agendou <b>dentro do período</b> (pela data do agendamento). O <b>cadastro Express</b> (feito pela recepcionista, sem conversa) aparece na lista mas <b>não</b> entra na conta. O <b>comparecimento</b> à aula depende de cruzar com a presença no EVO — fica como próximo passo.</p>
+    <p class="quando" style="text-align:center">O funil conta só quem <b>realmente conversou</b> com a SoFIA e agendou <b>dentro do período</b> (pela data do agendamento). O <b>cadastro Express</b> (feito pela recepcionista, sem conversa) aparece na lista mas <b>não</b> entra na conta. <b>Fez a aula</b> vem da “Presença da experimental” (lê o EVO e troca a tag) e <b>fechou contrato</b> = ganhou a tag <b>${esc(tAluna)}</b> (aluna com contrato ativo no EVO).</p>
   </div>`;
   return chrome({ tab: 'Funil', h1: 'SoFIA', p: 'Funil — conversas que viraram agendamento.' }, 'sofia', corpo);
 }
