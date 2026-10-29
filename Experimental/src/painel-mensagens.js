@@ -852,13 +852,14 @@ function navTabs(ativo) {
   // Ordem no HTML mantém a SoFIA por ÚLTIMO: no mobile ela cai sozinha na 2ª
   // linha ocupando a largura toda (destaque). No DESKTOP, o CSS (order) exibe na
   // ordem pedida: SoFIA → WhatsApp → Instagram → Formulário → Perfis.
-  // Formulário = Agendamento (indicadores) + Campanhas (formulários editáveis), cada um com permissão própria.
-  let html = pode('ind') ? item('ind', '/indicadores', '📈', 'Formulário') : pode('formularios') ? cel('/formularios', ativo === 'ind', '📈', 'Formulário', 'ind') : '';
+  // Formulário = formulários de campanha (editáveis). Os números do formulário de agendamento ficam em Indicadores.
+  let html = pode('formularios') ? cel('/formularios', ativo === 'formularios', '📈', 'Formulário', 'ind') : '';
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp', 'msg');
   if (IG_NO_PAINEL) html += item('ig', '/instagram', '📸', 'Instagram');
   if (sess.admin) html += cel('/perfis', ativo === 'perfis', '👤', 'Perfis', 'perfis');
-  // Indicadores = Funil + Grade, cada um com a sua permissão. Abre no primeiro permitido.
-  if (podeFunil(sess) || pode('grade')) html += cel(podeFunil(sess) ? '/funil' : '/grade', ativo === 'grade' || ativo === 'funil', '📊', 'Indicadores', 'grade');
+  // Indicadores = Funil + Formulário + Grade, cada um com a sua permissão. Abre no primeiro permitido.
+  const indHref = podeFunil(sess) ? '/funil' : pode('ind') ? '/indicadores' : pode('grade') ? '/grade' : '';
+  if (indHref) html += cel(indHref, ativo === 'grade' || ativo === 'funil' || ativo === 'ind', '📊', 'Indicadores', 'grade');
   if (sess.admin || (sess.telas || []).includes('saude')) html += cel('/saude', ativo === 'saude', '🩺', 'Saúde', 'saude');
   if (pode('slimclub')) { // número = o que espera a recepção (cadastros, alterações, reclamações)
     const n = slimclub.pendenciasRecepcao();
@@ -2331,7 +2332,7 @@ function paginaIndicadores(dias, aviso) {
   const funilAgendOrig = funilPorOrigem('agendamentos');
 
   const corpo = `<div class="wrap">
-    ${subnavFormulario('agendamento')}
+    ${subnavIndicadores('formulario')}
     ${aviso ? `<div class="aviso err">${esc(aviso)}</div>` : ''}
     <div class="segs">${segs}</div>
     <div class="stats">
@@ -2414,7 +2415,7 @@ function blocoSofiaWa() {
 }
 
 // Sub-navegação da aba Sofia: Configuração (prompt/configs) x Conversas (inbox).
-// Indicadores (menu de cima) = Funil + Grade. O Funil tem permissão própria
+// Indicadores (menu de cima) = Funil + Formulário + Grade. O Funil tem permissão própria
 // ('funil'); quem já via o Funil pela SoFIA (Conversas) continua vendo.
 function podeFunil(sess) { return !!(sess && (sess.admin || (sess.telas || []).includes('funil') || (sess.telas || []).includes('sofia_conversas'))); }
 function subnavIndicadores(view) {
@@ -2422,6 +2423,7 @@ function subnavIndicadores(view) {
   const pode = k => sess.admin || (sess.telas || []).includes(k);
   let its = '';
   if (podeFunil(sess)) its += `<a href="/funil"${view === 'funil' ? ' class="on"' : ''}>Funil</a>`;
+  if (pode('ind')) its += `<a href="/indicadores"${view === 'formulario' ? ' class="on"' : ''}>Formulário</a>`;
   if (pode('grade')) its += `<a href="/grade"${view === 'grade' ? ' class="on"' : ''}>Grade</a>`;
   return its ? `<div class="subtabs">${its}</div>` : '';
 }
@@ -6787,15 +6789,9 @@ function paginaSlimClub(view, base, aviso) {
   return chrome({ tab: 'Slim Club', h1: 'Slim Club', p: 'Validação dos negócios das alunas.' }, 'slimclub', corpo);
 }
 
-// ── Formulários de campanha (Formulário → Campanhas) ─────────────────────────
+// ── Formulários de campanha (menu Formulário) ───────────────────────────────
 // A recepção monta o formulário (perguntas, capa, tag) e divulga o link
 // /formulario/<endereço>. As respostas ficam aqui, com planilha para baixar.
-function subnavFormulario(view) {
-  const sess = _navSess || { admin: true, telas: [] };
-  const pode = k => sess.admin || (sess.telas || []).includes(k);
-  if (!(pode('ind') && pode('formularios'))) return '';
-  return `<div class="subtabs"><a href="/indicadores"${view === 'agendamento' ? ' class="on"' : ''}>Agendamento</a><a href="/formularios"${view === 'campanhas' ? ' class="on"' : ''}>Campanhas</a></div>`;
-}
 function fmLink(base, f) { return base + '/formulario/' + f.slug; }
 const FM_CSS = `<style>
   .fm-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 4px}
@@ -6881,7 +6877,6 @@ function paginaFormularios(base, aviso) {
     <p>Monte um formulário com as perguntas que quiser, divulgue o link no Instagram ou no WhatsApp e acompanhe aqui quem se interessou. Comece pelo modelo da Black Friday e ajuste o que precisar.</p>
     <div class="fm-btns" style="justify-content:center"><a class="save" href="/formularios/editar?modelo=blackfriday">Usar modelo Black Friday</a><a class="reset" href="/formularios/editar">Começar em branco</a></div></div>`;
   const corpo = `<div class="wrap">${FM_CSS}
-    ${subnavFormulario('campanhas')}
     <div class="fm-top"><h1>Formulários de campanha</h1>${lista.length ? `<div class="acts"><a class="reset" style="padding:9px 16px;border-radius:999px;text-decoration:none;font-weight:700;color:var(--cinza)" href="/formularios/editar?modelo=blackfriday">Modelo Black Friday</a><button type="button" class="save" onclick="location.href='/formularios/editar'">+ Novo formulário</button></div>` : ''}</div>
     <p class="quando">Listas de interessadas para promoções e eventos. Quem responde com o mesmo WhatsApp de novo só atualiza a resposta, sem duplicar.</p>
     ${aviso ? `<div class="aviso">${esc(aviso)}</div>` : ''}
@@ -6897,7 +6892,7 @@ function paginaFormularios(base, aviso) {
       .catch(function(){ alert('❌ Erro de rede.'); });
   }
   </script>`;
-  return chrome({ tab: 'Formulários de campanha' }, 'ind', corpo);
+  return chrome({ tab: 'Formulários de campanha' }, 'formularios', corpo);
 }
 
 function paginaFormularioEditar(base, f, modelo) {
@@ -6907,7 +6902,6 @@ function paginaFormularioEditar(base, f, modelo) {
   let tags = []; try { tags = contatos.tagsDistintas().map(t => t.tag).filter(Boolean); } catch (_) {}
   const tiposOpts = Object.entries(formularios.TIPOS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
   const corpo = `<div class="wrap">${FM_CSS}
-    ${subnavFormulario('campanhas')}
     <div class="fm-top"><h1>${novo ? 'Novo formulário' : 'Editar formulário'}</h1><div class="acts"><a href="/formularios" style="color:var(--teal-esc);font-weight:600;text-decoration:none">← Voltar para a lista</a></div></div>
     ${f ? `<div class="fm-link" style="margin:8px 0"><span>Link:</span><code>${esc(fmLink(base, f))}</code><button type="button" class="reset" onclick="fmCopiar('${esc(fmLink(base, f))}',this)">Copiar link</button><a href="${esc(fmLink(base, f))}" target="_blank" rel="noopener" style="color:var(--teal-esc);font-weight:600">Abrir</a></div>` : ''}
     ${modelo && novo ? '<div class="aviso">Modelo da Black Friday carregado. Troque os textos e as perguntas como quiser e clique em <b>Salvar</b>.</div>' : ''}
@@ -7051,7 +7045,7 @@ function paginaFormularioEditar(base, f, modelo) {
     };
   })();
   </script>`;
-  return chrome({ tab: novo ? 'Novo formulário' : 'Editar formulário' }, 'ind', corpo);
+  return chrome({ tab: novo ? 'Novo formulário' : 'Editar formulário' }, 'formularios', corpo);
 }
 
 function paginaFormularioRespostas(base, f) {
@@ -7070,7 +7064,6 @@ function paginaFormularioRespostas(base, f) {
     </tr>`;
   }).join('');
   const corpo = `<div class="wrap" style="max-width:1080px">${FM_CSS}
-    ${subnavFormulario('campanhas')}
     <div class="fm-top"><h1>${esc(f.titulo)}</h1><div class="acts"><a href="/formularios" style="color:var(--teal-esc);font-weight:600;text-decoration:none">← Voltar para a lista</a></div></div>
     ${(() => {
       const a = formularios.acessos(f.id);
@@ -7105,7 +7098,7 @@ function paginaFormularioRespostas(base, f) {
       .catch(function(){ alert('❌ Erro de rede.'); });
   }
   </script>`;
-  return chrome({ tab: 'Respostas · ' + f.titulo }, 'ind', corpo);
+  return chrome({ tab: 'Respostas · ' + f.titulo }, 'formularios', corpo);
 }
 
 // Conta a abertura da página pública. Não conta: a equipe logada no painel (que
