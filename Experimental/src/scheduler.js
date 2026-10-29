@@ -259,7 +259,7 @@ let jobRunning = false;
 // tentamos de novo (2 min, depois 5 min). Se algo já saiu, NÃO repetimos — o job
 // mandaria de novo para quem já recebeu; aí vale o alerta de sempre. Durante a
 // espera o robô fica livre para os outros jobs (senão eles seriam "ignorados").
-const ERRO_PASSAGEIRO = /navigation timeout|timeout of \d+ ?ms exceeded|net::err_|detached|target closed|protocol error|session closed|execution context was destroyed|waiting failed|waiting for selector .* failed|tela de login do evo|econnreset|econnrefused|etimedout|socket hang up|connection closed|most likely because of a navigation|browser has disconnected/i;
+const ERRO_PASSAGEIRO = /navigation timeout|timeout of \d+ ?ms exceeded|net::err_|detached|target closed|protocol error|protocolerror|callfunctionon timed out|runtime\.\w+ timed out|session closed|execution context was destroyed|waiting failed|waiting for selector .* failed|tela de login do evo|econnreset|econnrefused|etimedout|socket hang up|connection closed|most likely because of a navigation|browser has disconnected/i;
 const RETRY_ESPERAS_MS = [2 * 60 * 1000, 5 * 60 * 1000];
 const dormir = (ms) => new Promise(r => setTimeout(r, ms));
 async function comRetry(nome, fn, { antesDeEsperar, depoisDeEsperar } = {}) {
