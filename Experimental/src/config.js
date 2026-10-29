@@ -115,6 +115,9 @@ const config = {
     circuitoLembrete: '15 16 * * 5',    // 16:15 sexta ("é amanhã!" no grupo Circuito Slim)
     agendadosManha:   '45 10 * * *',    // 10:45 todos os dias (envios agendados no painel — turno manhã)
     agendadosTarde:   '45 15 * * *',    // 15:45 todos os dias (envios agendados no painel — turno tarde)
+    histExperimentais: (process.env.HIST_EXP_CRON && process.env.HIST_EXP_CRON.trim().split(/\s+/).length === 5)
+      ? process.env.HIST_EXP_CRON.trim()
+      : '20 2 * * *',                 // 02:20 todo dia — lê a agenda de experimentais (professora, presença, contrato) p/ Indicadores → Professoras
     comparecimento:   '0 16 * * 6',     // 16:00 sábado (cruza presença da semana no EVO → troca tags)
     inadimplentes:    '20 10 * * 1-6',  // 10:20 seg-sáb (recorrente + boleto VENCIDO há 2+ dias)
     inadimplentesHoje: '20 10 * * 1-6', // "boleto vence HOJE" — horário/dias PRÓPRIOS (independentes da cobrança acima), editáveis no painel

@@ -151,6 +151,7 @@ async function coletarSemana(scraper, n) {
       await scraper.changeDateFilter(data);
       await sleep(2500);
       const aulas = await scraper.extractClassList();
+      try { require('./experimentais-hist').registrarDia(data, aulas); } catch (_) {} // histórico (Indicadores → Professoras)
       const comVeredito = aulas
         .map(a => ({ ...a, v: veredito(a.status) }))
         .filter(a => a.v && a.name);

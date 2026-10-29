@@ -698,6 +698,7 @@ function iniciarRodarJobWatcher() {
     planilha:          { nome: 'Planilha de aniversários [manual]', fn: () => require('./planilha-aniversarios').runPlanilhaAniversarios() },
     // abre a ficha de cada devedora no EVO (pode passar dos 5 min padrão)
     inadimplentes:     { nome: 'Cobrança de inadimplentes [manual]', fn: () => require('./inadimplentes').runInadimplentes({ dry: false }), timeoutMs: 20 * 60 * 1000 },
+    historicoExperimentais: { nome: 'Histórico de experimentais (professoras) [manual]', fn: () => require('./historico-experimentais').runHistoricoExperimentais(), timeoutMs: 45 * 60 * 1000 },
     freeAntecedencia:  { nome: 'Planos FREE — antecedência [manual]', fn: (pedido) => require('./free-antecedencia').runFreeAntecedencia({ dry: !!(pedido && pedido.dry) }) },
   };
   const t = setInterval(() => {
@@ -1140,6 +1141,17 @@ async function main() {
     _slotsAgendado = true;
   }
   // Grade de MATRÍCULAS FIXAS (página /grade): atualiza sozinha 1x/dia.
+  // Schedule: 02:20 todo dia → lê a agenda de experimentais do EVO (professora,
+  // presença, contrato) e guarda o histórico para Indicadores → Professoras.
+  // Só lê (não envia nada). Usa o EVO, então espera a vez do jobRunning.
+  if (config.schedule.histExperimentais) {
+    cron.schedule(config.schedule.histExperimentais, () => {
+      log('⏰ Cron disparado: Histórico de experimentais (professoras)');
+      runJob('Histórico de experimentais (professoras)', () => require('./historico-experimentais').runHistoricoExperimentais(), 45 * 60 * 1000).catch(err => logError('Histórico de experimentais', err));
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job HISTÓRICO DE EXPERIMENTAIS agendado: ${config.schedule.histExperimentais} (Indicadores → Professoras)`);
+  }
+
   if (config.schedule.gradeFixas) {
     cron.schedule(config.schedule.gradeFixas, () => runGradeFixas('agendado'), { timezone: 'America/Sao_Paulo' });
     log(`📅 Job GRADE DE FIXAS agendado: ${config.schedule.gradeFixas} (atualiza a página /grade)`);
