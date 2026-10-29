@@ -5915,7 +5915,16 @@ function paginaSofiaFunil(params) {
   const FU_DADOS = {};
   for (const f of Object.keys(FU_FILTROS)) FU_DADOS[f] = detAg.filter(d => FU_FILTROS[f](d.sit)).sort((a, b) => b.em - a.em).map(d => ({ n: d.nome, u: d.evo || '', c: linkContato(d.tel) }));
   const fuNum = (n, f) => n ? `<a href="#fuDet" class="fu-pop-alvo" data-filtro="${f}" onclick="fuFiltrar('${f}');return false" style="font-weight:700;color:var(--teal-esc)">${n}</a>` : `<b>${n}</b>`;
-  const barra = (rot, n, max, cor, filtro) => `<div style="display:flex;align-items:center;gap:10px;margin:9px 0${filtro ? ';cursor:pointer' : ''}"${filtro ? ` class="fu-bar fu-pop-alvo" data-filtro="${filtro}" onclick="fuFiltrar('${filtro}')"` : ''}><span style="width:150px;flex:none;color:var(--tinta);font-weight:600;font-size:.86rem">${rot}</span><span style="flex:1;height:26px;background:var(--linha-soft);border-radius:8px;overflow:hidden"><span style="display:block;height:100%;width:${(max && n > 0) ? Math.max(3, Math.round(n / max * 100)) : 0}%;background:${cor}"></span></span><span style="width:44px;flex:none;text-align:right;font-weight:700;color:var(--tinta)">${n}</span></div>`;
+  // Trilho da barra com o % (da primeira barra do funil = largura da barra) escrito
+  // DENTRO da cor; se a barra for estreita demais para caber, o % vai logo depois dela.
+  const barraTrilho = (n, max, cor) => {
+    const w = (max && n > 0) ? Math.max(3, Math.round(n / max * 100)) : 0;
+    const p = max ? String(Math.round(n * 1000 / max) / 10).replace('.', ',').replace(/,0$/, '') + '%' : '';
+    const dentro = w >= 14;
+    const rot = p ? `<span style="position:absolute;top:0;bottom:0;display:flex;align-items:center;font-size:.76rem;font-weight:800;font-variant-numeric:tabular-nums;pointer-events:none;${dentro ? `left:10px;color:#fff` : `left:calc(${w}% + 8px);color:var(--cinza)`}">${p}</span>` : '';
+    return `<span style="flex:1;height:26px;background:var(--linha-soft);border-radius:8px;overflow:hidden;position:relative"><span style="display:block;height:100%;width:${w}%;background:${cor}"></span>${rot}</span>`;
+  };
+  const barra = (rot, n, max, cor, filtro) => `<div style="display:flex;align-items:center;gap:10px;margin:9px 0${filtro ? ';cursor:pointer' : ''}"${filtro ? ` class="fu-bar fu-pop-alvo" data-filtro="${filtro}" onclick="fuFiltrar('${filtro}')"` : ''}><span style="width:150px;flex:none;color:var(--tinta);font-weight:600;font-size:.86rem">${rot}</span>${barraTrilho(n, max, cor)}<span style="width:44px;flex:none;text-align:right;font-weight:700;color:var(--tinta)">${n}</span></div>`;
   const qCanal = canalSel === 'todos' ? '' : `&canal=${canalSel}`;
   const qPer = custom ? `&de=${encodeURIComponent(params.de || '')}&ate=${encodeURIComponent(params.ate || '')}` : `&per=${per}`;
   const segs = janelas.map(([v, l]) => `<a href="/sofia?view=funil&per=${v}${qCanal}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
