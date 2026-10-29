@@ -1051,6 +1051,7 @@ class EvoScraper {
 
     const allClasses = await this.extractClassList();
     console.log(`   Total de aulas: ${allClasses.length}`);
+    try { require('./experimentais-hist').registrarDia(yesterdayStr, allClasses); } catch (_) {} // histórico (Indicadores → Professoras)
 
     const comPresenca = allClasses.filter(c =>
       (c.status || '').toLowerCase().includes('presen')
@@ -1099,6 +1100,7 @@ class EvoScraper {
 
     const allClasses = await this.extractClassList();
     console.log(`   Total de aulas: ${allClasses.length}`);
+    try { require('./experimentais-hist').registrarDia(todayStr, allClasses); } catch (_) {} // histórico (Indicadores → Professoras)
 
     const comFalta = allClasses.filter(c => isExactStatus(c.status, 'falta'));
     console.log(`   Com Falta: ${comFalta.length}`);

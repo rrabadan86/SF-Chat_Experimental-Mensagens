@@ -28,6 +28,7 @@ const TELAS = [
   { key: 'saude', rot: '🩺 Saúde' },
   { key: 'funil', rot: '📊 Funil', grupo: '📊 Indicadores' },
   { key: 'ind', rot: '📈 Formulário (agendamento)', grupo: '📊 Indicadores' },
+  { key: 'professoras', rot: '👩‍🏫 Professoras', grupo: '📊 Indicadores' },
   { key: 'grade', rot: '📋 Grade', grupo: '📊 Indicadores' },
   { key: 'slimclub', rot: '🤝 Slim Club' },
   { key: 'sofia_conversas', rot: '💬 Conversas', grupo: '🤖 Sofia' },

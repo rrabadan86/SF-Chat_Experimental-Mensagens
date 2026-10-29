@@ -36,6 +36,7 @@ const inadConfig = require('./inadimplentes-config'); // "vencido há X+ dias" (
 const freeCfg = require('./free-antecedencia-config'); // planos FREE: intervalo (horas) + janela (dias)
 const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
+const histExp = require('./experimentais-hist'); // agenda de experimentais do EVO (Indicadores → Professoras)
 const bookings = require('./bookings');
 const autoTagAlunas = require('./auto-tag-alunas');
 const origens = require('./origens');
@@ -394,7 +395,8 @@ function telaDaUrl(u) {
   if (u === '/perfis' || u.startsWith('/perfis/')) return 'perfis';
   if (u === '/saude') return 'saude'; // liberável por usuário (checkbox em Perfis) — a checagem genérica cobre
   if (u === '/grade' || u.startsWith('/grade/')) return 'grade'; // idem (checkbox em Perfis)
-  if (u === '/funil') return 'funil'; // Indicadores → Funil (checkbox em Perfis; quem via pela SoFIA Conversas continua vendo)
+  if (u === '/funil') return 'funil';
+  if (u === '/professoras' || u.startsWith('/professoras/')) return 'professoras'; // Indicadores → Professoras (checkbox em Perfis) // Indicadores → Funil (checkbox em Perfis; quem via pela SoFIA Conversas continua vendo)
   if (u === '/clube' || u.startsWith('/clube/')) return 'slimclub'; // validação do Slim Club (checkbox em Perfis)
   if (u === '/formularios' || u.startsWith('/formularios/')) return 'formularios'; // formulários de campanha (checkbox em Perfis)
   return 'msg';
@@ -453,6 +455,7 @@ function primeiraTela(sess) {
   if (sess.telas.includes('slimclub')) return '/clube';
   if (sess.telas.includes('formularios')) return '/formularios';
   if (podeFunil(sess)) return '/funil';
+  if (sess.telas.includes('professoras')) return '/professoras';
   if (sess.telas.includes('grade')) return '/grade';
   return '';
 }
@@ -857,9 +860,9 @@ function navTabs(ativo) {
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp', 'msg');
   if (IG_NO_PAINEL) html += item('ig', '/instagram', '📸', 'Instagram');
   if (sess.admin) html += cel('/perfis', ativo === 'perfis', '👤', 'Perfis', 'perfis');
-  // Indicadores = Funil + Formulário + Grade, cada um com a sua permissão. Abre no primeiro permitido.
-  const indHref = podeFunil(sess) ? '/funil' : pode('ind') ? '/indicadores' : pode('grade') ? '/grade' : '';
-  if (indHref) html += cel(indHref, ativo === 'grade' || ativo === 'funil' || ativo === 'ind', '📊', 'Indicadores', 'grade');
+  // Indicadores = Funil + Formulário + Professoras + Grade, cada um com a sua permissão. Abre no primeiro permitido.
+  const indHref = podeFunil(sess) ? '/funil' : pode('ind') ? '/indicadores' : pode('professoras') ? '/professoras' : pode('grade') ? '/grade' : '';
+  if (indHref) html += cel(indHref, ativo === 'grade' || ativo === 'funil' || ativo === 'ind' || ativo === 'professoras', '📊', 'Indicadores', 'grade');
   if (sess.admin || (sess.telas || []).includes('saude')) html += cel('/saude', ativo === 'saude', '🩺', 'Saúde', 'saude');
   if (pode('slimclub')) { // número = o que espera a recepção (cadastros, alterações, reclamações)
     const n = slimclub.pendenciasRecepcao();
@@ -2415,7 +2418,7 @@ function blocoSofiaWa() {
 }
 
 // Sub-navegação da aba Sofia: Configuração (prompt/configs) x Conversas (inbox).
-// Indicadores (menu de cima) = Funil + Formulário + Grade. O Funil tem permissão própria
+// Indicadores (menu de cima) = Funil + Formulário + Professoras + Grade. O Funil tem permissão própria
 // ('funil'); quem já via o Funil pela SoFIA (Conversas) continua vendo.
 function podeFunil(sess) { return !!(sess && (sess.admin || (sess.telas || []).includes('funil') || (sess.telas || []).includes('sofia_conversas'))); }
 function subnavIndicadores(view) {
@@ -2424,6 +2427,7 @@ function subnavIndicadores(view) {
   let its = '';
   if (podeFunil(sess)) its += `<a href="/funil"${view === 'funil' ? ' class="on"' : ''}>Funil</a>`;
   if (pode('ind')) its += `<a href="/indicadores"${view === 'formulario' ? ' class="on"' : ''}>Formulário</a>`;
+  if (pode('professoras')) its += `<a href="/professoras"${view === 'professoras' ? ' class="on"' : ''}>Professoras</a>`;
   if (pode('grade')) its += `<a href="/grade"${view === 'grade' ? ' class="on"' : ''}>Grade</a>`;
   return its ? `<div class="subtabs">${its}</div>` : '';
 }
@@ -6058,6 +6062,141 @@ function paginaSofiaFunil(params) {
   return chrome({ tab: 'Funil' }, 'funil', corpo);
 }
 
+// ── Indicadores → Professoras: conversão da aula experimental por professora ──
+// Fonte: histórico da agenda de experimentais do EVO (experimentais-hist.js),
+// lido toda noite pelo robô. Cada linha: aluna, dia/hora, professora, presença e
+// "Nome do contrato". Fechou = contrato preenchido no EVO OU a aluna tem a tag de
+// aluna no CRM (mesmo nome). Conversão = fecharam ÷ vieram (só conta quem fez a aula).
+function paginaProfessoras(params) {
+  params = params || {};
+  const h = histExp.ler();
+  const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const menosDias = (n) => { const d = new Date(hojeStr + 'T12:00:00'); d.setDate(d.getDate() - n); return d.toLocaleDateString('en-CA'); };
+  const custom = !!(params.de || params.ate);
+  const per = custom ? '' : (['30', '90', '0'].includes(params.per) ? params.per : '30');
+  let iniD = '', fimD = hojeStr, rotulo = '';
+  if (custom) { iniD = params.de || ''; fimD = params.ate || hojeStr; rotulo = `${params.de || 'início'} até ${fimD}`; }
+  else if (per === '30') { iniD = menosDias(29); rotulo = 'últimos 30 dias'; }
+  else if (per === '90') { iniD = menosDias(89); rotulo = 'últimos 90 dias'; }
+  else rotulo = 'todo o histórico';
+  const dentro = (dia) => dia && (!iniD || dia >= iniD) && (!fimD || dia <= fimD);
+
+  // Quem já é aluna no CRM (tag de aluna), pelo nome — pega quem fechou depois
+  // que a linha da experimental saiu da janela relida no EVO.
+  let tAluna = '0. Aluna'; try { tAluna = String(autoTagAlunas.ler().tagAluna || tAluna).trim(); } catch (_) {}
+  const alunasNome = new Set();
+  try { const cs = contatos.carregar() || {}; for (const t in cs) { const c = cs[t]; if (c && c.nome && (c.tags || []).includes(tAluna)) alunasNome.add(histExp.norm(c.nome)); } } catch (_) {}
+
+  const SEM = '— sem professora';
+  const profs = {}, horas = {};
+  const tot = { exp: 0, veio: 0, faltou: 0, agendada: 0, fechou: 0 };
+  for (const a of Object.values(h.aulas)) {
+    if (!dentro(a.dia)) continue;
+    const sit = histExp.situacao(a.status);
+    if (sit === 'cancelada') continue;
+    const fechou = sit === 'veio' && (!!a.contrato || alunasNome.has(histExp.norm(a.nome)));
+    const p = a.prof || SEM;
+    const r = profs[p] || (profs[p] = { prof: p, exp: 0, veio: 0, faltou: 0, agendada: 0, fechou: 0, alunas: [] });
+    r.exp++; r[sit]++; if (fechou) r.fechou++;
+    r.alunas.push({ nome: a.nome, dia: a.dia, hora: a.hora, sit: fechou ? 'fechou' : sit, contrato: a.contrato });
+    tot.exp++; tot[sit]++; if (fechou) tot.fechou++;
+    if (sit === 'veio' && a.hora) {
+      const hr = horas[a.hora] || (horas[a.hora] = { hora: a.hora, veio: 0, fechou: 0, profs: {} });
+      hr.veio++; if (fechou) hr.fechou++; hr.profs[p] = (hr.profs[p] || 0) + 1;
+    }
+  }
+  const POUCAS = 5; // menos que isso de aulas feitas: o % ainda não diz muito
+  const taxa = (n, d) => d ? Math.round(n * 1000 / d) / 10 : null;
+  const fmtPct = (v) => v == null ? '—' : String(v).replace('.', ',').replace(/,0$/, '') + '%';
+  const lista = Object.values(profs).sort((a, b) => (b.veio >= POUCAS) - (a.veio >= POUCAS) || (taxa(b.fechou, b.veio) || 0) - (taxa(a.fechou, a.veio) || 0) || b.veio - a.veio);
+  const fmtDia = (d) => { const p = String(d).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : d; };
+  const SIT = { fechou: ['💰 fechou', 'var(--ok)'], veio: ['✅ veio', 'var(--teal-esc)'], faltou: ['❌ faltou', 'var(--erro)'], agendada: ['⏳ agendada', 'var(--cinza)'] };
+  const ordemSit = { fechou: 0, veio: 1, faltou: 2, agendada: 3 };
+
+  const barraConv = (r) => {
+    const v = taxa(r.fechou, r.veio), w = v == null ? 0 : Math.max(v > 0 ? 3 : 0, Math.round(v));
+    const poucas = r.veio < POUCAS;
+    const cor = poucas ? 'var(--cinza)' : 'var(--ok)';
+    const dentroB = w >= 14;
+    return `<span style="flex:1;height:26px;background:var(--linha-soft);border-radius:8px;overflow:hidden;position:relative;min-width:120px"><span style="display:block;height:100%;width:${w}%;background:${cor};opacity:${poucas ? '.55' : '1'}"></span>${v == null ? '' : `<span style="position:absolute;top:0;bottom:0;display:flex;align-items:center;font-size:.78rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;${dentroB ? 'left:10px;color:#fff' : `left:calc(${w}% + 8px);color:var(--cinza)`}">${fmtPct(v)}</span>`}</span>`;
+  };
+  const linhaProf = (r) => {
+    const poucas = r.veio < POUCAS;
+    const alunas = r.alunas.sort((a, b) => ordemSit[a.sit] - ordemSit[b.sit] || b.dia.localeCompare(a.dia))
+      .map(x => `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--linha-soft);font-size:.82rem;flex-wrap:wrap"><span><a href="/sofia?view=contatos&q=${encodeURIComponent(x.nome)}" title="Procurar em Contatos" style="color:var(--tinta);font-weight:600">${esc(x.nome)}</a> <span style="font-weight:700;font-size:.74rem;color:${SIT[x.sit][1]}">${SIT[x.sit][0]}</span>${x.contrato ? ` <span class="quando">· ${esc(x.contrato)}</span>` : ''}</span><span class="quando" style="white-space:nowrap">${esc(fmtDia(x.dia))}${x.hora ? ' · ' + esc(x.hora) : ''}</span></div>`).join('');
+    return `<details class="pf-item">
+      <summary class="pf-row">
+        <span class="pf-nome">${esc(r.prof)}${poucas ? ' <span class="pf-poucas">poucas aulas</span>' : ''}</span>
+        ${barraConv(r)}
+        <span class="pf-nums"><b>${r.fechou}</b>/<b>${r.veio}</b> <span class="quando">fecharam/vieram</span></span>
+      </summary>
+      <div class="pf-det">
+        <div class="quando" style="margin:2px 0 6px">${r.exp} experimenta${r.exp === 1 ? 'l' : 'is'} · ${r.veio} vieram · ${r.faltou} faltaram${r.agendada ? ` · ${r.agendada} ainda agendada${r.agendada === 1 ? '' : 's'}` : ''} · presença ${fmtPct(taxa(r.veio, r.veio + r.faltou))}</div>
+        ${alunas}
+      </div>
+    </details>`;
+  };
+  const horasLista = Object.values(horas).sort((a, b) => a.hora.localeCompare(b.hora));
+  const tabHoras = horasLista.length ? `<div class="card" style="overflow-x:auto"><table class="pf-tab"><thead><tr><th>Horário</th><th>Vieram</th><th>Fecharam</th><th>Conversão</th><th>Professoras</th></tr></thead><tbody>${horasLista.map(x => `<tr><td><b>${esc(x.hora)}</b></td><td>${x.veio}</td><td>${x.fechou}</td><td><b style="color:${x.veio < POUCAS ? 'var(--cinza)' : 'var(--ok)'}">${fmtPct(taxa(x.fechou, x.veio))}</b></td><td class="quando">${Object.entries(x.profs).sort((a, b) => b[1] - a[1]).map(([p, n]) => `${esc(p === SEM ? 'sem professora' : p.split(' ')[0])} (${n})`).join(', ')}</td></tr>`).join('')}</tbody></table></div>` : '';
+
+  // Situação da leitura no EVO.
+  const st = h.status || {};
+  const lidos = Object.keys(h.lidos || {}).sort();
+  const rodando = st.estado === 'executando' && Date.now() - (st.inicio || 0) < 60 * 60 * 1000;
+  const fmtQuando = (ms) => { try { return new Date(ms).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+  const situacaoLeitura = rodando ? `⏳ Lendo a agenda no EVO agora (começou ${esc(fmtQuando(st.inicio))}) — pode levar uns 15 min. Atualize a página depois.`
+    : st.estado === 'erro' ? `⚠️ A última leitura falhou (${esc(fmtQuando(st.fim))}): ${esc(st.msg || '')}`
+    : lidos.length ? `Histórico de ${esc(fmtDia(lidos[0]))}/${lidos[0].slice(0, 4)} até ${esc(fmtDia(lidos[lidos.length - 1]))}/${lidos[lidos.length - 1].slice(0, 4)}${st.fim ? ` · última leitura ${esc(fmtQuando(st.fim))}` : ''}. O robô relê a agenda toda noite.`
+    : 'O robô ainda não leu a agenda de experimentais. A primeira leitura busca até 90 dias para trás (em duas noites).';
+  const btnAtualizar = `<form method="POST" action="/professoras/atualizar" style="display:inline"><button class="reset" type="submit" ${rodando ? 'disabled' : ''} style="padding:5px 12px;font-size:.8rem">🔄 Ler agora no EVO</button></form>`;
+
+  const segs = [['30', '30 dias'], ['90', '90 dias'], ['0', 'Tudo']].map(([v, l]) => `<a href="/professoras?per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
+  const corpo = `<div class="wrap">
+    ${subnavIndicadores('professoras')}
+    <div class="sec-t">Conversão por professora <small style="font-weight:600;color:var(--cinza)">(aula experimental → contrato)</small></div>
+    <div class="segs">${segs}</div>
+    <form method="GET" action="/professoras" class="filtro-datas" style="flex-wrap:wrap">
+      <span class="filtro-lbl" style="align-self:center">Período personalizado</span>
+      <input type="date" name="de" value="${esc(params.de || '')}">
+      <span class="ate">até</span>
+      <input type="date" name="ate" value="${esc(params.ate || '')}">
+      <button class="save" type="submit" style="padding:8px 18px;font-size:.82rem">Aplicar</button>
+      ${custom ? `<a href="/professoras" class="reset filtro-limpar" style="text-decoration:none">🧹</a>` : ''}
+    </form>
+    <div class="aviso" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0">${situacaoLeitura} ${btnAtualizar}</div>
+    ${tot.exp ? `<div class="stats">
+      <div class="stat tot"><div class="n">${tot.exp}</div><div class="l">experimentais · ${esc(rotulo)}</div></div>
+      <div class="stat"><div class="n" style="color:var(--teal-esc)">${tot.veio}</div><div class="l">vieram · presença ${fmtPct(taxa(tot.veio, tot.veio + tot.faltou))}</div></div>
+      <div class="stat ok"><div class="n">${tot.fechou}</div><div class="l">fecharam contrato</div></div>
+      <div class="stat"><div class="n" style="color:var(--coral-esc)">${fmtPct(taxa(tot.fechou, tot.veio))}</div><div class="l">conversão do Studio (de quem veio)</div></div>
+    </div>
+    <div class="sec-t">Por professora</div>
+    <div class="card">
+      ${lista.map(linhaProf).join('')}
+      <p class="quando" style="margin:10px 0 0">A barra é a <b>conversão</b>: de quem fez a aula com ela, quantas fecharam. Clique no nome para ver as alunas. Em cinza: menos de ${POUCAS} aulas no período — o % ainda muda muito com uma aluna a mais ou a menos.</p>
+    </div>
+    <div class="sec-t">Por horário da aula</div>
+    ${tabHoras}
+    <p class="quando" style="text-align:center">A conversão não depende só da professora: horário, quem atendeu na recepção e preço também pesam. Use o número para conversar, não para julgar. <b>Fechou</b> = “Nome do contrato” preenchido na agenda de experimentais do EVO, ou a aluna já tem a tag <b>${esc(tAluna)}</b>. Aulas canceladas não entram.</p>`
+    : `<div class="card"><div class="vazio">${lidos.length ? 'Nenhuma aula experimental registrada neste período.' : 'Ainda sem histórico. Clique em “Ler agora no EVO” ou espere a leitura desta noite.'}</div></div>`}
+    <style>
+      .pf-item{border-bottom:1px solid var(--linha-soft)}
+      .pf-item:last-of-type{border-bottom:0}
+      .pf-row{display:flex;align-items:center;gap:12px;padding:10px 0;cursor:pointer;list-style:none}
+      .pf-row::-webkit-details-marker{display:none}
+      .pf-nome{width:170px;flex:none;font-weight:700;color:var(--tinta);font-size:.9rem}
+      .pf-poucas{display:inline-block;font-size:.66rem;font-weight:700;color:var(--cinza);border:1px solid var(--linha);border-radius:999px;padding:1px 7px;margin-left:4px;vertical-align:middle}
+      .pf-nums{width:150px;flex:none;text-align:right;font-variant-numeric:tabular-nums;font-size:.86rem}
+      .pf-det{padding:0 0 12px 4px}
+      .pf-tab{width:100%;border-collapse:collapse;font-size:.86rem;font-variant-numeric:tabular-nums}
+      .pf-tab th{text-align:left;font-size:.74rem;color:var(--cinza);font-weight:700;padding:6px 8px;border-bottom:1px solid var(--linha)}
+      .pf-tab td{padding:7px 8px;border-bottom:1px solid var(--linha-soft)}
+      @media(max-width:600px){.pf-row{flex-wrap:wrap;row-gap:4px}.pf-nome{width:100%}.pf-nums{width:auto}}
+    </style>
+  </div>`;
+  return chrome({ tab: 'Professoras' }, 'professoras', corpo);
+}
+
 // ── Página: SoFIA → Custo IA ────────────────────────────────────────────────
 function paginaSofiaCusto(aviso, erro, params) {
   params = params || {};
@@ -7469,6 +7608,19 @@ const server = http.createServer((req, res) => {
     const sp = new URLSearchParams(req.url.split('?')[1] || '');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(paginaSofiaFunil({ per: sp.get('per') || '7', de: sp.get('de') || '', ate: sp.get('ate') || '', canal: sp.get('canal') || '' }));
+  }
+
+  // ── Indicadores → Professoras (permissão "professoras" — barrada acima) ──
+  if (req.method === 'GET' && url === '/professoras') {
+    const sp = new URLSearchParams(req.url.split('?')[1] || '');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(paginaProfessoras({ per: sp.get('per') || '30', de: sp.get('de') || '', ate: sp.get('ate') || '' }));
+  }
+  if (req.method === 'POST' && url === '/professoras/atualizar') {
+    // Pede ao robô (mesma pasta data/) para ler a agenda de experimentais agora.
+    try { fs.writeFileSync(path.resolve(__dirname, '..', 'data', 'rodar-job.json'), JSON.stringify({ job: 'historicoExperimentais' })); histExp.setStatus({ estado: 'executando', inicio: Date.now(), msg: '' }); } catch (_) {}
+    try { auditoria.registrar(sess.usuario, 'professoras.ler-evo', '', ''); } catch (_) {}
+    res.writeHead(303, { Location: '/professoras' }); return res.end();
   }
 
   // ── Formulários de campanha (permissão "formularios" — barrada acima) ──
