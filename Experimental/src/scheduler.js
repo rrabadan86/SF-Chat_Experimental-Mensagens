@@ -800,6 +800,15 @@ async function main() {
 
   log('Scheduler iniciando...');
 
+  // Perfis temporários de navegador que sobram dos jobs do EVO ocupam a RAM
+  // (/tmp é tmpfs; com o Chromium do snap ninguém os apagava). Limpa no boot e a
+  // cada 30 min — só os parados há 30+ min e que nenhum navegador aberto usa.
+  const { limparPerfisTemp } = require('./limpar-perfis-temp');
+  const limpar = () => { try { limparPerfisTemp(log); } catch (_) {} };
+  limpar();
+  const tLimpa = setInterval(limpar, 30 * 60 * 1000);
+  if (tLimpa.unref) tLimpa.unref();
+
   // ─── Impedir suspensão/hibernação do Windows ──────────────
   keepAwake.enable();
 
