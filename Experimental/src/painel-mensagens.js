@@ -394,6 +394,7 @@ function telaDaUrl(u) {
   if (u === '/perfis' || u.startsWith('/perfis/')) return 'perfis';
   if (u === '/saude') return 'saude'; // liberável por usuário (checkbox em Perfis) — a checagem genérica cobre
   if (u === '/grade' || u.startsWith('/grade/')) return 'grade'; // idem (checkbox em Perfis)
+  if (u === '/funil') return 'funil'; // Indicadores → Funil (checkbox em Perfis; quem via pela SoFIA Conversas continua vendo)
   if (u === '/clube' || u.startsWith('/clube/')) return 'slimclub'; // validação do Slim Club (checkbox em Perfis)
   if (u === '/formularios' || u.startsWith('/formularios/')) return 'formularios'; // formulários de campanha (checkbox em Perfis)
   return 'msg';
@@ -447,10 +448,12 @@ function primeiraTela(sess) {
   if (sess.admin) return '/hoje';
   if (temMsg(sess)) return msgHref(sess);
   if (sess.telas.includes('ind')) return '/indicadores';
-  if (sess.telas.includes('ig')) return '/instagram';
+  if (IG_NO_PAINEL && sess.telas.includes('ig')) return '/instagram';
   if (temSofia(sess)) return sofiaHref(sess);
   if (sess.telas.includes('slimclub')) return '/clube';
   if (sess.telas.includes('formularios')) return '/formularios';
+  if (podeFunil(sess)) return '/funil';
+  if (sess.telas.includes('grade')) return '/grade';
   return '';
 }
 
@@ -839,6 +842,8 @@ const ESTILO = `
 `;
 
 // Menu de abas, mostrando só as telas que o usuário logado pode ver (+ Perfis p/ admin).
+// A aba Instagram fica escondida (o Studio não usa). Volta com PAINEL_INSTAGRAM=1 no .env.
+const IG_NO_PAINEL = /^(1|true|sim|on)$/i.test(String(process.env.PAINEL_INSTAGRAM || '').trim());
 function navTabs(ativo) {
   const sess = _navSess || { admin: true, telas: usuarios.TELAS_KEYS };
   const pode = k => sess.admin || (sess.telas || []).includes(k);
@@ -850,9 +855,10 @@ function navTabs(ativo) {
   // Formulário = Agendamento (indicadores) + Campanhas (formulários editáveis), cada um com permissão própria.
   let html = pode('ind') ? item('ind', '/indicadores', '📈', 'Formulário') : pode('formularios') ? cel('/formularios', ativo === 'ind', '📈', 'Formulário', 'ind') : '';
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp', 'msg');
-  html += item('ig', '/instagram', '📸', 'Instagram');
+  if (IG_NO_PAINEL) html += item('ig', '/instagram', '📸', 'Instagram');
   if (sess.admin) html += cel('/perfis', ativo === 'perfis', '👤', 'Perfis', 'perfis');
-  html += item('grade', '/grade', '📋', 'Grade');
+  // Indicadores = Funil + Grade, cada um com a sua permissão. Abre no primeiro permitido.
+  if (podeFunil(sess) || pode('grade')) html += cel(podeFunil(sess) ? '/funil' : '/grade', ativo === 'grade' || ativo === 'funil', '📊', 'Indicadores', 'grade');
   if (sess.admin || (sess.telas || []).includes('saude')) html += cel('/saude', ativo === 'saude', '🩺', 'Saúde', 'saude');
   if (pode('slimclub')) { // número = o que espera a recepção (cadastros, alterações, reclamações)
     const n = slimclub.pendenciasRecepcao();
@@ -2408,6 +2414,17 @@ function blocoSofiaWa() {
 }
 
 // Sub-navegação da aba Sofia: Configuração (prompt/configs) x Conversas (inbox).
+// Indicadores (menu de cima) = Funil + Grade. O Funil tem permissão própria
+// ('funil'); quem já via o Funil pela SoFIA (Conversas) continua vendo.
+function podeFunil(sess) { return !!(sess && (sess.admin || (sess.telas || []).includes('funil') || (sess.telas || []).includes('sofia_conversas'))); }
+function subnavIndicadores(view) {
+  const sess = _navSess || { admin: true, telas: [] };
+  const pode = k => sess.admin || (sess.telas || []).includes(k);
+  let its = '';
+  if (podeFunil(sess)) its += `<a href="/funil"${view === 'funil' ? ' class="on"' : ''}>Funil</a>`;
+  if (pode('grade')) its += `<a href="/grade"${view === 'grade' ? ' class="on"' : ''}>Grade</a>`;
+  return its ? `<div class="subtabs">${its}</div>` : '';
+}
 function subnavSofia(view) {
   const item = (v, rot) => `<a href="/sofia${v === 'config' ? '' : '?view=' + v}"${view === v ? ' class="on"' : ''}>${rot}</a>`;
   const sess = _navSess || { admin: true, telas: [] };
@@ -2417,7 +2434,6 @@ function subnavSofia(view) {
   if (podeSofiaSub(sess, 'contatos')) its += item('contatos', 'Contatos');
   if (podeSofiaSub(sess, 'contatos')) its += item('tags', 'Tags');
   if (podeSofiaSub(sess, 'campanhas')) its += item('campanhas', 'Campanhas');
-  if (podeSofiaSub(sess, 'conversas')) its += item('funil', 'Funil');
   if (podeSofiaSub(sess, 'config')) its += item('cobranca', 'Cobrança');
   if (podeSofiaSub(sess, 'config')) its += item('custo', 'Custo IA');
   return `<div class="subtabs">${its}</div>`;
@@ -5150,6 +5166,7 @@ function paginaGrade(off) {
   }
 
   const corpoWrap = `<div class="wrap">
+    ${subnavIndicadores('grade')}
     <style>
     .gr-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin:4px 0 2px}
     .gr-btns{display:flex;gap:8px;flex-wrap:wrap}
@@ -5589,7 +5606,7 @@ function paginaPerfis(aviso, erro, view) {
     marcadas = (marcadas || []);
     // Compat: quem tinha a permissão antiga "msg_agendar" já aparece com a tela unificada marcada.
     if (marcadas.includes('msg_agendar') && !marcadas.includes('msg_express')) marcadas = marcadas.concat('msg_express');
-    const soltas = usuarios.TELAS.filter(t => !t.grupo);
+    const soltas = usuarios.TELAS.filter(t => !t.grupo && (t.key !== 'ig' || IG_NO_PAINEL)); // Instagram escondido → sem a opção
     const grupos = {};
     for (const t of usuarios.TELAS) if (t.grupo) (grupos[t.grupo] = grupos[t.grupo] || []).push(t);
     const linha = `<div style="display:flex;flex-wrap:wrap;gap:6px 18px">${soltas.map(t => umChk(t, marcadas, prefixo)).join('')}</div>`;
@@ -5928,9 +5945,9 @@ function paginaSofiaFunil(params) {
   const barra = (rot, n, max, cor, filtro, extra) => `<div style="display:flex;align-items:center;gap:10px;margin:9px 0${filtro ? ';cursor:pointer' : ''}" class="fu-row${filtro ? ` fu-bar fu-pop-alvo" data-filtro="${filtro}" onclick="fuFiltrar('${filtro}')` : ''}"><span class="fu-rot" style="width:150px;flex:none;color:var(--tinta);font-weight:600;font-size:.86rem">${rot}</span>${barraTrilho(n, max, cor, extra)}<span style="width:44px;flex:none;text-align:right;font-weight:700;color:var(--tinta)">${n}</span></div>`;
   const qCanal = canalSel === 'todos' ? '' : `&canal=${canalSel}`;
   const qPer = custom ? `&de=${encodeURIComponent(params.de || '')}&ate=${encodeURIComponent(params.ate || '')}` : `&per=${per}`;
-  const segs = janelas.map(([v, l]) => `<a href="/sofia?view=funil&per=${v}${qCanal}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
+  const segs = janelas.map(([v, l]) => `<a href="/funil?per=${v}${qCanal}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
   const CANAIS_ROT = [['todos', 'Todos', todosAg.length], ['sofia', '🤖 SoFIA', porCanal.sofia], ['formulario', '📲 Formulário', porCanal.formulario], ['express', '🏪 Express', porCanal.express]];
-  const segsCanal = CANAIS_ROT.map(([v, l, n]) => `<a href="/sofia?view=funil${qPer}${v === 'todos' ? '' : '&canal=' + v}" class="${canalSel === v ? 'on' : ''}">${l} <span style="opacity:.75">(${n})</span></a>`).join('');
+  const segsCanal = CANAIS_ROT.map(([v, l, n]) => `<a href="/funil?${qPer.slice(1)}${v === 'todos' ? '' : '&canal=' + v}" class="${canalSel === v ? 'on' : ''}">${l} <span style="opacity:.75">(${n})</span></a>`).join('');
   const rotSel = { todos: 'todos os canais', sofia: 'SoFIA', formulario: 'Formulário', express: 'Cadastro Express' }[canalSel];
   // Lista de quem agendou no período (com canal) + os Express que ficaram de fora —
   // ajuda a conferir quem contou e por quê.
@@ -5941,18 +5958,18 @@ function paginaSofiaFunil(params) {
     + (detAg.length ? `<div style="margin-top:8px">${detAg.sort((a, b) => b.em - a.em).map(linhaDet).join('')}</div>` : '<p class="quando" style="margin:8px 0 0">Ninguém agendou neste período.</p>')
     + `</details>` : '';
   const corpo = `<div class="wrap">
-    ${subnavSofia('funil')}
+    ${subnavIndicadores('funil')}
     <div class="sec-t">Funil de agendamentos <small style="font-weight:600;color:var(--cinza)">(SoFIA, Formulário e Cadastro Express)</small></div>
     <div class="segs">${segs}</div>
     <div class="segs" style="margin-top:6px">${segsCanal}</div>
-    <form method="GET" action="/sofia" class="filtro-datas" style="flex-wrap:wrap">
-      <input type="hidden" name="view" value="funil">${canalSel === 'todos' ? '' : `<input type="hidden" name="canal" value="${canalSel}">`}
+    <form method="GET" action="/funil" class="filtro-datas" style="flex-wrap:wrap">
+      ${canalSel === 'todos' ? '' : `<input type="hidden" name="canal" value="${canalSel}">`}
       <span class="filtro-lbl" style="align-self:center">Período personalizado</span>
       <input type="date" name="de" value="${esc(params.de || '')}">
       <span class="ate">até</span>
       <input type="date" name="ate" value="${esc(params.ate || '')}">
       <button class="save" type="submit" style="padding:8px 18px;font-size:.82rem">Aplicar</button>
-      ${custom ? `<a href="/sofia?view=funil&per=7${qCanal}" class="reset filtro-limpar" style="text-decoration:none">🧹</a>` : ''}
+      ${custom ? `<a href="/funil?per=7${qCanal}" class="reset filtro-limpar" style="text-decoration:none">🧹</a>` : ''}
     </form>
     <div class="stats">
       ${canalSel === 'sofia' ? `<div class="stat tot"><div class="n">${convs}</div><div class="l">conversas · ${esc(rotulo)}</div></div>
@@ -6018,7 +6035,7 @@ function paginaSofiaFunil(params) {
     </script>
     <p class="quando" style="text-align:center">Conta quem agendou <b>dentro do período</b> (pela data do agendamento), por canal: <b>SoFIA</b> (conversa no WhatsApp), <b>Formulário</b> (link de agendamento) e <b>Cadastro Express</b> (feito pela recepção). No filtro SoFIA, a base são as <b>conversas reais</b> (a pessoa escreveu). <b>Fez a aula</b> vem da “Presença da experimental” (lê o EVO e troca a tag) e <b>fechou contrato</b> = ganhou a tag <b>${esc(tAluna)}</b> (aluna com contrato ativo no EVO).</p>
   </div>`;
-  return chrome({ tab: 'Funil', h1: 'SoFIA', p: 'Funil — conversas que viraram agendamento.' }, 'sofia', corpo);
+  return chrome({ tab: 'Funil' }, 'funil', corpo);
 }
 
 // ── Página: SoFIA → Custo IA ────────────────────────────────────────────────
@@ -6277,10 +6294,10 @@ function paginaSaude(list, extra = {}) {
   const corpo = `<div class="wrap">
     <div class="sec-t">Saúde do sistema</div>
     <p class="quando" style="margin:0 0 14px">Estado de cada parte da automação num lugar só. Atualiza a cada visita a esta página.</p>
-    <div class="sd-grid">${cardExp}${cardSof}${cardEvo}${cardIg}${cardForm}${cardServ}${cardLid}</div>
+    <div class="sd-grid">${cardExp}${cardSof}${cardEvo}${IG_NO_PAINEL ? cardIg : ''}${cardForm}${cardServ}${cardLid}</div>
     <p class="quando" style="text-align:center;margin-top:14px"><a href="/saude" style="color:var(--teal-esc);font-weight:600;text-decoration:none">↻ Atualizar</a></p>
   </div>`;
-  return chrome({ tab: 'Saúde', h1: 'Saúde', p: 'Estado de robô, SoFIA, painel, Instagram e formulário.' }, 'saude', corpo);
+  return chrome({ tab: 'Saúde', h1: 'Saúde', p: 'Estado de robô, SoFIA, painel e formulário.' }, 'saude', corpo);
 }
 
 // ── Slim Club ───────────────────────────────────────────────────────────────
@@ -7433,7 +7450,15 @@ const server = http.createServer((req, res) => {
       else if (!msgRotaPermitida(sess, url, req.url)) return negarAcesso(res, sess);
     }
   }
+  else if (tela === 'funil') { if (!podeFunil(sess)) return negarAcesso(res, sess); }
   else if (tela && !sess.admin && !(sess.telas || []).includes(tela)) return negarAcesso(res, sess);
+
+  // ── Indicadores → Funil (permissão "funil" — barrada acima) ──
+  if (req.method === 'GET' && url === '/funil') {
+    const sp = new URLSearchParams(req.url.split('?')[1] || '');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(paginaSofiaFunil({ per: sp.get('per') || '7', de: sp.get('de') || '', ate: sp.get('ate') || '', canal: sp.get('canal') || '' }));
+  }
 
   // ── Formulários de campanha (permissão "formularios" — barrada acima) ──
   if (tela === 'formularios') return rotaFormulariosPainel(req, res, url, sess);
@@ -7917,6 +7942,8 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)okc=ok/.test(q)) aviso = '✔️ Feito.';
     else if (/(?:^|&)errc=/.test(q)) { aviso = decodeURIComponent((q.match(/errc=([^&]*)/) || [])[1] || 'Erro na campanha.'); erro = true; }
     const sp = new URLSearchParams(q);
+    // Endereço antigo do Funil (SoFIA → Funil) → Indicadores → Funil, mantendo os filtros.
+    if (sp.get('view') === 'funil') { sp.delete('view'); res.writeHead(302, { Location: '/funil' + (sp.toString() ? '?' + sp.toString() : '') }); return res.end(); }
     // Só renderiza a sub-aba que o usuário pode ver; se pediu uma sem acesso,
     // cai na primeira permitida (config → conversas → contatos).
     let view = sp.get('view') || 'config';
@@ -7928,7 +7955,6 @@ const server = http.createServer((req, res) => {
     if (view === 'tags') return res.end(paginaSofiaTags(aviso, erro));
     if (view === 'conversas') return res.end(paginaSofiaConversas(aviso, erro, (sess && sess.usuario) ? sess.usuario : ''));
     if (view === 'campanhas') return res.end(paginaSofiaCampanhas(aviso, erro));
-    if (view === 'funil') return res.end(paginaSofiaFunil({ per: sp.get('per') || '7', de: sp.get('de') || '', ate: sp.get('ate') || '', canal: sp.get('canal') || '' }));
     if (view === 'cobranca') return res.end(paginaCobranca(aviso, erro));
     if (view === 'custo') return res.end(paginaSofiaCusto(aviso, erro, { per: sp.get('per') || '7', de: sp.get('de') || '', ate: sp.get('ate') || '' }));
     return res.end(paginaSofia(aviso, erro));
