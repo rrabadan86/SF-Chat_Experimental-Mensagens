@@ -1466,7 +1466,7 @@ function avisarRecepcao(telefoneAluna: string, motivo: string) {
       ? "pediu remarcação, mas não há reposição disponível"
       : `pediu remarcação (${motivo})`;
     const aviso = `🎓 *Aluna precisa de atendimento*\n\nContato: ${tel}\nMotivo: ${porque}.\n\nEla foi avisada de que a recepção entrará em contato.`;
-    fs.appendFileSync(AVISOS_OUT_FILE, JSON.stringify({ numero: cfg.recepcaoNumero, texto: aviso, em: Date.now() }) + "\n");
+    fs.appendFileSync(AVISOS_OUT_FILE, JSON.stringify({ numero: cfg.recepcaoNumero, texto: aviso, em: Date.now(), sobre: tel, motivo: "remarcacao" }) + "\n"); // sobre = de qual aluna (marca na conversa dela)
     console.log(`🎓 aviso de aluna enfileirado para ${cfg.recepcaoNumero} (contato ${tel}).`);
   } catch (e: any) { console.log("⚠️  avisarRecepcao falhou:", e?.message ?? e); }
 }

@@ -97,4 +97,4 @@ function resumoHoje(dia) {
 
 function listarHoje(dia, limite = 120) { return doDia(dia).slice(-limite).reverse(); }
 
-module.exports = { setContexto, contextoAtual, registrar, resumoHoje, listarHoje, doDia, hojeSP, ARQUIVO, ARQUIVO_SOFIA };
+module.exports = { setContexto, contextoAtual, registrar, resumoHoje, listarHoje, doDia, hojeSP, carregarSofia, ARQUIVO, ARQUIVO_SOFIA };

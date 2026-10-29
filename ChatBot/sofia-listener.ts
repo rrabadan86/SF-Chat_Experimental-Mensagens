@@ -1660,17 +1660,24 @@ const CONTEXTO_COBRANCA: Record<string, string> = {
   recorrente: "Cobrança — recorrente", boleto: "Cobrança — boleto", saldo: "Cobrança — saldo devedor", teste: "Cobrança — teste",
 };
 function registrarAtividadeCobranca(ent: any, telefone: string, texto: string, ok: boolean, erro?: string) {
+  registrarAtividadeSofia(CONTEXTO_COBRANCA[String(ent?.tipo || "")] || "Cobrança", telefone, texto, ok, erro);
+}
+// Uma linha no Log do painel (data/atividade-sofia.jsonl) para cada envio da
+// SoFIA que não é conversa: cobranças e avisos para a recepção. `extra` vai junto
+// (ex.: sobre = de qual aluna era o aviso, para marcar na conversa dela).
+function registrarAtividadeSofia(contexto: string, telefone: string, texto: string, ok: boolean, erro?: string, extra?: Record<string, any>) {
   try {
     const agora = new Date();
     const linha = {
       data: agora.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }),
       ts: agora.toISOString(),
       quando: agora.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }),
-      contexto: CONTEXTO_COBRANCA[String(ent?.tipo || "")] || "Cobrança",
+      contexto,
       destino: telefone, grupo: false, midia: false, ok,
       erro: erro ? String(erro).slice(0, 160) : "",
       preview: texto.replace(/\s+/g, " ").trim().slice(0, 80),
       texto: texto.trim().slice(0, 2000),
+      ...(extra || {}),
     };
     fs.appendFileSync(ATIVIDADE_SOFIA, JSON.stringify(linha) + "\n", "utf8");
     // não deixa o arquivo crescer para sempre: guarda as últimas ~1000 linhas
@@ -1795,10 +1802,12 @@ setInterval(limparFotosAntigas, 6 * 3600 * 1000); // a cada 6 h
 setTimeout(limparFotosAntigas, 30000);            // uma vez no boot
 
 // ── Avisos internos (painel → um número seu) ────────────────────────────────
-//    O painel enfileira em sofia-avisos.jsonl {numero, texto, em} quando uma
-//    automação de tag dispara (ex.: aluna agendou aula experimental). Aqui só
-//    entregamos por WhatsApp ao número configurado — SEM registrar como conversa
-//    nem assumir nada (é um recado de sistema, não um atendimento).
+//    O painel enfileira em sofia-avisos.jsonl {numero, texto, em, sobre?, tag?, motivo?}
+//    quando uma automação de tag dispara (ex.: aluna agendou aula experimental) e
+//    a SoFIA, quando uma aluna precisa da recepção. Aqui entregamos por WhatsApp ao
+//    número configurado — SEM virar conversa (é recado de sistema, não atendimento:
+//    como conversa, entraria nas automações e no follow-up). O resultado vai para o
+//    Log do painel e, com `sobre`, vira uma marca na conversa da aluna.
 const AVISOS_FILE = path.join(DIR, "sofia-avisos.jsonl");
 let processandoAvisos = false;
 async function processarAvisos() {
@@ -1815,8 +1824,14 @@ async function processarAvisos() {
     const numero = String(ent?.numero || "").replace(/\D/g, "");
     const texto = String(ent?.texto || "");
     if (!numero || !texto) continue;
-    try { const alvo = await resolverIdEnvio(numero); await enviar(alvo, texto); log(`aviso enviado para ${numero}.`); }
-    catch (e: any) { log(`falha ao enviar aviso para ${numero}: ${e?.message || e}`); }
+    const extra = { sobre: String(ent?.sobre || "").replace(/\D/g, ""), tag: String(ent?.tag || ""), motivo: String(ent?.motivo || "") };
+    try {
+      const alvo = await resolverIdEnvio(numero); await enviar(alvo, texto); log(`aviso enviado para ${numero}.`);
+      registrarAtividadeSofia("Aviso para a recepção", numero, texto, true, "", extra);
+    } catch (e: any) {
+      log(`falha ao enviar aviso para ${numero}: ${e?.message || e}`);
+      registrarAtividadeSofia("Aviso para a recepção", numero, texto, false, e?.message || String(e), extra);
+    }
   }
   processandoAvisos = false;
 }
