@@ -68,8 +68,8 @@ function runGradeFixas(motivo) {
 // tenta de novo (não pode logar no EVO em paralelo com outro job).
 function agendarCircuitoConvocacao(tentativa = 1) {
   if (jobRunning) {
-    if (tentativa > 6) {
-      logError('Circuito convocatória', new Error('scraper ocupado — desisti após esperar ~9 min'));
+    if (tentativa > 20) {
+      logError('Circuito convocatória', new Error('scraper ocupado — desisti após esperar ~30 min'));
       return;
     }
     log(`⏳ Circuito: outro job em execução — tento de novo em 90s (tentativa ${tentativa})`);
@@ -92,8 +92,8 @@ function agendarCircuitoConvocacao(tentativa = 1) {
 // usa o scraper e precisa respeitar o jobRunning, igual à convocatória.
 function agendarCircuitoLembrete(tentativa = 1) {
   if (jobRunning) {
-    if (tentativa > 6) {
-      logError('Circuito lembrete', new Error('scraper ocupado — desisti após esperar ~9 min'));
+    if (tentativa > 20) {
+      logError('Circuito lembrete', new Error('scraper ocupado — desisti após esperar ~30 min'));
       return;
     }
     log(`⏳ Circuito lembrete: outro job em execução — tento de novo em 90s (tentativa ${tentativa})`);
@@ -117,7 +117,7 @@ function agendarCircuitoLembrete(tentativa = 1) {
 // outro job estiver rodando, espera e tenta de novo (não loga no EVO em paralelo).
 function agendarInadimplentes(tentativa = 1, modo = 'regular') {
   if (jobRunning) {
-    if (tentativa > 6) { logError('Inadimplentes', new Error('scraper ocupado — desisti após ~9 min')); return; }
+    if (tentativa > 20) { logError('Inadimplentes', new Error('scraper ocupado — desisti após ~30 min')); return; }
     log(`⏳ Inadimplentes: outro job em execução — tento de novo em 90s (tentativa ${tentativa})`);
     setTimeout(() => agendarInadimplentes(tentativa + 1, modo), 90000);
     return;
@@ -139,7 +139,7 @@ function agendarInadimplentes(tentativa = 1, modo = 'regular') {
 // se outro job estiver rodando, espera e tenta de novo (não loga no EVO em paralelo).
 function agendarFreeAntecedencia(tentativa = 1) {
   if (jobRunning) {
-    if (tentativa > 6) { logError('Planos FREE (antecedência)', new Error('scraper ocupado — desisti após ~9 min')); return; }
+    if (tentativa > 20) { logError('Planos FREE (antecedência)', new Error('scraper ocupado — desisti após ~30 min')); return; }
     log(`⏳ Planos FREE: outro job em execução — tento de novo em 90s (tentativa ${tentativa})`);
     setTimeout(() => agendarFreeAntecedencia(tentativa + 1), 90000);
     return;
@@ -252,6 +252,28 @@ process.on('unhandledRejection', (reason) => {
 // ─── Job lock to prevent overlapping runs ──────────────────
 let jobRunning = false;
 
+// ─── Fila: job que encontra o robô ocupado ESPERA a vez ───────────────────
+// Antes, se outro job estava rodando, o novo era "ignorado" e só voltava no dia
+// seguinte (ex.: a Confirmação de HOJE das 08:32 pulada porque um job das 08:00
+// ainda rodava). Agora ele espera o robô ficar livre (até 40 min) e roda em
+// seguida. Se ainda assim não liberar, desiste com alerta e registro no Log.
+const ESPERA_VEZ_MAX_MS = 40 * 60 * 1000;
+async function esperarVez(nome) {
+  if (!jobRunning) { jobRunning = true; return true; }
+  const ini = Date.now();
+  log(`⏳ ${nome}: outro job em execução — espero a vez (até ${ESPERA_VEZ_MAX_MS / 60000} min) em vez de pular.`);
+  while (jobRunning) {
+    if (Date.now() - ini > ESPERA_VEZ_MAX_MS) {
+      logError(nome, new Error(`robô ocupado — esperei ${ESPERA_VEZ_MAX_MS / 60000} min e não liberou`));
+      return false;
+    }
+    await new Promise(r => setTimeout(r, 30000));
+  }
+  jobRunning = true;
+  log(`▶️  ${nome}: robô livre depois de ${Math.round((Date.now() - ini) / 60000)} min — rodando agora.`);
+  return true;
+}
+
 // ─── Nova tentativa quando o job falha por instabilidade ───────────────────
 // O EVO às vezes demora a abrir uma página ("Navigation timeout of 90000 ms
 // exceeded") ou o navegador cai no meio. Antes o job morria e só mandava o alerta.
@@ -299,13 +321,13 @@ async function comRetry(nome, fn, { antesDeEsperar, depoisDeEsperar } = {}) {
  * causava conflito: o init() do WhatsApp matava o Edge que o executor
  * do Instagram/Aniversariantes ia usar, e vice-versa.
  */
-async function runJob(jobName, jobFn, timeoutMs, { retry = true } = {}) {
-  if (jobRunning) {
+async function runJob(jobName, jobFn, timeoutMs, { retry = true, esperar = true } = {}) {
+  if (jobRunning && !esperar) {
     log(`⚠️  Job ${jobName} ignorado — outro job ainda está em execução`);
     return;
   }
+  if (!(await esperarVez(jobName))) return;
 
-  jobRunning = true;
   atividade.setContexto(jobName); // marca de quem são os envios deste job
   const startTime = new Date();
 
@@ -842,7 +864,7 @@ async function main() {
   }
 
   // Schedule: 08:30 seg-sáb → Aulas de hoje após 12h
-  cron.schedule(config.schedule.morning, () => {
+  cron.schedule(config.schedule.morning, async () => {
     log('⏰ Cron disparado: Job Manhã');
     if (!jobsAtivos.ativo('morning')) { log('⏸️  Confirmação HOJE desligada no painel — pulando'); return; }
     runJob('Manhã (hoje)', executeMorningJob).catch(err => {
@@ -854,7 +876,7 @@ async function main() {
   console.log('   → Busca aulas de hoje após 12h');
 
   // Schedule: 15:30 dom-sex → Aulas de amanhã até 11:30
-  cron.schedule(config.schedule.afternoon, () => {
+  cron.schedule(config.schedule.afternoon, async () => {
     log('⏰ Cron disparado: Job Tarde');
     if (!jobsAtivos.ativo('afternoon')) { log('⏸️  Confirmação AMANHÃ desligada no painel — pulando'); return; }
     runJob('Tarde (amanhã)', executeAfternoonJob).catch(err => {
@@ -866,11 +888,10 @@ async function main() {
   console.log('   → Busca aulas de amanhã até 11:30');
 
   // Schedule: 10:30 seg-sáb → Follow-up presença manhã (ontem antes das 12h)
-  cron.schedule(config.schedule.followupMorning, () => {
+  cron.schedule(config.schedule.followupMorning, async () => {
     log('⏰ Cron disparado: Follow-up Manhã');
     if (!jobsAtivos.ativo('followupMorning')) { log('⏸️  Follow-up Manhã desligado no painel — pulando'); return; }
-    if (jobRunning) { log('⚠️  Follow-up Manhã ignorado — outro job em execução'); return; }
-    jobRunning = true;
+    if (!(await esperarVez('Follow-up Manhã'))) return; // ocupado: espera a vez em vez de pular
     atividade.setContexto('Follow-up (manhã)');
     const start = new Date();
     comRetry('Follow-up Manhã', () => runFollowupMorning())
@@ -886,11 +907,10 @@ async function main() {
   console.log('   → Follow-up de ontem (aulas antes das 12h) com Presença');
 
   // Schedule: 16:00 seg-sáb → Follow-up presença tarde (ontem a partir das 12h)
-  cron.schedule(config.schedule.followupAfternoon, () => {
+  cron.schedule(config.schedule.followupAfternoon, async () => {
     log('⏰ Cron disparado: Follow-up Tarde');
     if (!jobsAtivos.ativo('followupAfternoon')) { log('⏸️  Follow-up Tarde desligado no painel — pulando'); return; }
-    if (jobRunning) { log('⚠️  Follow-up Tarde ignorado — outro job em execução'); return; }
-    jobRunning = true;
+    if (!(await esperarVez('Follow-up Tarde'))) return; // ocupado: espera a vez em vez de pular
     atividade.setContexto('Follow-up (tarde)');
     const start = new Date();
     comRetry('Follow-up Tarde', () => runFollowupAfternoon())
@@ -906,11 +926,10 @@ async function main() {
   console.log('   → Follow-up de ontem (aulas a partir das 12h) com Presença');
 
   // Schedule: 11:30 seg-sáb → Faltas (no-show) das aulas da MANHÃ
-  cron.schedule(config.schedule.noShowMorning, () => {
+  cron.schedule(config.schedule.noShowMorning, async () => {
     log('⏰ Cron disparado: Faltas (no-show) Manhã');
     if (!jobsAtivos.ativo('noShowMorning')) { log('⏸️  Faltas Manhã desligado no painel — pulando'); return; }
-    if (jobRunning) { log('⚠️  No-show Manhã ignorado — outro job em execução'); return; }
-    jobRunning = true;
+    if (!(await esperarVez('No-show Manhã'))) return; // ocupado: espera a vez em vez de pular
     atividade.setContexto('Faltas / no-show (manhã)');
     const start = new Date();
     comRetry('Faltas Manhã', () => runNoShowMorning())
@@ -926,11 +945,10 @@ async function main() {
   console.log('   → Faltas das aulas da manhã → convida a remarcar');
 
   // Schedule: 19:30 seg-sáb → Faltas (no-show) das aulas da TARDE/NOITE
-  cron.schedule(config.schedule.noShowAfternoon, () => {
+  cron.schedule(config.schedule.noShowAfternoon, async () => {
     log('⏰ Cron disparado: Faltas (no-show) Tarde/Noite');
     if (!jobsAtivos.ativo('noShowAfternoon')) { log('⏸️  Faltas Tarde/Noite desligado no painel — pulando'); return; }
-    if (jobRunning) { log('⚠️  No-show Tarde/Noite ignorado — outro job em execução'); return; }
-    jobRunning = true;
+    if (!(await esperarVez('No-show Tarde/Noite'))) return; // ocupado: espera a vez em vez de pular
     atividade.setContexto('Faltas / no-show (tarde)');
     const start = new Date();
     comRetry('Faltas Tarde/Noite', () => runNoShowAfternoon())
@@ -946,11 +964,10 @@ async function main() {
   console.log('   → Faltas da tarde/noite → convida a remarcar');
 
   // Schedule: 14:30 todos os dias → Renovação (avisa quem vence em exatos 7 dias)
-  cron.schedule(config.schedule.renewal, () => {
+  cron.schedule(config.schedule.renewal, async () => {
     log('⏰ Cron disparado: Renovação de contratos');
     if (!jobsAtivos.ativo('renewal')) { log('⏸️  Renovação desligada no painel — pulando'); return; }
-    if (jobRunning) { log('⚠️  Renovação ignorada — outro job em execução'); return; }
-    jobRunning = true;
+    if (!(await esperarVez('Renovação'))) return; // ocupado: espera a vez em vez de pular
     atividade.setContexto('Renovação de contrato');
     const start = new Date();
     comRetry('Renovação de contratos', () => require('./renovar-contratos').runRenovacao())
@@ -970,7 +987,7 @@ async function main() {
   if (!config.jobAtivo('circuito_convocacao')) {
     log('📅 Job CIRCUITO (convocatória) DESATIVADO nesta unidade (JOBS_OFF).');
   } else if (config.schedule.circuitoConvoca) {
-    cron.schedule(config.schedule.circuitoConvoca, () => {
+    cron.schedule(config.schedule.circuitoConvoca, async () => {
       log('⏰ Cron disparado: Circuito — convocatória');
       if (!jobsAtivos.ativo('circuitoConvoca')) { log('⏸️  Circuito convocatória desligado no painel — pulando'); return; }
       agendarCircuitoConvocacao();
@@ -985,7 +1002,7 @@ async function main() {
   if (!config.jobAtivo('circuito_lembrete')) {
     log('📅 Job CIRCUITO (lembrete) DESATIVADO nesta unidade (JOBS_OFF).');
   } else if (config.schedule.circuitoLembrete) {
-    cron.schedule(config.schedule.circuitoLembrete, () => {
+    cron.schedule(config.schedule.circuitoLembrete, async () => {
       log('⏰ Cron disparado: Circuito — lembrete');
       if (!jobsAtivos.ativo('circuitoLembrete')) { log('⏸️  Circuito lembrete desligado no painel — pulando'); return; }
       agendarCircuitoLembrete();
@@ -1000,8 +1017,7 @@ async function main() {
   if (config.schedule.comparecimento) {
     const comparecimentoRunner = async () => {
       log('⏰ Cron disparado: Presença da experimental (troca de tags)');
-      if (jobRunning) { log('⚠️  Comparecimento ignorado — outro job em execução'); return; }
-      jobRunning = true;
+      if (!(await esperarVez('Comparecimento'))) return; // ocupado: espera a vez em vez de pular
       atividade.setContexto('Presença da experimental (tags)');
       try {
         const comp = require('./comparecimento');
@@ -1026,11 +1042,10 @@ async function main() {
   // Schedule: 10:45 (manhã) e 15:45 (tarde) → dispara os ENVIOS AGENDADOS no
   // painel para o dia+turno atual (texto ou foto com legenda).
   function agendarEnvios(turno, label) {
-    cron.schedule(turno === 'manha' ? config.schedule.agendadosManha : config.schedule.agendadosTarde, () => {
+    cron.schedule(turno === 'manha' ? config.schedule.agendadosManha : config.schedule.agendadosTarde, async () => {
       log(`⏰ Cron disparado: Envios agendados — ${turno}`);
       if (!jobsAtivos.ativo(turno === 'manha' ? 'agendadosManha' : 'agendadosTarde')) { log(`⏸️  Envios agendados (${turno}) desligado no painel — pulando`); return; }
-      if (jobRunning) { log(`⚠️  Agendados (${turno}) ignorado — outro job em execução`); return; }
-      jobRunning = true;
+      if (!(await esperarVez(`Agendados (${turno})`))) return; // ocupado: espera a vez em vez de pular
       atividade.setContexto('Envio agendado (painel)');
       const start = new Date();
       comRetry(`Envios agendados (${turno})`, () => require('./enviar-agendados').runAgendados(turno))
@@ -1052,7 +1067,7 @@ async function main() {
   } else {
     // Cobrança "regular": recorrente (cartão) + boleto VENCIDO — NÃO inclui a "boleto vence hoje".
     if (config.schedule.inadimplentes) {
-      cron.schedule(config.schedule.inadimplentes, () => {
+      cron.schedule(config.schedule.inadimplentes, async () => {
         log('⏰ Cron disparado: Cobrança (recorrente + boleto vencido)');
         if (!jobsAtivos.ativo('inadimplentes')) { log('⏸️  Cobrança desligada no painel — pulando'); return; }
         agendarInadimplentes(1, 'regular');
@@ -1062,7 +1077,7 @@ async function main() {
     }
     // Cobrança "boleto vence HOJE": horário/dias PRÓPRIOS (independentes), editáveis no painel.
     if (config.schedule.inadimplentesHoje) {
-      cron.schedule(config.schedule.inadimplentesHoje, () => {
+      cron.schedule(config.schedule.inadimplentesHoje, async () => {
         log('⏰ Cron disparado: Cobrança — boleto vence hoje');
         if (!jobsAtivos.ativo('inadimplentes')) { log('⏸️  Cobrança desligada no painel — pulando'); return; }
         agendarInadimplentes(1, 'hoje');
@@ -1086,7 +1101,7 @@ async function main() {
     // start, mudar N no painel passa a exigir reiniciar o scheduler.
     const horasFree = require('./free-antecedencia-config').lerHoras();
     const cronFree = `2 */${horasFree} * * *`;
-    cron.schedule(cronFree, () => {
+    cron.schedule(cronFree, async () => {
       if (!jobsAtivos.ativo('freeAntecedencia')) return;  // desligado no painel
       log(`⏰ Planos FREE: disparo agendado (${cronFree})`);
       agendarFreeAntecedencia();
@@ -1134,12 +1149,11 @@ async function main() {
   // Sempre agenda; liga/desliga é decidido NO DISPARO por instagram-config
   // (data/instagram-config.json, controlado no painel) ou pelo .env IG_ENABLED.
   // Assim o Studio religa/pausa pelo painel sem reiniciar o robô.
-  cron.schedule(config.schedule.instagram, () => {
+  cron.schedule(config.schedule.instagram, async () => {
     if (!igcfg.ligado()) { log('⏸️  Instagram DESLIGADO (painel/.env) — pulando o disparo de hoje'); return; }
     if (!jobsAtivos.ativo('instagram')) { log('⏸️  Instagram desligado no painel (envio) — pulando'); return; }
     log('⏰ Cron disparado: Instagram boas-vindas');
-    if (jobRunning) { log('⚠️  Instagram ignorado — outro job em execução'); return; }
-    jobRunning = true;
+    if (!(await esperarVez('Instagram'))) return; // ocupado: espera a vez em vez de pular
     atividade.setContexto('Instagram (boas-vindas)');
     const start = new Date();
     comRetry('Instagram boas-vindas', () => require('./instagram-boasvindas').runBoasVindas())
@@ -1154,11 +1168,10 @@ async function main() {
   console.log('   → Boas-vindas a novos seguidores (perfil logado no Instagram)');
 
   // Schedule: 08:00 todos os dias → Parabéns às aniversariantes nos grupos
-  cron.schedule(config.schedule.aniversariantes, () => {
+  cron.schedule(config.schedule.aniversariantes, async () => {
     log('⏰ Cron disparado: Aniversariantes');
     if (!jobsAtivos.ativo('aniversariantes')) { log('⏸️  Aniversariantes desligado no painel — pulando'); return; }
-    if (jobRunning) { log('⚠️  Aniversariantes ignorado — outro job em execução'); return; }
-    jobRunning = true;
+    if (!(await esperarVez('Aniversariantes'))) return; // ocupado: espera a vez em vez de pular
     atividade.setContexto('Aniversário (grupos)');
     const start = new Date();
     comRetry('Aniversariantes', () => require('./aniversariantes').runAniversariantes())
@@ -1174,11 +1187,10 @@ async function main() {
   console.log('   → Parabéns nos grupos em comum (perfil SlimFit)');
 
   // Schedule: 08:03 todos os dias → Parabéns DIRETO para EX-ALUNAS (reativação)
-  cron.schedule(config.schedule.aniversarioEx, () => {
+  cron.schedule(config.schedule.aniversarioEx, async () => {
     log('⏰ Cron disparado: Aniversário ex-alunas');
     if (!jobsAtivos.ativo('aniversarioEx')) { log('⏸️  Aniversário ex-alunas desligado no painel — pulando'); return; }
-    if (jobRunning) { log('⚠️  Aniversário ex-alunas ignorado — outro job em execução'); return; }
-    jobRunning = true;
+    if (!(await esperarVez('Aniversário ex-alunas'))) return; // ocupado: espera a vez em vez de pular
     atividade.setContexto('Aniversário ex-alunas');
     const start = new Date();
     comRetry('Aniversário ex-alunas', () => require('./aniversario-ex').runAniversarioEx())
@@ -1194,11 +1206,10 @@ async function main() {
   console.log('   → Parabéns direto no WhatsApp de quem já foi aluna (EVO status "Inativos")');
 
   // Schedule: 06:30 segunda → Planilha Google de alunas ativas + aniversários
-  cron.schedule(config.schedule.planilhaAniv, () => {
+  cron.schedule(config.schedule.planilhaAniv, async () => {
     log('⏰ Cron disparado: Planilha de aniversários');
     if (!jobsAtivos.ativo('planilhaAniv')) { log('⏸️  Planilha desligada no painel — pulando'); return; }
-    if (jobRunning) { log('⚠️  Planilha ignorada — outro job em execução'); return; }
-    jobRunning = true;
+    if (!(await esperarVez('Planilha'))) return; // ocupado: espera a vez em vez de pular
     const start = new Date();
     comRetry('Planilha de aniversários', () => require('./planilha-aniversarios').runPlanilhaAniversarios())
       .then(() => log('✅ Planilha de aniversários concluída'))
@@ -1213,11 +1224,10 @@ async function main() {
   console.log('   → Alunas ativas + aniversários → Google Sheets (preserva sua coluna)');
 
   // Schedule: 05:30 todo dia 01 → Lista de aniversariantes do mês no grupo da equipe
-  cron.schedule(config.schedule.aniversMesGrupo, () => {
+  cron.schedule(config.schedule.aniversMesGrupo, async () => {
     log('⏰ Cron disparado: Aniversariantes do mês (grupo da equipe)');
     if (!jobsAtivos.ativo('aniversMesGrupo')) { log('⏸️  Aniversariantes do mês desligado no painel — pulando'); return; }
-    if (jobRunning) { log('⚠️  Aniversariantes-mês ignorado — outro job em execução'); return; }
-    jobRunning = true;
+    if (!(await esperarVez('Aniversariantes-mês'))) return; // ocupado: espera a vez em vez de pular
     const start = new Date();
     comRetry('Aniversariantes do mês (grupo)', () => require('./aniversariantes-mes-grupo').runEquipeAniversariantesMes())
       .then(() => log('✅ Aniversariantes do mês (grupo) concluído'))
@@ -1232,11 +1242,10 @@ async function main() {
   console.log('   → Lista de aniversariantes do mês no grupo "SlimFit Equipe" (perfil das confirmações)');
 
   // Schedule: 09:07 todo dia 28 → Contratos a vencer no MÊS SEGUINTE no grupo da equipe
-  cron.schedule(config.schedule.renovacoesMesGrupo, () => {
+  cron.schedule(config.schedule.renovacoesMesGrupo, async () => {
     log('⏰ Cron disparado: Contratos a vencer no mês (grupo da equipe)');
     if (!jobsAtivos.ativo('renovacoesMesGrupo')) { log('⏸️  Contratos a vencer no mês desligado no painel — pulando'); return; }
-    if (jobRunning) { log('⚠️  Renovações-mês ignorado — outro job em execução'); return; }
-    jobRunning = true;
+    if (!(await esperarVez('Renovações-mês'))) return; // ocupado: espera a vez em vez de pular
     const start = new Date();
     comRetry('Contratos a vencer no mês (grupo)', () => require('./renovacoes-mes-grupo').runRenovacoesMesGrupo())
       .then(() => log('✅ Contratos a vencer no mês (grupo) concluído'))
@@ -1254,11 +1263,10 @@ async function main() {
   if (!config.jobAtivo('presentes')) {
     log('📅 Job PRESENTES DESATIVADO nesta unidade (JOBS_OFF).');
   } else {
-    cron.schedule(config.schedule.presentesPend, () => {
+    cron.schedule(config.schedule.presentesPend, async () => {
       log('⏰ Cron disparado: Presentes pendentes (grupo da equipe)');
       if (!jobsAtivos.ativo('presentesPend')) { log('⏸️  Presentes pendentes desligado no painel — pulando'); return; }
-      if (jobRunning) { log('⚠️  Presentes pendentes ignorado — outro job em execução'); return; }
-      jobRunning = true;
+      if (!(await esperarVez('Presentes pendentes'))) return; // ocupado: espera a vez em vez de pular
       const start = new Date();
       comRetry('Presentes pendentes', () => require('./presentes-pendentes-grupo').runPresentesPendentes())
         .then(() => log('✅ Presentes pendentes concluído'))
@@ -1274,11 +1282,10 @@ async function main() {
   }
 
   // Schedule: 16:30 toda sexta → Resumo da semana no grupo da equipe
-  cron.schedule(config.schedule.resumoSemana, () => {
+  cron.schedule(config.schedule.resumoSemana, async () => {
     log('⏰ Cron disparado: Resumo da semana');
     if (!jobsAtivos.ativo('resumoSemana')) { log('⏸️  Resumo da semana desligado no painel — pulando'); return; }
-    if (jobRunning) { log('⚠️  Resumo da semana ignorado — outro job em execução'); return; }
-    jobRunning = true;
+    if (!(await esperarVez('Resumo da semana'))) return; // ocupado: espera a vez em vez de pular
     const start = new Date();
     comRetry('Resumo da semana', () => require('./resumo-semana').runResumoSemana())
       .then(() => log('✅ Resumo da semana concluído'))
@@ -1293,11 +1300,10 @@ async function main() {
   console.log('   → Resumo da semana das experimentais no grupo "SlimFit Equipe"');
 
   // Schedule: 06:10 toda segunda → Alunas ausentes há 10+ dias no grupo da equipe
-  cron.schedule(config.schedule.ausentes10, () => {
+  cron.schedule(config.schedule.ausentes10, async () => {
     log('⏰ Cron disparado: Ausentes 10 dias');
     if (!jobsAtivos.ativo('ausentes10')) { log('⏸️  Ausentes 10 dias desligado no painel — pulando'); return; }
-    if (jobRunning) { log('⚠️  Ausentes 10 dias ignorado — outro job em execução'); return; }
-    jobRunning = true;
+    if (!(await esperarVez('Ausentes 10 dias'))) return; // ocupado: espera a vez em vez de pular
     const start = new Date();
     comRetry('Ausentes 10 dias', () => require('./ausentes-10-dias').runAusentes10Dias())
       .then(() => log('✅ Ausentes 10 dias concluído'))
@@ -1312,11 +1318,10 @@ async function main() {
   console.log('   → Alunas ativas ausentes há 10+ dias no grupo "SlimFit Equipe"');
 
   // Schedule: 19:45 todos os dias → Resumo do dia das experimentais no grupo
-  cron.schedule(config.schedule.resumoDia, () => {
+  cron.schedule(config.schedule.resumoDia, async () => {
     log('⏰ Cron disparado: Resumo do dia');
     if (!jobsAtivos.ativo('resumoDia')) { log('⏸️  Resumo do dia desligado no painel — pulando'); return; }
-    if (jobRunning) { log('⚠️  Resumo do dia ignorado — outro job em execução'); return; }
-    jobRunning = true;
+    if (!(await esperarVez('Resumo do dia'))) return; // ocupado: espera a vez em vez de pular
     const start = new Date();
     comRetry('Resumo do dia', () => require('./resumo-dia').runResumoDia())
       .then(() => log('✅ Resumo do dia concluído'))
@@ -1331,9 +1336,9 @@ async function main() {
   console.log('   → Reposições, experimentais (fizeram/faltaram) e fechamentos no grupo "SlimFit Equipe"');
 
   // A cada 15 min → envia as confirmações de aula experimental (fila ZEE/EVO + formulário)
-  cron.schedule('*/15 * * * *', () => {
+  cron.schedule('*/15 * * * *', async () => {
     log('⏰ Cron disparado: Confirmação Aula Experimental');
-    runJob('Confirmação Aula Experimental', executeExperimentalConfirmJob, undefined, { retry: false }).catch(err => { // roda a cada 15 min: a próxima rodada já é a nova tentativa
+    runJob('Confirmação Aula Experimental', executeExperimentalConfirmJob, undefined, { retry: false, esperar: false }).catch(err => { // roda a cada 15 min: a próxima rodada já é a nova tentativa
       logError('Falha crítica no job Confirmação Aula Experimental', err);
     });
   }, { timezone: 'America/Sao_Paulo' });
