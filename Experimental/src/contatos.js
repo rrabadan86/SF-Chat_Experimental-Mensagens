@@ -320,6 +320,8 @@ function adicionarTag(telefone, nome, tag, opts) {
   // WhatsApp). Com opts.forcarNome (ex.: sincronização com o EVO), o nome oficial
   // do EVO SOBREPÕE o da conversa.
   if (nome && (!c.nome || (opts && opts.forcarNome))) c.nome = String(nome).trim();
+  // Código do cliente no EVO (vem da sincronização de alunas) — o painel monta o link do perfil.
+  if (opts && opts.idEvo && /^\d+$/.test(String(opts.idEvo))) c.idEvo = String(opts.idEvo);
   tag = String(tag || '').trim();
   if (tag && !c.tags.includes(tag)) c.tags.push(tag);
   c.tags = tagsAposRegras(c.tags); // aplica transições (ex.: sai de "Contato inicial")

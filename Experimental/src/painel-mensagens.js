@@ -5824,9 +5824,11 @@ function paginaSofiaFunil(params) {
   const last8 = (k) => String(k).replace(/\D/g, '').slice(-8);
   const canalDe = (k) => String(canalMap[last8(k)] || '').trim();
   // Nome: usa o da conversa; se vier vazio, busca no CRM (tolerante ao 9º dígito).
+  // Nome: prefere o do CRM (quem vira aluna ganha o nome COMPLETO do EVO); se não
+  // houver, o da conversa (perfil do WhatsApp).
   const nomeDe = (k, c) => {
-    const n = (c && c.nome || '').trim(); if (n) return n;
     try { const r = contatos.acharPorTel(k, contatosMap); if (r && r.contato && r.contato.nome) return String(r.contato.nome).trim(); } catch (_) {}
+    const n = (c && c.nome || '').trim(); if (n) return n;
     return last8(k);
   };
   // Instante + CANAL do agendamento DENTRO do período. Lê o tagLog e pega a ÚLTIMA
@@ -5874,9 +5876,14 @@ function paginaSofiaFunil(params) {
   let compCfg = {}; try { compCfg = lerCompCfg(); } catch (_) {}
   let atCfg = {}; try { atCfg = autoTagAlunas.ler(); } catch (_) {}
   const tFez = String(compCfg.tagCompareceu || '').trim(), tFaltou = String(compCfg.tagFaltou || '').trim(), tAluna = String(atCfg.tagAluna || '0. Aluna').trim();
+  // Link do perfil da aluna no EVO (contratos) — o código vem da sincronização de alunas.
+  const EVO_LINK = (process.env.EVO_LINK_URL || 'https://evo5.w12app.com.br').replace(/\/+$/, '');
+  // Ficha da pessoa na aba Contatos (busca pelos 8 últimos dígitos: tolera o 9º dígito).
+  const linkContato = (tel) => tel ? '/sofia?view=contatos&q=' + last8(tel) : '';
+  const linkEvo = (id) => id ? `${EVO_LINK}/${config.evo.appBase}/clientes/cadastro/${id}//perfil` : '';
   const situacaoDe = (d) => {
     let tags = [];
-    try { const r = contatos.acharPorTel(d.tel, contatosMap); tags = (r && r.contato && r.contato.tags) || []; } catch (_) {}
+    try { const r = contatos.acharPorTel(d.tel, contatosMap); tags = (r && r.contato && r.contato.tags) || []; d.evo = linkEvo(r && r.contato && r.contato.idEvo); } catch (_) {}
     if (tAluna && tags.includes(tAluna)) return 'fechou';
     if (tFez && tags.includes(tFez)) return 'fez';
     if (tFaltou && tags.includes(tFaltou)) return 'faltou';
@@ -5895,14 +5902,15 @@ function paginaSofiaFunil(params) {
   const FU_ROT = { agendou: 'agendaram', fez: 'fizeram a aula', fechou: 'fecharam contrato', faltou: 'faltaram', aguardando: 'ainda aguardando' };
   const SIT = { fechou: ['💰 fechou contrato', 'var(--ok)'], fez: ['✅ fez a aula', 'var(--teal-esc)'], faltou: ['❌ faltou', 'var(--erro)'], aguardando: ['⏳ aguardando', 'var(--cinza)'] };
   // filtro (opcional): passar o mouse mostra os nomes; clicar abre a lista só com eles.
-  const nomesDe = (f) => { const l = detAg.filter(d => FU_FILTROS[f](d.sit)).map(d => d.nome); return l.length ? (l.slice(0, 30).join('\n') + (l.length > 30 ? `\n…e mais ${l.length - 30}` : '') + '\n\n(clique para ver na lista)') : 'Ninguém'; };
-  const fuNum = (n, f) => n ? `<a href="#fuDet" onclick="fuFiltrar('${f}');return false" title="${esc(nomesDe(f))}" style="font-weight:700;color:var(--teal-esc)">${n}</a>` : `<b>${n}</b>`;
-  const barra = (rot, n, max, cor, filtro) => `<div style="display:flex;align-items:center;gap:10px;margin:9px 0${filtro ? ';cursor:pointer' : ''}"${filtro ? ` class="fu-bar" data-filtro="${filtro}" title="${esc(nomesDe(filtro))}" onclick="fuFiltrar('${filtro}')"` : ''}><span style="width:150px;flex:none;color:var(--tinta);font-weight:600;font-size:.86rem">${rot}</span><span style="flex:1;height:26px;background:var(--linha-soft);border-radius:8px;overflow:hidden"><span style="display:block;height:100%;width:${(max && n > 0) ? Math.max(3, Math.round(n / max * 100)) : 0}%;background:${cor}"></span></span><span style="width:44px;flex:none;text-align:right;font-weight:700;color:var(--tinta)">${n}</span></div>`;
+  const FU_DADOS = {};
+  for (const f of Object.keys(FU_FILTROS)) FU_DADOS[f] = detAg.filter(d => FU_FILTROS[f](d.sit)).sort((a, b) => b.em - a.em).map(d => ({ n: d.nome, u: d.evo || '', c: linkContato(d.tel) }));
+  const fuNum = (n, f) => n ? `<a href="#fuDet" class="fu-pop-alvo" data-filtro="${f}" onclick="fuFiltrar('${f}');return false" style="font-weight:700;color:var(--teal-esc)">${n}</a>` : `<b>${n}</b>`;
+  const barra = (rot, n, max, cor, filtro) => `<div style="display:flex;align-items:center;gap:10px;margin:9px 0${filtro ? ';cursor:pointer' : ''}"${filtro ? ` class="fu-bar fu-pop-alvo" data-filtro="${filtro}" onclick="fuFiltrar('${filtro}')"` : ''}><span style="width:150px;flex:none;color:var(--tinta);font-weight:600;font-size:.86rem">${rot}</span><span style="flex:1;height:26px;background:var(--linha-soft);border-radius:8px;overflow:hidden"><span style="display:block;height:100%;width:${(max && n > 0) ? Math.max(3, Math.round(n / max * 100)) : 0}%;background:${cor}"></span></span><span style="width:44px;flex:none;text-align:right;font-weight:700;color:var(--tinta)">${n}</span></div>`;
   const segs = janelas.map(([v, l]) => `<a href="/sofia?view=funil&per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
   // Lista de quem agendou no período (com canal) + os Express que ficaram de fora —
   // ajuda a conferir quem contou e por quê.
   const fmtDtCurta = (ms) => { try { return new Date(Number(ms)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
-  const linhaDet = (d) => `<div${d.sit ? ` data-sit="${d.sit}"` : ''} style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--linha-soft);font-size:.82rem;flex-wrap:wrap"><span style="font-weight:600;color:var(--tinta)">${esc(d.nome)}${d.sit ? ` <span style="font-weight:700;font-size:.74rem;color:${SIT[d.sit][1]}">${SIT[d.sit][0]}</span>` : ''}</span><span class="quando" style="white-space:nowrap">${rotCanal(d.canal)} · ${esc(fmtDtCurta(d.em))}</span></div>`;
+  const linhaDet = (d) => `<div${d.sit ? ` data-sit="${d.sit}"` : ''} style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--linha-soft);font-size:.82rem;flex-wrap:wrap"><span style="font-weight:600;color:var(--tinta)">${d.tel ? `<a href="${esc(linkContato(d.tel))}" title="Abrir em Contatos" style="color:inherit">${esc(d.nome)}</a>` : esc(d.nome)}${d.sit ? ` <span style="font-weight:700;font-size:.74rem;color:${SIT[d.sit][1]}">${SIT[d.sit][0]}</span>` : ''}</span><span class="quando" style="white-space:nowrap">${d.evo ? `<a href="${esc(d.evo)}" target="_blank" rel="noopener" style="color:var(--teal-esc);font-weight:700;margin-right:8px">abrir no EVO ↗</a>` : ''}${rotCanal(d.canal)} · ${esc(fmtDtCurta(d.em))}</span></div>`;
   const detalheHtml = (detAg.length || detExp.length) ? `<details class="card" id="fuDet" style="padding:10px 15px;margin-top:10px"><summary style="cursor:pointer;font-weight:700">🔎 Quem agendou no período (${detAg.length})${detExp.length ? ` · ${detExp.length} fora da conta` : ''}</summary>`
     + `<div id="fuFiltroInfo" class="aviso" style="margin:8px 0 0;display:none"></div>`
     + (detAg.length ? `<div style="margin-top:8px">${detAg.sort((a, b) => b.em - a.em).map(linhaDet).join('')}</div>` : '<p class="quando" style="margin:8px 0 0">Ninguém agendou neste período.</p>')
@@ -5935,8 +5943,36 @@ function paginaSofiaFunil(params) {
       ${(!compCfg.on || !atCfg.on) ? `<p class="quando" style="margin:8px 0 0;color:var(--warn)">⚠️ ${!compCfg.on ? '“Presença da experimental” está desligada (SoFIA → Tags) — sem ela, ninguém sai de “aguardando”. ' : ''}${!atCfg.on ? '“Alunas / Ex-alunas automáticas” está desligado (SoFIA → Tags) — sem ele, o fechamento de contrato não aparece.' : ''}</p>` : ''}
     </div>
     ${detalheHtml}
+    <style>
+      #fuPop{position:absolute;z-index:80;display:none;min-width:240px;max-width:360px;max-height:320px;overflow:auto;background:var(--card);border:1px solid var(--linha);border-radius:12px;box-shadow:0 12px 32px -10px rgba(16,24,40,.35);padding:10px 12px;font-size:.84rem}
+      #fuPop .t{font-weight:800;margin:0 0 6px;color:var(--tinta)}
+      #fuPop .r{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px solid var(--linha-soft)}
+      #fuPop .r span{font-weight:600;color:var(--tinta)}
+      #fuPop .r a{color:var(--teal-esc);font-weight:700;white-space:nowrap;text-decoration:none}
+      #fuPop .r a:hover{text-decoration:underline}
+      #fuPop .d{margin-top:6px;color:var(--faint);font-size:.76rem}
+    </style>
     <script>
     var FU_ROT=${JSON.stringify(FU_ROT)};
+    var FU_DADOS=${JSON.stringify(FU_DADOS).replace(/</g, '\\u003c')};
+    // Passar o mouse numa barra (ou num número do resumo) abre a lista com o nome
+    // completo e o link do perfil no EVO; dá para mover o mouse até ela e clicar.
+    (function(){
+      var pop=document.createElement('div'); pop.id='fuPop'; document.body.appendChild(pop);
+      var t=null, esc=function(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+      function esconder(){ t=setTimeout(function(){ pop.style.display='none'; },250); }
+      function mostrar(el){
+        clearTimeout(t);
+        var f=el.getAttribute('data-filtro'), l=FU_DADOS[f]||[]; if(!l.length) return;
+        pop.innerHTML='<div class="t">'+esc(FU_ROT[f])+' ('+l.length+')</div>'+l.slice(0,40).map(function(x){ return '<div class="r"><span>'+(x.c?'<a href="'+esc(x.c)+'" title="Abrir em Contatos" style="color:inherit;font-weight:600;white-space:normal">'+esc(x.n)+'</a>':esc(x.n))+'</span>'+(x.u?'<a href="'+esc(x.u)+'" target="_blank" rel="noopener">abrir no EVO ↗</a>':'')+'</div>'; }).join('')
+          +(l.length>40?'<div class="d">…e mais '+(l.length-40)+' — clique para ver todas na lista.</div>':'<div class="d">Nome → ficha em Contatos · clique na barra para ver na lista abaixo.</div>');
+        var r=el.getBoundingClientRect(); pop.style.display='block';
+        var left=Math.min(r.left+window.scrollX+(el.classList.contains('fu-bar')?150:0), window.scrollX+document.documentElement.clientWidth-pop.offsetWidth-12);
+        pop.style.left=Math.max(window.scrollX+8,left)+'px'; pop.style.top=(r.bottom+window.scrollY+4)+'px';
+      }
+      [].forEach.call(document.querySelectorAll('.fu-pop-alvo'),function(el){ el.addEventListener('mouseenter',function(){ mostrar(el); }); el.addEventListener('mouseleave',esconder); });
+      pop.addEventListener('mouseenter',function(){ clearTimeout(t); }); pop.addEventListener('mouseleave',esconder);
+    })();
     function fuFiltrar(f){
       var det=document.getElementById('fuDet'); if(!det) return;
       det.open=true;
