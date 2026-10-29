@@ -5896,8 +5896,21 @@ function paginaSofiaFunil(params) {
   const detAg = canalSel === 'todos' ? todosAg : todosAg.filter(d => d.canal === canalSel);
   const agend = detAg.length;
   const agSofia = porCanal.sofia;
-  const naoAg = Math.max(0, convs - agSofia);
-  const conv = convs ? Math.round((agSofia / convs) * 1000) / 10 : 0;
+  // Filtro Formulário: a etapa de cima é quem VISITOU o link de agendamento no
+  // período (pessoas únicas, os mesmos números da subaba Formulário).
+  let visitas = 0;
+  if (canalSel === 'formulario') {
+    try {
+      const vids = new Set(); let semVid = 0;
+      for (const e of indicadores.carregar()) { if (e.tipo !== 'acesso' || !dentro(e.dia)) continue; if (e.vid) vids.add(e.vid); else semVid++; }
+      visitas = vids.size + semVid;
+    } catch (_) {}
+  }
+  // Etapa de cima do funil: conversas (SoFIA) ou visitas (Formulário). Nos outros filtros, não há.
+  const topo = canalSel === 'sofia' ? { n: convs, rot: 'Conversaram', stat: 'conversas', de: 'das conversas', vazio: 'Sem conversas no período.' }
+    : (canalSel === 'formulario' && visitas) ? { n: Math.max(visitas, porCanal.formulario), rot: 'Visitaram o formulário', stat: 'visitaram o formulário', de: 'de quem visitou' } : null;
+  const naoAg = topo ? Math.max(0, topo.n - (canalSel === 'sofia' ? agSofia : porCanal.formulario)) : 0;
+  const conv = topo && topo.n ? Math.round(((canalSel === 'sofia' ? agSofia : porCanal.formulario) / topo.n) * 1000) / 10 : 0;
   // Depois do agendamento: fez a aula? fechou contrato? Lido das TAGS atuais do
   // contato — "Presença da experimental" troca para Fez aula / Sem presença (lendo
   // o EVO) e a sincronização de alunas põe "0. Aluna" em quem tem contrato ativo.
@@ -5951,6 +5964,10 @@ function paginaSofiaFunil(params) {
   const CANAIS_ROT = [['todos', 'Todos', todosAg.length], ['sofia', '🤖 SoFIA', porCanal.sofia], ['formulario', '📲 Formulário', porCanal.formulario], ['express', '🏪 Express', porCanal.express]];
   const segsCanal = CANAIS_ROT.map(([v, l, n]) => `<a href="/funil?${qPer.slice(1)}${v === 'todos' ? '' : '&canal=' + v}" class="${canalSel === v ? 'on' : ''}">${l} <span style="opacity:.75">(${n})</span></a>`).join('');
   const rotSel = { todos: 'todos os canais', sofia: 'SoFIA', formulario: 'Formulário', express: 'Cadastro Express' }[canalSel];
+  // Link para a subaba Formulário (detalhes), no mesmo período quando dá.
+  const sessF = _navSess || { admin: true, telas: [] };
+  const podeVerInd = sessF.admin || (sessF.telas || []).includes('ind');
+  const diasInd = custom ? 7 : ({ hoje: 1, '7': 7, '30': 30, '0': 0 }[per]);
   // Lista de quem agendou no período (com canal) + os Express que ficaram de fora —
   // ajuda a conferir quem contou e por quê.
   const fmtDtCurta = (ms) => { try { return new Date(Number(ms)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
@@ -5974,22 +5991,23 @@ function paginaSofiaFunil(params) {
       ${custom ? `<a href="/funil?per=7${qCanal}" class="reset filtro-limpar" style="text-decoration:none">🧹</a>` : ''}
     </form>
     <div class="stats">
-      ${canalSel === 'sofia' ? `<div class="stat tot"><div class="n">${convs}</div><div class="l">conversas · ${esc(rotulo)}</div></div>
-      <div class="stat ok"><div class="n">${agend}</div><div class="l">agendaram · <b style="color:var(--coral-esc)">${String(conv).replace('.', ',')}%</b> das conversas</div></div>`
+      ${topo ? `<div class="stat tot"><div class="n">${topo.n}</div><div class="l">${topo.stat} · ${esc(rotulo)}</div></div>
+      <div class="stat ok"><div class="n">${agend}</div><div class="l">agendaram · <b style="color:var(--coral-esc)">${String(conv).replace('.', ',')}%</b> ${topo.de}</div></div>`
       : `<div class="stat ok"><div class="n">${agend}</div><div class="l">agendaram · ${esc(rotulo)}${canalSel === 'todos' ? `<br><span style="font-size:.72rem">🤖 ${porCanal.sofia} · 📲 ${porCanal.formulario} · 🏪 ${porCanal.express}${porCanal.outro ? ` · ${porCanal.outro} sem canal` : ''}</span>` : ''}</div></div>`}
       <div class="stat"><div class="n" style="color:var(--teal-esc)">${fez}</div><div class="l">fizeram a aula · ${pct(fez, agend)} das agendadas</div></div>
       <div class="stat ok"><div class="n">${fechou}</div><div class="l">fecharam contrato · ${pct(fechou, fez)} de quem fez</div></div>
     </div>
     <div class="sec-t">Funil</div>
     <div class="card">
-      ${canalSel === 'sofia'
-        ? (convs ? barra('Conversaram', convs, convs, 'var(--teal)') + barra('Agendaram', agend, convs, 'var(--ok)', agend ? 'agendou' : '') + barra('Fizeram a aula', fez, convs, 'var(--teal-esc)', fez ? 'fez' : '', agend ? `${pct(fez, agend).replace(/,0%$/, '%')} das agendadas` : '') + barra('Fecharam contrato', fechou, convs, '#0b5e33', fechou ? 'fechou' : '', fez ? `${pct(fechou, fez).replace(/,0%$/, '%')} de quem fez<span class="fu-l">&nbsp;a aula</span>` : '') + barra('Não agendaram', naoAg, convs, 'var(--cinza)')
-          : '<div class="vazio">Sem conversas no período.</div>')
+      ${topo
+        ? (topo.n ? barra(topo.rot, topo.n, topo.n, 'var(--teal)') + barra('Agendaram', agend, topo.n, 'var(--ok)', agend ? 'agendou' : '') + barra('Fizeram a aula', fez, topo.n, 'var(--teal-esc)', fez ? 'fez' : '', agend ? `${pct(fez, agend).replace(/,0%$/, '%')} das agendadas` : '') + barra('Fecharam contrato', fechou, topo.n, '#0b5e33', fechou ? 'fechou' : '', fez ? `${pct(fechou, fez).replace(/,0%$/, '%')} de quem fez<span class="fu-l">&nbsp;a aula</span>` : '') + barra('Não agendaram', naoAg, topo.n, 'var(--cinza)')
+          : `<div class="vazio">${topo.vazio}</div>`)
         : (agend ? barra('Agendaram', agend, agend, 'var(--ok)', 'agendou') + barra('Fizeram a aula', fez, agend, 'var(--teal-esc)', fez ? 'fez' : '') + barra('Fecharam contrato', fechou, agend, '#0b5e33', fechou ? 'fechou' : '', fez ? `${pct(fechou, fez).replace(/,0%$/, '%')} de quem fez<span class="fu-l">&nbsp;a aula</span>` : '') + barra('Faltaram', faltou, agend, 'var(--erro)', faltou ? 'faltou' : '') + barra('Aguardando', aguardando, agend, 'var(--cinza)', aguardando ? 'aguardando' : '')
           : `<div class="vazio">Ninguém agendou ${canalSel === 'todos' ? '' : 'pelo ' + rotSel + ' '}neste período.</div>`)}
       ${agend ? `<p class="quando" style="margin:10px 0 0">Das <b>${agend}</b> que agendaram: ${fuNum(fez, 'fez')} fizeram a aula (${fuNum(fechou, 'fechou')} já ${fechou === 1 ? 'fechou' : 'fecharam'} contrato), ${fuNum(faltou, 'faltou')} ${faltou === 1 ? 'faltou' : 'faltaram'} e ${fuNum(aguardando, 'aguardando')} ainda ${aguardando === 1 ? 'aguarda' : 'aguardam'} — aula futura ou presença ainda não lida no EVO. <span style="color:var(--faint)">Passe o mouse nas barras para ver os nomes; clique para filtrar a lista.</span></p>` : ''}
       ${(!compCfg.on || !atCfg.on) ? `<p class="quando" style="margin:8px 0 0;color:var(--warn)">⚠️ ${!compCfg.on ? '“Presença da experimental” está desligada (SoFIA → Tags) — sem ela, ninguém sai de “aguardando”. ' : ''}${!atCfg.on ? '“Alunas / Ex-alunas automáticas” está desligado (SoFIA → Tags) — sem ele, o fechamento de contrato não aparece.' : ''}</p>` : ''}
     </div>
+    ${canalSel === 'formulario' && podeVerInd ? `<p style="margin:10px 0 0;text-align:right"><a href="/indicadores?dias=${diasInd}" style="color:var(--teal-esc);font-weight:700;font-size:.86rem">Ver detalhes do formulário (por dia, horários de pico, origens e links) →</a></p>` : ''}
     ${detalheHtml}
     <style>
       #fuPop{position:absolute;z-index:80;display:none;min-width:240px;max-width:360px;max-height:320px;overflow:auto;background:var(--card);border:1px solid var(--linha);border-radius:12px;box-shadow:0 12px 32px -10px rgba(16,24,40,.35);padding:10px 12px;font-size:.84rem}
@@ -6035,7 +6053,7 @@ function paginaSofiaFunil(params) {
       det.scrollIntoView({behavior:'smooth',block:'start'});
     }
     </script>
-    <p class="quando" style="text-align:center">Conta quem agendou <b>dentro do período</b> (pela data do agendamento), por canal: <b>SoFIA</b> (conversa no WhatsApp), <b>Formulário</b> (link de agendamento) e <b>Cadastro Express</b> (feito pela recepção). No filtro SoFIA, a base são as <b>conversas reais</b> (a pessoa escreveu). <b>Fez a aula</b> vem da “Presença da experimental” (lê o EVO e troca a tag) e <b>fechou contrato</b> = ganhou a tag <b>${esc(tAluna)}</b> (aluna com contrato ativo no EVO).</p>
+    <p class="quando" style="text-align:center">Conta quem agendou <b>dentro do período</b> (pela data do agendamento), por canal: <b>SoFIA</b> (conversa no WhatsApp), <b>Formulário</b> (link de agendamento) e <b>Cadastro Express</b> (feito pela recepção). No filtro SoFIA, a base são as <b>conversas reais</b> (a pessoa escreveu); no Formulário, as <b>pessoas que abriram o link</b> de agendamento. <b>Fez a aula</b> vem da “Presença da experimental” (lê o EVO e troca a tag) e <b>fechou contrato</b> = ganhou a tag <b>${esc(tAluna)}</b> (aluna com contrato ativo no EVO).</p>
   </div>`;
   return chrome({ tab: 'Funil' }, 'funil', corpo);
 }
