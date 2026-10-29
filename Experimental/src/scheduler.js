@@ -1147,7 +1147,7 @@ async function main() {
   if (config.schedule.histExperimentais) {
     cron.schedule(config.schedule.histExperimentais, () => {
       log('⏰ Cron disparado: Histórico de experimentais (professoras)');
-      runJob('Histórico de experimentais (professoras)', () => require('./historico-experimentais').runHistoricoExperimentais(), 45 * 60 * 1000).catch(err => logError('Histórico de experimentais', err));
+      runJob('Histórico de experimentais (professoras)', () => require('./historico-experimentais').runHistoricoExperimentais({ extras: 60 }), 60 * 60 * 1000).catch(err => logError('Histórico de experimentais', err));
     }, { timezone: 'America/Sao_Paulo' });
     log(`📅 Job HISTÓRICO DE EXPERIMENTAIS agendado: ${config.schedule.histExperimentais} (Indicadores → Professoras)`);
   }

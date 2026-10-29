@@ -6073,11 +6073,12 @@ function paginaProfessoras(params) {
   const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
   const menosDias = (n) => { const d = new Date(hojeStr + 'T12:00:00'); d.setDate(d.getDate() - n); return d.toLocaleDateString('en-CA'); };
   const custom = !!(params.de || params.ate);
-  const per = custom ? '' : (['30', '90', '0'].includes(params.per) ? params.per : '30');
+  const per = custom ? '' : (['30', '90', 'ano', '0'].includes(params.per) ? params.per : '30');
   let iniD = '', fimD = hojeStr, rotulo = '';
   if (custom) { iniD = params.de || ''; fimD = params.ate || hojeStr; rotulo = `${params.de || 'início'} até ${fimD}`; }
   else if (per === '30') { iniD = menosDias(29); rotulo = 'últimos 30 dias'; }
   else if (per === '90') { iniD = menosDias(89); rotulo = 'últimos 90 dias'; }
+  else if (per === 'ano') { iniD = hojeStr.slice(0, 4) + '-01-01'; rotulo = 'em ' + hojeStr.slice(0, 4); }
   else rotulo = 'todo o histórico';
   const dentro = (dia) => dia && (!iniD || dia >= iniD) && (!fimD || dia <= fimD);
 
@@ -6147,10 +6148,23 @@ function paginaProfessoras(params) {
   const situacaoLeitura = rodando ? `⏳ Lendo a agenda no EVO agora (começou ${esc(fmtQuando(st.inicio))}) — pode levar uns 15 min. Atualize a página depois.`
     : st.estado === 'erro' ? `⚠️ A última leitura falhou (${esc(fmtQuando(st.fim))}): ${esc(st.msg || '')}`
     : lidos.length ? `Histórico de ${esc(fmtDia(lidos[0]))}/${lidos[0].slice(0, 4)} até ${esc(fmtDia(lidos[lidos.length - 1]))}/${lidos[lidos.length - 1].slice(0, 4)}${st.fim ? ` · última leitura ${esc(fmtQuando(st.fim))}` : ''}. O robô relê a agenda toda noite.`
-    : 'O robô ainda não leu a agenda de experimentais. A primeira leitura busca até 90 dias para trás (em duas noites).';
+    : 'Ainda sem dados. Toda madrugada o robô copia a agenda de experimentais do EVO. Para não esperar, clique em “Ler agora no EVO”.';
   const btnAtualizar = `<form method="POST" action="/professoras/atualizar" style="display:inline"><button class="reset" type="submit" ${rodando ? 'disabled' : ''} style="padding:5px 12px;font-size:.8rem">🔄 Ler agora no EVO</button></form>`;
+  // Até onde buscar para trás (padrão 90 dias). Os dias antigos são lidos aos poucos:
+  // 60 por madrugada; "Ler agora" adianta 30.
+  const desde = h.cfg.desde || '';
+  const pend = histExp.antigosPendentes(h).length;
+  const inicioPadrao = (() => { const d = new Date(hojeStr + 'T12:00:00'); d.setDate(d.getDate() - (histExp.HISTORICO_PADRAO - 1)); return d.toLocaleDateString('en-CA'); })();
+  const fmtBR = (iso) => { const p = String(iso).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso; };
+  const noites = Math.ceil(pend / 60);
+  const blocoDesde = `<form method="POST" action="/professoras/desde" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:-2px 0 12px">
+      <span class="filtro-lbl">Buscar no EVO desde</span>
+      <input type="date" name="desde" value="${esc(desde || inicioPadrao)}" max="${esc(hojeStr)}" min="2020-01-01" style="width:165px;flex:none">
+      <button class="save" type="submit" style="padding:8px 16px;font-size:.82rem">Salvar</button>
+      <span class="quando" style="align-self:center">${pend ? `Faltam <b>${pend}</b> dia${pend === 1 ? '' : 's'} antigo${pend === 1 ? '' : 's'} para ler — o robô lê 60 por madrugada (≈ ${noites} noite${noites === 1 ? '' : 's'}); “Ler agora” adianta 30.` : `Histórico completo desde ${esc(fmtBR(desde || inicioPadrao))}.`}</span>
+    </form>`;
 
-  const segs = [['30', '30 dias'], ['90', '90 dias'], ['0', 'Tudo']].map(([v, l]) => `<a href="/professoras?per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
+  const segs = [['30', '30 dias'], ['90', '90 dias'], ['ano', hojeStr.slice(0, 4)], ['0', 'Tudo']].map(([v, l]) => `<a href="/professoras?per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
   const corpo = `<div class="wrap">
     ${subnavIndicadores('professoras')}
     <div class="sec-t">Conversão por professora <small style="font-weight:600;color:var(--cinza)">(aula experimental → contrato)</small></div>
@@ -6164,6 +6178,7 @@ function paginaProfessoras(params) {
       ${custom ? `<a href="/professoras" class="reset filtro-limpar" style="text-decoration:none">🧹</a>` : ''}
     </form>
     <div class="aviso" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0">${situacaoLeitura} ${btnAtualizar}</div>
+    ${blocoDesde}
     ${tot.exp ? `<div class="stats">
       <div class="stat tot"><div class="n">${tot.exp}</div><div class="l">experimentais · ${esc(rotulo)}</div></div>
       <div class="stat"><div class="n" style="color:var(--teal-esc)">${tot.veio}</div><div class="l">vieram · presença ${fmtPct(taxa(tot.veio, tot.veio + tot.faltou))}</div></div>
@@ -7615,6 +7630,17 @@ const server = http.createServer((req, res) => {
     const sp = new URLSearchParams(req.url.split('?')[1] || '');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(paginaProfessoras({ per: sp.get('per') || '30', de: sp.get('de') || '', ate: sp.get('ate') || '' }));
+  }
+  if (req.method === 'POST' && url === '/professoras/desde') {
+    return lerCorpo(req, 1e4, corpo => {
+      const d = new URLSearchParams(corpo).get('desde') || '';
+      const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d) && d >= '2020-01-01' && d <= hoje) {
+        try { histExp.definirDesde(d); } catch (_) {}
+        try { auditoria.registrar(sess.usuario, 'professoras.desde', d, ''); } catch (_) {}
+      }
+      res.writeHead(303, { Location: '/professoras' }); res.end();
+    });
   }
   if (req.method === 'POST' && url === '/professoras/atualizar') {
     // Pede ao robô (mesma pasta data/) para ler a agenda de experimentais agora.

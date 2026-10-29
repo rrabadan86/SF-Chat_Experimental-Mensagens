@@ -8,7 +8,8 @@
  *
  * data/experimentais-historico.json:
  *   { aulas: { "<dia>|<hora>|<id ou nome>": { dia, hora, prof, nome, id, status, contrato, visto } },
- *     lidos: { "<dia>": ms }, status: { estado, inicio, fim, msg, dias, aulas } }
+ *     lidos: { "<dia>": ms }, status: { estado, inicio, fim, msg, dias, aulas },
+ *     cfg: { desde: "YYYY-MM-DD" } }   ← até onde buscar para trás (escolhido no painel)
  *
  * Ler um dia SUBSTITUI o que havia dele (status e contrato mudam com o tempo).
  * Se a leitura volta vazia, mantém o que já havia (pode ter sido lentidão do EVO).
@@ -21,8 +22,8 @@ const ARQ = path.resolve(__dirname, '..', 'data', 'experimentais-historico.json'
 function ler() {
   try {
     const o = JSON.parse(fs.readFileSync(ARQ, 'utf8'));
-    return { aulas: (o && o.aulas) || {}, lidos: (o && o.lidos) || {}, status: (o && o.status) || {} };
-  } catch (_) { return { aulas: {}, lidos: {}, status: {} }; }
+    return { aulas: (o && o.aulas) || {}, lidos: (o && o.lidos) || {}, status: (o && o.status) || {}, cfg: (o && o.cfg) || {} };
+  } catch (_) { return { aulas: {}, lidos: {}, status: {}, cfg: {} }; }
 }
 function gravar(h) {
   const dir = path.dirname(ARQ);
@@ -85,4 +86,40 @@ function setStatus(st) {
   gravar(h);
 }
 
-module.exports = { ARQ, ler, registrarDia, setStatus, situacao, diaIso, norm };
+// ── Quais dias ler no EVO ────────────────────────────────────────────────────
+// Toda vez: os últimos 30 dias (presença e contrato mudam depois da aula). Mais um
+// lote dos dias ANTIGOS ainda não lidos, até a data de início (padrão: 90 dias atrás;
+// o painel pode escolher outra, ex.: 01/01 para o ano todo). Domingo não tem aula.
+const JANELA = 30;
+const HISTORICO_PADRAO = 90;
+function dataBR(d) { return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; }
+function diasAtras(n) { const d = new Date(); d.setDate(d.getDate() - n); return d; }
+function limiteDias(h) {
+  const desde = (h || ler()).cfg.desde;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(desde || '')) return HISTORICO_PADRAO;
+  const hoje = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) + 'T12:00:00');
+  const dias = Math.floor((hoje - new Date(desde + 'T12:00:00')) / 86400000) + 1;
+  return Math.max(JANELA, Math.min(dias, 1500));
+}
+// Dias antigos (fora dos 30 recentes) que ainda faltam ler até a data de início.
+function antigosPendentes(h) {
+  h = h || ler();
+  const out = [];
+  for (let i = JANELA, lim = limiteDias(h); i < lim; i++) {
+    const d = diasAtras(i);
+    if (d.getDay() !== 0 && !h.lidos[diaIso(dataBR(d))]) out.push(dataBR(d));
+  }
+  return out;
+}
+function datasParaLer(extras) {
+  const out = [];
+  for (let i = 0; i < JANELA; i++) { const d = diasAtras(i); if (d.getDay() !== 0) out.push(dataBR(d)); }
+  return out.concat(antigosPendentes().slice(0, Math.max(0, extras | 0)));
+}
+function definirDesde(dia) {
+  const h = ler();
+  h.cfg = Object.assign({}, h.cfg, { desde: /^\d{4}-\d{2}-\d{2}$/.test(dia || '') ? dia : '' });
+  gravar(h);
+}
+
+module.exports = { ARQ, ler, registrarDia, setStatus, situacao, diaIso, norm, datasParaLer, antigosPendentes, definirDesde, limiteDias, HISTORICO_PADRAO };
