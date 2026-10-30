@@ -6,8 +6,8 @@
  * mesmo mês do ano anterior — em texto e numa imagem (card com mini gráfico).
  * Opcional: nomes de quem saiu e as aulas experimentais do mês.
  *
- * Antes de montar, relê as alunas ativas no EVO (run_ativas_foto.py), para não
- * mandar número velho. Config e último envio em data/resumo-mensal.json.
+ * Antes de montar, se os números ainda não foram atualizados hoje (leitura das
+ * 05:25 ou "Atualizar agora"), relê as alunas no EVO (run_ativas_foto.py). Config e último envio em data/resumo-mensal.json.
  *
  * Uso à mão (na pasta Experimental):
  *   node src/resumo-mensal.js --previa [AAAA-MM]   → só imprime o texto
@@ -274,8 +274,14 @@ async function enviar({ mes, teste = false, log = console.log } = {}) {
     salvarCfg({ tentativa: { mes, n: t.n + 1, em: Date.now() } });
   }
   if (!cfg.grupos.length) throw new Error('Nenhum grupo configurado (Indicadores → Alunas ativas → Resumo mensal).');
-  const at = await atualizarAtivas();
-  log(`📊 Resumo mensal: alunas ativas relidas no EVO — ${at.ok ? 'ok' : 'falhou (uso o último cálculo)'}${at.msg ? ': ' + at.msg : ''}`);
+  // Só relê o EVO se os números ainda não foram atualizados HOJE (a leitura da
+  // madrugada, 05:25, ou um "Atualizar agora" já deixam tudo em dia).
+  const ultimaLeitura = ((ativasDados.ler().ultimo) || {}).dia;
+  if (ultimaLeitura === agoraSP().dia) log(`📊 Resumo mensal: alunas ativas já atualizadas hoje — sem reler o EVO.`);
+  else {
+    const at = await atualizarAtivas();
+    log(`📊 Resumo mensal: alunas ativas relidas no EVO — ${at.ok ? 'ok' : 'falhou (uso o último cálculo)'}${at.msg ? ': ' + at.msg : ''}`);
+  }
   const d = dadosDoMes(mes, cfg);
   if (!d) throw new Error('Ainda não há histórico de alunas ativas para esse mês.');
   const txt = texto(d);
