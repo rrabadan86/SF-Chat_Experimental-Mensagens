@@ -8052,7 +8052,7 @@ function paginaFormularioRespostas(base, f) {
       const tabOrig = (origens.length > 1 || (origens.length === 1 && origens[0].origem)) ? `<div class="fm-tabw" style="margin:10px 0 4px"><table class="fm-tab"><thead><tr><th>Origem</th><th>Aberturas</th><th>Pessoas</th><th>Respostas</th><th>Conversão</th></tr></thead><tbody>${origens.map(o => `<tr><td>${rotOrig(o.origem)}</td><td class="nw">${o.aberturas}</td><td class="nw">${o.pessoas}</td><td class="nw">${o.respostas}</td><td class="nw">${pct(o.respostas, o.pessoas)}</td></tr>`).join('')}</tbody></table></div>` : '';
       return `<div class="fm-stats"><div><b>${a.aberturas}</b><span>aberturas</span></div><div><b>${a.pessoas}</b><span>pessoas</span></div><div><b>${a.respostas}</b><span>respostas</span></div><div><b>${pct(a.respostas, a.pessoas)}</b><span>conversão</span></div></div>
       ${tabOrig}
-      <p class="quando">Aberturas = vezes que a página abriu; pessoas = celulares/computadores diferentes; conversão = respostas ÷ pessoas. A equipe logada no painel e as prévias de link do WhatsApp/Instagram não contam. Para saber de onde vieram, divulgue o link com a origem no final, ex.: <code>${esc(link)}?origem=instagram</code> ou <code>?origem=whatsapp</code>.</p>
+      <p class="quando">Aberturas = vezes que a página abriu num celular/computador (recarregar em menos de 2 min não conta de novo); pessoas = celulares/computadores diferentes; conversão = respostas ÷ pessoas. Não contam: a equipe logada no painel, as prévias de link (WhatsApp, Instagram…) e os verificadores de link — só conta quem abriu a página de verdade. Veja quem foi em <b>Últimas aberturas</b>, no fim da página. Para saber de onde vieram, divulgue o link com a origem no final, ex.: <code>${esc(link)}?origem=instagram</code> ou <code>?origem=whatsapp</code>.</p>
       ${f.tag ? `<p class="quando">Todas as respostas entram nos Contatos da SoFIA com a tag <b>${esc(f.tag)}</b>.</p>` : ''}`;
     })()}
     <div class="fm-link"><code>${esc(link)}</code><button type="button" class="reset" onclick="fmCopiar('${esc(link)}',this)">Copiar link</button></div>
@@ -8068,6 +8068,36 @@ function paginaFormularioRespostas(base, f) {
     ${f.tag && lista.length ? `<p class="quando">Para mandar a oferta para esta lista: SoFIA → Campanhas → nova campanha para a tag <b>${esc(f.tag)}</b>.</p>` : ''}
     ${lista.length ? `<div class="fm-tabw"><table class="fm-tab"><thead><tr><th>Data</th><th>Nome</th><th>WhatsApp</th><th>Acessos</th>${cols.map(c => `<th>${esc(c.rotulo)}</th>`).join('')}<th></th></tr></thead><tbody id="tb">${linhas}</tbody></table></div>`
     : `<div class="card fm-vazio"><h2>Ainda sem respostas</h2><p>Divulgue o link acima. As respostas aparecem aqui assim que chegam (atualize a página).</p></div>`}
+    ${(() => {
+      // Últimas aberturas: quando, aparelho, origem e — se der para saber — quem
+      // (pelo código pessoal da campanha ou porque a mesma pessoa respondeu).
+      const log = formularios.ultimasAberturas(f.id);
+      const porCod = new Map(fmCodigosDoForm(f).map(o => [o.c, o]));
+      const porVid = new Map(lista.filter(r => r.vid).map(r => [r.vid, r]));
+      const nVis = {}; for (const x of log) nVis[x.v] = (nVis[x.v] || 0) + 1;
+      const rot = new Map(); let k = 0; // visitante sem nome → "Visitante 1, 2…"
+      const quem = (x) => {
+        const cd = x.c && porCod.get(x.c);
+        if (cd) return `📩 <b>${esc(cd.nome || formularios.fmtTel(cd.tel))}</b> <span class="quando" style="margin:0">(link da campanha)</span>`;
+        const r = porVid.get(x.v);
+        if (r) return `✅ <b>${esc(r.nome)}</b> <span class="quando" style="margin:0">(respondeu)</span>`;
+        if (!rot.has(x.v)) rot.set(x.v, ++k);
+        return `<span style="color:var(--cinza)">Visitante ${rot.get(x.v)}</span>`;
+      };
+      const linhasLog = log.slice(0, 100).map(x => `<tr><td class="nw">${esc(formularios.fmtQuando(x.t))}</td><td>${quem(x)}</td><td class="nw">${esc(x.d || '—')}</td><td class="nw">${x.o ? esc(x.o) : '<span style="color:var(--faint)">—</span>'}</td><td class="nw">${nVis[x.v] > 1 ? nVis[x.v] + '×' : ''}</td></tr>`).join('');
+      const zerado = formularios.zeradoEm(f.id);
+      return `<div class="sec-t">Últimas aberturas <small style="font-weight:600;color:var(--cinza)">(${log.length})</small></div>
+      <div class="card">
+        ${log.length ? `<div class="fm-tabw"><table class="fm-tab"><thead><tr><th>Quando</th><th>Quem</th><th>Aparelho</th><th>Origem</th><th>Vezes</th></tr></thead><tbody>${linhasLog}</tbody></table></div>${log.length > 100 ? '<p class="quando">Mostrando as 100 mais recentes.</p>' : ''}`
+          : '<div class="vazio">Nenhuma abertura registrada ainda. A lista começa a partir desta versão do painel.</div>'}
+        <p class="quando" style="margin:10px 0 0">Até 30/10/2026 a contagem era feita quando o servidor entregava a página — verificadores de link e prévias de alguns aplicativos entravam como aberturas, então os números antigos podem estar acima do real.${zerado ? ` Contagem zerada em ${esc(formularios.fmtQuando(zerado))}.` : ''} Se quiser começar do zero (as respostas ficam):</p>
+        <div style="margin:8px 0 0"><button type="button" class="ui-btn sec perigo" onclick="fmZerar(this)">Zerar aberturas e pessoas</button></div>
+      </div>
+      <script>function fmZerar(b){ if(!confirm('Zerar aberturas, pessoas e origens deste formulário? As respostas NÃO são apagadas.')) return; b.disabled=true;
+        fetch('/formularios/zerar-acessos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({form:${JSON.stringify(f.id)}})})
+          .then(function(r){return r.json();}).then(function(j){ if(!j||!j.ok){ alert('❌ '+((j&&j.erro)||'Não consegui zerar.')); b.disabled=false; return; } location.reload(); })
+          .catch(function(){ alert('❌ Erro de rede.'); b.disabled=false; }); }</script>`;
+    })()}
   </div>
   <script>
   ${FM_JS_COPIAR}
@@ -8091,21 +8121,28 @@ function paginaFormularioRespostas(base, f) {
   return chrome({ tab: 'Respostas · ' + f.titulo }, 'formularios', corpo);
 }
 
-// Conta a abertura da página pública. Não conta: a equipe logada no painel (que
-// testa o formulário) e os robôs de prévia de link (WhatsApp, Instagram/Facebook,
-// Telegram…), que abrem a página para montar o cartão do link e não são pessoas.
+// Conta a abertura da página pública. A página avisa pelo navegador (POST
+// /formulario/<endereço>/abriu, feito pelo JavaScript dela) — robôs de prévia de
+// link (WhatsApp, Instagram…) e verificadores de segurança baixam a página mas não
+// rodam JavaScript, então não contam. Também não contam: a equipe logada no painel
+// e recarregar a página em menos de 2 minutos.
 const FM_ROBO = /bot|crawl|spider|slurp|facebookexternalhit|meta-externalagent|whatsapp|telegram|discord|skype|preview|embedly|curl|wget|python|node-fetch|headless/i;
-function fmContarAcesso(req, res, f) {
+function fmCookieVisitante(req, res) {
+  let vid = lerCookie(req, 'fm_v');
+  if (!/^[a-f0-9]{16}$/.test(vid || '')) {
+    vid = crypto.randomBytes(8).toString('hex');
+    res.setHeader('Set-Cookie', `fm_v=${vid}; Path=/formulario; HttpOnly; SameSite=Lax; Max-Age=${400 * 86400}${ehHttps(req) ? '; Secure' : ''}`);
+  }
+  return vid;
+}
+function fmContarAcesso(req, res, f, d) {
   try {
     if (usuarioDaReq(req)) return;
-    if (FM_ROBO.test(String(req.headers['user-agent'] || ''))) return;
-    let vid = lerCookie(req, 'fm_v');
-    if (!/^[a-f0-9]{16}$/.test(vid || '')) {
-      vid = crypto.randomBytes(8).toString('hex');
-      res.setHeader('Set-Cookie', `fm_v=${vid}; Path=/formulario; HttpOnly; SameSite=Lax; Max-Age=${400 * 86400}${ehHttps(req) ? '; Secure' : ''}`);
-    }
-    const qs = new URLSearchParams(req.url.split('?')[1] || '');
-    formularios.registrarAcesso(f.id, vid, qs.get('origem') || '', qs.get('c') || ''); // c = código pessoal do link da campanha
+    const ua = String(req.headers['user-agent'] || '');
+    if (FM_ROBO.test(ua)) return;
+    const vid = fmCookieVisitante(req, res);
+    if (formularios.aberturaRecente(f.id, vid, 120e3)) return;
+    formularios.registrarAcesso(f.id, vid, String(d.origem || '').slice(0, 40), String(d.c || ''), ua); // c = código pessoal do link da campanha
   } catch (e) { console.log('[formularios] contador de acesso falhou:', e.message); }
 }
 
@@ -8121,6 +8158,16 @@ function rotaFormularioPublico(req, res, rota) {
     res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=300' });
     return fs.createReadStream(p).pipe(res);
   }
+  if (partes.length === 3 && partes[2] === 'abriu' && req.method === 'POST') {
+    const f = formularios.porSlug(partes[1]);
+    if (!f || !formularios.estaAberto(f)) { res.writeHead(204); return res.end(); }
+    if (!formularios.permitir('fma:' + scIp(req), 120, 3600e3)) { res.writeHead(204); return res.end(); }
+    return lerCorpo(req, 2000, corpo => {
+      let d = {}; try { d = JSON.parse(corpo) || {}; } catch (_) {}
+      fmContarAcesso(req, res, f, typeof d === 'object' ? d : {});
+      res.writeHead(204); res.end();
+    });
+  }
   if (partes.length > 2) return scHtml(res, 404, formulariosPaginas.paginaFechada({ studio, f: null }));
   const f = partes[1] ? formularios.porSlug(partes[1]) : formularios.unicoAberto();
   if (req.method === 'GET') {
@@ -8133,7 +8180,7 @@ function rotaFormularioPublico(req, res, rota) {
       if (!(s && (s.admin || (s.telas || []).includes('formularios')))) return scHtml(res, 200, formulariosPaginas.paginaFechada({ studio, f, capaUrl }));
       previa = formularios.situacao(f);
     }
-    if (!previa) fmContarAcesso(req, res, f);
+    if (!previa) { try { if (!usuarioDaReq(req)) fmCookieVisitante(req, res); } catch (_) {} } // a abertura é contada pelo navegador (/abriu)
     return scHtml(res, 200, formulariosPaginas.paginaFormulario({ studio, f, previa, capaUrl, acao: '/formulario/' + f.slug }));
   }
   if (req.method !== 'POST') { res.writeHead(405, { 'Content-Type': 'text/plain' }); return res.end('method not allowed'); }
@@ -8217,6 +8264,17 @@ function rotaFormulariosPainel(req, res, url, sess) {
         return scJson(res, 200, { ok: true });
       }
       return scJson(res, 400, { erro: 'Ação desconhecida.' });
+    });
+  }
+  if (req.method === 'POST' && url === '/formularios/zerar-acessos') {
+    if (!scSoJson(req)) return scJson(res, 415, { erro: 'Envio inválido.' });
+    return lerCorpo(req, 1e4, corpo => {
+      let d = {}; try { d = JSON.parse(corpo) || {}; } catch (_) {}
+      const f = formularios.obter(String(d.form || ''));
+      if (!f) return scJson(res, 404, { erro: 'Formulário não encontrado.' });
+      formularios.zerarAcessos(f.id);
+      try { auditoria.registrar(sess.usuario, 'formularios.zerar-acessos', f.titulo, ''); } catch (_) {}
+      return scJson(res, 200, { ok: true });
     });
   }
   if (req.method === 'POST' && url === '/formularios/etiquetar') {
