@@ -6806,11 +6806,12 @@ function paginaProfessoras(params) {
     const res = resultado(a, sit, ct);
     const fechou = res.sit === 'fechou';
     const p = a.prof || SEM;
-    const r = profs[p] || (profs[p] = { prof: p, exp: 0, veio: 0, faltou: 0, agendada: 0, fechou: 0, jaaluna: 0, alunas: [] });
+    // já era aluna (contrato vigente no dia — ex.: aula de evento): não é
+    // experimental de verdade — não aparece nem entra na conta
+    if (res.sit === 'jaaluna') { tot.jaaluna++; continue; }
+    const r = profs[p] || (profs[p] = { prof: p, exp: 0, veio: 0, faltou: 0, agendada: 0, fechou: 0, alunas: [] });
     const idEvo = res.idEvo || (ct && ct.c ? ct.c.idEvo : '');
     r.alunas.push({ nome: a.nome, dia: a.dia, hora: a.hora, sit: res.sit || sit, contrato: res.contrato, tel: ct ? ct.tel : '', idEvo });
-    // já era aluna: não é experimental de verdade — fica de fora da conta
-    if (res.sit === 'jaaluna') { r.jaaluna++; tot.jaaluna++; continue; }
     r.exp++; r[sit]++; if (fechou) r.fechou++;
     tot.exp++; tot[sit]++; if (fechou) tot.fechou++;
     if (sit === 'veio' && a.hora) {
@@ -6855,7 +6856,7 @@ function paginaProfessoras(params) {
         <span class="pf-nums"><b>${r.fechou}</b> de <b>${r.veio}</b> <span>fecharam</span></span>
       </summary>
       <div class="pf-det">
-        <div class="pf-resumo"><span>📋 <b>${r.exp}</b> experimenta${r.exp === 1 ? 'l' : 'is'}</span><span>✅ <b>${r.veio}</b> vieram</span><span>❌ <b>${r.faltou}</b> faltaram</span>${r.agendada ? `<span>⏳ <b>${r.agendada}</b> agendada${r.agendada === 1 ? '' : 's'}</span>` : ''}<span>presença <b>${fmtPct(taxa(r.veio, r.veio + r.faltou))}</b></span><span>💰 <b>${r.fechou}</b> fecharam</span>${r.jaaluna ? `<span title="Lançadas como experimental, mas já tinham contrato vigente — fora da conta">🎓 <b>${r.jaaluna}</b> já ${r.jaaluna === 1 ? 'era aluna' : 'eram alunas'}</span>` : ''}</div>
+        <div class="pf-resumo"><span>📋 <b>${r.exp}</b> experimenta${r.exp === 1 ? 'l' : 'is'}</span><span>✅ <b>${r.veio}</b> vieram</span><span>❌ <b>${r.faltou}</b> faltaram</span>${r.agendada ? `<span>⏳ <b>${r.agendada}</b> agendada${r.agendada === 1 ? '' : 's'}</span>` : ''}<span>presença <b>${fmtPct(taxa(r.veio, r.veio + r.faltou))}</b></span><span>💰 <b>${r.fechou}</b> fecharam</span></div>
         <div class="ip-lista">${alunas}</div>
       </div>
     </details>`;
@@ -6912,7 +6913,7 @@ function paginaProfessoras(params) {
     <div class="sec-t">Por horário da aula</div>
     ${tabHoras}
     </div>
-    <p class="ui-rodape">A conversão não depende só da professora: horário, quem atendeu na recepção e preço também pesam. Use o número para conversar, não para julgar. <b>Fechou</b> = começou um contrato no EVO depois da aula (até 120 dias; pelos contratos lidos em Alunas ativas) ou “Nome do contrato” preenchido na agenda de experimentais${pessoasEvo ? '' : `, ou a aluna já tem a tag <b>${esc(tAluna)}</b>`}. Contratos ${esc(String(process.env.ATIVAS_IGNORAR_CONTRATOS || 'circuito,vip').toUpperCase().split(',').join(' e '))} não contam. <b>Já era aluna</b> = tinha contrato vigente no dia da aula (foi lançada como experimental) — não entra na conta.${tot.jaaluna ? ` No período: <b>${tot.jaaluna}</b>.` : ''} Aulas canceladas não entram, nem professora lançada como aluna${profComoAluna ? ` (${profComoAluna} no período)` : ''}.</p>`
+    <p class="ui-rodape">A conversão não depende só da professora: horário, quem atendeu na recepção e preço também pesam. Use o número para conversar, não para julgar. <b>Fechou</b> = começou um contrato no EVO depois da aula (até 120 dias; pelos contratos lidos em Alunas ativas) ou “Nome do contrato” preenchido na agenda de experimentais${pessoasEvo ? '' : `, ou a aluna já tem a tag <b>${esc(tAluna)}</b>`}. Contratos ${esc(String(process.env.ATIVAS_IGNORAR_CONTRATOS || 'circuito,vip').toUpperCase().split(',').join(' e '))} não contam. Quem <b>já era aluna</b> no dia da aula (contrato vigente — ex.: aula de evento) não aparece nem entra na conta. Aulas canceladas não entram, nem professora lançada como aluna${profComoAluna ? ` (${profComoAluna} no período)` : ''}.</p>`
     : `<div class="card"><div class="vazio">${lidos.length ? 'Nenhuma aula experimental registrada neste período.' : 'Ainda sem histórico. Clique em “Ler agora no EVO” ou espere a leitura desta madrugada.'}</div></div>`}
     <style>
       .pf-item{border-bottom:1px solid var(--linha-soft)}
