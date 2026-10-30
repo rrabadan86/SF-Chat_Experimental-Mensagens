@@ -6389,9 +6389,12 @@ function paginaAtivasLista(params) {
   const porContrato = {};
   if (atualHoje) for (const x of lista) { const c = x.p.c || 'sem contrato'; porContrato[c] = (porContrato[c] || 0) + 1; }
   const nTranc = atualHoje ? lista.filter(x => x.p.t).length : 0;
+  const contrOrd = Object.entries(porContrato).sort((a, b) => b[1] - a[1]);
+  const idxContr = Object.fromEntries(contrOrd.map(([c], i) => [c, i]));
   const linhas = lista.map(x => {
     const ct = porEvo[x.id];
     return uiPessoa({
+      attrs: atualHoje ? ` data-c="${idxContr[x.p.c || 'sem contrato']}"` : '',
       nome: nomeDe(x),
       href: ct ? '/sofia?view=contatos&q=' + String(ct.tel).replace(/\D/g, '').slice(-8) : '',
       evo: `${EVO_LINK}/${config.evo.appBase}/clientes/cadastro/${x.id}//perfil`,
@@ -6407,15 +6410,29 @@ function paginaAtivasLista(params) {
   const resumo = [`<b>${lista.length}</b> aluna${lista.length === 1 ? '' : 's'}`];
   if (nTranc) resumo.push(`${nTranc} trancada${nTranc === 1 ? '' : 's'}`);
   if (tipo === 'entraram') { const nv = lista.filter(x => x.nova).length; resumo.push(`${nv} nova${nv === 1 ? '' : 's'} · ${lista.length - nv} voltaram`); }
-  const chipsContr = Object.entries(porContrato).sort((a, b) => b[1] - a[1]).map(([c, n]) => `<span class="ui-chip">${esc(c)} <b>${n}</b></span>`).join('');
-  const busca = `<input type="search" placeholder="Buscar pelo nome…" aria-label="Buscar pelo nome" oninput="var q=this.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');document.querySelectorAll('#al-lista .ip-row').forEach(function(r){r.style.display=r.textContent.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').indexOf(q)<0?'none':''})" style="max-width:320px">`;
+  // Clicar num contrato filtra a lista (de novo = mostra todas); combina com a busca.
+  const chipsContr = contrOrd.length > 1 ? `<button type="button" class="ui-chip on" data-fc="">Todos <b>${lista.length}</b></button>` + contrOrd.map(([c, n], i) => `<button type="button" class="ui-chip" data-fc="${i}">${esc(c)} <b>${n}</b></button>`).join('') : '';
+  const busca = `<input type="search" id="al-busca" placeholder="Buscar pelo nome…" aria-label="Buscar pelo nome" style="max-width:320px">`;
+  const scriptFiltro = `<script>(function(){
+    var fc='', q='', lista=document.getElementById('al-lista'), cont=document.getElementById('al-cont');
+    var norm=function(t){return String(t).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');};
+    function aplicar(){ if(!lista) return; var n=0;
+      lista.querySelectorAll('.ip-row').forEach(function(r){ var ok=(fc===''||r.getAttribute('data-c')===fc)&&(!q||norm(r.textContent).indexOf(q)>=0); r.style.display=ok?'':'none'; if(ok) n++; });
+      if(cont) cont.textContent=(fc!==''||q)?('Mostrando '+n+(n===1?' aluna':' alunas')):''; }
+    document.querySelectorAll('[data-fc]').forEach(function(b){ b.addEventListener('click',function(){
+      fc=(fc===b.getAttribute('data-fc'))?'':b.getAttribute('data-fc');
+      document.querySelectorAll('[data-fc]').forEach(function(x){ x.classList.toggle('on', x.getAttribute('data-fc')===fc); });
+      aplicar(); if(fc!==''&&lista) lista.scrollIntoView({behavior:'smooth',block:'start'}); }); });
+    var bx=document.getElementById('al-busca'); if(bx) bx.addEventListener('input',function(){ q=norm(bx.value); aplicar(); });
+  })();</script>`;
   const corpo = `<div class="wrap">${subnavIndicadores('ativas')}
     ${topo([`<div class="ui-linha"><span>${resumo.join(' · ')}</span></div>`, notaIgn].filter(Boolean))}
-    ${chipsContr ? `<div class="card"><div class="ui-lbl" style="margin:0 0 8px">Por contrato</div><div class="ui-chips" style="flex-wrap:wrap">${chipsContr}</div></div>` : ''}
+    ${chipsContr ? `<div class="card"><div class="ui-lbl" style="margin:0 0 8px">Por contrato <span style="font-weight:600;text-transform:none;letter-spacing:0">— toque para ver só as alunas daquele contrato</span></div><div class="ui-chips" style="flex-wrap:wrap">${chipsContr}</div></div>` : ''}
     <div class="card">
       ${lista.length > 8 ? `<div style="margin:0 0 10px">${busca}</div>` : ''}
+      <div id="al-cont" class="quando" style="margin:0 0 6px"></div>
       ${lista.length ? `<div class="ip-lista" id="al-lista">${linhas}</div>` : '<div class="vazio">Ninguém neste recorte.</div>'}
-    </div></div>`;
+    </div></div>${scriptFiltro}`;
   return chrome({ tab: 'Alunas ativas' }, 'ativas', corpo);
 }
 
