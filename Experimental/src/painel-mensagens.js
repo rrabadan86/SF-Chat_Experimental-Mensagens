@@ -6178,6 +6178,8 @@ function paginaSofiaFunil(params) {
   let fez = 0, fechou = 0, faltou = 0, aguardando = 0;
   for (const d of detAg) {
     d.sit = situacaoDe(d);
+    // fechou só circuito/VIP → conta como "fez a aula", não como contrato fechado
+    if (d.sit === 'fechou' && d.exp && contratoIgnorado(d.exp.contrato)) d.sit = 'fez';
     if (d.sit === 'fechou') { fechou++; fez++; }
     else if (d.sit === 'fez') fez++;
     else if (d.sit === 'faltou') faltou++;
@@ -6333,6 +6335,15 @@ let _ativasGerando = false;
 let _ativasUltimo = null; // { ok, msg, fim }
 const MESES_CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+// Contratos que não são do método (padrão: CIRCUITO e VIP — mesma regra do
+// run_ativas_foto.py, ATIVAS_IGNORAR_CONTRATOS no .env): não contam como aluna
+// ativa nem como "fechou contrato" depois da experimental.
+function contratoIgnorado(nome) {
+  const n = String(nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (!n) return false;
+  return String(process.env.ATIVAS_IGNORAR_CONTRATOS || 'circuito,vip').split(',').map(x => x.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')).filter(Boolean)
+    .some(t => new RegExp('(^|[^a-z0-9])' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(n));
+}
 function lerAtivasHist() { try { return JSON.parse(fs.readFileSync(ATIVAS_FILE, 'utf8')) || {}; } catch (_) { return {}; } }
 
 // Série diária → [{ dia:'YYYY-MM-DD', a, e, n, s }]
@@ -6738,11 +6749,12 @@ function paginaProfessoras(params) {
     const sit = histExp.situacao(a.status);
     if (sit === 'cancelada') continue;
     const ct = acharContato(a.nome);
-    const fechou = sit === 'veio' && (!!a.contrato || !!(ct && ct.c && (ct.c.tags || []).includes(tAluna)));
+    // contrato de circuito/VIP não é fechamento (nem a tag de aluna que veio dele)
+    const fechou = sit === 'veio' && !contratoIgnorado(a.contrato) && (!!a.contrato || !!(ct && ct.c && (ct.c.tags || []).includes(tAluna)));
     const p = a.prof || SEM;
     const r = profs[p] || (profs[p] = { prof: p, exp: 0, veio: 0, faltou: 0, agendada: 0, fechou: 0, alunas: [] });
     r.exp++; r[sit]++; if (fechou) r.fechou++;
-    r.alunas.push({ nome: a.nome, dia: a.dia, hora: a.hora, sit: fechou ? 'fechou' : sit, contrato: a.contrato, tel: ct ? ct.tel : '', idEvo: ct && ct.c ? ct.c.idEvo : '' });
+    r.alunas.push({ nome: a.nome, dia: a.dia, hora: a.hora, sit: fechou ? 'fechou' : sit, contrato: fechou ? a.contrato : '', tel: ct ? ct.tel : '', idEvo: ct && ct.c ? ct.c.idEvo : '' });
     tot.exp++; tot[sit]++; if (fechou) tot.fechou++;
     if (sit === 'veio' && a.hora) {
       const hr = horas[a.hora] || (horas[a.hora] = { hora: a.hora, veio: 0, fechou: 0, profs: {} });
