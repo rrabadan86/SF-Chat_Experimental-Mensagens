@@ -139,6 +139,14 @@ function dadosDoMes(mes, cfg) {
 }
 
 // ── texto ────────────────────────────────────────────────────────────────────
+const LIMITE_LEGENDA = 1000; // legenda de foto no WhatsApp (~1.024 caracteres)
+function textoSaidas(d) {
+  if (!d.saidas || !d.saidas.length) return '🙌 Ninguém saiu no mês.';
+  const L = [`📋 *Quem saiu em ${d.nome}* (último dia do contrato):`];
+  d.saidas.slice(0, 40).forEach(s => L.push(`• ${s.nome} — ${fmtD(s.ultimo)}`));
+  if (d.saidas.length > 40) L.push(`• … e mais ${d.saidas.length - 40}`);
+  return L.join('\n');
+}
 function texto(d) {
   const L = [];
   L.push(`📊 *Resumo de ${d.nome} — Alunas ativas*`);
@@ -158,15 +166,7 @@ function texto(d) {
     L.push(`• Vieram: *${d.exp.veio}* (presença ${pct(d.exp.veio, d.exp.veio + d.exp.faltou, 0)})`);
     L.push(`• Fecharam contrato: *${d.exp.fechou}* (conversão ${pct(d.exp.fechou, d.exp.veio, 0)})`);
   }
-  if (d.saidas) {
-    L.push('');
-    if (!d.saidas.length) L.push('🙌 Ninguém saiu no mês.');
-    else {
-      L.push(`📋 *Quem saiu* (último dia do contrato):`);
-      d.saidas.slice(0, 40).forEach(s => L.push(`• ${s.nome} — ${fmtD(s.ultimo)}`));
-      if (d.saidas.length > 40) L.push(`• … e mais ${d.saidas.length - 40}`);
-    }
-  }
+  if (d.saidas) { L.push(''); L.push(textoSaidas(d)); }
   L.push('');
   L.push(`_Não contam: contratos ${d.ignorados.map(x => String(x).toUpperCase()).join('/')} e renovação na fila. Trancada conta como ativa._`);
   return L.join('\n');
@@ -288,8 +288,16 @@ async function enviar({ mes, teste = false, log = console.log } = {}) {
   const res = [];
   for (const g of cfg.grupos) {
     let okImg = false, okTxt = false, erro = '';
-    if (img) { try { await wa.sendGrupoMidia(g, img, '', 'Resumo mensal'); okImg = true; } catch (e) { erro = 'imagem: ' + e.message; } }
-    try { await wa.sendGrupo(g, txt, 'Resumo mensal'); okTxt = true; } catch (e) { erro = (erro ? erro + ' · ' : '') + 'texto: ' + e.message; }
+    // Imagem com o texto como LEGENDA (uma mensagem só). A legenda do WhatsApp tem
+    // limite (~1.000 caracteres): se a lista de quem saiu for longa, ela vai numa
+    // 2ª mensagem. Se a foto falhar, o wa-client manda a legenda como texto.
+    const legenda = txt.length <= LIMITE_LEGENDA ? txt : texto(Object.assign({}, d, { saidas: null }));
+    const resto = legenda === txt ? '' : textoSaidas(d);
+    if (img) {
+      try { await wa.sendGrupoMidia(g, img, legenda, 'Resumo mensal'); okImg = true; okTxt = true; } catch (e) { erro = 'imagem: ' + e.message; }
+    }
+    if (!okTxt) { try { await wa.sendGrupo(g, legenda, 'Resumo mensal'); okTxt = true; } catch (e) { erro = (erro ? erro + ' · ' : '') + 'texto: ' + e.message; } }
+    if (okTxt && resto) { try { await wa.sendGrupo(g, resto, 'Resumo mensal'); } catch (e) { erro = (erro ? erro + ' · ' : '') + 'lista de quem saiu: ' + e.message; } }
     res.push({ grupo: g, okImg, okTxt, erro });
     log(`📊 Resumo mensal (${d.nome}) → "${g}": ${okTxt ? 'texto ✅' : 'texto ❌'}${img ? (okImg ? ' · imagem ✅' : ' · imagem ❌') : ''}${erro ? ' — ' + erro : ''}`);
   }

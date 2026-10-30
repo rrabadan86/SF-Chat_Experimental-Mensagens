@@ -6557,7 +6557,7 @@ function paginaResumoMensal(params, aviso) {
       </form>` : '<div class="vazio">Ainda sem histórico de alunas ativas. Em <b>Alunas ativas</b>, clique em <b>Atualizar agora</b>.</div>'}
     </div>
     <script>(function(){ function ajusta(){ document.querySelectorAll('.rm-img').forEach(function(c){ c.style.setProperty('--rm-esc', (c.clientWidth/1080).toFixed(4)); }); } ajusta(); window.addEventListener('resize', ajusta); })();</script>
-    <p class="ui-rodape">No texto aparecem em <b>negrito</b> os trechos entre *asteriscos* (formato do WhatsApp). Se o robô estiver desligado no horário, ele envia quando voltar (até 3 dias depois). Se falhar (ex.: nome do grupo errado), tenta de novo em 1 hora, até 4 vezes.</p>
+    <p class="ui-rodape">O texto vai como <b>legenda da imagem</b> (uma mensagem só); se a lista de quem saiu deixar o texto longo demais para legenda, ela vai numa 2ª mensagem. No texto aparecem em <b>negrito</b> os trechos entre *asteriscos* (formato do WhatsApp). Se o robô estiver desligado no horário, ele envia quando voltar (até 3 dias depois). Se falhar (ex.: nome do grupo errado), tenta de novo em 1 hora, até 4 vezes.</p>
   </div>`;
   return chrome({ tab: 'Resumo mensal' }, 'ativas', corpo);
 }
