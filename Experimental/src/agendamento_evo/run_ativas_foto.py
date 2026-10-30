@@ -18,9 +18,10 @@ ex-alunas). Validado no Bueno: as ativas de hoje reconstruídas batem com as
 reais. Renovação com até 7 dias de atraso não conta como saída/retorno.
 Vai em "reconstruido": { inicio, ativas[], entraram[], novas[], sairam[] }.
 
-CONTRATOS IGNORADOS: contrato que não é do método (ex.: CIRCUITO) não conta —
-quem só tem esse contrato não é aluna ativa. Padrão: nome com "circuito"; outra
-lista no .env: ATIVAS_IGNORAR_CONTRATOS=circuito,avulso (separado por vírgula).
+CONTRATOS IGNORADOS: CIRCUITO e VIP não contam — quem só tem esse contrato não
+é aluna ativa. Padrão: nome com "circuito" ou "vip"; outra lista no .env:
+ATIVAS_IGNORAR_CONTRATOS=circuito,vip,avulso (separado por vírgula).
+Contrato NA FILA (renovação que ainda não começou) também não conta.
 
 LISTA DE ALUNAS (para a tela mostrar quem são): "pessoas" { id: { n: nome,
 iv: [[início, fim]…], c: contrato, t: trancada } }. A lista do EVO só traz o
@@ -33,6 +34,7 @@ Uso (na pasta agendamento_evo, com o .env da unidade):
 import argparse
 import json
 import os
+import re
 import sys
 import unicodedata
 from datetime import date, datetime, timezone, timedelta
@@ -44,7 +46,7 @@ except Exception as e:  # pragma: no cover
     sys.exit(1)
 
 ATIVOS = ("active", "suspended")  # trancada = ativa
-IGNORAR = [x.strip() for x in os.getenv("ATIVAS_IGNORAR_CONTRATOS", "circuito").split(",") if x.strip()]
+IGNORAR = [x.strip() for x in os.getenv("ATIVAS_IGNORAR_CONTRATOS", "circuito,vip").split(",") if x.strip()]
 ARQ = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "alunas-ativas-historico.json"))
 
 
@@ -69,24 +71,40 @@ def _norm(s):
 def ignorado(x):
     """Contrato que não conta (ex.: circuito)."""
     n = _norm(x.get("name"))
-    return any(_norm(i) in n for i in IGNORAR)
+    # começo de palavra: "vip" pega "VIP NOVO", mas não pega no meio de outra palavra
+    return any(re.search(r"(?<![a-z0-9])" + re.escape(_norm(i)), n) for i in IGNORAR)
 
 
 def _st(x):
     return str((x or {}).get("membershipStatus") or "").strip().lower()
 
 
-def contrato_vigente(m):
-    """(conta?, contrato, trancada) de uma cliente com status ativo/trancado.
-    Não conta se TODOS os contratos vigentes dela são ignorados (só circuito)."""
-    vig = [x for x in (m.get("memberships") or []) if _st(x) in ATIVOS]
-    bons = [x for x in vig if not ignorado(x)]
-    if vig and not bons:
-        return False, vig[0].get("name") or "", False
+def contrato_vigente(m, hoje):
+    """(motivo, contrato, trancada, fila) de uma cliente com status ativo/trancado.
+    motivo: "conta" | "ignorado" (só circuito) | "fila" (só contrato que ainda não
+    começou — renovação na fila não é contrato vigente) | "sem" (nenhum vigente).
+    fila = (nome, início) do próximo contrato na fila, se houver."""
+    lst = m.get("memberships") or []
+    if not lst:  # sem os contratos na lista: confia no status do EVO
+        return "conta", "", _st(m) == "suspended", None
+
+    def vale(x):
+        ini, fim = _d(x.get("startDate")), _fim_efetivo(x)
+        return bool(ini) and ini <= hoje and (fim is None or fim >= hoje or _st(x) in ATIVOS)
+
+    futuros = sorted((x for x in lst if not ignorado(x) and _d(x.get("startDate")) and _d(x.get("startDate")) > hoje),
+                     key=lambda x: str(x.get("startDate")))
+    fila = ((futuros[0].get("name") or "").strip(), str(futuros[0].get("startDate"))[:10]) if futuros else None
+    bons = [x for x in lst if not ignorado(x) and vale(x)]
+    if not bons:
+        ign = [x for x in lst if ignorado(x) and vale(x)]
+        if ign:
+            return "ignorado", (ign[0].get("name") or "").strip(), False, None
+        return ("fila" if fila else "sem"), (fila[0] if fila else ""), False, None
     bons.sort(key=lambda x: str(x.get("startDate") or ""), reverse=True)
-    c = bons[0] if bons else {}
+    c = bons[0]
     tranc = _st(m) == "suspended" or _st(c) == "suspended"
-    return True, (c.get("name") or "").strip(), tranc
+    return "conta", (c.get("name") or "").strip(), tranc, fila
 
 
 def _fim_efetivo(m):
@@ -156,22 +174,28 @@ def main():
     args = ap.parse_args()
     evo = EvoClient()
     ativas, trancadas, take, skip = set(), set(), 100, 0
-    todos, info, so_ignorado = [], {}, {}
+    todos, info, so_ignorado, fora = [], {}, {}, {"fila": 0, "sem": 0}
+    hoje = date.fromisoformat(hoje_sp())
+    vistos = set()
     for _ in range(200):
         rows = evo._request("GET", "/api/v1/members", params={"take": take, "skip": skip}) or []
         if not isinstance(rows, list) or not rows:
             break
-        todos.extend(rows)
-        for m in rows:
+        novos = [m for m in rows if str(m.get("idMember")) not in vistos]  # paginação pode repetir
+        vistos.update(str(m.get("idMember")) for m in novos)
+        todos.extend(novos)
+        for m in novos:
             st = str(m.get("membershipStatus") or "").strip().lower()
             idm = m.get("idMember")
             if idm is not None and st in ATIVOS:
-                conta, contrato, tranc = contrato_vigente(m)
-                if not conta:
+                motivo, contrato, tranc, fila = contrato_vigente(m, hoje)
+                if motivo == "ignorado":
                     so_ignorado[contrato] = so_ignorado.get(contrato, 0) + 1
+                if motivo != "conta":
+                    fora[motivo] = fora.get(motivo, 0) + 1
                     continue
                 ativas.add(str(idm))
-                info[str(idm)] = (contrato, tranc)
+                info[str(idm)] = (contrato, tranc, fila)
                 if tranc:
                     trancadas.add(str(idm))
         if len(rows) < take:
@@ -198,7 +222,7 @@ def main():
     dias[dia] = {"ativas": len(ativas), "trancadas": len(trancadas), "entraram": entraram, "sairam": sairam}
     h["dias"] = dict(sorted(dias.items()))
     h["ultimo"] = {"dia": dia, "ids": sorted(ativas)}
-    h["ignorados"] = {"regra": IGNORAR, "so_ignorado": so_ignorado}
+    h["ignorados"] = {"regra": IGNORAR, "so_ignorado": so_ignorado, "so_fila": fora["fila"], "sem_vigente": fora["sem"]}
     por_id = {}
     try:
         rec = reconstruir(todos, date.fromisoformat(dia), por_id)
@@ -236,6 +260,8 @@ def main():
         p = {"n": nomes.get(k) or str(m.get("firstName") or "").strip() or f"id {k}", "iv": iv or []}
         if k in info:
             p["c"], p["t"] = info[k][0], info[k][1]
+            if info[k][2]:
+                p["f"] = info[k][2]  # próximo contrato na fila (nome, início)
         pessoas[k] = p
     h["pessoas"] = pessoas
     sem_nome = len(ativas - set(nomes))
@@ -248,7 +274,9 @@ def main():
     rec = h.get("reconstruido") or {}
     hist = f" · histórico desde {rec.get('inicio')} (hoje pelos contratos: {rec['ativas'][-1]})" if rec.get("ativas") else ""
     ign = sum(so_ignorado.values())
-    ign = f" · {ign} ignorada(s) por só ter contrato {'/'.join(IGNORAR)}" if ign else ""
+    ign = f" · {ign} ignorada(s) por só ter contrato {' ou '.join(IGNORAR)}" if ign else ""
+    if fora["fila"]:
+        ign += f" · {fora['fila']} fora por só ter contrato na fila (ainda não começou)"
     nm = f" · faltam {sem_nome} nomes completos (vêm nas próximas atualizações)" if sem_nome else ""
     print(f"foto de alunas ativas {dia}: {len(ativas)} ativas ({len(trancadas)} trancadas){ign}{extra}{hist}{nm}")
 
