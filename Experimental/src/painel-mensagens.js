@@ -5690,7 +5690,7 @@ function paginaPrivacidade() {
     <ul>
       <li><b>Dados que você informa:</b> nome, telefone/WhatsApp, e-mail e as respostas que você der nos nossos formulários (agendamento de aula experimental, listas de campanhas e promoções, cadastro no Slim Club) e no atendimento.</li>
       <li><b>Dados de matrícula:</b> quando você se torna aluna, os dados do contrato ficam no nosso sistema de gestão (por exemplo: nome, CPF, data de nascimento, contato, plano, horários, frequência e situação de pagamentos).</li>
-      <li><b>Conversas:</b> mensagens trocadas com o Studio pelo WhatsApp (inclusive com a SoFIA, nossa assistente virtual) e pelo Instagram (comentários e mensagens no Direct), incluindo áudios e imagens que você enviar.</li>
+      <li><b>Conversas:</b> mensagens trocadas com o Studio pelo WhatsApp (inclusive com a SoFIA, nossa assistente virtual)${IG_NO_PAINEL ? ' e pelo Instagram (comentários e mensagens no Direct)' : ''}, incluindo áudios e imagens que você enviar.</li>
       <li><b>Slim Club:</b> se você cadastrar o seu negócio, os dados do anúncio (nome do negócio, categoria, CPF/CNPJ, benefício oferecido, Instagram, WhatsApp e foto ou logo), além do registro de uso dos benefícios e das avaliações.</li>
       <li><b>Dados técnicos:</b> endereço IP e dados básicos de acesso às nossas páginas, usados para segurança e para evitar envios automáticos (robôs).</li>
       <li><b>Equipe do Studio:</b> quem usa o painel interno tem nome de usuário, e-mail e registro de acessos. No login com Google recebemos apenas o e-mail e o nome do perfil; <b>não</b> acessamos caixa de e-mail, arquivos ou contatos.</li>
@@ -5712,7 +5712,7 @@ function paginaPrivacidade() {
     <h2>5. Assistente virtual com inteligência artificial (SoFIA)</h2>
     <p>Parte do atendimento no WhatsApp é feita pela SoFIA, uma assistente virtual. Para responder, o conteúdo da conversa é processado por um <b>provedor de inteligência artificial</b> contratado, apenas para gerar a resposta. Áudios podem ser transcritos automaticamente para o mesmo fim. Você pode pedir para falar com uma pessoa da equipe a qualquer momento.</p>
 
-    <h2>6. Instagram (API oficial da Meta)</h2>
+    ${IG_NO_PAINEL ? `    <h2>6. Instagram (API oficial da Meta)</h2>
     <p>O Studio conecta sua <b>própria conta profissional do Instagram</b> ao painel pela <b>API oficial da Meta</b>:</p>
     <ul>
       <li><b>O que recebemos:</b> quando alguém comenta em um post do Studio ou envia uma mensagem no Direct, a Meta nos envia o texto e o identificador público de quem enviou.</li>
@@ -5720,12 +5720,12 @@ function paginaPrivacidade() {
       <li><b>O que não fazemos:</b> não enviamos mensagens a quem não interagiu, não coletamos sua lista de seguidores, não publicamos em seu nome e não vendemos esses dados.</li>
     </ul>
     <p>Esse uso segue as Políticas da Plataforma da Meta.</p>
-
-    <h2>7. Com quem compartilhamos</h2>
+` : ''}
+    <h2>${IG_NO_PAINEL ? 7 : 6}. Com quem compartilhamos</h2>
     <p><b>Não vendemos nem alugamos dados pessoais.</b> Compartilhamos apenas o necessário com quem nos ajuda a prestar o serviço:</p>
     <ul>
       <li><b>Sistema de gestão de academias</b> (cadastro, contratos, agenda e pagamentos);</li>
-      <li><b>Meta</b> (WhatsApp e Instagram) para enviar e receber mensagens;</li>
+      <li><b>Meta</b> (${IG_NO_PAINEL ? 'WhatsApp e Instagram' : 'WhatsApp'}) para enviar e receber mensagens;</li>
       <li><b>Google</b> (login da equipe e planilhas internas);</li>
       <li><b>Provedores de inteligência artificial</b> (respostas da assistente virtual e transcrição de áudios);</li>
       <li><b>Provedor de hospedagem</b> onde ficam o painel e os formulários;</li>
@@ -5735,17 +5735,17 @@ function paginaPrivacidade() {
     <p>No Slim Club, os dados do anúncio que você cadastrou ficam visíveis para as alunas do Studio que acessam a listagem.</p>
     <p>Alguns desses fornecedores podem guardar dados fora do Brasil; nesses casos exigimos que sigam regras de proteção compatíveis com a LGPD.</p>
 
-    <h2>8. Por quanto tempo guardamos</h2>
+    <h2>${IG_NO_PAINEL ? 8 : 7}. Por quanto tempo guardamos</h2>
     <p>Guardamos os dados enquanto forem necessários para a finalidade de cada um: durante o atendimento e a matrícula e, depois disso, pelo prazo exigido por lei (por exemplo, obrigações fiscais e para defesa em eventuais processos). Respostas de formulários de campanha ficam até o fim da campanha ou até você pedir a exclusão. O histórico de conversas tem prazo de retenção definido no painel.</p>
 
-    <h2>9. Como protegemos</h2>
+    <h2>${IG_NO_PAINEL ? 9 : 8}. Como protegemos</h2>
     <p>As páginas e o painel usam conexão segura (<b>HTTPS</b>). O acesso ao painel é restrito à equipe autorizada, com senha guardada de forma protegida (hash), sessão por cookie assinado e registro de acessos. Formulários públicos têm proteção contra envios automáticos.</p>
 
-    <h2>10. Cookies</h2>
+    <h2>${IG_NO_PAINEL ? 10 : 9}. Cookies</h2>
     <p>Usamos apenas cookies <b>essenciais</b>: para manter a equipe conectada ao painel, as alunas conectadas ao Slim Club e, nos formulários, um identificador anônimo do navegador para contar as visitas. Não usamos cookies de publicidade nem de rastreamento de terceiros nessas páginas.</p>
     <p>Os <b>links de formulário que o Studio envia por WhatsApp</b> (por exemplo, numa campanha) podem ter um código pessoal. Com ele registramos <b>se e quando você abriu</b> a página, para saber se a mensagem foi útil e não insistir com quem já respondeu. Esse registro fica só no Studio e segue os prazos e direitos desta política.</p>
 
-    <h2>11. Seus direitos</h2>
+    <h2>${IG_NO_PAINEL ? 11 : 10}. Seus direitos</h2>
     <p>Pela LGPD (art. 18), você pode, a qualquer momento e sem custo:</p>
     <ul>
       <li>confirmar se tratamos seus dados e ter acesso a eles;</li>
@@ -5758,10 +5758,10 @@ function paginaPrivacidade() {
     </ul>
     <p>Para exercer seus direitos, fale com a gente pelos canais do item 1. Também é possível reclamar à <b>Autoridade Nacional de Proteção de Dados (ANPD)</b>.</p>
 
-    <h2>12. Menores de idade</h2>
+    <h2>${IG_NO_PAINEL ? 12 : 11}. Menores de idade</h2>
     <p>Dados de menores de 18 anos só são tratados com autorização e acompanhamento do responsável legal.</p>
 
-    <h2>13. Alterações</h2>
+    <h2>${IG_NO_PAINEL ? 13 : 12}. Alterações</h2>
     <p>Esta política pode ser atualizada; a data no topo indica a versão em vigor. Mudanças importantes serão comunicadas pelos nossos canais.</p>`, { voltar: false });
 }
 function paginaTermos() {
