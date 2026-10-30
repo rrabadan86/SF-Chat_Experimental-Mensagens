@@ -58,12 +58,14 @@ function nomeador(h) {
   return (id) => { const p = (h.pessoas || {})[id] || {}; return (p.nc && p.n) || porEvo[id] || p.n || `id ${id}`; };
 }
 
-// ── aulas experimentais do mês (mesma regra da tela Professoras) ─────────────
-function experimentaisDoMes(h, k) {
+// ── aulas experimentais de um período (mesma regra da tela Professoras) ──────
+// → { exp, veio, faltou, fechou, profs: { nome: { exp, veio, fechou } },
+//     pendentes: [{ nome, dia, hora, prof }] (vieram e ainda não fecharam) } ou null
+function experimentaisPeriodo(h, de, ate) {
   let hist;
   try { hist = require('./experimentais-hist'); } catch (_) { return null; }
   const he = hist.ler();
-  const aulas = Object.values(he.aulas || {}).filter(a => String(a.dia || '').slice(0, 7) === k);
+  const aulas = Object.values(he.aulas || {}).filter(a => a.dia && a.dia >= de && a.dia <= ate);
   if (!aulas.length) return null;
   const pessoas = h.pessoas || null;
   // professora lançada como aluna não conta
@@ -86,7 +88,7 @@ function experimentaisDoMes(h, k) {
     if (!set && ks[1]) set = porNome.get('~' + ks[1]);
     return set && set.size === 1 ? pessoas && pessoas[[...set][0]] : null;
   };
-  const r = { exp: 0, veio: 0, faltou: 0, fechou: 0 };
+  const r = { exp: 0, veio: 0, faltou: 0, fechou: 0, profs: {}, pendentes: [] };
   for (const a of aulas) {
     const sit = hist.situacao(a.status);
     if (sit === 'cancelada' || ehProfessora(a.nome)) continue;
@@ -96,9 +98,15 @@ function experimentaisDoMes(h, k) {
     if (cs.some(c => c[0] < tol && c[1] >= a.dia)) continue; // já era aluna (ex.: aula de evento)
     const fechou = sit === 'veio' && (cs.some(c => c[0] >= tol && c[0] <= somaDias(a.dia, 120)) || (!!a.contrato && !ativasDados.contratoIgnorado(a.contrato)));
     r.exp++; if (sit === 'veio') r.veio++; if (sit === 'faltou') r.faltou++; if (fechou) r.fechou++;
+    const pf = a.prof || '— sem professora';
+    const rp = r.profs[pf] || (r.profs[pf] = { exp: 0, veio: 0, fechou: 0 });
+    rp.exp++; if (sit === 'veio') rp.veio++; if (fechou) rp.fechou++;
+    if (sit === 'veio' && !fechou) r.pendentes.push({ nome: String(a.nome || '').trim(), dia: a.dia, hora: a.hora || '', prof: a.prof || '' });
   }
+  r.pendentes.sort((x, y) => (x.dia + x.hora).localeCompare(y.dia + y.hora));
   return r.exp ? r : null;
 }
+function experimentaisDoMes(h, k) { return experimentaisPeriodo(h, `${k}-01`, `${k}-31`); }
 
 // ── números do mês ───────────────────────────────────────────────────────────
 // mes = 'AAAA-MM' (padrão: o mês que acabou). null se ainda não há histórico.
@@ -238,8 +246,9 @@ function imagemHtml(d, studio) {
   <div class="rod">Trancada conta como ativa. Não contam contratos ${esc(d.ignorados.map(x => String(x).toUpperCase()).join('/'))} nem renovação na fila.</div>
 </body></html>`;
 }
-async function gerarImagem(d, studio) {
-  const html = imagemHtml(d, studio);
+async function gerarImagem(d, studio) { return gerarPng(imagemHtml(d, studio), ARQ_IMG); }
+// Fotografa um HTML 1080×1350 com o Chromium (puppeteer) e grava o PNG em `arq`.
+async function gerarPng(html, arq) {
   let browser;
   try {
     const puppeteer = require('puppeteer');
@@ -247,8 +256,8 @@ async function gerarImagem(d, studio) {
     const page = await browser.newPage();
     await page.setViewport({ width: 1080, height: 1350, deviceScaleFactor: 1 });
     await page.setContent(html, { waitUntil: 'networkidle0', timeout: 20000 }).catch(() => {}); // sem internet: segue com a fonte do sistema
-    await page.screenshot({ path: ARQ_IMG, type: 'png', clip: { x: 0, y: 0, width: 1080, height: 1350 } });
-    return ARQ_IMG;
+    await page.screenshot({ path: arq, type: 'png', clip: { x: 0, y: 0, width: 1080, height: 1350 } });
+    return arq;
   } finally { try { if (browser) await browser.close(); } catch (_) {} }
 }
 
@@ -289,29 +298,34 @@ async function enviar({ mes, teste = false, log = console.log } = {}) {
   let studio = '';
   try { studio = require('./config').STUDIO_NOME || ''; } catch (_) {}
   try { img = await gerarImagem(d, studio || process.env.STUDIO_NOME || ''); } catch (e) { log(`📊 Resumo mensal: não consegui gerar a imagem (${e.message}) — vai só o texto.`); }
-  const wa = require('./wa-client');
-  await wa.initWhatsApp();
-  const res = [];
-  for (const g of cfg.grupos) {
-    let okImg = false, okTxt = false, erro = '';
-    // Imagem com o texto como LEGENDA (uma mensagem só). A legenda do WhatsApp tem
-    // limite (~1.000 caracteres): se a lista de quem saiu for longa, ela vai numa
-    // 2ª mensagem. Se a foto falhar, o wa-client manda a legenda como texto.
-    const legenda = txt.length <= LIMITE_LEGENDA ? txt : texto(Object.assign({}, d, { saidas: null }));
-    const resto = legenda === txt ? '' : textoSaidas(d);
-    if (img) {
-      try { await wa.sendGrupoMidia(g, img, legenda, 'Resumo mensal'); okImg = true; okTxt = true; } catch (e) { erro = 'imagem: ' + e.message; }
-    }
-    if (!okTxt) { try { await wa.sendGrupo(g, legenda, 'Resumo mensal'); okTxt = true; } catch (e) { erro = (erro ? erro + ' · ' : '') + 'texto: ' + e.message; } }
-    if (okTxt && resto) { try { await wa.sendGrupo(g, resto, 'Resumo mensal'); } catch (e) { erro = (erro ? erro + ' · ' : '') + 'lista de quem saiu: ' + e.message; } }
-    res.push({ grupo: g, okImg, okTxt, erro });
-    log(`📊 Resumo mensal (${d.nome}) → "${g}": ${okTxt ? 'texto ✅' : 'texto ❌'}${img ? (okImg ? ' · imagem ✅' : ' · imagem ❌') : ''}${erro ? ' — ' + erro : ''}`);
-  }
+  // Se a lista de quem saiu deixar o texto longo demais para legenda, ela vai à parte.
+  const legenda = txt.length <= LIMITE_LEGENDA ? txt : texto(Object.assign({}, d, { saidas: null }));
+  const res = await enviarNosGrupos({ grupos: cfg.grupos, img, legenda, resto: legenda === txt ? '' : textoSaidas(d), contexto: 'Resumo mensal', rotulo: `Resumo mensal (${d.nome})`, log });
   const algum = res.some(r => r.okTxt);
   const mudar = { ultimo: { em: Date.now(), mes: d.k, teste, ok: algum, msg: res.map(r => `${r.grupo}: ${r.okTxt ? 'enviado' : 'falhou'}${r.erro ? ` (${r.erro})` : ''}`).join(' · ') } };
   if (algum && !teste) mudar.enviados = Object.assign({}, cfg.enviados, { [d.k]: Date.now() });
   salvarCfg(mudar);
   if (!algum) throw new Error('Não consegui enviar em nenhum grupo: ' + res.map(r => r.erro).join(' · '));
+  return res;
+}
+
+// Imagem com o texto como LEGENDA (uma mensagem só) em cada grupo; `resto` (se
+// houver) vai numa 2ª mensagem. Se a foto falhar, vai só o texto.
+// → [{ grupo, okImg, okTxt, erro }]
+async function enviarNosGrupos({ grupos, img, legenda, resto, contexto, rotulo, log = console.log }) {
+  const wa = require('./wa-client');
+  await wa.initWhatsApp();
+  const res = [];
+  for (const g of grupos) {
+    let okImg = false, okTxt = false, erro = '';
+    if (img) {
+      try { await wa.sendGrupoMidia(g, img, legenda, contexto); okImg = true; okTxt = true; } catch (e) { erro = 'imagem: ' + e.message; }
+    }
+    if (!okTxt) { try { await wa.sendGrupo(g, legenda, contexto); okTxt = true; } catch (e) { erro = (erro ? erro + ' · ' : '') + 'texto: ' + e.message; } }
+    if (okTxt && resto) { try { await wa.sendGrupo(g, resto, contexto); } catch (e) { erro = (erro ? erro + ' · ' : '') + 'continuação: ' + e.message; } }
+    res.push({ grupo: g, okImg, okTxt, erro });
+    log(`📊 ${rotulo} → "${g}": ${okTxt ? 'texto ✅' : 'texto ❌'}${img ? (okImg ? ' · imagem ✅' : ' · imagem ❌') : ''}${erro ? ' — ' + erro : ''}`);
+  }
   return res;
 }
 
@@ -329,7 +343,11 @@ function estaNaHora(cfg) {
   return mes;
 }
 
-module.exports = { lerCfg, salvarCfg, dadosDoMes, texto, imagemHtml, gerarImagem, enviar, estaNaHora, mesAnterior, nomeMes, agoraSP, ARQ_IMG };
+module.exports = {
+  lerCfg, salvarCfg, dadosDoMes, texto, imagemHtml, gerarImagem, enviar, estaNaHora, mesAnterior, nomeMes, agoraSP, ARQ_IMG,
+  // usados também pelo resumo da semana (resumo-semanal.js)
+  experimentaisPeriodo, gerarPng, enviarNosGrupos, atualizarAtivas, somaDias, fmtD, pct, sinal, esc, LIMITE_LEGENDA,
+};
 
 if (require.main === module) {
   require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });

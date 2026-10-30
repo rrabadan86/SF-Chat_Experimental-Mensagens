@@ -751,6 +751,11 @@ const ESTILO = `
   .rm-campo{display:flex;flex-direction:column;gap:6px;min-width:0}
   .rm-linha{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,220px));gap:12px}
   .rm-btns{display:flex;gap:10px}
+  .rm-dias{display:flex;flex-wrap:wrap;gap:6px}
+  .rm-dia{position:relative;cursor:pointer}.rm-dia input{position:absolute;opacity:0}
+  .rm-dia span{display:inline-block;padding:6px 13px;border:1px solid var(--linha);border-radius:999px;font-weight:600;font-size:var(--fs-sm);background:var(--card)}
+  .rm-dia input:checked+span{background:var(--teal);border-color:var(--teal);color:#fff}
+  .rm-dia input:focus-visible+span{outline:2px solid var(--teal);outline-offset:2px}
   .rm-prev{display:grid;grid-template-columns:minmax(0,432px) minmax(0,1fr);gap:18px;align-items:start}
   .rm-img{width:100%;aspect-ratio:1080/1350;overflow:hidden;border-radius:12px;border:1px solid var(--linha);position:relative}
   .rm-img iframe{position:absolute;top:0;left:0;width:1080px;height:1350px;border:0;transform-origin:0 0;transform:scale(var(--rm-esc,.4))}
@@ -1471,7 +1476,7 @@ function paginaMensagens(aviso, erro) {
   const outros = OUTROS_JOBS.map(chave => hmap[chave]).filter(Boolean).map(j => {
     const badgeH = j.editado ? '<span class="badge-ed">alterado</span>' : '';
     return `<div class="card" style="position:relative">${switchEnvio([j.chave])}<div class="chead"><h2 style="font-size:.98rem">${esc(j.titulo)} ${badgeH}</h2></div>
-      <div class="hsec" style="border:0;margin:8px 0 0;padding:0">${blocoHorario(j, '')}</div></div>`;
+      <div class="hsec" style="border:0;margin:8px 0 0;padding:0">${blocoHorario(j, '')}</div>${j.chave === 'resumoSemana' ? '<p class="quando" style="margin:8px 0 0">Grupos, o que vai na mensagem, prévia e envio de teste: <a href="/ativas/resumo?t=semana">Indicadores → Alunas ativas → Resumos no WhatsApp</a>.</p>' : ''}</div>`;
   }).join('\n');
 
   const corpo = `<div class="wrap">
@@ -6528,7 +6533,7 @@ function paginaResumoMensal(params, aviso) {
   const optDia = Array.from({ length: 28 }, (_, i) => i + 1).map(n => `<option value="${n}"${n === cfg.dia ? ' selected' : ''}>dia ${n}</option>`).join('');
   const optMes = meses.slice().reverse().slice(0, 24).map(m => `<option value="${m.k}"${m.k === mes ? ' selected' : ''}>${rm.nomeMes(m.k)}</option>`).join('');
   const corpo = `<div class="wrap">${subnavIndicadores('ativas')}
-    ${uiTopo({ titulo: 'Resumo mensal no WhatsApp', sub: 'Todo mês, no dia e horário escolhidos, o robô manda nos grupos o resumo do mês que fechou: alunas ativas comparadas com o mês anterior (entradas e saídas) e com o mesmo mês do ano anterior — em texto e numa imagem. Usa os números atualizados no dia (leitura das 05:25); se ainda não houver, relê o EVO antes.', acoes: '<a class="ui-btn sec" href="/ativas">← Alunas ativas</a>', linhas: [aviso || '', status, ultHtml].filter(Boolean) })}
+    ${uiTopo({ titulo: 'Resumos no WhatsApp', sub: 'Resumo do <b>mês</b>: todo mês, no dia e horário escolhidos, o robô manda nos grupos o resumo do mês que fechou: alunas ativas comparadas com o mês anterior (entradas e saídas) e com o mesmo mês do ano anterior — em texto e numa imagem. Usa os números atualizados no dia (leitura das 05:25); se ainda não houver, relê o EVO antes.', acoes: '<a class="ui-btn sec" href="/ativas">← Alunas ativas</a>', linhas: [uiChips('Resumo', [['/ativas/resumo', 'Mensal', true], ['/ativas/resumo?t=semana', 'Semanal', false]]), aviso || '', status, ultHtml].filter(Boolean) })}
     <form method="POST" action="/ativas/resumo/salvar" class="card rm-form">
       <div class="rm-cab"><b>Envio automático</b>${sw}</div>
       <label class="rm-campo"><span class="ui-lbl">Grupo(s) do WhatsApp</span>
@@ -6562,6 +6567,65 @@ function paginaResumoMensal(params, aviso) {
   return chrome({ tab: 'Resumo mensal' }, 'ativas', corpo);
 }
 
+// ── … → Resumos no WhatsApp → Semanal ────────────────────────────────────────
+// Resumo da semana no grupo da equipe (resumo-semanal.js). Liga/desliga e
+// dias/horário são os do job resumoSemana (os mesmos de WhatsApp → Outros envios).
+function paginaResumoSemanal(params, aviso) {
+  const rs = require('./resumo-semanal');
+  const rmx = require('./resumo-mensal');
+  const cfg = rs.lerCfg();
+  const ontem = rmx.somaDias(rmx.agoraSP().dia, -1);
+  const semanas = Array.from({ length: 8 }, (_, i) => rmx.somaDias(ontem, -7 * i));
+  const ate = semanas.includes(params.ate) ? params.ate : ontem;
+  let d = null; try { d = rs.dadosDaSemana(ate, cfg); } catch (e) { console.log('[resumo semanal] prévia falhou:', e.message); }
+  const fmtQ = (ms) => { try { return new Date(ms).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+  const diasTxt = (cfg.dias || []).map(x => rs.DIAS_LONGO[x]).join(', ').replace(/, ([^,]+)$/, ' e $1');
+  const ult = cfg.ultimo;
+  const status = !cfg.ativo ? '<div class="ui-nota"><span>Envio automático <b>desligado</b>. Ligue abaixo e salve.</span></div>'
+    : !cfg.grupos.length ? '<div class="ui-nota warn"><span>Ligado, mas <b>sem grupo</b> — escreva o nome do grupo abaixo.</span></div>'
+    : `<div class="ui-nota ok"><span>✅ Ligado: envia <b>${esc(diasTxt)}</b> às <b>${esc(cfg.hora)}</b> (semana = 7 dias até a véspera), em ${cfg.grupos.map(g => `<b>${esc(g)}</b>`).join(', ')}.</span></div>`;
+  const ultHtml = ult ? `<div class="ui-nota ${ult.ok ? '' : 'erro'}"><span>${ult.ok ? '📤' : '⚠️'} Último envio${ult.teste ? ' (manual)' : ''}: ${esc(fmtQ(ult.em))}. ${esc(ult.msg || '')}</span></div>` : '';
+  const sw = `<label class="envsw rm-sw ${cfg.ativo ? 'on' : 'off'}"><span class="envsw-txt">${cfg.ativo ? 'Ativado' : 'Desligado'}</span>
+      <input type="checkbox" name="ativo" value="1"${cfg.ativo ? ' checked' : ''} onchange="var l=this.parentNode;l.className='envsw rm-sw '+(this.checked?'on':'off');l.firstElementChild.textContent=this.checked?'Ativado':'Desligado'">
+      <span class="envsw-track"><span class="envsw-thumb"></span></span></label>`;
+  const chkDia = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((n, i) => `<label class="rm-dia"><input type="checkbox" name="dias" value="${i}"${(cfg.dias || []).includes(i) ? ' checked' : ''}><span>${n}</span></label>`).join('');
+  const fmtD = (x) => { const p = String(x).split('-'); return `${p[2]}/${p[1]}`; };
+  const optSem = semanas.map(s => `<option value="${s}"${s === ate ? ' selected' : ''}>${fmtD(rmx.somaDias(s, -6))} a ${fmtD(s)}${s === ontem ? ' (a mais recente)' : ''}</option>`).join('');
+  const corpo = `<div class="wrap">${subnavIndicadores('ativas')}
+    ${uiTopo({ titulo: 'Resumos no WhatsApp', sub: 'Resumo da <b>semana</b> no grupo da equipe: agendamentos por canal, aulas experimentais (vieram, faltaram, fecharam), por professora, alunas ativas e quem veio e ainda não fechou — em texto (como legenda) e numa imagem. Não abre mais o EVO no navegador: usa o que o robô já leu.', acoes: '<a class="ui-btn sec" href="/ativas">← Alunas ativas</a>',
+      linhas: [uiChips('Resumo', [['/ativas/resumo', 'Mensal', false], ['/ativas/resumo?t=semana', 'Semanal', true]]), aviso || '', status, ultHtml].filter(Boolean) })}
+    <form method="POST" action="/ativas/resumo/semana/salvar" class="card rm-form">
+      <div class="rm-cab"><b>Envio automático</b>${sw}</div>
+      <label class="rm-campo"><span class="ui-lbl">Grupo(s) do WhatsApp</span>
+        <textarea name="grupos" rows="2" placeholder="Nome do grupo, exatamente como aparece no WhatsApp (um por linha)">${esc(cfg.grupos.join('\n'))}</textarea></label>
+      <div class="rm-campo"><span class="ui-lbl">Dias</span><div class="rm-dias">${chkDia}</div></div>
+      <label class="rm-campo" style="max-width:220px"><span class="ui-lbl">Horário</span><input type="time" name="hora" value="${esc(cfg.hora)}"></label>
+      <label class="chk"><input type="checkbox" name="porProfessora" value="1"${cfg.porProfessora ? ' checked' : ''}> <span>Incluir <b>por professora</b> (quantas fecharam de quem veio)</span></label>
+      <label class="chk"><input type="checkbox" name="ativas" value="1"${cfg.ativas ? ' checked' : ''}> <span>Incluir <b>alunas ativas</b> (entradas e saídas na semana × semana anterior)</span></label>
+      <label class="chk"><input type="checkbox" name="pendentes" value="1"${cfg.pendentes ? ' checked' : ''}> <span>Incluir <b>quem veio e ainda não fechou</b> (nomes, para a recepção ligar)</span></label>
+      <div class="rm-btns"><button class="ui-btn" type="submit">Salvar</button></div>
+      <p class="quando" style="margin:0">Liga/desliga e dias/horário são os mesmos de <b>WhatsApp → Outros envios → Resumo da semana</b>. Mudanças valem sem reiniciar o robô.</p>
+    </form>
+    <div class="sec-t">Prévia</div>
+    <div class="card">
+      <form method="GET" action="/ativas/resumo" class="ui-linha" style="margin:0 0 12px"><input type="hidden" name="t" value="semana"><span class="ui-lbl">Semana</span><select name="ate" onchange="this.form.submit()" style="width:auto">${optSem}</select>
+        <span class="quando" style="margin:0">Salve antes de ver a prévia, se mudou as opções.</span></form>
+      ${d && !d.vazio ? `<div class="rm-prev">
+        <div class="rm-img"><iframe src="/ativas/resumo/imagem-semana?ate=${esc(ate)}" title="Imagem do resumo da semana" loading="lazy" scrolling="no"></iframe></div>
+        <pre class="rm-txt">${esc(rs.texto(d))}</pre>
+      </div>
+      <form method="POST" action="/ativas/resumo/semana/enviar" class="ui-linha" style="margin:14px 0 0" onsubmit="return confirm('Enviar agora o resumo da semana em: ${esc(cfg.grupos.join(', ') || '(nenhum grupo)')}?')">
+        <input type="hidden" name="ate" value="${esc(ate)}">
+        <button class="ui-btn" type="submit"${cfg.grupos.length ? '' : ' disabled title="Escreva o nome do grupo e salve"'}>📤 Enviar agora nos grupos</button>
+        <span class="quando" style="margin:0">Chega em cerca de 1 minuto. Não muda o envio automático.</span>
+      </form>` : '<div class="vazio">Nenhum agendamento nem aula experimental nesta semana — nada a enviar.</div>'}
+    </div>
+    <script>(function(){ function ajusta(){ document.querySelectorAll('.rm-img').forEach(function(c){ c.style.setProperty('--rm-esc', (c.clientWidth/1080).toFixed(4)); }); } ajusta(); window.addEventListener('resize', ajusta); })();</script>
+    <p class="ui-rodape">A <b>semana</b> são os 7 dias que terminam na véspera do envio (a presença do dia ainda não foi lida no EVO). <b>Agendaram</b> = agendamentos feitos na semana (SoFIA, Formulário, Express), como no Funil; <b>aulas</b> = experimentais com data na semana, com a regra da tela Professoras. O texto vai como legenda da imagem; se a lista de quem não fechou for longa, ela vai numa 2ª mensagem. Semana sem nenhum agendamento nem aula não é enviada.</p>
+  </div>`;
+  return chrome({ tab: 'Resumo da semana' }, 'ativas', corpo);
+}
+
 function paginaAtivas(params) {
   params = params || {};
   const h = lerAtivasHist();
@@ -6580,7 +6644,7 @@ function paginaAtivas(params) {
   const topoBase = (linhas) => uiTopo({
     titulo: 'Alunas ativas',
     sub: 'Quantas alunas têm contrato vigente — <b>trancada conta como ativa</b> — mês a mês ou semana a semana, quem entrou, quem saiu e a comparação com o mesmo período do ano anterior.',
-    acoes: `<div class="ui-acoes"><a class="ui-btn sec" href="/ativas/resumo">📤 Resumo no WhatsApp</a>${btnAtualizar}</div>`, linhas: (linhas || []).concat(avisoCalc ? [avisoCalc] : []),
+    acoes: `<div class="ui-acoes"><a class="ui-btn sec" href="/ativas/resumo">📤 Resumos no WhatsApp</a>${btnAtualizar}</div>`, linhas: (linhas || []).concat(avisoCalc ? [avisoCalc] : []),
   });
   if (!serie.length) {
     return chrome({ tab: 'Alunas ativas' }, 'ativas', `<div class="wrap">${subnavIndicadores('ativas')}${topoBase([])}
@@ -8557,8 +8621,9 @@ const server = http.createServer((req, res) => {
   }
   if (req.method === 'GET' && url === '/ativas/resumo') {
     const sp = new URLSearchParams(req.url.split('?')[1] || '');
-    const av = { salvo: '<div class="ui-nota ok"><span>✅ Configuração salva.</span></div>', enviando: '<div class="ui-nota ok"><span>📤 Pedido enviado ao robô — em 1 a 3 minutos a mensagem chega nos grupos. Atualize a página para ver o resultado.</span></div>' }[sp.get('ok') || ''] || '';
+    const av = { erro: `<div class="ui-nota erro"><span>⚠️ Não salvei: ${esc(sp.get('msg') || '')}</span></div>`, salvo: '<div class="ui-nota ok"><span>✅ Configuração salva.</span></div>', enviando: '<div class="ui-nota ok"><span>📤 Pedido enviado ao robô — em 1 a 3 minutos a mensagem chega nos grupos. Atualize a página para ver o resultado.</span></div>' }[sp.get('ok') || ''] || '';
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    if (sp.get('t') === 'semana') return res.end(paginaResumoSemanal({ ate: sp.get('ate') || '' }, av));
     return res.end(paginaResumoMensal({ mes: sp.get('mes') || '' }, av));
   }
   if (req.method === 'GET' && url === '/ativas/resumo/imagem') {
@@ -8567,6 +8632,36 @@ const server = http.createServer((req, res) => {
     let d = null; try { d = rm.dadosDoMes(/^\d{4}-\d{2}$/.test(mes) ? mes : undefined); } catch (_) {}
     res.writeHead(d ? 200 : 404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(d ? rm.imagemHtml(d, scStudio()) : 'sem dados');
+  }
+  if (req.method === 'GET' && url === '/ativas/resumo/imagem-semana') {
+    const rs = require('./resumo-semanal');
+    const ate = new URLSearchParams(req.url.split('?')[1] || '').get('ate') || '';
+    let d = null; try { d = rs.dadosDaSemana(ate); } catch (_) {}
+    res.writeHead(d && !d.vazio ? 200 : 404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(d && !d.vazio ? rs.imagemHtml(d, scStudio()) : 'sem dados');
+  }
+  if (req.method === 'POST' && url === '/ativas/resumo/semana/salvar') {
+    return lerCorpo(req, 2e4, corpo => {
+      const q = new URLSearchParams(corpo);
+      let erro = '';
+      try {
+        const dias = q.getAll('dias').map(Number).filter(n => n >= 0 && n <= 6);
+        require('./resumo-semanal').salvarCfg({ ativo: q.get('ativo') === '1', grupos: String(q.get('grupos') || '').slice(0, 1000), dias, hora: q.get('hora') || '',
+          porProfessora: q.get('porProfessora') === '1', ativas: q.get('ativas') === '1', pendentes: q.get('pendentes') === '1' });
+        auditoria.registrar(sess.usuario, 'ativas.resumo-semana.salvar', '', '');
+      } catch (e) { erro = e.message; }
+      res.writeHead(303, { Location: '/ativas/resumo?t=semana&ok=' + (erro ? 'erro&msg=' + encodeURIComponent(erro) : 'salvo') }); res.end();
+    });
+  }
+  if (req.method === 'POST' && url === '/ativas/resumo/semana/enviar') {
+    return lerCorpo(req, 1e4, corpo => {
+      const ate = new URLSearchParams(corpo).get('ate') || '';
+      try {
+        fs.writeFileSync(path.resolve(__dirname, '..', 'data', 'rodar-job.json'), JSON.stringify({ job: 'resumoSemanal', ate: /^\d{4}-\d{2}-\d{2}$/.test(ate) ? ate : undefined }));
+        auditoria.registrar(sess.usuario, 'ativas.resumo-semana.enviar', ate, '');
+      } catch (_) {}
+      res.writeHead(303, { Location: '/ativas/resumo?t=semana&ok=enviando&ate=' + encodeURIComponent(ate) }); res.end();
+    });
   }
   if (req.method === 'POST' && url === '/ativas/resumo/salvar') {
     return lerCorpo(req, 2e4, corpo => {

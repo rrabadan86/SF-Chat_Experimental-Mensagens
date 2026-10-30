@@ -15,7 +15,7 @@ puppeteer.use(StealthPlugin());
 //  últimos N dias", marca "Contabilizar Inadimplentes", pesquisa (lupa), e lê a
 //  grid (Nome | Últ. freq.) em TODAS as páginas. Para cada aluna, clica na linha
 //  e confere no painel de detalhes se ela tem "Contrato ativo" — só entram as
-//  ATIVAS. Depois manda a lista no grupo da equipe (mesmo do resumo-semana.js).
+//  ATIVAS. Depois manda a lista no grupo da equipe (mesmo do resumo da semana).
 //
 //  Grid tem só 2 colunas (Nome, Últ. freq.); o status do contrato aparece no
 //  painel lateral ("Contrato ativo") ao clicar na aluna.
