@@ -504,7 +504,7 @@ const ESTILO = `
   *{box-sizing:border-box}
   body{margin:0;font-family:"Inter",-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--tinta);line-height:1.5;font-size:var(--fs-body);letter-spacing:-.011em;-webkit-font-smoothing:antialiased}
   h1,h2,h3,button,.tabs a{font-family:"Inter",-apple-system,Segoe UI,Arial,sans-serif;letter-spacing:-.02em}
-  .wrap{max-width:900px;margin:0 auto;padding:16px 24px}
+  .wrap{max-width:1080px;margin:0 auto;padding:16px 24px} /* mesma largura do menu */
   @media(max-width:560px){.wrap{padding:14px 16px}}
   /* Barra superior ÚNICA e FIXA: logo + menu + login (sem a faixa branca separada). */
   .topbar{position:sticky;top:0;z-index:60;background:var(--card);border-bottom:1px solid var(--linha)}
@@ -730,14 +730,6 @@ const ESTILO = `
   .segs{position:sticky;top:var(--seg-top,var(--topbar-h,46px));z-index:54;display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px;padding:9px 0;background:var(--bg);box-shadow:0 5px 6px -6px rgba(16,24,40,.16)}
   .segs a{text-decoration:none;font-weight:700;font-size:var(--fs-sm);color:var(--cinza);background:#fff;border:1px solid var(--linha);border-radius:999px;padding:6px 13px}
   .segs a.on{background:var(--teal);color:#fff;border-color:var(--teal)}
-  .bar{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--linha);font-size:var(--fs-sm)}
-  .bar:last-child{border-bottom:0}
-  .bar .bd{width:64px;flex:none;color:var(--cinza);font-variant-numeric:tabular-nums}
-  .bar .btrack{flex:1;background:#eef1f2;border-radius:6px;height:18px;position:relative;overflow:hidden;min-width:60px}
-  .bar .bfill{position:absolute;inset:0 auto 0 0;background:var(--teal);border-radius:6px}
-  .bar .bfill.ag{background:var(--coral);opacity:.85}
-  .bar .bn{flex:none;width:96px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
-  .bar .bn small{font-weight:600;color:var(--cinza)}
   .testbar{background:#fff8f0;border:1px solid #f3dcbf}
   .testbar label{margin:0 0 4px}
   .testbar input{max-width:260px}
@@ -747,6 +739,67 @@ const ESTILO = `
   .prev-b.ok{background:var(--ok-bg);border-color:var(--ok-bd);color:var(--ok)}
   .prev-b.err{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
   .tbtn{background:#fff;color:var(--cinza);border:1px solid #dcdcdc}
+  /* ── Peças comuns do painel (topo de tela, filtros, botões, avisos, pessoas) ── */
+
+  .ui-topo{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:16px 18px;margin:4px 0 14px;box-shadow:0 1px 3px rgba(0,0,0,.05);display:flex;flex-direction:column;gap:12px}
+  .ui-tt{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+  .ui-tt h2{margin:0;font-size:1.08rem;font-weight:800;color:var(--tinta)}
+  .ui-tt p{margin:3px 0 0;color:var(--cinza);font-size:var(--fs-sm);max-width:75ch;line-height:1.45}
+  .ui-acoes{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .ui-linha{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}
+  .ui-lbl{font-size:var(--fs-xs);font-weight:700;color:var(--cinza);text-transform:uppercase;letter-spacing:.05em;min-width:62px}
+  .ui-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .ui-chip{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border:1px solid var(--linha);border-radius:999px;background:var(--card);color:var(--tinta);font-weight:600;font-size:var(--fs-sm);text-decoration:none;white-space:nowrap}
+  .ui-chip:hover{border-color:var(--teal);color:var(--teal-esc)}
+  .ui-chip.on{background:var(--teal);border-color:var(--teal);color:#fff}
+  .ui-chip .ct{opacity:.7;font-variant-numeric:tabular-nums}
+  .ui-datas{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0}
+  .ui-datas input[type=date]{width:150px;flex:none;padding:6px 9px;border:1px solid var(--linha);border-radius:8px;font:inherit;font-size:var(--fs-sm);background:var(--card);color:var(--tinta)}
+  .ui-datas .ate{color:var(--cinza);font-size:var(--fs-sm)}
+  .ui-btn{border:1px solid var(--teal);background:var(--teal);color:#fff;border-radius:9px;padding:6px 14px;font:inherit;font-weight:700;font-size:var(--fs-sm);cursor:pointer;text-decoration:none;white-space:nowrap}
+  .ui-btn.sec{background:var(--card);color:var(--teal-esc)}
+  .ui-btn:hover{filter:brightness(1.06)}
+  .ui-btn:disabled{opacity:.5;cursor:default}
+  .ui-nota{background:var(--avi-bg);border:1px solid var(--avi-bd);color:var(--avi-tx);border-radius:10px;padding:9px 12px;font-size:var(--fs-sm);display:flex;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;align-items:center}
+  .ui-nota.erro{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
+  .ui-rodape{text-align:center;color:var(--cinza);font-size:var(--fs-xs);line-height:1.55;max-width:85ch;margin:16px auto 6px}
+  /* Linha de pessoa (Funil e Professoras) */
+  .ip-lista{display:flex;flex-direction:column}
+  .ip-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 14px;padding:11px 6px;border-bottom:1px solid var(--linha-soft);align-items:center}
+  .ip-row:last-child{border-bottom:0}
+  .ip-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+  .ip-nome{font-weight:700;color:var(--tinta);text-decoration:none;font-size:.9rem}
+  a.ip-nome:hover{color:var(--teal-esc);text-decoration:underline}
+  .ip-pill{display:inline-block;font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px;border:1px solid;white-space:nowrap}
+  .ip-fechou{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-bd)}
+  .ip-fez,.ip-veio{background:var(--teal-soft);color:var(--teal-esc);border-color:var(--avi-bd)}
+  .ip-faltou{background:var(--erro-bg);color:var(--erro);border-color:var(--erro-bd)}
+  .ip-aguardando,.ip-agendada{background:var(--linha-soft);color:var(--cinza);border-color:var(--linha)}
+  .ip-meta{grid-column:1;grid-row:2;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.78rem;color:var(--cinza)}
+  .ip-meta b{color:var(--tinta);font-weight:600}
+  .ip-acao{grid-column:2;grid-row:1 / span 2;display:flex;gap:6px}
+  .ip-evo{font-size:.75rem;font-weight:700;color:var(--teal-esc);border:1px solid var(--linha);border-radius:8px;padding:4px 10px;text-decoration:none;white-space:nowrap;background:var(--card)}
+  .ip-evo:hover{border-color:var(--teal)}
+  @media(max-width:600px){.ui-topo{padding:14px}.ip-row{grid-template-columns:1fr}.ip-meta{grid-row:auto}.ip-acao{grid-column:1;grid-row:auto}.ui-lbl{min-width:0;width:100%}}
+  /* Gráfico de barras padrão do painel: rótulo · trilho (com % dentro) · valor.
+     Cores: teal = volume, verde (--ok) = sucesso, vermelho (--erro) = falta/erro,
+     cinza = pendente. Usar uiBarra()/uiTrilho() — não desenhar barra à mão. */
+  .ui-bar{display:flex;align-items:center;gap:10px;margin:8px 0}
+  .ui-bar-rot{width:150px;flex:none;color:var(--tinta);font-weight:600;font-size:.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ui-bar-val{flex:none;min-width:44px;text-align:right;font-weight:700;color:var(--tinta);font-variant-numeric:tabular-nums;font-size:.88rem;white-space:nowrap}
+  .ui-bar-val small{font-weight:600;color:var(--cinza)}
+  .ui-trilho{display:block;flex:1;min-width:80px;height:24px;background:var(--linha-soft);border-radius:8px;overflow:hidden;position:relative}
+  .ui-trilho>i{display:block;height:100%;border-radius:8px 0 0 8px}
+  .ui-trilho>em{position:absolute;top:0;bottom:0;display:flex;align-items:center;font-style:normal;font-size:.76rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none}
+  .ui-bar.fino{margin:5px 0}
+  .ui-bar.fino .ui-bar-rot{font-weight:500;color:var(--cinza);font-size:.8rem}
+  .ui-bar.fino .ui-trilho{height:10px;border-radius:999px}
+  .ui-bar.fino .ui-trilho>i{border-radius:999px}
+  .ui-bar.fino .ui-bar-val{font-size:.8rem}
+  .ui-bar.largo .ui-bar-rot{width:250px}
+  .ui-bar.clic{cursor:pointer}
+  .ui-bar.clic:hover .ui-trilho{box-shadow:0 0 0 2px var(--teal-soft)}
+  @media(max-width:600px){.ui-bar{flex-wrap:wrap;row-gap:3px}.ui-bar-rot{width:100%}}
   footer{color:var(--cinza);font-size:var(--fs-xs);text-align:center;padding:18px}
   /* Contatos — tabela + modal */
   .ct-wrap{background:var(--card);border:1px solid var(--linha);border-radius:12px;overflow-x:auto;margin:10px 0}
@@ -1885,10 +1938,11 @@ function paginaHoje(dia) {
   const evs = atividade.listarHoje(d, 150);
   const ehHoje = d === atividade.hojeSP();
 
-  const jobs = r.jobs.map(j => `<div class="jobrow">
-    <div class="jn">${esc(j.contexto)}</div>
-    <div class="jc">${j.sent} enviada${j.sent === 1 ? '' : 's'}${j.failed ? ` · <span class="f">${j.failed} falha${j.failed === 1 ? '' : 's'}</span>` : ''}</div>
-  </div>`).join('');
+  const maxJob = Math.max(1, ...r.jobs.map(j => j.sent + j.failed));
+  const jobs = r.jobs.map(j => uiBarra({
+    largo: true, rot: esc(j.contexto), titulo: j.contexto, n: j.sent, max: maxJob, cor: 'var(--ok)', texto: '',
+    valor: `${j.sent} <small>enviada${j.sent === 1 ? '' : 's'}</small>${j.failed ? ` · <span style="color:var(--erro)">${j.failed} falha${j.failed === 1 ? '' : 's'}</span>` : ''}`,
+  })).join('');
 
   const lista = evs.map(e => {
     const ic = e.ok ? '✅' : '⚠️';
@@ -2136,23 +2190,18 @@ function paginaIndicadores(dias, aviso) {
   const jan = janelas.some(([d]) => d === dias) ? dias : 7;
   const r = indicadores.resumo(jan);
 
-  const segs = indChips('Período', janelas.map(([d, l]) => [`/indicadores?dias=${d}`, l, d === jan]));
+  const segs = uiChips('Período', janelas.map(([d, l]) => [`/indicadores?dias=${d}`, l, d === jan]));
 
   // Barras por dia (mais recente primeiro), escala pelo maior nº de PESSOAS.
   const maxP = Math.max(1, ...r.porDia.map(d => d.pessoas));
   const fmtDia = s => { const p = String(s).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : s; };
-  const barras = r.porDia.filter(d => d.pessoas || d.agendamentos).map(d => {
-    const wP = Math.round((d.pessoas / maxP) * 100);
-    return `<div class="bar">
-      <span class="bd">${fmtDia(d.dia)}</span>
-      <span class="btrack"><span class="bfill" style="width:${wP}%"></span></span>
-      <span class="bn">${d.pessoas} <small>pessoa${d.pessoas === 1 ? '' : 's'}</small> · <span style="color:var(--coral-esc)">${d.agendamentos}</span> <small>agend.</small></span>
-    </div>`;
-  }).join('');
+  const barras = r.porDia.filter(d => d.pessoas || d.agendamentos).map(d => uiBarra({
+    rot: fmtDia(d.dia), n: d.pessoas, max: maxP, texto: '',
+    valor: `${d.pessoas} <small>pessoa${d.pessoas === 1 ? '' : 's'}</small> · <span style="color:var(--ok)">${d.agendamentos}</span> <small>agend.</small>`,
+  })).join('');
 
-  const barLinha = (label, n, max, coral) => `<div class="bar"><span class="bd">${esc(label)}</span><span class="btrack"><span class="bfill${coral ? ' ag' : ''}" style="width:${Math.round((n / max) * 100)}%"></span></span><span class="bn">${n}</span></div>`;
   const maxA = Math.max(1, ...r.horariosAula.map(a => a.n));
-  const aulaHtml = r.horariosAula.slice(0, 12).map(a => barLinha(a.hora, a.n, maxA, true)).join('');
+  const aulaHtml = r.horariosAula.slice(0, 12).map(a => uiBarra({ rot: esc(a.hora), n: a.n, max: maxA, cor: 'var(--ok)', texto: '' })).join('');
 
   // Heatmap (gráfico único): acessos por dia da semana × hora. Cor teal cresce
   // com o nº de acessos; célula vazia fica cinza-clara. Tooltip no hover.
@@ -2321,41 +2370,35 @@ function paginaIndicadores(dias, aviso) {
     const its = (r.porOrigem || []).filter(o => o[campo] > 0).sort((a, b) => b[campo] - a[campo]);
     if (!its.length) return '';
     const tot = its.reduce((s, o) => s + o[campo], 0) || 1;
-    const rows = its.map(o => {
-      const pct = Math.max(4, Math.round((o[campo] / tot) * 100));
-      return `<div style="display:flex;align-items:center;gap:9px;font-size:var(--fs-sm)">
-        <span style="width:104px;flex:none;color:var(--cinza);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(nomeOrigem(o.origem))}">${esc(nomeOrigem(o.origem))}</span>
-        <span style="flex:1;min-width:40px;height:7px;background:var(--linha);border-radius:999px;overflow:hidden"><span style="display:block;height:100%;width:${pct}%;background:var(--teal)"></span></span>
-        <span style="width:30px;flex:none;text-align:right;font-weight:700;color:var(--teal-esc)">${o[campo]}</span>
-      </div>`;
-    }).join('');
-    return `<div style="display:flex;flex-direction:column;gap:6px;padding:4px 4px 12px 26px">${rows}</div>`;
+    const rows = its.map(o => uiBarra({ fino: true, rot: `<span title="${esc(nomeOrigem(o.origem))}">${esc(nomeOrigem(o.origem))}</span>`, n: o[campo], max: tot, cor: campo === 'agendamentos' ? 'var(--ok)' : 'var(--teal)', texto: '' })).join('');
+    return `<div style="padding:0 0 6px 22px">${rows}</div>`;
   };
   const funilPessoasOrig = funilPorOrigem('pessoas');
   const funilAgendOrig = funilPorOrigem('agendamentos');
 
   const corpo = `<div class="wrap">
     ${subnavIndicadores('formulario')}
-    ${indTopo({
+    ${uiTopo({
       titulo: 'Formulário de agendamento',
       sub: 'Quem abriu o link de agendamento, quantas agendaram a aula experimental, quando acessam e de onde vieram.',
-      linhas: [segs, aviso ? `<div class="ind-nota erro">${esc(aviso)}</div>` : ''],
+      linhas: [segs, aviso ? `<div class="ui-nota erro">${esc(aviso)}</div>` : ''],
     })}
     <div class="stats">
       <div class="stat tot"><div class="n">${r.pessoas}</div><div class="l">👥 pessoas</div></div>
       <div class="stat"><div class="n" style="color:var(--cinza)">${r.acessos}</div><div class="l">aberturas (acessos)</div></div>
       <div class="stat ok"><div class="n">${r.agendamentos}</div><div class="l">agendaram</div></div>
-      <div class="stat"><div class="n" style="color:var(--coral-esc)">${r.conversao}%</div><div class="l">conversão (por pessoa)</div></div>
+      <div class="stat"><div class="n" style="color:var(--coral-esc)">${String(r.conversao).replace('.', ',')}%</div><div class="l">conversão (por pessoa)</div></div>
     </div>
-    <div class="ind-secoes">
+    <div class="ui-secoes">
     <div class="sec-t">Funil</div>
     <div class="card">
-      <div class="jobrow"><div class="jn">👥 Pessoas que visitaram</div><div class="jc">${r.pessoas}</div></div>
-      ${funilPessoasOrig}
-      <div class="jobrow"><div class="jn">👀 Aberturas da página (acessos)</div><div class="jc">${r.acessos}</div></div>
-      <div class="jobrow"><div class="jn">✅ Agendaram a experimental</div><div class="jc">${r.agendamentos}</div></div>
-      ${funilAgendOrig}
-      <div class="jobrow"><div class="jn">↩️ Visitaram e não agendaram</div><div class="jc">${r.naoAgendaram}</div></div>
+      ${r.pessoas ? uiBarra({ rot: 'Visitaram', n: r.pessoas, max: r.pessoas })
+        + funilPessoasOrig
+        + uiBarra({ rot: 'Agendaram', n: r.agendamentos, max: r.pessoas, cor: 'var(--ok)' })
+        + funilAgendOrig
+        + uiBarra({ rot: 'Não agendaram', n: r.naoAgendaram, max: r.pessoas, cor: 'var(--faint)' })
+        + `<p class="quando" style="margin:10px 0 0">👀 <b>${r.acessos}</b> abertura${r.acessos === 1 ? '' : 's'} da página no período — a mesma pessoa pode abrir mais de uma vez. Embaixo de cada etapa: de onde vieram (link por origem).</p>`
+        : '<div class="vazio">Ninguém abriu o formulário neste período.</div>'}
     </div>
     <div class="sec-t">Por dia (pessoas ▮ · agendamentos)</div>
     <div class="card">${barras || '<div class="vazio">Sem dados ainda neste período. Os números aparecem conforme as pessoas acessam o formulário.</div>'}</div>
@@ -2373,7 +2416,7 @@ function paginaIndicadores(dias, aviso) {
     ${origemBloco}
     ${logBloco}
     </div>
-    <p class="ind-rodape">Coletado do formulário a cada ~2 min. ${r.primeiroDia ? `Desde ${esc(fmtData(r.primeiroDia))}.` : 'Ainda começando a coletar.'}</p>
+    <p class="ui-rodape">Coletado do formulário a cada ~2 min. ${r.primeiroDia ? `Desde ${esc(fmtData(r.primeiroDia))}.` : 'Ainda começando a coletar.'}</p>
   </div>
   <style>
   .logtab{width:100%;border-collapse:collapse;font-size:var(--fs-sm,.85rem)}
@@ -2440,69 +2483,40 @@ function subnavIndicadores(view) {
 // ── Indicadores: peças de layout comuns às 4 subabas ─────────────────────────
 // Todas seguem a mesma ordem: subabas → cartão de topo (título, ações, período,
 // filtros) → números (.stats) → seções recolhíveis (.sec-t) → nota de rodapé.
-const IND_CSS = `<style>
-  .wrap{max-width:1080px}
-  .ind-topo{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:16px 18px;margin:4px 0 14px;box-shadow:0 1px 3px rgba(0,0,0,.05);display:flex;flex-direction:column;gap:12px}
-  .ind-tt{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
-  .ind-tt h2{margin:0;font-size:1.08rem;font-weight:800;color:var(--tinta)}
-  .ind-tt p{margin:3px 0 0;color:var(--cinza);font-size:var(--fs-sm);max-width:75ch;line-height:1.45}
-  .ind-acoes{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  .ind-linha{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}
-  .ind-lbl{font-size:var(--fs-xs);font-weight:700;color:var(--cinza);text-transform:uppercase;letter-spacing:.05em;min-width:62px}
-  .ind-chips{display:flex;flex-wrap:wrap;gap:6px}
-  .ind-chip{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border:1px solid var(--linha);border-radius:999px;background:var(--card);color:var(--tinta);font-weight:600;font-size:var(--fs-sm);text-decoration:none;white-space:nowrap}
-  .ind-chip:hover{border-color:var(--teal);color:var(--teal-esc)}
-  .ind-chip.on{background:var(--teal);border-color:var(--teal);color:#fff}
-  .ind-chip .ct{opacity:.7;font-variant-numeric:tabular-nums}
-  .ind-datas{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0}
-  .ind-datas input[type=date]{width:150px;flex:none;padding:6px 9px;border:1px solid var(--linha);border-radius:8px;font:inherit;font-size:var(--fs-sm);background:var(--card);color:var(--tinta)}
-  .ind-datas .ate{color:var(--cinza);font-size:var(--fs-sm)}
-  .ind-btn{border:1px solid var(--teal);background:var(--teal);color:#fff;border-radius:9px;padding:6px 14px;font:inherit;font-weight:700;font-size:var(--fs-sm);cursor:pointer;text-decoration:none;white-space:nowrap}
-  .ind-btn.sec{background:var(--card);color:var(--teal-esc)}
-  .ind-btn:hover{filter:brightness(1.06)}
-  .ind-btn:disabled{opacity:.5;cursor:default}
-  .ind-nota{background:var(--avi-bg);border:1px solid var(--avi-bd);color:var(--avi-tx);border-radius:10px;padding:9px 12px;font-size:var(--fs-sm);display:flex;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;align-items:center}
-  .ind-nota.erro{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
-  .ind-rodape{text-align:center;color:var(--cinza);font-size:var(--fs-xs);line-height:1.55;max-width:85ch;margin:16px auto 6px}
-  /* Linha de pessoa (Funil e Professoras) */
-  .ip-lista{display:flex;flex-direction:column}
-  .ip-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 14px;padding:11px 6px;border-bottom:1px solid var(--linha-soft);align-items:center}
-  .ip-row:last-child{border-bottom:0}
-  .ip-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
-  .ip-nome{font-weight:700;color:var(--tinta);text-decoration:none;font-size:.9rem}
-  a.ip-nome:hover{color:var(--teal-esc);text-decoration:underline}
-  .ip-pill{display:inline-block;font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px;border:1px solid;white-space:nowrap}
-  .ip-fechou{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-bd)}
-  .ip-fez,.ip-veio{background:var(--teal-soft);color:var(--teal-esc);border-color:var(--avi-bd)}
-  .ip-faltou{background:var(--erro-bg);color:var(--erro);border-color:var(--erro-bd)}
-  .ip-aguardando,.ip-agendada{background:var(--linha-soft);color:var(--cinza);border-color:var(--linha)}
-  .ip-meta{grid-column:1;grid-row:2;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.78rem;color:var(--cinza)}
-  .ip-meta b{color:var(--tinta);font-weight:600}
-  .ip-acao{grid-column:2;grid-row:1 / span 2;display:flex;gap:6px}
-  .ip-evo{font-size:.75rem;font-weight:700;color:var(--teal-esc);border:1px solid var(--linha);border-radius:8px;padding:4px 10px;text-decoration:none;white-space:nowrap;background:var(--card)}
-  .ip-evo:hover{border-color:var(--teal)}
-  @media(max-width:600px){.ind-topo{padding:14px}.ip-row{grid-template-columns:1fr}.ip-meta{grid-row:auto}.ip-acao{grid-column:1;grid-row:auto}.ind-lbl{min-width:0;width:100%}}
-</style>`;
+const IND_CSS = '';
+// Trilho de barra: preenchimento n/max e, dentro, o % (ou um texto). Se a barra
+// for estreita, o texto vai logo depois dela. extra: 2ª informação após o %.
+function uiTrilho(n, max, { cor = 'var(--teal)', texto = 'pct', extra = '' } = {}) {
+  const w = (max && n > 0) ? Math.max(2, Math.min(100, Math.round(n / max * 100))) : 0;
+  let t = texto === 'pct' ? (max ? String(Math.round(n * 1000 / max) / 10).replace('.', ',').replace(/,0$/, '') + '%' : '') : (texto || '');
+  if (t && extra) t += ' · ' + extra;
+  const dentro = w >= (extra ? 42 : 14);
+  return `<span class="ui-trilho"><i style="width:${w}%;background:${cor}"></i>${t ? `<em style="${dentro ? 'left:10px;color:#fff' : `left:calc(${w}% + 8px);color:var(--cinza)`}">${t}</em>` : ''}</span>`;
+}
+// Linha de gráfico: rótulo · trilho · valor. fino = sub-linha discreta (ex.: por origem).
+function uiBarra({ rot, n, max, cor, valor, texto, extra, fino, largo, cls, attrs, titulo }) {
+  return `<div class="ui-bar${fino ? ' fino' : ''}${largo ? ' largo' : ''}${cls ? ' ' + cls : ''}${attrs && /onclick|data-filtro/.test(attrs) ? ' clic' : ''}"${attrs || ''}${titulo ? ` title="${esc(titulo)}"` : ''}><span class="ui-bar-rot">${rot}</span>${uiTrilho(n, max, { cor, texto: texto === undefined ? 'pct' : texto, extra })}<span class="ui-bar-val">${valor !== undefined ? valor : n}</span></div>`;
+}
 // Cartão de topo. linhas: HTML de cada linha (período, canal, datas…), vazias são puladas.
-function indTopo({ titulo, sub, acoes, linhas }) {
-  return `<div class="ind-topo"><div class="ind-tt"><div><h2>${titulo}</h2>${sub ? `<p>${sub}</p>` : ''}</div>${acoes ? `<div class="ind-acoes">${acoes}</div>` : ''}</div>`
+function uiTopo({ titulo, sub, acoes, linhas }) {
+  return `<div class="ui-topo"><div class="ui-tt"><div><h2>${titulo}</h2>${sub ? `<p>${sub}</p>` : ''}</div>${acoes ? `<div class="ui-acoes">${acoes}</div>` : ''}</div>`
     + (linhas || []).filter(Boolean).join('') + `</div>`;
 }
 // Linha rotulada de botões-pílula: itens = [[href, rótulo, ativo, contagem?], …]
-function indChips(rotulo, itens) {
-  return `<div class="ind-linha">${rotulo ? `<span class="ind-lbl">${rotulo}</span>` : ''}<div class="ind-chips">${itens.map(([href, rot, on, n]) => `<a href="${href}" class="ind-chip${on ? ' on' : ''}">${rot}${n != null ? ` <span class="ct">${n}</span>` : ''}</a>`).join('')}</div></div>`;
+function uiChips(rotulo, itens) {
+  return `<div class="ui-linha">${rotulo ? `<span class="ui-lbl">${rotulo}</span>` : ''}<div class="ui-chips">${itens.map(([href, rot, on, n]) => `<a href="${href}" class="ui-chip${on ? ' on' : ''}">${rot}${n != null ? ` <span class="ct">${n}</span>` : ''}</a>`).join('')}</div></div>`;
 }
 // Período personalizado (de/até). extra: inputs hidden; limpar: href para tirar o filtro.
-function indDatas({ action, de, ate, extra, limpar }) {
-  return `<form method="GET" action="${action}" class="ind-linha ind-datas"><span class="ind-lbl">Datas</span>${extra || ''}
+function uiDatas({ action, de, ate, extra, limpar }) {
+  return `<form method="GET" action="${action}" class="ui-linha ui-datas"><span class="ui-lbl">Datas</span>${extra || ''}
       <input type="date" name="de" value="${esc(de || '')}" aria-label="De"><span class="ate">até</span><input type="date" name="ate" value="${esc(ate || '')}" aria-label="Até">
-      <button class="ind-btn" type="submit">Aplicar</button>${limpar ? `<a href="${limpar}" class="ind-btn sec">Limpar</a>` : ''}</form>`;
+      <button class="ui-btn" type="submit">Aplicar</button>${limpar ? `<a href="${limpar}" class="ui-btn sec">Limpar</a>` : ''}</form>`;
 }
 // Uma pessoa numa lista: nome (link p/ Contatos), situação, detalhes e o link do EVO.
-const IP_SIT = { fechou: '💰 Fechou contrato', fez: '✅ Fez a aula', veio: '✅ Veio', faltou: '❌ Faltou', aguardando: '⏳ Aguardando', agendada: '⏳ Agendada' };
-function indPessoa({ nome, href, sit, meta, evo, attrs }) {
+const UI_SIT = { fechou: '💰 Fechou contrato', fez: '✅ Fez a aula', veio: '✅ Veio', faltou: '❌ Faltou', aguardando: '⏳ Aguardando', agendada: '⏳ Agendada' };
+function uiPessoa({ nome, href, sit, meta, evo, attrs }) {
   return `<div class="ip-row"${attrs || ''}>
-      <div class="ip-top">${href ? `<a class="ip-nome" href="${esc(href)}" title="Abrir em Contatos">${esc(nome)}</a>` : `<span class="ip-nome">${esc(nome)}</span>`}${sit ? `<span class="ip-pill ip-${sit}">${IP_SIT[sit] || esc(sit)}</span>` : ''}</div>
+      <div class="ip-top">${href ? `<a class="ip-nome" href="${esc(href)}" title="Abrir em Contatos">${esc(nome)}</a>` : `<span class="ip-nome">${esc(nome)}</span>`}${sit ? `<span class="ip-pill ip-${sit}">${UI_SIT[sit] || esc(sit)}</span>` : ''}</div>
       ${(meta || []).filter(Boolean).length ? `<div class="ip-meta">${meta.filter(Boolean).map(m => `<span>${m}</span>`).join('')}</div>` : ''}
       ${evo ? `<div class="ip-acao"><a class="ip-evo" href="${esc(evo)}" target="_blank" rel="noopener">EVO ↗</a></div>` : ''}
     </div>`;
@@ -3757,7 +3771,7 @@ function campListHTML(filtro = {}) {
         </div>
       </div>
       <div style="margin:8px 0 0">
-        <div style="background:#eef1f2;border-radius:6px;height:16px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div>
+        ${uiTrilho(pct, 100, { cor: 'var(--ok)' })}
         <div class="quando" style="margin:4px 0 0">${enviados} enviadas · ${(c.pendentes || []).length} na fila · ${(c.falhas || []).length} falha(s) · ${total} no total · hoje: ${c.enviadosHoje || 0}/${c.limiteDia}</div>
         <div class="quando" style="margin:2px 0 0">📅 início ${esc(fmtDataBR(c.dataInicio))} · das ${esc(c.janelaIni)} às ${esc(c.janelaFim)} · ${c.delayMinSeg}–${c.delayMaxSeg}s entre envios${est ? ` · <b>término previsto ${est.fim}</b> (~${est.dias} dia${est.dias > 1 ? 's' : ''}, ~${est.porDia}/dia)` : ''} ${(c.status !== 'concluida' && c.status !== 'cancelada') ? `· <a href="javascript:void(0)" onclick="toggleRitmo('${esc(c.id)}')" style="text-decoration:underline">⚙️ ajustar ritmo</a>` : ''}</div>
       </div>
@@ -5388,11 +5402,11 @@ function paginaGrade(off) {
     .gr-trc{font-size:.66rem;font-weight:700;color:var(--cinza)}
     @media(max-width:760px){ .gr-desk{display:none} .gr-mob{display:block} }
     </style>
-    ${indTopo({
+    ${uiTopo({
       titulo: 'Grade de matrículas fixas',
       sub: 'Visão da <b>semana</b>. O selo é a <b>vaga de matrícula</b> (fixas, contadas mesmo faltando); a <b>presença</b> é a ocupação real da aula (fixas presentes + reposição/FREE — falta, falta justificada e trancado liberam a vaga). Clique numa turma para ver os nomes: <b>✓ foi</b> · <b>✗ faltou</b> · <b>⚠ falta justificada</b> · <b>🔒 trancada</b>. O <b>sábado</b> não entra na taxa de ocupação (escala).',
-      acoes: `<button id="btnAt" class="ind-btn" onclick="atualizar('/grade/atualizar')"${g ? ' disabled' : ''} title="Atualiza a grade da semana vista (presença/ocupação) reaproveitando o TKM/faturamento da última geração completa. Rápido — poucas chamadas ao EVO.">${g ? '⏳ gerando…' : '🔄 Atualizar grade'}</button>
-        <button id="btnAtTudo" class="ind-btn sec" onclick="atualizar('/grade/atualizar-tudo')"${g ? ' disabled' : ''} title="Recalcula também o TKM e o faturamento lendo o contrato de cada aluna no EVO. Mais demorado (vários minutos).">💰 Atualizar tudo</button>`,
+      acoes: `<button id="btnAt" class="ui-btn" onclick="atualizar('/grade/atualizar')"${g ? ' disabled' : ''} title="Atualiza a grade da semana vista (presença/ocupação) reaproveitando o TKM/faturamento da última geração completa. Rápido — poucas chamadas ao EVO.">${g ? '⏳ gerando…' : '🔄 Atualizar grade'}</button>
+        <button id="btnAtTudo" class="ui-btn sec" onclick="atualizar('/grade/atualizar-tudo')"${g ? ' disabled' : ''} title="Recalcula também o TKM e o faturamento lendo o contrato de cada aluna no EVO. Mais demorado (vários minutos).">💰 Atualizar tudo</button>`,
     })}
     <div id="aviso" class="aviso" style="display:${g ? 'block' : 'none'}">⏳ Gerando a grade a partir do EVO… pode levar alguns minutos. A página recarrega sozinha ao terminar.</div>
     ${corpo}
@@ -6035,19 +6049,14 @@ function paginaSofiaFunil(params) {
   // Trilho da barra com o % (da primeira barra do funil = largura da barra) escrito
   // DENTRO da cor; se a barra for estreita demais para caber, o % vai logo depois dela.
   // extra (opcional): uma segunda taxa, da etapa anterior (ex.: "25% de quem fez a aula").
-  const barraTrilho = (n, max, cor, extra) => {
-    const w = (max && n > 0) ? Math.max(3, Math.round(n / max * 100)) : 0;
-    const p = max ? String(Math.round(n * 1000 / max) / 10).replace('.', ',').replace(/,0$/, '') + '%' + (extra ? ` · ${extra}` : '') : '';
-    const dentro = w >= (extra ? 42 : 14); // com as duas taxas o texto é maior: só cabe dentro de barra larga
-    const rot = p ? `<span style="position:absolute;top:0;bottom:0;display:flex;align-items:center;font-size:.76rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none;${dentro ? `left:10px;color:#fff` : `left:calc(${w}% + 8px);color:var(--cinza)`}">${p}</span>` : '';
-    return `<span style="flex:1;height:26px;background:var(--linha-soft);border-radius:8px;overflow:hidden;position:relative"><span style="display:block;height:100%;width:${w}%;background:${cor}"></span>${rot}</span>`;
-  };
-  const barra = (rot, n, max, cor, filtro, extra) => `<div style="display:flex;align-items:center;gap:10px;margin:9px 0${filtro ? ';cursor:pointer' : ''}" class="fu-row${filtro ? ` fu-bar fu-pop-alvo" data-filtro="${filtro}" onclick="fuFiltrar('${filtro}')` : ''}"><span class="fu-rot" style="width:150px;flex:none;color:var(--tinta);font-weight:600;font-size:.86rem">${rot}</span>${barraTrilho(n, max, cor, extra)}<span style="width:44px;flex:none;text-align:right;font-weight:700;color:var(--tinta)">${n}</span></div>`;
+  // Barras do funil (peça padrão uiBarra). Com filtro: passar o mouse mostra os nomes; clicar filtra a lista.
+  // extra (opcional): uma segunda taxa, da etapa anterior (ex.: "25% de quem fez a aula").
+  const barra = (rot, n, max, cor, filtro, extra) => uiBarra({ rot, n, max, cor, extra, cls: filtro ? 'fu-bar fu-pop-alvo' : '', attrs: filtro ? ` data-filtro="${filtro}" onclick="fuFiltrar('${filtro}')"` : '' });
   const qCanal = canalSel === 'todos' ? '' : `&canal=${canalSel}`;
   const qPer = custom ? `&de=${encodeURIComponent(params.de || '')}&ate=${encodeURIComponent(params.ate || '')}` : `&per=${per}`;
-  const segs = indChips('Período', janelas.map(([v, l]) => [`/funil?per=${v}${qCanal}`, l, !custom && per === v]));
+  const segs = uiChips('Período', janelas.map(([v, l]) => [`/funil?per=${v}${qCanal}`, l, !custom && per === v]));
   const CANAIS_ROT = [['todos', 'Todos', todosAg.length], ['sofia', '🤖 SoFIA', porCanal.sofia], ['formulario', '📲 Formulário', porCanal.formulario], ['express', '🏪 Express', porCanal.express]];
-  const segsCanal = indChips('Canal', CANAIS_ROT.map(([v, l, n]) => [`/funil?${qPer.slice(1)}${v === 'todos' ? '' : '&canal=' + v}`, l, canalSel === v, n]));
+  const segsCanal = uiChips('Canal', CANAIS_ROT.map(([v, l, n]) => [`/funil?${qPer.slice(1)}${v === 'todos' ? '' : '&canal=' + v}`, l, canalSel === v, n]));
   const rotSel = { todos: 'todos os canais', sofia: 'SoFIA', formulario: 'Formulário', express: 'Cadastro Express' }[canalSel];
   // Link para a subaba Formulário (detalhes), no mesmo período quando dá.
   const sessF = _navSess || { admin: true, telas: [] };
@@ -6071,7 +6080,7 @@ function paginaSofiaFunil(params) {
   const linhaDet = (d) => {
     const ex = d.exp;
     const aula = d.when ? fmtWhen(d.when) : (ex ? fmtAulaExp(ex) : '');
-    return indPessoa({
+    return uiPessoa({
       nome: d.nome, href: d.tel ? linkContato(d.tel) : '', sit: d.sit, evo: d.evo,
       attrs: d.sit ? ` data-sit="${d.sit}"` : '',
       meta: [
@@ -6084,13 +6093,13 @@ function paginaSofiaFunil(params) {
     });
   };
   const detalheHtml = detAg.length ? `<div class="sec-t">Quem agendou no período <small style="font-weight:600;color:var(--cinza)">(${detAg.length}${canalSel === 'todos' ? '' : ' · ' + rotSel})</small></div>
-    <div class="card" id="fuDet"><div id="fuFiltroInfo" class="ind-nota" style="margin:0 0 6px;display:none"></div><div class="ip-lista">${detAg.sort((a, b) => b.em - a.em).map(linhaDet).join('')}</div></div>` : '';
+    <div class="card" id="fuDet"><div id="fuFiltroInfo" class="ui-nota" style="margin:0 0 6px;display:none"></div><div class="ip-lista">${detAg.sort((a, b) => b.em - a.em).map(linhaDet).join('')}</div></div>` : '';
   const corpo = `<div class="wrap">
     ${subnavIndicadores('funil')}
-    ${indTopo({
+    ${uiTopo({
       titulo: 'Funil de agendamentos',
       sub: 'Quem agendou a aula experimental pela SoFIA, pelo Formulário ou pelo Cadastro Express — e quantas fizeram a aula e fecharam contrato.',
-      linhas: [segs, segsCanal, indDatas({ action: '/funil', de: params.de, ate: params.ate, extra: canalSel === 'todos' ? '' : `<input type="hidden" name="canal" value="${canalSel}">`, limpar: custom ? `/funil?per=7${qCanal}` : '' })],
+      linhas: [segs, segsCanal, uiDatas({ action: '/funil', de: params.de, ate: params.ate, extra: canalSel === 'todos' ? '' : `<input type="hidden" name="canal" value="${canalSel}">`, limpar: custom ? `/funil?per=7${qCanal}` : '' })],
     })}
     <div class="stats">
       ${topo ? `<div class="stat tot"><div class="n">${topo.n}</div><div class="l">${topo.stat} · ${esc(rotulo)}</div></div>
@@ -6099,7 +6108,7 @@ function paginaSofiaFunil(params) {
       <div class="stat"><div class="n" style="color:var(--teal-esc)">${fez}</div><div class="l">fizeram a aula · ${pct(fez, agend)} das agendadas</div></div>
       <div class="stat ok"><div class="n">${fechou}</div><div class="l">fecharam contrato · ${pct(fechou, fez)} de quem fez</div></div>
     </div>
-    <div class="ind-secoes">
+    <div class="ui-secoes">
     <div class="sec-t">Funil</div>
     <div class="card">
       ${topo
@@ -6109,7 +6118,7 @@ function paginaSofiaFunil(params) {
           : `<div class="vazio">Ninguém agendou ${canalSel === 'todos' ? '' : 'pelo ' + rotSel + ' '}neste período.</div>`)}
       ${agend ? `<p class="quando" style="margin:10px 0 0">Das <b>${agend}</b> que agendaram: ${fuNum(fez, 'fez')} fizeram a aula (${fuNum(fechou, 'fechou')} já ${fechou === 1 ? 'fechou' : 'fecharam'} contrato), ${fuNum(faltou, 'faltou')} ${faltou === 1 ? 'faltou' : 'faltaram'} e ${fuNum(aguardando, 'aguardando')} ainda ${aguardando === 1 ? 'aguarda' : 'aguardam'} — aula futura ou presença ainda não lida no EVO. <span style="color:var(--faint)">Passe o mouse nas barras para ver os nomes; clique para filtrar a lista.</span></p>` : ''}
       ${(!compCfg.on || !atCfg.on) ? `<p class="quando" style="margin:8px 0 0;color:var(--warn)">⚠️ ${!compCfg.on ? '“Presença da experimental” está desligada (SoFIA → Tags) — sem ela, ninguém sai de “aguardando”. ' : ''}${!atCfg.on ? '“Alunas / Ex-alunas automáticas” está desligado (SoFIA → Tags) — sem ele, o fechamento de contrato não aparece.' : ''}</p>` : ''}
-      ${canalSel === 'formulario' && podeVerInd ? `<p style="margin:12px 0 0;text-align:right"><a href="/indicadores?dias=${diasInd}" class="ind-btn sec" style="display:inline-block">Ver detalhes do formulário (por dia, horários de pico, origens e links) →</a></p>` : ''}
+      ${canalSel === 'formulario' && podeVerInd ? `<p style="margin:12px 0 0;text-align:right"><a href="/indicadores?dias=${diasInd}" class="ui-btn sec" style="display:inline-block">Ver detalhes do formulário (por dia, horários de pico, origens e links) →</a></p>` : ''}
     </div>
     ${detalheHtml}
     </div>
@@ -6122,7 +6131,7 @@ function paginaSofiaFunil(params) {
       #fuPop .r a:hover{text-decoration:underline}
       #fuPop .d{margin-top:6px;color:var(--faint);font-size:.76rem}
       /* celular: o nome da etapa vai para cima da barra — a barra usa a largura toda */
-      @media(max-width:600px){.fu-row{flex-wrap:wrap;row-gap:3px}.fu-row .fu-rot{width:100%!important}.fu-l{display:none}}
+      @media(max-width:600px){.fu-l{display:none}}
     </style>
     <script>
     var FU_ROT=${JSON.stringify(FU_ROT)};
@@ -6157,7 +6166,7 @@ function paginaSofiaFunil(params) {
       (acc||det).scrollIntoView({behavior:'smooth',block:'start'});
     }
     </script>
-    <p class="ind-rodape">Conta quem agendou <b>dentro do período</b> (pela data do agendamento), por canal: <b>SoFIA</b> (conversa no WhatsApp), <b>Formulário</b> (link de agendamento) e <b>Cadastro Express</b> (feito pela recepção). No filtro SoFIA, a base são as <b>conversas reais</b> (a pessoa escreveu); no Formulário, as <b>pessoas que abriram o link</b> de agendamento. <b>Fez a aula</b> vem da “Presença da experimental” (lê o EVO e troca a tag) e <b>fechou contrato</b> = ganhou a tag <b>${esc(tAluna)}</b> (aluna com contrato ativo no EVO).</p>
+    <p class="ui-rodape">Conta quem agendou <b>dentro do período</b> (pela data do agendamento), por canal: <b>SoFIA</b> (conversa no WhatsApp), <b>Formulário</b> (link de agendamento) e <b>Cadastro Express</b> (feito pela recepção). No filtro SoFIA, a base são as <b>conversas reais</b> (a pessoa escreveu); no Formulário, as <b>pessoas que abriram o link</b> de agendamento. <b>Fez a aula</b> vem da “Presença da experimental” (lê o EVO e troca a tag) e <b>fechou contrato</b> = ganhou a tag <b>${esc(tAluna)}</b> (aluna com contrato ativo no EVO).</p>
   </div>`;
   return chrome({ tab: 'Funil' }, 'funil', corpo);
 }
@@ -6241,15 +6250,10 @@ function paginaProfessoras(params) {
   const EVO_LINK = (process.env.EVO_LINK_URL || 'https://evo5.w12app.com.br').replace(/\/+$/, '');
   const ordemSit = { fechou: 0, veio: 1, faltou: 2, agendada: 3 };
 
-  const barraConv = (r) => {
-    const v = taxa(r.fechou, r.veio), w = v == null ? 0 : Math.max(v > 0 ? 3 : 0, Math.round(v));
-    const poucas = r.veio < POUCAS;
-    const dentroB = w >= 14;
-    return `<span class="pf-bar"><span style="width:${w}%;background:${poucas ? 'var(--faint)' : 'var(--ok)'}"></span>${v == null ? '' : `<em style="${dentroB ? 'left:10px;color:#fff' : `left:calc(${w}% + 8px);color:var(--cinza)`}">${fmtPct(v)}</em>`}</span>`;
-  };
+  const barraConv = (r) => uiTrilho(r.fechou, r.veio, { cor: r.veio < POUCAS ? 'var(--faint)' : 'var(--ok)' });
   const linhaAluna = (x) => {
     const ag = x.tel ? agendouAntes(x.tel, x.dia) : null;
-    return indPessoa({
+    return uiPessoa({
       nome: x.nome, sit: x.sit,
       href: x.tel ? '/sofia?view=contatos&q=' + String(x.tel).replace(/\D/g, '').slice(-8) : '/sofia?view=contatos&q=' + encodeURIComponent(x.nome),
       evo: x.idEvo ? `${EVO_LINK}/${config.evo.appBase}/clientes/cadastro/${x.idEvo}//perfil` : '',
@@ -6289,28 +6293,28 @@ function paginaProfessoras(params) {
     : st.estado === 'erro' ? `⚠️ A última leitura falhou (${esc(fmtQuando(st.fim))}): ${esc(st.msg || '')}`
     : lidos.length ? `📚 Histórico de <b>${esc(fmtBR(lidos[0]))}</b> até <b>${esc(fmtBR(lidos[lidos.length - 1]))}</b>${st.fim ? ` · última leitura ${esc(fmtQuando(st.fim))}` : ''}. O robô relê a agenda toda madrugada.`
     : 'Ainda sem dados. Toda madrugada o robô copia a agenda de experimentais do EVO. Para não esperar, clique em “Ler agora no EVO”.';
-  const btnAtualizar = `<form method="POST" action="/professoras/atualizar" style="margin:0"><button class="ind-btn sec" type="submit" ${rodando ? 'disabled' : ''}>🔄 Ler agora no EVO</button></form>`;
+  const btnAtualizar = `<form method="POST" action="/professoras/atualizar" style="margin:0"><button class="ui-btn sec" type="submit" ${rodando ? 'disabled' : ''}>🔄 Ler agora no EVO</button></form>`;
   // Até onde buscar para trás (padrão 90 dias): 60 dias antigos por madrugada; "Ler agora" adianta 30.
   const desde = h.cfg.desde || '';
   const pend = histExp.antigosPendentes(h).length;
   const inicioPadrao = menosDias(histExp.HISTORICO_PADRAO - 1);
   const noites = Math.ceil(pend / 60);
-  const blocoDesde = `<form method="POST" action="/professoras/desde" class="ind-linha ind-datas"><span class="ind-lbl">Histórico</span>
+  const blocoDesde = `<form method="POST" action="/professoras/desde" class="ui-linha ui-datas"><span class="ui-lbl">Histórico</span>
       <span class="ate">buscar no EVO desde</span><input type="date" name="desde" value="${esc(desde || inicioPadrao)}" max="${esc(hojeStr)}" min="2020-01-01" aria-label="Buscar desde">
-      <button class="ind-btn sec" type="submit">Salvar</button>
+      <button class="ui-btn sec" type="submit">Salvar</button>
       <span class="quando">${pend ? `Faltam <b>${pend}</b> dia${pend === 1 ? '' : 's'} antigo${pend === 1 ? '' : 's'} — o robô lê 60 por madrugada (≈ ${noites} noite${noites === 1 ? '' : 's'}); “Ler agora” adianta 30.` : `Completo desde ${esc(fmtBR(desde || inicioPadrao))}.`}</span></form>`;
 
   const corpo = `<div class="wrap">
     ${subnavIndicadores('professoras')}
-    ${indTopo({
+    ${uiTopo({
       titulo: 'Conversão por professora',
       sub: 'Das alunas que fizeram a aula experimental com cada professora, quantas fecharam contrato. Vem da agenda de experimentais do EVO.',
       acoes: btnAtualizar,
       linhas: [
-        indChips('Período', [['30', '30 dias'], ['90', '90 dias'], ['ano', hojeStr.slice(0, 4)], ['0', 'Tudo']].map(([v, l]) => [`/professoras?per=${v}`, l, !custom && per === v])),
-        indDatas({ action: '/professoras', de: params.de, ate: params.ate, limpar: custom ? '/professoras' : '' }),
+        uiChips('Período', [['30', '30 dias'], ['90', '90 dias'], ['ano', hojeStr.slice(0, 4)], ['0', 'Tudo']].map(([v, l]) => [`/professoras?per=${v}`, l, !custom && per === v])),
+        uiDatas({ action: '/professoras', de: params.de, ate: params.ate, limpar: custom ? '/professoras' : '' }),
         blocoDesde,
-        `<div class="ind-nota${st.estado === 'erro' && !rodando ? ' erro' : ''}"><span>${situacaoLeitura}</span></div>`,
+        `<div class="ui-nota${st.estado === 'erro' && !rodando ? ' erro' : ''}"><span>${situacaoLeitura}</span></div>`,
       ],
     })}
     ${tot.exp ? `<div class="stats">
@@ -6319,7 +6323,7 @@ function paginaProfessoras(params) {
       <div class="stat ok"><div class="n">${tot.fechou}</div><div class="l">fecharam contrato</div></div>
       <div class="stat"><div class="n" style="color:var(--coral-esc)">${fmtPct(taxa(tot.fechou, tot.veio))}</div><div class="l">conversão do Studio (de quem veio)</div></div>
     </div>
-    <div class="ind-secoes">
+    <div class="ui-secoes">
     <div class="sec-t">Por professora</div>
     <div class="card">
       ${lista.map(linhaProf).join('')}
@@ -6328,7 +6332,7 @@ function paginaProfessoras(params) {
     <div class="sec-t">Por horário da aula</div>
     ${tabHoras}
     </div>
-    <p class="ind-rodape">A conversão não depende só da professora: horário, quem atendeu na recepção e preço também pesam. Use o número para conversar, não para julgar. <b>Fechou</b> = “Nome do contrato” preenchido na agenda de experimentais do EVO, ou a aluna já tem a tag <b>${esc(tAluna)}</b>. Aulas canceladas não entram.</p>`
+    <p class="ui-rodape">A conversão não depende só da professora: horário, quem atendeu na recepção e preço também pesam. Use o número para conversar, não para julgar. <b>Fechou</b> = “Nome do contrato” preenchido na agenda de experimentais do EVO, ou a aluna já tem a tag <b>${esc(tAluna)}</b>. Aulas canceladas não entram.</p>`
     : `<div class="card"><div class="vazio">${lidos.length ? 'Nenhuma aula experimental registrada neste período.' : 'Ainda sem histórico. Clique em “Ler agora no EVO” ou espere a leitura desta madrugada.'}</div></div>`}
     <style>
       .pf-item{border-bottom:1px solid var(--linha-soft)}
@@ -6342,9 +6346,6 @@ function paginaProfessoras(params) {
       .pf-item[open] .pf-seta{transform:rotate(90deg)}
       .pf-nome{width:200px;flex:none;font-weight:700;color:var(--tinta);font-size:.92rem}
       .pf-poucas{display:inline-block;font-size:.66rem;font-weight:700;color:var(--cinza);border:1px solid var(--linha);border-radius:999px;padding:1px 7px;margin-left:4px;vertical-align:middle}
-      .pf-bar{flex:1;min-width:120px;height:26px;background:var(--linha-soft);border-radius:8px;overflow:hidden;position:relative}
-      .pf-bar>span{display:block;height:100%}
-      .pf-bar>em{position:absolute;top:0;bottom:0;display:flex;align-items:center;font-style:normal;font-size:.78rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
       .pf-nums{width:150px;flex:none;text-align:right;font-variant-numeric:tabular-nums;font-size:.86rem;color:var(--tinta)}
       .pf-nums span{color:var(--cinza)}
       .pf-det{margin:0 6px 12px 20px;padding:4px 14px;border-left:3px solid var(--teal-soft)}
@@ -6387,7 +6388,7 @@ function paginaSofiaCusto(aviso, erro, params) {
   const fmtDiaC = (s) => { const p = String(s).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : s; };
   const maxU = Math.max(0.0001, ...dias.map(d => d.usd));
   const barras = dias.length
-    ? dias.slice().reverse().map(d => `<div class="bar"><span class="bd">${fmtDiaC(d.dia)}</span><span class="btrack"><span class="bfill" style="width:${Math.round((d.usd / maxU) * 100)}%"></span></span><span class="bn">${brl(d.usd)} <small style="opacity:.55">(${usd(d.usd)})</small> <small>· ${d.convs} conv.</small></span></div>`).join('')
+    ? dias.slice().reverse().map(d => uiBarra({ rot: fmtDiaC(d.dia), n: d.usd, max: maxU, texto: '', valor: `${brl(d.usd)} <small>(${usd(d.usd)}) · ${d.convs} conv.</small>` })).join('')
     : '<div class="vazio">Sem gasto registrado no período.</div>';
   // Gasto por conversa (telefone) no mesmo período. Só entram os turnos que já
   // trazem o telefone (registrados após ativar este detalhamento).
@@ -6416,13 +6417,10 @@ function paginaSofiaCusto(aviso, erro, params) {
   // tags por intenção, follow-up).
   let porTipo = []; try { porTipo = sofia.lerCustoPorTipo(ini, fim || hojeStr); } catch (_) {}
   const rotTipo = { conversa: '💬 Conversas', gerador: '✨ Gerador de frases', resumo: '📝 Resumos de interações', tags: '🏷️ Tags por intenção', followup: '🔁 Follow-up' };
-  const tipoRows = porTipo.map(t => `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--linha)">
-      <div style="min-width:0"><b>${rotTipo[t.tipo] || esc(t.tipo)}</b> <small style="color:var(--faint)">· ${t.n}×</small></div>
-      <div style="display:flex;gap:14px;align-items:baseline;white-space:nowrap;font-variant-numeric:tabular-nums">
-        <span style="color:var(--faint);font-size:.8rem">${ktok(t.inTok + t.outTok)} tok</span>
-        <span style="white-space:nowrap"><b>${brl(t.usd)}</b> <small style="color:var(--faint);font-size:.72rem">${usd(t.usd)}</small></span></div></div>`).join('');
+  const totTipo = porTipo.reduce((a, t) => a + (t.usd || 0), 0);
+  const tipoRows = porTipo.map(t => uiBarra({ largo: true, rot: `${rotTipo[t.tipo] || esc(t.tipo)} <small style="color:var(--faint);font-weight:600">· ${t.n}×</small>`, n: t.usd, max: totTipo, valor: `${brl(t.usd)} <small>· ${ktok(t.inTok + t.outTok)} tok</small>` })).join('');
   const tipoBloco = tipoRows
-    ? tipoRows + `<p class="quando" style="margin:12px 0 0">As <b>Conversas</b> usam o custo real da IA. O restante (gerador, resumos, tags, follow-up) é <b>estimado</b> por tokens × preço do modelo.</p>`
+    ? tipoRows + `<p class="quando" style="margin:12px 0 0">A barra é a parte de cada tipo no gasto do período. As <b>Conversas</b> usam o custo real da IA. O restante (gerador, resumos, tags, follow-up) é <b>estimado</b> por tokens × preço do modelo.</p>`
     : '<div class="vazio">Sem uso de IA registrado no período.</div>';
   const segs = janelas.map(([v, l]) => `<a href="/sofia?view=custo&per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
   const limite = c.limite;
