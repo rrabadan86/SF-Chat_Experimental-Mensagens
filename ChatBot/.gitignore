@@ -53,6 +53,8 @@ sofia-bloqueios.json
 sofia-nao-responder.json
 sofia-followup-cfg.json
 sofia-followup.jsonl
+# código pessoal do link do formulário em cada mensagem de campanha (quem abriu)
+formulario-codigos.jsonl
 sofia-followup.*.proc
 sofia-agendaram.json
 sofia-agendaram-canal.json

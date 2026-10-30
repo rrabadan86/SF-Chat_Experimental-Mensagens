@@ -251,7 +251,10 @@ function validarResposta(f, d) {
 }
 
 // Grava a resposta. Mesmo número de novo → atualiza a resposta que já existia.
-function responder(f, d) {
+function responder(f, d, extra) {
+  extra = extra || {};
+  const vid = /^[a-f0-9]{16}$/.test(String(extra.vid || '')) ? extra.vid : '';
+  const cod = CODIGO_OK.test(String(extra.codigo || '').toUpperCase()) ? String(extra.codigo).toUpperCase() : '';
   const v = validarResposta(f, d);
   if (v.erro) return v;
   const resp = carregarResp();
@@ -260,8 +263,8 @@ function responder(f, d) {
   const k = chaveTel(v.telefone);
   const ja = lista.find(r => chaveTel(r.telefone) === k);
   // Reenvio: vale a resposta nova, mas guarda o número na forma completa (com o 9) se uma das duas tiver.
-  if (ja) Object.assign(ja, { nome: v.nome, telefone: v.telefone.length >= String(ja.telefone).length ? v.telefone : ja.telefone, valores: v.valores, atualizadoEm: agora, vezes: (ja.vezes || 1) + 1 });
-  else lista.push({ id: novoId(), em: agora, nome: v.nome, telefone: v.telefone, valores: v.valores, origem: corta(d.origem, 40) });
+  if (ja) Object.assign(ja, { nome: v.nome, telefone: v.telefone.length >= String(ja.telefone).length ? v.telefone : ja.telefone, valores: v.valores, atualizadoEm: agora, vezes: (ja.vezes || 1) + 1 }, vid && !ja.vid ? { vid } : {}, cod && !ja.codigo ? { codigo: cod } : {});
+  else lista.push(Object.assign({ id: novoId(), em: agora, nome: v.nome, telefone: v.telefone, valores: v.valores, origem: corta(d.origem, 40) }, vid ? { vid } : {}, cod ? { codigo: cod } : {}));
   salvarResp(resp);
   return { ok: true, novo: !ja, nome: v.nome, telefone: v.telefone };
 }
@@ -332,20 +335,42 @@ function gravarAcessos(map, ja) {
   if (_acessosTimer.unref) _acessosTimer.unref();
 }
 const normOrigem = o => normSlug(o).slice(0, 30);
-function registrarAcesso(formId, visitante, origem) {
+// codigo: o código pessoal do link (?c=XXXXXX) que a SoFIA põe em cada mensagem de
+// campanha — diz QUEM abriu. Por visitante (cookie) e por código guardamos
+// { n: aberturas, p: 1ª, u: última } — dá "abriu 3 vezes" e "última às 18:40".
+const MAX_CODIGOS = 50000;
+const CODIGO_OK = /^[2-9A-Z]{6}$/;
+function registrarAcesso(formId, visitante, origem, codigo) {
   const map = carregarAcessos();
   const a = map[formId] || (map[formId] = { aberturas: 0, visitantes: {}, origens: {} });
   const o = normOrigem(origem) || '';
+  const agora = Date.now();
   a.aberturas++;
   const og = a.origens[o] || (a.origens[o] = { aberturas: 0, pessoas: 0 });
   og.aberturas++;
   const v = String(visitante || '');
   if (v && !a.visitantes[v] && Object.keys(a.visitantes).length < MAX_VISITANTES) {
-    a.visitantes[v] = Date.now();
+    a.visitantes[v] = agora;
     og.pessoas++;
+  }
+  if (v && a.visitantes[v]) {
+    const cv = (a.vezes || (a.vezes = {}))[v] || (a.vezes[v] = { n: 0, p: agora });
+    cv.n++; cv.u = agora;
+  }
+  const c = String(codigo || '').toUpperCase();
+  if (CODIGO_OK.test(c)) {
+    const cs = a.codigos || (a.codigos = {});
+    if (cs[c] || Object.keys(cs).length < MAX_CODIGOS) {
+      const cc = cs[c] || (cs[c] = { n: 0, p: agora });
+      cc.n++; cc.u = agora;
+    }
   }
   gravarAcessos(map);
 }
+// Quantas vezes um visitante / um código abriu: { n, p, u } ou null.
+function vezesVisitante(formId, v) { const a = carregarAcessos()[formId]; return (a && a.vezes && a.vezes[v]) || null; }
+function vezesCodigo(formId, c) { const a = carregarAcessos()[formId]; return (a && a.codigos && a.codigos[String(c || '').toUpperCase()]) || null; }
+
 // { aberturas, pessoas, respostas, conversao, porOrigem: [{ origem, aberturas, pessoas, respostas }] }
 function acessos(formId) {
   const a = carregarAcessos()[formId] || { aberturas: 0, visitantes: {}, origens: {} };
@@ -374,5 +399,5 @@ module.exports = {
   TIPOS, COM_OPCOES, MODELO_BLACK_FRIDAY, MAX_CAMPOS,
   listar, obter, porSlug, unicoAberto, estaAberto, situacao, salvar, definirAtivo, duplicar, excluir,
   capaPath, responder, respostas, excluirResposta, colunas, valorTexto, fmtTel, fmtQuando, csv, normSlug, permitir,
-  registrarAcesso, acessos,
+  registrarAcesso, acessos, vezesVisitante, vezesCodigo, chaveTel, CODIGO_OK,
 };

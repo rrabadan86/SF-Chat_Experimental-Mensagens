@@ -2200,6 +2200,29 @@ async function processarCampInbox() {
 
 // Runner: manda no máximo UMA mensagem por tick, respeitando delay/teto/janela.
 let campanhaEnviando = false;
+// ── Link do formulário com código pessoal ───────────────────────────────────
+// Se a mensagem da campanha tem o link de um formulário de campanha do painel
+// (…/formulario/<endereço>), cada pessoa recebe o link com um código só dela
+// (?c=8K2FQX). O painel usa o código para saber QUEM abriu, quantas vezes e se
+// respondeu (formulário → Respostas → "Pela campanha"). O código não carrega o
+// telefone: a ligação código → pessoa fica só aqui, em formulario-codigos.jsonl.
+const COD_FILE = path.join(DIR, "formulario-codigos.jsonl");
+const COD_ALFA = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // sem 0/O/1/I/L (não confunde)
+function novoCodigoLink(): string {
+  let s = "";
+  for (const b of crypto.randomBytes(6)) s += COD_ALFA[b % COD_ALFA.length];
+  return s;
+}
+function marcarLinksFormulario(texto: string, dest: { tel: string; nome?: string }, c: Campanha): string {
+  return String(texto || "").replace(/(https?:\/\/[^\s<>"']*?\/formulario\/([a-z0-9][a-z0-9-]*))(\?[\w=&%.-]*[\w=&%-])?/gi, (m, base: string, slug: string, qs?: string) => {
+    if (qs && /[?&]c=/.test(qs)) return m; // já tem código
+    const cod = novoCodigoLink();
+    try { fs.appendFileSync(COD_FILE, JSON.stringify({ c: cod, tel: dest.tel, nome: dest.nome || "", slug: slug.toLowerCase(), camp: c.id, campNome: c.nome, em: Date.now() }) + "\n", "utf8"); }
+    catch { return m; } // sem registrar o código, manda o link comum
+    return base + (qs ? qs + "&" : "?") + "c=" + cod;
+  });
+}
+
 async function tickCampanha() {
   if (campanhaEnviando || !pronta) return;
   const c = campanhas.find((x) => x.status === "enviando");
@@ -2214,7 +2237,7 @@ async function tickCampanha() {
   if (Date.now() < c.proxEnvioEm) return;                     // espaçamento entre envios — SEMPRE respeitado (segurança do número)
   const alvoDest = c.pendentes[0];
   const variacaoBase = (c.variacoes.length ? c.variacoes[(c.enviados.length) % c.variacoes.length] : c.textoBase) || c.textoBase;
-  const variacao = aplicarNome(variacaoBase, alvoDest.nome); // personaliza com o 1º nome
+  const variacao = marcarLinksFormulario(aplicarNome(variacaoBase, alvoDest.nome), alvoDest, c); // 1º nome + link do formulário com código pessoal
   campanhaEnviando = true;
   try {
     const alvo = await resolverIdEnvio(alvoDest.tel);
