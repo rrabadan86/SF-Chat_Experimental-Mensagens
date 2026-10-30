@@ -510,12 +510,33 @@ const ESTILO = `
   .topbar{position:sticky;top:0;z-index:60;background:var(--card);border-bottom:1px solid var(--linha)}
   .topbar .in{max-width:1080px;margin:0 auto;padding:4px 24px;display:flex;align-items:center;gap:16px} /* mais largo que o conteúdo: cabem as 8 abas do admin numa linha */
   .tb-logo{height:50px;width:auto;flex:none;display:block}
-  .hdr-user{display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-size:.82rem;white-space:nowrap;flex:none;margin-left:auto}
-  .hdr-user-row{display:flex;align-items:center;gap:12px}
-  .hdr-user span{color:var(--cinza)}
-  .hdr-user a{color:var(--teal-esc);font-weight:600;text-decoration:none}
-  .hdr-user a:hover{text-decoration:underline}
-  .hdr-studio{font-size:.72rem;color:var(--faint);font-weight:500}
+  /* Menu da conta (canto superior direito): avatar → Saúde, Perfis e Sair. */
+  .conta{position:relative;flex:none;margin-left:auto}
+  .conta>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:4px 4px 4px 10px;border-radius:999px;border:1px solid transparent;user-select:none}
+  .conta>summary::-webkit-details-marker{display:none}
+  .conta>summary:hover,.conta[open]>summary{background:var(--linha-soft);border-color:var(--linha)}
+  .conta>summary:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .conta.on>summary .av{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--teal)}
+  .conta-txt{display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;white-space:nowrap}
+  .conta-txt b{font-size:.82rem;color:var(--tinta);font-weight:600}
+  .conta-txt small{font-size:.7rem;color:var(--faint);font-weight:500}
+  .av{position:relative;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:800;font-size:.82rem;letter-spacing:.03em;flex:none}
+  .av>img{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover}
+  .av-dot{position:absolute;right:-2px;top:-2px;width:13px;height:13px;border-radius:50%;border:2px solid var(--card)}
+  .av-dot.warn{background:#e0a100}
+  .av-dot.erro{background:#d93025}
+  .conta-menu{position:absolute;right:0;top:calc(100% + 8px);width:300px;max-width:calc(100vw - 24px);background:var(--card);border:1px solid var(--linha);border-radius:14px;box-shadow:0 16px 40px -12px rgba(16,24,40,.35);padding:8px;z-index:80}
+  .conta-cab{display:flex;gap:12px;align-items:center;padding:8px 8px 12px;border-bottom:1px solid var(--linha-soft);margin-bottom:6px}
+  .conta-cab .av{width:46px;height:46px;font-size:.95rem}
+  .conta-cab b{display:block;font-size:.95rem;color:var(--tinta)}
+  .conta-cab div>span{display:block;font-size:.76rem;color:var(--cinza)}
+  .conta-menu a{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;color:var(--tinta);text-decoration:none;font-weight:600;font-size:.88rem}
+  .conta-menu a:hover{background:var(--linha-soft)}
+  .conta-menu a.on{background:var(--teal-soft);color:var(--teal-esc)}
+  .conta-menu a .sd-pill{margin-left:auto}
+  .conta-menu a.sair{color:var(--erro)}
+  .conta-sep{height:1px;background:var(--linha-soft);margin:6px 0}
+  @media(max-width:400px){.conta-txt{display:none}}
   .tabs{display:flex;flex-wrap:wrap;gap:6px;flex:1 1 auto;justify-content:center;margin:0;padding:0}
   .tabs a{flex:0 1 auto;display:flex;align-items:center;justify-content:center;line-height:1.1;text-decoration:none;font-weight:500;color:var(--cinza);background:transparent;border:1px solid transparent;border-radius:10px;padding:9px 12px}
   .tabs a .tic{display:none}
@@ -523,14 +544,13 @@ const ESTILO = `
   .tabs a:hover{color:var(--tinta);background:var(--linha-soft)}
   .tabs a.on{background:var(--teal);color:#fff;border-color:var(--teal)}
   /* Mesma ordem no desktop E no mobile: SoFIA → WhatsApp → Instagram →
-     Formulário → Perfis → Grade → Saúde (no HTML a SoFIA fica por último; o order reordena). */
+     Formulário → Indicadores → Slim Club (no HTML a SoFIA fica por último; o order
+     reordena). Perfis e Saúde ficam no menu da conta (avatar). */
   .tabs .nav-sofia{order:1}
   .tabs .nav-msg{order:2}
   .tabs .nav-ig{order:3}
   .tabs .nav-ind{order:4}
-  .tabs .nav-perfis{order:5}
   .tabs .nav-grade{order:6}
-  .tabs .nav-saude{order:7}
   .tabs .nav-slimclub{order:8}
   .nav-badge{display:inline-block;min-width:17px;border-radius:999px;background:#c62828;color:#fff;font-size:.68rem;font-weight:700;line-height:17px;padding:0 5px;text-align:center;margin-left:3px;vertical-align:1px}
   /* Mobile: logo + login na 1ª linha; o menu ocupa a linha inteira logo abaixo.
@@ -934,17 +954,65 @@ function navTabs(ativo) {
   let html = pode('formularios') ? cel('/formularios', ativo === 'formularios', '📈', 'Formulário', 'ind') : '';
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp', 'msg');
   if (IG_NO_PAINEL) html += item('ig', '/instagram', '📸', 'Instagram');
-  if (sess.admin) html += cel('/perfis', ativo === 'perfis', '👤', 'Perfis', 'perfis');
   // Indicadores = Funil + Formulário + Professoras + Grade, cada um com a sua permissão. Abre no primeiro permitido.
   const indHref = podeFunil(sess) ? '/funil' : pode('ind') ? '/indicadores' : pode('professoras') ? '/professoras' : pode('grade') ? '/grade' : '';
   if (indHref) html += cel(indHref, ativo === 'grade' || ativo === 'funil' || ativo === 'ind' || ativo === 'professoras', '📊', 'Indicadores', 'grade');
-  if (sess.admin || (sess.telas || []).includes('saude')) html += cel('/saude', ativo === 'saude', '🩺', 'Saúde', 'saude');
   if (pode('slimclub')) { // número = o que espera a recepção (cadastros, alterações, reclamações)
     const n = slimclub.pendenciasRecepcao();
     html += item('slimclub', '/clube', '🤝', 'Slim Club' + (n ? ` <span class="nav-badge" title="${n} para a recepção ver">${n}</span>` : ''));
   }
   if (temSofia(sess)) html += cel(sofiaHref(sess), ativo === 'sofia', '🤖', 'SoFIA', 'sofia');
   return html;
+}
+
+// ── Menu da conta (avatar no canto superior direito) ────────────────────────
+// Foto: a do Google (gravada no login com Google); sem foto, as iniciais num
+// círculo de cor fixa por usuário. A bolinha no avatar mostra a Saúde (amarelo/
+// vermelho) para quem pode ver a Saúde — assim um problema aparece em qualquer tela.
+const FOTOS_FILE = path.resolve(__dirname, '..', 'data', 'fotos-usuarios.json');
+function fotoDe(usuario) {
+  try { const m = JSON.parse(fs.readFileSync(FOTOS_FILE, 'utf8')) || {}; const f = String(m[String(usuario || '').toLowerCase()] || ''); return /^https:\/\/[a-z0-9.-]+\.googleusercontent\.com\//i.test(f) ? f : ''; }
+  catch (_) { return ''; }
+}
+function salvarFoto(usuario, url) {
+  const u = String(usuario || '').toLowerCase(), f = String(url || '');
+  if (!u || !/^https:\/\/[a-z0-9.-]+\.googleusercontent\.com\//i.test(f)) return;
+  let m = {}; try { m = JSON.parse(fs.readFileSync(FOTOS_FILE, 'utf8')) || {}; } catch (_) {}
+  if (m[u] === f) return;
+  m[u] = f;
+  try { fs.writeFileSync(FOTOS_FILE, JSON.stringify(m, null, 2), 'utf8'); } catch (_) {}
+}
+function iniciais(usuario) {
+  const p = String(usuario || '').trim().split(/[\s._@-]+/).filter(Boolean);
+  return (p.length > 1 ? p[0][0] + p[1][0] : (p[0] || '?').slice(0, 2)).toUpperCase();
+}
+const AV_CORES = ['#0e6e6b', '#495a95', '#8a6a2e', '#6f4e8f', '#a5473f', '#3c8258', '#95517a'];
+function avatar(usuario, dot) {
+  let h = 0; for (const ch of String(usuario || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const foto = fotoDe(usuario);
+  return `<span class="av" style="background:${AV_CORES[h % AV_CORES.length]}" aria-hidden="true">${esc(iniciais(usuario))}${foto ? `<img src="${esc(foto)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}${dot || ''}</span>`;
+}
+// Último estado geral da Saúde (calculado por paginaSaude — na visita à tela e a
+// cada 3 min em segundo plano). { cor: 'ok'|'warn'|'erro', em }.
+let _saudeCor = null;
+function menuConta(ativo) {
+  const sess = _navSess;
+  const podeSaude = sess.admin || (sess.telas || []).includes('saude');
+  const sc = (podeSaude && _saudeCor && Date.now() - _saudeCor.em < 15 * 60 * 1000) ? _saudeCor.cor : '';
+  const dot = (sc === 'warn' || sc === 'erro') ? `<span class="av-dot ${sc}" title="${sc === 'erro' ? 'Saúde: há um problema' : 'Saúde: atenção'}"></span>` : '';
+  const PILL = { ok: '<span class="sd-pill sd-ok">🟢 OK</span>', warn: '<span class="sd-pill sd-warn">🟡 Atenção</span>', erro: '<span class="sd-pill sd-erro">🔴 Problema</span>' };
+  const studio = esc(config.STUDIO_NOME || '');
+  const papel = sess.admin ? 'Administrador' : 'Equipe';
+  return `<details class="conta${ativo === 'saude' || ativo === 'perfis' ? ' on' : ''}">
+    <summary aria-label="Menu da conta"><span class="conta-txt"><b>${esc(sess.usuario)}</b><small>${studio}</small></span>${avatar(sess.usuario, dot)}</summary>
+    <div class="conta-menu">
+      <div class="conta-cab">${avatar(sess.usuario)}<div><b>${esc(sess.usuario)}</b><span>${papel}${studio ? ' · ' + studio : ''}</span></div></div>
+      ${podeSaude ? `<a href="/saude"${ativo === 'saude' ? ' class="on"' : ''}>🩺 Saúde do sistema ${sc ? PILL[sc] : ''}</a>` : ''}
+      ${sess.admin ? `<a href="/perfis"${ativo === 'perfis' ? ' class="on"' : ''}>👤 Perfis e acessos</a>` : ''}
+      ${podeSaude || sess.admin ? '<div class="conta-sep"></div>' : ''}
+      <a href="/logout" class="sair">↪ Sair</a>
+    </div>
+  </details>`;
 }
 
 function chrome(titSubtitulo, ativo, corpo) {
@@ -958,10 +1026,17 @@ function chrome(titSubtitulo, ativo, corpo) {
 <nav class="topbar"><div class="in">
   <img class="tb-logo" alt="SlimFit Studio" src="https://drive.google.com/thumbnail?id=1pl1mh709FGcitG9uHo0J6nzMUKFYqg-w&sz=w400">
   <div class="tabs">${navTabs(ativo)}</div>
-  ${_navSess ? `<div class="hdr-user"><div class="hdr-user-row"><span>👤 ${esc(_navSess.usuario)}</span><a href="/logout">Sair</a></div><div class="hdr-studio">${esc(config.STUDIO_NOME || '')}</div></div>` : ''}
+  ${_navSess ? menuConta(ativo) : ''}
 </div></nav>
 ${corpo}
 <footer>SlimFit · painel do Studio</footer>
+<script>
+/* Menu da conta: fecha ao clicar fora ou com Esc. */
+(function(){ var c=document.querySelector('details.conta'); if(!c) return;
+  document.addEventListener('click',function(e){ if(c.open && !c.contains(e.target)) c.open=false; });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape' && c.open){ c.open=false; c.querySelector('summary').focus(); } });
+})();
+</script>
 <script>
 /* Altura real da barra de topo (varia: no mobile ela quebra em 2 linhas) vira a
    variável --topbar-h, usada pelo submenu (.subtabs) para "grudar" logo abaixo
@@ -6637,6 +6712,7 @@ function paginaSaude(list, extra = {}) {
     bkp ? `🗄️ Último backup dos dados <b>${bId.txt}</b> (${bkp.n} cópia${bkp.n === 1 ? '' : 's'} guardada${bkp.n === 1 ? '' : 's'}).${diasBkp > 2 ? ' <b>Faz mais de 2 dias</b> — confira o cron do backup.' : ''}` : '<span class="sd-muted">🗄️ Sem backup em <code>backups/</code> — configure o cron do <code>backup-dados.js</code>.</span>',
   ]);
 
+  _saudeCor = { cor: [corExp, corSof, corEvo, corForm, corServ, corLid].concat(IG_NO_PAINEL ? [corIg] : []).reduce(pior, 'ok'), em: Date.now() };
   const corpo = `<div class="wrap">
     ${uiTopo({ titulo: 'Saúde do sistema', sub: 'O estado de cada parte da automação num lugar só: verde funcionando, amarelo atenção, vermelho com problema.', acoes: '<a href="/saude" class="ui-btn sec">↻ Atualizar</a>' })}
     <div class="sd-grid">${cardExp}${cardSof}${cardEvo}${IG_NO_PAINEL ? cardIg : ''}${cardForm}${cardServ}${cardLid}</div>
@@ -7679,7 +7755,7 @@ const server = http.createServer((req, res) => {
     setStateCookie(req, res, state);
     const qs = new URLSearchParams({
       client_id: GOOGLE_ID, redirect_uri: redirectUri(req), response_type: 'code',
-      scope: 'openid email', state, access_type: 'online', prompt: 'select_account',
+      scope: 'openid email profile', state, access_type: 'online', prompt: 'select_account',
     }).toString();
     res.writeHead(303, { Location: 'https://accounts.google.com/o/oauth2/v2/auth?' + qs }); return res.end();
   }
@@ -7698,6 +7774,7 @@ const server = http.createServer((req, res) => {
       const ok = loginPorEmail(claims.email);
       if (!ok) { res.writeHead(303, { Location: '/login?g=naoaut' }); return res.end(); }
       try { acessos.registrarLogin(ok.usuario, 'google'); } catch (_) {}
+      try { if (claims.picture) salvarFoto(ok.usuario, claims.picture); } catch (_) {}
       setCookieSessao(req, res, criarToken(ok.usuario, criarSessao(ok.usuario, 'google', req)), lerSessaoDias() * 86400);
       const sess = { admin: ok.admin, telas: ok.admin ? TODAS_TELAS : (usuarios.obter(ok.usuario) || { telas: [] }).telas };
       res.writeHead(303, { Location: primeiraTela(sess) || '/hoje' }); res.end();
@@ -9834,4 +9911,13 @@ server.listen(PORT, HOST, () => {
   // Instagram oficial (Graph API): valida token e descobre a conta. Silencioso
   // se as variáveis não estiverem no .env — não atrapalha o resto do painel.
   try { igApi.bootstrap().catch(() => {}); } catch (_) {}
+  // Estado da Saúde para a bolinha do avatar: a cada 3 min (pm2 jlist é leve).
+  const atualizarSaudeCor = () => exec('pm2 jlist', { timeout: 15000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) => {
+    let list = null; try { list = JSON.parse(stdout); } catch (_) {}
+    const navAntes = _navSess; _navSess = null;
+    try { paginaSaude(list, {}); } catch (_) {}
+    _navSess = navAntes;
+  });
+  setTimeout(atualizarSaudeCor, 5000);
+  const tSaude = setInterval(atualizarSaudeCor, 3 * 60 * 1000); if (tSaude.unref) tSaude.unref();
 });
