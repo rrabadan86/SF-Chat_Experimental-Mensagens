@@ -714,6 +714,7 @@ function iniciarRodarJobWatcher() {
     inadimplentes:     { nome: 'Cobrança de inadimplentes [manual]', fn: () => require('./inadimplentes').runInadimplentes({ dry: false }), timeoutMs: 20 * 60 * 1000 },
     historicoExperimentais: { nome: 'Histórico de experimentais (professoras) [manual]', fn: () => require('./historico-experimentais').runHistoricoExperimentais(), timeoutMs: 45 * 60 * 1000 },
     // "Enviar agora" do resumo mensal (Indicadores → Alunas ativas): manda nos grupos sem marcar o mês como enviado
+    resumoSemanal:     { nome: 'Resumo da semana no WhatsApp [manual]', fn: (pedido) => require('./resumo-semanal').enviar({ ate: pedido && pedido.ate, teste: true, log }), timeoutMs: 12 * 60 * 1000 },
     resumoMensal:      { nome: 'Resumo mensal no WhatsApp [manual]', fn: (pedido) => require('./resumo-mensal').enviar({ mes: pedido && pedido.mes, teste: true, log }), timeoutMs: 12 * 60 * 1000 },
     freeAntecedencia:  { nome: 'Planos FREE — antecedência [manual]', fn: (pedido) => require('./free-antecedencia').runFreeAntecedencia({ dry: !!(pedido && pedido.dry) }) },
   };
@@ -738,21 +739,24 @@ function iniciarRodarJobWatcher() {
 // cada conferência — mudar no painel não precisa reiniciar o robô.
 function iniciarResumoMensal() {
   const rm = require('./resumo-mensal');
+  const rs = require('./resumo-semanal');
   let ocupado = false;
   const conferir = () => {
     if (ocupado || jobRunning) return;
-    let mes = null;
-    try { mes = rm.estaNaHora(); } catch (_) { return; }
-    if (!mes) return;
+    let mes = null, semana = false;
+    try { mes = rm.estaNaHora(); } catch (_) {}
+    try { semana = !mes && rs.estaNaHora(); } catch (_) {}
+    if (!mes && !semana) return;
     ocupado = true;
-    runJob('Resumo mensal no WhatsApp', () => rm.enviar({ mes, log }), 12 * 60 * 1000, { retry: false })
-      .catch(err => logError('Resumo mensal no WhatsApp', err))
-      .finally(() => { ocupado = false; });
+    const job = mes
+      ? runJob('Resumo mensal no WhatsApp', () => rm.enviar({ mes, log }), 12 * 60 * 1000, { retry: false })
+      : runJob('Resumo da semana no WhatsApp', () => rs.enviar({ log }), 12 * 60 * 1000, { retry: false });
+    job.catch(err => logError('Resumo no WhatsApp', err)).finally(() => { ocupado = false; });
   };
   const t = setInterval(conferir, 5 * 60 * 1000);
   if (t.unref) t.unref();
   setTimeout(conferir, 60 * 1000);
-  log('📊 Resumo mensal no WhatsApp: conferindo a cada 5 min (dia/horário no painel).');
+  log('📊 Resumos no WhatsApp (mensal e semanal): conferindo a cada 5 min (dia/horário no painel).');
 }
 
 // O painel grava um pedido em data/teste-envio.json; aqui (que temos a sessão
@@ -1347,23 +1351,10 @@ async function main() {
     console.log('   → Presentes de tempo de casa pendentes no grupo "SlimFit Equipe"');
   }
 
-  // Schedule: 16:30 toda sexta → Resumo da semana no grupo da equipe
-  cron.schedule(config.schedule.resumoSemana, async () => {
-    log('⏰ Cron disparado: Resumo da semana');
-    if (!jobsAtivos.ativo('resumoSemana')) { log('⏸️  Resumo da semana desligado no painel — pulando'); return; }
-    if (!(await esperarVez('Resumo da semana'))) return; // ocupado: espera a vez em vez de pular
-    const start = new Date();
-    comRetry('Resumo da semana', () => require('./resumo-semana').runResumoSemana())
-      .then(() => log('✅ Resumo da semana concluído'))
-      .catch(err => logError('Resumo da semana', err))
-      .finally(() => {
-        jobRunning = false;
-        log(`⏱️  Resumo da semana finalizado em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
-      });
-  }, { timezone: 'America/Sao_Paulo' });
-
-  log(`📅 Job RESUMO SEMANA agendado: ${config.schedule.resumoSemana} (16:30 sexta)`);
-  console.log('   → Resumo da semana das experimentais no grupo "SlimFit Equipe"');
+  // Resumo da semana no grupo da equipe: agora é o resumo-semanal.js (texto +
+  // imagem, sem abrir o EVO no navegador), conferido a cada 5 min em
+  // iniciarResumoMensal() — usa o mesmo liga/desliga e horário (resumoSemana).
+  try { const hr = require('./horarios').parse(require('./horarios').cronDe('resumoSemana')); log(`📅 Resumo da semana (WhatsApp): ${hr.dias.map(d => ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d]).join(', ')} às ${hr.hora}${jobsAtivos.ativo('resumoSemana') ? '' : ' — DESLIGADO no painel'}`); } catch (_) {}
 
   // Schedule: 06:10 toda segunda → Alunas ausentes há 10+ dias no grupo da equipe
   cron.schedule(config.schedule.ausentes10, async () => {

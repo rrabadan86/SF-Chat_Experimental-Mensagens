@@ -56,6 +56,9 @@ data/alunas-ativas-historico.json.tmp
 data/resumo-mensal.json
 data/resumo-mensal.json.tmp
 data/resumo-mensal.png
+data/resumo-semanal.json
+data/resumo-semanal.json.tmp
+data/resumo-semanal.png
 # Log completo dos agendamentos do formulario (dados da aluna) — por VPS
 data/bookings.json
 # DM de teste do Instagram (ponte painel<->robo) — por VPS
