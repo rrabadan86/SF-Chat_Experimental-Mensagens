@@ -745,6 +745,17 @@ const ESTILO = `
   .stat{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:14px;text-align:center}
   .stat .n{font-family:"Inter";font-weight:800;font-size:1.8rem;line-height:1}
   .stat .l{font-size:var(--fs-xs);color:var(--cinza);margin-top:4px;font-weight:600}
+  .rm-form{display:flex;flex-direction:column;gap:14px}
+  .rm-cab{display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .rm-sw{position:static}
+  .rm-campo{display:flex;flex-direction:column;gap:6px;min-width:0}
+  .rm-linha{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,220px));gap:12px}
+  .rm-btns{display:flex;gap:10px}
+  .rm-prev{display:grid;grid-template-columns:minmax(0,432px) minmax(0,1fr);gap:18px;align-items:start}
+  .rm-img{width:100%;aspect-ratio:1080/1350;overflow:hidden;border-radius:12px;border:1px solid var(--linha);position:relative}
+  .rm-img iframe{position:absolute;top:0;left:0;width:1080px;height:1350px;border:0;transform-origin:0 0;transform:scale(var(--rm-esc,.4))}
+  .rm-txt{white-space:pre-wrap;font-family:inherit;font-size:var(--fs-sm);background:#e7f6ee;border-radius:12px;padding:14px 16px;margin:0;line-height:1.5;color:var(--tinta)}
+  @media(max-width:760px){.rm-prev{grid-template-columns:1fr}}
   .al-filtros{display:grid;grid-template-columns:minmax(150px,1fr) minmax(150px,1fr) minmax(220px,2fr);gap:10px 12px;align-items:end}
   .al-filtros label{display:flex;flex-direction:column;gap:5px;min-width:0}
   .al-filtros .al-f-larg:last-of-type{grid-column:1/-1}
@@ -6333,53 +6344,11 @@ const ATIVAS_FILE = path.resolve(__dirname, '..', 'data', 'alunas-ativas-histori
 // mostrar o erro em vez de ficar em "Calculando…" se algo der errado.
 let _ativasGerando = false;
 let _ativasUltimo = null; // { ok, msg, fim }
-const MESES_CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-// Contratos que não são do método (padrão: CIRCUITO e VIP — mesma regra do
-// run_ativas_foto.py, ATIVAS_IGNORAR_CONTRATOS no .env): não contam como aluna
-// ativa nem como "fechou contrato" depois da experimental.
-function contratoIgnorado(nome) {
-  const n = String(nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  if (!n) return false;
-  return String(process.env.ATIVAS_IGNORAR_CONTRATOS || 'circuito,vip').split(',').map(x => x.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')).filter(Boolean)
-    .some(t => new RegExp('(^|[^a-z0-9])' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(n));
-}
-function lerAtivasHist() { try { return JSON.parse(fs.readFileSync(ATIVAS_FILE, 'utf8')) || {}; } catch (_) { return {}; } }
-
-// Série diária → [{ dia:'YYYY-MM-DD', a, e, n, s }]
-function ativasSerie(rec) {
-  if (!rec || !Array.isArray(rec.ativas) || !rec.inicio) return [];
-  const d0 = new Date(rec.inicio + 'T12:00:00Z');
-  return rec.ativas.map((a, i) => {
-    const d = new Date(d0.getTime() + i * 86400000);
-    return { dia: d.toISOString().slice(0, 10), a, e: (rec.entraram || [])[i] || 0, n: (rec.novas || [])[i] || 0, s: (rec.sairam || [])[i] || 0 };
-  });
-}
-// Agrupa a série por mês ('mes') ou semana começando na segunda ('semana').
-function ativasPeriodos(serie, vis) {
-  const chave = (dia) => {
-    if (vis === 'mes') return dia.slice(0, 7);
-    const d = new Date(dia + 'T12:00:00Z'); const dow = (d.getUTCDay() + 6) % 7; // 0 = segunda
-    return new Date(d.getTime() - dow * 86400000).toISOString().slice(0, 10);
-  };
-  const out = [];
-  let cur = null, ant = null;
-  for (const p of serie) {
-    const k = chave(p.dia);
-    if (!cur || cur.k !== k) {
-      if (cur) out.push(cur);
-      cur = { k, ini: ant ? ant.a : p.a - p.e + p.s, fim: p.a, e: 0, n: 0, s: 0, de: p.dia, ate: p.dia };
-    }
-    cur.fim = p.a; cur.e += p.e; cur.n += p.n; cur.s += p.s; cur.ate = p.dia;
-    ant = p;
-  }
-  if (cur) out.push(cur);
-  return out;
-}
-function rotuloPeriodo(p, vis, longo) {
-  if (vis === 'mes') { const [y, m] = p.k.split('-'); return longo ? `${MESES_LONGO[+m - 1]}/${y}` : `${MESES_CURTO[+m - 1]}/${y.slice(2)}`; }
-  const [, m, d] = p.k.split('-'); return `${d}/${m}`;
-}
+// Leitura do histórico e agrupamento por mês/semana: ativas-dados.js (o resumo
+// mensal no WhatsApp usa o mesmo módulo, para os números baterem).
+const ativasDados = require('./ativas-dados');
+const { MESES_CURTO, MESES_LONGO, rotuloPeriodo, contratoIgnorado } = ativasDados;
+const lerAtivasHist = ativasDados.ler, ativasSerie = ativasDados.serie, ativasPeriodos = ativasDados.periodos;
 
 // Lista de alunas de um recorte: ativas num dia (fim de cada mês, ou hoje), ou quem
 // entrou / saiu num mês ou período. Filtros no servidor (tipo, mês, contrato, nome)
@@ -6530,6 +6499,69 @@ function paginaAtivasLista(params) {
   return chrome({ tab: 'Alunas ativas' }, 'ativas', corpo);
 }
 
+// ── Indicadores → Alunas ativas → Resumo mensal no WhatsApp ───────────────────
+// Configura o envio automático (resumo-mensal.js, rodado pelo robô), mostra a
+// prévia (texto + imagem) e permite mandar agora.
+function paginaResumoMensal(params, aviso) {
+  const rm = require('./resumo-mensal');
+  const cfg = rm.lerCfg();
+  const h = lerAtivasHist();
+  const meses = ativasPeriodos(ativasSerie(h.reconstruido), 'mes');
+  const padrao = rm.mesAnterior(rm.agoraSP().dia.slice(0, 7));
+  const mes = meses.some(m => m.k === params.mes) ? params.mes : (meses.some(m => m.k === padrao) ? padrao : (meses.length ? meses[meses.length - 1].k : ''));
+  let d = null; try { d = mes ? rm.dadosDoMes(mes, cfg) : null; } catch (e) { console.log('[resumo mensal] prévia falhou:', e.message); }
+  const fmtQ = (ms) => { try { return new Date(ms).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+  const proxEnvio = (() => {
+    const a = rm.agoraSP(); const [y, m] = a.dia.split('-').map(Number);
+    const jaEsteMes = a.d > cfg.dia || (a.d === cfg.dia && a.hora >= cfg.hora) || cfg.enviados[rm.mesAnterior(a.dia.slice(0, 7))];
+    const ym = jaEsteMes ? (m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`) : `${y}-${String(m).padStart(2, '0')}`;
+    return `dia ${String(cfg.dia).padStart(2, '0')}/${ym.slice(5)}/${ym.slice(0, 4)} às ${cfg.hora} (resumo de ${rm.nomeMes(rm.mesAnterior(ym))})`;
+  })();
+  const ult = cfg.ultimo;
+  const status = !cfg.ativo ? '<div class="ui-nota"><span>Envio automático <b>desligado</b>. Ligue abaixo e salve.</span></div>'
+    : !cfg.grupos.length ? '<div class="ui-nota warn"><span>Ligado, mas <b>sem grupo</b> — escreva o nome do grupo abaixo.</span></div>'
+    : `<div class="ui-nota ok"><span>✅ Ligado. Próximo envio: <b>${esc(proxEnvio)}</b>, em ${cfg.grupos.map(g => `<b>${esc(g)}</b>`).join(', ')}.</span></div>`;
+  const ultHtml = ult ? `<div class="ui-nota ${ult.ok ? '' : 'erro'}"><span>${ult.ok ? '📤' : '⚠️'} Último envio${ult.teste ? ' (manual)' : ''}: ${esc(fmtQ(ult.em))} — resumo de ${esc(rm.nomeMes(ult.mes))}. ${esc(ult.msg || '')}</span></div>` : '';
+  const sw = `<label class="envsw rm-sw ${cfg.ativo ? 'on' : 'off'}"><span class="envsw-txt">${cfg.ativo ? 'Ativado' : 'Desligado'}</span>
+      <input type="checkbox" name="ativo" value="1"${cfg.ativo ? ' checked' : ''} onchange="var l=this.parentNode;l.className='envsw rm-sw '+(this.checked?'on':'off');l.firstElementChild.textContent=this.checked?'Ativado':'Desligado'">
+      <span class="envsw-track"><span class="envsw-thumb"></span></span></label>`;
+  const optDia = Array.from({ length: 28 }, (_, i) => i + 1).map(n => `<option value="${n}"${n === cfg.dia ? ' selected' : ''}>dia ${n}</option>`).join('');
+  const optMes = meses.slice().reverse().slice(0, 24).map(m => `<option value="${m.k}"${m.k === mes ? ' selected' : ''}>${rm.nomeMes(m.k)}</option>`).join('');
+  const corpo = `<div class="wrap">${subnavIndicadores('ativas')}
+    ${uiTopo({ titulo: 'Resumo mensal no WhatsApp', sub: 'Todo mês, no dia e horário escolhidos, o robô manda nos grupos o resumo do mês que fechou: alunas ativas comparadas com o mês anterior (entradas e saídas) e com o mesmo mês do ano anterior — em texto e numa imagem. Antes de enviar ele relê as alunas no EVO.', acoes: '<a class="ui-btn sec" href="/ativas">← Alunas ativas</a>', linhas: [aviso || '', status, ultHtml].filter(Boolean) })}
+    <form method="POST" action="/ativas/resumo/salvar" class="card rm-form">
+      <div class="rm-cab"><b>Envio automático</b>${sw}</div>
+      <label class="rm-campo"><span class="ui-lbl">Grupo(s) do WhatsApp</span>
+        <textarea name="grupos" rows="3" placeholder="Nome do grupo, exatamente como aparece no WhatsApp (um por linha)">${esc(cfg.grupos.join('\n'))}</textarea>
+        <small class="quando" style="margin:0">Até 5 grupos, um por linha. O WhatsApp do robô precisa estar no grupo.</small></label>
+      <div class="rm-linha">
+        <label class="rm-campo"><span class="ui-lbl">Dia do mês</span><select name="dia">${optDia}</select></label>
+        <label class="rm-campo"><span class="ui-lbl">Horário</span><input type="time" name="hora" value="${esc(cfg.hora)}"></label>
+      </div>
+      <label class="chk"><input type="checkbox" name="experimentais" value="1"${cfg.experimentais ? ' checked' : ''}> <span>Incluir as <b>aulas experimentais</b> do mês (vieram, fecharam e conversão)</span></label>
+      <label class="chk"><input type="checkbox" name="nomesSaida" value="1"${cfg.nomesSaida ? ' checked' : ''}> <span>Incluir os <b>nomes de quem saiu</b> (para a equipe tentar recuperar) — atenção a quem está no grupo</span></label>
+      <div class="rm-btns"><button class="ui-btn" type="submit">Salvar</button></div>
+    </form>
+    <div class="sec-t">Prévia</div>
+    <div class="card">
+      <form method="GET" action="/ativas/resumo" class="ui-linha" style="margin:0 0 12px"><span class="ui-lbl">Mês</span><select name="mes" onchange="this.form.submit()" style="width:auto">${optMes}</select>
+        <span class="quando" style="margin:0">Salve antes de ver a prévia, se mudou as opções.</span></form>
+      ${d ? `<div class="rm-prev">
+        <div class="rm-img"><iframe src="/ativas/resumo/imagem?mes=${esc(mes)}" title="Imagem do resumo" loading="lazy" scrolling="no"></iframe></div>
+        <pre class="rm-txt">${esc(rm.texto(d))}</pre>
+      </div>
+      <form method="POST" action="/ativas/resumo/enviar" class="ui-linha" style="margin:14px 0 0" onsubmit="return confirm('Enviar agora o resumo de ${esc(rm.nomeMes(mes))} em: ${esc(cfg.grupos.join(', ') || '(nenhum grupo)')}?')">
+        <input type="hidden" name="mes" value="${esc(mes)}">
+        <button class="ui-btn" type="submit"${cfg.grupos.length ? '' : ' disabled title="Escreva o nome do grupo e salve"'}>📤 Enviar agora nos grupos</button>
+        <span class="quando" style="margin:0">O robô relê o EVO, gera a imagem e envia (leva 1–3 min). Não muda o envio automático.</span>
+      </form>` : '<div class="vazio">Ainda sem histórico de alunas ativas. Em <b>Alunas ativas</b>, clique em <b>Atualizar agora</b>.</div>'}
+    </div>
+    <script>(function(){ function ajusta(){ document.querySelectorAll('.rm-img').forEach(function(c){ c.style.setProperty('--rm-esc', (c.clientWidth/1080).toFixed(4)); }); } ajusta(); window.addEventListener('resize', ajusta); })();</script>
+    <p class="ui-rodape">No texto aparecem em <b>negrito</b> os trechos entre *asteriscos* (formato do WhatsApp). Se o robô estiver desligado no horário, ele envia quando voltar (até 3 dias depois). Se falhar (ex.: nome do grupo errado), tenta de novo em 1 hora, até 4 vezes.</p>
+  </div>`;
+  return chrome({ tab: 'Resumo mensal' }, 'ativas', corpo);
+}
+
 function paginaAtivas(params) {
   params = params || {};
   const h = lerAtivasHist();
@@ -6548,7 +6580,7 @@ function paginaAtivas(params) {
   const topoBase = (linhas) => uiTopo({
     titulo: 'Alunas ativas',
     sub: 'Quantas alunas têm contrato vigente — <b>trancada conta como ativa</b> — mês a mês ou semana a semana, quem entrou, quem saiu e a comparação com o mesmo período do ano anterior.',
-    acoes: btnAtualizar, linhas: (linhas || []).concat(avisoCalc ? [avisoCalc] : []),
+    acoes: `<div class="ui-acoes"><a class="ui-btn sec" href="/ativas/resumo">📤 Resumo no WhatsApp</a>${btnAtualizar}</div>`, linhas: (linhas || []).concat(avisoCalc ? [avisoCalc] : []),
   });
   if (!serie.length) {
     return chrome({ tab: 'Alunas ativas' }, 'ativas', `<div class="wrap">${subnavIndicadores('ativas')}${topoBase([])}
@@ -8522,6 +8554,39 @@ const server = http.createServer((req, res) => {
     const sp = new URLSearchParams(req.url.split('?')[1] || '');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(paginaAtivas({ vis: sp.get('vis') || '', r: sp.get('r') || '', a: sp.get('a') || '', b: sp.get('b') || '' }));
+  }
+  if (req.method === 'GET' && url === '/ativas/resumo') {
+    const sp = new URLSearchParams(req.url.split('?')[1] || '');
+    const av = { salvo: '<div class="ui-nota ok"><span>✅ Configuração salva.</span></div>', enviando: '<div class="ui-nota ok"><span>📤 Pedido enviado ao robô — em 1 a 3 minutos a mensagem chega nos grupos. Atualize a página para ver o resultado.</span></div>' }[sp.get('ok') || ''] || '';
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(paginaResumoMensal({ mes: sp.get('mes') || '' }, av));
+  }
+  if (req.method === 'GET' && url === '/ativas/resumo/imagem') {
+    const rm = require('./resumo-mensal');
+    const mes = new URLSearchParams(req.url.split('?')[1] || '').get('mes') || '';
+    let d = null; try { d = rm.dadosDoMes(/^\d{4}-\d{2}$/.test(mes) ? mes : undefined); } catch (_) {}
+    res.writeHead(d ? 200 : 404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(d ? rm.imagemHtml(d, scStudio()) : 'sem dados');
+  }
+  if (req.method === 'POST' && url === '/ativas/resumo/salvar') {
+    return lerCorpo(req, 2e4, corpo => {
+      const q = new URLSearchParams(corpo);
+      try {
+        require('./resumo-mensal').salvarCfg({ ativo: q.get('ativo') === '1', grupos: String(q.get('grupos') || '').slice(0, 1000), dia: q.get('dia'), hora: q.get('hora'), experimentais: q.get('experimentais') === '1', nomesSaida: q.get('nomesSaida') === '1' });
+        auditoria.registrar(sess.usuario, 'ativas.resumo.salvar', '', '');
+      } catch (e) { console.log('[resumo mensal] salvar falhou:', e.message); }
+      res.writeHead(303, { Location: '/ativas/resumo?ok=salvo' }); res.end();
+    });
+  }
+  if (req.method === 'POST' && url === '/ativas/resumo/enviar') {
+    return lerCorpo(req, 1e4, corpo => {
+      const mes = new URLSearchParams(corpo).get('mes') || '';
+      try {
+        fs.writeFileSync(path.resolve(__dirname, '..', 'data', 'rodar-job.json'), JSON.stringify({ job: 'resumoMensal', mes: /^\d{4}-\d{2}$/.test(mes) ? mes : undefined }));
+        auditoria.registrar(sess.usuario, 'ativas.resumo.enviar', mes, '');
+      } catch (_) {}
+      res.writeHead(303, { Location: '/ativas/resumo?ok=enviando&mes=' + encodeURIComponent(mes) }); res.end();
+    });
   }
   if (req.method === 'GET' && url === '/ativas/lista') {
     const sp = new URLSearchParams(req.url.split('?')[1] || '');
