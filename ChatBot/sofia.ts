@@ -1282,9 +1282,15 @@ async function apiAluna(rota: string, corpo: any): Promise<any> {
 }
 
 type ResultadoAgendamento =
-  | { ok: true; when: string }
-  | { lotada: true; alternativas: string[] }
+  | { ok: true; when: string; aviso?: string }
+  | { lotada: true; alternativas: string[]; motivo?: string }
+  | { duplicado: true; existente: any }
   | { erro: true; detalhe?: string };
+
+// Campos a mais do agendamento MANUAL (painel): decisão no cadastro duplicado
+// (mãe x filha: "sobrescrever" | "novo") e tipo da aula ("circuito" = experimental
+// do Circuito Slim, com serviço próprio). Vão iguais para a rota /api/book-sofia.
+type ExtraAgendamento = { acao_duplicado?: string; tipo?: string };
 
 // Registra um agendamento bem-sucedido num arquivo que o PAINEL consome para
 // (a) auto-etiquetar o contato e (b) avisar no WhatsApp — configurável por tag.
@@ -1483,10 +1489,12 @@ function registrarAgendamento(telefone: string, nome: string, when: string) {
 // REAL para quem chamou — usado pela ferramenta solicitar_agendamento e pelo
 // fallback automático. A aluna manda "dia"/"hora" em linguagem natural OU já
 // vem "AAAA-MM-DD HH:MM"; o parse do Python resolve a data real.
-async function bookNoEvo(telefone: string, nome: string, email: string, when: string, origem: string = ""): Promise<ResultadoAgendamento> {
+async function bookNoEvo(telefone: string, nome: string, email: string, when: string, origem: string = "", extra: ExtraAgendamento = {}): Promise<ResultadoAgendamento> {
   // `origem` distingue a fonte do agendamento para o texto de confirmação:
   // "express" = Cadastro Express (texto próprio); vazio = formulário/SoFIA.
-  const corpo = { nome, email, telefone, when, origem };
+  const corpo: Record<string, string> = { nome, email, telefone, when, origem };
+  if (extra.acao_duplicado) corpo.acao_duplicado = String(extra.acao_duplicado);
+  if (extra.tipo === "circuito") corpo.tipo = "circuito";
   let resp: any;
   try {
     resp = await comRetry(async () => {
@@ -1509,14 +1517,19 @@ async function bookNoEvo(telefone: string, nome: string, email: string, when: st
   if (resp.ok && data.ok) {
     console.log(`✅ AGENDADO NO EVO: ${nome} em ${data.when} (idProspect=${data.idProspect})`);
     registrarAgendamento(telefone, nome, data.when); // avisa o painel (auto-tag + notificação)
-    return { ok: true, when: data.when };
+    return data.aviso ? { ok: true, when: data.when, aviso: String(data.aviso) } : { ok: true, when: data.when };
+  }
+  // Cadastro de OUTRA pessoa com o mesmo telefone (mãe x filha): a tela do painel
+  // pergunta "mesma pessoa" ou "outra pessoa" e reenvia com acao_duplicado.
+  if (resp.status === 409 && data?.motivo === "cadastro_existente" && data?.existente) {
+    return { duplicado: true, existente: data.existente };
   }
   // Turma cheia/indisponível: o lead já ficou cadastrado no EVO; a Sofia oferece
   // as alternativas retornadas para a aluna escolher outro horário.
   if (resp.status === 409) {
     const alternativas = Array.isArray(data.alternativas) ? data.alternativas.filter(Boolean) : [];
     console.log(`⚠️  Sem vaga para ${nome}. Alternativas:`, alternativas);
-    return { lotada: true, alternativas };
+    return { lotada: true, alternativas, motivo: String(data?.detalhe || "").slice(0, 300) };
   }
   console.log("⚠️  Falha ao agendar no EVO:", resp.status, data);
   return { erro: true, detalhe: data?.erro };
@@ -1528,14 +1541,14 @@ async function enviarParaSeuSistema(telefone: string, resumo: ResumoAgendamento)
 
 // Agendamento MANUAL (atendente pelo painel): mesma rota do EVO que a SoFIA usa
 // (cadastra + marca). Devolve o resultado real para o painel mostrar.
-export async function agendarManual(telefone: string, nome: string, email: string, when: string, origem: string = ""): Promise<ResultadoAgendamento> {
+export async function agendarManual(telefone: string, nome: string, email: string, when: string, origem: string = "", extra: ExtraAgendamento = {}): Promise<ResultadoAgendamento> {
   const tel = String(telefone || "").replace(/\D/g, "");
   if (!tel) return { erro: true, detalhe: "telefone inválido" };
   // E-mail agora é OBRIGATÓRIO: o EVO passou a exigi-lo no cadastro do prospect.
   // O painel/rota já validam antes de enfileirar; reforçamos aqui por segurança.
   if (!String(nome || "").trim() || !String(when || "").trim()) return { erro: true, detalhe: "faltam nome ou data/horário" };
   // `origem` ("express" p/ Cadastro Express) segue até o outbox p/ escolher o texto.
-  return bookNoEvo(tel, String(nome).trim(), String(email || "").trim(), String(when).trim(), String(origem || "").trim());
+  return bookNoEvo(tel, String(nome).trim(), String(email || "").trim(), String(when).trim(), String(origem || "").trim(), extra);
 }
 
 // ══════════════════════════════════════════════════════════════════════════

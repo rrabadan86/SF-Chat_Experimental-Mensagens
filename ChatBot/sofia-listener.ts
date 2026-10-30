@@ -1763,7 +1763,10 @@ async function processarAgendarInbox() {
     const telefone = String(op?.telefone || chave).replace(/\D/g, "");
     if (!id) continue;
     try {
-      const r: any = await agendarManual(telefone, String(op?.nome || ""), String(op?.email || ""), String(op?.when || ""), String(op?.origem || ""));
+      // acao_duplicado (mesma/outra pessoa) e tipo ("circuito") vêm do painel — repassa
+      // tudo, igual ao processador do painel (os dois leem esta mesma fila).
+      const r: any = await agendarManual(telefone, String(op?.nome || ""), String(op?.email || ""), String(op?.when || ""), String(op?.origem || ""),
+        { acao_duplicado: String(op?.acaoDuplicado || ""), tipo: op?.tipo === "circuito" ? "circuito" : "" });
       mapa[id] = { ...r, em: Date.now() };
       if (r && r.ok) {
         const por = String(op?.por || "").trim();
