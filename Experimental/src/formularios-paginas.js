@@ -203,7 +203,8 @@ ${previa ? '' : `<script>
     }
     bt.disabled=true; bt.textContent='Enviando…';
     var origem=(location.search.match(/[?&]origem=([^&]+)/)||[])[1]||'';
-    fetch(${js(acao)},{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome:nome,telefone:dig,valores:valores,site:document.getElementById('site').value,origem:(function(){ try{ return decodeURIComponent(origem); }catch(e){ return ''; } })()})})
+    var cod=(location.search.match(/[?&]c=([A-Za-z0-9]{6})(?:&|$)/)||[])[1]||''; // código pessoal do link da campanha
+    fetch(${js(acao)},{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome:nome,telefone:dig,valores:valores,site:document.getElementById('site').value,c:cod,origem:(function(){ try{ return decodeURIComponent(origem); }catch(e){ return ''; } })()})})
       .then(function(r){ return r.json().catch(function(){ return {erro:'Não consegui enviar agora. Tente de novo.'}; }); })
       .then(function(j){
         if(!j||!j.ok){ bt.disabled=false; bt.textContent=${js(f.botao || 'Enviar')}; return falha((j&&j.erro)||'Não consegui enviar agora. Tente de novo.'); }

@@ -5741,7 +5741,8 @@ function paginaPrivacidade() {
     <p>As páginas e o painel usam conexão segura (<b>HTTPS</b>). O acesso ao painel é restrito à equipe autorizada, com senha guardada de forma protegida (hash), sessão por cookie assinado e registro de acessos. Formulários públicos têm proteção contra envios automáticos.</p>
 
     <h2>10. Cookies</h2>
-    <p>Usamos apenas cookies <b>essenciais</b>: para manter a equipe conectada ao painel e as alunas conectadas ao Slim Club. Não usamos cookies de publicidade nem de rastreamento de terceiros nessas páginas.</p>
+    <p>Usamos apenas cookies <b>essenciais</b>: para manter a equipe conectada ao painel, as alunas conectadas ao Slim Club e, nos formulários, um identificador anônimo do navegador para contar as visitas. Não usamos cookies de publicidade nem de rastreamento de terceiros nessas páginas.</p>
+    <p>Os <b>links de formulário que o Studio envia por WhatsApp</b> (por exemplo, numa campanha) podem ter um código pessoal. Com ele registramos <b>se e quando você abriu</b> a página, para saber se a mensagem foi útil e não insistir com quem já respondeu. Esse registro fica só no Studio e segue os prazos e direitos desta política.</p>
 
     <h2>11. Seus direitos</h2>
     <p>Pela LGPD (art. 18), você pode, a qualquer momento e sem custo:</p>
@@ -7254,6 +7255,11 @@ const FM_CSS = `<style>
   .fm-barra .msg{font-size:var(--fs-sm);color:var(--cinza)}
   .fm-tabw{overflow-x:auto;border:1px solid var(--linha);border-radius:12px;background:#fff}
   .fm-tab{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
+  .fm-grupo{border-top:1px solid var(--linha-soft);margin-top:8px;padding-top:4px}
+  .fm-grupo>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;padding:8px 2px;font-weight:600;font-size:.88rem}
+  .fm-grupo>summary::-webkit-details-marker{display:none}
+  .fm-grupo>summary::before{content:"▸";color:var(--teal);font-weight:900}
+  .fm-grupo[open]>summary::before{content:"▾"}
   .fm-tab th,.fm-tab td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--linha-soft);vertical-align:top}
   .fm-tab th{color:var(--cinza);font-weight:700;white-space:nowrap;background:var(--bg)}
   .fm-tab td{max-width:260px;overflow-wrap:anywhere}
@@ -7466,10 +7472,85 @@ function paginaFormularioEditar(base, f, modelo) {
   return chrome({ tab: novo ? 'Novo formulário' : 'Editar formulário' }, 'formularios', corpo);
 }
 
+// ── Formulário × campanha da SoFIA ───────────────────────────────────────────
+// A SoFIA põe um código pessoal no link do formulário em cada mensagem de campanha
+// e grava { c, tel, nome, slug, camp, campNome, em } em formulario-codigos.jsonl.
+// Aqui cruzamos com as aberturas (por código) e as respostas: quem recebeu, quem
+// abriu (quantas vezes), quem respondeu — e quem abriu e NÃO respondeu.
+function fmCodigosDoForm(f) {
+  let linhas = [];
+  try { linhas = fs.readFileSync(path.join(sofia.DIR, 'formulario-codigos.jsonl'), 'utf8').split('\n'); } catch (_) { return []; }
+  const out = [];
+  for (const l of linhas) { if (!l.trim()) continue; try { const o = JSON.parse(l); if (o && o.slug === f.slug && formularios.CODIGO_OK.test(o.c || '')) out.push(o); } catch (_) {} }
+  return out;
+}
+function fmCampanhas(f, respostas) {
+  const cods = fmCodigosDoForm(f);
+  if (!cods.length) return [];
+  const porTel = new Map(respostas.map(r => [formularios.chaveTel(String(r.telefone).replace(/\D/g, '')), r]));
+  const porCod = new Map(respostas.filter(r => r.codigo).map(r => [r.codigo, r]));
+  const camps = new Map();
+  for (const o of cods) {
+    const cp = camps.get(o.camp) || camps.set(o.camp, { id: o.camp, nome: o.campNome || 'Campanha', em: o.em, pessoas: new Map() }).get(o.camp);
+    if (o.em < cp.em) cp.em = o.em;
+    const tel = String(o.tel || '').replace(/\D/g, '');
+    const k = formularios.chaveTel(tel);
+    const p = cp.pessoas.get(k) || cp.pessoas.set(k, { tel, nome: o.nome || '', codigos: [], enviado: o.em, n: 0, u: 0 }).get(k);
+    p.codigos.push(o.c);
+    const v = formularios.vezesCodigo(f.id, o.c);
+    if (v) { p.n += v.n || 0; p.u = Math.max(p.u, v.u || 0); }
+  }
+  for (const cp of camps.values()) {
+    for (const p of cp.pessoas.values()) {
+      p.resp = porTel.get(formularios.chaveTel(p.tel)) || null;
+      if (!p.resp) { const rc = p.codigos.map(c => porCod.get(c)).find(Boolean); if (rc) { p.resp = rc; p.encaminhado = true; } }
+      p.grupo = p.resp ? 'respondeu' : (p.n ? 'abriu' : 'naoabriu');
+    }
+    cp.lista = [...cp.pessoas.values()];
+  }
+  return [...camps.values()].sort((a, b) => b.em - a.em);
+}
+
 function paginaFormularioRespostas(base, f) {
   const lista = formularios.respostas(f.id);
   const cols = formularios.colunas(f, lista);
   const link = fmLink(base, f);
+  const fmQuandoCurto = (ms) => { try { return new Date(ms).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+  const nomeCamp = new Map(); // código → nome da campanha (p/ a coluna de visitas)
+  const camps = fmCampanhas(f, lista);
+  for (const cp of camps) for (const p of cp.lista) for (const c of p.codigos) nomeCamp.set(c, cp.nome);
+  const visitasDe = (r) => {
+    const v = r.vid ? formularios.vezesVisitante(f.id, r.vid) : null;
+    const partes = [];
+    if (v) partes.push(`abriu <b>${v.n}×</b>${v.p ? ` · 1º ${esc(fmQuandoCurto(v.p))}` : ''}`);
+    if (r.codigo) partes.push(`📩 ${esc(nomeCamp.get(r.codigo) || 'campanha')}`);
+    return partes.join('<br>') || '<span style="color:var(--faint)">—</span>';
+  };
+  const ROT_G = { respondeu: '✅ Responderam', abriu: '🤔 Abriram e não responderam', naoabriu: '📭 Não abriram' };
+  const SIT_G = { respondeu: 'fechou', abriu: 'aguardando', naoabriu: 'agendada' };
+  const blocoCampanhas = camps.map(cp => {
+    const g = { respondeu: [], abriu: [], naoabriu: [] };
+    for (const p of cp.lista) g[p.grupo].push(p);
+    const tot = cp.lista.length, abriram = g.respondeu.filter(p => p.n).length + g.abriu.length;
+    const pessoa = (p) => uiPessoa({
+      nome: p.nome || fmtTel(p.tel), href: '/sofia?view=contatos&q=' + p.tel.slice(-8),
+      meta: [
+        `📱 ${esc(fmtTel(p.tel))}`,
+        `📤 recebeu ${esc(fmQuandoCurto(p.enviado))}`,
+        p.n ? `👀 abriu <b>${p.n}×</b> · última ${esc(fmQuandoCurto(p.u))}` : '👀 não abriu',
+        p.resp ? (p.encaminhado ? `↪️ link encaminhado — respondeu <b>${esc(p.resp.nome)}</b> (${esc(fmtTel(p.resp.telefone))})` : `✅ respondeu ${esc(formularios.fmtQuando(p.resp.atualizadoEm || p.resp.em))}`) : '',
+      ],
+    });
+    const grupo = (k) => g[k].length ? `<details class="fm-grupo"${k === 'abriu' ? ' open' : ''}><summary>${ROT_G[k]} <b>${g[k].length}</b>${k !== 'respondeu' ? ` <button type="button" class="ui-btn sec" style="margin-left:auto;padding:4px 10px;font-size:.76rem" onclick="event.preventDefault();fmEtiquetar(${esc(JSON.stringify(cp.id))},'${k}',${esc(JSON.stringify(f.titulo + (k === 'abriu' ? ' · abriu sem responder' : ' · não abriu')))})">🏷️ Etiquetar estes ${g[k].length}</button>` : ''}</summary><div class="ip-lista">${g[k].sort((a, b) => (b.u || 0) - (a.u || 0)).map(pessoa).join('')}</div></details>` : '';
+    return `<div class="card">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline"><b>📩 ${esc(cp.nome)}</b><span class="quando" style="margin:0">disparada ${esc(fmQuandoCurto(cp.em))}</span></div>
+      ${uiBarra({ rot: 'Receberam', n: tot, max: tot, valor: tot })}
+      ${uiBarra({ rot: 'Abriram', n: abriram, max: tot })}
+      ${uiBarra({ rot: 'Responderam', n: g.respondeu.length, max: tot, cor: 'var(--ok)' })}
+      ${uiBarra({ rot: 'Abriram, não resp.', n: g.abriu.length, max: tot, cor: '#e0a100' })}
+      ${grupo('abriu')}${grupo('respondeu')}${grupo('naoabriu')}
+    </div>`;
+  }).join('');
   const linhas = lista.map(r => {
     const wa = 'https://wa.me/' + String(r.telefone).replace(/\D/g, '');
     const busca = [r.nome, r.telefone, formularios.fmtTel(r.telefone), ...cols.map(c => formularios.valorTexto(r, c.id))].join(' ').toLowerCase();
@@ -7477,6 +7558,7 @@ function paginaFormularioRespostas(base, f) {
       <td class="nw">${esc(formularios.fmtQuando(r.atualizadoEm || r.em))}${r.vezes > 1 ? ` <span class="pill" title="Respondeu ${r.vezes} vezes; vale a última">${r.vezes}×</span>` : ''}</td>
       <td class="nm">${esc(r.nome)}</td>
       <td class="nw"><a href="${wa}" target="_blank" rel="noopener">${esc(formularios.fmtTel(r.telefone))}</a></td>
+      <td class="nw" style="font-size:.78rem">${visitasDe(r)}</td>
       ${cols.map(c => `<td>${esc(formularios.valorTexto(r, c.id)) || '<span style="color:var(--faint)">—</span>'}</td>`).join('')}
       <td><button type="button" class="x" title="Apagar esta resposta" aria-label="Apagar resposta de ${esc(r.nome)}" data-id="${r.id}" data-nome="${esc(r.nome)}" onclick="fmApagar(this)">×</button></td>
     </tr>`;
@@ -7500,14 +7582,25 @@ function paginaFormularioRespostas(base, f) {
       <a class="reset" href="/formularios/editar?id=${f.id}">Editar formulário</a>
       ${lista.length > 5 ? '<input id="busca" class="fm-busca" type="text" placeholder="Buscar nome, telefone ou resposta" aria-label="Buscar nas respostas">' : ''}
     </div>
+    ${camps.length ? `<div class="sec-t">Pela campanha <small style="font-weight:600;color:var(--cinza)">(quem recebeu o link pela SoFIA — cada pessoa ganha um link com código próprio)</small></div>
+    ${blocoCampanhas}
+    <p class="quando">Etiquetar coloca uma tag nos Contatos; depois é só criar uma nova campanha para essa tag (SoFIA → Campanhas). “Link encaminhado” = a resposta veio pelo link de uma pessoa, mas de outro telefone.</p>
+    <div class="sec-t">Respostas</div>` : ''}
     ${f.tag && lista.length ? `<p class="quando">Para mandar a oferta para esta lista: SoFIA → Campanhas → nova campanha para a tag <b>${esc(f.tag)}</b>.</p>` : ''}
-    ${lista.length ? `<div class="fm-tabw"><table class="fm-tab"><thead><tr><th>Data</th><th>Nome</th><th>WhatsApp</th>${cols.map(c => `<th>${esc(c.rotulo)}</th>`).join('')}<th></th></tr></thead><tbody id="tb">${linhas}</tbody></table></div>`
+    ${lista.length ? `<div class="fm-tabw"><table class="fm-tab"><thead><tr><th>Data</th><th>Nome</th><th>WhatsApp</th><th>Acessos</th>${cols.map(c => `<th>${esc(c.rotulo)}</th>`).join('')}<th></th></tr></thead><tbody id="tb">${linhas}</tbody></table></div>`
     : `<div class="card fm-vazio"><h2>Ainda sem respostas</h2><p>Divulgue o link acima. As respostas aparecem aqui assim que chegam (atualize a página).</p></div>`}
   </div>
   <script>
   ${FM_JS_COPIAR}
   var busca=document.getElementById('busca');
   if(busca) busca.oninput=function(){ var q=busca.value.trim().toLowerCase(); [].forEach.call(document.querySelectorAll('#tb tr'),function(tr){ tr.hidden=!!q && tr.getAttribute('data-b').indexOf(q)<0; }); };
+  function fmEtiquetar(camp, grupo, tagPadrao){
+    var tag=prompt('Nome da tag para estas pessoas (vai para os Contatos):', tagPadrao); if(!tag) return;
+    fetch('/formularios/etiquetar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({form:${JSON.stringify(f.id)},camp:camp,grupo:grupo,tag:tag})})
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(!j||!j.ok){ alert('❌ '+((j&&j.erro)||'Não consegui etiquetar.')); return; } alert('✅ '+j.n+' contato(s) com a tag “'+tag+'”. Para falar com eles: SoFIA → Campanhas → nova campanha para essa tag.'); })
+      .catch(function(){ alert('❌ Erro de rede.'); });
+  }
   function fmApagar(b){
     if(!confirm('Apagar a resposta de '+b.getAttribute('data-nome')+'? Não dá para desfazer.')) return;
     fetch('/formularios/resposta/excluir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({form:${JSON.stringify(f.id)},id:b.getAttribute('data-id')})})
@@ -7532,8 +7625,8 @@ function fmContarAcesso(req, res, f) {
       vid = crypto.randomBytes(8).toString('hex');
       res.setHeader('Set-Cookie', `fm_v=${vid}; Path=/formulario; HttpOnly; SameSite=Lax; Max-Age=${400 * 86400}${ehHttps(req) ? '; Secure' : ''}`);
     }
-    const origem = new URLSearchParams(req.url.split('?')[1] || '').get('origem') || '';
-    formularios.registrarAcesso(f.id, vid, origem);
+    const qs = new URLSearchParams(req.url.split('?')[1] || '');
+    formularios.registrarAcesso(f.id, vid, qs.get('origem') || '', qs.get('c') || ''); // c = código pessoal do link da campanha
   } catch (e) { console.log('[formularios] contador de acesso falhou:', e.message); }
 }
 
@@ -7573,7 +7666,7 @@ function rotaFormularioPublico(req, res, rota) {
     if (!d || typeof d !== 'object') return scJson(res, 400, { erro: 'Envio inválido. Recarregue a página e tente de novo.' });
     if (d.site) return scJson(res, 200, { ok: true }); // campo invisível preenchido = robô; finge que deu certo
     let r;
-    try { r = formularios.responder(f, d); } catch (e) { console.log('[formularios] erro ao salvar resposta:', e.message); r = { erro: 'Não consegui salvar agora. Tente de novo em instantes.' }; }
+    try { r = formularios.responder(f, d, { vid: lerCookie(req, 'fm_v'), codigo: d.c }); } catch (e) { console.log('[formularios] erro ao salvar resposta:', e.message); r = { erro: 'Não consegui salvar agora. Tente de novo em instantes.' }; }
     if (!r.ok) return scJson(res, 400, { erro: r.erro });
     if (f.tag) { try { contatos.adicionarTag(r.telefone, r.nome, f.tag); } catch (e) { console.log('[formularios] tag no contato falhou:', e.message); } }
     console.log(`[formularios] ${r.novo ? 'nova resposta' : 'resposta atualizada'} em "${f.titulo}"`);
@@ -7645,6 +7738,21 @@ function rotaFormulariosPainel(req, res, url, sess) {
         return scJson(res, 200, { ok: true });
       }
       return scJson(res, 400, { erro: 'Ação desconhecida.' });
+    });
+  }
+  if (req.method === 'POST' && url === '/formularios/etiquetar') {
+    if (!scSoJson(req)) return scJson(res, 415, { erro: 'Envio inválido.' });
+    return lerCorpo(req, 1e4, corpo => {
+      let d = {}; try { d = JSON.parse(corpo) || {}; } catch (_) {}
+      const f = formularios.obter(String(d.form || ''));
+      const tag = String(d.tag || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      if (!f || !tag || !['abriu', 'naoabriu'].includes(d.grupo)) return scJson(res, 400, { erro: 'Pedido inválido.' });
+      const cp = fmCampanhas(f, formularios.respostas(f.id)).find(c => String(c.id) === String(d.camp));
+      if (!cp) return scJson(res, 404, { erro: 'Campanha não encontrada.' });
+      let n = 0;
+      for (const p of cp.lista) if (p.grupo === d.grupo) { try { contatos.adicionarTag(p.tel, p.nome, tag); n++; } catch (_) {} }
+      try { auditoria.registrar(sess.usuario, 'formularios.etiquetar', f.titulo, `${tag} (${n})`); } catch (_) {}
+      return scJson(res, 200, { ok: true, n });
     });
   }
   if (req.method === 'POST' && url === '/formularios/resposta/excluir') {
