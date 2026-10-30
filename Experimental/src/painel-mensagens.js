@@ -5649,11 +5649,12 @@ function paginaLogin(erro) {
 // ── Páginas legais (públicas): Política de Privacidade e Termos de Serviço ───
 // Precisam ser acessíveis SEM login (o Google lê ao publicar o app OAuth).
 function docLegal(titulo, atualizacao, corpo, { voltar = true } = {}) {
-  const studio = esc(config.STUDIO_NOME || 'o Studio');
+  // Documentos legais assinados pela ferramenta (Painel CRM), sem a marca/nome da unidade.
+  const studio = 'Painel CRM';
   const contato = ADMIN_EMAIL ? esc(ADMIN_EMAIL) : 'o administrador do Studio';
   return `<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(titulo)} · ${studio}</title>
+<title>${esc(titulo)} · Painel CRM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>${ESTILO}
@@ -5680,18 +5681,18 @@ function docLegal(titulo, atualizacao, corpo, { voltar = true } = {}) {
 // Política pública (LGPD): vale para alunas, leads e para a equipe. Servida em
 // /politicadeprivacidade (link usado em formulários, Meta e Google) e /privacidade.
 function paginaPrivacidade() {
-  return docLegal('Política de Privacidade', '29/10/2026', (studio, contato) => `
-    <p>Esta política explica como ${studio} (“Studio”, “nós”) coleta, usa, guarda e protege os dados pessoais de alunas, ex-alunas, interessadas (leads), empresas parceiras e da própria equipe, conforme a <b>Lei Geral de Proteção de Dados (Lei nº 13.709/2018 — LGPD)</b>.</p>
+  return docLegal('Política de Privacidade', '30/10/2026', (studio, contato) => `
+    <p>Esta política explica como o <b>Painel CRM</b> e o estúdio que o utiliza (“Studio”, “nós”) coletam, usam, guardam e protegem os dados pessoais de alunas, ex-alunas, interessadas (leads), empresas parceiras e da própria equipe, conforme a <b>Lei Geral de Proteção de Dados (Lei nº 13.709/2018 — LGPD)</b>.</p>
 
     <h2>1. Quem é o responsável pelos seus dados</h2>
-    <p>O controlador dos dados é ${studio}, unidade franqueada da rede SlimFit. Para qualquer assunto sobre seus dados, fale com a gente pelo WhatsApp ou pela recepção do Studio, ou pelo e-mail ${contato}.</p>
+    <p>O controlador dos dados é o <b>estúdio com quem você tem relação</b> — o que enviou a mensagem, o formulário ou o link. O Painel CRM é a ferramenta que ele usa para atender e se comunicar com você. Para qualquer assunto sobre seus dados, fale com a gente pelo WhatsApp ou pela recepção do Studio, ou pelo e-mail ${contato}.</p>
 
     <h2>2. Quais dados coletamos</h2>
     <ul>
-      <li><b>Dados que você informa:</b> nome, telefone/WhatsApp, e-mail e as respostas que você der nos nossos formulários (agendamento de aula experimental, listas de campanhas e promoções, cadastro no Slim Club) e no atendimento.</li>
+      <li><b>Dados que você informa:</b> nome, telefone/WhatsApp, e-mail e as respostas que você der nos nossos formulários (agendamento de aula experimental, listas de campanhas e promoções, cadastro no clube de benefícios) e no atendimento.</li>
       <li><b>Dados de matrícula:</b> quando você se torna aluna, os dados do contrato ficam no nosso sistema de gestão (por exemplo: nome, CPF, data de nascimento, contato, plano, horários, frequência e situação de pagamentos).</li>
       <li><b>Conversas:</b> mensagens trocadas com o Studio pelo WhatsApp (inclusive com a SoFIA, nossa assistente virtual)${IG_NO_PAINEL ? ' e pelo Instagram (comentários e mensagens no Direct)' : ''}, incluindo áudios e imagens que você enviar.</li>
-      <li><b>Slim Club:</b> se você cadastrar o seu negócio, os dados do anúncio (nome do negócio, categoria, CPF/CNPJ, benefício oferecido, Instagram, WhatsApp e foto ou logo), além do registro de uso dos benefícios e das avaliações.</li>
+      <li><b>Clube de benefícios:</b> se você cadastrar o seu negócio, os dados do anúncio (nome do negócio, categoria, CPF/CNPJ, benefício oferecido, Instagram, WhatsApp e foto ou logo), além do registro de uso dos benefícios e das avaliações.</li>
       <li><b>Dados técnicos:</b> endereço IP e dados básicos de acesso às nossas páginas, usados para segurança e para evitar envios automáticos (robôs).</li>
       <li><b>Equipe do Studio:</b> quem usa o painel interno tem nome de usuário, e-mail e registro de acessos. No login com Google recebemos apenas o e-mail e o nome do perfil; <b>não</b> acessamos caixa de e-mail, arquivos ou contatos.</li>
     </ul>
@@ -5702,7 +5703,7 @@ function paginaPrivacidade() {
       <li><b>Gerir a matrícula:</b> horários, frequência, renovações, avisos de vencimento e cobrança de valores em aberto — execução de contrato (art. 7º, V) e exercício regular de direitos (art. 7º, VI).</li>
       <li><b>Enviar novidades, promoções e campanhas</b> (por exemplo, para quem entrou numa lista de interesse) — consentimento (art. 7º, I) ou legítimo interesse (art. 7º, IX), sempre com a opção de parar de receber.</li>
       <li><b>Mensagens de relacionamento</b>, como aniversário e lembretes — legítimo interesse (art. 7º, IX).</li>
-      <li><b>Funcionar o Slim Club</b> (exibir o anúncio para as alunas e conferir o uso dos benefícios) — consentimento dado no cadastro (art. 7º, I).</li>
+      <li><b>Funcionar o clube de benefícios</b> (exibir o anúncio para as alunas e conferir o uso dos benefícios) — consentimento dado no cadastro (art. 7º, I).</li>
       <li><b>Segurança, prevenção a fraudes e cumprimento de obrigações legais</b> — art. 7º, II e IX.</li>
     </ul>
 
@@ -5732,7 +5733,7 @@ function paginaPrivacidade() {
       <li><b>Bancos e meios de pagamento</b>, para boletos e cobranças;</li>
       <li><b>Autoridades públicas</b>, quando exigido por lei ou ordem judicial.</li>
     </ul>
-    <p>No Slim Club, os dados do anúncio que você cadastrou ficam visíveis para as alunas do Studio que acessam a listagem.</p>
+    <p>No clube de benefícios, os dados do anúncio que você cadastrou ficam visíveis para as alunas do Studio que acessam a listagem.</p>
     <p>Alguns desses fornecedores podem guardar dados fora do Brasil; nesses casos exigimos que sigam regras de proteção compatíveis com a LGPD.</p>
 
     <h2>${IG_NO_PAINEL ? 8 : 7}. Por quanto tempo guardamos</h2>
@@ -5742,7 +5743,7 @@ function paginaPrivacidade() {
     <p>As páginas e o painel usam conexão segura (<b>HTTPS</b>). O acesso ao painel é restrito à equipe autorizada, com senha guardada de forma protegida (hash), sessão por cookie assinado e registro de acessos. Formulários públicos têm proteção contra envios automáticos.</p>
 
     <h2>${IG_NO_PAINEL ? 10 : 9}. Cookies</h2>
-    <p>Usamos apenas cookies <b>essenciais</b>: para manter a equipe conectada ao painel, as alunas conectadas ao Slim Club e, nos formulários, um identificador anônimo do navegador para contar as visitas. Não usamos cookies de publicidade nem de rastreamento de terceiros nessas páginas.</p>
+    <p>Usamos apenas cookies <b>essenciais</b>: para manter a equipe conectada ao painel, as alunas conectadas ao clube de benefícios e, nos formulários, um identificador anônimo do navegador para contar as visitas. Não usamos cookies de publicidade nem de rastreamento de terceiros nessas páginas.</p>
     <p>Os <b>links de formulário que o Studio envia por WhatsApp</b> (por exemplo, numa campanha) podem ter um código pessoal. Com ele registramos <b>se e quando você abriu</b> a página, para saber se a mensagem foi útil e não insistir com quem já respondeu. Esse registro fica só no Studio e segue os prazos e direitos desta política.</p>
 
     <h2>${IG_NO_PAINEL ? 11 : 10}. Seus direitos</h2>
@@ -5766,9 +5767,9 @@ function paginaPrivacidade() {
 }
 function paginaTermos() {
   return docLegal('Termos de Serviço', '28/08/2026', (studio, contato) => `
-    <p>Ao acessar o “Painel do Studio”, você concorda com estes termos.</p>
+    <p>Ao acessar o <b>Painel CRM</b>, você concorda com estes termos.</p>
     <h2>1. Objeto</h2>
-    <p>O painel é uma ferramenta <b>interna de gestão</b> de ${studio}, de uso restrito à equipe autorizada.</p>
+    <p>O painel é uma ferramenta <b>interna de gestão</b> do estúdio que o utiliza, de uso restrito à equipe autorizada.</p>
     <h2>2. Acesso</h2>
     <p>O acesso é concedido pelo <b>administrador</b> do Studio e pode ser <b>revogado a qualquer momento</b>. Cada usuário é responsável por manter suas credenciais em sigilo.</p>
     <h2>3. Uso aceitável</h2>
