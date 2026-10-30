@@ -29,6 +29,7 @@ const TELAS = [
   { key: 'funil', rot: '📊 Funil', grupo: '📊 Indicadores' },
   { key: 'ind', rot: '📈 Formulário (agendamento)', grupo: '📊 Indicadores' },
   { key: 'professoras', rot: '👩‍🏫 Professoras', grupo: '📊 Indicadores' },
+  { key: 'ativas', rot: '👥 Alunas ativas', grupo: '📊 Indicadores' },
   { key: 'grade', rot: '📋 Grade', grupo: '📊 Indicadores' },
   { key: 'slimclub', rot: '🤝 Slim Club' },
   { key: 'sofia_conversas', rot: '💬 Conversas', grupo: '🤖 Sofia' },
