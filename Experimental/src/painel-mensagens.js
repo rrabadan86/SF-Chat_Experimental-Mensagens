@@ -1844,6 +1844,12 @@ function paginaExpress(aviso, erro) {
   // Normaliza p/ DDI 55 (o EVO e a confirmação por WhatsApp esperam o número cheio).
   function exNormTel(s){ var d=exSoDig(s); if(d.length===10||d.length===11) d='55'+d; return d; }
   function exBtnOn(on){ var b=document.getElementById('exBtn'); if(b){ b.disabled=!on; b.textContent=on?'Agendar no EVO':'Agendando…'; } }
+  // Erros conhecidos do EVO em português claro (o original fica entre parênteses).
+  function exErroEvo(d){
+    d=String(d||'erro no EVO');
+    if(/no sessions for this activity/i.test(d)) return '❌ O EVO não deixou matricular: <b>esse horário é de outra atividade</b> (ex.: Circuito Slim) — a aula experimental só vale para as turmas do SlimFit. Escolha outro horário.<br><small style="opacity:.75">('+exEsc(d)+')</small>';
+    return '❌ Não consegui agendar: '+exEsc(d);
+  }
   // Motivo real da recusa (vem do EVO) em português claro.
   function exMotivoLotada(res){
     var m=String(res.motivo||''), r=(m.match(/^Turma de .*?\\d{1,2}:\\d{2}\\s*:\\s*([^.]+)/)||[])[1]||'';
@@ -1935,7 +1941,7 @@ function paginaExpress(aviso, erro) {
                 +'</div>','err');
             }
             else if(res.lotada){ exStatus(exMotivoLotada(res),'err'); exSlots=null; exCarregarSlots(); }
-            else { exStatus('❌ Não consegui agendar: '+exEsc(res.detalhe||'erro no EVO'),'err'); }
+            else { exStatus(exErroEvo(res.detalhe),'err'); }
           }).catch(function(){ if(n>40){ exStatus('❌ erro de rede','err'); exBtnOn(true); return; } setTimeout(poll,1500); });
         })();
       }).catch(function(){ exStatus('❌ erro de rede','err'); exBtnOn(true); });
@@ -3103,7 +3109,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
                 +'</div>';
             }
             else if(res.lotada){ if(st){ var mr=(String(res.motivo||'').match(/^Turma de .*?\\d{1,2}:\\d{2}\\s*:\\s*([^.]+)/)||[])[1]||''; st.innerHTML='⚠️ Não deu para agendar nesse horário'+(mr?': <b>'+escH(mr)+'</b>.':' (turma cheia).')+'<br>Horários com vaga: '+(escH((res.alternativas||[]).join('  ·  '))||'nenhum encontrado na semana')+'.'; } }
-            else { if(st)st.textContent='❌ Não consegui agendar: '+(res.detalhe||'erro no EVO'); }
+            else { if(st)st.textContent=(/no sessions for this activity/i.test(String(res.detalhe||''))?'❌ O EVO não deixou matricular: esse horário é de outra atividade (ex.: Circuito Slim) — a aula experimental só vale para as turmas do SlimFit. Escolha outro horário.':'❌ Não consegui agendar: '+(res.detalhe||'erro no EVO')); }
           }).catch(function(){ if(n>40){ if(st)st.textContent='❌ erro de rede'; return; } setTimeout(poll,1500); });
         })();
       }).catch(function(){ if(st)st.textContent='❌ erro de rede'; });
