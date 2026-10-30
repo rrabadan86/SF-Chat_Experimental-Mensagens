@@ -1211,7 +1211,11 @@ def api_book_sofia():
         }), 409
     except Exception as e:
         app.logger.exception("Sofia: falha no agendamento")
-        return jsonify({"ok": False, "erro": f"não consegui agendar: {e}"}), 500
+        # Recusa do EVO (HTTP 4xx: sem direito à atividade, venda já feita, dado
+        # inválido…) é DEFINITIVA: devolve 422 para quem chamou NÃO repetir — repetir
+        # revendia o serviço ("Amount of sale of this plan already achieved").
+        definitivo = " -> HTTP 4" in str(e)
+        return jsonify({"ok": False, "erro": f"não consegui agendar: {e}"}), (422 if definitivo else 500)
 
     # 3b) Log de auditoria (mesmo do formulário). No fluxo da Sofia não há
     #     CPF/nascimento, mas registramos o que veio + o que o EVO fez com o
