@@ -88,6 +88,53 @@ def _ignorar_atividades():
     return [x.strip().lower() for x in os.getenv("EXPERIMENTAL_IGNORAR_ATIVIDADES", "circuito").split(",") if x.strip()]
 
 
+# Atividades que um SERVIÇO libera no EVO (GET /api/v1/service com showActivities).
+# Usado no Circuito Slim: a grade e a marcação só usam turmas das atividades que o
+# serviço da experimental do circuito libera — senão o EVO recusa a matrícula
+# ("This member has no sessions for this activity"). Guardado por 10 min.
+_SERV_ATIV_CACHE = {}
+
+
+def atividades_do_servico(evo, id_service, branch_id=None):
+    """→ (ids, nomes) das atividades que o serviço libera; (None, None) se não deu
+    para saber (aí não restringe — fica a regra do nome "circuito")."""
+    if not id_service:
+        return None, None
+    chave = (int(id_service), branch_id)
+    hit = _SERV_ATIV_CACHE.get(chave)
+    if hit and hit[0] > time.monotonic():
+        return hit[1]
+    res = (None, None)
+    try:
+        svc = next((x for x in (evo.list_services(branch_id=branch_id) or [])
+                    if str(x.get("idService")) == str(id_service)), None)
+        acts = (svc or {}).get("activities") or (svc or {}).get("activitiesService") or []
+        ids, nomes = set(), []
+        for a in acts if isinstance(acts, list) else []:
+            if not isinstance(a, dict):
+                continue
+            ida = a.get("idActivity") or a.get("id")
+            if ida is not None and str(ida).isdigit():
+                ids.add(int(ida))
+            n = a.get("name") or a.get("nameActivity") or a.get("description")
+            if n:
+                nomes.append(str(n))
+        if ids:
+            res = (ids, nomes)
+    except Exception as e:  # sem a lista: segue sem restringir
+        log.warning("Não consegui ler as atividades do serviço %s: %s", id_service, e)
+    _SERV_ATIV_CACHE[chave] = (time.monotonic() + 600, res)
+    return res
+
+
+def _match_circuito(sess, ids_servico=None) -> bool:
+    """Turma serve para a experimental do CIRCUITO? Se soubermos as atividades que o
+    serviço libera, vale só elas; senão, as que têm "circuito" no nome."""
+    if ids_servico:
+        return sess.get("idActivity") in ids_servico
+    return "circuito" in (sess.get("name") or "").lower()
+
+
 def _match_experimental(sess, activity=None, id_activity=None) -> bool:
     """Turma serve para a aula experimental? Atividade configurada e não ignorada."""
     if not _match_activity(sess, activity, id_activity):
@@ -238,6 +285,7 @@ def book_experimental(
         if not id_service:
             raise ValueError("Serviço da aula experimental do Circuito não configurado "
                              "(WhatsApp → Express → id do serviço do Circuito no EVO).")
+        ids_circ, nomes_circ = atividades_do_servico(evo, id_service, branch_id)
     else:
         activity = activity or config.EVO_ACTIVITY or None
         service = service or config.EVO_SERVICE or None
@@ -289,7 +337,16 @@ def book_experimental(
     if not schedule:
         raise EvoError("não consegui ler a grade do EVO agora (grade vazia). "
                        "Tente de novo em instantes.")
-    session = _find_session(schedule, when, activity, id_activity)
+    if circuito:
+        session = next((s for s in schedule if same_slot(s, when) and _match_circuito(s, ids_circ)), None)
+        if session is None and ids_circ:
+            raise TurmaLotadaError(
+                fmt_datetime_evo(when),
+                reason=f"o serviço {id_service} da experimental do circuito não libera esta turma "
+                       f"(libera: {', '.join(nomes_circ) or 'outra atividade'})",
+            )
+    else:
+        session = _find_session(schedule, when, activity, id_activity)
     if session is None:
         raise TurmaLotadaError(
             fmt_datetime_evo(when),
@@ -437,8 +494,10 @@ def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_i
             return hit[1]
 
     evo = evo or EvoClient()
+    ids_circ = None
     if circuito:  # grade das turmas de Circuito Slim (experimental do circuito)
         activity, id_activity = "circuito", None
+        ids_circ, _ = atividades_do_servico(evo, config.circuito_service_id(), branch_id)
     else:
         activity = activity or config.EVO_ACTIVITY or None
         id_activity = id_activity or (config.EVO_ACTIVITY_ID or None)
@@ -469,7 +528,7 @@ def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_i
             d += timedelta(days=7)
             continue
         for s in sched:
-            if not _match_experimental(s, activity, id_activity):
+            if not (_match_circuito(s, ids_circ) if circuito else _match_experimental(s, activity, id_activity)):
                 continue
             dt = session_start_datetime(s)
             if dt is None or dt < now or dt >= fim:
