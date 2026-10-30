@@ -745,6 +745,8 @@ const ESTILO = `
   .stat{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:14px;text-align:center}
   .stat .n{font-family:"Inter";font-weight:800;font-size:1.8rem;line-height:1}
   .stat .l{font-size:var(--fs-xs);color:var(--cinza);margin-top:4px;font-weight:600}
+  a.stat-link{display:block;color:inherit;text-decoration:none;transition:border-color .15s}
+  a.stat-link:hover,a.stat-link:focus-visible{border-color:var(--teal)}
   .stat.ok .n{color:var(--ok)}.stat.err .n{color:var(--erro)}.stat.tot .n{color:var(--teal)}
   .jobrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--linha)}
   .jobrow:last-child{border-bottom:0}
@@ -6295,7 +6297,10 @@ function paginaSofiaFunil(params) {
 // vêm de data/alunas-ativas-historico.json, gravado pelo run_ativas_foto.py
 // (05:25 todo dia): a série diária reconstruída pelos contratos do EVO.
 const ATIVAS_FILE = path.resolve(__dirname, '..', 'data', 'alunas-ativas-historico.json');
+// Cálculo sob demanda ("Atualizar agora"): estado + a saída do script, para a tela
+// mostrar o erro em vez de ficar em "Calculando…" se algo der errado.
 let _ativasGerando = false;
+let _ativasUltimo = null; // { ok, msg, fim }
 const MESES_CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 function lerAtivasHist() { try { return JSON.parse(fs.readFileSync(ATIVAS_FILE, 'utf8')) || {}; } catch (_) { return {}; } }
@@ -6335,6 +6340,85 @@ function rotuloPeriodo(p, vis, longo) {
   const [, m, d] = p.k.split('-'); return `${d}/${m}`;
 }
 
+// Lista de alunas de um recorte: ativas num dia, ou quem entrou / saiu num período.
+// Usa "pessoas" (intervalos de contrato de cada uma) gravado pelo run_ativas_foto.py.
+function paginaAtivasLista(params) {
+  const h = lerAtivasHist();
+  const serie = ativasSerie(h.reconstruido);
+  const hojeIso = serie.length ? serie[serie.length - 1].dia : '';
+  const iso = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : '';
+  const tipo = ['entraram', 'sairam'].includes(params.tipo) ? params.tipo : 'ativas';
+  const dia = iso(params.dia) && iso(params.dia) <= hojeIso ? params.dia : hojeIso;
+  const de = iso(params.de) || hojeIso, ate = iso(params.ate) || hojeIso;
+  const fmtD = (d) => { const p = String(d || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : ''; };
+  const maisUm = (d) => new Date(new Date(d + 'T12:00:00Z').getTime() + 86400000).toISOString().slice(0, 10);
+  const pessoas = h.pessoas || {};
+  const voltar = `<a class="ui-btn sec" href="${esc(params.voltar && /^\/ativas(\?|$)/.test(params.voltar) ? params.voltar : '/ativas')}">← Voltar</a>`;
+  const titulo = tipo === 'ativas' ? `Alunas ativas ${dia === hojeIso ? 'hoje' : 'em ' + fmtD(dia)}`
+    : `${tipo === 'entraram' ? 'Entraram' : 'Saíram'} ${de === ate ? 'em ' + fmtD(de) : `de ${fmtD(de)} a ${fmtD(ate)}`}`;
+  const ign = h.ignorados || {};
+  const nIgn = Object.values(ign.so_ignorado || {}).reduce((a, b) => a + b, 0);
+  const notaIgn = (ign.regra || []).length ? `<div class="ui-nota"><span>Contratos com <b>${(ign.regra || []).map(esc).join(', ')}</b> no nome não contam${tipo === 'ativas' && dia === hojeIso && nIgn ? ` — hoje ${nIgn === 1 ? '1 pessoa só com esse contrato ficou' : nIgn + ' pessoas só com esse contrato ficaram'} de fora` : ''}.</span></div>` : '';
+  const topo = (linhas) => uiTopo({ titulo, sub: 'Toque no nome para abrir o contato; <b>EVO ↗</b> abre o cadastro.', acoes: voltar, linhas });
+  if (!serie.length || !h.pessoas) {
+    return chrome({ tab: 'Alunas ativas' }, 'ativas', `<div class="wrap">${subnavIndicadores('ativas')}${topo([])}
+      <div class="card"><div class="vazio">A lista de alunas aparece depois da próxima atualização. Volte e clique em <b>Atualizar agora</b>.</div></div></div>`);
+  }
+  // nome/telefone do CRM pelo id do EVO (o CRM guarda o nome completo)
+  const porEvo = {};
+  try { for (const [tel, c] of Object.entries(contatos.carregar() || {})) if (c && c.idEvo) porEvo[String(c.idEvo)] = { nome: c.nome, tel }; } catch (_) {}
+  const EVO_LINK = (process.env.EVO_LINK_URL || 'https://evo5.w12app.com.br').replace(/\/+$/, '');
+  const lista = [];
+  for (const [id, p] of Object.entries(pessoas)) {
+    const iv = p.iv || [];
+    if (tipo === 'ativas') {
+      const k = iv.findIndex(([a, b]) => a <= dia && dia <= b);
+      if (k < 0) continue;
+      lista.push({ id, p, data: iv[k][0], nova: k === 0 });
+    } else {
+      iv.forEach(([a, b], k) => {
+        if (tipo === 'entraram' && a >= de && a <= ate) lista.push({ id, p, data: a, nova: k === 0 });
+        if (tipo === 'sairam' && b < hojeIso && maisUm(b) >= de && maisUm(b) <= ate) lista.push({ id, p, data: b });
+      });
+    }
+  }
+  const nomeDe = (x) => (porEvo[x.id] && porEvo[x.id].nome) || x.p.n || ('id ' + x.id);
+  lista.sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), 'pt-BR'));
+  const atualHoje = tipo === 'ativas' && dia === hojeIso;
+  // contratos (só das ativas hoje — é o que o EVO diz agora)
+  const porContrato = {};
+  if (atualHoje) for (const x of lista) { const c = x.p.c || 'sem contrato'; porContrato[c] = (porContrato[c] || 0) + 1; }
+  const nTranc = atualHoje ? lista.filter(x => x.p.t).length : 0;
+  const linhas = lista.map(x => {
+    const ct = porEvo[x.id];
+    return uiPessoa({
+      nome: nomeDe(x),
+      href: ct ? '/sofia?view=contatos&q=' + String(ct.tel).replace(/\D/g, '').slice(-8) : '',
+      evo: `${EVO_LINK}/${config.evo.appBase}/clientes/cadastro/${x.id}//perfil`,
+      meta: [
+        atualHoje && x.p.t ? '🔒 <b>Trancada</b>' : '',
+        atualHoje && x.p.c ? `📄 ${esc(x.p.c)}` : '',
+        tipo === 'ativas' ? `Aluna desde <b>${fmtD(x.data)}</b>` : '',
+        tipo === 'entraram' ? `Entrou em <b>${fmtD(x.data)}</b> · ${x.nova ? '<b>nova</b>' : 'voltou'}` : '',
+        tipo === 'sairam' ? `Último dia do contrato <b>${fmtD(x.data)}</b>` : '',
+      ],
+    });
+  }).join('');
+  const resumo = [`<b>${lista.length}</b> aluna${lista.length === 1 ? '' : 's'}`];
+  if (nTranc) resumo.push(`${nTranc} trancada${nTranc === 1 ? '' : 's'}`);
+  if (tipo === 'entraram') { const nv = lista.filter(x => x.nova).length; resumo.push(`${nv} nova${nv === 1 ? '' : 's'} · ${lista.length - nv} voltaram`); }
+  const chipsContr = Object.entries(porContrato).sort((a, b) => b[1] - a[1]).map(([c, n]) => `<span class="ui-chip">${esc(c)} <b>${n}</b></span>`).join('');
+  const busca = `<input type="search" placeholder="Buscar pelo nome…" aria-label="Buscar pelo nome" oninput="var q=this.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');document.querySelectorAll('#al-lista .ip-row').forEach(function(r){r.style.display=r.textContent.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').indexOf(q)<0?'none':''})" style="max-width:320px">`;
+  const corpo = `<div class="wrap">${subnavIndicadores('ativas')}
+    ${topo([`<div class="ui-linha"><span>${resumo.join(' · ')}</span></div>`, notaIgn].filter(Boolean))}
+    ${chipsContr ? `<div class="card"><div class="ui-lbl" style="margin:0 0 8px">Por contrato</div><div class="ui-chips" style="flex-wrap:wrap">${chipsContr}</div></div>` : ''}
+    <div class="card">
+      ${lista.length > 8 ? `<div style="margin:0 0 10px">${busca}</div>` : ''}
+      ${lista.length ? `<div class="ip-lista" id="al-lista">${linhas}</div>` : '<div class="vazio">Ninguém neste recorte.</div>'}
+    </div></div>`;
+  return chrome({ tab: 'Alunas ativas' }, 'ativas', corpo);
+}
+
 function paginaAtivas(params) {
   params = params || {};
   const h = lerAtivasHist();
@@ -6348,10 +6432,12 @@ function paginaAtivas(params) {
   const ultimo = h.ultimo && h.ultimo.dia;
   const fotoHoje = ultimo && h.dias && h.dias[ultimo];
   const btnAtualizar = `<form method="POST" action="/ativas/atualizar" style="margin:0"><button class="ui-btn sec" type="submit"${_ativasGerando ? ' disabled' : ''}>${_ativasGerando ? '⏳ Calculando…' : '🔄 Atualizar agora'}</button></form>`;
+  const avisoCalc = _ativasGerando ? '<div class="ui-nota">⏳ Calculando no EVO… leva menos de 1 minuto. Atualize a página (F5).</div>'
+    : (_ativasUltimo && !_ativasUltimo.ok && Date.now() - _ativasUltimo.fim < 6 * 3600e3) ? `<div class="ui-nota erro">⚠️ O último cálculo falhou: ${esc(_ativasUltimo.msg)}</div>` : '';
   const topoBase = (linhas) => uiTopo({
     titulo: 'Alunas ativas',
     sub: 'Quantas alunas têm contrato vigente — <b>trancada conta como ativa</b> — mês a mês ou semana a semana, quem entrou, quem saiu e a comparação com o mesmo período do ano anterior.',
-    acoes: btnAtualizar, linhas,
+    acoes: btnAtualizar, linhas: (linhas || []).concat(avisoCalc ? [avisoCalc] : []),
   });
   if (!serie.length) {
     return chrome({ tab: 'Alunas ativas' }, 'ativas', `<div class="wrap">${subnavIndicadores('ativas')}${topoBase([])}
@@ -6381,13 +6467,16 @@ function paginaAtivas(params) {
       <div class="l">${esc(rotuloPeriodo(PB, 'mes', true))}: <b>${fmt(vb)}</b>${d == null ? '' : ` · <b style="color:${bom == null ? 'var(--cinza)' : bom ? 'var(--ok)' : 'var(--erro)'}">${fmt === fmtPct ? (d > 0 ? '+' : '') + String(Math.round(d * 10) / 10).replace('.', ',') + ' p.p.' : sinal(d)}</b>`}</div></div>`;
   };
   const mesAtual = mA === meses[meses.length - 1].k;
+  const voltarQ = encodeURIComponent(`/ativas?vis=${vis}&r=${range}`);
+  const lnk = (q, html, titulo) => `<a href="/ativas/lista?${q}&voltar=${voltarQ}" title="${esc(titulo || 'Ver as alunas')}" style="color:inherit;text-decoration:none;border-bottom:1px dashed currentColor">${html}</a>`;
+  const qPer = (tipo, p) => `tipo=${tipo}&de=${p.de}&ate=${p.ate}`;
 
   const linhasTab = vistos.slice().reverse().map(p => `<tr>
       <td><b>${esc(rotuloPeriodo(p, vis, true))}</b>${p === atual ? ' <span class="quando" style="margin:0">(até hoje)</span>' : ''}</td>
       <td>${p.ini}</td>
-      <td><b style="color:var(--ok)">+${p.e}</b> <span class="quando" style="margin:0">(${p.n} nova${p.n === 1 ? '' : 's'} · ${p.e - p.n} voltou${p.e - p.n === 1 ? '' : 'aram'})</span></td>
-      <td><b style="color:var(--erro)">−${p.s}</b></td>
-      <td><b>${p.fim}</b></td>
+      <td>${p.e ? lnk(qPer('entraram', p), `<b style="color:var(--ok)">+${p.e}</b>`, 'Ver quem entrou') : '<b style="color:var(--ok)">+0</b>'} <span class="quando" style="margin:0">(${p.n} nova${p.n === 1 ? '' : 's'} · ${p.e - p.n} voltou${p.e - p.n === 1 ? '' : 'aram'})</span></td>
+      <td>${p.s ? lnk(qPer('sairam', p), `<b style="color:var(--erro)">−${p.s}</b>`, 'Ver quem saiu') : '<b style="color:var(--erro)">−0</b>'}</td>
+      <td>${lnk(`tipo=ativas&dia=${p.ate}`, `<b>${p.fim}</b>`, 'Ver as alunas ativas neste dia')}</td>
       <td><b style="color:${p.fim > p.ini ? 'var(--ok)' : p.fim < p.ini ? 'var(--erro)' : 'var(--cinza)'}">${sinal(p.fim - p.ini)}</b></td>
       <td>${fmtPct(taxa(p))}</td>
     </tr>`).join('');
@@ -6406,9 +6495,9 @@ function paginaAtivas(params) {
       uiChips('Período', opcoesRange.map(([v, l]) => [`/ativas?vis=${vis}&r=${v}`, l, range === v])),
     ])}
     <div class="stats">
-      <div class="stat tot"><div class="n">${hoje.a}</div><div class="l">alunas ativas hoje${fotoHoje && fotoHoje.trancadas ? ` · ${fotoHoje.trancadas} trancada${fotoHoje.trancadas === 1 ? '' : 's'}` : ''}</div></div>
-      <div class="stat ok"><div class="n">+${atual.e}</div><div class="l">entraram ${vis === 'mes' ? 'neste mês' : 'nesta semana'}</div></div>
-      <div class="stat err"><div class="n">−${atual.s}</div><div class="l">saíram ${vis === 'mes' ? 'neste mês' : 'nesta semana'}</div></div>
+      <a class="stat tot stat-link" href="/ativas/lista?voltar=${voltarQ}"><div class="n">${hoje.a}</div><div class="l">alunas ativas hoje${fotoHoje && fotoHoje.trancadas ? ` · ${fotoHoje.trancadas} trancada${fotoHoje.trancadas === 1 ? '' : 's'}` : ''} · <u>ver lista</u></div></a>
+      <a class="stat ok stat-link" href="/ativas/lista?${qPer('entraram', atual)}&voltar=${voltarQ}"><div class="n">+${atual.e}</div><div class="l">entraram ${vis === 'mes' ? 'neste mês' : 'nesta semana'} · <u>ver</u></div></a>
+      <a class="stat err stat-link" href="/ativas/lista?${qPer('sairam', atual)}&voltar=${voltarQ}"><div class="n">−${atual.s}</div><div class="l">saíram ${vis === 'mes' ? 'neste mês' : 'nesta semana'} · <u>ver</u></div></a>
       <div class="stat"><div class="n" style="color:${hoje.a - atual.ini >= 0 ? 'var(--ok)' : 'var(--erro)'}">${sinal(hoje.a - atual.ini)}</div><div class="l">saldo ${vis === 'mes' ? 'do mês' : 'da semana'}</div></div>
     </div>
     <div class="ui-secoes">
@@ -8206,18 +8295,28 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(paginaAtivas({ vis: sp.get('vis') || '', r: sp.get('r') || '', a: sp.get('a') || '', b: sp.get('b') || '' }));
   }
+  if (req.method === 'GET' && url === '/ativas/lista') {
+    const sp = new URLSearchParams(req.url.split('?')[1] || '');
+    const g = (k) => sp.get(k) || '';
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(paginaAtivasLista({ tipo: g('tipo'), dia: g('dia'), de: g('de'), ate: g('ate'), voltar: g('voltar') }));
+  }
   if (req.method === 'POST' && url === '/ativas/atualizar') {
-    // Roda o run_ativas_foto.py agora (só lê o EVO pela API; < 1 min).
+    // Roda o run_ativas_foto.py agora (só lê o EVO pela API; < 1 min; desiste em 5 min).
     if (!_ativasGerando) {
       try {
         const { py, dir } = _gradePyBin();
         _ativasGerando = true;
-        const child = require('child_process').spawn(py, ['run_ativas_foto.py'], { cwd: dir, detached: true, stdio: 'ignore' });
-        child.on('exit', () => { _ativasGerando = false; });
-        child.on('error', () => { _ativasGerando = false; });
-        try { child.unref(); } catch (_) {}
+        require('child_process').execFile(py, ['run_ativas_foto.py'], { cwd: dir, timeout: 300000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+          _ativasGerando = false;
+          const out = String((stdout || '') + (stderr || '')).trim().split('\n').filter(Boolean);
+          _ativasUltimo = err
+            ? { ok: false, fim: Date.now(), msg: (err.killed ? 'passou de 5 minutos e foi interrompido. ' : '') + (out.slice(-4).join(' · ') || err.message || 'erro desconhecido') }
+            : { ok: true, fim: Date.now(), msg: out.slice(-1)[0] || '' };
+          if (err) console.log('[ativas] cálculo falhou:', _ativasUltimo.msg);
+        });
         try { auditoria.registrar(sess.usuario, 'ativas.atualizar', '', ''); } catch (_) {}
-      } catch (_) { _ativasGerando = false; }
+      } catch (e) { _ativasGerando = false; _ativasUltimo = { ok: false, fim: Date.now(), msg: e.message }; }
     }
     res.writeHead(303, { Location: '/ativas' }); return res.end();
   }
