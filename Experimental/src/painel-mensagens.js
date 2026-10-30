@@ -6782,6 +6782,18 @@ function paginaProfessoras(params) {
     return { sit: fechou ? 'fechou' : null, contrato: fechou ? a.contrato : '', idEvo: '' };
   };
 
+  // Professora lançada como aluna na agenda de experimentais (ex.: testando a aula):
+  // quem tem o nome de uma professora não entra na lista nem na conta.
+  const chavesProf = new Set();
+  for (const a of Object.values(h.aulas)) if (a.prof) histExp.chavesNome(a.prof).forEach(k => chavesProf.add(k));
+  const profsCompletos = [...new Set(Object.values(h.aulas).map(a => (histExp.chavesNome(a.prof)[0] || '')).filter(k => k.includes(' ')))];
+  const ehProfessora = (nome) => {
+    const ks = histExp.chavesNome(nome);
+    if (!ks.length || !ks[0].includes(' ')) return false; // só o 1º nome não basta
+    return ks.some(k => chavesProf.has(k)) || profsCompletos.some(pk => pk.startsWith(ks[0] + ' ') || ks[0].startsWith(pk + ' '));
+  };
+  let profComoAluna = 0;
+
   const SEM = '— sem professora';
   const profs = {}, horas = {};
   const tot = { exp: 0, veio: 0, faltou: 0, agendada: 0, fechou: 0, jaaluna: 0 };
@@ -6789,6 +6801,7 @@ function paginaProfessoras(params) {
     if (!dentro(a.dia)) continue;
     const sit = histExp.situacao(a.status);
     if (sit === 'cancelada') continue;
+    if (ehProfessora(a.nome)) { profComoAluna++; continue; }
     const ct = acharContato(a.nome);
     const res = resultado(a, sit, ct);
     const fechou = res.sit === 'fechou';
@@ -6899,7 +6912,7 @@ function paginaProfessoras(params) {
     <div class="sec-t">Por horário da aula</div>
     ${tabHoras}
     </div>
-    <p class="ui-rodape">A conversão não depende só da professora: horário, quem atendeu na recepção e preço também pesam. Use o número para conversar, não para julgar. <b>Fechou</b> = começou um contrato no EVO depois da aula (até 120 dias; pelos contratos lidos em Alunas ativas) ou “Nome do contrato” preenchido na agenda de experimentais${pessoasEvo ? '' : `, ou a aluna já tem a tag <b>${esc(tAluna)}</b>`}. Contratos ${esc(String(process.env.ATIVAS_IGNORAR_CONTRATOS || 'circuito,vip').toUpperCase().split(',').join(' e '))} não contam. <b>Já era aluna</b> = tinha contrato vigente no dia da aula (foi lançada como experimental) — não entra na conta.${tot.jaaluna ? ` No período: <b>${tot.jaaluna}</b>.` : ''} Aulas canceladas não entram.</p>`
+    <p class="ui-rodape">A conversão não depende só da professora: horário, quem atendeu na recepção e preço também pesam. Use o número para conversar, não para julgar. <b>Fechou</b> = começou um contrato no EVO depois da aula (até 120 dias; pelos contratos lidos em Alunas ativas) ou “Nome do contrato” preenchido na agenda de experimentais${pessoasEvo ? '' : `, ou a aluna já tem a tag <b>${esc(tAluna)}</b>`}. Contratos ${esc(String(process.env.ATIVAS_IGNORAR_CONTRATOS || 'circuito,vip').toUpperCase().split(',').join(' e '))} não contam. <b>Já era aluna</b> = tinha contrato vigente no dia da aula (foi lançada como experimental) — não entra na conta.${tot.jaaluna ? ` No período: <b>${tot.jaaluna}</b>.` : ''} Aulas canceladas não entram, nem professora lançada como aluna${profComoAluna ? ` (${profComoAluna} no período)` : ''}.</p>`
     : `<div class="card"><div class="vazio">${lidos.length ? 'Nenhuma aula experimental registrada neste período.' : 'Ainda sem histórico. Clique em “Ler agora no EVO” ou espere a leitura desta madrugada.'}</div></div>`}
     <style>
       .pf-item{border-bottom:1px solid var(--linha-soft)}
