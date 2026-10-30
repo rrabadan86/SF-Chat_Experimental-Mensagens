@@ -78,10 +78,29 @@ def _match_activity(sess, activity=None, id_activity=None) -> bool:
     return True
 
 
+# Atividades que NUNCA recebem a aula experimental do método (padrão: Circuito
+# Slim). O serviço vendido na experimental só dá direito às turmas do SlimFit — o
+# EVO recusa matricular numa turma de circuito ("This member has no sessions for
+# this activity…"). Sem EVO_ACTIVITY/EVO_ACTIVITY_ID no .env, a grade aceitava
+# TODAS as atividades e oferecia horários de circuito (com 25 vagas).
+# Outra lista no .env: EXPERIMENTAL_IGNORAR_ATIVIDADES=circuito,pilates
+def _ignorar_atividades():
+    return [x.strip().lower() for x in os.getenv("EXPERIMENTAL_IGNORAR_ATIVIDADES", "circuito").split(",") if x.strip()]
+
+
+def _match_experimental(sess, activity=None, id_activity=None) -> bool:
+    """Turma serve para a aula experimental? Atividade configurada e não ignorada."""
+    if not _match_activity(sess, activity, id_activity):
+        return False
+    nome = (sess.get("name") or "").lower()
+    alvo = (activity or "").lower()
+    return not any(t in nome and t not in alvo for t in _ignorar_atividades())
+
+
 def _find_session(schedule, when, activity=None, id_activity=None):
     """Acha a turma cujo horário (data + HH:MM) bate com o escolhido."""
     for s in schedule:
-        if same_slot(s, when) and _match_activity(s, activity, id_activity):
+        if same_slot(s, when) and _match_experimental(s, activity, id_activity):
             return s
     return None
 
@@ -99,7 +118,7 @@ def list_alternatives(evo, when, activity=None, id_activity=None, branch_id=None
     schedule = evo.list_schedule(when, show_full_week=True, branch_id=branch_id)
     out = []
     for s in schedule:
-        if turma_fechada(s) or not session_has_room_normal(s) or not _match_activity(s, activity, id_activity):
+        if turma_fechada(s) or not session_has_room_normal(s) or not _match_experimental(s, activity, id_activity):
             continue
         start = session_start_datetime(s)
         if start is None:
@@ -434,7 +453,7 @@ def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_i
             d += timedelta(days=7)
             continue
         for s in sched:
-            if not _match_activity(s, activity, id_activity):
+            if not _match_experimental(s, activity, id_activity):
                 continue
             dt = session_start_datetime(s)
             if dt is None or dt < now or dt >= fim:
