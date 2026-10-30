@@ -666,6 +666,7 @@ const ESTILO = `
      destacado e clicável, com chevron à direita e realce quando aberto — para
      não passar despercebido como uma linha de texto. */
   .acc-sec{margin:12px 0}
+  [id^="sec-"],#waBanner{scroll-margin-top:120px}
   .acc-sec>summary{list-style:none;cursor:pointer;position:relative;padding:14px 42px 14px 15px!important;margin:0!important;background:var(--card);border:1px solid var(--linha);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
   .acc-sec>summary::-webkit-details-marker{display:none}
   .acc-sec>summary::after{content:"▸";position:absolute;right:15px;top:50%;transform:translateY(-50%);color:var(--teal);font-weight:900;font-size:1rem}
@@ -998,9 +999,10 @@ ${corpo}
       // Para no próximo cabeçalho .sec-t OU num bloco que já é uma seção recolhível
       // própria (.acc-sec) — assim uma seção não "engole" a seguinte (ex.: o
       // "Gerador de links" deixa de virar parte de "Horários de aula").
-      while(el && !(el.classList && (el.classList.contains('sec-t') || el.classList.contains('acc-sec')))){ sibs.push(el); el=el.nextElementSibling; }
+      // (um .acc-sec com data-dentro faz parte da seção de cima; a barra fixa de salvar .hbar fica de fora)
+      while(el && !(el.classList && (el.classList.contains('sec-t') || el.classList.contains('hbar') || (el.classList.contains('acc-sec') && !el.hasAttribute('data-dentro'))))){ sibs.push(el); el=el.nextElementSibling; }
       if(!sibs.length) return;
-      var det=document.createElement('details'); det.className='acc-sec';
+      var det=document.createElement('details'); det.className='acc-sec'; if(h.id){ det.id=h.id; }
       var sum=document.createElement('summary'); sum.className='sec-t'; sum.innerHTML=h.innerHTML;
       det.appendChild(sum); sibs.forEach(function(s){ det.appendChild(s); });
       var key='sec:'+location.pathname+':'+(sum.textContent||'').replace(/\\s+/g,' ').trim().slice(0,60);
@@ -1008,6 +1010,11 @@ ${corpo}
       det.open=aberto;
       det.addEventListener('toggle',function(){ try{ localStorage.setItem(key, det.open?'1':'0'); }catch(e){} });
       h.parentNode.replaceChild(det,h);
+    });
+    // Índice "Ir para": abre a seção antes de rolar até ela.
+    document.addEventListener('click',function(ev){
+      var a=ev.target.closest && ev.target.closest('a[href^="#sec-"]'); if(!a) return;
+      var t=document.getElementById(a.getAttribute('href').slice(1)); if(t && t.tagName==='DETAILS') t.open=true;
     });
   }catch(e){}
 })();
@@ -1297,7 +1304,7 @@ function cardGrupos() {
   const eqp = grupos.equipe();
   const circ = grupos.circuito();
   return `
-  <details class="acc-sec" data-nosec="1">
+  <details class="acc-sec" data-nosec="1" data-dentro="1">
     <summary>👥 Grupos do WhatsApp</summary>
     <div class="card">
       <p class="quando" style="margin:0 0 10px">Nome <b>exato</b> de cada grupo no WhatsApp (com emojis, se tiver). O robô procura o grupo por esse nome — se não bater certinho, ele não encontra o grupo e a mensagem não é enviada.</p>
@@ -1348,7 +1355,8 @@ function paginaMensagens(aviso, erro) {
 
   const corpo = `<div class="wrap">
     ${subnavMensagens('config')}
-    ${uiTopo({ titulo: 'WhatsApp do robô', sub: 'Conexão do número do robô, o texto de cada mensagem automática, fotos, horários e quem recebe.' })}
+    ${uiTopo({ titulo: 'WhatsApp do robô', sub: 'Conexão do número do robô, o texto de cada mensagem automática, fotos, horários e quem recebe. Clique no título de uma seção para abrir ou fechar.',
+      linhas: [uiChips('Ir para', [['#waBanner', '📶 Conexão'], ['#sec-indiv', '👤 Mensagens individuais'], ['#sec-grupo', '👥 Mensagens em grupo'], ['#sec-outros', '⚙️ Outros envios'], ['#sec-free', '🆓 Planos FREE']])] })}
     <div id="waBanner">${blocoWaRobo()}</div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin:-4px 0 0">
       <form method="POST" action="/wa/reiniciar" onsubmit="return confirm('Reiniciar o robô agora?\\n\\nEle fica cerca de 1 minuto fora do ar enquanto reconecta o WhatsApp. Evite reiniciar bem em cima de um horário de disparo.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔄 Reiniciar robô</button></form>
@@ -1374,9 +1382,9 @@ function paginaMensagens(aviso, erro) {
     ${barraTeste()}
     ${card2FA()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
-    <div class="sec-t">Mensagens individuais <small style="font-weight:600;color:var(--cinza)">(enviadas 1 para 1, direto para a aluna)</small></div>
+    <div class="sec-t" id="sec-indiv">Mensagens individuais <small style="font-weight:600;color:var(--cinza)">(enviadas 1 para 1, direto para a aluna)</small></div>
     ${itensIndividuais}
-    <div class="sec-t">Mensagens em grupo <small style="font-weight:600;color:var(--cinza)">(enviadas nos grupos do WhatsApp)</small></div>
+    <div class="sec-t" id="sec-grupo">Mensagens em grupo <small style="font-weight:600;color:var(--cinza)">(enviadas nos grupos do WhatsApp)</small></div>
     ${cardGrupos()}
     ${(() => {
       const offs = config.jobsDesativadosLabels();
@@ -1388,9 +1396,9 @@ function paginaMensagens(aviso, erro) {
       </div>`;
     })()}
     ${itensGrupo}
-    <div class="sec-t">Outros envios em grupo <small style="font-weight:600;color:var(--cinza)">(automáticos, sem texto editável)</small></div>
+    <div class="sec-t" id="sec-outros">Outros envios em grupo <small style="font-weight:600;color:var(--cinza)">(automáticos, sem texto editável)</small></div>
     ${outros}
-    <div class="sec-t">Planos FREE — desmarcação por antecedência <small style="font-weight:600;color:var(--cinza)">(robô desmarca quem marcou cedo demais e avisa a Equipe)</small></div>
+    <div class="sec-t" id="sec-free">Planos FREE — desmarcação por antecedência <small style="font-weight:600;color:var(--cinza)">(robô desmarca quem marcou cedo demais e avisa a Equipe)</small></div>
     <div class="card" style="position:relative;border-left:4px solid var(--teal);background:#f6fbf9">
       ${switchEnvio(['freeAntecedencia'])}
       <p class="quando" style="margin:0 0 10px;padding-right:100px">As alunas de plano <b>FREE … GRUPO 2</b> só podem marcar a aula com, no máximo, <b>1 dia de antecedência</b>. O robô varre a grade em <b>horas fixas, no minuto :02</b> (a cada N horas, o dia todo — ex.: 6h → 00:02, 06:02, 12:02, 18:02), <b>desmarca</b> quem marcou com <b>2+ dias</b> (falta justificada — libera a vaga e a aluna pode remarcar) e <b>avisa no grupo da Equipe</b>. Só conta plano FREE com <b>contrato ativo</b>. A aluna <b>não</b> recebe mensagem direta. Ligue/desligue no <b>botão acima</b>.</p>
@@ -5903,6 +5911,7 @@ function paginaCobranca(aviso, erro) {
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"><input type="hidden" name="voltar" value="${esc(VOLTAR)}"></form>
+    <div class="sec-t" id="sec-regra">Regra de atraso</div>
     <div class="card">
       <div class="chead" style="margin:0"><h2 style="font-size:.98rem">⏱️ A partir de quantos dias de atraso cobrar?</h2></div>
       <p class="quando" style="margin:6px 0 10px">Só entra na cobrança quem está vencido há <b>este número de dias ou mais</b>. Ex.: <b>2</b> → cobra a partir de 2 dias de atraso; <b>4</b> → só a partir de 4.</p>
@@ -5914,6 +5923,7 @@ function paginaCobranca(aviso, erro) {
         <button type="submit" class="save" style="padding:8px 16px">Salvar</button>
       </form>
     </div>
+    <div class="sec-t" id="sec-msgs">Mensagens de cobrança <small style="font-weight:600;color:var(--cinza)">(texto, horário e dias de cada tipo)</small></div>
     ${cards || '<div class="card">Mensagens de cobrança não encontradas no catálogo.</div>'}
     <div class="hbar">
       <div class="acts"><button type="submit" form="fh" id="btnH" class="save">🕒 Salvar horário e reiniciar o robô</button></div>
@@ -6140,7 +6150,7 @@ function paginaSofiaFunil(params) {
           : `<div class="vazio">Ninguém agendou ${canalSel === 'todos' ? '' : 'pelo ' + rotSel + ' '}neste período.</div>`)}
       ${agend ? `<p class="quando" style="margin:10px 0 0">Das <b>${agend}</b> que agendaram: ${fuNum(fez, 'fez')} fizeram a aula (${fuNum(fechou, 'fechou')} já ${fechou === 1 ? 'fechou' : 'fecharam'} contrato), ${fuNum(faltou, 'faltou')} ${faltou === 1 ? 'faltou' : 'faltaram'} e ${fuNum(aguardando, 'aguardando')} ainda ${aguardando === 1 ? 'aguarda' : 'aguardam'} — aula futura ou presença ainda não lida no EVO. <span style="color:var(--faint)">Passe o mouse nas barras para ver os nomes; clique para filtrar a lista.</span></p>` : ''}
       ${(!compCfg.on || !atCfg.on) ? `<p class="quando" style="margin:8px 0 0;color:var(--warn)">⚠️ ${!compCfg.on ? '“Presença da experimental” está desligada (SoFIA → Tags) — sem ela, ninguém sai de “aguardando”. ' : ''}${!atCfg.on ? '“Alunas / Ex-alunas automáticas” está desligado (SoFIA → Tags) — sem ele, o fechamento de contrato não aparece.' : ''}</p>` : ''}
-      ${canalSel === 'formulario' && podeVerInd ? `<p style="margin:12px 0 0;text-align:right"><a href="/indicadores?dias=${diasInd}" class="ui-btn sec" style="display:inline-block">Ver detalhes do formulário (por dia, horários de pico, origens e links) →</a></p>` : ''}
+      ${canalSel === 'formulario' && podeVerInd ? `<p style="margin:12px 0 0;text-align:right"><a href="/indicadores?dias=${diasInd}" class="ui-btn sec" style="display:inline-block;white-space:normal;text-align:center">Ver detalhes do formulário (por dia, horários de pico, origens e links) →</a></p>` : ''}
     </div>
     ${detalheHtml}
     </div>
