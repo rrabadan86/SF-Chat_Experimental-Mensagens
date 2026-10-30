@@ -395,8 +395,9 @@ function telaDaUrl(u) {
   if (u === '/perfis' || u.startsWith('/perfis/')) return 'perfis';
   if (u === '/saude') return 'saude'; // liberável por usuário (checkbox em Perfis) — a checagem genérica cobre
   if (u === '/grade' || u.startsWith('/grade/')) return 'grade'; // idem (checkbox em Perfis)
-  if (u === '/funil') return 'funil';
-  if (u === '/professoras' || u.startsWith('/professoras/')) return 'professoras'; // Indicadores → Professoras (checkbox em Perfis) // Indicadores → Funil (checkbox em Perfis; quem via pela SoFIA Conversas continua vendo)
+  if (u === '/funil') return 'funil'; // Indicadores → Funil (checkbox em Perfis; quem via pela SoFIA Conversas continua vendo)
+  if (u === '/professoras' || u.startsWith('/professoras/')) return 'professoras'; // Indicadores → Professoras (checkbox em Perfis)
+  if (u === '/ativas' || u.startsWith('/ativas/')) return 'ativas'; // Indicadores → Alunas ativas (checkbox em Perfis)
   if (u === '/clube' || u.startsWith('/clube/')) return 'slimclub'; // validação do Slim Club (checkbox em Perfis)
   if (u === '/formularios' || u.startsWith('/formularios/')) return 'formularios'; // formulários de campanha (checkbox em Perfis)
   return 'msg';
@@ -456,6 +457,7 @@ function primeiraTela(sess) {
   if (sess.telas.includes('formularios')) return '/formularios';
   if (podeFunil(sess)) return '/funil';
   if (sess.telas.includes('professoras')) return '/professoras';
+  if (sess.telas.includes('ativas')) return '/ativas';
   if (sess.telas.includes('grade')) return '/grade';
   return '';
 }
@@ -955,8 +957,8 @@ function navTabs(ativo) {
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp', 'msg');
   if (IG_NO_PAINEL) html += item('ig', '/instagram', '📸', 'Instagram');
   // Indicadores = Funil + Formulário + Professoras + Grade, cada um com a sua permissão. Abre no primeiro permitido.
-  const indHref = podeFunil(sess) ? '/funil' : pode('ind') ? '/indicadores' : pode('professoras') ? '/professoras' : pode('grade') ? '/grade' : '';
-  if (indHref) html += cel(indHref, ativo === 'grade' || ativo === 'funil' || ativo === 'ind' || ativo === 'professoras', '📊', 'Indicadores', 'grade');
+  const indHref = podeFunil(sess) ? '/funil' : pode('ind') ? '/indicadores' : pode('professoras') ? '/professoras' : pode('ativas') ? '/ativas' : pode('grade') ? '/grade' : '';
+  if (indHref) html += cel(indHref, ativo === 'grade' || ativo === 'funil' || ativo === 'ind' || ativo === 'professoras' || ativo === 'ativas', '📊', 'Indicadores', 'grade');
   if (pode('slimclub')) { // número = o que espera a recepção (cadastros, alterações, reclamações)
     const n = slimclub.pendenciasRecepcao();
     html += item('slimclub', '/clube', '🤝', 'Slim Club' + (n ? ` <span class="nav-badge" title="${n} para a recepção ver">${n}</span>` : ''));
@@ -2574,7 +2576,7 @@ function blocoSofiaWa() {
 }
 
 // Sub-navegação da aba Sofia: Configuração (prompt/configs) x Conversas (inbox).
-// Indicadores (menu de cima) = Funil + Formulário + Professoras + Grade. O Funil tem permissão própria
+// Indicadores (menu de cima) = Funil + Formulário + Professoras + Alunas ativas + Grade. O Funil tem permissão própria
 // ('funil'); quem já via o Funil pela SoFIA (Conversas) continua vendo.
 function podeFunil(sess) { return !!(sess && (sess.admin || (sess.telas || []).includes('funil') || (sess.telas || []).includes('sofia_conversas'))); }
 function subnavIndicadores(view) {
@@ -2584,6 +2586,7 @@ function subnavIndicadores(view) {
   if (podeFunil(sess)) its += `<a href="/funil"${view === 'funil' ? ' class="on"' : ''}>Funil</a>`;
   if (pode('ind')) its += `<a href="/indicadores"${view === 'formulario' ? ' class="on"' : ''}>Formulário</a>`;
   if (pode('professoras')) its += `<a href="/professoras"${view === 'professoras' ? ' class="on"' : ''}>Professoras</a>`;
+  if (pode('ativas')) its += `<a href="/ativas"${view === 'ativas' ? ' class="on"' : ''}>Alunas ativas</a>`;
   if (pode('grade')) its += `<a href="/grade"${view === 'grade' ? ' class="on"' : ''}>Grade</a>`;
   return IND_CSS + (its ? `<div class="subtabs">${its}</div>` : '');
 }
@@ -6286,6 +6289,215 @@ function paginaSofiaFunil(params) {
 // lido toda noite pelo robô. Cada linha: aluna, dia/hora, professora, presença e
 // "Nome do contrato". Fechou = contrato preenchido no EVO OU a aluna tem a tag de
 // aluna no CRM (mesmo nome). Conversão = fecharam ÷ vieram (só conta quem fez a aula).
+// ── Indicadores → Alunas ativas ─────────────────────────────────────────────
+// Evolução das alunas com contrato vigente (TRANCADA conta como ativa), por mês
+// ou semana, e comparação entre dois meses (ex.: dez/2026 × dez/2025). Os dados
+// vêm de data/alunas-ativas-historico.json, gravado pelo run_ativas_foto.py
+// (05:25 todo dia): a série diária reconstruída pelos contratos do EVO.
+const ATIVAS_FILE = path.resolve(__dirname, '..', 'data', 'alunas-ativas-historico.json');
+let _ativasGerando = false;
+const MESES_CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+function lerAtivasHist() { try { return JSON.parse(fs.readFileSync(ATIVAS_FILE, 'utf8')) || {}; } catch (_) { return {}; } }
+
+// Série diária → [{ dia:'YYYY-MM-DD', a, e, n, s }]
+function ativasSerie(rec) {
+  if (!rec || !Array.isArray(rec.ativas) || !rec.inicio) return [];
+  const d0 = new Date(rec.inicio + 'T12:00:00Z');
+  return rec.ativas.map((a, i) => {
+    const d = new Date(d0.getTime() + i * 86400000);
+    return { dia: d.toISOString().slice(0, 10), a, e: (rec.entraram || [])[i] || 0, n: (rec.novas || [])[i] || 0, s: (rec.sairam || [])[i] || 0 };
+  });
+}
+// Agrupa a série por mês ('mes') ou semana começando na segunda ('semana').
+function ativasPeriodos(serie, vis) {
+  const chave = (dia) => {
+    if (vis === 'mes') return dia.slice(0, 7);
+    const d = new Date(dia + 'T12:00:00Z'); const dow = (d.getUTCDay() + 6) % 7; // 0 = segunda
+    return new Date(d.getTime() - dow * 86400000).toISOString().slice(0, 10);
+  };
+  const out = [];
+  let cur = null, ant = null;
+  for (const p of serie) {
+    const k = chave(p.dia);
+    if (!cur || cur.k !== k) {
+      if (cur) out.push(cur);
+      cur = { k, ini: ant ? ant.a : p.a - p.e + p.s, fim: p.a, e: 0, n: 0, s: 0, de: p.dia, ate: p.dia };
+    }
+    cur.fim = p.a; cur.e += p.e; cur.n += p.n; cur.s += p.s; cur.ate = p.dia;
+    ant = p;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+function rotuloPeriodo(p, vis, longo) {
+  if (vis === 'mes') { const [y, m] = p.k.split('-'); return longo ? `${MESES_LONGO[+m - 1]}/${y}` : `${MESES_CURTO[+m - 1]}/${y.slice(2)}`; }
+  const [, m, d] = p.k.split('-'); return `${d}/${m}`;
+}
+
+function paginaAtivas(params) {
+  params = params || {};
+  const h = lerAtivasHist();
+  const serie = ativasSerie(h.reconstruido);
+  const vis = params.vis === 'semana' ? 'semana' : 'mes';
+  const opcoesRange = vis === 'mes' ? [['12', '12 meses'], ['24', '24 meses'], ['0', 'Tudo']] : [['13', '3 meses'], ['26', '6 meses'], ['52', '1 ano']];
+  const range = opcoesRange.some(([v]) => v === params.r) ? params.r : opcoesRange[0][0];
+  const fmtN = (n) => String(n);
+  const fmtPct = (v) => v == null || !isFinite(v) ? '—' : String(Math.round(v * 10) / 10).replace('.', ',') + '%';
+  const sinal = (n) => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n);
+  const ultimo = h.ultimo && h.ultimo.dia;
+  const fotoHoje = ultimo && h.dias && h.dias[ultimo];
+  const btnAtualizar = `<form method="POST" action="/ativas/atualizar" style="margin:0"><button class="ui-btn sec" type="submit"${_ativasGerando ? ' disabled' : ''}>${_ativasGerando ? '⏳ Calculando…' : '🔄 Atualizar agora'}</button></form>`;
+  const topoBase = (linhas) => uiTopo({
+    titulo: 'Alunas ativas',
+    sub: 'Quantas alunas têm contrato vigente — <b>trancada conta como ativa</b> — mês a mês ou semana a semana, quem entrou, quem saiu e a comparação com o mesmo período do ano anterior.',
+    acoes: btnAtualizar, linhas,
+  });
+  if (!serie.length) {
+    return chrome({ tab: 'Alunas ativas' }, 'ativas', `<div class="wrap">${subnavIndicadores('ativas')}${topoBase([])}
+      <div class="card"><div class="vazio">${_ativasGerando ? 'Calculando o histórico no EVO… atualize a página em 1 minuto.' : 'Ainda sem histórico. Clique em <b>Atualizar agora</b> (leva menos de 1 minuto) ou espere a atualização das 05:25.'}</div></div></div>`);
+  }
+
+  const periodos = ativasPeriodos(serie, vis);
+  const n = range === '0' ? periodos.length : Math.min(periodos.length, parseInt(range, 10));
+  const vistos = periodos.slice(-n);
+  const atual = periodos[periodos.length - 1];
+  const hoje = serie[serie.length - 1];
+
+  // ── comparação entre dois meses ──
+  const meses = ativasPeriodos(serie, 'mes');
+  const okMes = (k) => meses.some(m => m.k === k);
+  const mA = okMes(params.a) ? params.a : meses[meses.length - 1].k;
+  const anoAnt = (+mA.slice(0, 4) - 1) + mA.slice(4);
+  const mB = okMes(params.b) ? params.b : (okMes(anoAnt) ? anoAnt : meses[0].k);
+  const PA = meses.find(m => m.k === mA), PB = meses.find(m => m.k === mB);
+  const diaria = (k) => { const v = Array(31).fill(null); for (const p of serie) if (p.dia.slice(0, 7) === k) v[+p.dia.slice(8) - 1] = p.a; return v; };
+  const optsMes = (sel) => meses.slice().reverse().map(m => `<option value="${m.k}"${m.k === sel ? ' selected' : ''}>${rotuloPeriodo(m, 'mes', true)}</option>`).join('');
+  const taxa = (p) => p.ini ? p.s * 100 / p.ini : null;
+  const tile = (rot, va, vb, fmt, menorMelhor) => {
+    const d = (va == null || vb == null) ? null : va - vb;
+    const bom = d == null || d === 0 ? null : (menorMelhor ? d < 0 : d > 0);
+    return `<div class="stat"><div class="l" style="margin:0 0 6px">${rot}</div><div class="n" style="color:var(--tinta)">${fmt(va)}</div>
+      <div class="l">${esc(rotuloPeriodo(PB, 'mes', true))}: <b>${fmt(vb)}</b>${d == null ? '' : ` · <b style="color:${bom == null ? 'var(--cinza)' : bom ? 'var(--ok)' : 'var(--erro)'}">${fmt === fmtPct ? (d > 0 ? '+' : '') + String(Math.round(d * 10) / 10).replace('.', ',') + ' p.p.' : sinal(d)}</b>`}</div></div>`;
+  };
+  const mesAtual = mA === meses[meses.length - 1].k;
+
+  const linhasTab = vistos.slice().reverse().map(p => `<tr>
+      <td><b>${esc(rotuloPeriodo(p, vis, true))}</b>${p === atual ? ' <span class="quando" style="margin:0">(até hoje)</span>' : ''}</td>
+      <td>${p.ini}</td>
+      <td><b style="color:var(--ok)">+${p.e}</b> <span class="quando" style="margin:0">(${p.n} nova${p.n === 1 ? '' : 's'} · ${p.e - p.n} voltou${p.e - p.n === 1 ? '' : 'aram'})</span></td>
+      <td><b style="color:var(--erro)">−${p.s}</b></td>
+      <td><b>${p.fim}</b></td>
+      <td><b style="color:${p.fim > p.ini ? 'var(--ok)' : p.fim < p.ini ? 'var(--erro)' : 'var(--cinza)'}">${sinal(p.fim - p.ini)}</b></td>
+      <td>${fmtPct(taxa(p))}</td>
+    </tr>`).join('');
+
+  const dadosEvol = { rotulos: vistos.map(p => rotuloPeriodo(p, vis, false)), longos: vistos.map(p => rotuloPeriodo(p, vis, true) + (p === atual ? ' (até hoje)' : '')),
+    series: [{ nome: 'Ativas', cor: '#00918a', valores: vistos.map(p => p.fim) }],
+    extra: vistos.map(p => `+${p.e} entraram · −${p.s} saíram`), area: true };
+  const dadosComp = { rotulos: Array.from({ length: 31 }, (_, i) => String(i + 1)), longos: Array.from({ length: 31 }, (_, i) => 'dia ' + (i + 1)),
+    series: [{ nome: rotuloPeriodo(PA, 'mes', true), cor: '#00918a', valores: diaria(mA) }, { nome: rotuloPeriodo(PB, 'mes', true), cor: '#c2660f', valores: diaria(mB) }] };
+  const js = (o) => JSON.stringify(o).replace(/</g, '\\u003c');
+
+  const corpo = `<div class="wrap">
+    ${subnavIndicadores('ativas')}
+    ${topoBase([
+      uiChips('Ver por', [['/ativas?vis=mes', 'Mês', vis === 'mes'], ['/ativas?vis=semana', 'Semana', vis === 'semana']]),
+      uiChips('Período', opcoesRange.map(([v, l]) => [`/ativas?vis=${vis}&r=${v}`, l, range === v])),
+    ])}
+    <div class="stats">
+      <div class="stat tot"><div class="n">${hoje.a}</div><div class="l">alunas ativas hoje${fotoHoje && fotoHoje.trancadas ? ` · ${fotoHoje.trancadas} trancada${fotoHoje.trancadas === 1 ? '' : 's'}` : ''}</div></div>
+      <div class="stat ok"><div class="n">+${atual.e}</div><div class="l">entraram ${vis === 'mes' ? 'neste mês' : 'nesta semana'}</div></div>
+      <div class="stat err"><div class="n">−${atual.s}</div><div class="l">saíram ${vis === 'mes' ? 'neste mês' : 'nesta semana'}</div></div>
+      <div class="stat"><div class="n" style="color:${hoje.a - atual.ini >= 0 ? 'var(--ok)' : 'var(--erro)'}">${sinal(hoje.a - atual.ini)}</div><div class="l">saldo ${vis === 'mes' ? 'do mês' : 'da semana'}</div></div>
+    </div>
+    <div class="ui-secoes">
+    <div class="sec-t">Evolução <small style="font-weight:600;color:var(--cinza)">(alunas ativas no fim de cada ${vis === 'mes' ? 'mês' : 'semana'})</small></div>
+    <div class="card"><div class="ui-graf" data-graf="evol"></div></div>
+    <div class="sec-t">Comparar dois meses</div>
+    <div class="card">
+      <form method="GET" action="/ativas" class="ui-linha" style="margin:0 0 6px">
+        <input type="hidden" name="vis" value="${vis}"><input type="hidden" name="r" value="${range}">
+        <select name="a" onchange="this.form.submit()" aria-label="Mês" style="width:auto">${optsMes(mA)}</select>
+        <span class="quando" style="margin:0">comparado com</span>
+        <select name="b" onchange="this.form.submit()" aria-label="Mês de comparação" style="width:auto">${optsMes(mB)}</select>
+      </form>
+      <div class="stats" style="margin:10px 0">
+        ${tile(`Ativas no fim de ${esc(rotuloPeriodo(PA, 'mes', true))}${mesAtual ? ' (até hoje)' : ''}`, PA.fim, PB.fim, fmtN, false)}
+        ${tile('Entraram', PA.e, PB.e, fmtN, false)}
+        ${tile('Saíram', PA.s, PB.s, fmtN, true)}
+        ${tile('Taxa de saída', taxa(PA), taxa(PB), fmtPct, true)}
+      </div>
+      <div class="ui-graf" data-graf="comp"></div>
+      <p class="quando" style="margin:8px 0 0">Alunas ativas em cada dia do mês.${mesAtual ? ' O mês atual vai até hoje.' : ''}</p>
+    </div>
+    <div class="sec-t">${vis === 'mes' ? 'Mês a mês' : 'Semana a semana'}</div>
+    <div class="card" style="overflow-x:auto">
+      <table class="ui-tab"><thead><tr><th>${vis === 'mes' ? 'Mês' : 'Semana de'}</th><th>Início</th><th>Entraram</th><th>Saíram</th><th>Fim</th><th>Variação</th><th>Taxa de saída</th></tr></thead><tbody>${linhasTab}</tbody></table>
+    </div>
+    </div>
+    <p class="ui-rodape"><b>Ativa</b> = contrato vigente no EVO; <b>trancada conta</b>. Calculado pelos contratos (início, fim e cancelamento) de todas as clientes, inclusive ex-alunas — por isso dá para comparar com o passado. Renovação com até ${(h.reconstruido && h.reconstruido.tolerancia) || 7} dias de atraso não conta como saída. <b>Nova</b> = primeiro contrato; <b>voltou</b> = ex-aluna que voltou. <b>Taxa de saída</b> = saíram ÷ ativas no início. Atualizado todo dia às 05:25${ultimo ? ` (última: ${esc(fmtData(ultimo))})` : ''}.</p>
+  </div>
+  <style>
+    .ui-graf{position:relative;width:100%}
+    .ui-graf svg{display:block;width:100%;overflow:visible}
+    .ui-graf .gt{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--linha);border-radius:10px;box-shadow:0 8px 24px -10px rgba(16,24,40,.35);padding:8px 10px;font-size:.8rem;min-width:150px;display:none;z-index:5}
+    .ui-graf .gt .r{display:flex;align-items:center;gap:8px;margin-top:3px}
+    .ui-graf .gt .k{width:14px;height:2px;border-radius:2px;flex:none}
+    .ui-graf .gt b{font-variant-numeric:tabular-nums;color:var(--tinta)}
+    .ui-graf .lg{display:flex;gap:16px;flex-wrap:wrap;font-size:.8rem;color:var(--cinza);margin:0 0 6px}
+    .ui-graf .lg span{display:inline-flex;align-items:center;gap:6px}
+    .ui-graf .lg i{width:16px;height:2px;border-radius:2px;display:inline-block}
+  </style>
+  <script>
+  var DADOS={evol:${js(dadosEvol)},comp:${js(dadosComp)}};
+  // Gráfico de linha desenhado na largura real (legível no celular) + cursor que
+  // segue o mouse/dedo e mostra os valores de todas as séries naquele ponto.
+  function grafLinha(el, d){
+    var W=el.clientWidth||600, H=W<520?220:260, L=36, R=W<520?40:52, T=14, B=26, NS='http://www.w3.org/2000/svg';
+    var n=d.rotulos.length, todos=[]; d.series.forEach(function(s){ s.valores.forEach(function(v){ if(v!=null) todos.push(v); }); });
+    if(!todos.length){ el.textContent='Sem dados.'; return; }
+    var mn=Math.min.apply(null,todos), mx=Math.max.apply(null,todos), span=Math.max(4,mx-mn);
+    var passo=[1,2,5,10,20,25,50,100,200,500].find(function(p){ return span/p<=4; })||1000;
+    var y0=Math.max(0,Math.floor((mn-span*.15)/passo)*passo), y1=Math.ceil((mx+span*.1)/passo)*passo; if(y1===y0) y1=y0+passo;
+    var X=function(i){ return n<2?(L+W-R)/2:L+i*(W-L-R)/(n-1); }, Y=function(v){ return T+(y1-v)/(y1-y0)*(H-T-B); };
+    el.innerHTML='';
+    if(d.series.length>1){ var lg=document.createElement('div'); lg.className='lg'; d.series.forEach(function(s){ var sp=document.createElement('span'), k=document.createElement('i'); k.style.background=s.cor; sp.appendChild(k); sp.appendChild(document.createTextNode(s.nome)); lg.appendChild(sp); }); el.appendChild(lg); }
+    var svg=document.createElementNS(NS,'svg'); svg.setAttribute('viewBox','0 0 '+W+' '+H); svg.setAttribute('height',H); svg.setAttribute('role','img');
+    svg.setAttribute('aria-label', d.series.map(function(s){ var u=null; s.valores.forEach(function(v){ if(v!=null) u=v; }); return s.nome+': '+u; }).join('; '));
+    function add(tag, at){ var e=document.createElementNS(NS,tag); for(var k in at) e.setAttribute(k,at[k]); svg.appendChild(e); return e; }
+    for(var v=y0; v<=y1; v+=passo){ add('line',{x1:L,x2:W-R,y1:Y(v),y2:Y(v),stroke:'#eeeef0','stroke-width':1}); var t=add('text',{x:L-8,y:Y(v)+4,'text-anchor':'end','font-size':11,fill:'#6e6e73'}); t.textContent=v; }
+    var cada=Math.max(1,Math.ceil(n/(W<520?6:12)));
+    for(var i=0;i<n;i++){ if(i%cada && i!==n-1) continue; var tx=add('text',{x:X(i),y:H-8,'text-anchor':'middle','font-size':11,fill:'#6e6e73'}); tx.textContent=d.rotulos[i]; }
+    d.series.forEach(function(s){
+      var pts=[]; s.valores.forEach(function(v,i){ if(v!=null) pts.push([X(i),Y(v),v]); }); if(!pts.length) return;
+      var dd=pts.map(function(p,i){ return (i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1); }).join(' ');
+      if(d.area && d.series.length===1) add('path',{d:dd+' L'+pts[pts.length-1][0].toFixed(1)+' '+(H-B)+' L'+pts[0][0].toFixed(1)+' '+(H-B)+' Z',fill:s.cor,'fill-opacity':.1});
+      add('path',{d:dd,fill:'none',stroke:s.cor,'stroke-width':2,'stroke-linejoin':'round','stroke-linecap':'round'});
+      var u=pts[pts.length-1]; add('circle',{cx:u[0],cy:u[1],r:4.5,fill:s.cor,stroke:'#fff','stroke-width':2});
+      var lb=add('text',{x:u[0]+8,y:u[1]+4,'font-size':12,'font-weight':700,fill:'#1d1d1f'}); lb.textContent=u[2];
+    });
+    var cruz=add('line',{x1:0,x2:0,y1:T,y2:H-B,stroke:'#9a9aa0','stroke-width':1,visibility:'hidden'});
+    el.appendChild(svg);
+    var tip=document.createElement('div'); tip.className='gt'; el.appendChild(tip);
+    function mostra(cx){
+      var r=svg.getBoundingClientRect(), x=(cx-r.left)*W/r.width, i=n<2?0:Math.round((x-L)/((W-L-R)/(n-1))); i=Math.max(0,Math.min(n-1,i));
+      cruz.setAttribute('x1',X(i)); cruz.setAttribute('x2',X(i)); cruz.setAttribute('visibility','visible');
+      tip.innerHTML=''; var tt=document.createElement('div'); tt.style.cssText='font-weight:700;margin-bottom:2px'; tt.textContent=d.longos[i]; tip.appendChild(tt);
+      d.series.forEach(function(s){ var row=document.createElement('div'); row.className='r'; var k=document.createElement('span'); k.className='k'; k.style.background=s.cor; var b=document.createElement('b'); b.textContent=s.valores[i]==null?'—':s.valores[i]; var nm=document.createElement('span'); nm.style.color='#6e6e73'; nm.textContent=s.nome; row.appendChild(k); row.appendChild(b); row.appendChild(nm); tip.appendChild(row); });
+      if(d.extra){ var ex=document.createElement('div'); ex.style.cssText='margin-top:4px;color:#6e6e73'; ex.textContent=d.extra[i]; tip.appendChild(ex); }
+      tip.style.display='block'; var px=X(i)*r.width/W, lw=tip.offsetWidth; tip.style.left=Math.max(0,Math.min(r.width-lw, px+12 + (px+12+lw>r.width ? -lw-24 : 0)))+'px'; tip.style.top=(r.top-el.getBoundingClientRect().top+8)+'px';
+    }
+    svg.addEventListener('pointermove',function(e){ mostra(e.clientX); });
+    svg.addEventListener('pointerleave',function(){ tip.style.display='none'; cruz.setAttribute('visibility','hidden'); });
+  }
+  function desenhar(){ [].forEach.call(document.querySelectorAll('.ui-graf[data-graf]'),function(el){ if(el.offsetParent!==null) grafLinha(el, DADOS[el.getAttribute('data-graf')]); }); }
+  desenhar(); var tr; window.addEventListener('resize',function(){ clearTimeout(tr); tr=setTimeout(desenhar,150); });
+  document.addEventListener('toggle',function(e){ if(e.target.tagName==='DETAILS' && e.target.open) desenhar(); },true);
+  </script>`;
+  return chrome({ tab: 'Alunas ativas' }, 'ativas', corpo);
+}
+
 function paginaProfessoras(params) {
   params = params || {};
   const h = histExp.ler();
@@ -7986,6 +8198,28 @@ const server = http.createServer((req, res) => {
     const sp = new URLSearchParams(req.url.split('?')[1] || '');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(paginaSofiaFunil({ per: sp.get('per') || '7', de: sp.get('de') || '', ate: sp.get('ate') || '', canal: sp.get('canal') || '' }));
+  }
+
+  // ── Indicadores → Alunas ativas (permissão "ativas" — barrada acima) ──
+  if (req.method === 'GET' && url === '/ativas') {
+    const sp = new URLSearchParams(req.url.split('?')[1] || '');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(paginaAtivas({ vis: sp.get('vis') || '', r: sp.get('r') || '', a: sp.get('a') || '', b: sp.get('b') || '' }));
+  }
+  if (req.method === 'POST' && url === '/ativas/atualizar') {
+    // Roda o run_ativas_foto.py agora (só lê o EVO pela API; < 1 min).
+    if (!_ativasGerando) {
+      try {
+        const { py, dir } = _gradePyBin();
+        _ativasGerando = true;
+        const child = require('child_process').spawn(py, ['run_ativas_foto.py'], { cwd: dir, detached: true, stdio: 'ignore' });
+        child.on('exit', () => { _ativasGerando = false; });
+        child.on('error', () => { _ativasGerando = false; });
+        try { child.unref(); } catch (_) {}
+        try { auditoria.registrar(sess.usuario, 'ativas.atualizar', '', ''); } catch (_) {}
+      } catch (_) { _ativasGerando = false; }
+    }
+    res.writeHead(303, { Location: '/ativas' }); return res.end();
   }
 
   // ── Indicadores → Professoras (permissão "professoras" — barrada acima) ──
