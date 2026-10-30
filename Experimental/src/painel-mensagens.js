@@ -1327,6 +1327,7 @@ function paginaMensagens(aviso, erro) {
 
   const corpo = `<div class="wrap">
     ${subnavMensagens('config')}
+    ${uiTopo({ titulo: 'WhatsApp do robô', sub: 'Conexão do número do robô, o texto de cada mensagem automática, fotos, horários e quem recebe.' })}
     <div id="waBanner">${blocoWaRobo()}</div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin:-4px 0 0">
       <form method="POST" action="/wa/reiniciar" onsubmit="return confirm('Reiniciar o robô agora?\\n\\nEle fica cerca de 1 minuto fora do ar enquanto reconecta o WhatsApp. Evite reiniciar bem em cima de um horário de disparo.')" style="display:inline"><button type="submit" class="reset" style="padding:4px 11px;font-size:var(--fs-xs)">🔄 Reiniciar robô</button></form>
@@ -1787,7 +1788,7 @@ function paginaExpress(aviso, erro) {
 
   const vazio = (!podeExpress && !podeAgendar) ? '<div class="card"><p class="quando" style="margin:0">Você não tem acesso a estas funções.</p></div>' : '';
 
-  const corpo = `<div class="wrap">${subnavMensagens('express')}${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
+  const corpo = `<div class="wrap">${subnavMensagens('express')}${uiTopo({ titulo: 'Cadastro Express e envios agendados', sub: 'Cadastre a aluna e marque a aula experimental direto no EVO, e agende mensagens do WhatsApp para um dia e turno.' })}${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     <div style="max-width:720px;margin:0 auto">${secExpress}${secAgendar}${vazio}</div>
   </div>${scriptExpress}${podeAgendar ? ag.script : ''}`;
   return chrome({ tab: 'Express', h1: 'Express & agendamentos', p: 'Cadastro express (agenda no EVO) e agendamento de mensagens do WhatsApp — no mesmo lugar.' }, 'msg', corpo);
@@ -1972,25 +1973,25 @@ function paginaHoje(dia) {
       .pvmore .tudo{white-space:pre-wrap;word-break:break-word;margin-top:6px;padding:8px 10px;border:1px solid var(--linha);border-radius:8px;font-size:.9rem;line-height:1.45}
     </style>
     ${subnavMensagens('hoje')}
-    <div class="datesel">
-      <form method="GET" action="/hoje" class="datesel" style="margin:0">
-        <label style="margin:0">Dia:</label>
-        <input type="date" name="dia" value="${esc(d)}" max="${esc(atividade.hojeSP())}" onchange="this.form.submit()">
-        ${ehHoje ? '' : '<a href="/hoje" style="font-size:.85rem;font-weight:700;color:var(--teal)">voltar para hoje</a>'}
-      </form>
-    </div>
+    ${uiTopo({
+      titulo: 'Log de envios',
+      sub: ehHoje ? 'Tudo o que o robô enviou <b>hoje</b>, em tempo quase real (a página atualiza sozinha a cada minuto).' : `Tudo o que o robô enviou no dia <b>${esc(fmtData(d))}</b>.`,
+      linhas: [`<form method="GET" action="/hoje" class="ui-linha ui-datas"><span class="ui-lbl">Dia</span>
+        <input type="date" name="dia" value="${esc(d)}" max="${esc(atividade.hojeSP())}" onchange="this.form.submit()" aria-label="Dia">
+        ${ehHoje ? '' : '<a href="/hoje" class="ui-btn sec">Voltar para hoje</a>'}</form>`],
+    })}
     <div class="stats">
       <div class="stat tot"><div class="n">${r.total}</div><div class="l">total de envios</div></div>
       <div class="stat ok"><div class="n">${r.enviados}</div><div class="l">✅ enviados</div></div>
       <div class="stat err"><div class="n">${r.falhas}</div><div class="l">⚠️ falhas</div></div>
     </div>
+    <div class="sec-t">Por tipo de envio</div>
     <div class="card">
-      <div class="chead"><h2>Por tipo de envio</h2></div>
       ${jobs || '<div class="vazio">Nenhum envio registrado ' + (ehHoje ? 'hoje' : 'neste dia') + ' ainda.</div>'}
     </div>
     <div class="sec-t">Envios ${ehHoje ? 'de hoje' : 'do dia'} (${evs.length})</div>
     <div class="card">${lista || '<div class="vazio">Sem envios para mostrar.</div>'}</div>
-    <p class="quando" style="text-align:center">Registrado automaticamente a cada envio do robô. ${ehHoje ? 'Atualiza ao recarregar.' : ''}</p>
+    <p class="ui-rodape">Registrado automaticamente a cada envio do robô.</p>
   </div>${ehHoje ? '<script>setTimeout(function(){location.reload()},60000)</script>' : ''}`;
   return chrome({ tab: 'Log', h1: 'Log — o que o robô fez', p: ehHoje ? 'Todos os envios de <b>hoje</b>, em tempo quase real.' : `Envios do dia <b>${esc(fmtData(d))}</b>.` }, 'msg', corpo);
 }
@@ -3283,7 +3284,7 @@ function paginaSofiaContatos(aviso, erro, params) {
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('contatos')}
-    <div class="sec-t">Contatos <small style="font-weight:600;color:#5c5960">(${total} no total — importe por CSV, etiquete e filtre por tag)</small></div>
+    ${uiTopo({ titulo: 'Contatos', sub: `<b>${total}</b> contato${total === 1 ? '' : 's'} no total. Importe por CSV, etiquete com tags e filtre — é daqui que saem as campanhas e as automações.` })}
 
     <details class="card" style="padding:10px 15px">
       <summary style="cursor:pointer;font-weight:700">⬆️ Importar CSV <small style="font-weight:400;color:#5c5960">(colunas: Nome, Telefone, Instruções personalizadas, Tags)</small></summary>
@@ -3819,9 +3820,9 @@ function paginaSofiaTags(aviso, erro) {
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('tags')}
-    <div class="sec-t">Gerenciar tags <small style="font-weight:600;color:#5c5960">(criar, renomear, excluir ou automatizar)</small></div>
+    ${uiTopo({ titulo: 'Tags', sub: 'Criar, renomear, excluir ou automatizar as etiquetas dos contatos (ex.: aplicar sozinha quando a aluna agenda e avisar a recepção).', acoes: '<button type="button" class="ui-btn" onclick="criarTagNova()">＋ Criar tag</button>' })}
+    <div class="sec-t">Suas tags</div>
     <div class="card">
-      <div style="margin-bottom:12px"><button type="button" class="save" onclick="criarTagNova()" style="padding:8px 16px">＋ Criar tag</button></div>
       ${lista}
     </div>
 
@@ -4244,6 +4245,7 @@ function paginaSofiaCampanhas(aviso, erro) {
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('campanhas')}
+    ${uiTopo({ titulo: 'Campanhas', sub: 'Mensagens em massa pela SoFIA para um grupo de contatos (por tag), com variações de texto e limite por dia para não arriscar o número.' })}
     ${novo}
     <div class="sec-t">Campanhas</div>
     <div class="card" style="padding:11px 17px;margin:12px;background:var(--card);box-shadow:0 1px 2px rgba(16,24,40,.04);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -4483,6 +4485,7 @@ function paginaSofia(aviso, erro) {
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('config')}
+    ${uiTopo({ titulo: 'Configuração da SoFIA', sub: 'O WhatsApp dela, como ela conversa, o que ela sabe sobre o Studio e quando passa a conversa para a recepção.' })}
 
     <div class="sec-t">Conexão do WhatsApp da SoFIA <small style="font-weight:600;color:var(--cinza)">(número próprio, diferente do robô)</small></div>
     <div id="sofiaWa">${blocoSofiaWa()}</div>
@@ -5845,6 +5848,7 @@ function paginaPerfis(aviso, erro, view) {
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavPerfis(view)}
+    ${uiTopo({ titulo: 'Perfis e acessos', sub: view === 'acessos' ? 'Quem está logado agora e o histórico de entradas no painel. Encerre qualquer sessão por aqui.' : view === 'auditoria' ? 'Quem fez o quê no painel (salvou, excluiu, exportou…).' : 'Crie usuários, defina a senha ou o login pelo Google e escolha quais telas cada um pode ver.' })}
     ${view === 'acessos' ? secAcessos : view === 'auditoria' ? secAuditoria : secUsuarios}
   </div>`;
   return chrome({ tab: 'Perfis', h1: 'Perfis', p: 'Crie usuários e escolha quais telas cada um pode acessar.' }, 'perfis', corpo);
@@ -5875,12 +5879,10 @@ function paginaCobranca(aviso, erro) {
     .filter(Boolean).map(m => cardDeMsg(m, hmap, VOLTAR)).join('\n');
   const corpo = `<div class="wrap">
     ${subnavSofia('cobranca')}
+    ${uiTopo({ titulo: 'Cobrança', sub: `Mensagens enviadas <b>pelo número da SoFIA</b> para alunas com débito <b>vencido há ${inadConfig.lerDias()}+ dia(s)</b>. O robô lê os débitos no EVO, gera o link e a SoFIA envia. Use o botão no canto de cada cartão para ligar ou desligar.` })}
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${barraTeste()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"><input type="hidden" name="voltar" value="${esc(VOLTAR)}"></form>
-    <div class="card" style="background:#f6fbf9;border-left:4px solid var(--teal)">
-      <p class="quando" style="margin:0">Enviadas <b>pelo número da SoFIA</b> (não o da recepção), para alunas com débito <b>vencido há ${inadConfig.lerDias()}+ dia(s)</b>. O robô lê os débitos no EVO no horário abaixo, gera o link e a SoFIA envia. Use o <b>switch</b> no canto do card para ligar/desligar cada mensagem.</p>
-    </div>
     <div class="card">
       <div class="chead" style="margin:0"><h2 style="font-size:.98rem">⏱️ A partir de quantos dias de atraso cobrar?</h2></div>
       <p class="quando" style="margin:6px 0 10px">Só entra na cobrança quem está vencido há <b>este número de dias ou mais</b>. Ex.: <b>2</b> → cobra a partir de 2 dias de atraso; <b>4</b> → só a partir de 4.</p>
@@ -6422,24 +6424,18 @@ function paginaSofiaCusto(aviso, erro, params) {
   const tipoBloco = tipoRows
     ? tipoRows + `<p class="quando" style="margin:12px 0 0">A barra é a parte de cada tipo no gasto do período. As <b>Conversas</b> usam o custo real da IA. O restante (gerador, resumos, tags, follow-up) é <b>estimado</b> por tokens × preço do modelo.</p>`
     : '<div class="vazio">Sem uso de IA registrado no período.</div>';
-  const segs = janelas.map(([v, l]) => `<a href="/sofia?view=custo&per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
+  const segs = uiChips('Período', janelas.map(([v, l]) => [`/sofia?view=custo&per=${v}`, l, !custom && per === v]));
   const limite = c.limite;
   const alerta = (limite > 0 && c.hoje.usd >= limite) ? `<div class="aviso err">⚠️ O gasto de <b>hoje</b> (${brl(c.hoje.usd)} · ${usd(c.hoje.usd)}) atingiu o limite de ${usd(limite)}.</div>` : '';
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('custo')}
-    <div class="sec-t">Custo da IA <small style="font-weight:600;color:var(--cinza)">(gasto das conversas da SoFIA)</small></div>
+    ${uiTopo({
+      titulo: 'Custo da IA',
+      sub: 'Quanto a SoFIA gastou de inteligência artificial: conversas, gerador de frases, resumos, tags por intenção e follow-up.',
+      linhas: [segs, uiDatas({ action: '/sofia', de: params.de, ate: params.ate, extra: '<input type="hidden" name="view" value="custo">', limpar: custom ? '/sofia?view=custo&per=7' : '' })],
+    })}
     ${alerta}
-    <div class="segs">${segs}</div>
-    <form method="GET" action="/sofia" class="filtro-datas" style="flex-wrap:wrap">
-      <input type="hidden" name="view" value="custo">
-      <span class="filtro-lbl" style="align-self:center">Período personalizado</span>
-      <input type="date" name="de" value="${esc(params.de || '')}">
-      <span class="ate">até</span>
-      <input type="date" name="ate" value="${esc(params.ate || '')}">
-      <button class="save" type="submit" style="padding:8px 18px;font-size:.82rem">Aplicar</button>
-      ${custom ? `<a href="/sofia?view=custo&per=7" class="reset filtro-limpar" style="text-decoration:none">🧹</a>` : ''}
-    </form>
     <div class="stats">
       <div class="stat tot"><div class="n">${brl(tot.usd)}</div><div class="l">gasto · ${esc(rotulo)}</div><div class="l" style="opacity:.6;margin-top:2px">${usd(tot.usd)}</div></div>
       <div class="stat"><div class="n" style="color:var(--cinza)">${tot.convs}</div><div class="l">conversas</div></div>
@@ -6462,7 +6458,7 @@ function paginaSofiaCusto(aviso, erro, params) {
       </form>
       <p class="quando" style="margin:10px 0 0">Mostra um aviso nesta tela quando o gasto do dia atingir o valor. Deixe <b>0</b> para não alertar.</p>
     </div>
-    <p class="quando" style="text-align:center">Agora inclui <b>tudo que consome token</b>: conversas, gerador de frases, resumos, tags por intenção e follow-up. As conversas usam o custo real da IA; o restante é estimado por tokens × preço do modelo.</p>
+    <p class="ui-rodape">Inclui <b>tudo que consome token</b>: conversas, gerador de frases, resumos, tags por intenção e follow-up. As conversas usam o custo real da IA; o restante é estimado por tokens × preço do modelo.</p>
   </div>`;
   return chrome({ tab: 'Custo IA', h1: 'SoFIA', p: 'Custo da IA — gasto das conversas por período.' }, 'sofia', corpo);
 }
@@ -6611,10 +6607,8 @@ function paginaSaude(list, extra = {}) {
   ]);
 
   const corpo = `<div class="wrap">
-    <div class="sec-t">Saúde do sistema</div>
-    <p class="quando" style="margin:0 0 14px">Estado de cada parte da automação num lugar só. Atualiza a cada visita a esta página.</p>
+    ${uiTopo({ titulo: 'Saúde do sistema', sub: 'O estado de cada parte da automação num lugar só: verde funcionando, amarelo atenção, vermelho com problema.', acoes: '<a href="/saude" class="ui-btn sec">↻ Atualizar</a>' })}
     <div class="sd-grid">${cardExp}${cardSof}${cardEvo}${IG_NO_PAINEL ? cardIg : ''}${cardForm}${cardServ}${cardLid}</div>
-    <p class="quando" style="text-align:center;margin-top:14px"><a href="/saude" style="color:var(--teal-esc);font-weight:600;text-decoration:none">↻ Atualizar</a></p>
   </div>`;
   return chrome({ tab: 'Saúde', h1: 'Saúde', p: 'Estado de robô, SoFIA, painel e formulário.' }, 'saude', corpo);
 }
@@ -7068,6 +7062,7 @@ function paginaSlimClub(view, base, aviso) {
       @media(max-width:560px){.sc-dl{grid-template-columns:1fr}.sc-dl dd{margin-bottom:6px}.sc-link{flex-direction:column;align-items:flex-start}}
     </style>
     ${subtabs}
+    ${uiTopo({ titulo: 'Slim Club', sub: 'Benefícios de alunas para alunas: valide cadastros e alterações, acompanhe recomendações e reclamações e configure o clube.' })}
     ${aviso ? `<div class="aviso">${esc(aviso)}</div>` : ''}
     ${view === 'pendentes' ? links : ''}
     ${conteudo}
@@ -7194,8 +7189,7 @@ function paginaFormularios(base, aviso) {
     <p>Monte um formulário com as perguntas que quiser, divulgue o link no Instagram ou no WhatsApp e acompanhe aqui quem se interessou. Comece pelo modelo da Black Friday e ajuste o que precisar.</p>
     <div class="fm-btns" style="justify-content:center"><a class="save" href="/formularios/editar?modelo=blackfriday">Usar modelo Black Friday</a><a class="reset" href="/formularios/editar">Começar em branco</a></div></div>`;
   const corpo = `<div class="wrap">${FM_CSS}
-    <div class="fm-top"><h1>Formulários de campanha</h1>${lista.length ? `<div class="acts"><a class="reset" style="padding:9px 16px;border-radius:999px;text-decoration:none;font-weight:700;color:var(--cinza)" href="/formularios/editar?modelo=blackfriday">Modelo Black Friday</a><button type="button" class="save" onclick="location.href='/formularios/editar'">+ Novo formulário</button></div>` : ''}</div>
-    <p class="quando">Listas de interessadas para promoções e eventos. Quem responde com o mesmo WhatsApp de novo só atualiza a resposta, sem duplicar.</p>
+    ${uiTopo({ titulo: 'Formulários de campanha', sub: 'Listas de interessadas para promoções e eventos. Quem responde com o mesmo WhatsApp de novo só atualiza a resposta, sem duplicar.', acoes: lista.length ? '<a class="ui-btn sec" href="/formularios/editar?modelo=blackfriday">Modelo Black Friday</a><a class="ui-btn" href="/formularios/editar">＋ Novo formulário</a>' : '' })}
     ${aviso ? `<div class="aviso">${esc(aviso)}</div>` : ''}
     ${cards || vazio}
   </div>
@@ -7219,7 +7213,7 @@ function paginaFormularioEditar(base, f, modelo) {
   let tags = []; try { tags = contatos.tagsDistintas().map(t => t.tag).filter(Boolean); } catch (_) {}
   const tiposOpts = Object.entries(formularios.TIPOS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
   const corpo = `<div class="wrap">${FM_CSS}
-    <div class="fm-top"><h1>${novo ? 'Novo formulário' : 'Editar formulário'}</h1><div class="acts"><a href="/formularios" style="color:var(--teal-esc);font-weight:600;text-decoration:none">← Voltar para a lista</a></div></div>
+    ${uiTopo({ titulo: novo ? 'Novo formulário' : 'Editar formulário', sub: 'Monte a página, as perguntas e o que acontece com quem responde.', acoes: '<a href="/formularios" class="ui-btn sec">← Voltar para a lista</a>' })}
     ${f ? `<div class="fm-link" style="margin:8px 0"><span>Link:</span><code>${esc(fmLink(base, f))}</code><button type="button" class="reset" onclick="fmCopiar('${esc(fmLink(base, f))}',this)">Copiar link</button><a href="${esc(fmLink(base, f))}" target="_blank" rel="noopener" style="color:var(--teal-esc);font-weight:600">Abrir</a></div>` : ''}
     ${modelo && novo ? '<div class="aviso">Modelo da Black Friday carregado. Troque os textos e as perguntas como quiser e clique em <b>Salvar</b>.</div>' : ''}
     <form id="fm" onsubmit="return false">
@@ -7381,7 +7375,7 @@ function paginaFormularioRespostas(base, f) {
     </tr>`;
   }).join('');
   const corpo = `<div class="wrap" style="max-width:1080px">${FM_CSS}
-    <div class="fm-top"><h1>${esc(f.titulo)}</h1><div class="acts"><a href="/formularios" style="color:var(--teal-esc);font-weight:600;text-decoration:none">← Voltar para a lista</a></div></div>
+    ${uiTopo({ titulo: esc(f.titulo), sub: 'Quem respondeu, de onde veio e quantas pessoas abriram o link.', acoes: '<a href="/formularios" class="ui-btn sec">← Voltar para a lista</a>' })}
     ${(() => {
       const a = formularios.acessos(f.id);
       const pct = (n, d) => d ? String(Math.round(n * 1000 / d) / 10).replace('.', ',') + '%' : '—';
