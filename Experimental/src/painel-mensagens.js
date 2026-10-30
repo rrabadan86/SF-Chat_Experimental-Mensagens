@@ -2136,7 +2136,7 @@ function paginaIndicadores(dias, aviso) {
   const jan = janelas.some(([d]) => d === dias) ? dias : 7;
   const r = indicadores.resumo(jan);
 
-  const segs = janelas.map(([d, l]) => `<a href="/indicadores?dias=${d}" class="${d === jan ? 'on' : ''}">${l}</a>`).join('');
+  const segs = indChips('Período', janelas.map(([d, l]) => [`/indicadores?dias=${d}`, l, d === jan]));
 
   // Barras por dia (mais recente primeiro), escala pelo maior nº de PESSOAS.
   const maxP = Math.max(1, ...r.porDia.map(d => d.pessoas));
@@ -2336,16 +2336,20 @@ function paginaIndicadores(dias, aviso) {
 
   const corpo = `<div class="wrap">
     ${subnavIndicadores('formulario')}
-    ${aviso ? `<div class="aviso err">${esc(aviso)}</div>` : ''}
-    <div class="segs">${segs}</div>
+    ${indTopo({
+      titulo: 'Formulário de agendamento',
+      sub: 'Quem abriu o link de agendamento, quantas agendaram a aula experimental, quando acessam e de onde vieram.',
+      linhas: [segs, aviso ? `<div class="ind-nota erro">${esc(aviso)}</div>` : ''],
+    })}
     <div class="stats">
       <div class="stat tot"><div class="n">${r.pessoas}</div><div class="l">👥 pessoas</div></div>
       <div class="stat"><div class="n" style="color:var(--cinza)">${r.acessos}</div><div class="l">aberturas (acessos)</div></div>
       <div class="stat ok"><div class="n">${r.agendamentos}</div><div class="l">agendaram</div></div>
       <div class="stat"><div class="n" style="color:var(--coral-esc)">${r.conversao}%</div><div class="l">conversão (por pessoa)</div></div>
     </div>
+    <div class="ind-secoes">
+    <div class="sec-t">Funil</div>
     <div class="card">
-      <div class="chead"><h2>Funil</h2></div>
       <div class="jobrow"><div class="jn">👥 Pessoas que visitaram</div><div class="jc">${r.pessoas}</div></div>
       ${funilPessoasOrig}
       <div class="jobrow"><div class="jn">👀 Aberturas da página (acessos)</div><div class="jc">${r.acessos}</div></div>
@@ -2368,7 +2372,8 @@ function paginaIndicadores(dias, aviso) {
     </div>
     ${origemBloco}
     ${logBloco}
-    <p class="quando" style="text-align:center">Coletado do formulário a cada ~2 min. ${r.primeiroDia ? `Desde ${esc(fmtData(r.primeiroDia))}.` : 'Ainda começando a coletar.'}</p>
+    </div>
+    <p class="ind-rodape">Coletado do formulário a cada ~2 min. ${r.primeiroDia ? `Desde ${esc(fmtData(r.primeiroDia))}.` : 'Ainda começando a coletar.'}</p>
   </div>
   <style>
   .logtab{width:100%;border-collapse:collapse;font-size:var(--fs-sm,.85rem)}
@@ -2429,7 +2434,78 @@ function subnavIndicadores(view) {
   if (pode('ind')) its += `<a href="/indicadores"${view === 'formulario' ? ' class="on"' : ''}>Formulário</a>`;
   if (pode('professoras')) its += `<a href="/professoras"${view === 'professoras' ? ' class="on"' : ''}>Professoras</a>`;
   if (pode('grade')) its += `<a href="/grade"${view === 'grade' ? ' class="on"' : ''}>Grade</a>`;
-  return its ? `<div class="subtabs">${its}</div>` : '';
+  return IND_CSS + (its ? `<div class="subtabs">${its}</div>` : '');
+}
+
+// ── Indicadores: peças de layout comuns às 4 subabas ─────────────────────────
+// Todas seguem a mesma ordem: subabas → cartão de topo (título, ações, período,
+// filtros) → números (.stats) → seções recolhíveis (.sec-t) → nota de rodapé.
+const IND_CSS = `<style>
+  .wrap{max-width:1080px}
+  .ind-topo{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:16px 18px;margin:4px 0 14px;box-shadow:0 1px 3px rgba(0,0,0,.05);display:flex;flex-direction:column;gap:12px}
+  .ind-tt{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+  .ind-tt h2{margin:0;font-size:1.08rem;font-weight:800;color:var(--tinta)}
+  .ind-tt p{margin:3px 0 0;color:var(--cinza);font-size:var(--fs-sm);max-width:75ch;line-height:1.45}
+  .ind-acoes{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .ind-linha{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}
+  .ind-lbl{font-size:var(--fs-xs);font-weight:700;color:var(--cinza);text-transform:uppercase;letter-spacing:.05em;min-width:62px}
+  .ind-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .ind-chip{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border:1px solid var(--linha);border-radius:999px;background:var(--card);color:var(--tinta);font-weight:600;font-size:var(--fs-sm);text-decoration:none;white-space:nowrap}
+  .ind-chip:hover{border-color:var(--teal);color:var(--teal-esc)}
+  .ind-chip.on{background:var(--teal);border-color:var(--teal);color:#fff}
+  .ind-chip .ct{opacity:.7;font-variant-numeric:tabular-nums}
+  .ind-datas{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0}
+  .ind-datas input[type=date]{width:150px;flex:none;padding:6px 9px;border:1px solid var(--linha);border-radius:8px;font:inherit;font-size:var(--fs-sm);background:var(--card);color:var(--tinta)}
+  .ind-datas .ate{color:var(--cinza);font-size:var(--fs-sm)}
+  .ind-btn{border:1px solid var(--teal);background:var(--teal);color:#fff;border-radius:9px;padding:6px 14px;font:inherit;font-weight:700;font-size:var(--fs-sm);cursor:pointer;text-decoration:none;white-space:nowrap}
+  .ind-btn.sec{background:var(--card);color:var(--teal-esc)}
+  .ind-btn:hover{filter:brightness(1.06)}
+  .ind-btn:disabled{opacity:.5;cursor:default}
+  .ind-nota{background:var(--avi-bg);border:1px solid var(--avi-bd);color:var(--avi-tx);border-radius:10px;padding:9px 12px;font-size:var(--fs-sm);display:flex;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;align-items:center}
+  .ind-nota.erro{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
+  .ind-rodape{text-align:center;color:var(--cinza);font-size:var(--fs-xs);line-height:1.55;max-width:85ch;margin:16px auto 6px}
+  /* Linha de pessoa (Funil e Professoras) */
+  .ip-lista{display:flex;flex-direction:column}
+  .ip-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 14px;padding:11px 6px;border-bottom:1px solid var(--linha-soft);align-items:center}
+  .ip-row:last-child{border-bottom:0}
+  .ip-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+  .ip-nome{font-weight:700;color:var(--tinta);text-decoration:none;font-size:.9rem}
+  a.ip-nome:hover{color:var(--teal-esc);text-decoration:underline}
+  .ip-pill{display:inline-block;font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px;border:1px solid;white-space:nowrap}
+  .ip-fechou{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-bd)}
+  .ip-fez,.ip-veio{background:var(--teal-soft);color:var(--teal-esc);border-color:var(--avi-bd)}
+  .ip-faltou{background:var(--erro-bg);color:var(--erro);border-color:var(--erro-bd)}
+  .ip-aguardando,.ip-agendada{background:var(--linha-soft);color:var(--cinza);border-color:var(--linha)}
+  .ip-meta{grid-column:1;grid-row:2;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.78rem;color:var(--cinza)}
+  .ip-meta b{color:var(--tinta);font-weight:600}
+  .ip-acao{grid-column:2;grid-row:1 / span 2;display:flex;gap:6px}
+  .ip-evo{font-size:.75rem;font-weight:700;color:var(--teal-esc);border:1px solid var(--linha);border-radius:8px;padding:4px 10px;text-decoration:none;white-space:nowrap;background:var(--card)}
+  .ip-evo:hover{border-color:var(--teal)}
+  @media(max-width:600px){.ind-topo{padding:14px}.ip-row{grid-template-columns:1fr}.ip-meta{grid-row:auto}.ip-acao{grid-column:1;grid-row:auto}.ind-lbl{min-width:0;width:100%}}
+</style>`;
+// Cartão de topo. linhas: HTML de cada linha (período, canal, datas…), vazias são puladas.
+function indTopo({ titulo, sub, acoes, linhas }) {
+  return `<div class="ind-topo"><div class="ind-tt"><div><h2>${titulo}</h2>${sub ? `<p>${sub}</p>` : ''}</div>${acoes ? `<div class="ind-acoes">${acoes}</div>` : ''}</div>`
+    + (linhas || []).filter(Boolean).join('') + `</div>`;
+}
+// Linha rotulada de botões-pílula: itens = [[href, rótulo, ativo, contagem?], …]
+function indChips(rotulo, itens) {
+  return `<div class="ind-linha">${rotulo ? `<span class="ind-lbl">${rotulo}</span>` : ''}<div class="ind-chips">${itens.map(([href, rot, on, n]) => `<a href="${href}" class="ind-chip${on ? ' on' : ''}">${rot}${n != null ? ` <span class="ct">${n}</span>` : ''}</a>`).join('')}</div></div>`;
+}
+// Período personalizado (de/até). extra: inputs hidden; limpar: href para tirar o filtro.
+function indDatas({ action, de, ate, extra, limpar }) {
+  return `<form method="GET" action="${action}" class="ind-linha ind-datas"><span class="ind-lbl">Datas</span>${extra || ''}
+      <input type="date" name="de" value="${esc(de || '')}" aria-label="De"><span class="ate">até</span><input type="date" name="ate" value="${esc(ate || '')}" aria-label="Até">
+      <button class="ind-btn" type="submit">Aplicar</button>${limpar ? `<a href="${limpar}" class="ind-btn sec">Limpar</a>` : ''}</form>`;
+}
+// Uma pessoa numa lista: nome (link p/ Contatos), situação, detalhes e o link do EVO.
+const IP_SIT = { fechou: '💰 Fechou contrato', fez: '✅ Fez a aula', veio: '✅ Veio', faltou: '❌ Faltou', aguardando: '⏳ Aguardando', agendada: '⏳ Agendada' };
+function indPessoa({ nome, href, sit, meta, evo, attrs }) {
+  return `<div class="ip-row"${attrs || ''}>
+      <div class="ip-top">${href ? `<a class="ip-nome" href="${esc(href)}" title="Abrir em Contatos">${esc(nome)}</a>` : `<span class="ip-nome">${esc(nome)}</span>`}${sit ? `<span class="ip-pill ip-${sit}">${IP_SIT[sit] || esc(sit)}</span>` : ''}</div>
+      ${(meta || []).filter(Boolean).length ? `<div class="ip-meta">${meta.filter(Boolean).map(m => `<span>${m}</span>`).join('')}</div>` : ''}
+      ${evo ? `<div class="ip-acao"><a class="ip-evo" href="${esc(evo)}" target="_blank" rel="noopener">EVO ↗</a></div>` : ''}
+    </div>`;
 }
 function subnavSofia(view) {
   const item = (v, rot) => `<a href="/sofia${v === 'config' ? '' : '?view=' + v}"${view === v ? ' class="on"' : ''}>${rot}</a>`;
@@ -5312,16 +5388,12 @@ function paginaGrade(off) {
     .gr-trc{font-size:.66rem;font-weight:700;color:var(--cinza)}
     @media(max-width:760px){ .gr-desk{display:none} .gr-mob{display:block} }
     </style>
-    <div class="gr-top">
-      <div>
-        <div class="sec-t" style="margin:0" data-nosec>📋 Grade de Matrículas Fixas</div>
-        <p class="quando" style="margin:3px 0 0;max-width:740px">Visão da <b>semana</b>. O selo é a <b>vaga de matrícula</b> (fixas, contadas mesmo faltando). A "<b>presença</b>" é a ocupação <b>real</b> da aula (quem ocupou a vaga: fixas presentes + reposição/FREE) — <b>falta</b>, <b>falta justificada</b> e <b>trancado</b> liberam a vaga e não contam (por isso nunca passa da capacidade). Clique numa turma para ver os nomes: <b>✓ foi</b> · <b>✗ faltou</b> · <b>⚠ falta justificada</b> · <b>🔒 trancada</b>. O <b>sábado</b> não entra na taxa de ocupação (<b>escala</b>).</p>
-      </div>
-      <div class="gr-btns">
-        <button id="btnAt" class="save" onclick="atualizar('/grade/atualizar')"${g ? ' disabled' : ''} title="Atualiza a grade da semana vista (presença/ocupação) reaproveitando o TKM/faturamento da última geração completa. Rápido — poucas chamadas ao EVO.">${g ? '⏳ gerando…' : '🔄 Atualizar grade'}</button>
-        <button id="btnAtTudo" class="gr-btn2" onclick="atualizar('/grade/atualizar-tudo')"${g ? ' disabled' : ''} title="Recalcula também o TKM e o faturamento lendo o contrato de cada aluna no EVO. Mais demorado (vários minutos).">💰 Atualizar tudo</button>
-      </div>
-    </div>
+    ${indTopo({
+      titulo: 'Grade de matrículas fixas',
+      sub: 'Visão da <b>semana</b>. O selo é a <b>vaga de matrícula</b> (fixas, contadas mesmo faltando); a <b>presença</b> é a ocupação real da aula (fixas presentes + reposição/FREE — falta, falta justificada e trancado liberam a vaga). Clique numa turma para ver os nomes: <b>✓ foi</b> · <b>✗ faltou</b> · <b>⚠ falta justificada</b> · <b>🔒 trancada</b>. O <b>sábado</b> não entra na taxa de ocupação (escala).',
+      acoes: `<button id="btnAt" class="ind-btn" onclick="atualizar('/grade/atualizar')"${g ? ' disabled' : ''} title="Atualiza a grade da semana vista (presença/ocupação) reaproveitando o TKM/faturamento da última geração completa. Rápido — poucas chamadas ao EVO.">${g ? '⏳ gerando…' : '🔄 Atualizar grade'}</button>
+        <button id="btnAtTudo" class="ind-btn sec" onclick="atualizar('/grade/atualizar-tudo')"${g ? ' disabled' : ''} title="Recalcula também o TKM e o faturamento lendo o contrato de cada aluna no EVO. Mais demorado (vários minutos).">💰 Atualizar tudo</button>`,
+    })}
     <div id="aviso" class="aviso" style="display:${g ? 'block' : 'none'}">⏳ Gerando a grade a partir do EVO… pode levar alguns minutos. A página recarrega sozinha ao terminar.</div>
     ${corpo}
     <script>
@@ -5935,6 +6007,15 @@ function paginaSofiaFunil(params) {
     if (tFaltou && tags.includes(tFaltou)) return 'faltou';
     return 'aguardando';
   };
+  // Aula de cada agendamento: dia/hora que ela marcou (gravado no agendamento) e a
+  // experimental no EVO (professora, presença, contrato) — casada pelo nome.
+  let aulaMap = {}; try { const m = fuLerJson(FU_AGENDOU_AULA_FILE, {}); if (m && typeof m === 'object' && !Array.isArray(m)) aulaMap = m; } catch (_) {}
+  let idxExp = new Map(); try { idxExp = histExp.indicePorNome(); } catch (_) {}
+  for (const d of detAg) {
+    const am = aulaMap[last8(d.tel)];
+    if (am && am.when && Math.abs((am.em || 0) - d.em) < 3 * 86400000) d.when = am.when;
+    try { d.exp = histExp.acharAula(idxExp, d.nome, diaDe(d.em)); } catch (_) {}
+  }
   let fez = 0, fechou = 0, faltou = 0, aguardando = 0;
   for (const d of detAg) {
     d.sit = situacaoDe(d);
@@ -5964,9 +6045,9 @@ function paginaSofiaFunil(params) {
   const barra = (rot, n, max, cor, filtro, extra) => `<div style="display:flex;align-items:center;gap:10px;margin:9px 0${filtro ? ';cursor:pointer' : ''}" class="fu-row${filtro ? ` fu-bar fu-pop-alvo" data-filtro="${filtro}" onclick="fuFiltrar('${filtro}')` : ''}"><span class="fu-rot" style="width:150px;flex:none;color:var(--tinta);font-weight:600;font-size:.86rem">${rot}</span>${barraTrilho(n, max, cor, extra)}<span style="width:44px;flex:none;text-align:right;font-weight:700;color:var(--tinta)">${n}</span></div>`;
   const qCanal = canalSel === 'todos' ? '' : `&canal=${canalSel}`;
   const qPer = custom ? `&de=${encodeURIComponent(params.de || '')}&ate=${encodeURIComponent(params.ate || '')}` : `&per=${per}`;
-  const segs = janelas.map(([v, l]) => `<a href="/funil?per=${v}${qCanal}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
+  const segs = indChips('Período', janelas.map(([v, l]) => [`/funil?per=${v}${qCanal}`, l, !custom && per === v]));
   const CANAIS_ROT = [['todos', 'Todos', todosAg.length], ['sofia', '🤖 SoFIA', porCanal.sofia], ['formulario', '📲 Formulário', porCanal.formulario], ['express', '🏪 Express', porCanal.express]];
-  const segsCanal = CANAIS_ROT.map(([v, l, n]) => `<a href="/funil?${qPer.slice(1)}${v === 'todos' ? '' : '&canal=' + v}" class="${canalSel === v ? 'on' : ''}">${l} <span style="opacity:.75">(${n})</span></a>`).join('');
+  const segsCanal = indChips('Canal', CANAIS_ROT.map(([v, l, n]) => [`/funil?${qPer.slice(1)}${v === 'todos' ? '' : '&canal=' + v}`, l, canalSel === v, n]));
   const rotSel = { todos: 'todos os canais', sofia: 'SoFIA', formulario: 'Formulário', express: 'Cadastro Express' }[canalSel];
   // Link para a subaba Formulário (detalhes), no mesmo período quando dá.
   const sessF = _navSess || { admin: true, telas: [] };
@@ -5975,25 +6056,42 @@ function paginaSofiaFunil(params) {
   // Lista de quem agendou no período (com canal) + os Express que ficaram de fora —
   // ajuda a conferir quem contou e por quê.
   const fmtDtCurta = (ms) => { try { return new Date(Number(ms)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
-  const linhaDet = (d) => `<div${d.sit ? ` data-sit="${d.sit}"` : ''} style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--linha-soft);font-size:.82rem;flex-wrap:wrap"><span style="font-weight:600;color:var(--tinta)">${d.tel ? `<a href="${esc(linkContato(d.tel))}" title="Abrir em Contatos" style="color:inherit">${esc(d.nome)}</a>` : esc(d.nome)}${d.sit ? ` <span style="font-weight:700;font-size:.74rem;color:${SIT[d.sit][1]}">${SIT[d.sit][0]}</span>` : ''}</span><span class="quando" style="white-space:nowrap">${d.evo ? `<a href="${esc(d.evo)}" target="_blank" rel="noopener" style="color:var(--teal-esc);font-weight:700;margin-right:8px">abrir no EVO ↗</a>` : ''}${rotCanal(d.canal)} · ${esc(fmtDtCurta(d.em))}</span></div>`;
-  const detalheHtml = detAg.length ? `<details class="card" id="fuDet" style="padding:10px 15px;margin-top:10px"><summary style="cursor:pointer;font-weight:700">🔎 Quem agendou no período (${detAg.length})${canalSel === 'todos' ? '' : ' · ' + rotSel}</summary>`
-    + `<div id="fuFiltroInfo" class="aviso" style="margin:8px 0 0;display:none"></div>`
-    + (detAg.length ? `<div style="margin-top:8px">${detAg.sort((a, b) => b.em - a.em).map(linhaDet).join('')}</div>` : '<p class="quando" style="margin:8px 0 0">Ninguém agendou neste período.</p>')
-    + `</details>` : '';
+  const DS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  // "2026-10-31 07:00" / "31/10/2026 07:00" → "sex 31/10 às 07:00" (outro formato: como veio).
+  const fmtWhen = (w) => {
+    const t = String(w || '').trim();
+    let m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})/.exec(t), y, mo, da, hh, mi;
+    if (m) [, y, mo, da, hh, mi] = m;
+    else if ((m = /^(\d{2})\/(\d{2})\/(\d{4})\D+(\d{1,2})[:h](\d{2})/.exec(t))) [, da, mo, y, hh, mi] = m;
+    else return esc(t);
+    const dw = new Date(`${y}-${mo}-${da}T12:00:00`).getDay();
+    return `${DS[dw] || ''} ${da}/${mo} às ${String(hh).padStart(2, '0')}:${mi}`;
+  };
+  const fmtAulaExp = (a) => { const dw = new Date(a.dia + 'T12:00:00').getDay(); const p = a.dia.split('-'); return `${DS[dw]} ${p[2]}/${p[1]}${a.hora ? ' às ' + esc(a.hora) : ''}`; };
+  const linhaDet = (d) => {
+    const ex = d.exp;
+    const aula = d.when ? fmtWhen(d.when) : (ex ? fmtAulaExp(ex) : '');
+    return indPessoa({
+      nome: d.nome, href: d.tel ? linkContato(d.tel) : '', sit: d.sit, evo: d.evo,
+      attrs: d.sit ? ` data-sit="${d.sit}"` : '',
+      meta: [
+        `📅 Agendou <b>${esc(fmtDtCurta(d.em))}</b>`,
+        rotCanal(d.canal),
+        aula ? `🏋️ Aula <b>${aula}</b>` : '',
+        ex && ex.prof ? `👩‍🏫 <b>${esc(ex.prof)}</b>` : '',
+        d.sit === 'fechou' && ex && ex.contrato ? `📄 ${esc(ex.contrato)}` : '',
+      ],
+    });
+  };
+  const detalheHtml = detAg.length ? `<div class="sec-t">Quem agendou no período <small style="font-weight:600;color:var(--cinza)">(${detAg.length}${canalSel === 'todos' ? '' : ' · ' + rotSel})</small></div>
+    <div class="card" id="fuDet"><div id="fuFiltroInfo" class="ind-nota" style="margin:0 0 6px;display:none"></div><div class="ip-lista">${detAg.sort((a, b) => b.em - a.em).map(linhaDet).join('')}</div></div>` : '';
   const corpo = `<div class="wrap">
     ${subnavIndicadores('funil')}
-    <div class="sec-t">Funil de agendamentos <small style="font-weight:600;color:var(--cinza)">(SoFIA, Formulário e Cadastro Express)</small></div>
-    <div class="segs">${segs}</div>
-    <div class="segs" style="margin-top:6px">${segsCanal}</div>
-    <form method="GET" action="/funil" class="filtro-datas" style="flex-wrap:wrap">
-      ${canalSel === 'todos' ? '' : `<input type="hidden" name="canal" value="${canalSel}">`}
-      <span class="filtro-lbl" style="align-self:center">Período personalizado</span>
-      <input type="date" name="de" value="${esc(params.de || '')}">
-      <span class="ate">até</span>
-      <input type="date" name="ate" value="${esc(params.ate || '')}">
-      <button class="save" type="submit" style="padding:8px 18px;font-size:.82rem">Aplicar</button>
-      ${custom ? `<a href="/funil?per=7${qCanal}" class="reset filtro-limpar" style="text-decoration:none">🧹</a>` : ''}
-    </form>
+    ${indTopo({
+      titulo: 'Funil de agendamentos',
+      sub: 'Quem agendou a aula experimental pela SoFIA, pelo Formulário ou pelo Cadastro Express — e quantas fizeram a aula e fecharam contrato.',
+      linhas: [segs, segsCanal, indDatas({ action: '/funil', de: params.de, ate: params.ate, extra: canalSel === 'todos' ? '' : `<input type="hidden" name="canal" value="${canalSel}">`, limpar: custom ? `/funil?per=7${qCanal}` : '' })],
+    })}
     <div class="stats">
       ${topo ? `<div class="stat tot"><div class="n">${topo.n}</div><div class="l">${topo.stat} · ${esc(rotulo)}</div></div>
       <div class="stat ok"><div class="n">${agend}</div><div class="l">agendaram · <b style="color:var(--coral-esc)">${String(conv).replace('.', ',')}%</b> ${topo.de}</div></div>`
@@ -6001,6 +6099,7 @@ function paginaSofiaFunil(params) {
       <div class="stat"><div class="n" style="color:var(--teal-esc)">${fez}</div><div class="l">fizeram a aula · ${pct(fez, agend)} das agendadas</div></div>
       <div class="stat ok"><div class="n">${fechou}</div><div class="l">fecharam contrato · ${pct(fechou, fez)} de quem fez</div></div>
     </div>
+    <div class="ind-secoes">
     <div class="sec-t">Funil</div>
     <div class="card">
       ${topo
@@ -6010,9 +6109,10 @@ function paginaSofiaFunil(params) {
           : `<div class="vazio">Ninguém agendou ${canalSel === 'todos' ? '' : 'pelo ' + rotSel + ' '}neste período.</div>`)}
       ${agend ? `<p class="quando" style="margin:10px 0 0">Das <b>${agend}</b> que agendaram: ${fuNum(fez, 'fez')} fizeram a aula (${fuNum(fechou, 'fechou')} já ${fechou === 1 ? 'fechou' : 'fecharam'} contrato), ${fuNum(faltou, 'faltou')} ${faltou === 1 ? 'faltou' : 'faltaram'} e ${fuNum(aguardando, 'aguardando')} ainda ${aguardando === 1 ? 'aguarda' : 'aguardam'} — aula futura ou presença ainda não lida no EVO. <span style="color:var(--faint)">Passe o mouse nas barras para ver os nomes; clique para filtrar a lista.</span></p>` : ''}
       ${(!compCfg.on || !atCfg.on) ? `<p class="quando" style="margin:8px 0 0;color:var(--warn)">⚠️ ${!compCfg.on ? '“Presença da experimental” está desligada (SoFIA → Tags) — sem ela, ninguém sai de “aguardando”. ' : ''}${!atCfg.on ? '“Alunas / Ex-alunas automáticas” está desligado (SoFIA → Tags) — sem ele, o fechamento de contrato não aparece.' : ''}</p>` : ''}
+      ${canalSel === 'formulario' && podeVerInd ? `<p style="margin:12px 0 0;text-align:right"><a href="/indicadores?dias=${diasInd}" class="ind-btn sec" style="display:inline-block">Ver detalhes do formulário (por dia, horários de pico, origens e links) →</a></p>` : ''}
     </div>
-    ${canalSel === 'formulario' && podeVerInd ? `<p style="margin:10px 0 0;text-align:right"><a href="/indicadores?dias=${diasInd}" style="color:var(--teal-esc);font-weight:700;font-size:.86rem">Ver detalhes do formulário (por dia, horários de pico, origens e links) →</a></p>` : ''}
     ${detalheHtml}
+    </div>
     <style>
       #fuPop{position:absolute;z-index:80;display:none;min-width:240px;max-width:360px;max-height:320px;overflow:auto;background:var(--card);border:1px solid var(--linha);border-radius:12px;box-shadow:0 12px 32px -10px rgba(16,24,40,.35);padding:10px 12px;font-size:.84rem}
       #fuPop .t{font-weight:800;margin:0 0 6px;color:var(--tinta)}
@@ -6047,17 +6147,17 @@ function paginaSofiaFunil(params) {
     })();
     function fuFiltrar(f){
       var det=document.getElementById('fuDet'); if(!det) return;
-      det.open=true;
+      var acc=det.closest('details'); if(acc) acc.open=true;
       var ok={agendou:function(){return true},fez:function(s){return s==='fez'||s==='fechou'},fechou:function(s){return s==='fechou'},faltou:function(s){return s==='faltou'},aguardando:function(s){return s==='aguardando'}}[f]||function(){return true};
       var n=0; [].forEach.call(det.querySelectorAll('[data-sit]'),function(r){ var v=!f||ok(r.getAttribute('data-sit')); r.style.display=v?'':'none'; if(v) n++; });
       var exp=document.getElementById('fuExp'); if(exp) exp.style.display=(f&&f!=='agendou')?'none':'';
       var info=document.getElementById('fuFiltroInfo');
       if(f&&f!=='agendou'){ info.style.display='block'; info.innerHTML='Mostrando: <b>'+FU_ROT[f]+'</b> ('+n+') · <a href="#" onclick="fuFiltrar(\\'\\');return false" style="color:inherit;font-weight:700">mostrar todas</a>'; }
       else info.style.display='none';
-      det.scrollIntoView({behavior:'smooth',block:'start'});
+      (acc||det).scrollIntoView({behavior:'smooth',block:'start'});
     }
     </script>
-    <p class="quando" style="text-align:center">Conta quem agendou <b>dentro do período</b> (pela data do agendamento), por canal: <b>SoFIA</b> (conversa no WhatsApp), <b>Formulário</b> (link de agendamento) e <b>Cadastro Express</b> (feito pela recepção). No filtro SoFIA, a base são as <b>conversas reais</b> (a pessoa escreveu); no Formulário, as <b>pessoas que abriram o link</b> de agendamento. <b>Fez a aula</b> vem da “Presença da experimental” (lê o EVO e troca a tag) e <b>fechou contrato</b> = ganhou a tag <b>${esc(tAluna)}</b> (aluna com contrato ativo no EVO).</p>
+    <p class="ind-rodape">Conta quem agendou <b>dentro do período</b> (pela data do agendamento), por canal: <b>SoFIA</b> (conversa no WhatsApp), <b>Formulário</b> (link de agendamento) e <b>Cadastro Express</b> (feito pela recepção). No filtro SoFIA, a base são as <b>conversas reais</b> (a pessoa escreveu); no Formulário, as <b>pessoas que abriram o link</b> de agendamento. <b>Fez a aula</b> vem da “Presença da experimental” (lê o EVO e troca a tag) e <b>fechou contrato</b> = ganhou a tag <b>${esc(tAluna)}</b> (aluna com contrato ativo no EVO).</p>
   </div>`;
   return chrome({ tab: 'Funil' }, 'funil', corpo);
 }
@@ -6082,11 +6182,33 @@ function paginaProfessoras(params) {
   else rotulo = 'todo o histórico';
   const dentro = (dia) => dia && (!iniD || dia >= iniD) && (!fimD || dia <= fimD);
 
-  // Quem já é aluna no CRM (tag de aluna), pelo nome — pega quem fechou depois
-  // que a linha da experimental saiu da janela relida no EVO.
+  // Cada aluna do EVO ↔ contato do CRM (pelo nome inteiro; ou 1º + último nome se
+  // for uma pessoa só). Do contato vêm: a tag de aluna (fechou depois que a linha
+  // saiu da janela relida no EVO), o link de Contatos e quando/onde agendou.
   let tAluna = '0. Aluna'; try { tAluna = String(autoTagAlunas.ler().tagAluna || tAluna).trim(); } catch (_) {}
-  const alunasNome = new Set();
-  try { const cs = contatos.carregar() || {}; for (const t in cs) { const c = cs[t]; if (c && c.nome && (c.tags || []).includes(tAluna)) alunasNome.add(histExp.norm(c.nome)); } } catch (_) {}
+  let cs = {}; try { cs = contatos.carregar() || {}; } catch (_) {}
+  const porNome = new Map();
+  for (const t in cs) { const c = cs[t]; if (!c || !c.nome) continue; histExp.chavesNome(c.nome).forEach((k, i) => { const kk = (i ? '~' : '=') + k; (porNome.get(kk) || porNome.set(kk, new Set()).get(kk)).add(t); }); }
+  const acharContato = (nome) => {
+    const ks = histExp.chavesNome(nome);
+    let set = ks.length ? porNome.get('=' + ks[0]) : null;
+    if (!set && ks[1]) set = porNome.get('~' + ks[1]);
+    if (!set || set.size !== 1) return null;
+    const tel = [...set][0];
+    return { tel, c: cs[tel] };
+  };
+  let tagLogMap = {}; try { tagLogMap = sofia.lerTagLog() || {}; } catch (_) {}
+  let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => String(a.tag || '').trim()); } catch (_) {}
+  // Último agendamento (tag de "agendou") ANTES ou no dia da aula → { em, canal }.
+  const agendouAntes = (tel, dia) => {
+    let ult = null;
+    for (const e of (tagLogMap[String(tel).replace(/\D/g, '').slice(-8)] || [])) {
+      if (e.acao !== 'add' || !(e.motivo === 'agendou' || agTags.includes(String(e.tag || '').trim())) || !e.em) continue;
+      const d = new Date(e.em).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+      if (d <= dia && (!ult || e.em > ult.em)) ult = { em: e.em, canal: e.canal };
+    }
+    return ult;
+  };
 
   const SEM = '— sem professora';
   const profs = {}, horas = {};
@@ -6095,11 +6217,12 @@ function paginaProfessoras(params) {
     if (!dentro(a.dia)) continue;
     const sit = histExp.situacao(a.status);
     if (sit === 'cancelada') continue;
-    const fechou = sit === 'veio' && (!!a.contrato || alunasNome.has(histExp.norm(a.nome)));
+    const ct = acharContato(a.nome);
+    const fechou = sit === 'veio' && (!!a.contrato || !!(ct && ct.c && (ct.c.tags || []).includes(tAluna)));
     const p = a.prof || SEM;
     const r = profs[p] || (profs[p] = { prof: p, exp: 0, veio: 0, faltou: 0, agendada: 0, fechou: 0, alunas: [] });
     r.exp++; r[sit]++; if (fechou) r.fechou++;
-    r.alunas.push({ nome: a.nome, dia: a.dia, hora: a.hora, sit: fechou ? 'fechou' : sit, contrato: a.contrato });
+    r.alunas.push({ nome: a.nome, dia: a.dia, hora: a.hora, sit: fechou ? 'fechou' : sit, contrato: a.contrato, tel: ct ? ct.tel : '', idEvo: ct && ct.c ? ct.c.idEvo : '' });
     tot.exp++; tot[sit]++; if (fechou) tot.fechou++;
     if (sit === 'veio' && a.hora) {
       const hr = horas[a.hora] || (horas[a.hora] = { hora: a.hora, veio: 0, fechou: 0, profs: {} });
@@ -6111,102 +6234,126 @@ function paginaProfessoras(params) {
   const fmtPct = (v) => v == null ? '—' : String(v).replace('.', ',').replace(/,0$/, '') + '%';
   const lista = Object.values(profs).sort((a, b) => (b.veio >= POUCAS) - (a.veio >= POUCAS) || (taxa(b.fechou, b.veio) || 0) - (taxa(a.fechou, a.veio) || 0) || b.veio - a.veio);
   const fmtDia = (d) => { const p = String(d).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : d; };
-  const SIT = { fechou: ['💰 fechou', 'var(--ok)'], veio: ['✅ veio', 'var(--teal-esc)'], faltou: ['❌ faltou', 'var(--erro)'], agendada: ['⏳ agendada', 'var(--cinza)'] };
+  const DS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  const fmtAula = (x) => `${DS[new Date(x.dia + 'T12:00:00').getDay()]} ${fmtDia(x.dia)}${x.hora ? ' às ' + esc(x.hora) : ''}`;
+  const fmtDtCurta = (ms) => { try { return new Date(Number(ms)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+  const ROT_CANAL = { sofia: '🤖 SoFIA', formulario: '📲 Formulário', express: '🏪 Express' };
+  const EVO_LINK = (process.env.EVO_LINK_URL || 'https://evo5.w12app.com.br').replace(/\/+$/, '');
   const ordemSit = { fechou: 0, veio: 1, faltou: 2, agendada: 3 };
 
   const barraConv = (r) => {
     const v = taxa(r.fechou, r.veio), w = v == null ? 0 : Math.max(v > 0 ? 3 : 0, Math.round(v));
     const poucas = r.veio < POUCAS;
-    const cor = poucas ? 'var(--cinza)' : 'var(--ok)';
     const dentroB = w >= 14;
-    return `<span style="flex:1;height:26px;background:var(--linha-soft);border-radius:8px;overflow:hidden;position:relative;min-width:120px"><span style="display:block;height:100%;width:${w}%;background:${cor};opacity:${poucas ? '.55' : '1'}"></span>${v == null ? '' : `<span style="position:absolute;top:0;bottom:0;display:flex;align-items:center;font-size:.78rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;${dentroB ? 'left:10px;color:#fff' : `left:calc(${w}% + 8px);color:var(--cinza)`}">${fmtPct(v)}</span>`}</span>`;
+    return `<span class="pf-bar"><span style="width:${w}%;background:${poucas ? 'var(--faint)' : 'var(--ok)'}"></span>${v == null ? '' : `<em style="${dentroB ? 'left:10px;color:#fff' : `left:calc(${w}% + 8px);color:var(--cinza)`}">${fmtPct(v)}</em>`}</span>`;
+  };
+  const linhaAluna = (x) => {
+    const ag = x.tel ? agendouAntes(x.tel, x.dia) : null;
+    return indPessoa({
+      nome: x.nome, sit: x.sit,
+      href: x.tel ? '/sofia?view=contatos&q=' + String(x.tel).replace(/\D/g, '').slice(-8) : '/sofia?view=contatos&q=' + encodeURIComponent(x.nome),
+      evo: x.idEvo ? `${EVO_LINK}/${config.evo.appBase}/clientes/cadastro/${x.idEvo}//perfil` : '',
+      meta: [
+        ag ? `📅 Agendou <b>${esc(fmtDtCurta(ag.em))}</b>` : '',
+        ag && ROT_CANAL[ag.canal] ? ROT_CANAL[ag.canal] : '',
+        `🏋️ Aula <b>${fmtAula(x)}</b>`,
+        x.contrato ? `📄 ${esc(x.contrato)}` : '',
+      ],
+    });
   };
   const linhaProf = (r) => {
     const poucas = r.veio < POUCAS;
-    const alunas = r.alunas.sort((a, b) => ordemSit[a.sit] - ordemSit[b.sit] || b.dia.localeCompare(a.dia))
-      .map(x => `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--linha-soft);font-size:.82rem;flex-wrap:wrap"><span><a href="/sofia?view=contatos&q=${encodeURIComponent(x.nome)}" title="Procurar em Contatos" style="color:var(--tinta);font-weight:600">${esc(x.nome)}</a> <span style="font-weight:700;font-size:.74rem;color:${SIT[x.sit][1]}">${SIT[x.sit][0]}</span>${x.contrato ? ` <span class="quando">· ${esc(x.contrato)}</span>` : ''}</span><span class="quando" style="white-space:nowrap">${esc(fmtDia(x.dia))}${x.hora ? ' · ' + esc(x.hora) : ''}</span></div>`).join('');
+    const alunas = r.alunas.sort((a, b) => ordemSit[a.sit] - ordemSit[b.sit] || b.dia.localeCompare(a.dia)).map(linhaAluna).join('');
     return `<details class="pf-item">
       <summary class="pf-row">
-        <span class="pf-nome">${esc(r.prof)}${poucas ? ' <span class="pf-poucas">poucas aulas</span>' : ''}</span>
+        <span class="pf-nome"><span class="pf-seta">▸</span>${esc(r.prof)}${poucas ? ' <span class="pf-poucas">poucas aulas</span>' : ''}</span>
         ${barraConv(r)}
-        <span class="pf-nums"><b>${r.fechou}</b>/<b>${r.veio}</b> <span class="quando">fecharam/vieram</span></span>
+        <span class="pf-nums"><b>${r.fechou}</b> de <b>${r.veio}</b> <span>fecharam</span></span>
       </summary>
       <div class="pf-det">
-        <div class="quando" style="margin:2px 0 6px">${r.exp} experimenta${r.exp === 1 ? 'l' : 'is'} · ${r.veio} vieram · ${r.faltou} faltaram${r.agendada ? ` · ${r.agendada} ainda agendada${r.agendada === 1 ? '' : 's'}` : ''} · presença ${fmtPct(taxa(r.veio, r.veio + r.faltou))}</div>
-        ${alunas}
+        <div class="pf-resumo"><span>📋 <b>${r.exp}</b> experimenta${r.exp === 1 ? 'l' : 'is'}</span><span>✅ <b>${r.veio}</b> vieram</span><span>❌ <b>${r.faltou}</b> faltaram</span>${r.agendada ? `<span>⏳ <b>${r.agendada}</b> agendada${r.agendada === 1 ? '' : 's'}</span>` : ''}<span>presença <b>${fmtPct(taxa(r.veio, r.veio + r.faltou))}</b></span><span>💰 <b>${r.fechou}</b> fecharam</span></div>
+        <div class="ip-lista">${alunas}</div>
       </div>
     </details>`;
   };
   const horasLista = Object.values(horas).sort((a, b) => a.hora.localeCompare(b.hora));
-  const tabHoras = horasLista.length ? `<div class="card" style="overflow-x:auto"><table class="pf-tab"><thead><tr><th>Horário</th><th>Vieram</th><th>Fecharam</th><th>Conversão</th><th>Professoras</th></tr></thead><tbody>${horasLista.map(x => `<tr><td><b>${esc(x.hora)}</b></td><td>${x.veio}</td><td>${x.fechou}</td><td><b style="color:${x.veio < POUCAS ? 'var(--cinza)' : 'var(--ok)'}">${fmtPct(taxa(x.fechou, x.veio))}</b></td><td class="quando">${Object.entries(x.profs).sort((a, b) => b[1] - a[1]).map(([p, n]) => `${esc(p === SEM ? 'sem professora' : p.split(' ')[0])} (${n})`).join(', ')}</td></tr>`).join('')}</tbody></table></div>` : '';
+  const tabHoras = horasLista.length ? `<div class="card" style="overflow-x:auto"><table class="pf-tab"><thead><tr><th>Horário</th><th>Vieram</th><th>Fecharam</th><th>Conversão</th><th>Professoras</th></tr></thead><tbody>${horasLista.map(x => `<tr><td><b>${esc(x.hora)}</b></td><td>${x.veio}</td><td>${x.fechou}</td><td><b style="color:${x.veio < POUCAS ? 'var(--cinza)' : 'var(--ok)'}">${fmtPct(taxa(x.fechou, x.veio))}</b></td><td class="quando">${Object.entries(x.profs).sort((a, b) => b[1] - a[1]).map(([p, n]) => `${esc(p === SEM ? 'sem professora' : p.split(' ')[0])} (${n})`).join(', ')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="card"><div class="vazio">Sem aulas feitas no período.</div></div>';
 
   // Situação da leitura no EVO.
   const st = h.status || {};
   const lidos = Object.keys(h.lidos || {}).sort();
   const rodando = st.estado === 'executando' && Date.now() - (st.inicio || 0) < 60 * 60 * 1000;
   const fmtQuando = (ms) => { try { return new Date(ms).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
-  const situacaoLeitura = rodando ? `⏳ Lendo a agenda no EVO agora (começou ${esc(fmtQuando(st.inicio))}) — pode levar uns 15 min. Atualize a página depois.`
+  const fmtBR = (iso) => { const p = String(iso).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso; };
+  const situacaoLeitura = rodando ? `⏳ Lendo a agenda no EVO agora (começou ${esc(fmtQuando(st.inicio))}) — leva uns 15 a 20 min. Atualize a página depois.`
     : st.estado === 'erro' ? `⚠️ A última leitura falhou (${esc(fmtQuando(st.fim))}): ${esc(st.msg || '')}`
-    : lidos.length ? `Histórico de ${esc(fmtDia(lidos[0]))}/${lidos[0].slice(0, 4)} até ${esc(fmtDia(lidos[lidos.length - 1]))}/${lidos[lidos.length - 1].slice(0, 4)}${st.fim ? ` · última leitura ${esc(fmtQuando(st.fim))}` : ''}. O robô relê a agenda toda noite.`
+    : lidos.length ? `📚 Histórico de <b>${esc(fmtBR(lidos[0]))}</b> até <b>${esc(fmtBR(lidos[lidos.length - 1]))}</b>${st.fim ? ` · última leitura ${esc(fmtQuando(st.fim))}` : ''}. O robô relê a agenda toda madrugada.`
     : 'Ainda sem dados. Toda madrugada o robô copia a agenda de experimentais do EVO. Para não esperar, clique em “Ler agora no EVO”.';
-  const btnAtualizar = `<form method="POST" action="/professoras/atualizar" style="display:inline"><button class="reset" type="submit" ${rodando ? 'disabled' : ''} style="padding:5px 12px;font-size:.8rem">🔄 Ler agora no EVO</button></form>`;
-  // Até onde buscar para trás (padrão 90 dias). Os dias antigos são lidos aos poucos:
-  // 60 por madrugada; "Ler agora" adianta 30.
+  const btnAtualizar = `<form method="POST" action="/professoras/atualizar" style="margin:0"><button class="ind-btn sec" type="submit" ${rodando ? 'disabled' : ''}>🔄 Ler agora no EVO</button></form>`;
+  // Até onde buscar para trás (padrão 90 dias): 60 dias antigos por madrugada; "Ler agora" adianta 30.
   const desde = h.cfg.desde || '';
   const pend = histExp.antigosPendentes(h).length;
-  const inicioPadrao = (() => { const d = new Date(hojeStr + 'T12:00:00'); d.setDate(d.getDate() - (histExp.HISTORICO_PADRAO - 1)); return d.toLocaleDateString('en-CA'); })();
-  const fmtBR = (iso) => { const p = String(iso).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso; };
+  const inicioPadrao = menosDias(histExp.HISTORICO_PADRAO - 1);
   const noites = Math.ceil(pend / 60);
-  const blocoDesde = `<form method="POST" action="/professoras/desde" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:-2px 0 12px">
-      <span class="filtro-lbl">Buscar no EVO desde</span>
-      <input type="date" name="desde" value="${esc(desde || inicioPadrao)}" max="${esc(hojeStr)}" min="2020-01-01" style="width:165px;flex:none">
-      <button class="save" type="submit" style="padding:8px 16px;font-size:.82rem">Salvar</button>
-      <span class="quando" style="align-self:center">${pend ? `Faltam <b>${pend}</b> dia${pend === 1 ? '' : 's'} antigo${pend === 1 ? '' : 's'} para ler — o robô lê 60 por madrugada (≈ ${noites} noite${noites === 1 ? '' : 's'}); “Ler agora” adianta 30.` : `Histórico completo desde ${esc(fmtBR(desde || inicioPadrao))}.`}</span>
-    </form>`;
+  const blocoDesde = `<form method="POST" action="/professoras/desde" class="ind-linha ind-datas"><span class="ind-lbl">Histórico</span>
+      <span class="ate">buscar no EVO desde</span><input type="date" name="desde" value="${esc(desde || inicioPadrao)}" max="${esc(hojeStr)}" min="2020-01-01" aria-label="Buscar desde">
+      <button class="ind-btn sec" type="submit">Salvar</button>
+      <span class="quando">${pend ? `Faltam <b>${pend}</b> dia${pend === 1 ? '' : 's'} antigo${pend === 1 ? '' : 's'} — o robô lê 60 por madrugada (≈ ${noites} noite${noites === 1 ? '' : 's'}); “Ler agora” adianta 30.` : `Completo desde ${esc(fmtBR(desde || inicioPadrao))}.`}</span></form>`;
 
-  const segs = [['30', '30 dias'], ['90', '90 dias'], ['ano', hojeStr.slice(0, 4)], ['0', 'Tudo']].map(([v, l]) => `<a href="/professoras?per=${v}" class="${(!custom && per === v) ? 'on' : ''}">${l}</a>`).join('');
   const corpo = `<div class="wrap">
     ${subnavIndicadores('professoras')}
-    <div class="sec-t">Conversão por professora <small style="font-weight:600;color:var(--cinza)">(aula experimental → contrato)</small></div>
-    <div class="segs">${segs}</div>
-    <form method="GET" action="/professoras" class="filtro-datas" style="flex-wrap:wrap">
-      <span class="filtro-lbl" style="align-self:center">Período personalizado</span>
-      <input type="date" name="de" value="${esc(params.de || '')}">
-      <span class="ate">até</span>
-      <input type="date" name="ate" value="${esc(params.ate || '')}">
-      <button class="save" type="submit" style="padding:8px 18px;font-size:.82rem">Aplicar</button>
-      ${custom ? `<a href="/professoras" class="reset filtro-limpar" style="text-decoration:none">🧹</a>` : ''}
-    </form>
-    <div class="aviso" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0">${situacaoLeitura} ${btnAtualizar}</div>
-    ${blocoDesde}
+    ${indTopo({
+      titulo: 'Conversão por professora',
+      sub: 'Das alunas que fizeram a aula experimental com cada professora, quantas fecharam contrato. Vem da agenda de experimentais do EVO.',
+      acoes: btnAtualizar,
+      linhas: [
+        indChips('Período', [['30', '30 dias'], ['90', '90 dias'], ['ano', hojeStr.slice(0, 4)], ['0', 'Tudo']].map(([v, l]) => [`/professoras?per=${v}`, l, !custom && per === v])),
+        indDatas({ action: '/professoras', de: params.de, ate: params.ate, limpar: custom ? '/professoras' : '' }),
+        blocoDesde,
+        `<div class="ind-nota${st.estado === 'erro' && !rodando ? ' erro' : ''}"><span>${situacaoLeitura}</span></div>`,
+      ],
+    })}
     ${tot.exp ? `<div class="stats">
       <div class="stat tot"><div class="n">${tot.exp}</div><div class="l">experimentais · ${esc(rotulo)}</div></div>
       <div class="stat"><div class="n" style="color:var(--teal-esc)">${tot.veio}</div><div class="l">vieram · presença ${fmtPct(taxa(tot.veio, tot.veio + tot.faltou))}</div></div>
       <div class="stat ok"><div class="n">${tot.fechou}</div><div class="l">fecharam contrato</div></div>
       <div class="stat"><div class="n" style="color:var(--coral-esc)">${fmtPct(taxa(tot.fechou, tot.veio))}</div><div class="l">conversão do Studio (de quem veio)</div></div>
     </div>
+    <div class="ind-secoes">
     <div class="sec-t">Por professora</div>
     <div class="card">
       ${lista.map(linhaProf).join('')}
-      <p class="quando" style="margin:10px 0 0">A barra é a <b>conversão</b>: de quem fez a aula com ela, quantas fecharam. Clique no nome para ver as alunas. Em cinza: menos de ${POUCAS} aulas no período — o % ainda muda muito com uma aluna a mais ou a menos.</p>
+      <p class="quando" style="margin:12px 0 0">A barra é a <b>conversão</b>: de quem fez a aula com ela, quantas fecharam. Clique na professora para ver as alunas. Em cinza: menos de ${POUCAS} aulas no período — o % ainda muda muito com uma aluna a mais ou a menos.</p>
     </div>
     <div class="sec-t">Por horário da aula</div>
     ${tabHoras}
-    <p class="quando" style="text-align:center">A conversão não depende só da professora: horário, quem atendeu na recepção e preço também pesam. Use o número para conversar, não para julgar. <b>Fechou</b> = “Nome do contrato” preenchido na agenda de experimentais do EVO, ou a aluna já tem a tag <b>${esc(tAluna)}</b>. Aulas canceladas não entram.</p>`
-    : `<div class="card"><div class="vazio">${lidos.length ? 'Nenhuma aula experimental registrada neste período.' : 'Ainda sem histórico. Clique em “Ler agora no EVO” ou espere a leitura desta noite.'}</div></div>`}
+    </div>
+    <p class="ind-rodape">A conversão não depende só da professora: horário, quem atendeu na recepção e preço também pesam. Use o número para conversar, não para julgar. <b>Fechou</b> = “Nome do contrato” preenchido na agenda de experimentais do EVO, ou a aluna já tem a tag <b>${esc(tAluna)}</b>. Aulas canceladas não entram.</p>`
+    : `<div class="card"><div class="vazio">${lidos.length ? 'Nenhuma aula experimental registrada neste período.' : 'Ainda sem histórico. Clique em “Ler agora no EVO” ou espere a leitura desta madrugada.'}</div></div>`}
     <style>
       .pf-item{border-bottom:1px solid var(--linha-soft)}
       .pf-item:last-of-type{border-bottom:0}
-      .pf-row{display:flex;align-items:center;gap:12px;padding:10px 0;cursor:pointer;list-style:none}
+      .pf-row{display:flex;align-items:center;gap:14px;padding:12px 6px;cursor:pointer;list-style:none;border-radius:10px}
       .pf-row::-webkit-details-marker{display:none}
-      .pf-nome{width:170px;flex:none;font-weight:700;color:var(--tinta);font-size:.9rem}
+      .pf-row:hover{background:var(--linha-soft)}
+      .pf-row:focus{outline:none}
+      .pf-row:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+      .pf-seta{display:inline-block;width:14px;color:var(--teal);font-weight:900;transition:transform .15s}
+      .pf-item[open] .pf-seta{transform:rotate(90deg)}
+      .pf-nome{width:200px;flex:none;font-weight:700;color:var(--tinta);font-size:.92rem}
       .pf-poucas{display:inline-block;font-size:.66rem;font-weight:700;color:var(--cinza);border:1px solid var(--linha);border-radius:999px;padding:1px 7px;margin-left:4px;vertical-align:middle}
-      .pf-nums{width:150px;flex:none;text-align:right;font-variant-numeric:tabular-nums;font-size:.86rem}
-      .pf-det{padding:0 0 12px 4px}
+      .pf-bar{flex:1;min-width:120px;height:26px;background:var(--linha-soft);border-radius:8px;overflow:hidden;position:relative}
+      .pf-bar>span{display:block;height:100%}
+      .pf-bar>em{position:absolute;top:0;bottom:0;display:flex;align-items:center;font-style:normal;font-size:.78rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+      .pf-nums{width:150px;flex:none;text-align:right;font-variant-numeric:tabular-nums;font-size:.86rem;color:var(--tinta)}
+      .pf-nums span{color:var(--cinza)}
+      .pf-det{margin:0 6px 12px 20px;padding:4px 14px;border-left:3px solid var(--teal-soft)}
+      .pf-resumo{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.8rem;color:var(--cinza);padding:6px 0 8px;border-bottom:1px solid var(--linha-soft)}
+      .pf-resumo b{color:var(--tinta)}
       .pf-tab{width:100%;border-collapse:collapse;font-size:.86rem;font-variant-numeric:tabular-nums}
       .pf-tab th{text-align:left;font-size:.74rem;color:var(--cinza);font-weight:700;padding:6px 8px;border-bottom:1px solid var(--linha)}
       .pf-tab td{padding:7px 8px;border-bottom:1px solid var(--linha-soft)}
-      @media(max-width:600px){.pf-row{flex-wrap:wrap;row-gap:4px}.pf-nome{width:100%}.pf-nums{width:auto}}
+      @media(max-width:600px){.pf-row{flex-wrap:wrap;row-gap:6px}.pf-nome{width:100%}.pf-nums{width:auto}.pf-det{margin-left:6px;padding:4px 8px}}
     </style>
   </div>`;
   return chrome({ tab: 'Professoras' }, 'professoras', corpo);
@@ -9373,6 +9520,28 @@ function fuMarcarCanal(evs) {
   }
 }
 
+// Dia/hora da AULA de cada agendamento ({ <8 díg>: { when, em, canal } }) — o
+// evento traz "when" (SoFIA, Formulário e Express); o Funil mostra na lista.
+const FU_AGENDOU_AULA_FILE = path.join(sofia.DIR, 'sofia-agendaram-aula.json');
+function fuMarcarAula(evs) {
+  let mapa = fuLerJson(FU_AGENDOU_AULA_FILE, {}) || {};
+  if (typeof mapa !== 'object' || Array.isArray(mapa)) mapa = {};
+  let mudou = false;
+  for (const ev of evs) {
+    const d = String((ev && ev.telefone) || '').replace(/\D/g, '').slice(-8);
+    const when = String((ev && ev.when) || '').trim();
+    if (!d || !when) continue;
+    delete mapa[d]; // reinsere no fim (ordem = mais recentes por último, p/ a poda)
+    mapa[d] = { when: when.slice(0, 60), em: Number(ev.em) || Date.now(), canal: String(ev.canal || '').trim().toLowerCase() };
+    mudou = true;
+  }
+  if (mudou) {
+    const ks = Object.keys(mapa);
+    if (ks.length > 20000) for (const k of ks.slice(0, ks.length - 20000)) delete mapa[k];
+    fuSalvarJson(FU_AGENDOU_AULA_FILE, mapa);
+  }
+}
+
 // 1) Agendamentos concluídos (gatilho 'agendou') → aplica tags + avisa.
 function processarAgendamentos() {
   let evs = [];
@@ -9380,6 +9549,7 @@ function processarAgendamentos() {
   if (!evs.length) return;
   try { fuMarcarAgendou(evs.map(ev => ev.telefone)); } catch (_) {} // registra p/ o follow-up NÃO incomodar quem agendou
   try { fuMarcarCanal(evs); } catch (_) {} // guarda o canal (sofia/formulario/express) p/ o Funil não contar Express
+  try { fuMarcarAula(evs); } catch (_) {} // guarda dia/hora da aula agendada (mostrado no Funil)
   let autos = [];
   try { autos = contatos.tagsPorGatilho('agendou'); } catch (_) {}
   if (!autos.length) return;
