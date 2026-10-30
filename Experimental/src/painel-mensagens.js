@@ -6358,7 +6358,7 @@ function paginaAtivasLista(params) {
     : `${tipo === 'entraram' ? 'Entraram' : 'Saíram'} ${de === ate ? 'em ' + fmtD(de) : `de ${fmtD(de)} a ${fmtD(ate)}`}`;
   const ign = h.ignorados || {};
   const nIgn = Object.values(ign.so_ignorado || {}).reduce((a, b) => a + b, 0);
-  const notaIgn = (ign.regra || []).length ? `<div class="ui-nota"><span>Contratos com <b>${(ign.regra || []).map(esc).join(', ')}</b> no nome não contam${tipo === 'ativas' && dia === hojeIso && nIgn ? ` — hoje ${nIgn === 1 ? '1 pessoa só com esse contrato ficou' : nIgn + ' pessoas só com esse contrato ficaram'} de fora` : ''}.</span></div>` : '';
+  const notaIgn = (ign.regra || []).length ? `<div class="ui-nota"><span>Contratos com ${(ign.regra || []).map(r => `<b>${esc(String(r).toUpperCase())}</b>`).join(' ou ')} no nome não contam${tipo === 'ativas' && dia === hojeIso && nIgn ? ` — hoje ${nIgn === 1 ? '1 pessoa só com esse contrato ficou' : nIgn + ' pessoas só com esse contrato ficaram'} de fora` : ''}.${tipo === 'ativas' && dia === hojeIso && ign.so_fila ? ` Contrato <b>na fila</b> (que ainda não começou) também não conta${` — ${ign.so_fila} pessoa${ign.so_fila === 1 ? '' : 's'} só com contrato na fila`}.` : ''}</span></div>` : '';
   const topo = (linhas) => uiTopo({ titulo, sub: 'Toque no nome para abrir o contato; <b>EVO ↗</b> abre o cadastro.', acoes: voltar, linhas });
   if (!serie.length || !h.pessoas) {
     return chrome({ tab: 'Alunas ativas' }, 'ativas', `<div class="wrap">${subnavIndicadores('ativas')}${topo([])}
@@ -6385,6 +6385,8 @@ function paginaAtivasLista(params) {
   const nomeDe = (x) => (porEvo[x.id] && porEvo[x.id].nome) || x.p.n || ('id ' + x.id);
   lista.sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), 'pt-BR'));
   const atualHoje = tipo === 'ativas' && dia === hojeIso;
+  // mesmo nome em mais de um cadastro do EVO: mostra o nº para diferenciar
+  const nNome = {}; for (const x of lista) { const k = nomeDe(x).toLowerCase(); nNome[k] = (nNome[k] || 0) + 1; }
   // contratos (só das ativas hoje — é o que o EVO diz agora)
   const porContrato = {};
   if (atualHoje) for (const x of lista) { const c = x.p.c || 'sem contrato'; porContrato[c] = (porContrato[c] || 0) + 1; }
@@ -6401,6 +6403,8 @@ function paginaAtivasLista(params) {
       meta: [
         atualHoje && x.p.t ? '🔒 <b>Trancada</b>' : '',
         atualHoje && x.p.c ? `📄 ${esc(x.p.c)}` : '',
+        atualHoje && Array.isArray(x.p.f) ? `⏭️ Na fila: ${esc(x.p.f[0] || 'contrato')} a partir de <b>${fmtD(x.p.f[1])}</b>` : '',
+        nNome[nomeDe(x).toLowerCase()] > 1 ? `Cadastro EVO nº <b>${esc(x.id)}</b>` : '',
         tipo === 'ativas' ? `Aluna desde <b>${fmtD(x.data)}</b>` : '',
         tipo === 'entraram' ? `Entrou em <b>${fmtD(x.data)}</b> · ${x.nova ? '<b>nova</b>' : 'voltou'}` : '',
         tipo === 'sairam' ? `Último dia do contrato <b>${fmtD(x.data)}</b>` : '',
