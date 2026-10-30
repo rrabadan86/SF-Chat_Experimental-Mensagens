@@ -1199,6 +1199,7 @@ def api_book_sofia():
     except TurmaLotadaError as e:
         # Turma cheia / inexistente / fora de janela: o lead JÁ foi cadastrado no EVO.
         # Devolvemos as alternativas para a Sofia oferecer outro horário à aluna.
+        app.logger.warning("book-sofia (%s): não agendou %s — %s", origem or "sofia", when, e)
         return jsonify({
             "ok": False,
             "motivo": "sem_vaga",
