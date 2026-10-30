@@ -136,3 +136,4 @@ data/formularios-capas/
 data/*.tmp
 data/.slimclub-segredo
 data/auto-tag-ultimo.json
+data/circuito-servico.txt
