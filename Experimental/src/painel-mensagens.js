@@ -1009,7 +1009,8 @@ function menuConta(ativo) {
       <div class="conta-cab">${avatar(sess.usuario)}<div><b>${esc(sess.usuario)}</b><span>${papel}${studio ? ' · ' + studio : ''}</span></div></div>
       ${podeSaude ? `<a href="/saude"${ativo === 'saude' ? ' class="on"' : ''}>🩺 Saúde do sistema ${sc ? PILL[sc] : ''}</a>` : ''}
       ${sess.admin ? `<a href="/perfis"${ativo === 'perfis' ? ' class="on"' : ''}>👤 Perfis e acessos</a>` : ''}
-      ${podeSaude || sess.admin ? '<div class="conta-sep"></div>' : ''}
+      <a href="/politicadeprivacidade" target="_blank" rel="noopener">📄 Política de privacidade <span style="margin-left:auto;color:var(--faint);font-weight:500">↗</span></a>
+      <div class="conta-sep"></div>
       <a href="/logout" class="sair">↪ Sair</a>
     </div>
   </details>`;
@@ -6662,11 +6663,17 @@ function paginaSaude(list, extra = {}) {
   // todo LID atendido tem o telefone recuperável; amarelo se aparecerem LIDs sem
   // telefone (sinal de que o WhatsApp começou a esconder o número).
   let lidS = null; try { lidS = sofia.lerLidStats(); } catch (_) {}
-  const corLid = (lidS && lidS.semTel > 0) ? 'warn' : 'ok';
+  // Atenção só quando os LIDs sem telefone CRESCEM (5+ e algum nas últimas 2 semanas).
+  // Um caso isolado (ex.: 1 entre centenas) é normal e não acende o alerta.
+  const LID_ALERTA = 5;
+  const lidRecente = !!(lidS && lidS.ultimoSemTelEm && Date.now() - lidS.ultimoSemTelEm < 14 * 86400000);
+  const corLid = (lidS && lidS.semTel >= LID_ALERTA && lidRecente) ? 'warn' : 'ok';
   const lidId = (lidS && lidS.ultimoSemTelEm) ? fmtIdadeSaude(lidS.ultimoSemTelEm) : null;
   const cardLid = card('Identidade WhatsApp (número × LID)', corLid, corLid === 'warn' ? '🟡 Atenção' : '🟢 OK', [
     lidS ? `📇 Contatos com telefone <b>recuperado a partir do LID</b>: <b>${lidS.mapeados}</b>.` : '<span class="sd-muted">ainda sem dados — a SoFIA registra conforme atende.</span>',
-    lidS && lidS.semTel > 0
+    lidS && lidS.semTel > 0 && corLid === 'ok'
+      ? `ℹ️ ${lidS.semTel} LID${lidS.semTel === 1 ? '' : 's'} sem telefone recuperável${lidId ? ` <span class="sd-muted">(último ${lidId.txt})</span>` : ''} — ${lidS.semTel < LID_ALERTA ? 'caso isolado' : 'nenhum nas últimas 2 semanas'}, não preocupa. O alerta acende com ${LID_ALERTA}+ casos e algum recente.`
+      : lidS && lidS.semTel > 0
       ? `⚠️ LIDs <b>sem telefone recuperável</b>: <b>${lidS.semTel}</b>${lidId ? ` <span class="sd-muted">(último ${lidId.txt})</span>` : ''}. Se este número <b>crescer</b>, é sinal de que o WhatsApp começou a esconder o telefone no 1‑a‑1.`
       : (lidS ? '✅ Todo LID atendido teve o telefone recuperado.' : ''),
     '<span class="sd-muted">A SoFIA já lê e envia com o formato LID; aqui é só o termômetro dessa transição.</span>',
