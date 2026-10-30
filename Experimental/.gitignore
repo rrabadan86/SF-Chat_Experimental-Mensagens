@@ -53,6 +53,9 @@ data/fotos-usuarios.json
 # Foto diária das alunas ativas (Indicadores → Alunas ativas)
 data/alunas-ativas-historico.json
 data/alunas-ativas-historico.json.tmp
+data/resumo-mensal.json
+data/resumo-mensal.json.tmp
+data/resumo-mensal.png
 # Log completo dos agendamentos do formulario (dados da aluna) — por VPS
 data/bookings.json
 # DM de teste do Instagram (ponte painel<->robo) — por VPS

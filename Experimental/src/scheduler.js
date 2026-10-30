@@ -713,6 +713,8 @@ function iniciarRodarJobWatcher() {
     // abre a ficha de cada devedora no EVO (pode passar dos 5 min padrão)
     inadimplentes:     { nome: 'Cobrança de inadimplentes [manual]', fn: () => require('./inadimplentes').runInadimplentes({ dry: false }), timeoutMs: 20 * 60 * 1000 },
     historicoExperimentais: { nome: 'Histórico de experimentais (professoras) [manual]', fn: () => require('./historico-experimentais').runHistoricoExperimentais(), timeoutMs: 45 * 60 * 1000 },
+    // "Enviar agora" do resumo mensal (Indicadores → Alunas ativas): manda nos grupos sem marcar o mês como enviado
+    resumoMensal:      { nome: 'Resumo mensal no WhatsApp [manual]', fn: (pedido) => require('./resumo-mensal').enviar({ mes: pedido && pedido.mes, teste: true, log }), timeoutMs: 12 * 60 * 1000 },
     freeAntecedencia:  { nome: 'Planos FREE — antecedência [manual]', fn: (pedido) => require('./free-antecedencia').runFreeAntecedencia({ dry: !!(pedido && pedido.dry) }) },
   };
   const t = setInterval(() => {
@@ -728,6 +730,29 @@ function iniciarRodarJobWatcher() {
   }, 4000);
   if (t.unref) t.unref();
   log('▶️  Watcher de "rodar job manual" ativo (a cada 4s).');
+}
+
+// Resumo do mês no WhatsApp (resumo-mensal.js): a cada 5 min confere se chegou o
+// dia/horário escolhido no painel (Indicadores → Alunas ativas) e se o mês que
+// fechou ainda não foi enviado. Dia e horário vêm do data/resumo-mensal.json a
+// cada conferência — mudar no painel não precisa reiniciar o robô.
+function iniciarResumoMensal() {
+  const rm = require('./resumo-mensal');
+  let ocupado = false;
+  const conferir = () => {
+    if (ocupado || jobRunning) return;
+    let mes = null;
+    try { mes = rm.estaNaHora(); } catch (_) { return; }
+    if (!mes) return;
+    ocupado = true;
+    runJob('Resumo mensal no WhatsApp', () => rm.enviar({ mes, log }), 12 * 60 * 1000, { retry: false })
+      .catch(err => logError('Resumo mensal no WhatsApp', err))
+      .finally(() => { ocupado = false; });
+  };
+  const t = setInterval(conferir, 5 * 60 * 1000);
+  if (t.unref) t.unref();
+  setTimeout(conferir, 60 * 1000);
+  log('📊 Resumo mensal no WhatsApp: conferindo a cada 5 min (dia/horário no painel).');
 }
 
 // O painel grava um pedido em data/teste-envio.json; aqui (que temos a sessão
@@ -853,6 +878,7 @@ async function main() {
   // Ponte de "enviar teste" do painel (lê data/teste-envio.json e dispara).
   iniciarTesteWatcher(wa);
   iniciarRodarJobWatcher(); // gatilho manual de job (data/rodar-job.json)
+  iniciarResumoMensal();    // resumo do mês no WhatsApp (dia/horário escolhidos no painel)
   // Ponte de "DM de teste" do Instagram (lê data/teste-instagram.json).
   iniciarTesteInstagramWatcher();
   // Ponte de "forçar boas-vindas do IG agora" (lê data/ig-forcar.json).
