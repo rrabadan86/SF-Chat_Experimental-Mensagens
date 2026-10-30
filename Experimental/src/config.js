@@ -115,6 +115,10 @@ const config = {
     circuitoLembrete: '15 16 * * 5',    // 16:15 sexta ("é amanhã!" no grupo Circuito Slim)
     agendadosManha:   '45 10 * * *',    // 10:45 todos os dias (envios agendados no painel — turno manhã)
     agendadosTarde:   '45 15 * * *',    // 15:45 todos os dias (envios agendados no painel — turno tarde)
+    // 05:25 todo dia — foto das alunas ATIVAS (trancada conta) p/ Indicadores → Alunas ativas.
+    ativasFoto: (process.env.ATIVAS_FOTO_CRON && process.env.ATIVAS_FOTO_CRON.trim().split(/\s+/).length === 5)
+      ? process.env.ATIVAS_FOTO_CRON.trim()
+      : '25 5 * * *',
     histExperimentais: (process.env.HIST_EXP_CRON && process.env.HIST_EXP_CRON.trim().split(/\s+/).length === 5)
       ? process.env.HIST_EXP_CRON.trim()
       : '20 2 * * *',                 // 02:20 todo dia — lê a agenda de experimentais (professora, presença, contrato) p/ Indicadores → Professoras

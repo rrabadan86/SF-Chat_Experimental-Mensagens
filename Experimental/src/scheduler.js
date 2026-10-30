@@ -63,6 +63,20 @@ function runGradeFixas(motivo) {
   });
 }
 
+// Foto diária das alunas ATIVAS (Indicadores → Alunas ativas): Python leve, só
+// lista as clientes no EVO pela API (poucas chamadas) — não usa o navegador.
+function runAtivasFoto() {
+  const dir = path.resolve(__dirname, 'agendamento_evo');
+  const venv = path.join(dir, '.venv', 'bin', 'python');
+  let py = process.env.PYTHON_BIN || 'python3';
+  try { if (fs.existsSync(venv)) py = venv; } catch (_) {}
+  execFile(py, [path.join(dir, 'run_ativas_foto.py')], { cwd: dir, timeout: 300000 }, (err, stdout, stderr) => {
+    const out = (stdout || stderr || '').trim();
+    if (err) { logError('Foto de alunas ativas (run_ativas_foto)', err); if (out) console.log('   ' + out); return; }
+    log('👥 ' + (out || 'foto de alunas ativas gravada'));
+  });
+}
+
 // Convocatória do Circuito (quarta): lê a professora na Grade (usa o scraper do
 // EVO), então respeita o jobRunning. Se outro job estiver rodando, espera e
 // tenta de novo (não pode logar no EVO em paralelo com outro job).
@@ -1150,6 +1164,11 @@ async function main() {
       runJob('Histórico de experimentais (professoras)', () => require('./historico-experimentais').runHistoricoExperimentais({ extras: 60 }), 60 * 60 * 1000).catch(err => logError('Histórico de experimentais', err));
     }, { timezone: 'America/Sao_Paulo' });
     log(`📅 Job HISTÓRICO DE EXPERIMENTAIS agendado: ${config.schedule.histExperimentais} (Indicadores → Professoras)`);
+  }
+
+  if (config.schedule.ativasFoto) {
+    cron.schedule(config.schedule.ativasFoto, () => runAtivasFoto(), { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job FOTO DE ALUNAS ATIVAS agendado: ${config.schedule.ativasFoto} (Indicadores → Alunas ativas)`);
   }
 
   if (config.schedule.gradeFixas) {
