@@ -340,7 +340,15 @@ const normOrigem = o => normSlug(o).slice(0, 30);
 // { n: aberturas, p: 1ª, u: última } — dá "abriu 3 vezes" e "última às 18:40".
 const MAX_CODIGOS = 50000;
 const CODIGO_OK = /^[2-9A-Z]{6}$/;
-function registrarAcesso(formId, visitante, origem, codigo) {
+// Aparelho/navegador pelo User-Agent (só para a lista de aberturas no painel).
+function aparelhoDe(ua) {
+  ua = String(ua || '');
+  const so = /iPhone|iPad|iPod/i.test(ua) ? 'iPhone' : /Android/i.test(ua) ? 'Android' : /Windows/i.test(ua) ? 'Windows' : /Macintosh|Mac OS X/i.test(ua) ? 'Mac' : /Linux/i.test(ua) ? 'Linux' : 'outro';
+  const app = /Instagram/i.test(ua) ? 'Instagram' : /FBAN|FBAV|FB_IAB/i.test(ua) ? 'Facebook' : /EdgA?\//i.test(ua) ? 'Edge' : /SamsungBrowser/i.test(ua) ? 'Samsung' : /CriOS|Chrome\//i.test(ua) ? 'Chrome' : /Firefox|FxiOS/i.test(ua) ? 'Firefox' : /Safari/i.test(ua) ? 'Safari' : '';
+  return app ? `${so} · ${app}` : so;
+}
+const MAX_LOG = 300; // últimas aberturas guardadas por formulário
+function registrarAcesso(formId, visitante, origem, codigo, ua) {
   const map = carregarAcessos();
   const a = map[formId] || (map[formId] = { aberturas: 0, visitantes: {}, origens: {} });
   const o = normOrigem(origem) || '';
@@ -358,6 +366,9 @@ function registrarAcesso(formId, visitante, origem, codigo) {
     cv.n++; cv.u = agora;
   }
   const c = String(codigo || '').toUpperCase();
+  const log = a.log || (a.log = []);
+  log.push({ t: agora, v: v.slice(0, 16), o, c: CODIGO_OK.test(c) ? c : '', d: aparelhoDe(ua) });
+  if (log.length > MAX_LOG) log.splice(0, log.length - MAX_LOG);
   if (CODIGO_OK.test(c)) {
     const cs = a.codigos || (a.codigos = {});
     if (cs[c] || Object.keys(cs).length < MAX_CODIGOS) {
@@ -367,6 +378,13 @@ function registrarAcesso(formId, visitante, origem, codigo) {
   }
   gravarAcessos(map);
 }
+// Zera aberturas/pessoas/origens de um formulário (as respostas ficam).
+function zerarAcessos(formId) { const map = carregarAcessos(); map[formId] = { aberturas: 0, visitantes: {}, origens: {}, zerado: Date.now() }; gravarAcessos(map, true); }
+function zeradoEm(formId) { const a = carregarAcessos()[formId]; return (a && a.zerado) || 0; }
+// Últimas aberturas (mais recente primeiro): [{ t, v, o, c, d }]
+function ultimasAberturas(formId) { const a = carregarAcessos()[formId]; return ((a && a.log) || []).slice().reverse(); }
+// Mesmo visitante abriu há pouco (recarregar a página não conta de novo)?
+function aberturaRecente(formId, v, ms) { const a = carregarAcessos()[formId]; const x = a && a.vezes && a.vezes[v]; return !!(x && x.u && Date.now() - x.u < ms); }
 // Quantas vezes um visitante / um código abriu: { n, p, u } ou null.
 function vezesVisitante(formId, v) { const a = carregarAcessos()[formId]; return (a && a.vezes && a.vezes[v]) || null; }
 function vezesCodigo(formId, c) { const a = carregarAcessos()[formId]; return (a && a.codigos && a.codigos[String(c || '').toUpperCase()]) || null; }
@@ -396,6 +414,7 @@ function permitir(chave, max, janelaMs) {
 }
 
 module.exports = {
+  ultimasAberturas, aberturaRecente, zerarAcessos, zeradoEm,
   TIPOS, COM_OPCOES, MODELO_BLACK_FRIDAY, MAX_CAMPOS,
   listar, obter, porSlug, unicoAberto, estaAberto, situacao, salvar, definirAtivo, duplicar, excluir,
   capaPath, responder, respostas, excluirResposta, colunas, valorTexto, fmtTel, fmtQuando, csv, normSlug, permitir,

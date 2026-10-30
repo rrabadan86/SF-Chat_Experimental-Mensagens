@@ -179,6 +179,13 @@ function paginaFormulario({ studio, f, capaUrl, acao, previa }) {
 <p class="lgpd">Ao enviar, você autoriza o ${esc(studio)} a falar com você pelo WhatsApp sobre esta campanha. <a href="/politicadeprivacidade" target="_blank" rel="noopener">Política de Privacidade</a></p>
 ${previa ? '' : `<script>
 (function(){
+  // Conta a abertura daqui (do navegador): robôs de prévia e verificadores de link
+  // baixam a página mas não rodam JavaScript — assim só gente de verdade conta.
+  try{
+    var o0=(location.search.match(/[?&]origem=([^&]+)/)||[])[1]||'', c0=(location.search.match(/[?&]c=([A-Za-z0-9]{6})(?:&|$)/)||[])[1]||'';
+    try{ o0=decodeURIComponent(o0); }catch(e){ o0=''; }
+    fetch(${js(acao + '/abriu')},{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({c:c0,origem:o0}),keepalive:true}).catch(function(){});
+  }catch(e){}
   var f=document.getElementById('f'), erro=document.getElementById('erro'), bt=document.getElementById('enviar'), tel=document.getElementById('tel');
   tel.addEventListener('input',function(){
     var d=tel.value.replace(/\\D/g,'').replace(/^55(?=\\d{10,11}$)/,'').slice(0,11), s=d;
