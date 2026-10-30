@@ -76,6 +76,33 @@ atividade **SlimFit** e o serviço **"Aula experimental"** e grave os ids — no
 
 ## 1. Atualizar uma unidade para a última versão (deploy)
 
+### Jeito fácil: `slimfit-atualizar` (todas as unidades do servidor)
+
+```bash
+# 1ª vez em cada servidor: baixa o script e cria o atalho
+cd /root/SF-Chat_Experimental-Mensagens && git fetch origin main && git reset --hard FETCH_HEAD
+node scripts/atualizar.js --instalar
+
+# daí em diante, sempre:
+slimfit-atualizar
+```
+
+O script (`scripts/atualizar.js`) lê o PM2, descobre de qual pasta vem cada processo
+e atualiza **todas** as unidades daquele servidor (painel, robô, SoFIA e formulário —
+inclusive duas lojas na mesma máquina): `git fetch` + `reset --hard` no main, `npm
+install` se as dependências mudaram, reinicia só o que mudou e confere se voltou
+**online**. Processos que não são do SlimFit (outro repositório) não são tocados.
+
+| Opção | O que faz |
+|---|---|
+| `--painel` | reinicia só os painéis (mudança só de tela; robô e SoFIA não param) |
+| `--forcar` | reinicia mesmo se já estava na versão nova |
+| `--simular` | mostra o que faria, sem mudar nada |
+
+Evite rodar em cima de um horário de envio do robô (08:30, 10:30, 15:30, 16:00).
+
+### Jeito manual (uma pasta)
+
 Tudo roda na branch **`main`**. Para puxar a versão nova numa unidade já instalada:
 
 ```bash
