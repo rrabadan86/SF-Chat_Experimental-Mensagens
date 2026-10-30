@@ -468,7 +468,7 @@ function enfileirarResposta(chave, jid, texto, fotoArquivo, porNome) {
 
 // Agendamento MANUAL (atendente pelo painel): enfileira o pedido; o listener agenda
 // no EVO (mesma rota da SoFIA) e grava o resultado por id. Devolve o id p/ consulta.
-function enfileirarAgendamento({ chave, telefone, nome, email, when, por, origem, acaoDuplicado } = {}) {
+function enfileirarAgendamento({ chave, telefone, nome, email, when, por, origem, acaoDuplicado, tipo } = {}) {
   const id = String(Date.now()) + Math.random().toString(16).slice(2, 8);
   const linha = JSON.stringify({
     id,
@@ -480,7 +480,9 @@ function enfileirarAgendamento({ chave, telefone, nome, email, when, por, origem
     origem: String(origem || '').trim(),
     // decisão do usuário quando há cadastro de outra pessoa com o mesmo contato
     // (mãe x filha): "" (checar), "sobrescrever" ou "novo".
-    acaoDuplicado: String(acaoDuplicado || '').trim(), em: Date.now(),
+    acaoDuplicado: String(acaoDuplicado || '').trim(),
+    // "circuito" = experimental do Circuito Slim (turmas de circuito + serviço próprio); vazio = SlimFit.
+    tipo: tipo === 'circuito' ? 'circuito' : '', em: Date.now(),
   }) + '\n';
   fs.appendFileSync(F.agendarInbox, linha, 'utf8');
   return id;

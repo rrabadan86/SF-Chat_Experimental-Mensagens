@@ -218,6 +218,7 @@ def book_experimental(
     forcar_novo: bool = False,     # cria cadastro SEPARADO mesmo se e-mail/telefone já existir (mãe x filha)
     reuse_por: str = None,         # "phone" = reaproveita só por telefone (ignora e-mail/CPF)
     evo: EvoClient = None,
+    circuito: bool = False,        # experimental do CIRCUITO SLIM: turmas de circuito + serviço próprio
 ) -> BookingResult:
     """Fluxo real do Studio: cadastro -> venda do serviço -> matrícula na turma.
 
@@ -229,10 +230,19 @@ def book_experimental(
     # "segunda às 8h15" / "amanhã 07:00" / "dia 17 às 8h" -> data real (yyyy-MM-dd HH:mm)
     when = parse_when(when)
 
-    activity = activity or config.EVO_ACTIVITY or None
-    service = service or config.EVO_SERVICE or None
-    id_activity = id_activity or (config.EVO_ACTIVITY_ID or None)
-    id_service = id_service or (config.EVO_SERVICE_ID or None)
+    if circuito:
+        # Circuito Slim: só turmas com "circuito" no nome (ignora a atividade do
+        # SlimFit do .env) e o serviço da experimental do circuito (id por unidade).
+        activity, id_activity, service = "circuito", None, None
+        id_service = id_service or config.circuito_service_id()
+        if not id_service:
+            raise ValueError("Serviço da aula experimental do Circuito não configurado "
+                             "(WhatsApp → Express → id do serviço do Circuito no EVO).")
+    else:
+        activity = activity or config.EVO_ACTIVITY or None
+        service = service or config.EVO_SERVICE or None
+        id_activity = id_activity or (config.EVO_ACTIVITY_ID or None)
+        id_service = id_service or (config.EVO_SERVICE_ID or None)
 
     # Para vender, precisamos do id do serviço (resolve pelo nome se só veio o nome).
     if sell_service and not id_service:
@@ -310,7 +320,7 @@ def book_experimental(
     #     experimentais ATIVAS já marcadas na turma; se atingiu o limite, trata
     #     como turma cheia — a oportunidade já ficou cadastrada, mas NÃO vende nem
     #     matricula, e o Studio é avisado para reagendar.
-    _lim_exp = config.max_experimentais()
+    _lim_exp = 0 if circuito else config.max_experimentais()  # limite é das turmas do SlimFit
     if check_capacity and _lim_exp:
         n_exp = count_experimentais(evo, id_configuration, when, branch_id=branch_id)
         if n_exp is not None and n_exp >= _lim_exp:
@@ -408,7 +418,7 @@ def _antecedencia_ok(alvo, agora):
 
 
 def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_id=None,
-                    max_ocupacao=7, now=None, use_cache=True):
+                    max_ocupacao=7, now=None, use_cache=True, circuito=False):
     """Grade da aula experimental nos próximos `days` dias (padrão 10).
     Cada item traz vagas e um flag `disponivel`: True quando ocupation <= max_ocupacao
     (padrão 7). Turmas com 8/9 aparecem, mas com disponivel=False (não deixa marcar).
@@ -417,15 +427,18 @@ def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_i
     A grade é CACHEADA por `FORM_SLOTS_TTL` segundos (padrão 120): assim, várias
     visitas/refreshes do formulário no mesmo intervalo NÃO refazem dezenas de
     chamadas ao EVO (era o que estourava o limite de 40 req/min → HTTP 429)."""
-    cache_key = (days, activity, id_activity, branch_id, max_ocupacao)
+    cache_key = (days, activity, id_activity, branch_id, max_ocupacao, circuito)
     if use_cache and _SLOTS_TTL > 0:
         hit = _SLOTS_CACHE.get(cache_key)
         if hit and hit[0] > time.monotonic():
             return hit[1]
 
     evo = evo or EvoClient()
-    activity = activity or config.EVO_ACTIVITY or None
-    id_activity = id_activity or (config.EVO_ACTIVITY_ID or None)
+    if circuito:  # grade das turmas de Circuito Slim (experimental do circuito)
+        activity, id_activity = "circuito", None
+    else:
+        activity = activity or config.EVO_ACTIVITY or None
+        id_activity = id_activity or (config.EVO_ACTIVITY_ID or None)
     now = now or agora_brasilia()
     inicio = now.replace(hour=0, minute=0, second=0, microsecond=0)
     fim = inicio + timedelta(days=days)          # exclusivo
@@ -481,7 +494,7 @@ def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_i
             n_exp = None
             # Só checa experimentais nas turmas que, de outra forma, estariam
             # disponíveis (evita uma chamada /detail por turma já cheia).
-            _lim_exp = config.max_experimentais()
+            _lim_exp = 0 if circuito else config.max_experimentais()
             if (disponivel and _lim_exp
                     and (budget <= 0 or time.monotonic() - t0 < budget)):
                 n_exp = _exp_cached(evo, s.get("idConfiguration"), dt, branch_id)

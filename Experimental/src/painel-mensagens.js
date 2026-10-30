@@ -121,6 +121,19 @@ function gravarExpLimite(n) {
   return true;
 }
 
+// Aula experimental do CIRCUITO SLIM pelo Cadastro Express: id do serviço no EVO
+// (cada unidade tem o seu — ex.: 316 no Lago Sul 2). Gravado em
+// data/circuito-servico.txt; o agendamento (Python) lê este arquivo. Vazio = desligado.
+const CIRC_SERV_FILE = path.join(__dirname, '..', 'data', 'circuito-servico.txt');
+function lerCircuitoServico() { try { const v = String(fs.readFileSync(CIRC_SERV_FILE, 'utf8')).trim(); return /^\d+$/.test(v) && +v > 0 ? +v : null; } catch (_) { return null; } }
+function gravarCircuitoServico(v) {
+  const n = String(v || '').replace(/\D/g, '');
+  try { fs.mkdirSync(path.dirname(CIRC_SERV_FILE), { recursive: true }); } catch (_) {}
+  if (!n || +n <= 0) { try { fs.unlinkSync(CIRC_SERV_FILE); } catch (_) {} return null; }
+  fs.writeFileSync(CIRC_SERV_FILE, String(+n), 'utf8');
+  return +n;
+}
+
 // Antecedência mínima (horas) para agendar a experimental em DIA ÚTIL — editável
 // na aba SoFIA → Configuração. Gravado em data/sofia-antecedencia-horas.txt; a
 // grade (Python) e a SoFIA (verificar_disponibilidade) leem este arquivo.
@@ -745,6 +758,14 @@ const ESTILO = `
   .stat{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:14px;text-align:center}
   .stat .n{font-family:"Inter";font-weight:800;font-size:1.8rem;line-height:1}
   .stat .l{font-size:var(--fs-xs);color:var(--cinza);margin-top:4px;font-weight:600}
+  .ex-tipos{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+  .ex-tipo{position:relative;cursor:pointer;margin:0}.ex-tipo input{position:absolute;opacity:0}
+  .ex-tipo span{display:inline-block;padding:8px 16px;border:1px solid var(--linha);border-radius:999px;font-weight:700;font-size:var(--fs-sm);background:#fff;color:var(--tinta)}
+  .ex-tipo input:checked+span{background:var(--teal);border-color:var(--teal);color:#fff}
+  .ex-tipo input:disabled+span{opacity:.45;cursor:not-allowed}
+  .ex-tipo input:focus-visible+span{outline:2px solid var(--teal);outline-offset:2px}
+  .ex-cfg{margin:0 0 9px;background:#fff;border:1px solid var(--linha);border-radius:12px;padding:8px 14px}
+  .ex-cfg summary{cursor:pointer;font-weight:700;font-size:var(--fs-sm);color:var(--tinta)}
   .rm-form{display:flex;flex-direction:column;gap:14px}
   .rm-cab{display:flex;justify-content:space-between;align-items:center;gap:12px}
   .rm-sw{position:static}
@@ -1808,6 +1829,7 @@ function paginaExpress(aviso, erro) {
   const podeTela = podeMsgSub(sess, 'express') || podeMsgSub(sess, 'agendar');
   const podeExpress = podeTela, podeAgendar = podeTela;
   const hoje = hojeSP();
+  const circId = lerCircuitoServico();
   // Cabeçalho de seção (ícone + título + subtítulo) — fica DENTRO do painel colorido.
   const cab = (ic, tit, sub) => `<div style="display:flex;align-items:center;gap:12px;margin:2px 2px 12px"><span style="font-size:1.5rem;line-height:1;flex:none">${ic}</span><div style="min-width:0"><div style="font-family:'Manrope','Inter',sans-serif;font-weight:800;font-size:1.05rem;color:var(--tinta);line-height:1.15">${tit}</div><div style="font-size:.82rem;color:var(--cinza)">${sub}</div></div></div>`;
 
@@ -1818,6 +1840,12 @@ function paginaExpress(aviso, erro) {
       ${cab('📅', 'Cadastro express', 'Agenda a aula experimental no EVO — sem precisar de conversa')}
       <div class="card" style="margin:0 0 9px">
         <div style="margin:0 0 14px;font-size:.86rem;color:var(--cinza)">Para quem chegou <b>por telefone ou no balcão</b>. Marca no <b>EVO</b>, envia a <b>confirmação no WhatsApp</b> e aplica a tag <b>“agendou”</b> — igual quando a SoFIA agenda.</div>
+        <label>Aula experimental de</label>
+        <div class="ex-tipos" role="radiogroup" aria-label="Aula experimental de">
+          <label class="ex-tipo"><input type="radio" name="exTipo" value="" checked><span>💪 SlimFit</span></label>
+          <label class="ex-tipo"${circId ? '' : ' title="Configure o id do serviço do Circuito no EVO (abaixo)"'}><input type="radio" name="exTipo" value="circuito"${circId ? '' : ' disabled'}><span>🔁 Circuito Slim</span></label>
+        </div>
+        ${circId ? '' : '<p class="quando" style="margin:-4px 0 12px">Circuito Slim: falta informar o <b>id do serviço</b> da aula experimental do circuito no EVO (no fim deste quadro).</p>'}
         <label>Nome completo</label>
         <input id="exNome" type="text" placeholder="Nome da aluna" autocomplete="off">
         <div style="display:flex;gap:14px;flex-wrap:wrap">
@@ -1831,6 +1859,13 @@ function paginaExpress(aviso, erro) {
         <div class="acts" style="margin-top:18px"><button type="button" class="save" id="exBtn" onclick="exAgendar()" style="width:100%;padding:12px 20px;font-size:1rem;font-weight:600">📅 Agendar no EVO</button></div>
         <div id="exMsg" class="aviso" style="display:none"></div>
       </div>
+      ${sess.admin ? `<details class="ex-cfg"${circId ? '' : ' open'}><summary>⚙️ Circuito Slim — serviço da aula experimental no EVO</summary>
+        <form method="POST" action="/agendar/circuito-servico" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:8px 0 4px">
+          <div><label style="margin:0 0 4px">Id do serviço no EVO</label><input type="text" name="id" inputmode="numeric" value="${circId || ''}" placeholder="ex.: 316" style="width:140px"></div>
+          <button type="submit" class="save" style="width:auto;padding:9px 16px">Salvar</button>
+        </form>
+        <p class="quando" style="margin:4px 0 6px">É o serviço que o EVO vende na experimental do circuito — <b>cada unidade tem o seu número</b>. Deixe vazio para desligar a opção Circuito Slim.</p>
+      </details>` : ''}
       </div>
     </section>`;
   const scriptExpress = !podeExpress ? '' : `<script>
@@ -1864,8 +1899,12 @@ function paginaExpress(aviso, erro) {
   function exStatus(html,cls){ var m=document.getElementById('exMsg'); if(!m)return; m.className='aviso'+(cls?(' '+cls):''); m.innerHTML=html; m.style.display='block'; }
   // Combobox de horários: só os do dia escolhido que TÊM vaga (grade do form).
   var exSlots=null;
-  function exCarregarSlots(){
-    fetch('/agendar/slots',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
+  function exTipo(){ var r=document.querySelector('input[name=exTipo]:checked'); return r?r.value:''; }
+  document.querySelectorAll('input[name=exTipo]').forEach(function(r){ r.addEventListener('change',function(){ exSlots=null; exPreencherHoras(); exCarregarSlots(); }); });
+  function exCarregarSlots(forcar){
+    var circ=exTipo()==='circuito';
+    fetch('/agendar/slots'+(circ?'?tipo=circuito'+(forcar?'&forcar=1':''):''),{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
+      if(circ!==(exTipo()==='circuito')) return; // trocou de aula no meio do caminho
       exSlots=(j&&j.dias)||{}; exPreencherHoras();
     }).catch(function(){ exSlots={}; exPreencherHoras(); });
   }
@@ -1890,6 +1929,7 @@ function paginaExpress(aviso, erro) {
     var b=document.getElementById('exRefresh'), sel=document.getElementById('exHora');
     if(b){ b.disabled=true; b.textContent='⏳ atualizando…'; }
     if(sel){ sel.innerHTML='<option value="">atualizando a grade…</option>'; }
+    if(exTipo()==='circuito'){ exSlots=null; exCarregarSlots(true); setTimeout(function(){ if(b){ b.disabled=false; b.textContent='🔄 atualizar'; } },1500); return; }
     fetch('/agendar/slots/atualizar',{method:'POST'}).then(function(r){return r.json();}).then(function(j){
       exSlots=null; exCarregarSlots();
       if(b){ b.disabled=false; b.textContent='🔄 atualizar'; }
@@ -1914,7 +1954,7 @@ function paginaExpress(aviso, erro) {
     var when=data+' '+hora; // AAAA-MM-DD HH:MM (o EVO/form entende)
     exBtnOn(false);
     exStatus(acaoDup==='novo'?'⏳ Criando um cadastro novo…':(acaoDup==='sobrescrever'?'⏳ Atualizando o cadastro existente…':'⏳ Agendando no EVO…'));
-    fetch('/sofia/agendar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:tel,nome:nome,email:email,when:when,origem:'express',acao_duplicado:acaoDup})})
+    fetch('/sofia/agendar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:tel,nome:nome,email:email,when:when,origem:'express',acao_duplicado:acaoDup,tipo:exTipo()})})
       .then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok||!j.id){ exStatus('❌ '+exEsc((j&&j.erro)||'falha ao enviar'),'err'); exBtnOn(true); return; }
         var n=0;
@@ -1925,7 +1965,7 @@ function paginaExpress(aviso, erro) {
             if(!res){ if(n>40){ exStatus('⏳ Ainda processando… confira em instantes.'); exBtnOn(true); return; } setTimeout(poll,1500); return; }
             exBtnOn(true);
             if(res.ok){
-              exStatus('✅ Agendada no EVO para <b>'+exEsc(res.when||when)+'</b>! A confirmação foi para a fila do WhatsApp.'+(res.aviso?'<br><small>⚠️ '+exEsc(res.aviso)+'</small>':''));
+              exStatus('✅ Agendada no EVO'+(exTipo()==='circuito'?' (<b>Circuito Slim</b>)':'')+' para <b>'+exEsc(res.when||when)+'</b>! A confirmação foi para a fila do WhatsApp.'+(res.aviso?'<br><small>⚠️ '+exEsc(res.aviso)+'</small>':''));
               document.getElementById('exNome').value=''; document.getElementById('exTel').value='';
               document.getElementById('exEmail').value=''; document.getElementById('exHora').value=''; exCarregarSlots();
               document.getElementById('exNome').focus();
@@ -9549,6 +9589,29 @@ const server = http.createServer((req, res) => {
   }
   // Agendamento MANUAL no EVO (atendente pelo painel) — enfileira; o listener agenda.
   // Grade de horários disponíveis (proxy do formulário) — popula o combobox do Express.
+  if (req.method === 'GET' && url === '/agendar/slots' && /[?&]tipo=circuito\b/.test(req.url)) {
+    // Grade do CIRCUITO SLIM: calculada aqui (slots_circuito.py, poucas chamadas ao EVO), guardada 2 min.
+    const forcar = /[?&]forcar=1\b/.test(req.url);
+    const responder = (o) => { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(o)); };
+    if (!forcar && _circSlots.dados && Date.now() - _circSlots.em < 120000) return responder(_circSlots.dados);
+    const { py, dir } = _gradePyBin();
+    return require('child_process').execFile(py, ['slots_circuito.py', '10'], { cwd: dir, timeout: 90000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+      let j = null;
+      try { const l = String(stdout || '').trim().split('\n').filter(Boolean).pop(); j = JSON.parse(l); } catch (_) {}
+      if (err || !j || !j.dias) return responder({ dias: (_circSlots.dados && _circSlots.dados.dias) || {}, erro: String((stderr || (err && err.message) || 'falha ao ler a grade do circuito')).trim().slice(0, 300) });
+      _circSlots = { em: Date.now(), dados: { dias: j.dias } };
+      return responder(_circSlots.dados);
+    });
+  }
+  if (req.method === 'POST' && url === '/agendar/circuito-servico') {
+    if (!sess || !sess.admin) { res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Só administradores.'); }
+    return lerCorpo(req, 2000, corpo => {
+      const v = gravarCircuitoServico(new URLSearchParams(corpo).get('id'));
+      try { auditoria.registrar(sess.usuario, 'express.circuito-servico', String(v || 'desligado'), ''); } catch (_) {}
+      _circSlots = { em: 0, dados: null };
+      res.writeHead(303, { Location: '/?view=express' }); res.end();
+    });
+  }
   if (req.method === 'GET' && url === '/agendar/slots') {
     const FORM_BASE = (process.env.FORM_CLOUD_URL || '').replace(/\/+$/, '');
     const ctrl = new AbortController();
@@ -9592,7 +9655,7 @@ const server = http.createServer((req, res) => {
       if (!nome || !when) return res.end(JSON.stringify({ ok: false, erro: 'preencha nome e data/horário' }));
       if (!email || email.indexOf('@') < 1) return res.end(JSON.stringify({ ok: false, erro: 'e-mail é obrigatório (o EVO exige para cadastrar)' })); // o EVO passou a exigir e-mail no cadastro do prospect
       try {
-        const id = sofia.enfileirarAgendamento({ chave, telefone: chave, nome, email, when, por: quem, origem, acaoDuplicado });
+        const id = sofia.enfileirarAgendamento({ chave, telefone: chave, nome, email, when, por: quem, origem, acaoDuplicado, tipo: origem && d.tipo === 'circuito' ? 'circuito' : '' });
         try { auditoria.registrar(quem, 'conversa.agendar', chave, when); } catch (_) {}
         res.end(JSON.stringify({ ok: true, id }));
       } catch (e) { res.end(JSON.stringify({ ok: false, erro: e.message })); }
@@ -10705,6 +10768,7 @@ function bookConfig() {
   return _bookCfgCache;
 }
 let _bookInFlight = false;
+let _circSlots = { em: 0, dados: null }; // grade do Circuito Slim (Cadastro Express), 2 min
 async function processarExpressInbox() {
   if (_bookInFlight) return;
   let pend = [];
@@ -10723,7 +10787,7 @@ async function processarExpressInbox() {
         const r = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Sofia-Token': token },
-          body: JSON.stringify({ nome, email: String(op.email || '').trim(), telefone, when: String(op.when || '').trim(), origem: String(op.origem || '').trim(), acao_duplicado: String(op.acaoDuplicado || '').trim() }),
+          body: JSON.stringify({ nome, email: String(op.email || '').trim(), telefone, when: String(op.when || '').trim(), origem: String(op.origem || '').trim(), acao_duplicado: String(op.acaoDuplicado || '').trim(), tipo: op.tipo === 'circuito' ? 'circuito' : '' }),
           signal: AbortSignal.timeout(55000),
         });
         const data = await r.json().catch(() => ({}));

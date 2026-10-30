@@ -1153,6 +1153,9 @@ def api_book_sofia():
     origem = (dados.get("origem") or "").strip().lower()
     if origem not in ("express", "painel"):
         origem = ""
+    # tipo "circuito": experimental do CIRCUITO SLIM (turmas de circuito + serviço
+    # próprio, id por unidade). Só o operador (Express) escolhe isso.
+    circuito = (dados.get("tipo") or "").strip().lower() == "circuito" and origem in ("express", "painel")
 
     # 2) Validação mínima (sem CPF/nascimento — fluxo leve do WhatsApp).
     if len(nome.split()) < 2:
@@ -1195,7 +1198,7 @@ def api_book_sofia():
     #    deduplicação, limite de experimentais, etc.). CPF/nascimento ficam de fora.
     try:
         res = book_experimental(name=nome, when=when, email=email, phone=telefone,
-                                forcar_novo=forcar_novo, reuse_por="phone", evo=evo)
+                                forcar_novo=forcar_novo, reuse_por="phone", evo=evo, circuito=circuito)
     except TurmaLotadaError as e:
         # Turma cheia / inexistente / fora de janela: o lead JÁ foi cadastrado no EVO.
         # Devolvemos as alternativas para a Sofia oferecer outro horário à aluna.

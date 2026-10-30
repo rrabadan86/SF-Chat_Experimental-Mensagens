@@ -97,6 +97,22 @@ def max_experimentais():
         pass
     return EVO_MAX_EXPERIMENTAIS
 
+# Aula experimental do CIRCUITO SLIM (Cadastro Express): usa um serviço próprio no
+# EVO (cada unidade tem o seu id — ex.: 316 no Lago Sul 2). O painel grava o id em
+# Experimental/data/circuito-servico.txt (WhatsApp → Express); vale também
+# EVO_CIRCUITO_SERVICE_ID no .env. Sem id configurado, não agenda circuito.
+CIRCUITO_SERVICO_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "circuito-servico.txt")
+def circuito_service_id():
+    try:
+        with open(CIRCUITO_SERVICO_FILE, encoding="utf-8") as f:
+            v = (f.read() or "").strip()
+            if v.isdigit() and int(v) > 0:
+                return int(v)
+    except OSError:
+        pass
+    v = _clean("EVO_CIRCUITO_SERVICE_ID")
+    return int(v) if v and str(v).isdigit() else None
+
 # Antecedência mínima (em horas) para agendar a experimental em DIA ÚTIL. O painel
 # grava em Experimental/data/sofia-antecedencia-horas.txt e a grade (available_slots)
 # esconde os horários dentro dessa janela. Padrão 4h (mesma regra que a SoFIA usa).
