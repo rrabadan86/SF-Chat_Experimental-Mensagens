@@ -330,6 +330,9 @@ def book_experimental(
                 reason=f"já há {n_exp} aulas experimentais nesse horário",
             )
 
+    log.warning("Experimental%s: %s — vendendo o serviço %s e matriculando na turma %s (%s, idConfiguration=%s)",
+             " do CIRCUITO" if circuito else "", name, id_service if sell_service else "(sem venda)",
+             session.get("name"), fmt_datetime_evo(when), session.get("idConfiguration"))
     # 3) vende o serviço "Aula Experimental"
     sold = False
     if sell_service and id_service:

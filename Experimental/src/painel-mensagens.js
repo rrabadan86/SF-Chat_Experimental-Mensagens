@@ -1882,7 +1882,9 @@ function paginaExpress(aviso, erro) {
   // Erros conhecidos do EVO em português claro (o original fica entre parênteses).
   function exErroEvo(d){
     d=String(d||'erro no EVO');
-    if(/no sessions for this activity/i.test(d)) return '❌ O EVO não deixou matricular: <b>esse horário é de outra atividade</b> (ex.: Circuito Slim) — a aula experimental só vale para as turmas do SlimFit. Escolha outro horário.<br><small style="opacity:.75">('+exEsc(d)+')</small>';
+    if(/no sessions for this activity/i.test(d)) return exTipo()==='circuito'
+      ? '❌ O EVO não deixou matricular na turma do circuito: <b>o serviço vendido não dá direito a essa atividade</b>. Confira se o id do serviço da experimental do Circuito (abaixo) está certo — no EVO, o serviço precisa liberar a atividade do Circuito Slim.<br><small style="opacity:.75">('+exEsc(d)+')</small>'
+      : '❌ O EVO não deixou matricular: <b>esse horário é de outra atividade</b> (ex.: Circuito Slim) — a aula experimental do SlimFit só vale para as turmas do SlimFit. Escolha outro horário.<br><small style="opacity:.75">('+exEsc(d)+')</small>';
     return '❌ Não consegui agendar: '+exEsc(d);
   }
   // Motivo real da recusa (vem do EVO) em português claro.
