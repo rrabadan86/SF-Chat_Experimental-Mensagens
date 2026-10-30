@@ -636,7 +636,7 @@ const ESTILO = `
   .var{display:inline-block;background:#eef7f7;color:var(--teal-esc);border:1px solid #cdeaea;border-radius:6px;padding:2px 8px;font-family:ui-monospace,monospace;font-size:var(--fs-sm);cursor:pointer;user-select:none;transition:.12s}
   .var:hover{background:var(--teal);color:#fff;border-color:var(--teal)}
   label{display:block;font-weight:600;font-size:var(--fs-sm);margin:12px 0 4px}
-  input[type=text],input[type=tel],input[type=email],input[type=date],input[type=time],input[type=number],textarea{width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
+  input[type=text],input[type=search],input[type=tel],input[type=email],input[type=date],input[type=time],input[type=number],textarea{width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
   select{width:100%;max-width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:9px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
   textarea{line-height:1.5;resize:vertical}
   input:focus,textarea:focus,select:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(14,110,107,.16)}
@@ -745,6 +745,36 @@ const ESTILO = `
   .stat{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:14px;text-align:center}
   .stat .n{font-family:"Inter";font-weight:800;font-size:1.8rem;line-height:1}
   .stat .l{font-size:var(--fs-xs);color:var(--cinza);margin-top:4px;font-weight:600}
+  .al-filtros{display:grid;grid-template-columns:minmax(150px,1fr) minmax(150px,1fr) minmax(220px,2fr);gap:10px 12px;align-items:end}
+  .al-filtros label{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .al-filtros .al-f-larg:last-of-type{grid-column:1/-1}
+  .al-busca{display:flex;gap:8px}.al-busca input{flex:1;min-width:0}
+  .al-resumo{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;margin:0 0 10px;font-size:var(--fs-sm)}
+  .al-resumo b{font-size:1.05rem;color:var(--tinta)}
+  .wrap .al-tab td{vertical-align:top}
+  .al-tab .al-nome{font-weight:700;color:var(--tinta)}
+  .al-tab .al-nome a{color:var(--tinta);text-decoration:none}.al-tab .al-nome a:hover{color:var(--teal);text-decoration:underline}
+  .al-tab .al-nome .ip-pill{margin-left:8px;vertical-align:1px}
+  .al-sub{font-weight:500;font-size:var(--fs-xs);color:var(--cinza);margin-top:3px}
+  .al-tab .al-contr{color:var(--cinza);font-size:var(--fs-xs);max-width:300px}
+  .al-tab .al-data{white-space:nowrap}.al-rot{display:none}
+  .al-tab .al-evo{text-align:right;width:1%}
+  .al-pag{display:flex;align-items:center;justify-content:center;gap:10px;margin:14px 0 0;flex-wrap:wrap}
+  .al-pag [aria-disabled]{opacity:.4;pointer-events:none}
+  .al-nums{display:flex;gap:4px;align-items:center}
+  .al-nums a,.al-nums b{min-width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;font-weight:700;font-size:var(--fs-sm);text-decoration:none}
+  .al-nums a{color:var(--tinta)}.al-nums a:hover{background:var(--linha-soft)}
+  .al-nums b{background:var(--teal);color:#fff}
+  @media(max-width:640px){
+    .al-filtros{grid-template-columns:1fr 1fr}.al-filtros .al-f-larg{grid-column:1/-1}
+    .al-tab thead{display:none}
+    .al-tab tr{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:10px 0;border-bottom:1px solid var(--linha-soft)}
+    .wrap table.al-tab td{border:0;padding:0;background:none}
+    .wrap table.al-tab tbody tr:last-child{border-bottom:0}
+    .al-tab .al-nome{grid-column:1}.al-tab .al-evo{grid-column:2;grid-row:1/span 3;align-self:center}
+    .al-tab .al-contr,.al-tab .al-data{grid-column:1;max-width:none;font-size:var(--fs-xs);color:var(--cinza)}
+    .al-rot{display:inline}
+  }
   a.stat-link{display:block;color:inherit;text-decoration:none;transition:border-color .15s}
   a.stat-link:hover,a.stat-link:focus-visible{border-color:var(--teal)}
   .stat.ok .n{color:var(--ok)}.stat.err .n{color:var(--erro)}.stat.tot .n{color:var(--teal)}
@@ -6340,103 +6370,152 @@ function rotuloPeriodo(p, vis, longo) {
   const [, m, d] = p.k.split('-'); return `${d}/${m}`;
 }
 
-// Lista de alunas de um recorte: ativas num dia, ou quem entrou / saiu num período.
-// Usa "pessoas" (intervalos de contrato de cada uma) gravado pelo run_ativas_foto.py.
+// Lista de alunas de um recorte: ativas num dia (fim de cada mês, ou hoje), ou quem
+// entrou / saiu num mês ou período. Filtros no servidor (tipo, mês, contrato, nome)
+// e páginas de 50. Usa "pessoas" (intervalos e contratos de cada uma) do run_ativas_foto.py.
+const ATIVAS_POR_PAG = 50;
 function paginaAtivasLista(params) {
   const h = lerAtivasHist();
   const serie = ativasSerie(h.reconstruido);
   const hojeIso = serie.length ? serie[serie.length - 1].dia : '';
   const iso = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : '';
   const tipo = ['entraram', 'sairam'].includes(params.tipo) ? params.tipo : 'ativas';
-  const dia = iso(params.dia) && iso(params.dia) <= hojeIso ? params.dia : hojeIso;
-  const de = iso(params.de) || hojeIso, ate = iso(params.ate) || hojeIso;
+  const meses = serie.length ? ativasPeriodos(serie, 'mes') : [];
+  const mesSel = meses.find(m => m.k === params.m);
+  let dia = iso(params.dia) && iso(params.dia) <= hojeIso ? params.dia : hojeIso;
+  let de = iso(params.de) || '', ate = iso(params.ate) || '';
+  if (mesSel) { dia = mesSel.ate; de = mesSel.de; ate = mesSel.ate; }
+  else if (tipo !== 'ativas' && (!de || !ate)) { const ult = meses[meses.length - 1]; de = ult ? ult.de : hojeIso; ate = ult ? ult.ate : hojeIso; }
+  // qual opção do seletor de mês está valendo
+  const mesDoRecorte = tipo === 'ativas'
+    ? (dia === hojeIso ? 'hoje' : (meses.find(m => m.ate === dia) || {}).k)
+    : (meses.find(m => m.de === de && m.ate === ate) || {}).k;
   const fmtD = (d) => { const p = String(d || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : ''; };
   const maisUm = (d) => new Date(new Date(d + 'T12:00:00Z').getTime() + 86400000).toISOString().slice(0, 10);
   const pessoas = h.pessoas || {};
-  const voltar = `<a class="ui-btn sec" href="${esc(params.voltar && /^\/ativas(\?|$)/.test(params.voltar) ? params.voltar : '/ativas')}">← Voltar</a>`;
-  const titulo = tipo === 'ativas' ? `Alunas ativas ${dia === hojeIso ? 'hoje' : 'em ' + fmtD(dia)}`
-    : `${tipo === 'entraram' ? 'Entraram' : 'Saíram'} ${de === ate ? 'em ' + fmtD(de) : `de ${fmtD(de)} a ${fmtD(ate)}`}`;
+  const voltarUrl = params.voltar && /^\/ativas(\?|$)/.test(params.voltar) ? params.voltar : '/ativas';
+  const voltar = `<a class="ui-btn sec" href="${esc(voltarUrl)}">← Voltar</a>`;
+  const nomeMes = (k) => { const m = meses.find(x => x.k === k); return m ? rotuloPeriodo(m, 'mes', true) : ''; };
+  const titulo = tipo === 'ativas'
+    ? (dia === hojeIso ? 'Alunas ativas hoje' : mesDoRecorte ? `Alunas ativas no fim de ${nomeMes(mesDoRecorte)}` : `Alunas ativas em ${fmtD(dia)}`)
+    : `${tipo === 'entraram' ? 'Entraram' : 'Saíram'} ${mesDoRecorte ? 'em ' + nomeMes(mesDoRecorte) : de === ate ? 'em ' + fmtD(de) : `de ${fmtD(de)} a ${fmtD(ate)}`}`;
   const ign = h.ignorados || {};
+  const regra = (ign.regra || []).map(r => `<b>${esc(String(r).toUpperCase())}</b>`).join(' ou ');
   const nIgn = Object.values(ign.so_ignorado || {}).reduce((a, b) => a + b, 0);
-  const notaIgn = (ign.regra || []).length ? `<div class="ui-nota"><span>Contratos com ${(ign.regra || []).map(r => `<b>${esc(String(r).toUpperCase())}</b>`).join(' ou ')} no nome não contam${tipo === 'ativas' && dia === hojeIso && nIgn ? ` — hoje ${nIgn === 1 ? '1 pessoa só com esse contrato ficou' : nIgn + ' pessoas só com esse contrato ficaram'} de fora` : ''}.${tipo === 'ativas' && dia === hojeIso && ign.so_fila ? ` Contrato <b>na fila</b> (que ainda não começou) também não conta${` — ${ign.so_fila} pessoa${ign.so_fila === 1 ? '' : 's'} só com contrato na fila`}.` : ''}</span></div>` : '';
+  const atualHoje = tipo === 'ativas' && dia === hojeIso;
+  const notaIgn = regra ? `<p class="quando" style="margin:0">Não contam: contratos ${regra}${atualHoje && nIgn ? ` (${nIgn} pessoa${nIgn === 1 ? '' : 's'} hoje)` : ''} e renovação ainda na fila${atualHoje && ign.so_fila ? ` (${ign.so_fila} hoje)` : ''}.</p>` : '';
   const topo = (linhas) => uiTopo({ titulo, sub: 'Toque no nome para abrir o contato; <b>EVO ↗</b> abre o cadastro.', acoes: voltar, linhas });
   if (!serie.length || !h.pessoas) {
     return chrome({ tab: 'Alunas ativas' }, 'ativas', `<div class="wrap">${subnavIndicadores('ativas')}${topo([])}
       <div class="card"><div class="vazio">A lista de alunas aparece depois da próxima atualização. Volte e clique em <b>Atualizar agora</b>.</div></div></div>`);
   }
-  // nome/telefone do CRM pelo id do EVO (o CRM guarda o nome completo)
+  // nome/telefone do CRM pelo id do EVO
   const porEvo = {};
   try { for (const [tel, c] of Object.entries(contatos.carregar() || {})) if (c && c.idEvo) porEvo[String(c.idEvo)] = { nome: c.nome, tel }; } catch (_) {}
   const EVO_LINK = (process.env.EVO_LINK_URL || 'https://evo5.w12app.com.br').replace(/\/+$/, '');
-  const lista = [];
+  // contrato que valia numa data (o mais recente que já tinha começado)
+  const contratoEm = (p, d) => {
+    const cs = (p.cs || []).filter(c => c[0] <= d);
+    const vig = cs.filter(c => c[1] >= d);
+    const c = (vig.length ? vig : cs)[(vig.length ? vig : cs).length - 1];
+    return (c && c[2]) || (atualHoje ? p.c : '') || '';
+  };
+  const todos = [];
   for (const [id, p] of Object.entries(pessoas)) {
     const iv = p.iv || [];
     if (tipo === 'ativas') {
       const k = iv.findIndex(([a, b]) => a <= dia && dia <= b);
       if (k < 0) continue;
-      lista.push({ id, p, data: iv[k][0], nova: k === 0 });
+      todos.push({ id, p, data: iv[k][0], nova: k === 0, contrato: atualHoje && p.c ? p.c : contratoEm(p, dia) });
     } else {
       iv.forEach(([a, b], k) => {
-        if (tipo === 'entraram' && a >= de && a <= ate) lista.push({ id, p, data: a, nova: k === 0 });
-        if (tipo === 'sairam' && b < hojeIso && maisUm(b) >= de && maisUm(b) <= ate) lista.push({ id, p, data: b });
+        if (tipo === 'entraram' && a >= de && a <= ate) todos.push({ id, p, data: a, nova: k === 0, contrato: contratoEm(p, a) });
+        if (tipo === 'sairam' && b < hojeIso && maisUm(b) >= de && maisUm(b) <= ate) todos.push({ id, p, data: b, contrato: contratoEm(p, b) });
       });
     }
   }
-  const nomeDe = (x) => (porEvo[x.id] && porEvo[x.id].nome) || x.p.n || ('id ' + x.id);
-  lista.sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), 'pt-BR'));
-  const atualHoje = tipo === 'ativas' && dia === hojeIso;
-  // mesmo nome em mais de um cadastro do EVO: mostra o nº para diferenciar
-  const nNome = {}; for (const x of lista) { const k = nomeDe(x).toLowerCase(); nNome[k] = (nNome[k] || 0) + 1; }
-  // contratos (só das ativas hoje — é o que o EVO diz agora)
+  // nome: o completo do EVO > o do CRM > o 1º nome
+  const nomeDe = (x) => (x.p.nc && x.p.n) || (porEvo[x.id] && porEvo[x.id].nome) || x.p.n || ('id ' + x.id);
+  todos.forEach(x => { x.nome = nomeDe(x); x.c = x.contrato || 'sem contrato'; });
+  todos.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  const nNome = {}; for (const x of todos) { const k = x.nome.toLowerCase(); nNome[k] = (nNome[k] || 0) + 1; }
   const porContrato = {};
-  if (atualHoje) for (const x of lista) { const c = x.p.c || 'sem contrato'; porContrato[c] = (porContrato[c] || 0) + 1; }
+  for (const x of todos) porContrato[x.c] = (porContrato[x.c] || 0) + 1;
+  const contrOrd = Object.entries(porContrato).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const cSel = porContrato[params.c] ? params.c : '';
+  const normQ = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const q = String(params.q || '').trim().slice(0, 60);
+  const lista = todos.filter(x => (!cSel || x.c === cSel) && (!q || normQ(x.nome).includes(normQ(q))));
+  const paginas = Math.max(1, Math.ceil(lista.length / ATIVAS_POR_PAG));
+  const pag = Math.min(paginas, Math.max(1, parseInt(params.p, 10) || 1));
+  const naPag = lista.slice((pag - 1) * ATIVAS_POR_PAG, pag * ATIVAS_POR_PAG);
+
+  // link mantendo o recorte atual
+  const base = { tipo, m: mesDoRecorte && mesDoRecorte !== 'hoje' ? mesDoRecorte : '', dia: mesDoRecorte ? '' : (tipo === 'ativas' ? dia : ''), de: !mesDoRecorte && tipo !== 'ativas' ? de : '', ate: !mesDoRecorte && tipo !== 'ativas' ? ate : '', c: cSel, q, voltar: voltarUrl };
+  const url = (over) => { const o = Object.assign({}, base, over); return '/ativas/lista?' + Object.entries(o).filter(([, v]) => v !== '' && v != null).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&'); };
+
+  // ── filtros ──
+  const optMes = (tipo === 'ativas' ? [`<option value="hoje"${mesDoRecorte === 'hoje' ? ' selected' : ''}>Hoje</option>`] : [])
+    .concat(mesDoRecorte ? [] : [`<option value="" selected>${tipo === 'ativas' ? fmtD(dia) : `${fmtD(de)} a ${fmtD(ate)}`}</option>`])
+    .concat(meses.slice().reverse().map(m => `<option value="${m.k}"${m.k === mesDoRecorte ? ' selected' : ''}>${rotuloPeriodo(m, 'mes', true)}${m.k === meses[meses.length - 1].k && tipo === 'ativas' ? ' (até hoje)' : ''}</option>`)).join('');
+  const optContr = `<option value="">Todos os contratos (${todos.length})</option>` + contrOrd.map(([c, n]) => `<option value="${esc(c)}"${c === cSel ? ' selected' : ''}>${esc(c)} (${n})</option>`).join('');
+  const ocultos = (mesDoRecorte ? '' : (tipo === 'ativas' ? `<input type="hidden" name="dia" value="${dia}">` : `<input type="hidden" name="de" value="${de}"><input type="hidden" name="ate" value="${ate}">`))
+    + `<input type="hidden" name="voltar" value="${esc(voltarUrl)}">`;
+  const filtros = `<form method="GET" action="/ativas/lista" class="al-filtros">
+      <label><span class="ui-lbl">Ver</span><select name="tipo" onchange="this.form.submit()">
+        <option value="ativas"${tipo === 'ativas' ? ' selected' : ''}>Alunas ativas</option>
+        <option value="entraram"${tipo === 'entraram' ? ' selected' : ''}>Quem entrou</option>
+        <option value="sairam"${tipo === 'sairam' ? ' selected' : ''}>Quem saiu</option></select></label>
+      <label><span class="ui-lbl">${tipo === 'ativas' ? 'Quando' : 'Mês'}</span><select name="m" onchange="this.form.submit()">${optMes}</select></label>
+      <label class="al-f-larg"><span class="ui-lbl">Contrato</span><select name="c" onchange="this.form.submit()">${optContr}</select></label>
+      <label class="al-f-larg"><span class="ui-lbl">Nome</span><span class="al-busca"><input type="search" name="q" value="${esc(q)}" placeholder="Buscar pelo nome…"><button class="ui-btn" type="submit">Buscar</button></span></label>
+      ${ocultos}
+    </form>`;
+
+  // ── resumo ──
   const nTranc = atualHoje ? lista.filter(x => x.p.t).length : 0;
-  const contrOrd = Object.entries(porContrato).sort((a, b) => b[1] - a[1]);
-  const idxContr = Object.fromEntries(contrOrd.map(([c], i) => [c, i]));
-  const linhas = lista.map(x => {
+  const nNovas = lista.filter(x => x.nova).length;
+  const resumo = `<div class="al-resumo"><span><b>${lista.length}</b> aluna${lista.length === 1 ? '' : 's'}${cSel || q ? ` <span class="quando" style="margin:0">de ${todos.length}</span>` : ''}</span>
+      ${nTranc ? `<span>🔒 <b>${nTranc}</b> trancada${nTranc === 1 ? '' : 's'}</span>` : ''}
+      ${tipo === 'entraram' ? `<span><b>${nNovas}</b> nova${nNovas === 1 ? '' : 's'}</span><span><b>${lista.length - nNovas}</b> ${lista.length - nNovas === 1 ? 'voltou' : 'voltaram'}</span>` : ''}
+      ${cSel || q ? `<a href="${esc(url({ c: '', q: '' }))}" class="ui-btn sec" style="padding:4px 12px">Limpar filtros</a>` : ''}</div>`;
+
+  // ── tabela ──
+  const colData = tipo === 'ativas' ? 'Aluna desde' : tipo === 'entraram' ? 'Entrou em' : 'Último dia';
+  const linhas = naPag.map(x => {
     const ct = porEvo[x.id];
-    return uiPessoa({
-      attrs: atualHoje ? ` data-c="${idxContr[x.p.c || 'sem contrato']}"` : '',
-      nome: nomeDe(x),
-      href: ct ? '/sofia?view=contatos&q=' + String(ct.tel).replace(/\D/g, '').slice(-8) : '',
-      evo: `${EVO_LINK}/${config.evo.appBase}/clientes/cadastro/${x.id}//perfil`,
-      meta: [
-        atualHoje && x.p.t ? '🔒 <b>Trancada</b>' : '',
-        atualHoje && x.p.c ? `📄 ${esc(x.p.c)}` : '',
-        atualHoje && Array.isArray(x.p.f) ? `⏭️ Na fila: ${esc(x.p.f[0] || 'contrato')} a partir de <b>${fmtD(x.p.f[1])}</b>` : '',
-        nNome[nomeDe(x).toLowerCase()] > 1 ? `Cadastro EVO nº <b>${esc(x.id)}</b>` : '',
-        tipo === 'ativas' ? `Aluna desde <b>${fmtD(x.data)}</b>` : '',
-        tipo === 'entraram' ? `Entrou em <b>${fmtD(x.data)}</b> · ${x.nova ? '<b>nova</b>' : 'voltou'}` : '',
-        tipo === 'sairam' ? `Último dia do contrato <b>${fmtD(x.data)}</b>` : '',
-      ],
-    });
+    const href = ct ? '/sofia?view=contatos&q=' + String(ct.tel).replace(/\D/g, '').slice(-8) : '';
+    const tags = [
+      atualHoje && x.p.t ? '<span class="ip-pill ip-aguardando">🔒 Trancada</span>' : '',
+      tipo === 'entraram' ? (x.nova ? '<span class="ip-pill ip-fechou">Nova</span>' : '<span class="ip-pill ip-aguardando">Voltou</span>') : '',
+    ].join('');
+    const sub = [
+      atualHoje && Array.isArray(x.p.f) ? `⏭️ Renovação na fila a partir de ${fmtD(x.p.f[1])}` : '',
+      nNome[x.nome.toLowerCase()] > 1 ? `Cadastro EVO nº ${esc(x.id)}` : '',
+    ].filter(Boolean).join(' · ');
+    return `<tr>
+        <td class="al-nome">${href ? `<a href="${esc(href)}" title="Abrir em Contatos">${esc(x.nome)}</a>` : `<span>${esc(x.nome)}</span>`}${tags}${sub ? `<div class="al-sub">${sub}</div>` : ''}</td>
+        <td class="al-contr">${esc(x.contrato || '—')}</td>
+        <td class="al-data"><span class="al-rot">${colData} </span>${fmtD(x.data)}</td>
+        <td class="al-evo"><a class="ip-evo" href="${esc(`${EVO_LINK}/${config.evo.appBase}/clientes/cadastro/${x.id}//perfil`)}" target="_blank" rel="noopener">EVO ↗</a></td>
+      </tr>`;
   }).join('');
-  const resumo = [`<b>${lista.length}</b> aluna${lista.length === 1 ? '' : 's'}`];
-  if (nTranc) resumo.push(`${nTranc} trancada${nTranc === 1 ? '' : 's'}`);
-  if (tipo === 'entraram') { const nv = lista.filter(x => x.nova).length; resumo.push(`${nv} nova${nv === 1 ? '' : 's'} · ${lista.length - nv} voltaram`); }
-  // Clicar num contrato filtra a lista (de novo = mostra todas); combina com a busca.
-  const chipsContr = contrOrd.length > 1 ? `<button type="button" class="ui-chip on" data-fc="">Todos <b>${lista.length}</b></button>` + contrOrd.map(([c, n], i) => `<button type="button" class="ui-chip" data-fc="${i}">${esc(c)} <b>${n}</b></button>`).join('') : '';
-  const busca = `<input type="search" id="al-busca" placeholder="Buscar pelo nome…" aria-label="Buscar pelo nome" style="max-width:320px">`;
-  const scriptFiltro = `<script>(function(){
-    var fc='', q='', lista=document.getElementById('al-lista'), cont=document.getElementById('al-cont');
-    var norm=function(t){return String(t).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');};
-    function aplicar(){ if(!lista) return; var n=0;
-      lista.querySelectorAll('.ip-row').forEach(function(r){ var ok=(fc===''||r.getAttribute('data-c')===fc)&&(!q||norm(r.textContent).indexOf(q)>=0); r.style.display=ok?'':'none'; if(ok) n++; });
-      if(cont) cont.textContent=(fc!==''||q)?('Mostrando '+n+(n===1?' aluna':' alunas')):''; }
-    document.querySelectorAll('[data-fc]').forEach(function(b){ b.addEventListener('click',function(){
-      fc=(fc===b.getAttribute('data-fc'))?'':b.getAttribute('data-fc');
-      document.querySelectorAll('[data-fc]').forEach(function(x){ x.classList.toggle('on', x.getAttribute('data-fc')===fc); });
-      aplicar(); if(fc!==''&&lista) lista.scrollIntoView({behavior:'smooth',block:'start'}); }); });
-    var bx=document.getElementById('al-busca'); if(bx) bx.addEventListener('input',function(){ q=norm(bx.value); aplicar(); });
-  })();</script>`;
+  const nums = []; for (let i = 1; i <= paginas; i++) if (i === 1 || i === paginas || Math.abs(i - pag) <= 2) nums.push(i); else if (nums[nums.length - 1] !== '…') nums.push('…');
+  const paginacao = paginas > 1 ? `<nav class="al-pag" aria-label="Páginas">
+      ${pag > 1 ? `<a class="ui-btn sec" href="${esc(url({ p: pag - 1 }))}">← Anterior</a>` : '<span class="ui-btn sec" aria-disabled="true">← Anterior</span>'}
+      <span class="al-nums">${nums.map(n => n === '…' ? '<span class="quando" style="margin:0">…</span>' : n === pag ? `<b aria-current="page">${n}</b>` : `<a href="${esc(url({ p: n }))}">${n}</a>`).join('')}</span>
+      ${pag < paginas ? `<a class="ui-btn sec" href="${esc(url({ p: pag + 1 }))}">Próxima →</a>` : '<span class="ui-btn sec" aria-disabled="true">Próxima →</span>'}
+    </nav>
+    <p class="quando" style="margin:6px 0 0;text-align:center">${(pag - 1) * ATIVAS_POR_PAG + 1}–${Math.min(pag * ATIVAS_POR_PAG, lista.length)} de ${lista.length}</p>` : '';
+  const semNome = todos.filter(x => !x.p.nc && !porEvo[x.id]).length;
   const corpo = `<div class="wrap">${subnavIndicadores('ativas')}
-    ${topo([`<div class="ui-linha"><span>${resumo.join(' · ')}</span></div>`, notaIgn].filter(Boolean))}
-    ${chipsContr ? `<div class="card"><div class="ui-lbl" style="margin:0 0 8px">Por contrato <span style="font-weight:600;text-transform:none;letter-spacing:0">— toque para ver só as alunas daquele contrato</span></div><div class="ui-chips" style="flex-wrap:wrap">${chipsContr}</div></div>` : ''}
+    ${topo([filtros, notaIgn].filter(Boolean))}
     <div class="card">
-      ${lista.length > 8 ? `<div style="margin:0 0 10px">${busca}</div>` : ''}
-      <div id="al-cont" class="quando" style="margin:0 0 6px"></div>
-      ${lista.length ? `<div class="ip-lista" id="al-lista">${linhas}</div>` : '<div class="vazio">Ninguém neste recorte.</div>'}
-    </div></div>${scriptFiltro}`;
+      ${resumo}
+      ${lista.length ? `<div style="overflow-x:auto"><table class="ui-tab al-tab"><thead><tr><th>Aluna</th><th>Contrato</th><th>${colData}</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>${paginacao}`
+        : `<div class="vazio">Ninguém ${cSel || q ? 'com esse filtro' : 'neste recorte'}.</div>`}
+      ${semNome ? `<p class="quando" style="margin:10px 0 0">${semNome} nome${semNome === 1 ? '' : 's'} ainda só com o 1º nome — o nome completo vem do EVO aos poucos (a cada <b>Atualizar agora</b> e de madrugada).</p>` : ''}
+    </div></div>`;
   return chrome({ tab: 'Alunas ativas' }, 'ativas', corpo);
 }
 
@@ -6453,7 +6532,7 @@ function paginaAtivas(params) {
   const ultimo = h.ultimo && h.ultimo.dia;
   const fotoHoje = ultimo && h.dias && h.dias[ultimo];
   const btnAtualizar = `<form method="POST" action="/ativas/atualizar" style="margin:0"><button class="ui-btn sec" type="submit"${_ativasGerando ? ' disabled' : ''}>${_ativasGerando ? '⏳ Calculando…' : '🔄 Atualizar agora'}</button></form>`;
-  const avisoCalc = _ativasGerando ? '<div class="ui-nota">⏳ Calculando no EVO… leva menos de 1 minuto. Atualize a página (F5).</div>'
+  const avisoCalc = _ativasGerando ? '<div class="ui-nota">⏳ Calculando no EVO… os números ficam prontos em ~1 minuto; os nomes completos, em até 3. Atualize a página (F5).</div>'
     : (_ativasUltimo && !_ativasUltimo.ok && Date.now() - _ativasUltimo.fim < 6 * 3600e3) ? `<div class="ui-nota erro">⚠️ O último cálculo falhou: ${esc(_ativasUltimo.msg)}</div>` : '';
   const topoBase = (linhas) => uiTopo({
     titulo: 'Alunas ativas',
@@ -6462,7 +6541,7 @@ function paginaAtivas(params) {
   });
   if (!serie.length) {
     return chrome({ tab: 'Alunas ativas' }, 'ativas', `<div class="wrap">${subnavIndicadores('ativas')}${topoBase([])}
-      <div class="card"><div class="vazio">${_ativasGerando ? 'Calculando o histórico no EVO… atualize a página em 1 minuto.' : 'Ainda sem histórico. Clique em <b>Atualizar agora</b> (leva menos de 1 minuto) ou espere a atualização das 05:25.'}</div></div></div>`);
+      <div class="card"><div class="vazio">${_ativasGerando ? 'Calculando o histórico no EVO… atualize a página em 1 minuto.' : 'Ainda sem histórico. Clique em <b>Atualizar agora</b> (leva de 1 a 3 minutos) ou espere a atualização das 05:25.'}</div></div></div>`);
   }
 
   const periodos = ativasPeriodos(serie, vis);
@@ -6493,9 +6572,9 @@ function paginaAtivas(params) {
   const qPer = (tipo, p) => `tipo=${tipo}&de=${p.de}&ate=${p.ate}`;
 
   const linhasTab = vistos.slice().reverse().map(p => `<tr>
-      <td><b>${esc(rotuloPeriodo(p, vis, true))}</b>${p === atual ? ' <span class="quando" style="margin:0">(até hoje)</span>' : ''}</td>
+      <td>${lnk(vis === 'mes' ? `tipo=ativas&m=${p.k}` : `tipo=ativas&dia=${p.ate}`, `<b>${esc(rotuloPeriodo(p, vis, true))}</b>`, 'Ver as alunas ativas')}${p === atual ? ' <span class="quando" style="margin:0">(até hoje)</span>' : ''}</td>
       <td>${p.ini}</td>
-      <td>${p.e ? lnk(qPer('entraram', p), `<b style="color:var(--ok)">+${p.e}</b>`, 'Ver quem entrou') : '<b style="color:var(--ok)">+0</b>'} <span class="quando" style="margin:0">(${p.n} nova${p.n === 1 ? '' : 's'} · ${p.e - p.n} voltou${p.e - p.n === 1 ? '' : 'aram'})</span></td>
+      <td>${p.e ? lnk(qPer('entraram', p), `<b style="color:var(--ok)">+${p.e}</b>`, 'Ver quem entrou') : '<b style="color:var(--ok)">+0</b>'} <span class="quando" style="margin:0">(${p.n} nova${p.n === 1 ? '' : 's'} · ${p.e - p.n} ${p.e - p.n === 1 ? 'voltou' : 'voltaram'})</span></td>
       <td>${p.s ? lnk(qPer('sairam', p), `<b style="color:var(--erro)">−${p.s}</b>`, 'Ver quem saiu') : '<b style="color:var(--erro)">−0</b>'}</td>
       <td>${lnk(`tipo=ativas&dia=${p.ate}`, `<b>${p.fim}</b>`, 'Ver as alunas ativas neste dia')}</td>
       <td><b style="color:${p.fim > p.ini ? 'var(--ok)' : p.fim < p.ini ? 'var(--erro)' : 'var(--cinza)'}">${sinal(p.fim - p.ini)}</b></td>
@@ -6546,7 +6625,7 @@ function paginaAtivas(params) {
       <table class="ui-tab"><thead><tr><th>${vis === 'mes' ? 'Mês' : 'Semana de'}</th><th>Início</th><th>Entraram</th><th>Saíram</th><th>Fim</th><th>Variação</th><th>Taxa de saída</th></tr></thead><tbody>${linhasTab}</tbody></table>
     </div>
     </div>
-    <p class="ui-rodape"><b>Ativa</b> = contrato vigente no EVO; <b>trancada conta</b>. Calculado pelos contratos (início, fim e cancelamento) de todas as clientes, inclusive ex-alunas — por isso dá para comparar com o passado. Renovação com até ${(h.reconstruido && h.reconstruido.tolerancia) || 7} dias de atraso não conta como saída. <b>Nova</b> = primeiro contrato; <b>voltou</b> = ex-aluna que voltou. <b>Taxa de saída</b> = saíram ÷ ativas no início. Atualizado todo dia às 05:25${ultimo ? ` (última: ${esc(fmtData(ultimo))})` : ''}.</p>
+    <p class="ui-rodape"><b>Ativa</b> = contrato vigente no EVO; <b>trancada conta</b>; contrato ${((h.ignorados && h.ignorados.regra) || ['circuito', 'vip']).map(r => esc(String(r).toUpperCase())).join(' ou ')} e renovação ainda na fila <b>não contam</b>. Calculado pelos contratos (início, fim e cancelamento) de todas as clientes, inclusive ex-alunas — por isso dá para comparar com o passado. Renovação com até ${(h.reconstruido && h.reconstruido.tolerancia) || 7} dias de atraso não conta como saída. <b>Nova</b> = primeiro contrato; <b>voltou</b> = ex-aluna que voltou. <b>Taxa de saída</b> = saíram ÷ ativas no início. Atualizado todo dia às 05:25${ultimo ? ` (última: ${esc(fmtData(ultimo))})` : ''}.</p>
   </div>
   <style>
     .ui-graf{position:relative;width:100%}
@@ -8320,7 +8399,7 @@ const server = http.createServer((req, res) => {
     const sp = new URLSearchParams(req.url.split('?')[1] || '');
     const g = (k) => sp.get(k) || '';
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(paginaAtivasLista({ tipo: g('tipo'), dia: g('dia'), de: g('de'), ate: g('ate'), voltar: g('voltar') }));
+    return res.end(paginaAtivasLista({ tipo: g('tipo'), m: g('m'), dia: g('dia'), de: g('de'), ate: g('ate'), c: g('c'), q: g('q'), p: g('p'), voltar: g('voltar') }));
   }
   if (req.method === 'POST' && url === '/ativas/atualizar') {
     // Roda o run_ativas_foto.py agora (só lê o EVO pela API; < 1 min; desiste em 5 min).

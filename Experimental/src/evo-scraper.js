@@ -61,7 +61,7 @@ class EvoScraper {
     // HEADLESS=false (recomendado no Linux via xvfb-run) reproduz o navegador
     // "com tela" que o EVO espera. Perfil persistente guarda cookies/sessão,
     // exatamente como o Edge no Windows — evita cair no login a cada navegação.
-    const headless = process.env.HEADLESS !== 'false';
+    const headless = !require('./tela').querTela(); // sem tela virtual → cai para sem tela (tela.js)
     const userDataDir = process.env.EVO_PROFILE_DIR ||
       path.resolve(__dirname, '..', 'evo-chrome-data');
     // Trava velha do Chromium (SingletonLock/Cookie/Socket): guarda NOME-DA-MÁQUINA
