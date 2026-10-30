@@ -48,6 +48,8 @@ backups/
 data/indicadores.json
 data/experimentais-historico.json
 data/experimentais-historico.json.tmp
+# Foto de perfil do Google de cada usuário do painel (menu da conta)
+data/fotos-usuarios.json
 # Log completo dos agendamentos do formulario (dados da aluna) — por VPS
 data/bookings.json
 # DM de teste do Instagram (ponte painel<->robo) — por VPS
