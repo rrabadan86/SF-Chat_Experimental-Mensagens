@@ -6413,7 +6413,7 @@ function paginaAtivasLista(params) {
   }).join('');
   const resumo = [`<b>${lista.length}</b> aluna${lista.length === 1 ? '' : 's'}`];
   if (nTranc) resumo.push(`${nTranc} trancada${nTranc === 1 ? '' : 's'}`);
-  if (tipo === 'entraram') { const nv = lista.filter(x => x.nova).length; resumo.push(`${nv} nova${nv === 1 ? '' : 's'} · ${lista.length - nv} voltaram`); }
+  if (tipo === 'entraram') { const nv = lista.filter(x => x.nova).length; resumo.push(`${nv} nova${nv === 1 ? '' : 's'} · ${lista.length - nv} ${lista.length - nv === 1 ? 'voltou' : 'voltaram'}`); }
   // Clicar num contrato filtra a lista (de novo = mostra todas); combina com a busca.
   const chipsContr = contrOrd.length > 1 ? `<button type="button" class="ui-chip on" data-fc="">Todos <b>${lista.length}</b></button>` + contrOrd.map(([c, n], i) => `<button type="button" class="ui-chip" data-fc="${i}">${esc(c)} <b>${n}</b></button>`).join('') : '';
   const busca = `<input type="search" id="al-busca" placeholder="Buscar pelo nome…" aria-label="Buscar pelo nome" style="max-width:320px">`;
@@ -6495,7 +6495,7 @@ function paginaAtivas(params) {
   const linhasTab = vistos.slice().reverse().map(p => `<tr>
       <td><b>${esc(rotuloPeriodo(p, vis, true))}</b>${p === atual ? ' <span class="quando" style="margin:0">(até hoje)</span>' : ''}</td>
       <td>${p.ini}</td>
-      <td>${p.e ? lnk(qPer('entraram', p), `<b style="color:var(--ok)">+${p.e}</b>`, 'Ver quem entrou') : '<b style="color:var(--ok)">+0</b>'} <span class="quando" style="margin:0">(${p.n} nova${p.n === 1 ? '' : 's'} · ${p.e - p.n} voltou${p.e - p.n === 1 ? '' : 'aram'})</span></td>
+      <td>${p.e ? lnk(qPer('entraram', p), `<b style="color:var(--ok)">+${p.e}</b>`, 'Ver quem entrou') : '<b style="color:var(--ok)">+0</b>'} <span class="quando" style="margin:0">(${p.n} nova${p.n === 1 ? '' : 's'} · ${p.e - p.n} ${p.e - p.n === 1 ? 'voltou' : 'voltaram'})</span></td>
       <td>${p.s ? lnk(qPer('sairam', p), `<b style="color:var(--erro)">−${p.s}</b>`, 'Ver quem saiu') : '<b style="color:var(--erro)">−0</b>'}</td>
       <td>${lnk(`tipo=ativas&dia=${p.ate}`, `<b>${p.fim}</b>`, 'Ver as alunas ativas neste dia')}</td>
       <td><b style="color:${p.fim > p.ini ? 'var(--ok)' : p.fim < p.ini ? 'var(--erro)' : 'var(--cinza)'}">${sinal(p.fim - p.ini)}</b></td>
@@ -6546,7 +6546,7 @@ function paginaAtivas(params) {
       <table class="ui-tab"><thead><tr><th>${vis === 'mes' ? 'Mês' : 'Semana de'}</th><th>Início</th><th>Entraram</th><th>Saíram</th><th>Fim</th><th>Variação</th><th>Taxa de saída</th></tr></thead><tbody>${linhasTab}</tbody></table>
     </div>
     </div>
-    <p class="ui-rodape"><b>Ativa</b> = contrato vigente no EVO; <b>trancada conta</b>. Calculado pelos contratos (início, fim e cancelamento) de todas as clientes, inclusive ex-alunas — por isso dá para comparar com o passado. Renovação com até ${(h.reconstruido && h.reconstruido.tolerancia) || 7} dias de atraso não conta como saída. <b>Nova</b> = primeiro contrato; <b>voltou</b> = ex-aluna que voltou. <b>Taxa de saída</b> = saíram ÷ ativas no início. Atualizado todo dia às 05:25${ultimo ? ` (última: ${esc(fmtData(ultimo))})` : ''}.</p>
+    <p class="ui-rodape"><b>Ativa</b> = contrato vigente no EVO; <b>trancada conta</b>; contrato ${((h.ignorados && h.ignorados.regra) || ['circuito', 'vip']).map(r => esc(String(r).toUpperCase())).join(' ou ')} e renovação ainda na fila <b>não contam</b>. Calculado pelos contratos (início, fim e cancelamento) de todas as clientes, inclusive ex-alunas — por isso dá para comparar com o passado. Renovação com até ${(h.reconstruido && h.reconstruido.tolerancia) || 7} dias de atraso não conta como saída. <b>Nova</b> = primeiro contrato; <b>voltou</b> = ex-aluna que voltou. <b>Taxa de saída</b> = saíram ÷ ativas no início. Atualizado todo dia às 05:25${ultimo ? ` (última: ${esc(fmtData(ultimo))})` : ''}.</p>
   </div>
   <style>
     .ui-graf{position:relative;width:100%}
