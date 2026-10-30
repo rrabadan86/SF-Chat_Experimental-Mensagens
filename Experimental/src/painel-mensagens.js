@@ -1844,6 +1844,17 @@ function paginaExpress(aviso, erro) {
   // Normaliza p/ DDI 55 (o EVO e a confirmação por WhatsApp esperam o número cheio).
   function exNormTel(s){ var d=exSoDig(s); if(d.length===10||d.length===11) d='55'+d; return d; }
   function exBtnOn(on){ var b=document.getElementById('exBtn'); if(b){ b.disabled=!on; b.textContent=on?'Agendar no EVO':'Agendando…'; } }
+  // Motivo real da recusa (vem do EVO) em português claro.
+  function exMotivoLotada(res){
+    var m=String(res.motivo||''), r=(m.match(/^Turma de .*?\\d{1,2}:\\d{2}\\s*:\\s*([^.]+)/)||[])[1]||'';
+    var alt=(res.alternativas||[]).join('  ·  ');
+    var dica='';
+    if(/experimenta/i.test(r)) dica=' O limite de experimentais por turma fica em <b>SoFIA → Configuração</b>.';
+    else if(/fechada/i.test(r)) dica=' A turma está fechada (cadeado) no EVO.';
+    else if(/janela/i.test(r)) dica=' O EVO ainda não abriu a agenda dessa data — o cadastro e a venda foram feitos; matricule à mão no EVO.';
+    else if(/não há turma/i.test(r)) dica=' Não existe turma nesse dia/horário no EVO.';
+    return '⚠️ Não deu para agendar nesse horário'+(r?': <b>'+exEsc(r)+'</b>.':' (turma cheia).')+dica+'<br>Horários com vaga: '+(alt?exEsc(alt):'nenhum encontrado na semana')+'.';
+  }
   function exStatus(html,cls){ var m=document.getElementById('exMsg'); if(!m)return; m.className='aviso'+(cls?(' '+cls):''); m.innerHTML=html; m.style.display='block'; }
   // Combobox de horários: só os do dia escolhido que TÊM vaga (grade do form).
   var exSlots=null;
@@ -1923,7 +1934,7 @@ function paginaExpress(aviso, erro) {
                 +'<button type="button" class="save" style="width:auto;padding:9px 14px;background:#8a6100" onclick="exDupNovo()">Outra pessoa — criar novo</button>'
                 +'</div>','err');
             }
-            else if(res.lotada){ exStatus('⚠️ Turma cheia nesse horário. Alternativas: '+exEsc((res.alternativas||[]).join('  ·  ')||'—'),'err'); }
+            else if(res.lotada){ exStatus(exMotivoLotada(res),'err'); exSlots=null; exCarregarSlots(); }
             else { exStatus('❌ Não consegui agendar: '+exEsc(res.detalhe||'erro no EVO'),'err'); }
           }).catch(function(){ if(n>40){ exStatus('❌ erro de rede','err'); exBtnOn(true); return; } setTimeout(poll,1500); });
         })();
@@ -3091,7 +3102,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
                 +'<button type="button" onclick="agDupNovo()" style="padding:8px 12px;border-radius:9px;border:1px solid var(--linha);background:#8a6100;color:#fff;cursor:pointer">Outra pessoa — criar novo</button>'
                 +'</div>';
             }
-            else if(res.lotada){ if(st)st.innerHTML='⚠️ Turma cheia nesse horário. Alternativas: '+escH((res.alternativas||[]).join('  ·  ')||'—'); }
+            else if(res.lotada){ if(st){ var mr=(String(res.motivo||'').match(/^Turma de .*?\\d{1,2}:\\d{2}\\s*:\\s*([^.]+)/)||[])[1]||''; st.innerHTML='⚠️ Não deu para agendar nesse horário'+(mr?': <b>'+escH(mr)+'</b>.':' (turma cheia).')+'<br>Horários com vaga: '+(escH((res.alternativas||[]).join('  ·  '))||'nenhum encontrado na semana')+'.'; } }
             else { if(st)st.textContent='❌ Não consegui agendar: '+(res.detalhe||'erro no EVO'); }
           }).catch(function(){ if(n>40){ if(st)st.textContent='❌ erro de rede'; return; } setTimeout(poll,1500); });
         })();
@@ -10720,7 +10731,9 @@ async function processarExpressInbox() {
           // a tela decide sobrescrever ou criar novo, e reenvia com acao_duplicado.
           res = { duplicado: true, existente: data.existente };
         } else if (r.status === 409) {
-          res = { lotada: true, alternativas: Array.isArray(data.alternativas) ? data.alternativas.filter(Boolean) : [] };
+          // detalhe = o motivo REAL do EVO ("Turma de … : já há 2 aulas experimentais
+          // nesse horário", "não há turma nesse horário", "turma fechada"…) — a tela mostra.
+          res = { lotada: true, alternativas: Array.isArray(data.alternativas) ? data.alternativas.filter(Boolean) : [], motivo: String((data && data.detalhe) || '').slice(0, 300) };
         } else {
           res = { erro: true, detalhe: (data && (data.erro || data.detalhe)) || ('HTTP ' + r.status) };
         }
