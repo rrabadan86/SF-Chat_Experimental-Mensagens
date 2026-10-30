@@ -792,7 +792,16 @@ const ESTILO = `
   .ip-acao{grid-column:2;grid-row:1 / span 2;display:flex;gap:6px}
   .ip-evo{font-size:.75rem;font-weight:700;color:var(--teal-esc);border:1px solid var(--linha);border-radius:8px;padding:4px 10px;text-decoration:none;white-space:nowrap;background:var(--card)}
   .ip-evo:hover{border-color:var(--teal)}
+  .ip-val{font-weight:800;color:var(--tinta);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+  .ip-val small{font-weight:600;color:var(--faint)}
   @media(max-width:600px){.ui-topo{padding:14px}.ip-row{grid-template-columns:1fr}.ip-meta{grid-row:auto}.ip-acao{grid-column:1;grid-row:auto}.ui-lbl{min-width:0;width:100%}}
+  /* Tabelas: um só visual em todo o painel (cabeçalho discreto, linhas finas). */
+  .ui-tab{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
+  .wrap :is(.ui-tab,.ct-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) th{text-align:left;font-family:"Inter";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;letter-spacing:.04em;padding:10px 12px;border-bottom:1px solid var(--linha);background:var(--bg);white-space:nowrap}
+  .wrap :is(.ui-tab,.ct-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) td{padding:10px 12px;border-bottom:1px solid var(--linha-soft);vertical-align:middle}
+  .wrap :is(.ui-tab,.ct-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) tbody tr:last-child td{border-bottom:0}
+  .wrap :is(.ui-tab,.ct-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) tbody tr:hover td{background:var(--linha-soft)}
+  .wrap :is(.ui-tab,.ct-tab,.fm-tab,.logtab,.pf-tab) td{font-variant-numeric:tabular-nums}
   /* Gráfico de barras padrão do painel: rótulo · trilho (com % dentro) · valor.
      Cores: teal = volume, verde (--ok) = sucesso, vermelho (--erro) = falta/erro,
      cinza = pendente. Usar uiBarra()/uiTrilho() — não desenhar barra à mão. */
@@ -1997,12 +2006,14 @@ function paginaHoje(dia) {
       <div class="stat ok"><div class="n">${r.enviados}</div><div class="l">✅ enviados</div></div>
       <div class="stat err"><div class="n">${r.falhas}</div><div class="l">⚠️ falhas</div></div>
     </div>
+    <div class="ui-secoes">
     <div class="sec-t">Por tipo de envio</div>
     <div class="card">
       ${jobs || '<div class="vazio">Nenhum envio registrado ' + (ehHoje ? 'hoje' : 'neste dia') + ' ainda.</div>'}
     </div>
     <div class="sec-t">Envios ${ehHoje ? 'de hoje' : 'do dia'} (${evs.length})</div>
     <div class="card">${lista || '<div class="vazio">Sem envios para mostrar.</div>'}</div>
+    </div>
     <p class="ui-rodape">Registrado automaticamente a cada envio do robô.</p>
   </div>${ehHoje ? '<script>setTimeout(function(){location.reload()},60000)</script>' : ''}`;
   return chrome({ tab: 'Log', h1: 'Log — o que o robô fez', p: ehHoje ? 'Todos os envios de <b>hoje</b>, em tempo quase real.' : `Envios do dia <b>${esc(fmtData(d))}</b>.` }, 'msg', corpo);
@@ -2527,11 +2538,11 @@ function uiDatas({ action, de, ate, extra, limpar }) {
 }
 // Uma pessoa numa lista: nome (link p/ Contatos), situação, detalhes e o link do EVO.
 const UI_SIT = { fechou: '💰 Fechou contrato', fez: '✅ Fez a aula', veio: '✅ Veio', faltou: '❌ Faltou', aguardando: '⏳ Aguardando', agendada: '⏳ Agendada' };
-function uiPessoa({ nome, href, sit, meta, evo, attrs }) {
+function uiPessoa({ nome, href, sit, meta, evo, direita, attrs }) {
   return `<div class="ip-row"${attrs || ''}>
       <div class="ip-top">${href ? `<a class="ip-nome" href="${esc(href)}" title="Abrir em Contatos">${esc(nome)}</a>` : `<span class="ip-nome">${esc(nome)}</span>`}${sit ? `<span class="ip-pill ip-${sit}">${UI_SIT[sit] || esc(sit)}</span>` : ''}</div>
       ${(meta || []).filter(Boolean).length ? `<div class="ip-meta">${meta.filter(Boolean).map(m => `<span>${m}</span>`).join('')}</div>` : ''}
-      ${evo ? `<div class="ip-acao"><a class="ip-evo" href="${esc(evo)}" target="_blank" rel="noopener">EVO ↗</a></div>` : ''}
+      ${evo || direita ? `<div class="ip-acao">${direita ? `<span class="ip-val">${direita}</span>` : ''}${evo ? `<a class="ip-evo" href="${esc(evo)}" target="_blank" rel="noopener">EVO ↗</a>` : ''}</div>` : ''}
     </div>`;
 }
 function subnavSofia(view) {
@@ -5816,22 +5827,22 @@ function paginaPerfis(aviso, erro, view) {
     <div class="sec-t">Sessões ativas <small style="font-weight:600;color:var(--cinza)">— quem está logado agora</small></div>
     <div class="card">
       <p class="quando" style="margin:0 0 12px">Cada linha é um <b>login ativo</b> (um navegador/aparelho). O admin pode <b>Encerrar</b> qualquer sessão — a pessoa é <b>deslogada</b> e precisa entrar de novo. A <b>sua sessão atual</b> aparece destacada. Some daqui sozinho ao expirar (${sessDias} dia${sessDias === 1 ? '' : 's'}) ou no logout.</p>
-      ${sessArr.length ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:var(--fs-sm)">
-        <thead><tr style="text-align:left;border-bottom:1px solid var(--linha)">
-          <th style="padding:7px 10px;font-weight:700">Usuário</th>
-          <th style="padding:7px 10px;font-weight:700">Entrou</th>
-          <th style="padding:7px 10px;font-weight:700">Último uso</th>
-          <th style="padding:7px 10px;font-weight:700">Como</th>
-          <th style="padding:7px 10px;font-weight:700">Dispositivo</th>
-          <th style="padding:7px 10px;font-weight:700;text-align:right">Ação</th>
+      ${sessArr.length ? `<div style="overflow-x:auto"><table class="ui-tab">
+        <thead><tr>
+          <th>Usuário</th>
+          <th>Entrou</th>
+          <th>Último uso</th>
+          <th>Como</th>
+          <th>Dispositivo</th>
+          <th style="font-weight:700;text-align:right">Ação</th>
         </tr></thead>
-        <tbody>${sessArr.map(s => { const eu = (s.sid === meuSid); return `<tr style="border-bottom:1px solid var(--linha)${eu ? ';background:#f3fbfb' : ''}">
-          <td style="padding:7px 10px;font-weight:600">${esc(s.usuario || '—')}${eu ? ' <span style="background:#e6f6ec;color:#1f8f52;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700">você</span>' : ''}</td>
-          <td style="padding:7px 10px;font-variant-numeric:tabular-nums">${fmtAcesso(s.criadoEm)}</td>
-          <td style="padding:7px 10px;font-variant-numeric:tabular-nums">${fmtAcesso(s.ultimoEm)}</td>
-          <td style="padding:7px 10px">${s.metodo === 'google' ? '🟢 Google' : '🔑 Senha'}</td>
-          <td style="padding:7px 10px">${esc(uaCurto(s.ua))}</td>
-          <td style="padding:7px 10px;text-align:right">${eu
+        <tbody>${sessArr.map(s => { const eu = (s.sid === meuSid); return `<tr${eu ? ' style="background:var(--teal-soft)"' : ''}>
+          <td style="font-weight:600">${esc(s.usuario || '—')}${eu ? ' <span style="background:#e6f6ec;color:#1f8f52;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700">você</span>' : ''}</td>
+          <td style="font-variant-numeric:tabular-nums">${fmtAcesso(s.criadoEm)}</td>
+          <td style="font-variant-numeric:tabular-nums">${fmtAcesso(s.ultimoEm)}</td>
+          <td>${s.metodo === 'google' ? '🟢 Google' : '🔑 Senha'}</td>
+          <td>${esc(uaCurto(s.ua))}</td>
+          <td style="text-align:right">${eu
             ? `<a href="/logout" class="reset" style="padding:5px 12px;text-decoration:none;white-space:nowrap;color:#c0392b">Sair</a>`
             : `<form method="POST" action="/perfis/sessao-encerrar" style="display:inline" onsubmit="return confirm('Encerrar a sessão de ${esc(s.usuario || 'usuário')}? A pessoa vai precisar entrar de novo.')"><input type="hidden" name="sid" value="${esc(s.sid)}"><button type="submit" class="reset" style="padding:5px 12px;white-space:nowrap;color:#c0392b">Encerrar</button></form>`}</td>
         </tr>`; }).join('')}</tbody>
@@ -5843,12 +5854,12 @@ function paginaPerfis(aviso, erro, view) {
     <div class="sec-t">📜 Auditoria <small style="font-weight:600;color:var(--cinza)">— quem fez o quê</small></div>
     <div class="card">
       <p class="quando" style="margin:0 0 12px">Registro das ações de <b>impacto e segurança</b>: campanhas (criar/iniciar/pausar/cancelar/excluir), configuração/prompt da SoFIA, gestão de usuários, bloqueio/encerramento de conversa e reiniciar/desconectar. Mostra os 150 mais recentes.</p>
-      ${logsAud.length ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:var(--fs-sm)">
-        <thead><tr style="text-align:left;border-bottom:1px solid var(--linha)">
-          <th style="padding:7px 10px;font-weight:700">Quando</th>
-          <th style="padding:7px 10px;font-weight:700">Usuário</th>
-          <th style="padding:7px 10px;font-weight:700">Ação</th>
-          <th style="padding:7px 10px;font-weight:700">Sobre</th>
+      ${logsAud.length ? `<div style="overflow-x:auto"><table class="ui-tab">
+        <thead><tr>
+          <th>Quando</th>
+          <th>Usuário</th>
+          <th>Ação</th>
+          <th>Sobre</th>
         </tr></thead>
         <tbody>${auditoriaLinhas}</tbody>
       </table></div>` : '<p class="vazio" style="margin:0">Nenhuma atividade registrada ainda. Assim que alguém criar/iniciar/pausar uma campanha, mudar o prompt, etc., aparece aqui.</p>'}
@@ -6410,19 +6421,18 @@ function paginaSofiaCusto(aviso, erro, params) {
   const fmtTel = (t) => { const d = String(t || '').replace(/\D/g, ''); return d.replace(/^(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3') || d; };
   const convRows = porConv.linhas.slice(0, 60).map(x => {
     const nm = nomeDe(x.tel);
-    const quem = nm ? `<b>${esc(nm)}</b> <small style="color:var(--faint)">${fmtTel(x.tel)}</small>` : `<b>${fmtTel(x.tel) || '(sem telefone)'}</b>`;
-    return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--linha)">
-      <div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${quem}</div>
-      <div style="display:flex;gap:14px;align-items:baseline;white-space:nowrap;font-variant-numeric:tabular-nums">
-        <span style="color:var(--cinza);font-size:.8rem">${x.turnos} msg</span>
-        <span style="color:var(--faint);font-size:.8rem">${ktok(x.inTok + x.outTok)} tok</span>
-        <span style="white-space:nowrap"><b>${brl(x.usd)}</b> <small style="color:var(--faint);font-size:.72rem">${usd(x.usd)}</small></span></div></div>`;
+    const d8 = String(x.tel || '').replace(/\D/g, '').slice(-8);
+    return uiPessoa({
+      nome: nm || fmtTel(String(x.tel || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '')) || '(sem telefone)', href: d8 ? '/sofia?view=contatos&q=' + d8 : '',
+      meta: [nm ? `📱 ${fmtTel(String(x.tel || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, ''))}` : '', `💬 <b>${x.turnos}</b> msg`, `🔤 ${ktok(x.inTok + x.outTok)} tokens`],
+      direita: `${brl(x.usd)} <small>${usd(x.usd)}</small>`,
+    });
   }).join('');
   const convNota = [];
   if (porConv.linhas.length > 60) convNota.push(`Mostrando as 60 conversas de maior gasto (de ${porConv.linhas.length}).`);
   if (porConv.semTel > 0.005) convNota.push(`Conversas anteriores à ativação deste detalhamento somam ${brl(porConv.semTel)} (${usd(porConv.semTel)}) sem separar por aluna.`);
   const convBloco = convRows
-    ? convRows + (convNota.length ? `<p class="quando" style="margin:12px 0 0">${convNota.join(' ')}</p>` : '')
+    ? `<div class="ip-lista">${convRows}</div>` + (convNota.length ? `<p class="quando" style="margin:12px 0 0">${convNota.join(' ')}</p>` : '')
     : `<div class="vazio">Nenhuma conversa com gasto por aluna neste período ainda.${porConv.semTel > 0.005 ? ` (Há ${brl(porConv.semTel)} de conversas anteriores à ativação, sem separar por aluna.)` : ''}</div>`;
   // Gasto por TIPO (tudo que gasta token: conversas, gerador de frases, resumos,
   // tags por intenção, follow-up).
@@ -6452,6 +6462,7 @@ function paginaSofiaCusto(aviso, erro, params) {
       <div class="stat ok"><div class="n">${tot.convs ? brl(tot.usd / tot.convs) : brl(0)}</div><div class="l">média/conversa</div><div class="l" style="opacity:.6;margin-top:2px">${tot.convs ? usd(tot.usd / tot.convs) : usd(0)}</div></div>
     </div>
     ${cotLinha}
+    <div class="ui-secoes">
     <div class="sec-t">Gasto por dia</div>
     <div class="card">${barras}</div>
     <div class="sec-t">Gasto por tipo <small style="font-weight:600;color:var(--cinza)">(tudo que consome token)</small></div>
@@ -6466,6 +6477,7 @@ function paginaSofiaCusto(aviso, erro, params) {
         <button class="save" type="submit">Salvar</button>
       </form>
       <p class="quando" style="margin:10px 0 0">Mostra um aviso nesta tela quando o gasto do dia atingir o valor. Deixe <b>0</b> para não alertar.</p>
+    </div>
     </div>
     <p class="ui-rodape">Inclui <b>tudo que consome token</b>: conversas, gerador de frases, resumos, tags por intenção e follow-up. As conversas usam o custo real da IA; o restante é estimado por tokens × preço do modelo.</p>
   </div>`;
