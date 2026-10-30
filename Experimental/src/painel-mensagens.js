@@ -602,6 +602,8 @@ const ESTILO = `
   .sd-muted{color:var(--cinza)}
   .aviso{background:var(--avi-bg);border:1px solid var(--avi-bd);color:var(--avi-tx);border-radius:10px;padding:10px 14px;margin:14px 0;font-size:var(--fs-sm)}
   .aviso.err{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
+  .aviso.warn,.ui-nota.warn{background:var(--warn-bg);border-color:var(--warn-bd);color:var(--warn)}
+  .aviso.ok,.ui-nota.ok{background:var(--ok-bg);border-color:var(--ok-bd);color:var(--ok)}
   .card{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:15px 17px;margin:12px 0;box-shadow:0 1px 2px rgba(16,24,40,.04)}
   .chead{display:flex;align-items:center;gap:10px}
   h2{font-size:var(--fs-h2);font-weight:700;margin:0}
@@ -617,10 +619,19 @@ const ESTILO = `
   textarea{line-height:1.5;resize:vertical}
   input:focus,textarea:focus,select:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(14,110,107,.16)}
   .acts{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}
-  button{border:none;border-radius:999px;padding:9px 18px;font-size:var(--fs-body);font-weight:700;cursor:pointer;font-family:inherit}
-  .save{background:var(--teal);color:#fff}
-  .save:hover{background:var(--teal-esc)}
-  .reset,.rm{background:#fff;color:var(--cinza);border:1px solid #dcdcdc}
+  /* Botões: retângulo arredondado = AÇÃO (pílula fica para filtro/seleção).
+     Principal (.save/.ui-btn) teal cheio; secundário (.reset/.tbtn/.ui-btn.sec)
+     branco com contorno; perigo (.rm/.ui-btn.perigo) texto vermelho. */
+  button{border:none;border-radius:10px;padding:9px 18px;font-size:var(--fs-body);font-weight:700;cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s}
+  .save{background:var(--teal);color:#fff;border:1px solid var(--teal)}
+  .save:hover{background:var(--teal-esc);border-color:var(--teal-esc)}
+  .reset,.tbtn{background:var(--card);color:var(--teal-esc);border:1px solid var(--linha)}
+  .reset:hover,.tbtn:hover{border-color:var(--teal);background:var(--teal-soft)}
+  .rm{background:var(--card);color:var(--erro);border:1px solid var(--erro-bd)}
+  .rm:hover{background:var(--erro-bg)}
+  a.save,a.reset{display:inline-block;text-decoration:none;border-radius:10px}
+  button:disabled{opacity:.5;cursor:default}
+  button:focus-visible,a.save:focus-visible,a.reset:focus-visible,a.ui-btn:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
   .turnos{display:flex;gap:10px;margin-top:6px}
   .turnos label{flex:1;margin:0;display:block}
   .turnos input{position:absolute;opacity:0;pointer-events:none}
@@ -730,7 +741,7 @@ const ESTILO = `
   .segs{position:sticky;top:var(--seg-top,var(--topbar-h,46px));z-index:54;display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px;padding:9px 0;background:var(--bg);box-shadow:0 5px 6px -6px rgba(16,24,40,.16)}
   .segs a{text-decoration:none;font-weight:700;font-size:var(--fs-sm);color:var(--cinza);background:#fff;border:1px solid var(--linha);border-radius:999px;padding:6px 13px}
   .segs a.on{background:var(--teal);color:#fff;border-color:var(--teal)}
-  .testbar{background:#fff8f0;border:1px solid #f3dcbf}
+  .testbar{background:var(--warn-bg);border:1px solid var(--warn-bd)}
   .testbar label{margin:0 0 4px}
   .testbar input{max-width:260px}
   .prev{margin-top:10px}
@@ -738,7 +749,6 @@ const ESTILO = `
   .prev-b{white-space:pre-wrap;word-break:break-word;background:#eef7f7;border:1px solid #cdeaea;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);line-height:1.5}
   .prev-b.ok{background:var(--ok-bg);border-color:var(--ok-bd);color:var(--ok)}
   .prev-b.err{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
-  .tbtn{background:#fff;color:var(--cinza);border:1px solid #dcdcdc}
   /* ── Peças comuns do painel (topo de tela, filtros, botões, avisos, pessoas) ── */
 
   .ui-topo{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:16px 18px;margin:4px 0 14px;box-shadow:0 1px 3px rgba(0,0,0,.05);display:flex;flex-direction:column;gap:12px}
@@ -757,8 +767,10 @@ const ESTILO = `
   .ui-datas input[type=date]{width:150px;flex:none;padding:6px 9px;border:1px solid var(--linha);border-radius:8px;font:inherit;font-size:var(--fs-sm);background:var(--card);color:var(--tinta)}
   .ui-datas .ate{color:var(--cinza);font-size:var(--fs-sm)}
   .ui-btn{border:1px solid var(--teal);background:var(--teal);color:#fff;border-radius:9px;padding:6px 14px;font:inherit;font-weight:700;font-size:var(--fs-sm);cursor:pointer;text-decoration:none;white-space:nowrap}
-  .ui-btn.sec{background:var(--card);color:var(--teal-esc)}
-  .ui-btn:hover{filter:brightness(1.06)}
+  .ui-btn.sec{background:var(--card);color:var(--teal-esc);border-color:var(--linha)}
+  .ui-btn.sec:hover{border-color:var(--teal);background:var(--teal-soft)}
+  .ui-btn.perigo{background:var(--card);color:var(--erro);border-color:var(--erro-bd)}
+  .ui-btn:not(.sec):not(.perigo):hover{background:var(--teal-esc);border-color:var(--teal-esc)}
   .ui-btn:disabled{opacity:.5;cursor:default}
   .ui-nota{background:var(--avi-bg);border:1px solid var(--avi-bd);color:var(--avi-tx);border-radius:10px;padding:9px 12px;font-size:var(--fs-sm);display:flex;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;align-items:center}
   .ui-nota.erro{background:var(--erro-bg);border-color:var(--erro-bd);color:var(--erro)}
@@ -2725,7 +2737,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     // sessão (memória) OU quando houve encerramento manual (cadeado) entre elas.
     function divisorHtml(txt, cor, corLinha){ var c=cor||'#a15a5a', l=corLinha||'#e6cfcf'; return '<div style="display:flex;align-items:center;gap:10px;margin:16px 2px 8px;color:'+c+'"><span style="flex:1;height:1px;background:'+l+'"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap">'+txt+'</span><span style="flex:1;height:1px;background:'+l+'"></span></div>'; }
     // Marcador: resposta manual DIRETO pelo celular da SoFIA (dispara a pausa por tempo).
-    function wppDivisor(){ return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#f0dcc2"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#b45309;background:#fff4e5;border-radius:999px;padding:2px 11px">📱 Resposta manual pelo WhatsApp · SoFIA pausada por '+fmtPausa(PAUSA_MIN)+' nesta conversa</span><span style="flex:1;height:1px;background:#f0dcc2"></span></div>'; }
+    function wppDivisor(){ return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#f0dcc2"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#b45309;background:var(--warn-bg);border-radius:999px;padding:2px 11px">📱 Resposta manual pelo WhatsApp · SoFIA pausada por '+fmtPausa(PAUSA_MIN)+' nesta conversa</span><span style="flex:1;height:1px;background:#f0dcc2"></span></div>'; }
     var encPorTxt=(c.encPor && String(c.encPor).trim())?escH(c.encPor):'';
     // A "nova conversa" após um encerramento começa na PRÓXIMA mensagem da aluna
     // depois do fechamento — não na resposta que a SoFIA ainda mandou de despedida.
@@ -2752,7 +2764,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var ehFup = (m.tipo==='followup');
       var ehAnuncio = (m.tipo==='anuncio');
       var bg = m.autor==='aluna'?'#f1f3f4':(m.autor==='humano'?(ehWpp?'#fff4e5':'#dff5e6'):(ehAnuncio?'#eaf1fb':(ehFup?'#fff4e5':'#e4efee')));
-      var selo = ehFup ? ' <span style="display:inline-block;font-size:.6rem;font-weight:700;color:#b45309;background:#ffedd5;border-radius:6px;padding:1px 6px;margin-left:4px">↩︎ follow-up</span>'
+      var selo = ehFup ? ' <span style="display:inline-block;font-size:.6rem;font-weight:700;color:#b45309;background:var(--warn-bg);border-radius:6px;padding:1px 6px;margin-left:4px">↩︎ follow-up</span>'
                : (ehAnuncio ? ' <span style="display:inline-block;font-size:.6rem;font-weight:700;color:#1d4e89;background:#dceafc;border-radius:6px;padding:1px 6px;margin-left:4px">📣 anúncio</span>' : '');
       var img = m.foto ? '<img src="/sofia/humano-foto?arq='+encodeURIComponent(m.foto)+'" alt="foto enviada" style="display:block;max-width:100%;max-height:220px;border-radius:9px;margin:'+(m.texto?'6px 0 0':'2px 0 0')+';cursor:pointer" onclick="window.open(this.src,\\'_blank\\')">' : '';
       // Mensagem citada (quando ela usa o "responder" do WhatsApp): mostra um
@@ -2777,13 +2789,13 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       }
       if(e.acao==='aviso'){
         var dst=fmtTelCurto(e.destino);
-        if(e.ok) return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#f0dcc2"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#9a5b00;background:#fff4e5;border-radius:999px;padding:2px 11px">🔔 Recepção avisada'+(dst?' · '+escH(dst):'')+' · '+soHora(e.em)+'</span><span style="flex:1;height:1px;background:#f0dcc2"></span></div>';
+        if(e.ok) return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#f0dcc2"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#9a5b00;background:var(--warn-bg);border-radius:999px;padding:2px 11px">🔔 Recepção avisada'+(dst?' · '+escH(dst):'')+' · '+soHora(e.em)+'</span><span style="flex:1;height:1px;background:#f0dcc2"></span></div>';
         return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#e6cfcf"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#a12626;background:#f7ecec;border-radius:999px;padding:2px 11px" title="'+escH(e.erro||'')+'">⚠️ Aviso para a recepção não saiu'+(dst?' ('+escH(dst)+')':'')+' · '+soHora(e.em)+'</span><span style="flex:1;height:1px;background:#e6cfcf"></span></div>';
       }
       if(e.acao==='assumir') return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cdeadd"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#1f7a4d;background:#e7f6ec;border-radius:999px;padding:2px 11px">🙋 Conversa assumida por '+(quem||'atendente')+'</span><span style="flex:1;height:1px;background:#cdeadd"></span></div>';
       // Fim do prazo de pausa da resposta manual pelo celular (computado por horário).
       if(e.acao==='wpp-fim'){
-        if(e.ativo) return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#f0dcc2"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#b45309;background:#fff4e5;border-radius:999px;padding:2px 11px">⏳ SoFIA pausada até '+soHora(e.em)+' (resposta manual pelo WhatsApp)</span><span style="flex:1;height:1px;background:#f0dcc2"></span></div>';
+        if(e.ativo) return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#f0dcc2"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#b45309;background:var(--warn-bg);border-radius:999px;padding:2px 11px">⏳ SoFIA pausada até '+soHora(e.em)+' (resposta manual pelo WhatsApp)</span><span style="flex:1;height:1px;background:#f0dcc2"></span></div>';
         return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cfe4e3"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#0b6f72;background:#e4efee;border-radius:999px;padding:2px 11px">🤖 Prazo da pausa terminou — SoFIA voltou a responder</span><span style="flex:1;height:1px;background:#cfe4e3"></span></div>';
       }
       return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cfe4e3"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#0b6f72;background:#e4efee;border-radius:999px;padding:2px 11px">🤖 Devolvida à SoFIA'+(quem?' por '+quem:(e.auto?' — trava expirou':''))+'</span><span style="flex:1;height:1px;background:#cfe4e3"></span></div>';
@@ -2841,7 +2853,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       : '<button type="button" onclick="encerrarConversa()" class="reset" title="Encerrar conversa agora (cadeado — a SoFIA recomeça do zero)" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">🔒</button>';
     var bloq=!!c.bloq;
     var btnBloq='<button type="button" onclick="bloquearConversa()" class="reset" title="'+(bloq?'Desbloquear contato':'Bloquear contato (a SoFIA ignora)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(bloq?';color:#1c8f52':'')+'">'+(bloq?'✅':'🚫')+'</button>';
-    var selo=bloq?'<span title="Contato bloqueado" style="background:#fdeaea;color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700;margin-left:6px">🚫 bloqueado</span>':'';
+    var selo=bloq?'<span title="Contato bloqueado" style="background:var(--erro-bg);color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700;margin-left:6px">🚫 bloqueado</span>':'';
     var agSelo=c.agendou?'<span title="Aula experimental agendada" style="display:inline-flex;align-items:center;justify-content:center;font-size:1.05rem;margin-right:2px">📅</span>':'';
     var chAv='<div class="ch-av" style="background:'+corAv(c.nome||k)+'">'+escH(iniciais(c.nome,k))+'</div>';
     var btnVoltar='<button type="button" class="voltar-lista reset" onclick="voltarLista()" title="Voltar para a lista" style="padding:6px 10px;font-size:1rem;line-height:1;align-items:center">←</button>';
@@ -2874,7 +2886,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     // Só o dono da trava escreve. Placeholder explica o porquê quando bloqueado.
     var podeEscrever = donoMeu;
     var phBloq = donoOutro ? ('🔒 '+ (donoTxt||'Outro atendente') +' está atendendo (livre em ~'+restaMin+' min)') : '🔒 Clique em “assumir” para responder';
-    var bannerDono = donoOutro ? ('<div style="margin-top:8px;background:#fdf2e0;color:#8a5a00;border:1px solid #f0d9a8;border-radius:8px;padding:6px 10px;font-size:.78rem;font-weight:600">🔒 Conversa assumida por '+escH(donoTxt||'outro atendente')+' — você não pode escrever agora (livre em ~'+restaMin+' min).</div>') : '';
+    var bannerDono = donoOutro ? ('<div style="margin-top:8px;background:var(--warn-bg);color:#8a5a00;border:1px solid #f0d9a8;border-radius:8px;padding:6px 10px;font-size:.78rem;font-weight:600">🔒 Conversa assumida por '+escH(donoTxt||'outro atendente')+' — você não pode escrever agora (livre em ~'+restaMin+' min).</div>') : '';
     var composer='<div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end">'
       +'<input type="file" id="msgFoto" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="msgFotoSel()">'
       +'<button type="button" id="msgClip" title="Anexar foto" onclick="msgAbreFoto()" '+(podeEscrever?'':'disabled')+' style="padding:9px 12px;font-size:1.05rem;line-height:1;background:#fff;border:1px solid var(--linha,#ddd);border-radius:8px;cursor:pointer'+(podeEscrever?'':';opacity:.4;cursor:not-allowed')+'">📎</button>'
@@ -3111,10 +3123,10 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var enc=encerrada(c)?'<span style="display:inline-block;background:#f3eaea;color:#a15a5a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🔒 encerrada</span>':'';
       var hbMeu=c.humano&&c.humanoPor===MEU_USUARIO;
       var hb=c.humano?('<span title="'+(hbMeu?'Você assumiu esta conversa':'Assumida por '+escH(c.humanoPor||'atendente'))+'" style="display:inline-block;background:'+(hbMeu?'#e6f6ec;color:#1f8f52':'#fdf2e0;color:#8a5a00')+';border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">'+(hbMeu?'🙋 você':'🔒 '+escH(c.humanoPor||'atendente'))+'</span>'):'';
-      var fu=c.fuEspera?'<span title="Follow-up pronto, aguardando o horário permitido" style="display:inline-block;background:#fdf2e0;color:#b8770a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">⏳ follow-up '+escH(c.fuEspera)+'</span>':'';
+      var fu=c.fuEspera?'<span title="Follow-up pronto, aguardando o horário permitido" style="display:inline-block;background:var(--warn-bg);color:#b8770a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">⏳ follow-up '+escH(c.fuEspera)+'</span>':'';
       var at=c.atencao?'<span title="A aluna pediu atendimento humano" style="display:inline-block;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🙋 pediu humano</span>':'';
       var agMini=c.agendou?'<span title="Aula experimental agendada" style="font-size:.8rem;flex:none">📅</span>':'';
-      var blq=c.bloq?'<span title="Contato bloqueado" style="display:inline-block;background:#fdeaea;color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🚫 bloqueado</span>':'';
+      var blq=c.bloq?'<span title="Contato bloqueado" style="display:inline-block;background:var(--erro-bg);color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🚫 bloqueado</span>':'';
       // Cartão v2: avatar (iniciais) + nome/hora + telefone + chips de status/tag numa linha.
       var chips=[blq,at,tgs,hb,enc,fu].join(''); // já vêm como <span>…</span> estilizados
       var cls='cv-item'+(on?' on':'')+((c.atencao&&!on)?' aten':'');
@@ -3417,7 +3429,7 @@ function paginaSofiaContatos(aviso, erro, params) {
   <div id="ctModal" class="ct-ov" onclick="if(event.target===this)fecharModal()">
     <div class="ct-dlg">
       <div class="ct-dh"><h2>Editar contato</h2><button type="button" class="ct-x" onclick="fecharModal()">×</button></div>
-      <div class="ct-hero"><span id="ctAv" class="ct-av ct-av-lg"></span><div id="ctHnome" class="ct-hnome"></div><div id="ctHtel" class="ct-htel"></div><div id="ctBloqTag" style="display:none;margin-top:6px"><span style="background:#fdeaea;color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:2px 12px;font-size:.74rem;font-weight:700">🚫 Contato bloqueado</span></div></div>
+      <div class="ct-hero"><span id="ctAv" class="ct-av ct-av-lg"></span><div id="ctHnome" class="ct-hnome"></div><div id="ctHtel" class="ct-htel"></div><div id="ctBloqTag" style="display:none;margin-top:6px"><span style="background:var(--erro-bg);color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:2px 12px;font-size:.74rem;font-weight:700">🚫 Contato bloqueado</span></div></div>
       <label>Nome</label>
       <input type="text" id="ctNome" placeholder="Nome do contato">
       <label style="margin-top:12px">Tags</label>
@@ -3460,7 +3472,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     if(!outras.length){ box.innerHTML='<span class="quando">Nenhuma outra tag ainda.</span>'; return; }
     box.innerHTML=outras.map(function(t){
       var on=tgRemove.indexOf(t)>=0;
-      return '<button type="button" class="ct-tg'+(on?' on':'')+'" style="'+(on?'background:#fdecea;color:#c0392b;border-color:#f5c6cb':'background:#fff;color:#5c5960;border-color:#e8e8ea')+'" onclick="tgToggleRemove(this,\\''+t.replace(/'/g,"\\\\'")+'\\')">'+(on?'✕ ':'')+esc(t)+'</button>';
+      return '<button type="button" class="ct-tg'+(on?' on':'')+'" style="'+(on?'background:var(--erro-bg);color:#c0392b;border-color:#f5c6cb':'background:#fff;color:#5c5960;border-color:#e8e8ea')+'" onclick="tgToggleRemove(this,\\''+t.replace(/'/g,"\\\\'")+'\\')">'+(on?'✕ ':'')+esc(t)+'</button>';
     }).join('');
   }
   function tgToggleRemove(btn,t){ var i=tgRemove.indexOf(t); if(i>=0)tgRemove.splice(i,1); else tgRemove.push(t); tgRenderRemove(); }
@@ -3956,7 +3968,7 @@ function paginaSofiaTags(aviso, erro) {
     if(!outras.length){ box.innerHTML='<span class="quando">Nenhuma outra tag ainda.</span>'; return; }
     box.innerHTML=outras.map(function(t){
       var on=tgRemove.indexOf(t)>=0;
-      return '<button type="button" class="ct-tg'+(on?' on':'')+'" style="'+(on?'background:#fdecea;color:#c0392b;border-color:#f5c6cb':'background:#fff;color:#5c5960;border-color:#e8e8ea')+'" onclick="tgToggleRemove(this,\\''+t.replace(/'/g,"\\\\'")+'\\')">'+(on?'✕ ':'')+esc(t)+'</button>';
+      return '<button type="button" class="ct-tg'+(on?' on':'')+'" style="'+(on?'background:var(--erro-bg);color:#c0392b;border-color:#f5c6cb':'background:#fff;color:#5c5960;border-color:#e8e8ea')+'" onclick="tgToggleRemove(this,\\''+t.replace(/'/g,"\\\\'")+'\\')">'+(on?'✕ ':'')+esc(t)+'</button>';
     }).join('');
   }
   function tgToggleRemove(btn,t){ var i=tgRemove.indexOf(t); if(i>=0)tgRemove.splice(i,1); else tgRemove.push(t); tgRenderRemove(); }
@@ -4795,7 +4807,7 @@ function paginaSofia(aviso, erro) {
           <label>Só enviar entre${infoI('Horário permitido para a retomada. Se o prazo acima vencer <b>fora</b> desta janela (ex.: 19h50), a SoFIA <b>não manda de madrugada</b> — espera e envia no <b>próximo horário permitido</b> (ex.: 8h do dia seguinte). Nesse meio-tempo, a conversa aparece na aba <b>Conversas</b> com o selo <b>⏳ follow-up &lt;hora&gt;</b>. Horário de Brasília.')}</label>
           <div class="cfg-in" style="gap:8px"><input type="time" name="followupJanIni" value="${esc(e.followup.janelaIni)}" style="width:auto"><span class="suf">e</span><input type="time" name="followupJanFim" value="${esc(e.followup.janelaFim)}" style="width:auto"></div>
         </div>
-        ${(function(){ var ks=Object.keys(fuEsperando||{}); var n=ks.length; if(!n) return ''; var h=esc(fuEsperando[ks[0]]||e.followup.janelaIni); return '<div style="margin-top:12px;background:#fdf2e0;border:1px solid #f0d9a8;border-radius:10px;padding:10px 12px"><p class="quando" style="margin:0;color:#8a6100">⏳ <b>'+n+' lead'+(n>1?'s':'')+' aguardando o horário</b> — '+(n>1?'saem':'sai')+' a partir das <b>'+h+'</b>. Venceram fora da janela; a SoFIA segura para não enviar tarde da noite. (Na aba <b>Conversas</b> aparecem com o selo ⏳.)</p></div>'; })()}
+        ${(function(){ var ks=Object.keys(fuEsperando||{}); var n=ks.length; if(!n) return ''; var h=esc(fuEsperando[ks[0]]||e.followup.janelaIni); return '<div style="margin-top:12px;background:var(--warn-bg);border:1px solid #f0d9a8;border-radius:10px;padding:10px 12px"><p class="quando" style="margin:0;color:#8a6100">⏳ <b>'+n+' lead'+(n>1?'s':'')+' aguardando o horário</b> — '+(n>1?'saem':'sai')+' a partir das <b>'+h+'</b>. Venceram fora da janela; a SoFIA segura para não enviar tarde da noite. (Na aba <b>Conversas</b> aparecem com o selo ⏳.)</p></div>'; })()}
         <div style="margin-top:14px">
           <label>Instrução para a IA gerar a mensagem</label>
           <textarea name="followupInstrucao" rows="3" maxlength="1000" placeholder="Ex.: Pergunte se ela ainda tem interesse e retome o convite para a aula experimental gratuita, de forma calorosa." style="width:100%;resize:vertical">${esc(e.followup.instrucao)}</textarea>
@@ -5270,9 +5282,6 @@ function paginaGrade(off) {
     .gr-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin:4px 0 2px}
     .gr-btns{display:flex;gap:8px;flex-wrap:wrap}
     #btnAt{white-space:nowrap}
-    .gr-btn2{white-space:nowrap;border:1px solid var(--teal);background:transparent;color:var(--teal);border-radius:10px;padding:9px 14px;font-weight:700;font-size:var(--fs-sm);cursor:pointer;font-family:inherit}
-    .gr-btn2:hover{background:var(--teal-soft)}
-    .gr-btn2:disabled{opacity:.5;cursor:default}
     .gr-btns-wrap{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
     .gr-wk{display:flex;align-items:center;gap:5px}
     .gr-wk-b{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--linha);border-radius:8px;color:var(--teal);font-weight:800;text-decoration:none;font-size:1.15rem;line-height:1;background:var(--card)}
@@ -5713,7 +5722,7 @@ function paginaPerfis(aviso, erro, view) {
     <details class="card" style="margin-bottom:8px">
       <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:2px 0;user-select:none">
         <span style="font-weight:700;font-size:var(--fs-h2)">${esc(u.usuario)}</span>
-        ${u.admin ? '<span style="background:#fdf2e0;color:#8a6300;border:1px solid #f0d9a8;border-radius:999px;padding:1px 9px;font-size:.68rem;font-weight:700">👑 admin</span>' : ''}
+        ${u.admin ? '<span style="background:var(--warn-bg);color:#8a6300;border:1px solid #f0d9a8;border-radius:999px;padding:1px 9px;font-size:.68rem;font-weight:700">👑 admin</span>' : ''}
         ${u.email ? `<span class="quando" style="margin:0">📧 ${esc(u.email)}</span>` : '<span class="quando" style="margin:0;color:var(--faint)">sem e-mail</span>'}
         <span class="quando" style="margin:0">· ${u.admin ? 'vê todas as telas' : (u.telas || []).length + ' tela(s)'}</span>
         ${seloAcesso(u.usuario)}
