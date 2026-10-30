@@ -142,7 +142,9 @@ def reconstruir(rows, hoje, por_id=None):
                 junt.append([a, b])
         pessoas.append(junt)
         if por_id is not None and m.get("idMember") is not None:
-            por_id[str(m.get("idMember"))] = [[a.isoformat(), b.isoformat()] for a, b in junt if a <= hoje]
+            cs = sorted(([str(x.get("startDate"))[:10], (_fim_efetivo(x) or hoje).isoformat(), (x.get("name") or "").strip()]
+                         for x in (m.get("memberships") or []) if not ignorado(x) and _d(x.get("startDate")) and _d(x.get("startDate")) <= hoje))
+            por_id[str(m.get("idMember"))] = ([[a.isoformat(), b.isoformat()] for a, b in junt if a <= hoje], cs)
     if not pessoas:
         return None
     inicio = min(p[0][0] for p in pessoas)
@@ -170,7 +172,8 @@ def reconstruir(rows, hoje, por_id=None):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--nomes", type=int, default=30, help="quantos nomes completos buscar no EVO nesta vez (padrão 30)")
+    ap.add_argument("--nomes", type=int, default=150, help="no máx. quantos nomes completos buscar no EVO nesta vez")
+    ap.add_argument("--tempo", type=int, default=150, help="no máx. quantos segundos gastar buscando nomes (padrão 150)")
     args = ap.parse_args()
     evo = EvoClient()
     ativas, trancadas, take, skip = set(), set(), 100, 0
@@ -231,11 +234,49 @@ def main():
     except Exception as e:  # o histórico é um bônus: falha nele não perde a foto
         print(f"[aviso] reconstrução do histórico falhou: {e}")
 
-    # Quem é cada uma (a tela lista as alunas de cada período)
+    # Quem é cada uma (a tela lista as alunas de cada período). Grava antes de
+    # buscar os nomes — se o EVO demorar, os números já ficam salvos.
     nomes = h.get("nomes") or {}
-    buscados, falhas = 0, 0
-    for idm in sorted(ativas - set(nomes)):
-        if buscados >= max(0, args.nomes):
+
+    def montar_pessoas():
+        pes = {}
+        for m in todos:
+            idm = m.get("idMember")
+            if idm is None:
+                continue
+            k = str(idm)
+            iv, cs = por_id.get(k) or ([], [])
+            if not iv and k not in ativas:
+                continue
+            p = {"n": nomes.get(k) or str(m.get("firstName") or "").strip() or f"id {k}", "iv": iv, "cs": cs}
+            if k in nomes:
+                p["nc"] = 1  # nome completo (do cadastro do EVO)
+            if k in info:
+                p["c"], p["t"] = info[k][0], info[k][1]
+                if info[k][2]:
+                    p["f"] = info[k][2]  # próximo contrato na fila (nome, início)
+            pes[k] = p
+        return pes
+
+    def gravar():
+        h["nomes"] = nomes
+        h["pessoas"] = montar_pessoas()
+        os.makedirs(os.path.dirname(ARQ), exist_ok=True)
+        tmp = ARQ + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(h, f, ensure_ascii=False)
+        os.replace(tmp, ARQ)
+
+    gravar()
+    # Nome completo: a lista do EVO só traz o 1º nome. Busca o detalhe — primeiro as
+    # ativas, depois as ex-alunas que saíram mais recentemente — até --nomes ou --tempo.
+    pes = h["pessoas"]
+    fila = [k for k in pes if k not in nomes]
+    fila = [k for k in fila if k in ativas] + sorted((k for k in fila if k not in ativas),
+                                                     key=lambda k: pes[k]["iv"][-1][1] if pes[k]["iv"] else "", reverse=True)
+    buscados, falhas, t0 = 0, 0, datetime.now()
+    for idm in fila:
+        if buscados >= max(0, args.nomes) or (datetime.now() - t0).total_seconds() > args.tempo:
             break
         buscados += 1
         try:
@@ -247,29 +288,11 @@ def main():
             falhas += 1
             if falhas >= 3:  # EVO instável: fica para a próxima
                 break
-    h["nomes"] = nomes
-    pessoas = {}
-    for m in todos:
-        idm = m.get("idMember")
-        if idm is None:
-            continue
-        k = str(idm)
-        iv = por_id.get(k)
-        if not iv and k not in ativas:
-            continue
-        p = {"n": nomes.get(k) or str(m.get("firstName") or "").strip() or f"id {k}", "iv": iv or []}
-        if k in info:
-            p["c"], p["t"] = info[k][0], info[k][1]
-            if info[k][2]:
-                p["f"] = info[k][2]  # próximo contrato na fila (nome, início)
-        pessoas[k] = p
-    h["pessoas"] = pessoas
+        if buscados % 25 == 0:
+            gravar()
+    gravar()
+    sem_nome_total = sum(1 for k in h["pessoas"] if k not in nomes)
     sem_nome = len(ativas - set(nomes))
-    os.makedirs(os.path.dirname(ARQ), exist_ok=True)
-    tmp = ARQ + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(h, f, ensure_ascii=False)
-    os.replace(tmp, ARQ)
     extra = f" · entraram {entraram} · saíram {sairam}" if base else " · primeira foto (entradas/saídas a partir de amanhã)"
     rec = h.get("reconstruido") or {}
     hist = f" · histórico desde {rec.get('inicio')} (hoje pelos contratos: {rec['ativas'][-1]})" if rec.get("ativas") else ""
@@ -277,7 +300,8 @@ def main():
     ign = f" · {ign} ignorada(s) por só ter contrato {' ou '.join(IGNORAR)}" if ign else ""
     if fora["fila"]:
         ign += f" · {fora['fila']} fora por só ter contrato na fila (ainda não começou)"
-    nm = f" · faltam {sem_nome} nomes completos (vêm nas próximas atualizações)" if sem_nome else ""
+    nm = (f" · faltam {sem_nome} nomes completos de ativas" if sem_nome else "") + \
+         (f" · {sem_nome_total} nomes de ex-alunas ainda por buscar (vêm aos poucos, de madrugada)" if sem_nome_total > sem_nome else "")
     print(f"foto de alunas ativas {dia}: {len(ativas)} ativas ({len(trancadas)} trancadas){ign}{extra}{hist}{nm}")
 
 

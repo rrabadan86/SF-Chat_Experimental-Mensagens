@@ -111,7 +111,7 @@ async function buscarAniversariantesHoje() {
   console.log('═══════════════════════════════════════════════════\n');
 
   const browser = await puppeteer.launch({
-    headless: process.env.HEADLESS === 'false' ? false : 'new',
+    headless: require('./tela').querTela() ? false : 'new',
     executablePath: process.env.CHROMIUM_PATH || undefined,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--window-size=1366,900'],
     defaultViewport: { width: 1366, height: 900 },

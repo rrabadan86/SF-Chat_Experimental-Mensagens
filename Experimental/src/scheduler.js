@@ -70,7 +70,7 @@ function runAtivasFoto() {
   const venv = path.join(dir, '.venv', 'bin', 'python');
   let py = process.env.PYTHON_BIN || 'python3';
   try { if (fs.existsSync(venv)) py = venv; } catch (_) {}
-  execFile(py, [path.join(dir, 'run_ativas_foto.py'), '--nomes', '100'], { cwd: dir, timeout: 600000 }, (err, stdout, stderr) => {
+  execFile(py, [path.join(dir, 'run_ativas_foto.py'), '--nomes', '400', '--tempo', '720'], { cwd: dir, timeout: 900000 }, (err, stdout, stderr) => {
     const out = (stdout || stderr || '').trim();
     if (err) { logError('Foto de alunas ativas (run_ativas_foto)', err); if (out) console.log('   ' + out); return; }
     log('👥 ' + (out || 'foto de alunas ativas gravada'));

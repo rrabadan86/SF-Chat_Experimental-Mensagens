@@ -195,7 +195,7 @@ async function coletarTrancamentos(dias = 10, page = null) {
   let browser = null, ownPage = page;
   if (!ownPage) {
     browser = await puppeteer.launch({
-      headless: process.env.HEADLESS === 'false' ? false : 'new',
+      headless: require('./tela').querTela() ? false : 'new',
       executablePath: process.env.CHROMIUM_PATH || undefined,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--window-size=1600,950'],
       defaultViewport: { width: 1600, height: 950 },
