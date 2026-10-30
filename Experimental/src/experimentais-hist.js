@@ -122,4 +122,38 @@ function definirDesde(dia) {
   gravar(h);
 }
 
-module.exports = { ARQ, ler, registrarDia, setStatus, situacao, diaIso, norm, datasParaLer, antigosPendentes, definirDesde, limiteDias, HISTORICO_PADRAO };
+// ── Achar a experimental de uma pessoa (pelo nome) ──────────────────────────
+// O CRM e o EVO nem sempre têm o nome igual (o do WhatsApp pode vir sem o meio).
+// Casa pelo nome inteiro; se não achar, pelo 1º + último nome.
+function chavesNome(nome) {
+  const n = norm(nome).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!n) return [];
+  const p = n.split(' ');
+  return p.length > 1 ? [n, p[0] + ' ' + p[p.length - 1]] : [n];
+}
+function indicePorNome(h) {
+  const idx = new Map();
+  for (const a of Object.values((h || ler()).aulas)) {
+    if (situacao(a.status) === 'cancelada') continue;
+    chavesNome(a.nome).forEach((k, i) => {
+      const kk = (i ? '~' : '=') + k;
+      (idx.get(kk) || idx.set(kk, []).get(kk)).push(a);
+    });
+  }
+  return idx;
+}
+// A aula experimental da pessoa: a 1ª a partir de `desdeDia` (YYYY-MM-DD, ex.: o
+// dia em que agendou); se não houver, a mais recente. null se não achar.
+function acharAula(idx, nome, desdeDia) {
+  const ks = chavesNome(nome);
+  let lista = ks.length ? idx.get('=' + ks[0]) : null;
+  if (!lista && ks[1]) lista = idx.get('~' + ks[1]) || idx.get('=' + ks[1]);
+  if (!lista && ks.length === 1) lista = idx.get('~' + ks[0]);
+  if (!lista || !lista.length) return null;
+  // Pelo 1º + último nome só vale se for UMA pessoa (ex.: duas "Ana Silva" → não arrisca).
+  if (new Set(lista.map(a => norm(a.nome))).size > 1 && !idx.get('=' + ks[0])) return null;
+  const ord = lista.slice().sort((a, b) => (a.dia + a.hora).localeCompare(b.dia + b.hora));
+  return (desdeDia && ord.find(a => a.dia >= desdeDia)) || ord[ord.length - 1];
+}
+
+module.exports = { ARQ, ler, registrarDia, setStatus, situacao, diaIso, norm, datasParaLer, antigosPendentes, definirDesde, limiteDias, HISTORICO_PADRAO, indicePorNome, acharAula, chavesNome };
