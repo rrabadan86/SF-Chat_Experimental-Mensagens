@@ -841,7 +841,7 @@ const ESTILO = `
   .ip-fechou{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-bd)}
   .ip-fez,.ip-veio{background:var(--teal-soft);color:var(--teal-esc);border-color:var(--avi-bd)}
   .ip-faltou{background:var(--erro-bg);color:var(--erro);border-color:var(--erro-bd)}
-  .ip-aguardando,.ip-agendada{background:var(--linha-soft);color:var(--cinza);border-color:var(--linha)}
+  .ip-aguardando,.ip-agendada,.ip-jaaluna{background:var(--linha-soft);color:var(--cinza);border-color:var(--linha)}
   .ip-meta{grid-column:1;grid-row:2;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.78rem;color:var(--cinza)}
   .ip-meta b{color:var(--tinta);font-weight:600}
   .ip-acao{grid-column:2;grid-row:1 / span 2;display:flex;gap:6px}
@@ -2656,7 +2656,7 @@ function uiDatas({ action, de, ate, extra, limpar }) {
       <button class="ui-btn" type="submit">Aplicar</button>${limpar ? `<a href="${limpar}" class="ui-btn sec">Limpar</a>` : ''}</form>`;
 }
 // Uma pessoa numa lista: nome (link p/ Contatos), situação, detalhes e o link do EVO.
-const UI_SIT = { fechou: '💰 Fechou contrato', fez: '✅ Fez a aula', veio: '✅ Veio', faltou: '❌ Faltou', aguardando: '⏳ Aguardando', agendada: '⏳ Agendada' };
+const UI_SIT = { jaaluna: '🎓 Já era aluna', fechou: '💰 Fechou contrato', fez: '✅ Fez a aula', veio: '✅ Veio', faltou: '❌ Faltou', aguardando: '⏳ Aguardando', agendada: '⏳ Agendada' };
 function uiPessoa({ nome, href, sit, meta, evo, direita, attrs }) {
   return `<div class="ip-row"${attrs || ''}>
       <div class="ip-top">${href ? `<a class="ip-nome" href="${esc(href)}" title="Abrir em Contatos">${esc(nome)}</a>` : `<span class="ip-nome">${esc(nome)}</span>`}${sit ? `<span class="ip-pill ip-${sit}">${UI_SIT[sit] || esc(sit)}</span>` : ''}</div>
@@ -6741,20 +6741,64 @@ function paginaProfessoras(params) {
     return ult;
   };
 
+  // Contratos de cada cliente no EVO (gravados pela tela Alunas ativas, sem
+  // circuito/VIP): mostram QUAL contrato ela fechou depois da aula e pegam quem
+  // JÁ ERA aluna (contrato vigente antes da aula, lançada como experimental).
+  const pessoasEvo = (() => { try { return lerAtivasHist().pessoas || null; } catch (_) { return null; } })();
+  const evoPorNome = new Map();
+  if (pessoasEvo) for (const [id, pe] of Object.entries(pessoasEvo)) {
+    if (!pe || !pe.n || (!pe.nc && !/\s/.test(pe.n.trim()))) continue; // só o 1º nome não identifica ninguém
+    histExp.chavesNome(pe.n).forEach((k, i) => { const kk = (i ? '~' : '=') + k; (evoPorNome.get(kk) || evoPorNome.set(kk, new Set()).get(kk)).add(id); });
+  }
+  const acharEvo = (nome, ct) => {
+    const id = ct && ct.c && ct.c.idEvo ? String(ct.c.idEvo) : '';
+    if (id && pessoasEvo[id]) return { id, pe: pessoasEvo[id] };
+    const ks = histExp.chavesNome(nome);
+    let set = ks.length ? evoPorNome.get('=' + ks[0]) : null;
+    if (!set && ks[1]) set = evoPorNome.get('~' + ks[1]);
+    if (!set || set.size !== 1) return id ? { id, pe: null } : null;
+    const k = [...set][0];
+    return { id: k, pe: pessoasEvo[k] };
+  };
+  const somaDias = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+  // → { sit: 'fechou' | 'jaaluna' | null (segue a presença), contrato, idEvo }
+  const resultado = (a, sit, ct) => {
+    const agendaOk = !!a.contrato && !contratoIgnorado(a.contrato);
+    const ev = pessoasEvo ? acharEvo(a.nome, ct) : null;
+    if (ev && ev.pe && (ev.pe.cs || []).length) {
+      const cs = ev.pe.cs, D = a.dia, tol = somaDias(D, -3);
+      const antes = cs.find(c => c[0] < tol && c[1] >= D);       // contrato rodando no dia da aula
+      if (antes) return { sit: 'jaaluna', contrato: antes[2], idEvo: ev.id };
+      const novo = cs.find(c => c[0] >= tol && c[0] <= somaDias(D, 120)); // começou depois da aula
+      if (novo && sit === 'veio') return { sit: 'fechou', contrato: novo[2], idEvo: ev.id };
+      return { sit: sit === 'veio' && agendaOk ? 'fechou' : null, contrato: sit === 'veio' && agendaOk ? a.contrato : '', idEvo: ev.id };
+    }
+    if (ev && pessoasEvo) {
+      // está no EVO mas nunca teve contrato do método: só a agenda decide
+      return { sit: sit === 'veio' && agendaOk ? 'fechou' : null, contrato: sit === 'veio' && agendaOk ? a.contrato : '', idEvo: ev.id };
+    }
+    // sem histórico de contratos: agenda do EVO ou a tag de aluna no CRM
+    const fechou = sit === 'veio' && !contratoIgnorado(a.contrato) && (!!a.contrato || !!(ct && ct.c && (ct.c.tags || []).includes(tAluna)));
+    return { sit: fechou ? 'fechou' : null, contrato: fechou ? a.contrato : '', idEvo: '' };
+  };
+
   const SEM = '— sem professora';
   const profs = {}, horas = {};
-  const tot = { exp: 0, veio: 0, faltou: 0, agendada: 0, fechou: 0 };
+  const tot = { exp: 0, veio: 0, faltou: 0, agendada: 0, fechou: 0, jaaluna: 0 };
   for (const a of Object.values(h.aulas)) {
     if (!dentro(a.dia)) continue;
     const sit = histExp.situacao(a.status);
     if (sit === 'cancelada') continue;
     const ct = acharContato(a.nome);
-    // contrato de circuito/VIP não é fechamento (nem a tag de aluna que veio dele)
-    const fechou = sit === 'veio' && !contratoIgnorado(a.contrato) && (!!a.contrato || !!(ct && ct.c && (ct.c.tags || []).includes(tAluna)));
+    const res = resultado(a, sit, ct);
+    const fechou = res.sit === 'fechou';
     const p = a.prof || SEM;
-    const r = profs[p] || (profs[p] = { prof: p, exp: 0, veio: 0, faltou: 0, agendada: 0, fechou: 0, alunas: [] });
+    const r = profs[p] || (profs[p] = { prof: p, exp: 0, veio: 0, faltou: 0, agendada: 0, fechou: 0, jaaluna: 0, alunas: [] });
+    const idEvo = res.idEvo || (ct && ct.c ? ct.c.idEvo : '');
+    r.alunas.push({ nome: a.nome, dia: a.dia, hora: a.hora, sit: res.sit || sit, contrato: res.contrato, tel: ct ? ct.tel : '', idEvo });
+    // já era aluna: não é experimental de verdade — fica de fora da conta
+    if (res.sit === 'jaaluna') { r.jaaluna++; tot.jaaluna++; continue; }
     r.exp++; r[sit]++; if (fechou) r.fechou++;
-    r.alunas.push({ nome: a.nome, dia: a.dia, hora: a.hora, sit: fechou ? 'fechou' : sit, contrato: fechou ? a.contrato : '', tel: ct ? ct.tel : '', idEvo: ct && ct.c ? ct.c.idEvo : '' });
     tot.exp++; tot[sit]++; if (fechou) tot.fechou++;
     if (sit === 'veio' && a.hora) {
       const hr = horas[a.hora] || (horas[a.hora] = { hora: a.hora, veio: 0, fechou: 0, profs: {} });
@@ -6771,7 +6815,7 @@ function paginaProfessoras(params) {
   const fmtDtCurta = (ms) => { try { return new Date(Number(ms)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
   const ROT_CANAL = { sofia: '🤖 SoFIA', formulario: '📲 Formulário', express: '🏪 Express' };
   const EVO_LINK = (process.env.EVO_LINK_URL || 'https://evo5.w12app.com.br').replace(/\/+$/, '');
-  const ordemSit = { fechou: 0, veio: 1, faltou: 2, agendada: 3 };
+  const ordemSit = { fechou: 0, veio: 1, faltou: 2, agendada: 3, jaaluna: 4 };
 
   const barraConv = (r) => uiTrilho(r.fechou, r.veio, { cor: r.veio < POUCAS ? 'var(--faint)' : 'var(--ok)' });
   const linhaAluna = (x) => {
@@ -6798,7 +6842,7 @@ function paginaProfessoras(params) {
         <span class="pf-nums"><b>${r.fechou}</b> de <b>${r.veio}</b> <span>fecharam</span></span>
       </summary>
       <div class="pf-det">
-        <div class="pf-resumo"><span>📋 <b>${r.exp}</b> experimenta${r.exp === 1 ? 'l' : 'is'}</span><span>✅ <b>${r.veio}</b> vieram</span><span>❌ <b>${r.faltou}</b> faltaram</span>${r.agendada ? `<span>⏳ <b>${r.agendada}</b> agendada${r.agendada === 1 ? '' : 's'}</span>` : ''}<span>presença <b>${fmtPct(taxa(r.veio, r.veio + r.faltou))}</b></span><span>💰 <b>${r.fechou}</b> fecharam</span></div>
+        <div class="pf-resumo"><span>📋 <b>${r.exp}</b> experimenta${r.exp === 1 ? 'l' : 'is'}</span><span>✅ <b>${r.veio}</b> vieram</span><span>❌ <b>${r.faltou}</b> faltaram</span>${r.agendada ? `<span>⏳ <b>${r.agendada}</b> agendada${r.agendada === 1 ? '' : 's'}</span>` : ''}<span>presença <b>${fmtPct(taxa(r.veio, r.veio + r.faltou))}</b></span><span>💰 <b>${r.fechou}</b> fecharam</span>${r.jaaluna ? `<span title="Lançadas como experimental, mas já tinham contrato vigente — fora da conta">🎓 <b>${r.jaaluna}</b> já ${r.jaaluna === 1 ? 'era aluna' : 'eram alunas'}</span>` : ''}</div>
         <div class="ip-lista">${alunas}</div>
       </div>
     </details>`;
@@ -6855,7 +6899,7 @@ function paginaProfessoras(params) {
     <div class="sec-t">Por horário da aula</div>
     ${tabHoras}
     </div>
-    <p class="ui-rodape">A conversão não depende só da professora: horário, quem atendeu na recepção e preço também pesam. Use o número para conversar, não para julgar. <b>Fechou</b> = “Nome do contrato” preenchido na agenda de experimentais do EVO, ou a aluna já tem a tag <b>${esc(tAluna)}</b>. Aulas canceladas não entram.</p>`
+    <p class="ui-rodape">A conversão não depende só da professora: horário, quem atendeu na recepção e preço também pesam. Use o número para conversar, não para julgar. <b>Fechou</b> = começou um contrato no EVO depois da aula (até 120 dias; pelos contratos lidos em Alunas ativas) ou “Nome do contrato” preenchido na agenda de experimentais${pessoasEvo ? '' : `, ou a aluna já tem a tag <b>${esc(tAluna)}</b>`}. Contratos ${esc(String(process.env.ATIVAS_IGNORAR_CONTRATOS || 'circuito,vip').toUpperCase().split(',').join(' e '))} não contam. <b>Já era aluna</b> = tinha contrato vigente no dia da aula (foi lançada como experimental) — não entra na conta.${tot.jaaluna ? ` No período: <b>${tot.jaaluna}</b>.` : ''} Aulas canceladas não entram.</p>`
     : `<div class="card"><div class="vazio">${lidos.length ? 'Nenhuma aula experimental registrada neste período.' : 'Ainda sem histórico. Clique em “Ler agora no EVO” ou espere a leitura desta madrugada.'}</div></div>`}
     <style>
       .pf-item{border-bottom:1px solid var(--linha-soft)}
