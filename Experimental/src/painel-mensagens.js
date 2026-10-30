@@ -6528,7 +6528,7 @@ function paginaResumoMensal(params, aviso) {
   const optDia = Array.from({ length: 28 }, (_, i) => i + 1).map(n => `<option value="${n}"${n === cfg.dia ? ' selected' : ''}>dia ${n}</option>`).join('');
   const optMes = meses.slice().reverse().slice(0, 24).map(m => `<option value="${m.k}"${m.k === mes ? ' selected' : ''}>${rm.nomeMes(m.k)}</option>`).join('');
   const corpo = `<div class="wrap">${subnavIndicadores('ativas')}
-    ${uiTopo({ titulo: 'Resumo mensal no WhatsApp', sub: 'Todo mês, no dia e horário escolhidos, o robô manda nos grupos o resumo do mês que fechou: alunas ativas comparadas com o mês anterior (entradas e saídas) e com o mesmo mês do ano anterior — em texto e numa imagem. Antes de enviar ele relê as alunas no EVO.', acoes: '<a class="ui-btn sec" href="/ativas">← Alunas ativas</a>', linhas: [aviso || '', status, ultHtml].filter(Boolean) })}
+    ${uiTopo({ titulo: 'Resumo mensal no WhatsApp', sub: 'Todo mês, no dia e horário escolhidos, o robô manda nos grupos o resumo do mês que fechou: alunas ativas comparadas com o mês anterior (entradas e saídas) e com o mesmo mês do ano anterior — em texto e numa imagem. Usa os números atualizados no dia (leitura das 05:25); se ainda não houver, relê o EVO antes.', acoes: '<a class="ui-btn sec" href="/ativas">← Alunas ativas</a>', linhas: [aviso || '', status, ultHtml].filter(Boolean) })}
     <form method="POST" action="/ativas/resumo/salvar" class="card rm-form">
       <div class="rm-cab"><b>Envio automático</b>${sw}</div>
       <label class="rm-campo"><span class="ui-lbl">Grupo(s) do WhatsApp</span>
@@ -6553,7 +6553,7 @@ function paginaResumoMensal(params, aviso) {
       <form method="POST" action="/ativas/resumo/enviar" class="ui-linha" style="margin:14px 0 0" onsubmit="return confirm('Enviar agora o resumo de ${esc(rm.nomeMes(mes))} em: ${esc(cfg.grupos.join(', ') || '(nenhum grupo)')}?')">
         <input type="hidden" name="mes" value="${esc(mes)}">
         <button class="ui-btn" type="submit"${cfg.grupos.length ? '' : ' disabled title="Escreva o nome do grupo e salve"'}>📤 Enviar agora nos grupos</button>
-        <span class="quando" style="margin:0">O robô relê o EVO, gera a imagem e envia (leva 1–3 min). Não muda o envio automático.</span>
+        <span class="quando" style="margin:0">O robô gera a imagem e envia em cerca de 1 minuto (se os números ainda não foram atualizados hoje, relê o EVO antes: mais 1–3 min). Não muda o envio automático.</span>
       </form>` : '<div class="vazio">Ainda sem histórico de alunas ativas. Em <b>Alunas ativas</b>, clique em <b>Atualizar agora</b>.</div>'}
     </div>
     <script>(function(){ function ajusta(){ document.querySelectorAll('.rm-img').forEach(function(c){ c.style.setProperty('--rm-esc', (c.clientWidth/1080).toFixed(4)); }); } ajusta(); window.addEventListener('resize', ajusta); })();</script>
