@@ -4670,7 +4670,9 @@ function paginaSofiaCampanhas(aviso, erro) {
       function maisN(mostrados,total){ return total>mostrados?('<div class="quando" style="padding:7px 0">…e mais '+(total-mostrados)+'</div>'):''; }
       var env=j.enviados.slice().reverse().map(function(x){ return linha(x.nome,x.tel,'✅ '+cpFmtHora(x.em)); }).join('')+maisN(j.enviados.length,tEnv) || '<p class="quando">Ninguém ainda.</p>';
       var fila=j.pendentes.map(function(x){ return linha(x.nome,x.tel,'⏳ na fila','<button type="button" class="ct-ic" title="Remover da fila (não recebe a campanha)" style="margin:0;color:#c0392b" onclick="cpRemoverFila(\\''+cpEsc(String(x.tel).replace(/[^0-9]/g,''))+'\\')">🗑️</button>'); }).join('')+maisN(j.pendentes.length,tPen) || '<p class="quando">Fila vazia.</p>';
-      var fal=j.falhas.slice().reverse().map(function(x){ return linha(x.nome,x.tel,'<span style="color:var(--erro)">⚠️ '+cpEsc((x.erro||'').slice(0,200))+'</span>','<button type="button" class="ct-ic" title="Reenviar este número (volta pra fila)" style="margin:0" onclick="cpReenviar(\\''+cpEsc(String(x.tel).replace(/[^0-9]/g,''))+'\\')">↻</button>'); }).join('') || '<p class="quando">Nenhuma falha. 🎉</p>';
+      // "No LID for user …" = o WhatsApp não achou esse número (quase sempre: número sem WhatsApp ou errado)
+      var cpErroTxt=function(e){ e=String(e||''); return /No LID for user|sem WhatsApp/i.test(e) ? 'Número sem WhatsApp (ou errado) — confira o número no cadastro' : e.slice(0,200); };
+      var fal=j.falhas.slice().reverse().map(function(x){ return linha(x.nome,x.tel,'<span style="color:var(--erro)" title="'+cpEsc(x.erro||'')+'">⚠️ '+cpEsc(cpErroTxt(x.erro))+'</span>','<button type="button" class="ct-ic" title="Reenviar este número (volta pra fila)" style="margin:0" onclick="cpReenviar(\\''+cpEsc(String(x.tel).replace(/[^0-9]/g,''))+'\\')">↻</button>'); }).join('') || '<p class="quando">Nenhuma falha. 🎉</p>';
       var cpBodyEl=document.getElementById('cpBody');
       var html=
         '<div class="cp-sec"><div class="cp-h">Enviadas ('+tEnv+')</div><div class="cp-list">'+env+'</div></div>'+
