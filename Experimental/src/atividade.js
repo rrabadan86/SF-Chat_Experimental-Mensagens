@@ -48,7 +48,7 @@ function salvar(arr) {
 let _enviosOk = 0;
 function enviosOk() { return _enviosOk; }
 
-// ev: { destino, preview, ok, erro, grupo, midia, contexto? }
+// ev: { destino, preview, ok, erro, grupo, midia, contexto?, chaveFoto? }
 function registrar(ev) {
   if (ev && ev.ok !== false) _enviosOk++;
   try {
@@ -67,6 +67,8 @@ function registrar(ev) {
       // Mensagem COMPLETA (preserva quebras de linha) para o painel expandir com "+".
       // Cap generoso: mensagens de WhatsApp raramente passam disso.
       texto: String(ev.preview || '').trim().slice(0, 2000),
+      // foto (flyer) salva no painel que foi junto — o ↻ Reenviar do Log reusa
+      ...(ev.chaveFoto ? { chaveFoto: String(ev.chaveFoto).slice(0, 80) } : {}),
     });
     salvar(arr);
   } catch (_) { /* registro nunca derruba o envio */ }
