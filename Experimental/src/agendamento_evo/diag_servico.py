@@ -33,15 +33,29 @@ def main():
         acts = s.get("activities") or s.get("activitiesService") or []
         print("Atividades liberadas:", "; ".join(resumo_ativ(a) for a in acts) if acts else "(nenhuma informada pelo EVO)")
         print("Campos do serviço:", ", ".join(sorted(s.keys())))
+        print("activityGroups:", json.dumps(s.get("activityGroups"), ensure_ascii=False)[:1500])
+        # Para comparar: o serviço da experimental do SlimFit (o que funciona)
+        from evo_agendamento import config
+        sf = next((x for x in servs if str(x.get("idService")) == str(config.EVO_SERVICE_ID or "")), None)
+        if sf:
+            print(f"\nComparação — serviço do SlimFit {sf.get('idService')} · {sf.get('nameService')}")
+            print("activityGroups:", json.dumps(sf.get("activityGroups"), ensure_ascii=False)[:1500])
     else:
         for s in servs:
             if s.get("experimentalClass") or "experim" in str(s.get("nameService") or "").lower():
                 acts = s.get("activities") or []
                 print(f"{s.get('idService')} · {s.get('nameService')} → {'; '.join(resumo_ativ(a) for a in acts) or '(sem atividades)'}")
     # Atividades da academia (para comparar com as turmas de circuito)
-    print("\nAtividades com 'circuito' no nome:")
+    print("\nAtividades com 'circuito' no nome (todos os campos, para ver o grupo):")
     for a in evo.list_activities(search="circuito") or []:
         print("  ", resumo_ativ(a))
+        print("     ", json.dumps({k: v for k, v in a.items() if not isinstance(v, (list, dict)) or "group" in k.lower()}, ensure_ascii=False)[:800])
+    print("\nAtividades com 'slim' no nome (o SlimFit, para comparar):")
+    for a in evo.list_activities(search="slim") or []:
+        if "circuito" in str(a.get("name") or "").lower():
+            continue
+        print("  ", resumo_ativ(a))
+        print("     ", json.dumps({k: v for k, v in a.items() if not isinstance(v, (list, dict)) or "group" in k.lower()}, ensure_ascii=False)[:800])
 
 
 if __name__ == "__main__":
