@@ -401,7 +401,7 @@ function validarLogin(usuario, senha) {
 }
 // Qual aba uma URL pertence (para a checagem de acesso). O resto é a aba WhatsApp.
 function telaDaUrl(u) {
-  if (u === '/hoje') return 'msg'; // Hoje virou sub-aba do WhatsApp
+  if (u === '/hoje' || u.startsWith('/hoje/')) return 'msg'; // Hoje virou sub-aba do WhatsApp
   if (u === '/indicadores' || u === '/origens/criar' || u === '/origens/excluir') return 'ind';
   if (u === '/instagram' || u.startsWith('/instagram/')) return 'ig';
   if (u === '/sofia' || u.startsWith('/sofia/')) return 'sofia';
@@ -2174,8 +2174,18 @@ function paginaHoje(dia) {
     } else {
       pvNode = `<span class="pv">${esc(pvText)}</span>`;
     }
+    // Falha de envio individual do robô (ex.: número errado/sem WhatsApp): ↻ Reenviar
+    // abre o número (editável) e a mensagem original, e manda só essa de novo.
+    const podeReenviar = !e.ok && !e.grupo && !e.sofia && String(e.texto || '').trim();
+    const reenviar = podeReenviar ? `<details class="hj-re"><summary title="Corrigir o número e reenviar só esta mensagem">↻ Reenviar</summary>
+        <div class="hj-re-f">
+          <label>Número (WhatsApp)<input type="tel" class="hj-tel" value="${esc(fmtTel(e.destino))}" placeholder="(61) 99999-9999"></label>
+          <label>Mensagem<textarea class="hj-txt" rows="4">${esc(e.texto)}</textarea></label>
+          <input type="hidden" class="hj-ctx" value="${esc(e.contexto || '')}">
+          <div class="hj-re-a"><button type="button" class="ui-btn" onclick="hjReenviar(this)">Enviar</button><span class="hj-st quando" style="margin:0"></span></div>
+        </div></details>` : '';
     return `<div class="ev"><span class="h">${esc(e.quando)}</span><span class="ic">${ic}</span>
-      <div class="d"><span class="who">${who}</span> <span class="ctx">· ${esc(e.contexto)}</span>${pvNode}</div></div>`;
+      <div class="d"><span class="who">${who}</span> <span class="ctx">· ${esc(e.contexto)}</span>${pvNode}${reenviar}</div></div>`;
   }).join('');
 
   const corpo = `<div class="wrap">
@@ -2186,6 +2196,14 @@ function paginaHoje(dia) {
       .pvmore .mais{color:var(--teal);font-weight:700;font-size:.82rem;white-space:nowrap}
       .pvmore[open] summary .mais{opacity:.55}
       .pvmore .tudo{white-space:pre-wrap;word-break:break-word;margin-top:6px;padding:8px 10px;border:1px solid var(--linha);border-radius:8px;font-size:.9rem;line-height:1.45}
+      .hj-re{margin-top:6px}
+      .hj-re summary{display:inline-block;cursor:pointer;list-style:none;font-weight:700;font-size:.82rem;color:var(--teal);border:1px solid var(--linha);border-radius:999px;padding:3px 11px;background:#fff}
+      .hj-re summary::-webkit-details-marker{display:none}
+      .hj-re[open] summary{background:var(--teal);color:#fff;border-color:var(--teal)}
+      .hj-re-f{display:flex;flex-direction:column;gap:8px;margin-top:8px;padding:10px 12px;border:1px solid var(--linha);border-radius:10px;background:var(--bg);max-width:560px}
+      .hj-re-f label{display:flex;flex-direction:column;gap:4px;font-size:.8rem;font-weight:700;color:var(--cinza)}
+      .hj-re-f textarea{font-size:.88rem}
+      .hj-re-a{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
     </style>
     ${subnavMensagens('hoje')}
     ${uiTopo({
@@ -2209,7 +2227,31 @@ function paginaHoje(dia) {
     <div class="card">${lista || '<div class="vazio">Sem envios para mostrar.</div>'}</div>
     </div>
     <p class="ui-rodape">Registrado automaticamente a cada envio do robô.</p>
-  </div>${ehHoje ? '<script>setTimeout(function(){location.reload()},60000)</script>' : ''}`;
+  </div>
+  <script>
+  // Reenvio: pede ao robô (fila de envio do painel) e acompanha o resultado.
+  var hjOcupado=false;
+  function hjReenviar(b){
+    var f=b.closest('.hj-re-f'), st=f.querySelector('.hj-st');
+    var tel=(f.querySelector('.hj-tel').value||'').replace(/\\D/g,''), txt=f.querySelector('.hj-txt').value||'';
+    if(tel.length===10||tel.length===11) tel='55'+tel;
+    if(tel.length<12){ st.textContent='⚠️ Número inválido — inclua o DDD.'; return; }
+    if(!txt.trim()){ st.textContent='⚠️ Mensagem vazia.'; return; }
+    b.disabled=true; hjOcupado=true; st.textContent='⏳ Enviando…';
+    fetch('/hoje/reenviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:tel,texto:txt,contexto:f.querySelector('.hj-ctx').value})})
+      .then(function(r){return r.json();}).then(function(j){
+        if(!j||!j.ok){ st.textContent='❌ '+((j&&j.erro)||'não consegui pedir o envio'); b.disabled=false; hjOcupado=false; return; }
+        var n=0;(function poll(){ n++;
+          fetch('/teste/status?id='+encodeURIComponent(j.id),{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){
+            if(s.status==='enviado'){ st.textContent='✅ Reenviada!'; hjOcupado=false; return; }
+            if(s.status==='falha'){ st.textContent='❌ '+(s.erro||'falhou'); b.disabled=false; hjOcupado=false; return; }
+            if(n>45){ st.textContent='⏳ O robô ainda não enviou — confira no Log em instantes.'; hjOcupado=false; return; }
+            setTimeout(poll,2000);
+          }).catch(function(){ setTimeout(poll,2000); });
+        })();
+      }).catch(function(){ st.textContent='❌ erro de rede'; b.disabled=false; hjOcupado=false; });
+  }
+  </script>${ehHoje ? '<script>setInterval(function(){ if(!hjOcupado && !document.querySelector(\'.hj-re[open]\')) location.reload(); },60000)</script>' : ''}`;
   return chrome({ tab: 'Log', h1: 'Log — o que o robô fez', p: ehHoje ? 'Todos os envios de <b>hoje</b>, em tempo quase real.' : `Envios do dia <b>${esc(fmtData(d))}</b>.` }, 'msg', corpo);
 }
 
@@ -9050,6 +9092,21 @@ const server = http.createServer((req, res) => {
     return fs.createReadStream(caminho).pipe(res);
   }
 
+  // ↻ Reenviar uma mensagem que falhou (Log de envios): o robô manda só essa, com o
+  // número corrigido. Aparece no Log como "<tipo original> · reenvio".
+  if (req.method === 'POST' && url === '/hoje/reenviar') {
+    return lerCorpo(req, 1e5, corpo => {
+      try {
+        const d = JSON.parse(corpo || '{}');
+        const ctx = String(d.contexto || '').trim().slice(0, 60);
+        const id = teste.solicitar({ telefone: d.telefone, texto: String(d.texto || '').slice(0, 4000), contexto: (ctx ? ctx + ' · reenvio' : 'Reenvio (painel)') });
+        try { auditoria.registrar(sess && sess.usuario, 'log.reenviar', String(d.telefone || '').replace(/\D/g, ''), ctx); } catch (_) {}
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, id }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+  }
   // Enviar teste: painel grava o pedido; o robô (que tem a sessão) envia.
   if (req.method === 'POST' && url === '/teste/enviar') {
     return lerCorpo(req, 1e6, corpo => {
