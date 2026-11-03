@@ -75,7 +75,7 @@ function registrar(ev) {
 function carregarSofia() {
   try {
     return fs.readFileSync(ARQUIVO_SOFIA, 'utf8').split('\n').map(l => l.trim()).filter(Boolean)
-      .map(l => { try { return JSON.parse(l); } catch (_) { return null; } }).filter(Boolean);
+      .map(l => { try { const o = JSON.parse(l); if (o) o.sofia = true; return o; } catch (_) { return null; } }).filter(Boolean); // sofia: saiu pelo número da SoFIA
   } catch (_) { return []; }
 }
 function doDia(dia) {
