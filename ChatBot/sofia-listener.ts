@@ -1559,11 +1559,16 @@ async function resolverIdEnvio(telefone: string): Promise<string> {
   let n = String(telefone || "").replace(/\D/g, "");
   if (!n) throw new Error("sem telefone");
   if (!n.startsWith("55")) n = "55" + n;
+  let houveErro = false;
   for (const cand of variantesBR(n)) {
     try { const numId: any = await client.getNumberId(cand); if (numId && numId._serialized) return numId._serialized; }
-    catch {}
+    catch { houveErro = true; } // instabilidade: não conclui que o número é inválido
   }
-  return n + "@c.us"; // último recurso: deixa o envio tentar
+  // Nenhuma variação (com/sem o 9) existe no WhatsApp. Antes caíamos em
+  // "<numero>@c.us" e o envio estourava "No LID for user …" (mensagem confusa).
+  // Igual ao robô: desiste na hora com um motivo claro.
+  if (!houveErro) throw Object.assign(new Error(`número sem WhatsApp: ${n}`), { code: "INVALIDO" });
+  return n + "@c.us"; // só instabilidade → deixa o envio tentar
 }
 
 let processandoResp = false;
@@ -2259,7 +2264,10 @@ async function tickCampanha() {
   } catch (e: any) {
     c.pendentes.shift();
     c.falhas.push({ tel: alvoDest.tel, erro: (e?.message || String(e)).slice(0, 120), em: Date.now() });
-    c.falhasSeguidas = (c.falhasSeguidas || 0) + 1;
+    // Número sem WhatsApp é problema do número, não da conexão: não conta para a
+    // pausa automática (senão uma lista com vários números velhos pausava a campanha).
+    const numeroInvalido = e?.code === "INVALIDO" || /sem WhatsApp|No LID for user/i.test(String(e?.message || e));
+    if (!numeroInvalido) c.falhasSeguidas = (c.falhasSeguidas || 0) + 1;
     log(`campanha "${c.nome}": FALHA em ${alvoDest.tel} (${e?.message || e}). Seguidas: ${c.falhasSeguidas}.`);
     if (c.falhasSeguidas >= CAMP_MAX_FALHAS_SEGUIDAS) {
       c.status = "pausada"; // auto-pausa para não queimar o número
