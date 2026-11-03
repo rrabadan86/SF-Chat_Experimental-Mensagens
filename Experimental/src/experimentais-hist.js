@@ -22,7 +22,10 @@ const ARQ = path.resolve(__dirname, '..', 'data', 'experimentais-historico.json'
 function ler() {
   try {
     const o = JSON.parse(fs.readFileSync(ARQ, 'utf8'));
-    return { aulas: (o && o.aulas) || {}, lidos: (o && o.lidos) || {}, status: (o && o.status) || {}, cfg: (o && o.cfg) || {} };
+    const aulas = (o && o.aulas) || {};
+    // Limpa também o que já foi gravado antes do filtro (ex.: "Valor Elevado").
+    for (const k in aulas) { const a = aulas[k]; if (a && a.prof) a.prof = limparProf(a); }
+    return { aulas, lidos: (o && o.lidos) || {}, status: (o && o.status) || {}, cfg: (o && o.cfg) || {} };
   } catch (_) { return { aulas: {}, lidos: {}, status: {}, cfg: {} }; }
 }
 function gravar(h) {
@@ -49,14 +52,22 @@ function situacao(status) {
   return 'agendada';
 }
 
-// A coluna da professora é achada por exclusão (scraper); se por acaso vier o
-// status ou o contrato no lugar, descarta.
+// A coluna da professora é achada por exclusão (scraper): quando a experimental
+// está SEM professora no EVO, vem o texto da coluna seguinte — status, contrato,
+// o serviço ("Aula Experimental") ou o motivo/observação ("Valor Elevado", "Não
+// responde"…). Isso não é professora: descarta (a aula fica "sem professora").
+// Palavras INTEIRAS que não aparecem em nome de pessoa (comparação sem acento).
+const NAO_E_PROFESSORA = new Set(('presenca falta faltou ausente justificada justificado confirmado confirmada cancelado cancelada '
+  + 'pendente agendado agendada realizado realizada aula aulas experimental valor elevado caro preco responde respondeu retorno '
+  + 'interesse desistiu desistencia horario distancia financeiro viagem saude mudou motivo ligar whatsapp mensagem contato '
+  + 'recepcao nao sem outro outros plano contrato servico reposicao avulsa free fixo').split(' '));
 function limparProf(a) {
-  const p = String(a.professor || '').replace(/\s+/g, ' ').trim();
+  const p = String((a && (a.professor != null ? a.professor : a.prof)) || '').replace(/\s+/g, ' ').trim();
   if (!p) return '';
   const n = norm(p);
-  if (/^(presen|falta|ausent|justificad|confirmad|cancelad|pendente|agendad|realizad)/.test(n)) return '';
+  if (n.split(/[^a-z0-9]+/).some(w => NAO_E_PROFESSORA.has(w))) return '';
   if (a.contrato && n === norm(a.contrato)) return '';
+  if (/[0-9@/:]/.test(p)) return ''; // nome de pessoa não tem número, e-mail, data ou hora
   return p;
 }
 
@@ -156,4 +167,4 @@ function acharAula(idx, nome, desdeDia) {
   return (desdeDia && ord.find(a => a.dia >= desdeDia)) || ord[ord.length - 1];
 }
 
-module.exports = { ARQ, ler, registrarDia, setStatus, situacao, diaIso, norm, datasParaLer, antigosPendentes, definirDesde, limiteDias, HISTORICO_PADRAO, indicePorNome, acharAula, chavesNome };
+module.exports = { ARQ, limparProf, ler, registrarDia, setStatus, situacao, diaIso, norm, datasParaLer, antigosPendentes, definirDesde, limiteDias, HISTORICO_PADRAO, indicePorNome, acharAula, chavesNome };
