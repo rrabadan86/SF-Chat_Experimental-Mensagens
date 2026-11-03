@@ -6329,7 +6329,7 @@ function paginaSofiaFunil(params) {
   const SIT = { fechou: ['💰 fechou contrato', 'var(--ok)'], fez: ['✅ fez a aula', 'var(--teal-esc)'], faltou: ['❌ faltou', 'var(--erro)'], aguardando: ['⏳ aguardando', 'var(--cinza)'] };
   // filtro (opcional): passar o mouse mostra os nomes; clicar abre a lista só com eles.
   const FU_DADOS = {};
-  for (const f of Object.keys(FU_FILTROS)) FU_DADOS[f] = detAg.filter(d => FU_FILTROS[f](d.sit)).sort((a, b) => b.em - a.em).map(d => ({ n: d.nome, u: d.evo || '', c: linkContato(d.tel) }));
+  for (const f of Object.keys(FU_FILTROS)) FU_DADOS[f] = detAg.filter(d => FU_FILTROS[f](d.sit)).sort((a, b) => b.em - a.em).map(d => ({ n: d.nome, u: d.evo || '', c: linkContato(d.tel), k: d.canal || '', s: d.sit || '' }));
   const fuNum = (n, f) => n ? `<a href="#fuDet" class="fu-pop-alvo" data-filtro="${f}" onclick="fuFiltrar('${f}');return false" style="font-weight:700;color:var(--teal-esc)">${n}</a>` : `<b>${n}</b>`;
   // Trilho da barra com o % (da primeira barra do funil = largura da barra) escrito
   // DENTRO da cor; se a barra for estreita demais para caber, o % vai logo depois dela.
@@ -6408,18 +6408,27 @@ function paginaSofiaFunil(params) {
     ${detalheHtml}
     </div>
     <style>
-      #fuPop{position:absolute;z-index:80;display:none;min-width:240px;max-width:360px;max-height:320px;overflow:auto;background:var(--card);border:1px solid var(--linha);border-radius:12px;box-shadow:0 12px 32px -10px rgba(16,24,40,.35);padding:10px 12px;font-size:.84rem}
-      #fuPop .t{font-weight:800;margin:0 0 6px;color:var(--tinta)}
-      #fuPop .r{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px solid var(--linha-soft)}
-      #fuPop .r span{font-weight:600;color:var(--tinta)}
-      #fuPop .r a{color:var(--teal-esc);font-weight:700;white-space:nowrap;text-decoration:none}
-      #fuPop .r a:hover{text-decoration:underline}
-      #fuPop .d{margin-top:6px;color:var(--faint);font-size:.76rem}
+      #fuPop{position:absolute;z-index:80;display:none;width:340px;max-width:calc(100vw - 16px);max-height:380px;overflow:auto;background:var(--card);border:1px solid var(--linha);border-radius:14px;box-shadow:0 14px 36px -12px rgba(16,24,40,.35);font-size:.84rem}
+      #fuPop .fp-t{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:11px 14px 9px;background:var(--card);border-bottom:1px solid var(--linha)}
+      #fuPop .fp-t b{font-weight:800;color:var(--tinta);font-size:.9rem}
+      #fuPop .fp-t span{color:var(--cinza);font-size:.76rem;font-weight:600}
+      #fuPop .fp-g{padding:4px 14px 6px}
+      #fuPop .fp-g + .fp-g{border-top:1px solid var(--linha-soft)}
+      #fuPop .fp-gt{display:flex;justify-content:space-between;align-items:center;margin:6px 0 2px;font-size:.7rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--cinza)}
+      #fuPop .fp-gt em{font-style:normal;background:var(--linha-soft);border-radius:999px;padding:1px 8px;color:var(--tinta);letter-spacing:0}
+      #fuPop .fp-r{display:flex;align-items:center;gap:8px;padding:5px 0;min-width:0}
+      #fuPop .fp-n{flex:1;min-width:0;font-weight:600;color:var(--tinta);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #fuPop a.fp-n:hover{color:var(--teal-esc);text-decoration:underline}
+      #fuPop .ip-pill{font-size:.66rem;padding:1px 7px}
+      #fuPop .ip-evo{font-size:.7rem;padding:2px 8px}
+      #fuPop .fp-d{padding:8px 14px 10px;border-top:1px solid var(--linha);color:var(--faint);font-size:.74rem}
       /* celular: o nome da etapa vai para cima da barra — a barra usa a largura toda */
       @media(max-width:600px){.fu-l{display:none}}
     </style>
     <script>
     var FU_ROT=${JSON.stringify(FU_ROT)};
+    var FU_SIT=${JSON.stringify({ fechou: UI_SIT.fechou, fez: UI_SIT.fez, faltou: UI_SIT.faltou, aguardando: UI_SIT.aguardando })};
+    var FU_CANAIS=[['sofia','🤖 SoFIA'],['formulario','📲 Formulário'],['express','🏪 Express'],['','Sem canal']];
     var FU_DADOS=${JSON.stringify(FU_DADOS).replace(/</g, '\\u003c')};
     // Passar o mouse numa barra (ou num número do resumo) abre a lista com o nome
     // completo e o link do perfil no EVO; dá para mover o mouse até ela e clicar.
@@ -6430,8 +6439,23 @@ function paginaSofiaFunil(params) {
       function mostrar(el){
         clearTimeout(t);
         var f=el.getAttribute('data-filtro'), l=FU_DADOS[f]||[]; if(!l.length) return;
-        pop.innerHTML='<div class="t">'+esc(FU_ROT[f])+' ('+l.length+')</div>'+l.slice(0,40).map(function(x){ return '<div class="r"><span>'+(x.c?'<a href="'+esc(x.c)+'" title="Abrir em Contatos" style="color:inherit;font-weight:600;white-space:normal">'+esc(x.n)+'</a>':esc(x.n))+'</span>'+(x.u?'<a href="'+esc(x.u)+'" target="_blank" rel="noopener">abrir no EVO ↗</a>':'')+'</div>'; }).join('')
-          +(l.length>40?'<div class="d">…e mais '+(l.length-40)+' — clique para ver todas na lista.</div>':'<div class="d">Nome → ficha em Contatos · clique na barra para ver na lista abaixo.</div>');
+        // Agrupado por canal; a etiqueta de situação só aparece onde ela varia
+        // (em "fecharam", "faltaram" e "aguardando" todas são iguais).
+        var comSit=(f==='agendou'||f==='fez'), max=30;
+        var linha=function(x){
+          var nome=x.c?'<a class="fp-n" href="'+esc(x.c)+'" title="Abrir em Contatos">'+esc(x.n)+'</a>':'<span class="fp-n">'+esc(x.n)+'</span>';
+          var sit=comSit&&FU_SIT[x.s]?'<span class="ip-pill ip-'+x.s+'">'+FU_SIT[x.s]+'</span>':'';
+          var evo=x.u?'<a class="ip-evo" href="'+esc(x.u)+'" target="_blank" rel="noopener" title="Abrir no EVO">EVO ↗</a>':'';
+          return '<div class="fp-r">'+nome+sit+evo+'</div>';
+        };
+        var grupos=FU_CANAIS.map(function(c){
+          var g=l.filter(function(x){ return c[0] ? x.k===c[0] : !(x.k==='sofia'||x.k==='formulario'||x.k==='express'); });
+          if(!g.length) return '';
+          var vis=g.slice(0,max);
+          return '<div class="fp-g"><div class="fp-gt">'+c[1]+'<em>'+g.length+'</em></div>'+vis.map(linha).join('')+(vis.length<g.length?'<div class="fp-r" style="color:var(--faint)">…e mais '+(g.length-vis.length)+' — clique na barra para ver todas</div>':'')+'</div>';
+        }).join('');
+        pop.innerHTML='<div class="fp-t"><b>'+esc(FU_ROT[f].charAt(0).toUpperCase()+FU_ROT[f].slice(1))+'</b><span>'+l.length+(l.length===1?' pessoa':' pessoas')+'</span></div>'+grupos
+          +'<div class="fp-d">Clique no nome para abrir em Contatos · clique na barra para filtrar a lista abaixo.</div>';
         var r=el.getBoundingClientRect(); pop.style.display='block';
         var left=Math.min(r.left+window.scrollX+(el.classList.contains('fu-bar')?150:0), window.scrollX+document.documentElement.clientWidth-pop.offsetWidth-12);
         pop.style.left=Math.max(window.scrollX+8,left)+'px'; pop.style.top=(r.bottom+window.scrollY+4)+'px';
