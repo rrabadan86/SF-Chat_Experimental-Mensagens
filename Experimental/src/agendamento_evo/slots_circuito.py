@@ -22,7 +22,20 @@ def main():
             "idConfiguration": s["idConfiguration"], "activityDate": s["activityDate"], "time": s["time"],
             "activity": s["activity"], "disponivel": s["disponivel"], "freeSpots": s["freeSpots"],
         })
-    print(json.dumps({"ok": True, "dias": dias}, ensure_ascii=False))
+    out = {"ok": True, "dias": dias}
+    # Serviço do circuito que não libera nenhuma turma de circuito: explica à recepção.
+    try:
+        from evo_agendamento import config, EvoClient
+        from evo_agendamento.orchestrator import atividades_do_servico
+        sid = config.circuito_service_id()
+        ids, nomes, grupos = atividades_do_servico(EvoClient(), sid)
+        if ids is not None and not slots:
+            out["aviso"] = (f"O serviço {sid} (experimental do circuito) libera o grupo "
+                            f"{', '.join(grupos) or '—'}, mas nenhuma turma desse grupo tem horário. "
+                            "No EVO, inclua o grupo das turmas do circuito (ex.: Circuito Slim Adm) no serviço.")
+    except Exception:
+        pass
+    print(json.dumps(out, ensure_ascii=False))
 
 
 if __name__ == "__main__":

@@ -316,9 +316,9 @@ class EvoClient:
             data = [s for s in data if s.get("experimentalClass")]
         return data
 
-    def list_activities(self, search="", branch_id=None):
-        """Lista atividades (aulas) da academia."""
-        params = {"take": 50, "search": search}
+    def list_activities(self, search="", branch_id=None, take=100):
+        """Lista atividades (aulas) da academia (com o grupo: idActivityGroup)."""
+        params = {"take": take, "search": search}
         bid = self._bid(branch_id)
         if bid:
             params["idBranch"] = bid

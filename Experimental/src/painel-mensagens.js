@@ -1907,6 +1907,7 @@ function paginaExpress(aviso, erro) {
     var circ=exTipo()==='circuito';
     fetch('/agendar/slots'+(circ?'?tipo=circuito'+(forcar?'&forcar=1':''):''),{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){
       if(circ!==(exTipo()==='circuito')) return; // trocou de aula no meio do caminho
+      if(circ&&j&&j.aviso) exStatus('⚠️ '+exEsc(j.aviso),'err');
       exSlots=(j&&j.dias)||{}; exPreencherHoras();
     }).catch(function(){ exSlots={}; exPreencherHoras(); });
   }
@@ -9601,7 +9602,7 @@ const server = http.createServer((req, res) => {
       let j = null;
       try { const l = String(stdout || '').trim().split('\n').filter(Boolean).pop(); j = JSON.parse(l); } catch (_) {}
       if (err || !j || !j.dias) return responder({ dias: (_circSlots.dados && _circSlots.dados.dias) || {}, erro: String((stderr || (err && err.message) || 'falha ao ler a grade do circuito')).trim().slice(0, 300) });
-      _circSlots = { em: Date.now(), dados: { dias: j.dias } };
+      _circSlots = { em: Date.now(), dados: j.aviso ? { dias: j.dias, aviso: String(j.aviso).slice(0, 400) } : { dias: j.dias } };
       return responder(_circSlots.dados);
     });
   }
