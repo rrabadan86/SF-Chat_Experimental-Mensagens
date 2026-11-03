@@ -28,7 +28,19 @@ def main():
         from evo_agendamento import config, EvoClient
         from evo_agendamento.orchestrator import atividades_do_servico
         sid = config.circuito_service_id()
-        ids, nomes, grupos = atividades_do_servico(EvoClient(), sid)
+        evo = EvoClient()
+        servs = evo.list_services() or []
+        svc = next((x for x in servs if str(x.get("idService")) == str(sid)), None)
+        if svc and svc.get("inactive"):
+            # Serviço configurado está INATIVO no EVO (ex.: 316 antigo no Lago Sul 2):
+            # sugere os serviços de experimental do circuito que estão ativos.
+            ativos = [f"{x.get('idService')} · {x.get('nameService')}" for x in servs
+                      if x.get("experimentalClass") and not x.get("inactive") and "circuito" in str(x.get("nameService") or "").lower()]
+            out["aviso"] = (f"O serviço {sid} ({svc.get('nameService')}) está INATIVO no EVO. "
+                            + (f"Use um ativo: {' · '.join(ativos)}." if ativos else "Ative-o no EVO ou informe outro serviço."))
+            print(json.dumps(out, ensure_ascii=False))
+            return
+        ids, nomes, grupos = atividades_do_servico(evo, sid)
         if ids is not None and not slots:
             out["aviso"] = (f"O serviço {sid} (experimental do circuito) libera o grupo "
                             f"{', '.join(grupos) or '—'}, mas nenhuma turma desse grupo tem horário. "
