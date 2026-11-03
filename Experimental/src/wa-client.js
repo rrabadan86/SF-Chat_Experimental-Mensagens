@@ -583,10 +583,11 @@ async function sendTexto(telefone, texto, contexto, chaveFoto) {
     } else {
       r = await comRetry(() => sendRawTexto(id, texto));
     }
-    atividade.registrar({ destino: telefone, preview: (fotoPath ? '📎 ' : '') + texto, midia: !!fotoPath, ok: true, contexto });
+    atividade.registrar({ destino: telefone, preview: (fotoPath ? '📎 ' : '') + texto, midia: !!fotoPath, ok: true, contexto, chaveFoto: fotoPath ? chaveFoto : '' });
     return r;
   } catch (e) {
-    atividade.registrar({ destino: telefone, preview: texto, ok: false, erro: e && e.message, contexto });
+    // chaveFoto: o ↻ Reenviar do Log manda a mesma foto junto
+    atividade.registrar({ destino: telefone, preview: texto, ok: false, erro: e && e.message, contexto, chaveFoto: fotoPath ? chaveFoto : '' });
     throw e;
   }
 }

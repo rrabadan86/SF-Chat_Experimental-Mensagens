@@ -2147,6 +2147,21 @@ function switchEnvio(chaves) {
 // Hora 'HH:MM' de um job (override ou padrão) — usada nos rótulos do /agendar.
 function horaTurno(chave) { try { return horarios.parse(horarios.cronDe(chave)).hora; } catch (_) { return ''; } }
 
+// Foto (flyer) que foi — ou iria — junto com um envio do Log. Registros novos trazem
+// a chave; nos antigos (antes disso), deduz pelo tipo de envio. Só devolve se a
+// foto ainda existe no painel.
+const FOTO_POR_CONTEXTO = {
+  'Manhã (hoje)': 'confirmacao_experimental', 'Tarde (amanhã)': 'confirmacao_experimental',
+  'Renovação de contrato': 'renovacao', 'Aniversário ex-alunas': 'aniversario_ex',
+};
+function fotoDoEnvio(e) {
+  let ch = String(e.chaveFoto || '');
+  if (!ch) {
+    ch = FOTO_POR_CONTEXTO[String(e.contexto || '').replace(/ · reenvio$/, '')] || '';
+  }
+  try { return ch && mensagens.fotoPath(ch) ? ch : ''; } catch (_) { return ''; }
+}
+
 // ── Página: o que o robô fez hoje ───────────────────────────────────────────
 function paginaHoje(dia) {
   const d = dia || atividade.hojeSP();
@@ -2177,11 +2192,13 @@ function paginaHoje(dia) {
     // Falha de envio individual do robô (ex.: número errado/sem WhatsApp): ↻ Reenviar
     // abre o número (editável) e a mensagem original, e manda só essa de novo.
     const podeReenviar = !e.ok && !e.grupo && !e.sofia && String(e.texto || '').trim();
+    const chFoto = podeReenviar ? fotoDoEnvio(e) : '';
     const reenviar = podeReenviar ? `<details class="hj-re"><summary title="Corrigir o número e reenviar só esta mensagem">↻ Reenviar</summary>
         <div class="hj-re-f">
           <label>Número (WhatsApp)<input type="tel" class="hj-tel" value="${esc(fmtTel(e.destino))}" placeholder="(61) 99999-9999"></label>
           <label>Mensagem<textarea class="hj-txt" rows="4">${esc(e.texto)}</textarea></label>
           <input type="hidden" class="hj-ctx" value="${esc(e.contexto || '')}">
+          ${chFoto ? `<label class="hj-foto"><input type="checkbox" class="hj-chf" value="${esc(chFoto)}" checked> <span>📎 Enviar com a foto da mensagem</span></label>` : ''}
           <div class="hj-re-a"><button type="button" class="ui-btn" onclick="hjReenviar(this)">Enviar</button><span class="hj-st quando" style="margin:0"></span></div>
         </div></details>` : '';
     return `<div class="ev"><span class="h">${esc(e.quando)}</span><span class="ic">${ic}</span>
@@ -2204,6 +2221,7 @@ function paginaHoje(dia) {
       .hj-re-f label{display:flex;flex-direction:column;gap:4px;font-size:.8rem;font-weight:700;color:var(--cinza)}
       .hj-re-f textarea{font-size:.88rem}
       .hj-re-a{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+      .hj-re-f .hj-foto{flex-direction:row;align-items:center;gap:8px;font-weight:600;color:var(--tinta)}
     </style>
     ${subnavMensagens('hoje')}
     ${uiTopo({
@@ -2238,7 +2256,7 @@ function paginaHoje(dia) {
     if(tel.length<12){ st.textContent='⚠️ Número inválido — inclua o DDD.'; return; }
     if(!txt.trim()){ st.textContent='⚠️ Mensagem vazia.'; return; }
     b.disabled=true; hjOcupado=true; st.textContent='⏳ Enviando…';
-    fetch('/hoje/reenviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:tel,texto:txt,contexto:f.querySelector('.hj-ctx').value})})
+    fetch('/hoje/reenviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:tel,texto:txt,contexto:f.querySelector('.hj-ctx').value,chaveFoto:(function(c){return c&&c.checked?c.value:'';})(f.querySelector('.hj-chf'))})})
       .then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok){ st.textContent='❌ '+((j&&j.erro)||'não consegui pedir o envio'); b.disabled=false; hjOcupado=false; return; }
         var n=0;(function poll(){ n++;
@@ -9099,7 +9117,9 @@ const server = http.createServer((req, res) => {
       try {
         const d = JSON.parse(corpo || '{}');
         const ctx = String(d.contexto || '').trim().slice(0, 60);
-        const id = teste.solicitar({ telefone: d.telefone, texto: String(d.texto || '').slice(0, 4000), contexto: (ctx ? ctx + ' · reenvio' : 'Reenvio (painel)') });
+        // a foto só vai se for de uma mensagem do painel que tem foto salva
+        const chaveFoto = /^[a-z0-9_]{2,60}$/i.test(String(d.chaveFoto || '')) && mensagens.fotoPath(d.chaveFoto) ? String(d.chaveFoto) : '';
+        const id = teste.solicitar({ telefone: d.telefone, texto: String(d.texto || '').slice(0, 4000), chaveFoto, contexto: (ctx ? ctx + ' · reenvio' : 'Reenvio (painel)') });
         try { auditoria.registrar(sess && sess.usuario, 'log.reenviar', String(d.telefone || '').replace(/\D/g, ''), ctx); } catch (_) {}
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, id }));
       } catch (e) {
