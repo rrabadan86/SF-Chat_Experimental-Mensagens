@@ -96,31 +96,41 @@ _SERV_ATIV_CACHE = {}
 
 
 def atividades_do_servico(evo, id_service, branch_id=None):
-    """→ (ids, nomes) das atividades que o serviço libera; (None, None) se não deu
-    para saber (aí não restringe — fica a regra do nome "circuito")."""
+    """→ (ids, nomes, grupos) do que o serviço libera no EVO.
+    O EVO liga o serviço às atividades por GRUPO (activityGroups): o serviço libera
+    os grupos e cada atividade pertence a um grupo (idActivityGroup). Ex.: Lago Sul 2
+    — serviço 316 libera o grupo "Circuito Slim", mas a turma "Circuito Slim B" é do
+    grupo "Circuito Slim Adm" → o EVO recusa a matrícula.
+    ids = set() → o serviço não libera nenhuma atividade conhecida;
+    ids = None → não deu para saber (aí vale a regra do nome "circuito")."""
     if not id_service:
-        return None, None
+        return None, [], []
     chave = (int(id_service), branch_id)
     hit = _SERV_ATIV_CACHE.get(chave)
     if hit and hit[0] > time.monotonic():
         return hit[1]
-    res = (None, None)
+    res = (None, [], [])
     try:
         svc = next((x for x in (evo.list_services(branch_id=branch_id) or [])
-                    if str(x.get("idService")) == str(id_service)), None)
-        acts = (svc or {}).get("activities") or (svc or {}).get("activitiesService") or []
+                    if str(x.get("idService")) == str(id_service)), None) or {}
+        acts = svc.get("activities") or svc.get("activitiesService") or []
         ids, nomes = set(), []
         for a in acts if isinstance(acts, list) else []:
-            if not isinstance(a, dict):
-                continue
-            ida = a.get("idActivity") or a.get("id")
-            if ida is not None and str(ida).isdigit():
-                ids.add(int(ida))
-            n = a.get("name") or a.get("nameActivity") or a.get("description")
-            if n:
-                nomes.append(str(n))
+            if isinstance(a, dict) and str(a.get("idActivity") or a.get("id") or "").isdigit():
+                ids.add(int(a.get("idActivity") or a.get("id")))
+                nomes.append(str(a.get("name") or a.get("nameActivity") or ""))
+        grupos = [g for g in (svc.get("activityGroups") or []) if isinstance(g, dict) and g.get("idActivityGroup") is not None]
+        nomes_grupos = [str(g.get("nameActivityGroup") or g.get("idActivityGroup")) for g in grupos]
         if ids:
-            res = (ids, nomes)
+            res = (ids, nomes, nomes_grupos)
+        elif grupos:
+            ids_grupo = {int(g["idActivityGroup"]) for g in grupos}
+            todas = evo.list_activities(branch_id=branch_id) or []
+            for a in todas if isinstance(todas, list) else []:
+                if isinstance(a, dict) and a.get("idActivityGroup") is not None and int(a["idActivityGroup"]) in ids_grupo and not a.get("inactive"):
+                    ids.add(int(a.get("idActivity")))
+                    nomes.append(str(a.get("name") or ""))
+            res = (ids, nomes, nomes_grupos) if todas else (None, [], nomes_grupos)
     except Exception as e:  # sem a lista: segue sem restringir
         log.warning("Não consegui ler as atividades do serviço %s: %s", id_service, e)
     _SERV_ATIV_CACHE[chave] = (time.monotonic() + 600, res)
@@ -130,7 +140,7 @@ def atividades_do_servico(evo, id_service, branch_id=None):
 def _match_circuito(sess, ids_servico=None) -> bool:
     """Turma serve para a experimental do CIRCUITO? Se soubermos as atividades que o
     serviço libera, vale só elas; senão, as que têm "circuito" no nome."""
-    if ids_servico:
+    if ids_servico is not None:
         return sess.get("idActivity") in ids_servico
     return "circuito" in (sess.get("name") or "").lower()
 
@@ -285,7 +295,7 @@ def book_experimental(
         if not id_service:
             raise ValueError("Serviço da aula experimental do Circuito não configurado "
                              "(WhatsApp → Express → id do serviço do Circuito no EVO).")
-        ids_circ, nomes_circ = atividades_do_servico(evo, id_service, branch_id)
+        ids_circ, nomes_circ, grupos_circ = atividades_do_servico(evo, id_service, branch_id)
     else:
         activity = activity or config.EVO_ACTIVITY or None
         service = service or config.EVO_SERVICE or None
@@ -339,11 +349,15 @@ def book_experimental(
                        "Tente de novo em instantes.")
     if circuito:
         session = next((s for s in schedule if same_slot(s, when) and _match_circuito(s, ids_circ)), None)
-        if session is None and ids_circ:
+        if session is None and ids_circ is not None:
+            outra = next((s for s in schedule if same_slot(s, when) and "circuito" in (s.get("name") or "").lower()), None)
             raise TurmaLotadaError(
                 fmt_datetime_evo(when),
-                reason=f"o serviço {id_service} da experimental do circuito não libera esta turma "
-                       f"(libera: {', '.join(nomes_circ) or 'outra atividade'})",
+                reason=(f"o serviço {id_service} da experimental do circuito não libera "
+                        f"{('a turma ' + str(outra.get('name'))) if outra else 'nenhuma turma'} nesse horário "
+                        f"(o serviço libera o grupo {', '.join(grupos_circ) or '—'}"
+                        f"{'; atividades: ' + ', '.join(nomes_circ) if nomes_circ else ''}) — "
+                        "no EVO, inclua o grupo da turma no serviço"),
             )
     else:
         session = _find_session(schedule, when, activity, id_activity)
@@ -497,7 +511,7 @@ def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_i
     ids_circ = None
     if circuito:  # grade das turmas de Circuito Slim (experimental do circuito)
         activity, id_activity = "circuito", None
-        ids_circ, _ = atividades_do_servico(evo, config.circuito_service_id(), branch_id)
+        ids_circ, _, _ = atividades_do_servico(evo, config.circuito_service_id(), branch_id)
     else:
         activity = activity or config.EVO_ACTIVITY or None
         id_activity = id_activity or (config.EVO_ACTIVITY_ID or None)
