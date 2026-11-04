@@ -6346,7 +6346,13 @@ function paginaSofiaFunil(params) {
   for (const d of detAg) {
     const am = aulaMap[last8(d.tel)];
     if (am && am.when && Math.abs((am.em || 0) - d.em) < 3 * 86400000) d.when = am.when;
-    try { d.exp = histExp.acharAula(idxExp, d.nome, diaDe(d.em)); } catch (_) {}
+    // Dia/hora que ela marcou (quando foi gravado): ajuda a achar a aula no EVO
+    // mesmo com o nome diferente (ex.: CRM "Luciana Carvalho" × EVO com o nome todo).
+    let quando = null;
+    { const w = String(d.when || '').trim(); let m;
+      if ((m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2}))?/.exec(w))) quando = { dia: `${m[1]}-${m[2]}-${m[3]}`, hora: m[4] ? `${m[4].padStart(2, '0')}:${m[5]}` : '' };
+      else if ((m = /^(\d{2})\/(\d{2})\/(\d{4})(?:\D+(\d{1,2})[:h](\d{2}))?/.exec(w))) quando = { dia: `${m[3]}-${m[2]}-${m[1]}`, hora: m[4] ? `${m[4].padStart(2, '0')}:${m[5]}` : '' }; }
+    try { d.exp = histExp.acharAula(idxExp, d.nome, diaDe(d.em), quando); } catch (_) {}
   }
   let fez = 0, fechou = 0, faltou = 0, aguardando = 0;
   const hojeFu = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
