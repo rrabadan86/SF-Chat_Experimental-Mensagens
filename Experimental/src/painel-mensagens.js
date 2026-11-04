@@ -880,6 +880,7 @@ const ESTILO = `
   .ip-fez,.ip-veio{background:var(--teal-soft);color:var(--teal-esc);border-color:var(--avi-bd)}
   .ip-faltou{background:var(--erro-bg);color:var(--erro);border-color:var(--erro-bd)}
   .ip-aguardando,.ip-agendada,.ip-jaaluna{background:var(--linha-soft);color:var(--cinza);border-color:var(--linha)}
+  .ip-semreg{background:var(--warn-bg, #fdf3e1);color:var(--warn);border-color:var(--warn-bd, #f1d9a8)}
   .ip-meta{grid-column:1;grid-row:2;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.78rem;color:var(--cinza)}
   .ip-meta b{color:var(--tinta);font-weight:600}
   .ip-acao{grid-column:2;grid-row:1 / span 2;display:flex;gap:6px}
@@ -2823,7 +2824,7 @@ function uiDatas({ action, de, ate, extra, limpar }) {
       <button class="ui-btn" type="submit">Aplicar</button>${limpar ? `<a href="${limpar}" class="ui-btn sec">Limpar</a>` : ''}</form>`;
 }
 // Uma pessoa numa lista: nome (link p/ Contatos), situação, detalhes e o link do EVO.
-const UI_SIT = { jaaluna: '🎓 Já era aluna', fechou: '💰 Fechou contrato', fez: '✅ Fez a aula', veio: '✅ Veio', faltou: '❌ Faltou', aguardando: '⏳ Aguardando', agendada: '⏳ Agendada' };
+const UI_SIT = { jaaluna: '🎓 Já era aluna', fechou: '💰 Fechou contrato', fez: '✅ Fez a aula', veio: '✅ Veio', faltou: '❌ Faltou', aguardando: '⏳ Aguardando', agendada: '⏳ Agendada', semreg: '❔ Sem registro' };
 function uiPessoa({ nome, href, sit, meta, evo, direita, attrs }) {
   return `<div class="ip-row"${attrs || ''}>
       <div class="ip-top">${href ? `<a class="ip-nome" href="${esc(href)}" title="Abrir em Contatos">${esc(nome)}</a>` : `<span class="ip-nome">${esc(nome)}</span>`}${sit ? `<span class="ip-pill ip-${sit}">${UI_SIT[sit] || esc(sit)}</span>` : ''}</div>
@@ -6343,18 +6344,22 @@ function paginaSofiaFunil(params) {
   // experimental no EVO (professora, presença, contrato) — casada pelo nome.
   let aulaMap = {}; try { const m = fuLerJson(FU_AGENDOU_AULA_FILE, {}); if (m && typeof m === 'object' && !Array.isArray(m)) aulaMap = m; } catch (_) {}
   let idxExp = new Map(); try { idxExp = histExp.indicePorNome(); } catch (_) {}
+  // "2026-11-05 08:15" / "05/11/2026 08:15" → { dia: '2026-11-05', hora: '08:15' } ({} se não der).
+  const quandoDe = (w) => {
+    const t = String(w || '').trim(); let m;
+    if ((m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2}))?/.exec(t))) return { dia: `${m[1]}-${m[2]}-${m[3]}`, hora: m[4] ? `${m[4].padStart(2, '0')}:${m[5]}` : '' };
+    if ((m = /^(\d{2})\/(\d{2})\/(\d{4})(?:\D+(\d{1,2})[:h](\d{2}))?/.exec(t))) return { dia: `${m[3]}-${m[2]}-${m[1]}`, hora: m[4] ? `${m[4].padStart(2, '0')}:${m[5]}` : '' };
+    return {};
+  };
   for (const d of detAg) {
     const am = aulaMap[last8(d.tel)];
     if (am && am.when && Math.abs((am.em || 0) - d.em) < 3 * 86400000) d.when = am.when;
     // Dia/hora que ela marcou (quando foi gravado): ajuda a achar a aula no EVO
     // mesmo com o nome diferente (ex.: CRM "Luciana Carvalho" × EVO com o nome todo).
-    let quando = null;
-    { const w = String(d.when || '').trim(); let m;
-      if ((m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2}))?/.exec(w))) quando = { dia: `${m[1]}-${m[2]}-${m[3]}`, hora: m[4] ? `${m[4].padStart(2, '0')}:${m[5]}` : '' };
-      else if ((m = /^(\d{2})\/(\d{2})\/(\d{4})(?:\D+(\d{1,2})[:h](\d{2}))?/.exec(w))) quando = { dia: `${m[3]}-${m[2]}-${m[1]}`, hora: m[4] ? `${m[4].padStart(2, '0')}:${m[5]}` : '' }; }
-    try { d.exp = histExp.acharAula(idxExp, d.nome, diaDe(d.em), quando); } catch (_) {}
+    const quando = quandoDe(d.when);
+    try { d.exp = histExp.acharAula(idxExp, d.nome, diaDe(d.em), quando.dia ? quando : null); } catch (_) {}
   }
-  let fez = 0, fechou = 0, faltou = 0, aguardando = 0;
+  let fez = 0, fechou = 0, faltou = 0, aguardando = 0, semreg = 0;
   const hojeFu = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
   const somaDiasFu = (dia, n) => { const x = new Date(dia + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
   for (const d of detAg) {
@@ -6372,23 +6377,27 @@ function paginaSofiaFunil(params) {
     // não há experimental dela no EVO perto do agendamento: avisa na linha. (O
     // histórico só conhece até 7 dias à frente — antes de 14 dias a aula pode
     // simplesmente ainda não ter sido lida.)
-    if (d.sit === 'aguardando' && !d.exp && hojeFu > somaDiasFu(diaDe(d.em), 14)) {
-      const w = String(d.when || '').trim();
-      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(w) || (/^(\d{2})\/(\d{2})\/(\d{4})/.exec(w) ? (([, da, mo, y]) => [null, y, mo, da])(/^(\d{2})\/(\d{2})\/(\d{4})/.exec(w)) : null);
-      const diaAula = m ? `${m[1]}-${m[2]}-${m[3]}` : '';
-      if (!diaAula || diaAula < hojeFu) d.semAulaEvo = true;
+    // A aula que ela marcou (gravada no agendamento) já passou e não está no EVO
+    // também conta, mesmo antes dos 14 dias.
+    if (d.sit === 'aguardando' && !d.exp) {
+      const diaAula = quandoDe(d.when).dia;
+      if (diaAula ? diaAula < hojeFu : hojeFu > somaDiasFu(diaDe(d.em), 14)) d.semAulaEvo = true;
     }
+    // "Aguardando" é só quem ainda VAI fazer a aula. A aula já passou sem presença
+    // no EVO, ou a experimental não está no EVO → "Sem registro" (barra própria).
+    if (d.sit === 'aguardando' && (d.semPresenca || d.semAulaEvo)) d.sit = 'semreg';
     // fechou só circuito/VIP → conta como "fez a aula", não como contrato fechado
     if (d.sit === 'fechou' && d.exp && contratoIgnorado(d.exp.contrato)) d.sit = 'fez';
     if (d.sit === 'fechou') { fechou++; fez++; }
     else if (d.sit === 'fez') fez++;
     else if (d.sit === 'faltou') faltou++;
+    else if (d.sit === 'semreg') semreg++;
     else aguardando++;
   }
   const pct = (n, d) => d ? String(Math.round(n * 1000 / d) / 10).replace('.', ',') + '%' : '—';
-  const FU_FILTROS = { agendou: () => true, fez: (s) => s === 'fez' || s === 'fechou', fechou: (s) => s === 'fechou', faltou: (s) => s === 'faltou', aguardando: (s) => s === 'aguardando' };
-  const FU_ROT = { agendou: 'agendaram', fez: 'fizeram a aula', fechou: 'fecharam contrato', faltou: 'faltaram', aguardando: 'ainda aguardando' };
-  const SIT = { fechou: ['💰 fechou contrato', 'var(--ok)'], fez: ['✅ fez a aula', 'var(--teal-esc)'], faltou: ['❌ faltou', 'var(--erro)'], aguardando: ['⏳ aguardando', 'var(--cinza)'] };
+  const FU_FILTROS = { agendou: () => true, fez: (s) => s === 'fez' || s === 'fechou', fechou: (s) => s === 'fechou', faltou: (s) => s === 'faltou', aguardando: (s) => s === 'aguardando', semreg: (s) => s === 'semreg' };
+  const FU_ROT = { agendou: 'agendaram', fez: 'fizeram a aula', fechou: 'fecharam contrato', faltou: 'faltaram', aguardando: 'ainda aguardando', semreg: 'sem registro no EVO' };
+  const SIT = { fechou: ['💰 fechou contrato', 'var(--ok)'], fez: ['✅ fez a aula', 'var(--teal-esc)'], faltou: ['❌ faltou', 'var(--erro)'], aguardando: ['⏳ aguardando', 'var(--cinza)'], semreg: ['❔ sem registro', 'var(--warn)'] };
   // filtro (opcional): passar o mouse mostra os nomes; clicar abre a lista só com eles.
   const FU_DADOS = {};
   for (const f of Object.keys(FU_FILTROS)) FU_DADOS[f] = detAg.filter(d => FU_FILTROS[f](d.sit)).sort((a, b) => b.em - a.em).map(d => ({ n: d.nome, u: d.evo || '', c: linkContato(d.tel), k: d.canal || '', s: d.sit || '' }));
@@ -6411,7 +6420,7 @@ function paginaSofiaFunil(params) {
   const diasInd = custom ? 7 : ({ hoje: 1, '7': 7, '30': 30, '0': 0 }[per]);
   // Lista de quem agendou no período (com canal) + os Express que ficaram de fora —
   // ajuda a conferir quem contou e por quê.
-  const fmtDtCurta = (ms) => { try { return new Date(Number(ms)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+  const fmtDtCurta = (ms) => { try { return new Date(Number(ms)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
   const DS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
   // "2026-10-31 07:00" / "31/10/2026 07:00" → "sex 31/10 às 07:00" (outro formato: como veio).
   const fmtWhen = (w) => {
@@ -6463,9 +6472,9 @@ function paginaSofiaFunil(params) {
       ${topo
         ? (topo.n ? barra(topo.rot, topo.n, topo.n, 'var(--teal)') + barra('Agendaram', agend, topo.n, 'var(--ok)', agend ? 'agendou' : '') + barra('Fizeram a aula', fez, topo.n, 'var(--teal-esc)', fez ? 'fez' : '', agend ? `${pct(fez, agend).replace(/,0%$/, '%')} das agendadas` : '') + barra('Fecharam contrato', fechou, topo.n, '#0b5e33', fechou ? 'fechou' : '', fez ? `${pct(fechou, fez).replace(/,0%$/, '%')} de quem fez<span class="fu-l">&nbsp;a aula</span>` : '') + barra('Não agendaram', naoAg, topo.n, 'var(--cinza)')
           : `<div class="vazio">${topo.vazio}</div>`)
-        : (agend ? barra('Agendaram', agend, agend, 'var(--ok)', 'agendou') + barra('Fizeram a aula', fez, agend, 'var(--teal-esc)', fez ? 'fez' : '') + barra('Fecharam contrato', fechou, agend, '#0b5e33', fechou ? 'fechou' : '', fez ? `${pct(fechou, fez).replace(/,0%$/, '%')} de quem fez<span class="fu-l">&nbsp;a aula</span>` : '') + barra('Faltaram', faltou, agend, 'var(--erro)', faltou ? 'faltou' : '') + barra('Aguardando', aguardando, agend, 'var(--cinza)', aguardando ? 'aguardando' : '')
+        : (agend ? barra('Agendaram', agend, agend, 'var(--ok)', 'agendou') + barra('Fizeram a aula', fez, agend, 'var(--teal-esc)', fez ? 'fez' : '') + barra('Fecharam contrato', fechou, agend, '#0b5e33', fechou ? 'fechou' : '', fez ? `${pct(fechou, fez).replace(/,0%$/, '%')} de quem fez<span class="fu-l">&nbsp;a aula</span>` : '') + barra('Faltaram', faltou, agend, 'var(--erro)', faltou ? 'faltou' : '') + barra('Aguardando', aguardando, agend, 'var(--cinza)', aguardando ? 'aguardando' : '') + (semreg ? barra('Sem registro', semreg, agend, 'var(--warn)', 'semreg') : '')
           : `<div class="vazio">Ninguém agendou ${canalSel === 'todos' ? '' : 'pelo ' + rotSel + ' '}neste período.</div>`)}
-      ${agend ? `<p class="quando" style="margin:10px 0 0">Das <b>${agend}</b> que agendaram: ${fuNum(fez, 'fez')} fizeram a aula (${fuNum(fechou, 'fechou')} já ${fechou === 1 ? 'fechou' : 'fecharam'} contrato), ${fuNum(faltou, 'faltou')} ${faltou === 1 ? 'faltou' : 'faltaram'} e ${fuNum(aguardando, 'aguardando')} ainda ${aguardando === 1 ? 'aguarda' : 'aguardam'} — aula futura ou presença ainda não lida no EVO. <span style="color:var(--faint)">Passe o mouse nas barras para ver os nomes; clique para filtrar a lista.</span></p>` : ''}
+      ${agend ? `<p class="quando" style="margin:10px 0 0">Das <b>${agend}</b> que agendaram: ${fuNum(fez, 'fez')} fizeram a aula (${fuNum(fechou, 'fechou')} já ${fechou === 1 ? 'fechou' : 'fecharam'} contrato), ${fuNum(faltou, 'faltou')} ${faltou === 1 ? 'faltou' : 'faltaram'}${semreg ? ',' : ' e'} ${fuNum(aguardando, 'aguardando')} ainda ${aguardando === 1 ? 'aguarda' : 'aguardam'} a aula${semreg ? ` e ${fuNum(semreg, 'semreg')} ${semreg === 1 ? 'está' : 'estão'} sem registro no EVO (a aula já passou sem presença lançada, ou a experimental não está no EVO)` : ''}. <span style="color:var(--faint)">Passe o mouse nas barras para ver os nomes; clique para filtrar a lista.</span></p>` : ''}
       ${(!compCfg.on || !atCfg.on) ? `<p class="quando" style="margin:8px 0 0;color:var(--warn)">⚠️ ${!compCfg.on ? '“Presença da experimental” está desligada (SoFIA → Tags) — sem ela, ninguém sai de “aguardando”. ' : ''}${!atCfg.on ? '“Alunas / Ex-alunas automáticas” está desligado (SoFIA → Tags) — sem ele, o fechamento de contrato não aparece.' : ''}</p>` : ''}
       ${canalSel === 'formulario' && podeVerInd ? `<p style="margin:12px 0 0;text-align:right"><a href="/indicadores?dias=${diasInd}" class="ui-btn sec" style="display:inline-block;white-space:normal;text-align:center">Ver detalhes do formulário (por dia, horários de pico, origens e links) →</a></p>` : ''}
     </div>
@@ -6491,7 +6500,7 @@ function paginaSofiaFunil(params) {
     </style>
     <script>
     var FU_ROT=${JSON.stringify(FU_ROT)};
-    var FU_SIT=${JSON.stringify({ fechou: UI_SIT.fechou, fez: UI_SIT.fez, faltou: UI_SIT.faltou, aguardando: UI_SIT.aguardando })};
+    var FU_SIT=${JSON.stringify({ fechou: UI_SIT.fechou, fez: UI_SIT.fez, faltou: UI_SIT.faltou, aguardando: UI_SIT.aguardando, semreg: UI_SIT.semreg })};
     var FU_CANAIS=[['sofia','🤖 SoFIA'],['formulario','📲 Formulário'],['express','🏪 Express'],['','Sem canal']];
     var FU_DADOS=${JSON.stringify(FU_DADOS).replace(/</g, '\\u003c')};
     // Passar o mouse numa barra (ou num número do resumo) abre a lista com o nome
@@ -6530,7 +6539,7 @@ function paginaSofiaFunil(params) {
     function fuFiltrar(f){
       var det=document.getElementById('fuDet'); if(!det) return;
       var acc=det.closest('details'); if(acc) acc.open=true;
-      var ok={agendou:function(){return true},fez:function(s){return s==='fez'||s==='fechou'},fechou:function(s){return s==='fechou'},faltou:function(s){return s==='faltou'},aguardando:function(s){return s==='aguardando'}}[f]||function(){return true};
+      var ok={agendou:function(){return true},fez:function(s){return s==='fez'||s==='fechou'},fechou:function(s){return s==='fechou'},faltou:function(s){return s==='faltou'},aguardando:function(s){return s==='aguardando'},semreg:function(s){return s==='semreg'}}[f]||function(){return true};
       var n=0; [].forEach.call(det.querySelectorAll('[data-sit]'),function(r){ var v=!f||ok(r.getAttribute('data-sit')); r.style.display=v?'':'none'; if(v) n++; });
       var exp=document.getElementById('fuExp'); if(exp) exp.style.display=(f&&f!=='agendou')?'none':'';
       var info=document.getElementById('fuFiltroInfo');
