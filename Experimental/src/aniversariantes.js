@@ -693,11 +693,23 @@ async function main() {
       catch (e) { console.log(`   ⚠️  Erro ao buscar grupos: ${e.message}`); }
       console.log(`   👥 ${grupos.length} grupo(s) em comum: ${grupos.map(g => g.name || g.id).join(', ') || '(nenhum)'}`);
 
-      if (grupos.length === 0) { resultados.push({ nome: aniv.nome, grupos: [], status: 'sem-grupos' }); continue; }
+      // Grupos que não recebem o parabéns (lista editável no painel).
+      const excluir = require('./aniversario-excluir').listar();
+      const pulados = [];
+      if (excluir.length) {
+        const { bloqueadoPor } = require('./aniversario-excluir');
+        grupos = grupos.filter(g => {
+          const por = bloqueadoPor(g.name || '', excluir);
+          if (por) { pulados.push(g.name || g.id); console.log(`   🚫 Pulando "${g.name || g.id}" (na lista de grupos que não recebem: "${por}")`); }
+          return !por;
+        });
+      }
+
+      if (grupos.length === 0) { resultados.push({ nome: aniv.nome, grupos: [], pulados, status: pulados.length ? 'so-excluidos' : 'sem-grupos' }); continue; }
 
       if (!MODO_ENVIO) {
         console.log('   🧪 Simulação — não enviei nada.');
-        resultados.push({ nome: aniv.nome, grupos: grupos.map(g => g.name || g.id), status: 'simulado' });
+        resultados.push({ nome: aniv.nome, grupos: grupos.map(g => g.name || g.id), pulados, status: 'simulado' });
         continue;
       }
 
@@ -719,7 +731,7 @@ async function main() {
         enviados.push({ grupo: rotulo, ok });
         await sleep(8000); // pausa entre grupos
       }
-      resultados.push({ nome: aniv.nome, grupos: enviados, status: 'processado' });
+      resultados.push({ nome: aniv.nome, grupos: enviados, pulados, status: 'processado' });
     }
   } finally {
     // cliente persistente permanece vivo para os outros jobs
