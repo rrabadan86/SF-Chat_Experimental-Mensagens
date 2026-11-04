@@ -6287,9 +6287,13 @@ function paginaSofiaFunil(params) {
   // Agendamentos do período, de QUALQUER canal: cada agendamento (SoFIA, Formulário
   // ou Express) aplica a tag de "agendou" e fica no histórico de tags com o canal.
   const todosAg = [];
+  // Quem foi EXCLUÍDO da aba Contatos (ex.: testes) sai do funil — o histórico
+  // de tags continua guardado, mas não conta mais. (Se o CRM não carregar, não filtra.)
+  const temCrm = Object.keys(cont8).length > 0;
   for (const l8 in tagLogMap) {
     const ag = agendouEmNoPeriodo(l8);
     if (!ag) continue;
+    if (temCrm && !cont8[l8]) continue;
     const ib = inbox8[l8];
     const canal = ag.canal || canalDe(l8) || (ib && conversou(ib.c) ? 'sofia' : '');
     const tel = (ib && ib.k) || cont8[l8] || l8;
@@ -6346,6 +6350,7 @@ function paginaSofiaFunil(params) {
   }
   let fez = 0, fechou = 0, faltou = 0, aguardando = 0;
   const hojeFu = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const somaDiasFu = (dia, n) => { const x = new Date(dia + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
   for (const d of detAg) {
     d.sit = situacaoDe(d);
     // A tag não mudou (o job de presença só pareia pelo TELEFONE e só olha os
@@ -6356,6 +6361,14 @@ function paginaSofiaFunil(params) {
       if (s === 'veio') d.sit = 'fez';
       else if (s === 'faltou') d.sit = 'faltou';
       else d.semPresenca = true;
+    }
+    // Agendou há mais de 3 dias, a aula que ela marcou (se gravada) já passou e
+    // não há experimental dela no EVO perto do agendamento: avisa na linha.
+    if (d.sit === 'aguardando' && !d.exp && hojeFu > somaDiasFu(diaDe(d.em), 3)) {
+      const w = String(d.when || '').trim();
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(w) || (/^(\d{2})\/(\d{2})\/(\d{4})/.exec(w) ? (([, da, mo, y]) => [null, y, mo, da])(/^(\d{2})\/(\d{2})\/(\d{4})/.exec(w)) : null);
+      const diaAula = m ? `${m[1]}-${m[2]}-${m[3]}` : '';
+      if (!diaAula || diaAula < hojeFu) d.semAulaEvo = true;
     }
     // fechou só circuito/VIP → conta como "fez a aula", não como contrato fechado
     if (d.sit === 'fechou' && d.exp && contratoIgnorado(d.exp.contrato)) d.sit = 'fez';
@@ -6415,6 +6428,7 @@ function paginaSofiaFunil(params) {
         aula ? `🏋️ Aula <b>${aula}</b>` : '',
         ex && ex.prof ? `👩‍🏫 <b>${esc(ex.prof)}</b>` : '',
         d.semPresenca ? `<span style="color:var(--warn)">⚠️ A aula já passou e a presença não foi lançada no EVO</span>` : '',
+        d.semAulaEvo ? `<span style="color:var(--warn)">⚠️ Não achei esta experimental no EVO (desmarcada, ou marcada com outro nome)</span>` : '',
         d.sit === 'fechou' && ex && ex.contrato ? `📄 ${esc(ex.contrato)}` : '',
       ],
     });
