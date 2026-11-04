@@ -768,9 +768,18 @@ function iniciarRodarJobWatcher() {
   };
   // Resultado do pedido (o "↻ Rodar de novo" do painel acompanha por aqui).
   const ARQ_ST = require('path').resolve(__dirname, '..', 'data', 'rodar-job-status.json');
+  // Guarda os últimos 60 pedidos { id: { job, estado, msg, em } } — o Log do painel
+  // mostra o resultado de cada um mesmo depois de outros pedidos.
   const status = (pedido, o) => {
     if (!pedido || !pedido.id) return;
-    try { fs.writeFileSync(ARQ_ST, JSON.stringify(Object.assign({ id: pedido.id, job: pedido.job, em: Date.now() }, o))); } catch (_) {}
+    try {
+      let mapa = {};
+      try { const x = JSON.parse(fs.readFileSync(ARQ_ST, 'utf8')); if (x && typeof x === 'object' && !x.id) mapa = x; } catch (_) {}
+      mapa[pedido.id] = Object.assign({ job: pedido.job, em: Date.now() }, o);
+      const ids = Object.keys(mapa).sort((a, b) => (mapa[a].em || 0) - (mapa[b].em || 0));
+      for (const k of ids.slice(0, Math.max(0, ids.length - 60))) delete mapa[k];
+      fs.writeFileSync(ARQ_ST, JSON.stringify(mapa));
+    } catch (_) {}
   };
   const t = setInterval(() => {
     let pedido = null;
@@ -789,15 +798,15 @@ function iniciarRodarJobWatcher() {
     status(pedido, { estado: 'rodando', msg: '' });
     // runJob trata o erro (log, alerta, registro no Log); aqui só guardamos o
     // resultado da ÚLTIMA tentativa para o painel mostrar.
-    let falha = null, rodou = false;
+    let falha = null, rodou = false, resultado = null;
     const enviosAntes = atividade.enviosOk();
-    runJob(alvo.nome, async () => { rodou = true; falha = null; try { return await alvo.fn(pedido); } catch (e) { falha = e; throw e; } }, alvo.timeoutMs)
+    runJob(alvo.nome, async () => { rodou = true; falha = null; try { resultado = await alvo.fn(pedido); return resultado; } catch (e) { falha = e; throw e; } }, alvo.timeoutMs)
       .catch(err => { falha = falha || err; logError(alvo.nome, err); })
       .finally(() => {
         const enviou = atividade.enviosOk() - enviosAntes;
         if (!rodou) status(pedido, { estado: 'erro', msg: 'o robô não conseguiu a vez para rodar — tente de novo em alguns minutos' });
         else if (falha) status(pedido, { estado: 'erro', msg: String((falha && falha.message) || falha).split('\n')[0].slice(0, 300) });
-        else status(pedido, { estado: 'ok', msg: enviou ? `${enviou} mensagem(ns) enviada(s)` : '' });
+        else status(pedido, { estado: 'ok', msg: enviou ? `${enviou} mensagem(ns) enviada(s)` : String((resultado && resultado.msg) || '').slice(0, 200) });
       });
   }, 4000);
   if (t.unref) t.unref();
