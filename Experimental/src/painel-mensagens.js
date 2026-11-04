@@ -6261,15 +6261,20 @@ function paginaSofiaFunil(params) {
   // um valor fixo por telefone (que misturava um Express com um SoFIA anterior).
   const agendouEmNoPeriodo = (k) => {
     const evs = tagLogMap[last8(k)] || [];
-    let ult = 0, canal = '';
+    let ult = 0, canal = '', por = '';
     for (const e of evs) {
       const ehAg = e.acao === 'add' && (e.motivo === 'agendou' || agTagsLc.includes(String(e.tag || '').trim()));
-      if (ehAg && e.em && e.em > ult) { ult = e.em; canal = String(e.canal || '').trim(); }
+      if (ehAg && e.em && e.em > ult) {
+        ult = e.em; canal = String(e.canal || '').trim(); por = '';
+        // Tag de "agendou" posta À MÃO em Contatos (na ficha ou em lote): não
+        // veio de um agendamento do sistema — mostra como "Manual" e por quem.
+        if (!canal && e.motivo === 'manual') { canal = 'manual'; por = String(e.por || '').trim(); }
+      }
     }
     if (!ult || !dentro(diaDe(ult))) return null;
-    return { em: ult, canal };
+    return { em: ult, canal, por };
   };
-  const rotCanal = (c) => ({ sofia: '🤖 SoFIA', formulario: '📲 Formulário', express: '🏪 Express' }[c] || '— sem canal');
+  const rotCanal = (c, por) => c === 'manual' ? `✍️ Tag posta à mão${por ? ' por ' + esc(por) : ''}` : ({ sofia: '🤖 SoFIA', formulario: '📲 Formulário', express: '🏪 Express' }[c] || '— sem canal');
   // Canal escolhido no filtro: todos | sofia | formulario | express.
   const canalSel = ['sofia', 'formulario', 'express'].includes(params.canal) ? params.canal : 'todos';
   // Conversas reais com a SoFIA no período (a pessoa escreveu) — base do funil da SoFIA.
@@ -6298,9 +6303,9 @@ function paginaSofiaFunil(params) {
     const ib = inbox8[l8];
     const canal = ag.canal || canalDe(l8) || (ib && conversou(ib.c) ? 'sofia' : '');
     const tel = (ib && ib.k) || cont8[l8] || l8;
-    todosAg.push({ nome: nomeDe(tel, ib && ib.c), canal, em: ag.em, tel });
+    todosAg.push({ nome: nomeDe(tel, ib && ib.c), canal, por: canal === 'manual' ? ag.por : '', em: ag.em, tel });
   }
-  const porCanal = { sofia: 0, formulario: 0, express: 0, outro: 0 };
+  const porCanal = { sofia: 0, formulario: 0, express: 0, manual: 0, outro: 0 };
   for (const d of todosAg) porCanal[porCanal[d.canal] != null ? d.canal : 'outro']++;
   const detAg = canalSel === 'todos' ? todosAg : todosAg.filter(d => d.canal === canalSel);
   const agend = detAg.length;
@@ -6441,7 +6446,7 @@ function paginaSofiaFunil(params) {
       attrs: d.sit ? ` data-sit="${d.sit}"` : '',
       meta: [
         `📅 Agendou <b>${esc(fmtDtCurta(d.em))}</b>`,
-        rotCanal(d.canal),
+        rotCanal(d.canal, d.por),
         aula ? `🏋️ Aula <b>${aula}</b>` : '',
         ex && ex.prof ? `👩‍🏫 <b>${esc(ex.prof)}</b>` : '',
         d.semPresenca ? `<span style="color:var(--warn)">⚠️ A aula já passou e a presença não foi lançada no EVO</span>` : '',
@@ -6462,7 +6467,7 @@ function paginaSofiaFunil(params) {
     <div class="stats">
       ${topo ? `<div class="stat tot"><div class="n">${topo.n}</div><div class="l">${topo.stat} · ${esc(rotulo)}</div></div>
       <div class="stat ok"><div class="n">${agend}</div><div class="l">agendaram · <b style="color:var(--coral-esc)">${String(conv).replace('.', ',')}%</b> ${topo.de}</div></div>`
-      : `<div class="stat ok"><div class="n">${agend}</div><div class="l">agendaram · ${esc(rotulo)}${canalSel === 'todos' ? `<br><span style="font-size:.72rem">🤖 ${porCanal.sofia} · 📲 ${porCanal.formulario} · 🏪 ${porCanal.express}${porCanal.outro ? ` · ${porCanal.outro} sem canal` : ''}</span>` : ''}</div></div>`}
+      : `<div class="stat ok"><div class="n">${agend}</div><div class="l">agendaram · ${esc(rotulo)}${canalSel === 'todos' ? `<br><span style="font-size:.72rem">🤖 ${porCanal.sofia} · 📲 ${porCanal.formulario} · 🏪 ${porCanal.express}${porCanal.manual ? ` · ✍️ ${porCanal.manual} à mão` : ''}${porCanal.outro ? ` · ${porCanal.outro} sem canal` : ''}</span>` : ''}</div></div>`}
       <div class="stat"><div class="n" style="color:var(--teal-esc)">${fez}</div><div class="l">fizeram a aula · ${pct(fez, agend)} das agendadas</div></div>
       <div class="stat ok"><div class="n">${fechou}</div><div class="l">fecharam contrato · ${pct(fechou, fez)} de quem fez</div></div>
     </div>
@@ -6501,7 +6506,7 @@ function paginaSofiaFunil(params) {
     <script>
     var FU_ROT=${JSON.stringify(FU_ROT)};
     var FU_SIT=${JSON.stringify({ fechou: UI_SIT.fechou, fez: UI_SIT.fez, faltou: UI_SIT.faltou, aguardando: UI_SIT.aguardando, semreg: UI_SIT.semreg })};
-    var FU_CANAIS=[['sofia','🤖 SoFIA'],['formulario','📲 Formulário'],['express','🏪 Express'],['','Sem canal']];
+    var FU_CANAIS=[['sofia','🤖 SoFIA'],['formulario','📲 Formulário'],['express','🏪 Express'],['manual','✍️ Tag posta à mão'],['','Sem canal']];
     var FU_DADOS=${JSON.stringify(FU_DADOS).replace(/</g, '\\u003c')};
     // Passar o mouse numa barra (ou num número do resumo) abre a lista com o nome
     // completo e o link do perfil no EVO; dá para mover o mouse até ela e clicar.
@@ -6522,7 +6527,7 @@ function paginaSofiaFunil(params) {
           return '<div class="fp-r">'+nome+sit+evo+'</div>';
         };
         var grupos=FU_CANAIS.map(function(c){
-          var g=l.filter(function(x){ return c[0] ? x.k===c[0] : !(x.k==='sofia'||x.k==='formulario'||x.k==='express'); });
+          var g=l.filter(function(x){ return c[0] ? x.k===c[0] : !(x.k==='sofia'||x.k==='formulario'||x.k==='express'||x.k==='manual'); });
           if(!g.length) return '';
           var vis=g.slice(0,max);
           return '<div class="fp-g"><div class="fp-gt">'+c[1]+'<em>'+g.length+'</em></div>'+vis.map(linha).join('')+(vis.length<g.length?'<div class="fp-r" style="color:var(--faint)">…e mais '+(g.length-vis.length)+' — clique na barra para ver todas</div>':'')+'</div>';
