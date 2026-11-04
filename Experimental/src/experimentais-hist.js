@@ -153,8 +153,10 @@ function indicePorNome(h) {
   }
   return idx;
 }
-// A aula experimental da pessoa: a 1ª a partir de `desdeDia` (YYYY-MM-DD, ex.: o
-// dia em que agendou); se não houver, a mais recente. null se não achar.
+// A aula experimental da pessoa. Com `desdeDia` (YYYY-MM-DD, o dia em que agendou):
+// a 1ª entre 3 dias antes e 60 dias depois dele — nunca uma aula de outra época
+// (ex.: a experimental do ano anterior de quem agendou de novo). Sem `desdeDia`:
+// a mais recente. null se não achar.
 function acharAula(idx, nome, desdeDia) {
   const ks = chavesNome(nome);
   let lista = ks.length ? idx.get('=' + ks[0]) : null;
@@ -164,7 +166,13 @@ function acharAula(idx, nome, desdeDia) {
   // Pelo 1º + último nome só vale se for UMA pessoa (ex.: duas "Ana Silva" → não arrisca).
   if (new Set(lista.map(a => norm(a.nome))).size > 1 && !idx.get('=' + ks[0])) return null;
   const ord = lista.slice().sort((a, b) => (a.dia + a.hora).localeCompare(b.dia + b.hora));
-  return (desdeDia && ord.find(a => a.dia >= desdeDia)) || ord[ord.length - 1];
+  if (!desdeDia) return ord[ord.length - 1];
+  const de = somaDias(desdeDia, -3), ate = somaDias(desdeDia, 60);
+  return ord.find(a => a.dia >= de && a.dia <= ate) || null;
+}
+function somaDias(dia, n) {
+  const d = new Date(dia + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
 }
 
 module.exports = { ARQ, limparProf, ler, registrarDia, setStatus, situacao, diaIso, norm, datasParaLer, antigosPendentes, definirDesde, limiteDias, HISTORICO_PADRAO, indicePorNome, acharAula, chavesNome };
