@@ -152,31 +152,63 @@ function chavesNome(nome) {
 }
 function indicePorNome(h) {
   const idx = new Map();
+  const todas = [];
   for (const a of Object.values((h || ler()).aulas)) {
     if (situacao(a.status) === 'cancelada') continue;
+    todas.push(a);
     chavesNome(a.nome).forEach((k, i) => {
       const kk = (i ? '~' : '=') + k;
       (idx.get(kk) || idx.set(kk, []).get(kk)).push(a);
     });
   }
+  idx.todas = todas; // para a busca por nome "contido" (abaixo)
   return idx;
+}
+// Palavras do nome sem as ligações (de, da, dos…), para comparar nomes parciais.
+const LIGA = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
+function palavrasNome(nome) {
+  return norm(nome).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w && !LIGA.has(w));
 }
 // A aula experimental da pessoa. Com `desdeDia` (YYYY-MM-DD, o dia em que agendou):
 // a 1ª entre 3 dias antes e 60 dias depois dele — nunca uma aula de outra época
 // (ex.: a experimental do ano anterior de quem agendou de novo). Sem `desdeDia`:
 // a mais recente. null se não achar.
-function acharAula(idx, nome, desdeDia) {
+// `quando` (opcional, { dia, hora }): o dia/hora que ela marcou, quando foi gravado
+// no agendamento — desempata e permite casar nomes que o CRM tem mais curto.
+function acharAula(idx, nome, desdeDia, quando) {
+  const de = desdeDia ? somaDias(desdeDia, -3) : '', ate = desdeDia ? somaDias(desdeDia, 60) : '';
+  const naJanela = (a) => !desdeDia || (a.dia >= de && a.dia <= ate);
+  const escolher = (lista) => {
+    const ord = lista.slice().sort((a, b) => (a.dia + a.hora).localeCompare(b.dia + b.hora));
+    if (quando && quando.dia) {
+      const mesma = ord.find(a => a.dia === quando.dia && (!quando.hora || !a.hora || a.hora.slice(0, 5) === quando.hora));
+      if (mesma) return mesma;
+    }
+    if (!desdeDia) return ord[ord.length - 1];
+    return ord.find(naJanela) || null;
+  };
+  // 1) Pelo nome inteiro; 2) pelo 1º + último nome (só se for UMA pessoa).
   const ks = chavesNome(nome);
   let lista = ks.length ? idx.get('=' + ks[0]) : null;
   if (!lista && ks[1]) lista = idx.get('~' + ks[1]) || idx.get('=' + ks[1]);
   if (!lista && ks.length === 1) lista = idx.get('~' + ks[0]);
-  if (!lista || !lista.length) return null;
-  // Pelo 1º + último nome só vale se for UMA pessoa (ex.: duas "Ana Silva" → não arrisca).
-  if (new Set(lista.map(a => norm(a.nome))).size > 1 && !idx.get('=' + ks[0])) return null;
-  const ord = lista.slice().sort((a, b) => (a.dia + a.hora).localeCompare(b.dia + b.hora));
-  if (!desdeDia) return ord[ord.length - 1];
-  const de = somaDias(desdeDia, -3), ate = somaDias(desdeDia, 60);
-  return ord.find(a => a.dia >= de && a.dia <= ate) || null;
+  if (lista && lista.length && !(new Set(lista.map(a => norm(a.nome))).size > 1 && !idx.get('=' + ks[0]))) {
+    const r = escolher(lista);
+    if (r) return r;
+  }
+  // 3) Nome do CRM CONTIDO no do EVO: mesmo 1º nome e todos os outros nomes
+  // presentes (ex.: "Luciana Carvalho" ⊂ "Luciana Cristina de Carvalho Ávila").
+  // Só na janela do agendamento e só se for UMA pessoa.
+  const pw = palavrasNome(nome);
+  if (!pw.length || !Array.isArray(idx.todas)) return null;
+  const contem = (a) => { const ew = palavrasNome(a.nome); return ew[0] === pw[0] && pw.every(w => ew.includes(w)); };
+  let cands = idx.todas.filter(a => naJanela(a) && (pw.length > 1 ? contem(a) : false));
+  // Só o 1º nome no CRM (ex.: "Luciana"): vale apenas no dia e hora exatos que ela marcou.
+  if (!cands.length && quando && quando.dia) {
+    cands = idx.todas.filter(a => a.dia === quando.dia && (!quando.hora || !a.hora || a.hora.slice(0, 5) === quando.hora) && palavrasNome(a.nome)[0] === pw[0]);
+  }
+  if (!cands.length || new Set(cands.map(a => norm(a.nome))).size > 1) return null;
+  return escolher(cands);
 }
 function somaDias(dia, n) {
   const d = new Date(dia + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n);
