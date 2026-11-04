@@ -21,9 +21,12 @@ const LOG_DIR = path.resolve(__dirname, '..', 'logs');
 // Calcula a grade de horários (script Python, rápido no VPS) e a envia pronta ao
 // formulário na Render. Processo separado e leve — não usa o navegador/WhatsApp.
 let _slotsPushRunning = false; // evita dois push_slots.py ao mesmo tempo
+// Devolve uma Promise { ok, msg } — NUNCA rejeita (os crons ignoram o retorno);
+// o "↻ Rodar de novo" do painel usa o resultado para mostrar se deu certo.
 function runSlotsPush(motivo) {
-  if (_slotsPushRunning) return;            // já há um envio em andamento
+  if (_slotsPushRunning) return Promise.resolve({ ok: true, msg: 'já estava atualizando — aguarde o resultado desse envio' });
   _slotsPushRunning = true;
+  return new Promise((fim) => {
   const dir = path.resolve(__dirname, 'agendamento_evo');
   const script = path.join(dir, 'push_slots.py');
   const py = process.env.PYTHON_BIN || 'python3';
@@ -44,14 +47,27 @@ function runSlotsPush(motivo) {
         log(`⚠️  Grade→formulário${tag}: falhou (EVO instável?) — tenta de novo no próximo horário; o formulário segue com a grade anterior.`);
       }
       if (out) console.log('   ' + out);
-      return;
+      return fim({ ok: false, msg: resumoErro(out || (err && err.message)) });
     }
     if (_slotsAlertado) {
       try { notif.alertar('Grade→formulário voltou', `A grade do formulário voltou a atualizar depois de ${_slotsFalhas} falha(s) seguida(s).`, { prioridade: 'default', tags: 'white_check_mark' }); } catch (_) {}
     }
     _slotsFalhas = 0; _slotsAlertado = false;
     log('🗓️  ' + (out || 'grade enviada ao formulário') + tag);
+    fim({ ok: true, msg: (out || 'grade enviada ao formulário').split('\n').pop() });
   });
+  });
+}
+// Para os jobs manuais: transforma { ok:false, msg } em erro (o runJob registra).
+async function resultadoOuErro(p) {
+  const r = await p;
+  if (r && r.ok === false) throw new Error(r.msg || 'falhou');
+  return r;
+}
+// Última linha útil da saída de um script (para mostrar no painel).
+function resumoErro(txt) {
+  const linhas = String(txt || '').split('\n').map(l => l.trim()).filter(Boolean);
+  return (linhas[linhas.length - 1] || 'falhou').slice(0, 300);
 }
 let _slotsFalhas = 0, _slotsAlertado = false; // falhas SEGUIDAS do push_slots (alerta só a partir da 2ª)
 
@@ -61,8 +77,9 @@ let _slotsFalhas = 0, _slotsAlertado = false; // falhas SEGUIDAS do push_slots (
 // botão "Atualizar grade agora" do painel faz o mesmo sob demanda.
 let _gradeFixasRunning = false;
 function runGradeFixas(motivo) {
-  if (_gradeFixasRunning) return;           // já há uma geração em andamento
+  if (_gradeFixasRunning) return Promise.resolve({ ok: true, msg: 'já estava atualizando' });
   _gradeFixasRunning = true;
+  return new Promise((fim) => {
   const dir = path.resolve(__dirname, 'agendamento_evo');
   const script = path.join(dir, 'run_grade_fixas.py');
   // usa o .venv do agendamento_evo se existir (mesma regra do painel) — senão o
@@ -77,22 +94,27 @@ function runGradeFixas(motivo) {
   execFile(py, [script, '--refresh-outras'], { cwd: dir, timeout: 900000 }, (err, stdout, stderr) => {
     _gradeFixasRunning = false;
     const out = (stdout || stderr || '').trim();
-    if (err) { logError('Grade de fixas (run_grade_fixas)' + tag, err, { contexto: 'Grade de fixas' }); if (out) console.log('   ' + out); return; }
+    if (err) { logError('Grade de fixas (run_grade_fixas)' + tag, err, { contexto: 'Grade de fixas' }); if (out) console.log('   ' + out); return fim({ ok: false, msg: resumoErro(out || (err && err.message)) }); }
     log('📋 ' + (out || 'grade de fixas atualizada') + tag);
+    fim({ ok: true, msg: (out || 'grade de fixas atualizada').split('\n').pop() });
+  });
   });
 }
 
 // Foto diária das alunas ATIVAS (Indicadores → Alunas ativas): Python leve, só
 // lista as clientes no EVO pela API (poucas chamadas) — não usa o navegador.
 function runAtivasFoto() {
+  return new Promise((fim) => {
   const dir = path.resolve(__dirname, 'agendamento_evo');
   const venv = path.join(dir, '.venv', 'bin', 'python');
   let py = process.env.PYTHON_BIN || 'python3';
   try { if (fs.existsSync(venv)) py = venv; } catch (_) {}
   execFile(py, [path.join(dir, 'run_ativas_foto.py'), '--nomes', '400', '--tempo', '720'], { cwd: dir, timeout: 900000 }, (err, stdout, stderr) => {
     const out = (stdout || stderr || '').trim();
-    if (err) { logError('Foto de alunas ativas (run_ativas_foto)', err, { contexto: 'Alunas ativas (EVO)' }); if (out) console.log('   ' + out); return; }
+    if (err) { logError('Foto de alunas ativas (run_ativas_foto)', err, { contexto: 'Alunas ativas (EVO)' }); if (out) console.log('   ' + out); return fim({ ok: false, msg: resumoErro(out || (err && err.message)) }); }
     log('👥 ' + (out || 'foto de alunas ativas gravada'));
+    fim({ ok: true, msg: (out || 'foto de alunas ativas gravada').split('\n').pop() });
+  });
   });
 }
 
@@ -740,9 +762,15 @@ function iniciarRodarJobWatcher() {
     freeAntecedencia:  { nome: 'Planos FREE — antecedência [manual]', fn: (pedido) => require('./free-antecedencia').runFreeAntecedencia({ dry: !!(pedido && pedido.dry) }) },
     // "↻ Rodar de novo" do Log do painel (falhas de job):
     inadimplentesHoje: { nome: 'Cobrança — boleto vence hoje [manual]', fn: () => require('./inadimplentes').runInadimplentes({ dry: false, modo: 'hoje' }), timeoutMs: 20 * 60 * 1000 },
-    slotsPush:         { nome: 'Grade→formulário [manual]', fn: async () => { runSlotsPush('pelo painel'); } },
-    gradeFixas:        { nome: 'Grade de fixas [manual]',   fn: async () => { runGradeFixas('pelo painel'); } },
-    ativasFoto:        { nome: 'Alunas ativas (EVO) [manual]', fn: async () => { runAtivasFoto(); } },
+    slotsPush:         { nome: 'Grade→formulário [manual]', fn: () => resultadoOuErro(runSlotsPush('pelo painel')), timeoutMs: 3 * 60 * 1000 },
+    gradeFixas:        { nome: 'Grade de fixas [manual]',   fn: () => resultadoOuErro(runGradeFixas('pelo painel')), timeoutMs: 16 * 60 * 1000 },
+    ativasFoto:        { nome: 'Alunas ativas (EVO) [manual]', fn: () => resultadoOuErro(runAtivasFoto()), timeoutMs: 16 * 60 * 1000 },
+  };
+  // Resultado do pedido (o "↻ Rodar de novo" do painel acompanha por aqui).
+  const ARQ_ST = require('path').resolve(__dirname, '..', 'data', 'rodar-job-status.json');
+  const status = (pedido, o) => {
+    if (!pedido || !pedido.id) return;
+    try { fs.writeFileSync(ARQ_ST, JSON.stringify(Object.assign({ id: pedido.id, job: pedido.job, em: Date.now() }, o))); } catch (_) {}
   };
   const t = setInterval(() => {
     let pedido = null;
@@ -750,10 +778,27 @@ function iniciarRodarJobWatcher() {
     try { fs.unlinkSync(ARQ); } catch (_) {}                                          // consome uma vez
     const chave = pedido && String(pedido.job || '').trim();
     const alvo = EXEC[chave];
-    if (!alvo) { log(`▶️  pedido de job desconhecido: "${chave}" — ignorado. Opções: ${Object.keys(EXEC).join(', ')}`); return; }
-    if (jobRunning) { log(`▶️  ${alvo.nome}: outro job em execução — tento de novo em 30s.`); setTimeout(() => { try { fs.writeFileSync(ARQ, JSON.stringify({ job: chave })); } catch (_) {} }, 30000); return; }
+    if (!alvo) { log(`▶️  pedido de job desconhecido: "${chave}" — ignorado. Opções: ${Object.keys(EXEC).join(', ')}`); status(pedido, { estado: 'erro', msg: 'job desconhecido' }); return; }
+    if (jobRunning) {
+      log(`▶️  ${alvo.nome}: outro job em execução — tento de novo em 30s.`);
+      status(pedido, { estado: 'esperando', msg: 'outro envio está rodando — começa assim que ele terminar' });
+      setTimeout(() => { try { fs.writeFileSync(ARQ, JSON.stringify(pedido)); } catch (_) {} }, 30000);
+      return;
+    }
     log(`▶️  Rodando job manual: ${alvo.nome}`);
-    runJob(alvo.nome, () => alvo.fn(pedido), alvo.timeoutMs).catch(err => logError(alvo.nome, err));
+    status(pedido, { estado: 'rodando', msg: '' });
+    // runJob trata o erro (log, alerta, registro no Log); aqui só guardamos o
+    // resultado da ÚLTIMA tentativa para o painel mostrar.
+    let falha = null, rodou = false;
+    const enviosAntes = atividade.enviosOk();
+    runJob(alvo.nome, async () => { rodou = true; falha = null; try { return await alvo.fn(pedido); } catch (e) { falha = e; throw e; } }, alvo.timeoutMs)
+      .catch(err => { falha = falha || err; logError(alvo.nome, err); })
+      .finally(() => {
+        const enviou = atividade.enviosOk() - enviosAntes;
+        if (!rodou) status(pedido, { estado: 'erro', msg: 'o robô não conseguiu a vez para rodar — tente de novo em alguns minutos' });
+        else if (falha) status(pedido, { estado: 'erro', msg: String((falha && falha.message) || falha).split('\n')[0].slice(0, 300) });
+        else status(pedido, { estado: 'ok', msg: enviou ? `${enviou} mensagem(ns) enviada(s)` : '' });
+      });
   }, 4000);
   if (t.unref) t.unref();
   log('▶️  Watcher de "rodar job manual" ativo (a cada 4s).');
