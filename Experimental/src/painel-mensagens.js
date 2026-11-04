@@ -6362,9 +6362,11 @@ function paginaSofiaFunil(params) {
       else if (s === 'faltou') d.sit = 'faltou';
       else d.semPresenca = true;
     }
-    // Agendou há mais de 3 dias, a aula que ela marcou (se gravada) já passou e
-    // não há experimental dela no EVO perto do agendamento: avisa na linha.
-    if (d.sit === 'aguardando' && !d.exp && hojeFu > somaDiasFu(diaDe(d.em), 3)) {
+    // Agendou há mais de 14 dias, a aula que ela marcou (se gravada) já passou e
+    // não há experimental dela no EVO perto do agendamento: avisa na linha. (O
+    // histórico só conhece até 7 dias à frente — antes de 14 dias a aula pode
+    // simplesmente ainda não ter sido lida.)
+    if (d.sit === 'aguardando' && !d.exp && hojeFu > somaDiasFu(diaDe(d.em), 14)) {
       const w = String(d.when || '').trim();
       const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(w) || (/^(\d{2})\/(\d{2})\/(\d{4})/.exec(w) ? (([, da, mo, y]) => [null, y, mo, da])(/^(\d{2})\/(\d{2})\/(\d{4})/.exec(w)) : null);
       const diaAula = m ? `${m[1]}-${m[2]}-${m[3]}` : '';

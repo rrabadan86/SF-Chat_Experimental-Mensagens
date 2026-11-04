@@ -3,7 +3,8 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env'
  * historico-experimentais.js — lê a agenda de experimentais do EVO dia a dia e
  * guarda no histórico (experimentais-hist.js): professora, presença e contrato.
  *
- * Toda noite: relê os últimos 30 dias (presença e contrato mudam depois da aula)
+ * Toda noite: lê os próximos 7 dias (aulas já marcadas, para o Funil) e relê os
+ * últimos 30 (presença e contrato mudam depois da aula)
  * e, enquanto o histórico não chega à data de início (padrão 90 dias; o painel
  * pode escolher outra, ex.: 01/01), lê mais 60 dias antigos ainda não lidos —
  * em vez de um job de horas. "Ler agora" no painel adianta 30. Domingo: pula.

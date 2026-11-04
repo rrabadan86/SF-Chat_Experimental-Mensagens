@@ -77,6 +77,10 @@ function registrarDia(dataBR, aulas) {
   if (!dia) return 0;
   const lista = (Array.isArray(aulas) ? aulas : []).filter(a => a && a.name);
   const h = ler();
+  // Dia de hoje em diante que veio vazio = as experimentais foram desmarcadas:
+  // tira as que estavam gravadas (num dia passado, vazio pode ser falha de leitura).
+  const hojeIso = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  if (!lista.length && dia >= hojeIso) for (const k of Object.keys(h.aulas)) if (h.aulas[k].dia === dia) delete h.aulas[k];
   if (lista.length) {
     for (const k of Object.keys(h.aulas)) if (h.aulas[k].dia === dia) delete h.aulas[k];
     for (const a of lista) {
@@ -102,6 +106,7 @@ function setStatus(st) {
 // lote dos dias ANTIGOS ainda não lidos, até a data de início (padrão: 90 dias atrás;
 // o painel pode escolher outra, ex.: 01/01 para o ano todo). Domingo não tem aula.
 const JANELA = 30;
+const FRENTE = 7; // dias à frente lidos toda noite (aulas já marcadas)
 const HISTORICO_PADRAO = 90;
 function dataBR(d) { return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; }
 function diasAtras(n) { const d = new Date(); d.setDate(d.getDate() - n); return d; }
@@ -124,6 +129,9 @@ function antigosPendentes(h) {
 }
 function datasParaLer(extras) {
   const out = [];
+  // Os próximos dias também: o Funil mostra a aula já marcada (dia, hora e
+  // professora) de quem agendou para a semana que vem.
+  for (let i = FRENTE; i >= 1; i--) { const d = diasAtras(-i); if (d.getDay() !== 0) out.push(dataBR(d)); }
   for (let i = 0; i < JANELA; i++) { const d = diasAtras(i); if (d.getDay() !== 0) out.push(dataBR(d)); }
   return out.concat(antigosPendentes().slice(0, Math.max(0, extras | 0)));
 }
