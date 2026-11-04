@@ -1440,7 +1440,7 @@ function cardAudio(grupo, chave) {
   const itens = audiosMsg.listar(grupo, professorasRecentes());
   const com = itens.filter(i => i.origem).length;
   if (_ffmpegOk === null) _ffmpegOk = audiosMsg.temFfmpeg();
-  const outros = grupo === 'followup' ? 'Vale para os dois follow-ups (ainda não fechou e já virou aluna).' : 'Vale para a confirmação de hoje e a de amanhã.';
+  const outros = grupo === 'followup' ? 'Vale para os dois follow-ups (ainda não fechou e já virou aluna).' : grupo === 'confirmacao_amanha' ? 'Só para a confirmação da aula de <b>amanhã</b> (a de hoje tem os áudios dela).' : 'Só para a confirmação da aula de <b>hoje</b> (a de amanhã tem os áudios dela).';
   const linhas = itens.map(i => {
     const src = i.origem ? `/mensagem/audio?grupo=${grupo}&slug=${encodeURIComponent(i.slug)}&v=${Date.now()}` : '';
     const selo = i.origem === 'painel' ? '<small class="pn">✓ com áudio</small>' : i.origem === 'sistema' ? '<small class="sis">áudio antigo (pasta do sistema)</small>' : '<small class="sem">sem áudio</small>';
