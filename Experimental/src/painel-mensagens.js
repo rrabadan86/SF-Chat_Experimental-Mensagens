@@ -2306,9 +2306,26 @@ function jobDoLog(contexto) {
 const _refazerPedido = {}; // job → { id, em } do último pedido (evita rodar 2x ao mesmo tempo)
 const RODAR_JOB_ST = path.resolve(__dirname, '..', 'data', 'rodar-job-status.json');
 function statusRodarJob(id) {
-  try { const o = JSON.parse(fs.readFileSync(RODAR_JOB_ST, 'utf8')); if (o && o.id === id) return o; } catch (_) {}
+  try {
+    const o = JSON.parse(fs.readFileSync(RODAR_JOB_ST, 'utf8'));
+    if (o && o.id === id) return o;            // formato antigo (um pedido só)
+    if (o && o[id]) return o[id];             // { id: { job, estado, msg, em } }
+  } catch (_) {}
   return null;
 }
+// Falhas do Log que alguém mandou refazer: { "<ts>|<contexto>": { job, id, por, em } }.
+const LOG_REFEITOS = path.resolve(__dirname, '..', 'data', 'log-refeitos.json');
+function lerRefeitos() { try { const o = JSON.parse(fs.readFileSync(LOG_REFEITOS, 'utf8')); return (o && typeof o === 'object') ? o : {}; } catch (_) { return {}; } }
+function gravarRefeito(linha, dados) {
+  if (!linha) return;
+  try {
+    const o = lerRefeitos(); o[String(linha).slice(0, 200)] = dados;
+    const ks = Object.keys(o).sort((a, b) => (o[a].em || 0) - (o[b].em || 0));
+    for (const k of ks.slice(0, Math.max(0, ks.length - 300))) delete o[k];
+    fs.writeFileSync(LOG_REFEITOS, JSON.stringify(o));
+  } catch (_) {}
+}
+const hhmm = (ms) => { try { return new Date(ms).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
 
 function fotoDoEnvio(e) {
   let ch = String(e.chaveFoto || '');
@@ -2339,6 +2356,7 @@ function paginaHoje(dia) {
     const t = Date.parse(e.ts) || 0, c = ctxBase(e.contexto);
     return evs.filter(x => x.ok && ctxBase(x.contexto) === c && (Date.parse(x.ts) || 0) <= t && t - (Date.parse(x.ts) || 0) < 3 * 3600000).length;
   };
+  const refeitos = lerRefeitos();
   const lista = evs.map(e => {
     const ic = e.ok ? '✅' : '⚠️';
     const who = e.grupo ? esc(e.destino || 'grupo') : esc(fmtTel(e.destino));
@@ -2370,9 +2388,21 @@ function paginaHoje(dia) {
     const jd = !e.ok && (e.destino === '—' || e.sofia) ? jobDoLog(e.contexto) : null;
     if (jd && (e.destino === '—' || jd.seguro)) {
       const antes = jd.seguro ? 0 : enviouAntes(e);
+      const linha = `${e.ts}|${ctxBase(e.contexto)}`;
+      // Já mandaram refazer esta falha? Mostra quem, quando e o resultado.
+      const rf = refeitos[linha];
+      const rst = rf ? statusRodarJob(rf.id) : null;
+      const quem = rf && rf.por ? ` por ${esc(rf.por)}` : '';
+      let selo = '';
+      if (rf && rst && rst.estado === 'ok') selo = `<span class="hj-st quando" style="margin:0;color:var(--ok)">✅ Refeito às ${hhmm(rst.em || rf.em)}${quem}${rst.msg ? ' — ' + esc(rst.msg) : ''}</span>`;
+      else if (rf && rst && rst.estado === 'erro') selo = `<span class="hj-st quando" style="margin:0;color:var(--erro)">❌ Tentativa às ${hhmm(rf.em)}${quem} falhou: ${esc(rst.msg || 'erro')}</span>`;
+      else if (rf && Date.now() - rf.em < 25 * 60000) selo = `<span class="hj-st quando" style="margin:0">⏳ Pedido às ${hhmm(rf.em)}${quem} — rodando…</span>`;
+      const feito = rst && rst.estado === 'ok';
       refazer = antes
         ? `<div class="quando" style="margin:6px 0 0">Não dá para rodar de novo: ${antes} mensagem(ns) deste envio já tinham saído — repetir mandaria em dobro.</div>`
-        : `<div class="hj-rj"><button type="button" class="ui-btn sec" onclick="hjRodarJob(this,'${jd.key}')" title="${esc(jd.dica)}">↻ Rodar de novo</button><span class="hj-st quando" style="margin:0"></span></div>`;
+        : feito
+          ? `<div class="hj-rj">${selo}</div>`
+          : `<div class="hj-rj"><button type="button" class="ui-btn sec" data-linha="${esc(linha)}" onclick="hjRodarJob(this,'${jd.key}')" title="${esc(jd.dica)}">↻ Rodar de novo</button>${selo || '<span class="hj-st quando" style="margin:0"></span>'}</div>`;
     }
     return `<div class="ev"><span class="h">${esc(e.quando)}</span><span class="ic">${ic}</span>
       <div class="d"><span class="who">${who}</span> <span class="ctx">· ${esc(e.contexto)}</span>${pvNode}${reenviar}${refazer}</div></div>`;
@@ -2449,9 +2479,9 @@ function paginaHoje(dia) {
     var st=b.parentNode.querySelector('.hj-st');
     if(!confirm('Rodar este envio de novo agora?')) return;
     b.disabled=true; hjOcupado=true; st.textContent='⏳ Pedindo ao robô…'; st.style.color='';
-    var fimOk=function(m){ hjOcupado=false; st.style.color='var(--ok)'; st.textContent='✅ Deu certo'+(m?' — '+m:'')+'.'; };
+    var fimOk=function(m){ hjOcupado=false; st.style.color='var(--ok)'; st.textContent='✅ Refeito agora'+(m?' — '+m:'')+'.'; b.style.display='none'; };
     var fimErro=function(m){ hjOcupado=false; b.disabled=false; st.style.color='var(--erro)'; st.textContent='❌ Falhou de novo: '+(m||'erro')+' — pode tentar outra vez.'; };
-    fetch('/hoje/rodar-job',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job:job})})
+    fetch('/hoje/rodar-job',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job:job, linha:b.getAttribute('data-linha')||''})})
       .then(function(r){return r.json();}).then(function(j){
         if(!j||!j.ok||!j.id){ hjOcupado=false; st.textContent='⚠️ '+((j&&j.erro)||'não consegui pedir'); b.disabled=false; return; }
         var n=0;(function poll(){ n++;
@@ -9434,19 +9464,21 @@ const server = http.createServer((req, res) => {
     return lerCorpo(req, 1e4, corpo => {
       const resp = (o, st = 200) => { res.writeHead(st, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(o)); };
       try {
-        const job = String(JSON.parse(corpo || '{}').job || '');
+        const pd = JSON.parse(corpo || '{}');
+        const job = String(pd.job || ''), linha = String(pd.linha || '');
         if (!JOBS_REFAZER.has(job)) return resp({ ok: false, erro: 'job desconhecido' }, 400);
         // Mesmo job já pedido e ainda sem resultado (até 25 min): não pede de novo.
         const ant = _refazerPedido[job];
         if (ant && Date.now() - ant.em < 25 * 60000) {
           const st = statusRodarJob(ant.id);
-          if (!st || !['ok', 'erro'].includes(st.estado)) return resp({ ok: true, id: ant.id, jaPedido: true });
+          if (!st || !['ok', 'erro'].includes(st.estado)) { gravarRefeito(linha, { job, id: ant.id, por: (sess && sess.usuario) || '', em: Date.now() }); return resp({ ok: true, id: ant.id, jaPedido: true }); }
         }
         const arq = path.resolve(__dirname, '..', 'data', 'rodar-job.json');
         if (fs.existsSync(arq)) return resp({ ok: false, erro: 'o robô ainda vai rodar outro pedido — tente em 1 minuto' });
         const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
         fs.writeFileSync(arq, JSON.stringify({ job, id }));
         _refazerPedido[job] = { id, em: Date.now() };
+        gravarRefeito(linha, { job, id, por: (sess && sess.usuario) || '', em: Date.now() });
         try { auditoria.registrar(sess && sess.usuario, 'log.rodar-job', job, ''); } catch (_) {}
         return resp({ ok: true, id });
       } catch (e) { return resp({ ok: false, erro: e.message }, 400); }
