@@ -48,6 +48,12 @@ async function claimWhatsAppSession(page) {
  */
 function getAudioPath(professorStr) {
   if (!professorStr) return null;
+  // Áudio enviado no painel (🎙️ Áudio da professora) tem prioridade; sem ele,
+  // vale o da pasta audios/ (AUDIO_MAP), como sempre.
+  try {
+    const doPainel = require('./audios-msg').arquivoPainel('followup', require('./audios-msg').slugProf(professorStr));
+    if (doPainel) return doPainel;
+  } catch (_) {}
 
   const firstName = professorStr.trim().split(/\s+/)[0]
     .toLowerCase()
@@ -464,7 +470,7 @@ async function sendFollowupMessage(page, phoneNumber, text, audioPath, chaveFoto
       if (audioPath) {
         await sleep(1500);
         console.log(`   🎧 Enviando áudio como voz: ${path.basename(audioPath)}`);
-        await wa.sendMidia(phoneNumber, audioPath, { comoVoz: true });
+        await wa.sendMidia(phoneNumber, audioPath, { comoVoz: /\.(ogg|opus|oga)$/i.test(audioPath) });
       }
       return true;
     } catch (e) {
