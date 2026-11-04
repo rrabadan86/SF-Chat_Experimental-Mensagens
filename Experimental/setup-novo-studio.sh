@@ -263,6 +263,7 @@ install_system_deps() {
     _sudo apt-get install -y nodejs || true
   fi
   _sudo apt-get install -y git python3 python3-venv python3-pip || true
+  _sudo apt-get install -y ffmpeg || echo "   ⚠️  não instalei o ffmpeg — os áudios das professoras enviados pelo painel só vão como voz em .ogg (apt install -y ffmpeg)."
   # Xvfb (tela virtual): o EVO (Angular) é INSTÁVEL em headless puro; a configuração
   # validada roda o robô com tela virtual (HEADLESS=false + xvfb-run). Sem isso os
   # jobs diários do EVO (faltantes, suspensões, presença, renovação) podem falhar.

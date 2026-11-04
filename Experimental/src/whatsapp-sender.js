@@ -48,6 +48,9 @@ class WhatsAppSender {
       console.log(`   📨 Enviando para ${student.name} (${student.phone})...`);
       const success = await this.sendMessage(student.phone, message, chaveFoto);
 
+      // Áudio da professora da aula (painel → 🎙️ Áudio da professora), depois do texto.
+      if (success) await this.enviarAudioDaProfessora(student.phone, chaveFoto, student.professor);
+
       if (success) {
         results.sent++;
         results.details.push({ name: student.name, phone: student.phone, status: 'sent' });
@@ -61,6 +64,24 @@ class WhatsAppSender {
     }
 
     return results;
+  }
+
+  // Manda o áudio (como mensagem de voz) da professora, se houver um para esta
+  // mensagem. Falha no áudio não desfaz o texto já enviado.
+  async enviarAudioDaProfessora(phone, chaveMsg, professora) {
+    let audio = null;
+    try {
+      const audios = require('./audios-msg');
+      const grupo = audios.grupoDaChave(chaveMsg);
+      if (!grupo) return;
+      audio = audios.caminho(grupo, professora);
+      if (!audio) return;
+      await this.sleep(1500);
+      await wa.sendMidia(phone, audio, { comoVoz: audios.VOZ.test(audio), contexto: `Áudio · ${professora || 'professora'}` });
+      console.log(`   🎧 Áudio enviado (${require('path').basename(audio)})`);
+    } catch (e) {
+      console.error(`   ⚠️  Áudio não enviado para ${phone}${audio ? ` (${require('path').basename(audio)})` : ''}: ${e.message}`);
+    }
   }
 
   sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }

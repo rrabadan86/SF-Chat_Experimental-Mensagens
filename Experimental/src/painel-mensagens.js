@@ -37,6 +37,7 @@ const inadConfig = require('./inadimplentes-config'); // "vencido há X+ dias" (
 const freeCfg = require('./free-antecedencia-config'); // planos FREE: intervalo (horas) + janela (dias)
 const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
+const audiosMsg = require('./audios-msg'); // áudio da professora (follow-up, confirmação)
 const histExp = require('./experimentais-hist'); // agenda de experimentais do EVO (Indicadores → Professoras)
 const bookings = require('./bookings');
 const autoTagAlunas = require('./auto-tag-alunas');
@@ -683,6 +684,20 @@ const ESTILO = `
   .foto-status{font-weight:600;font-size:.7rem;border-radius:999px;padding:2px 9px}
   .foto-status.on{background:#e6f6ec;color:#1c8f52}
   .foto-status.off{background:#eee;color:#8a8a8a}
+  .au-lista{display:flex;flex-direction:column;margin:8px 0 4px;border:1px solid var(--linha);border-radius:12px;overflow:hidden;background:var(--card)}
+  .au-row{display:grid;grid-template-columns:minmax(120px,1fr) auto;gap:6px 12px;align-items:center;padding:10px 12px;border-top:1px solid var(--linha-soft)}
+  .au-row:first-child{border-top:0}
+  .au-nome{font-weight:700;font-size:.88rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .au-nome small{font-weight:600;font-size:.7rem;border-radius:999px;padding:1px 8px}
+  .au-nome small.pn{background:#e6f6ec;color:#1c8f52}
+  .au-nome small.sis{background:var(--linha-soft);color:var(--cinza)}
+  .au-nome small.sem{background:#eee;color:#8a8a8a}
+  .au-acts{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+  .au-row audio{grid-column:1 / -1;width:100%;max-width:360px;height:34px}
+  .au-acts .tbtn,.au-acts .rm{padding:6px 11px;font-size:.78rem}
+  .au-nova{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+  .au-nova input[type=text]{max-width:200px}
+  @media(max-width:600px){.au-row{grid-template-columns:1fr}.au-acts{justify-content:flex-start}}
   .chk{display:flex;align-items:center;gap:9px;font-weight:600;font-size:.9rem;cursor:pointer}
   .chk input{width:18px;height:18px}
   #fotoWrap{display:none;margin-top:8px}
@@ -1324,6 +1339,29 @@ function scriptPreviewTeste() {
       msg.textContent='Foto removida — volta a enviar só o texto.';
     }catch(e){ msg.textContent='⚠️ '+(e.message||'Falha.'); btn.disabled=false; }
   }
+  // Áudio da professora: envia/troca/remove e recarrega o bloco aberto.
+  async function auEnviar(inp, grupo){
+    var box=inp.closest('.audrow'), msg=box.querySelector('.auMsg'), f=inp.files[0]; if(!f) return;
+    var row=inp.closest('.au-row'), nome=row ? row.getAttribute('data-nome') : (box.querySelector('.auNovoNome').value||'').trim();
+    if(!nome){ msg.textContent='Escreva o nome da professora.'; return; }
+    if(f.size>16*1024*1024){ msg.textContent='Áudio muito grande (máx. 16 MB).'; inp.value=''; return; }
+    msg.textContent='Enviando o áudio de '+nome+'…';
+    try{
+      var dataUrl=await mfLer(f);
+      var r=await fetch('/mensagem/audio/salvar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grupo:grupo, professora:nome, nome:f.name, dataUrl:dataUrl})});
+      var d=await r.json();
+      if(!d.ok){ msg.textContent='⚠️ '+(d.erro||'Falha ao salvar.'); inp.value=''; return; }
+      location.hash=box.id; location.reload();
+    }catch(e){ msg.textContent='⚠️ '+(e.message||'Falha.'); }
+  }
+  async function auRemover(btn, grupo){
+    var row=btn.closest('.au-row'); if(!confirm('Remover o áudio de '+row.getAttribute('data-nome')+'?')) return;
+    btn.disabled=true;
+    try{ await fetch('/mensagem/audio/remover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grupo:grupo, slug:row.getAttribute('data-slug')})}); location.hash=btn.closest('.audrow').id; location.reload(); }
+    catch(e){ btn.disabled=false; }
+  }
+  // Volta com o bloco de áudio aberto depois de enviar/remover.
+  (function(){ var h=location.hash; if(h.indexOf('#audio-')===0){ var d=document.getElementById(h.slice(1)); if(d){ d.open=true; setTimeout(function(){ d.scrollIntoView({block:'center'}); },50); } } })();
   async function testarDMIg(btn){
     var card = btn.closest('.card'); var ta = card.querySelector('textarea'); var b = card.querySelector('.prev');
     var inp = card.querySelector('.igteste'); var u = ((inp&&inp.value)||'').replace(/^@+/,'').trim().split(/\\s+/)[0];
@@ -1379,7 +1417,58 @@ function cardMensagem(m, voltar, opts = {}) {
       ${opts.ig ? botaoTeste : ''}
       ${m.aceitaFoto ? cardFoto(m) : ''}
       <div class="prev" style="display:none"></div>
-    </form>`;
+    </form>${audiosMsg.grupoDaChave(m.chave) ? cardAudio(audiosMsg.grupoDaChave(m.chave), m.chave) : ''}`;
+}
+
+// Professoras que aparecem na agenda de experimentais do EVO (últimos 120 dias),
+// para listar no bloco de áudio. Guardado 1 min (a página monta 4 cards).
+let _profsAudio = { em: 0, lista: [] };
+function professorasRecentes() {
+  if (Date.now() - _profsAudio.em < 60000) return _profsAudio.lista;
+  const desde = new Date(Date.now() - 120 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const vistos = new Map();
+  try { for (const a of Object.values(histExp.ler().aulas)) if (a.prof && a.dia >= desde) { const k = audiosMsg.slugProf(a.prof); if (k && !vistos.has(k)) vistos.set(k, a.prof); } } catch (_) {}
+  _profsAudio = { em: Date.now(), lista: [...vistos.values()] };
+  return _profsAudio.lista;
+}
+let _ffmpegOk = null;
+
+// Bloco "🎙️ Áudio da professora" (follow-up e confirmação): um áudio por
+// professora, enviado como mensagem de voz logo depois do texto.
+function cardAudio(grupo, chave) {
+  const G = audiosMsg.GRUPOS[grupo];
+  const itens = audiosMsg.listar(grupo, professorasRecentes());
+  const com = itens.filter(i => i.origem).length;
+  if (_ffmpegOk === null) _ffmpegOk = audiosMsg.temFfmpeg();
+  const outros = grupo === 'followup' ? 'Vale para os dois follow-ups (ainda não fechou e já virou aluna).' : 'Vale para a confirmação de hoje e a de amanhã.';
+  const linhas = itens.map(i => {
+    const src = i.origem ? `/mensagem/audio?grupo=${grupo}&slug=${encodeURIComponent(i.slug)}&v=${Date.now()}` : '';
+    const selo = i.origem === 'painel' ? '<small class="pn">✓ com áudio</small>' : i.origem === 'sistema' ? '<small class="sis">áudio antigo (pasta do sistema)</small>' : '<small class="sem">sem áudio</small>';
+    const aviso = i.origem && !i.voz ? ' <small class="sis" title="Sem ffmpeg no servidor: só .ogg/.opus chegam como mensagem de voz">vai como arquivo</small>' : '';
+    return `<div class="au-row" data-slug="${esc(i.slug)}" data-nome="${esc(i.nome)}">
+        <div class="au-nome">${esc(i.nome)} ${selo}${aviso}</div>
+        <div class="au-acts">
+          <input type="file" class="auFile" accept="audio/*,.ogg,.opus,.mp3,.m4a,.aac,.wav" style="display:none" onchange="auEnviar(this,'${grupo}')">
+          <button type="button" class="tbtn" onclick="this.parentNode.querySelector('.auFile').click()">${i.origem === 'painel' ? 'Trocar áudio' : 'Enviar áudio'}</button>
+          ${i.origem === 'painel' ? `<button type="button" class="rm" onclick="auRemover(this,'${grupo}')">Remover</button>` : ''}
+        </div>
+        ${src ? `<audio controls preload="none" src="${src}"></audio>` : ''}
+      </div>`;
+  }).join('');
+  return `<details class="foto-acc audrow" id="audio-${esc(chave || grupo)}">
+    <summary>🎙️ Áudio da professora <span class="foto-status ${com ? 'on' : 'off'}">${com ? `✓ ${com} com áudio` : 'sem áudio'}</span></summary>
+    <div class="foto-body">
+      <p class="meta" style="margin:6px 0 0">Vai como <b>mensagem de voz</b> logo depois do texto, com o áudio da <b>professora da aula</b>. Quem não tem áudio recebe só o texto. ${outros}</p>
+      ${_ffmpegOk ? '' : '<p class="meta" style="margin:6px 0 0;color:var(--warn)">⚠️ Este servidor não tem o conversor de áudio (ffmpeg): só arquivos .ogg chegam como mensagem de voz; os outros vão como arquivo. Para converter qualquer formato, rode no servidor: <code>apt install -y ffmpeg</code></p>'}
+      ${linhas ? `<div class="au-lista">${linhas}</div>` : ''}
+      <div class="au-nova">
+        <input type="text" class="auNovoNome" placeholder="Outra professora (nome)">
+        <input type="file" class="auFile" accept="audio/*,.ogg,.opus,.mp3,.m4a,.aac,.wav" style="display:none" onchange="auEnviar(this,'${grupo}')">
+        <button type="button" class="tbtn" onclick="var n=this.parentNode.querySelector('.auNovoNome');if(!n.value.trim()){n.focus();return;}this.parentNode.querySelector('.auFile').click()">Enviar áudio</button>
+      </div>
+      <div class="auMsg meta" style="margin-top:6px"></div>
+    </div>
+  </details>`;
 }
 
 // Bloco "enviar com foto (flyer)" para as mensagens de grupo que aceitam.
@@ -9205,6 +9294,36 @@ const server = http.createServer((req, res) => {
       try { mensagens.removerFoto(JSON.parse(corpo || '{}').chave); } catch (_) {}
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true }));
     });
+  }
+  // 🎙️ Áudio da professora (follow-up / confirmação)
+  if (req.method === 'POST' && url === '/mensagem/audio/salvar') {
+    return lerCorpo(req, 24e6, corpo => {
+      try {
+        const d = JSON.parse(corpo || '{}');
+        const r = audiosMsg.salvar(String(d.grupo || ''), String(d.professora || ''), d.dataUrl, String(d.nome || ''));
+        _profsAudio.em = 0;
+        try { auditoria.registrar(sess.usuario, 'audio.salvar', `${d.grupo} · ${d.professora}`, r.arquivo); } catch (_) {}
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, ...r }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+  }
+  if (req.method === 'POST' && url === '/mensagem/audio/remover') {
+    return lerCorpo(req, 1e5, corpo => {
+      try { const d = JSON.parse(corpo || '{}'); audiosMsg.remover(String(d.grupo || ''), String(d.slug || '')); try { auditoria.registrar(sess.usuario, 'audio.remover', `${d.grupo} · ${d.slug}`, ''); } catch (_) {} } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true }));
+    });
+  }
+  if (req.method === 'GET' && url === '/mensagem/audio') {
+    const q = new URLSearchParams(req.url.split('?')[1] || '');
+    const grupo = q.get('grupo') || '', slug = audiosMsg.slugProf(q.get('slug') || '');
+    const caminho = audiosMsg.GRUPOS[grupo] && slug ? (audiosMsg.arquivoPainel(grupo, slug) || (audiosMsg.GRUPOS[grupo].legado ? audiosMsg.arquivoLegado(slug) : null)) : null;
+    if (!caminho || !fs.existsSync(caminho)) { res.writeHead(404); return res.end('nao encontrado'); }
+    const ext = caminho.split('.').pop().toLowerCase();
+    const tipo = { ogg: 'audio/ogg', opus: 'audio/ogg', oga: 'audio/ogg', mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav' }[ext] || 'application/octet-stream';
+    res.writeHead(200, { 'Content-Type': tipo, 'Cache-Control': 'private, max-age=60' });
+    return fs.createReadStream(caminho).pipe(res);
   }
   if (req.method === 'GET' && url === '/mensagem/foto') {
     const chave = new URLSearchParams(req.url.split('?')[1] || '').get('chave');
