@@ -21,6 +21,7 @@ const ag = require('./agendamentos');
 const waStatus = require('./wa-status');
 const horarios = require('./horarios');
 const renovacaoConfig = require('./renovacao-config');
+const anivExcluir = require('./aniversario-excluir');
 const atividade = require('./atividade');
 const teste = require('./teste-envio');
 const slimclub = require('./slimclub');               // Slim Club: benefícios de alunas para alunas
@@ -2095,11 +2096,41 @@ function cardDeMsg(m, hmap, voltar) {
   }
   const sw = switchEnvio(jobsDoCard(m.chave));
   const opts = /^cobranca_/.test(m.chave) ? { cobranca: true } : undefined;
-  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : '';
+  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : '';
   return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar, opts)}${hbloco}${extra}</div>`;
 }
 
 // Campo "dias de antecedência" da Renovação (editável no painel; vale sem reiniciar).
+// Aniversário (nos grupos): grupos que NÃO recebem o parabéns. Mostra também os
+// grupos em comum vistos no último envio (clique para adicionar à lista).
+function blocoAnivExcluir() {
+  const lista = anivExcluir.listar();
+  const vistos = new Map();
+  try {
+    const rel = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'data', 'aniversariantes-envios.json'), 'utf8'));
+    for (const r of (rel && rel.resultados) || []) {
+      for (const g of [].concat(r.grupos || [], r.pulados || [])) {
+        const nome = String(typeof g === 'object' ? (g && g.grupo) || '' : g).trim();
+        if (nome && !/@g\.us$/.test(nome)) vistos.set(anivExcluir.norm(nome), nome);
+      }
+    }
+  } catch (_) {}
+  const chips = [...vistos.values()].sort((a, b) => a.localeCompare(b, 'pt-BR')).slice(0, 30).map(n => {
+    const fora = !!anivExcluir.bloqueadoPor(n, lista);
+    return `<button type="button" class="var${fora ? ' ae-fora' : ''}" title="${fora ? 'Já não recebe' : 'Clique para não enviar neste grupo'}" onclick="aeAdd(this)" data-g="${esc(n)}"${fora ? ' disabled' : ''}>${fora ? '🚫 ' : '+ '}${esc(n)}</button>`;
+  }).join(' ');
+  return `<div class="hsec" id="aniv-excluir"><div class="hsec-t">Grupos que não recebem ${lista.length ? `<span class="badge-ed">${lista.length}</span>` : ''}</div>
+    <form method="POST" action="/aniversario/excluir">
+      <div class="lbl">Um grupo por linha. O parabéns vai em todos os grupos em comum com a aniversariante, <b>menos</b> nestes.</div>
+      <textarea name="grupos" rows="3" placeholder="Ex.: Equipe SlimFit&#10;Circuito Slim" style="min-height:0">${esc(lista.join('\n'))}</textarea>
+      ${chips ? `<p class="vars" style="margin:8px 0 0">Grupos do último envio (clique para adicionar): ${chips}</p>` : ''}
+      <div class="acts" style="margin-top:8px"><button type="submit" class="save">Salvar grupos</button></div>
+    </form>
+    <p class="quando" style="margin:6px 0 0">Não diferencia maiúsculas nem acentos, e vale também para parte do nome: <b>"Equipe"</b> pula "Equipe SlimFit Bueno". Vale no próximo envio, sem reiniciar o robô.</p>
+    <style>.ae-fora{opacity:.55;cursor:default}</style>
+    <script>function aeAdd(b){ var t=b.closest('form').querySelector('textarea[name=grupos]'); var v=t.value.replace(/\\s+$/,''); t.value=(v?v+'\\n':'')+b.getAttribute('data-g'); b.disabled=true; b.classList.add('ae-fora'); b.textContent='🚫 '+b.getAttribute('data-g'); t.focus(); }</script></div>`;
+}
+
 function blocoRenovDias() {
   const d = renovacaoConfig.diasAntes();
   return `<div class="hsec"><div class="hsec-t">Antecedência do aviso</div>
@@ -9063,6 +9094,8 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)oksof=1/.test(q)) aviso = '🔄 Robô reiniciando… ele volta ao ar em ~1 minuto (o selo do WhatsApp acima mostra quando reconectar).';
     else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar o robô pelo painel. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
+    else if (/(?:^|&)okae=1/.test(q)) aviso = '🚫 Grupos que não recebem o parabéns salvos — já vale no próximo envio.';
+    else if (/(?:^|&)errae=1/.test(q)) { aviso = '⚠️ Não consegui salvar os grupos que não recebem o parabéns.'; erro = true; }
     else if (/(?:^|&)okfree=1/.test(q)) aviso = '✅ Planos FREE: configuração salva — já vale na próxima verificação (sem reiniciar).';
     // Só a sub-aba permitida; se pediu uma sem acesso, cai na primeira permitida.
     // "Express" é a tela unificada (Express + Agendar mensagem); view=agendar cai nela.
@@ -9299,6 +9332,15 @@ const server = http.createServer((req, res) => {
   }
 
   // Antecedência da Renovação (dias antes do vencimento) — não precisa reiniciar.
+  if (req.method === 'POST' && url === '/aniversario/excluir') {
+    return lerCorpo(req, 1e5, corpo => {
+      let ok = true, gr = [];
+      try { gr = anivExcluir.salvar(new URLSearchParams(corpo).get('grupos') || ''); } catch (_) { ok = false; }
+      try { if (ok) auditoria.registrar(sess.usuario, 'aniversario.excluir', gr.join(' | ') || '(nenhum)', ''); } catch (_) {}
+      res.writeHead(303, { Location: '/?view=config&' + (ok ? 'okae=1' : 'errae=1') + '#aniv-excluir' }); res.end();
+    });
+  }
+
   if (req.method === 'POST' && url === '/renovacao/dias') {
     return lerCorpo(req, 1e4, corpo => {
       const n = renovacaoConfig.salvarDias(new URLSearchParams(corpo).get('dias'));
