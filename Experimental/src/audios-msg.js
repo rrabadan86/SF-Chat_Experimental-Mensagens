@@ -4,7 +4,8 @@
  * Editados no painel (WhatsApp → Configuração, bloco "🎙️ Áudio da professora"
  * nos cards). Cada GRUPO vale para um ou mais cards:
  *   - followup:    Follow-up pós-aula (ainda não fechou) e (já virou aluna)
- *   - confirmacao: Confirmação — aula de hoje e aula de amanhã
+ *   - confirmacao_hoje:   Confirmação — aula de hoje
+ *   - confirmacao_amanha: Confirmação — aula de amanhã (áudio próprio: fala "amanhã")
  *
  * Arquivos: data/mensagens-audios/<grupo>/<professora>.<ext>, onde <professora>
  * é o 1º nome sem acento (como o robô casa a professora da aula: "Taynara Reges"
@@ -29,8 +30,24 @@ const VOZ = /\.(ogg|opus|oga)$/i;
 
 const GRUPOS = {
   followup: { titulo: 'Follow-up pós-aula', chaves: ['followup', 'followup_aluna'], legado: true },
-  confirmacao: { titulo: 'Confirmação da aula', chaves: ['confirmacao_hoje', 'confirmacao_amanha'], legado: false },
+  confirmacao_hoje: { titulo: 'Confirmação — aula de hoje', chaves: ['confirmacao_hoje'], legado: false },
+  confirmacao_amanha: { titulo: 'Confirmação — aula de amanhã', chaves: ['confirmacao_amanha'], legado: false },
 };
+
+// Antes, hoje e amanhã dividiam a pasta "confirmacao". Copia o que houver para as
+// duas (cada uma passa a ter o seu e pode ser trocado à parte) e aposenta a antiga.
+(function migrarConfirmacao() {
+  const velha = path.join(DIR, 'confirmacao');
+  try {
+    if (!fs.existsSync(velha)) return;
+    for (const g of ['confirmacao_hoje', 'confirmacao_amanha']) {
+      const nova = path.join(DIR, g);
+      fs.mkdirSync(nova, { recursive: true });
+      for (const f of fs.readdirSync(velha)) { const dest = path.join(nova, f); if (!fs.existsSync(dest)) fs.copyFileSync(path.join(velha, f), dest); }
+    }
+    fs.renameSync(velha, velha + '.migrado');
+  } catch (_) {}
+})();
 
 function grupoDaChave(chave) {
   for (const g of Object.keys(GRUPOS)) if (GRUPOS[g].chaves.includes(chave)) return g;
