@@ -2312,7 +2312,8 @@ function paginaHoje(dia) {
     }
     // Falha de envio individual do robô (ex.: número errado/sem WhatsApp): ↻ Reenviar
     // abre o número (editável) e a mensagem original, e manda só essa de novo.
-    const podeReenviar = !e.ok && !e.grupo && !e.sofia && String(e.texto || '').trim();
+    // (falha de JOB — destino "—", ex.: EVO fora do ar — não é mensagem: sem reenviar)
+    const podeReenviar = !e.ok && !e.grupo && !e.sofia && e.destino !== '—' && /\d{8}/.test(String(e.destino || '').replace(/\D/g, '')) && String(e.texto || '').trim();
     const chFoto = podeReenviar ? fotoDoEnvio(e) : '';
     const reenviar = podeReenviar ? `<details class="hj-re"><summary title="Corrigir o número e reenviar só esta mensagem">↻ Reenviar</summary>
         <div class="hj-re-f">
