@@ -31,10 +31,29 @@ function runSlotsPush(motivo) {
   execFile(py, [script], { cwd: dir, timeout: 120000 }, (err, stdout, stderr) => {
     _slotsPushRunning = false;
     const out = (stdout || stderr || '').trim();
-    if (err) { logError('Grade→formulário (push_slots)' + tag, err); if (out) console.log('   ' + out); return; }
+    if (err) {
+      // Uma falha isolada não atrapalha: o formulário continua com a última grade
+      // enviada e o agendamento confere a vaga no EVO na hora. Quase sempre é o EVO
+      // fora do ar por alguns minutos — só alerta se falhar 2 vezes SEGUIDAS.
+      _slotsFalhas++;
+      if (_slotsFalhas >= 2) {
+        if (!_slotsAlertado) logError(`Grade→formulário (push_slots)${tag} — ${_slotsFalhas} falhas seguidas, o formulário está com a grade da última atualização`, err, { contexto: 'Grade→formulário (push_slots)' });
+        else console.log(`⚠️  Grade→formulário: ainda falhando (${_slotsFalhas}x seguidas): ${String(err && err.message || err).split('\n')[0]}`);
+        _slotsAlertado = true;
+      } else {
+        log(`⚠️  Grade→formulário${tag}: falhou (EVO instável?) — tenta de novo no próximo horário; o formulário segue com a grade anterior.`);
+      }
+      if (out) console.log('   ' + out);
+      return;
+    }
+    if (_slotsAlertado) {
+      try { notif.alertar('Grade→formulário voltou', `A grade do formulário voltou a atualizar depois de ${_slotsFalhas} falha(s) seguida(s).`, { prioridade: 'default', tags: 'white_check_mark' }); } catch (_) {}
+    }
+    _slotsFalhas = 0; _slotsAlertado = false;
     log('🗓️  ' + (out || 'grade enviada ao formulário') + tag);
   });
 }
+let _slotsFalhas = 0, _slotsAlertado = false; // falhas SEGUIDAS do push_slots (alerta só a partir da 2ª)
 
 // Atualiza a grade de MATRÍCULAS FIXAS (página /grade do painel) — lê o EVO e grava
 // data/grade-fixas.json. Processo Python leve (não usa o navegador/WhatsApp), mas faz
@@ -58,7 +77,7 @@ function runGradeFixas(motivo) {
   execFile(py, [script, '--refresh-outras'], { cwd: dir, timeout: 900000 }, (err, stdout, stderr) => {
     _gradeFixasRunning = false;
     const out = (stdout || stderr || '').trim();
-    if (err) { logError('Grade de fixas (run_grade_fixas)' + tag, err); if (out) console.log('   ' + out); return; }
+    if (err) { logError('Grade de fixas (run_grade_fixas)' + tag, err, { contexto: 'Grade de fixas' }); if (out) console.log('   ' + out); return; }
     log('📋 ' + (out || 'grade de fixas atualizada') + tag);
   });
 }
@@ -72,7 +91,7 @@ function runAtivasFoto() {
   try { if (fs.existsSync(venv)) py = venv; } catch (_) {}
   execFile(py, [path.join(dir, 'run_ativas_foto.py'), '--nomes', '400', '--tempo', '720'], { cwd: dir, timeout: 900000 }, (err, stdout, stderr) => {
     const out = (stdout || stderr || '').trim();
-    if (err) { logError('Foto de alunas ativas (run_ativas_foto)', err); if (out) console.log('   ' + out); return; }
+    if (err) { logError('Foto de alunas ativas (run_ativas_foto)', err, { contexto: 'Alunas ativas (EVO)' }); if (out) console.log('   ' + out); return; }
     log('👥 ' + (out || 'foto de alunas ativas gravada'));
   });
 }
@@ -185,7 +204,9 @@ function log(msg) {
   console.log(line);
 }
 
-function logError(msg, err) {
+// opts.contexto: nome fixo no Log (processos à parte, como a grade do formulário,
+// não devem herdar o nome do último job que rodou).
+function logError(msg, err, opts = {}) {
   const ts = new Date().toLocaleString('pt-BR', {
     timeZone: 'America/Sao_Paulo',
     day: '2-digit', month: '2-digit', year: 'numeric',
@@ -208,7 +229,7 @@ function logError(msg, err) {
   // um job quebrava no login/WhatsApp (ex.: "Waiting failed: 30000ms"), nenhum
   // envio acontecia e nada aparecia no painel; agora fica um registro ⚠️.
   try {
-    const ctx = atividade.contextoAtual()
+    const ctx = (opts && opts.contexto) || atividade.contextoAtual()
       || String(msg || '')
         .replace(/^Erro no job\s+/i, '')
         .replace(/^TIMEOUT:\s*Job\s+/i, '')
