@@ -6345,8 +6345,18 @@ function paginaSofiaFunil(params) {
     try { d.exp = histExp.acharAula(idxExp, d.nome, diaDe(d.em)); } catch (_) {}
   }
   let fez = 0, fechou = 0, faltou = 0, aguardando = 0;
+  const hojeFu = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
   for (const d of detAg) {
     d.sit = situacaoDe(d);
+    // A tag não mudou (o job de presença só pareia pelo TELEFONE e só olha os
+    // últimos dias), mas a aula já passou: usa a presença do histórico do EVO.
+    // Sem presença lançada no EVO → continua aguardando, com um aviso na linha.
+    if (d.sit === 'aguardando' && d.exp && d.exp.dia && d.exp.dia < hojeFu) {
+      const s = histExp.situacao(d.exp.status);
+      if (s === 'veio') d.sit = 'fez';
+      else if (s === 'faltou') d.sit = 'faltou';
+      else d.semPresenca = true;
+    }
     // fechou só circuito/VIP → conta como "fez a aula", não como contrato fechado
     if (d.sit === 'fechou' && d.exp && contratoIgnorado(d.exp.contrato)) d.sit = 'fez';
     if (d.sit === 'fechou') { fechou++; fez++; }
@@ -6404,6 +6414,7 @@ function paginaSofiaFunil(params) {
         rotCanal(d.canal),
         aula ? `🏋️ Aula <b>${aula}</b>` : '',
         ex && ex.prof ? `👩‍🏫 <b>${esc(ex.prof)}</b>` : '',
+        d.semPresenca ? `<span style="color:var(--warn)">⚠️ A aula já passou e a presença não foi lançada no EVO</span>` : '',
         d.sit === 'fechou' && ex && ex.contrato ? `📄 ${esc(ex.contrato)}` : '',
       ],
     });
