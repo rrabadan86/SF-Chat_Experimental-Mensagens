@@ -2303,7 +2303,12 @@ function jobDoLog(contexto) {
   const j = JOBS_DO_LOG.find(([re]) => re.test(c));
   return j ? { key: j[1], seguro: j[2], dica: j[3] } : null;
 }
-const _refazerPedido = {}; // job → quando foi pedido (evita clique duplo rodar 2x)
+const _refazerPedido = {}; // job → { id, em } do último pedido (evita rodar 2x ao mesmo tempo)
+const RODAR_JOB_ST = path.resolve(__dirname, '..', 'data', 'rodar-job-status.json');
+function statusRodarJob(id) {
+  try { const o = JSON.parse(fs.readFileSync(RODAR_JOB_ST, 'utf8')); if (o && o.id === id) return o; } catch (_) {}
+  return null;
+}
 
 function fotoDoEnvio(e) {
   let ch = String(e.chaveFoto || '');
@@ -2443,12 +2448,23 @@ function paginaHoje(dia) {
   function hjRodarJob(b, job){
     var st=b.parentNode.querySelector('.hj-st');
     if(!confirm('Rodar este envio de novo agora?')) return;
-    b.disabled=true; hjOcupado=true; st.textContent='⏳ Pedindo ao robô…';
+    b.disabled=true; hjOcupado=true; st.textContent='⏳ Pedindo ao robô…'; st.style.color='';
+    var fimOk=function(m){ hjOcupado=false; st.style.color='var(--ok)'; st.textContent='✅ Deu certo'+(m?' — '+m:'')+'.'; };
+    var fimErro=function(m){ hjOcupado=false; b.disabled=false; st.style.color='var(--erro)'; st.textContent='❌ Falhou de novo: '+(m||'erro')+' — pode tentar outra vez.'; };
     fetch('/hoje/rodar-job',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job:job})})
       .then(function(r){return r.json();}).then(function(j){
-        hjOcupado=false;
-        if(!j||!j.ok){ st.textContent='⚠️ '+((j&&j.erro)||'não consegui pedir'); b.disabled=false; return; }
-        st.textContent='✅ Pedido enviado — o robô roda em alguns segundos; o resultado aparece aqui no Log.';
+        if(!j||!j.ok||!j.id){ hjOcupado=false; st.textContent='⚠️ '+((j&&j.erro)||'não consegui pedir'); b.disabled=false; return; }
+        var n=0;(function poll(){ n++;
+          fetch('/hoje/rodar-job/status?id='+encodeURIComponent(j.id),{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){
+            if(s.estado==='ok') return fimOk(s.msg);
+            if(s.estado==='erro') return fimErro(s.msg);
+            st.textContent= s.estado==='rodando' ? '⏳ Rodando… (se o EVO estiver instável, o robô tenta de novo sozinho e pode levar alguns minutos)'
+              : s.estado==='esperando' ? '⏳ '+(s.msg||'aguardando a vez')
+              : '⏳ Pedido enviado — o robô começa em alguns segundos…';
+            if(n>400){ hjOcupado=false; st.textContent='⏳ Ainda rodando — o resultado aparece no Log.'; return; }
+            setTimeout(poll,3000);
+          }).catch(function(){ setTimeout(poll,3000); });
+        })();
       }).catch(function(){ st.textContent='❌ erro de rede'; b.disabled=false; hjOcupado=false; });
   }
   </script>${ehHoje ? '<script>setInterval(function(){ if(!hjOcupado && !document.querySelector(\'.hj-re[open]\')) location.reload(); },60000)</script>' : ''}`;
@@ -9420,15 +9436,28 @@ const server = http.createServer((req, res) => {
       try {
         const job = String(JSON.parse(corpo || '{}').job || '');
         if (!JOBS_REFAZER.has(job)) return resp({ ok: false, erro: 'job desconhecido' }, 400);
-        if (Date.now() - (_refazerPedido[job] || 0) < 5 * 60000) return resp({ ok: false, erro: 'já pedido há pouco — veja o Log em instantes' });
+        // Mesmo job já pedido e ainda sem resultado (até 25 min): não pede de novo.
+        const ant = _refazerPedido[job];
+        if (ant && Date.now() - ant.em < 25 * 60000) {
+          const st = statusRodarJob(ant.id);
+          if (!st || !['ok', 'erro'].includes(st.estado)) return resp({ ok: true, id: ant.id, jaPedido: true });
+        }
         const arq = path.resolve(__dirname, '..', 'data', 'rodar-job.json');
         if (fs.existsSync(arq)) return resp({ ok: false, erro: 'o robô ainda vai rodar outro pedido — tente em 1 minuto' });
-        fs.writeFileSync(arq, JSON.stringify({ job }));
-        _refazerPedido[job] = Date.now();
+        const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        fs.writeFileSync(arq, JSON.stringify({ job, id }));
+        _refazerPedido[job] = { id, em: Date.now() };
         try { auditoria.registrar(sess && sess.usuario, 'log.rodar-job', job, ''); } catch (_) {}
-        return resp({ ok: true });
+        return resp({ ok: true, id });
       } catch (e) { return resp({ ok: false, erro: e.message }, 400); }
     });
+  }
+
+  if (req.method === 'GET' && url === '/hoje/rodar-job/status') {
+    const id = new URLSearchParams(req.url.split('?')[1] || '').get('id') || '';
+    const st = statusRodarJob(id) || { estado: 'pendente', msg: '' };
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ estado: st.estado, msg: st.msg || '' }));
   }
 
   // Enviar teste: painel grava o pedido; o robô (que tem a sessão) envia.
