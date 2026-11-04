@@ -738,6 +738,11 @@ function iniciarRodarJobWatcher() {
     resumoSemanal:     { nome: 'Resumo da semana no WhatsApp [manual]', fn: (pedido) => require('./resumo-semanal').enviar({ ate: pedido && pedido.ate, teste: true, log }), timeoutMs: 12 * 60 * 1000 },
     resumoMensal:      { nome: 'Resumo mensal no WhatsApp [manual]', fn: (pedido) => require('./resumo-mensal').enviar({ mes: pedido && pedido.mes, teste: true, log }), timeoutMs: 12 * 60 * 1000 },
     freeAntecedencia:  { nome: 'Planos FREE — antecedência [manual]', fn: (pedido) => require('./free-antecedencia').runFreeAntecedencia({ dry: !!(pedido && pedido.dry) }) },
+    // "↻ Rodar de novo" do Log do painel (falhas de job):
+    inadimplentesHoje: { nome: 'Cobrança — boleto vence hoje [manual]', fn: () => require('./inadimplentes').runInadimplentes({ dry: false, modo: 'hoje' }), timeoutMs: 20 * 60 * 1000 },
+    slotsPush:         { nome: 'Grade→formulário [manual]', fn: async () => { runSlotsPush('pelo painel'); } },
+    gradeFixas:        { nome: 'Grade de fixas [manual]',   fn: async () => { runGradeFixas('pelo painel'); } },
+    ativasFoto:        { nome: 'Alunas ativas (EVO) [manual]', fn: async () => { runAtivasFoto(); } },
   };
   const t = setInterval(() => {
     let pedido = null;

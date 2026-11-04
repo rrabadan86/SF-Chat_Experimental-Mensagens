@@ -2275,6 +2275,36 @@ const FOTO_POR_CONTEXTO = {
   'Manhã (hoje)': 'confirmacao_experimental', 'Tarde (amanhã)': 'confirmacao_experimental',
   'Renovação de contrato': 'renovacao', 'Aniversário ex-alunas': 'aniversario_ex',
 };
+// Qual job do robô refaz uma falha do Log (pelo nome gravado em "contexto").
+// seguro = o job não repete para quem já recebeu (pode rodar mesmo que algo já
+// tenha saído); senão, só se nada desse envio tinha saído antes da falha.
+const JOBS_DO_LOG = [
+  [/^Manhã \(hoje\)|^Confirmação HOJE/i, 'confirmacaoHoje', false, 'Confirmação das aulas de hoje'],
+  [/^Tarde \(amanhã\)|^Confirmação AMANHÃ/i, 'confirmacaoAmanha', false, 'Confirmação das aulas de amanhã'],
+  [/^Follow-up \(manhã|^Follow-up MANHÃ/i, 'followupMorning', false, 'Follow-up da manhã'],
+  [/^Follow-up \(tarde|^Follow-up TARDE/i, 'followupAfternoon', false, 'Follow-up da tarde'],
+  [/^Faltas \/ no-show \(manhã|^Faltas MANHÃ/i, 'noShowMorning', false, 'Faltas da manhã'],
+  [/^Faltas \/ no-show \(tarde|^Faltas TARDE/i, 'noShowAfternoon', false, 'Faltas da tarde e noite'],
+  [/^Aniversário \(grupos|^Aniversariantes/i, 'aniversariantes', false, 'Parabéns nos grupos'],
+  [/^Aniversário ex-alunas/i, 'aniversarioEx', false, 'Aniversário das ex-alunas'],
+  [/^Renovação/i, 'renovacao', false, 'Aviso de renovação'],
+  [/^Resumo do dia/i, 'resumoDia', false, 'Resumo do dia'],
+  [/^Cobrança de inadimplentes/i, 'inadimplentes', true, 'Cobrança: manda só para quem ainda não foi cobrada hoje'],
+  [/^Cobrança — boleto vence hoje/i, 'inadimplentesHoje', true, 'Boleto vence hoje: manda só para quem ainda não recebeu hoje'],
+  [/^Planos FREE/i, 'freeAntecedencia', true, 'Planos FREE'],
+  [/^Grade→formulário/i, 'slotsPush', true, 'Atualiza os horários do formulário'],
+  [/^Grade de fixas/i, 'gradeFixas', true, 'Atualiza a grade de matrículas'],
+  [/^Alunas ativas \(EVO\)/i, 'ativasFoto', true, 'Relê as alunas ativas no EVO'],
+  [/^Histórico de experimentais/i, 'historicoExperimentais', true, 'Relê as experimentais no EVO'],
+];
+const JOBS_REFAZER = new Set(JOBS_DO_LOG.map(j => j[1]));
+function jobDoLog(contexto) {
+  const c = String(contexto || '').replace(/\s*\[(manual|RECUPERAÇÃO)\]\s*$/i, '').trim();
+  const j = JOBS_DO_LOG.find(([re]) => re.test(c));
+  return j ? { key: j[1], seguro: j[2], dica: j[3] } : null;
+}
+const _refazerPedido = {}; // job → quando foi pedido (evita clique duplo rodar 2x)
+
 function fotoDoEnvio(e) {
   let ch = String(e.chaveFoto || '');
   if (!ch) {
@@ -2296,6 +2326,14 @@ function paginaHoje(dia) {
     valor: `${j.sent} <small>enviada${j.sent === 1 ? '' : 's'}</small>${j.failed ? ` · <span style="color:var(--erro)">${j.failed} falha${j.failed === 1 ? '' : 's'}</span>` : ''}`,
   })).join('');
 
+  // "↻ Rodar de novo" em falha de JOB (e na cobrança que falhou): pede ao robô para
+  // rodar o job outra vez. Só aparece quando é seguro — o job não manda em dobro
+  // (pula quem já recebeu) OU nada tinha saído desse job antes da falha.
+  const ctxBase = (c) => String(c || '').replace(/\s*\[(manual|RECUPERAÇÃO)\]\s*$/i, '').trim();
+  const enviouAntes = (e) => {
+    const t = Date.parse(e.ts) || 0, c = ctxBase(e.contexto);
+    return evs.filter(x => x.ok && ctxBase(x.contexto) === c && (Date.parse(x.ts) || 0) <= t && t - (Date.parse(x.ts) || 0) < 3 * 3600000).length;
+  };
   const lista = evs.map(e => {
     const ic = e.ok ? '✅' : '⚠️';
     const who = e.grupo ? esc(e.destino || 'grupo') : esc(fmtTel(e.destino));
@@ -2323,8 +2361,16 @@ function paginaHoje(dia) {
           ${chFoto ? `<label class="hj-foto"><input type="checkbox" class="hj-chf" value="${esc(chFoto)}" checked> <span>📎 Enviar com a foto da mensagem</span></label>` : ''}
           <div class="hj-re-a"><button type="button" class="ui-btn" onclick="hjReenviar(this)">Enviar</button><span class="hj-st quando" style="margin:0"></span></div>
         </div></details>` : '';
+    let refazer = '';
+    const jd = !e.ok && (e.destino === '—' || e.sofia) ? jobDoLog(e.contexto) : null;
+    if (jd && (e.destino === '—' || jd.seguro)) {
+      const antes = jd.seguro ? 0 : enviouAntes(e);
+      refazer = antes
+        ? `<div class="quando" style="margin:6px 0 0">Não dá para rodar de novo: ${antes} mensagem(ns) deste envio já tinham saído — repetir mandaria em dobro.</div>`
+        : `<div class="hj-rj"><button type="button" class="ui-btn sec" onclick="hjRodarJob(this,'${jd.key}')" title="${esc(jd.dica)}">↻ Rodar de novo</button><span class="hj-st quando" style="margin:0"></span></div>`;
+    }
     return `<div class="ev"><span class="h">${esc(e.quando)}</span><span class="ic">${ic}</span>
-      <div class="d"><span class="who">${who}</span> <span class="ctx">· ${esc(e.contexto)}</span>${pvNode}${reenviar}</div></div>`;
+      <div class="d"><span class="who">${who}</span> <span class="ctx">· ${esc(e.contexto)}</span>${pvNode}${reenviar}${refazer}</div></div>`;
   }).join('');
 
   const corpo = `<div class="wrap">
@@ -2336,6 +2382,8 @@ function paginaHoje(dia) {
       .pvmore[open] summary .mais{opacity:.55}
       .pvmore .tudo{white-space:pre-wrap;word-break:break-word;margin-top:6px;padding:8px 10px;border:1px solid var(--linha);border-radius:8px;font-size:.9rem;line-height:1.45}
       .hj-re{margin-top:6px}
+      .hj-rj{margin-top:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+      .hj-rj .ui-btn{padding:5px 12px;font-size:.82rem}
       .hj-re summary{display:inline-block;cursor:pointer;list-style:none;font-weight:700;font-size:.82rem;color:var(--teal);border:1px solid var(--linha);border-radius:999px;padding:3px 11px;background:#fff}
       .hj-re summary::-webkit-details-marker{display:none}
       .hj-re[open] summary{background:var(--teal);color:#fff;border-color:var(--teal)}
@@ -2389,6 +2437,18 @@ function paginaHoje(dia) {
             setTimeout(poll,2000);
           }).catch(function(){ setTimeout(poll,2000); });
         })();
+      }).catch(function(){ st.textContent='❌ erro de rede'; b.disabled=false; hjOcupado=false; });
+  }
+  // ↻ Rodar de novo: pede ao robô para rodar o job outra vez (o resultado aparece no Log).
+  function hjRodarJob(b, job){
+    var st=b.parentNode.querySelector('.hj-st');
+    if(!confirm('Rodar este envio de novo agora?')) return;
+    b.disabled=true; hjOcupado=true; st.textContent='⏳ Pedindo ao robô…';
+    fetch('/hoje/rodar-job',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job:job})})
+      .then(function(r){return r.json();}).then(function(j){
+        hjOcupado=false;
+        if(!j||!j.ok){ st.textContent='⚠️ '+((j&&j.erro)||'não consegui pedir'); b.disabled=false; return; }
+        st.textContent='✅ Pedido enviado — o robô roda em alguns segundos; o resultado aparece aqui no Log.';
       }).catch(function(){ st.textContent='❌ erro de rede'; b.disabled=false; hjOcupado=false; });
   }
   </script>${ehHoje ? '<script>setInterval(function(){ if(!hjOcupado && !document.querySelector(\'.hj-re[open]\')) location.reload(); },60000)</script>' : ''}`;
@@ -9353,6 +9413,24 @@ const server = http.createServer((req, res) => {
       }
     });
   }
+  // ↻ Rodar de novo (Log): pede ao robô para rodar o job que falhou.
+  if (req.method === 'POST' && url === '/hoje/rodar-job') {
+    return lerCorpo(req, 1e4, corpo => {
+      const resp = (o, st = 200) => { res.writeHead(st, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(o)); };
+      try {
+        const job = String(JSON.parse(corpo || '{}').job || '');
+        if (!JOBS_REFAZER.has(job)) return resp({ ok: false, erro: 'job desconhecido' }, 400);
+        if (Date.now() - (_refazerPedido[job] || 0) < 5 * 60000) return resp({ ok: false, erro: 'já pedido há pouco — veja o Log em instantes' });
+        const arq = path.resolve(__dirname, '..', 'data', 'rodar-job.json');
+        if (fs.existsSync(arq)) return resp({ ok: false, erro: 'o robô ainda vai rodar outro pedido — tente em 1 minuto' });
+        fs.writeFileSync(arq, JSON.stringify({ job }));
+        _refazerPedido[job] = Date.now();
+        try { auditoria.registrar(sess && sess.usuario, 'log.rodar-job', job, ''); } catch (_) {}
+        return resp({ ok: true });
+      } catch (e) { return resp({ ok: false, erro: e.message }, 400); }
+    });
+  }
+
   // Enviar teste: painel grava o pedido; o robô (que tem a sessão) envia.
   if (req.method === 'POST' && url === '/teste/enviar') {
     return lerCorpo(req, 1e6, corpo => {
