@@ -758,11 +758,13 @@ export function janelaSessaoMs(): number {
 
 // A memória das conversas vive na RAM — um reinício da SoFIA (atualização, vigia,
 // queda) fazia ela esquecer tudo e se apresentar de novo no meio da conversa
-// ("Oi! Tudo bem?" outra vez). Agora grava em sofia-conversas.json (só as que
+// ("Oi! Tudo bem?" outra vez). Agora grava em sofia-memoria.json (só as que
 // ainda estão dentro da janela da sessão) e recupera ao subir. O sessionId da IA
 // continua valendo depois do reinício (a sessão fica em disco), então ela segue
 // do ponto em que parou.
-const CONVERSAS_FILE = path.join(BASE_DIR, "sofia-conversas.json");
+// ATENÇÃO: NÃO usar "sofia-conversas.json" — esse é o arquivo da caixa de
+// conversas do painel (o listener grava). Dividir o arquivo apagava as conversas.
+const CONVERSAS_FILE = path.join(BASE_DIR, "sofia-memoria.json");
 let _convSujo = false;
 function marcarConversas() { _convSujo = true; }
 export function salvarConversasAgora() {

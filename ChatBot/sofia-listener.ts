@@ -826,7 +826,14 @@ type InboxConversa = { jid: string; nome: string; ultimaEm: number; msgs: InboxM
 const inbox = new Map<string, InboxConversa>();
 let inboxTimer: ReturnType<typeof setTimeout> | null = null;
 function carregarInbox() {
-  try { const o = JSON.parse(fs.readFileSync(CONVERSAS_FILE, "utf8")); if (o && typeof o === "object") for (const k of Object.keys(o)) inbox.set(k, o[k]); } catch {}
+  try {
+    const o = JSON.parse(fs.readFileSync(CONVERSAS_FILE, "utf8"));
+    let lixo = 0;
+    // Só aceita entradas no formato do inbox ({ msgs: [...] }). Entre 05 e 06/11 a
+    // memória da IA foi gravada por engano neste mesmo arquivo — ignora esse lixo.
+    if (o && typeof o === "object") for (const k of Object.keys(o)) { const c = o[k]; if (c && Array.isArray(c.msgs)) inbox.set(k, c); else lixo++; }
+    if (lixo) log(`🧹 inbox: ${lixo} entrada(s) fora do formato ignorada(s) (memória gravada por engano no arquivo das conversas).`);
+  } catch {}
 }
 function salvarInbox() {
   const corte = Date.now() - retencaoMs();
