@@ -121,6 +121,13 @@ const CATALOGO = [
     padrao: 'Olá, {aluna}! Como você está?\n\nHoje, no seu aniversário, a saudade de ter você por aqui apertou ainda mais! 🥳\n\nEspero que o seu dia esteja cheio de comemoração e muita endorfina.\n\nMas lembre-se: nossas portas continuam abertas para quando quiser voltar e começar esse novo ciclo com foco total na sua saúde! 💓\n\nDesejo um feliz aniversário e um ano incrível para você! 💕',
   },
   {
+    chave: 'vence_hoje',
+    titulo: 'Vence hoje — sem renovação',
+    quando: 'No dia do vencimento do contrato, para quem ainda NÃO tem contrato na fila (contrato na fila = já renovou). Quem venceu num dia sem disparo (ex.: domingo desligado) recebe no próximo — o {vencimento} vira "venceu ontem".',
+    vars: [['nome', 'primeiro nome da aluna'], ['vencimento', '"vence hoje", "venceu ontem" ou "venceu no dia DD/MM" — preenchido sozinho'], ['contrato', 'nome do plano/contrato da aluna']],
+    padrao: 'Oi, {nome}! 😊\nPassando para lembrar que o seu plano {vencimento}.\nPara você não ficar sem treinar, que tal já renovarmos? Pode ser o mesmo plano ou, se preferir, outra frequência. 💛\nQualquer dúvida, estou por aqui!',
+  },
+  {
     chave: 'saida_grupos',
     titulo: 'Saída — não renovou (retira dos grupos)',
     quando: 'Para quem está com o contrato vencido há alguns dias (você escolhe quantos, abaixo — padrão 7) e não renovou (contrato na fila conta como renovação). O robô primeiro RETIRA a pessoa de todos os grupos em comum com o número do Studio e depois manda esta mensagem. Se ela não está em nenhum grupo, nada é enviado.',

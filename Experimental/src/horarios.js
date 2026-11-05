@@ -35,6 +35,7 @@ const CATALOGO = [
   { chave: 'agendadosTarde',    titulo: 'Envios agendados — tarde',     padrao: '45 15 * * *' },
   { chave: 'inadimplentes',     titulo: 'Cobrança — recorrente + boleto vencido', padrao: '20 10 * * 1-6' },
   { chave: 'inadimplentesHoje', titulo: 'Cobrança — boleto vence hoje',  padrao: '20 10 * * 1-6' },
+  { chave: 'venceHoje',         titulo: 'Vence hoje — sem renovação',  padrao: '17 9 * * 1-6' },
   { chave: 'saidaGrupos',       titulo: 'Saída — não renovou (retira dos grupos)', padrao: '47 9 * * 1-6' },
 ];
 const PADROES = Object.fromEntries(CATALOGO.map(j => [j.chave, j.padrao]));

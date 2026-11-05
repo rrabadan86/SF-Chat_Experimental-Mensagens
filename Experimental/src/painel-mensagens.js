@@ -2139,6 +2139,7 @@ const HORARIOS_DA_MSG = {
   no_show:             [['noShowMorning', 'Manhã'], ['noShowAfternoon', 'Tarde']],
   renovacao:           [['renewal', '']],
   saida_grupos:        [['saidaGrupos', '']],
+  vence_hoje:          [['venceHoje', '']],
   aniversario:         [['aniversariantes', '']],
   aniversario_ex:      [['aniversarioEx', '']],
   instagram:           [['instagram', '']],
@@ -2189,7 +2190,7 @@ function cardDeMsg(m, hmap, voltar) {
   }
   const sw = switchEnvio(jobsDoCard(m.chave));
   const opts = /^cobranca_/.test(m.chave) ? { cobranca: true } : undefined;
-  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : '';
+  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : '';
   return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar, opts)}${hbloco}${extra}</div>`;
 }
 
@@ -2253,6 +2254,29 @@ function blocoSaidas() {
     ${fora.length ? `<details class="sg-fora"><summary>Ficaram de fora (${fora.length})</summary>${fora.map(linha).join('')}</details>` : ''}
     ${resumoExec(sim, true)}${reg.ultimaAcao && ult && reg.ultimaAcao.em !== ult.em ? resumoExec(reg.ultimaAcao, false) + `<div class="sg-ult">Última execução: ${quando(ult.em)} — ninguém para tratar.</div>` : resumoExec(ult, false)}
     <form method="POST" action="/saidas/simular" style="margin-top:10px"><button type="submit" class="tbtn">🧪 Simular agora (ver os grupos de cada uma, sem mexer)</button></form>
+    <style>.sg-row{padding:7px 0;border-top:1px solid var(--linha-soft);font-size:.88rem}.sg-row:first-child{border-top:0}.sg-row.fora{opacity:.75}.sg-fora{margin-top:8px}.sg-fora summary{cursor:pointer;font-weight:700;font-size:.85rem;color:var(--teal)}.sg-ult{margin-top:10px;font-size:.84rem;color:var(--cinza);line-height:1.5}.sg-ult b{color:var(--tinta)}</style>
+  </div>`;
+}
+
+// Vence hoje — sem renovação: quem recebe no próximo disparo (pelos dados do EVO).
+function blocoVenceHoje() {
+  let c = null, reg = {};
+  try { const vh = require('./vence-hoje'); c = vh.candidatas(); reg = vh.lerRegistro(); } catch (_) {}
+  const ligado = jobsAtivos.ativo('venceHoje');
+  const fmtD = (d) => d ? d.split('-').reverse().join('/') : '';
+  const linha = (x) => `<div class="sg-row${x.motivo ? ' fora' : ''}"><b>${esc(x.nome || 'sem nome')}</b> <span class="quando" style="margin:0">${esc(x.vencimento)} (${fmtD(x.fim)})${x.contrato ? ' · ' + esc(x.contrato) : ''}</span>${x.motivo ? `<div class="quando" style="margin:2px 0 0">⏭️ ${esc(x.motivo)}</div>` : ''}</div>`;
+  const vai = c ? c.lista.filter(x => !x.motivo) : [], fora = c ? c.lista.filter(x => x.motivo) : [];
+  const quando = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+  const ult = reg.ultimaAcao;
+  const ultHtml = ult ? `<div class="sg-ult"><b>Último envio (${quando(ult.em)}):</b> ${ult.enviados.map(t => esc(t.nome) + (t.ok ? ' ✉️' : ' ⚠️ ' + esc(t.erro || 'falhou'))).join(' · ')}</div>` : '';
+  const cobre = c && c.datas.length > 1 ? ` e quem venceu em ${c.datas.slice(1).map(fmtD).join(', ')} (dia sem disparo)` : '';
+  return `<div class="hsec" id="vencehoje"><div class="hsec-t">Quem recebe no próximo disparo ${vai.length ? `<span class="badge-ed">${vai.length}</span>` : ''}</div>
+    <p class="quando" data-se-desligado style="margin:0 0 8px;color:var(--warn)${ligado ? ';display:none' : ''}">⏸️ Desligado: nada é enviado até você ligar o botão <b>Ativado</b> no topo deste cartão.</p>
+    <p class="quando" style="margin:0 0 8px">Contrato SlimFit que vence <b>hoje</b>${cobre} e ainda não tem contrato na fila. Trancada e Circuito/VIP não recebem. Cada contrato recebe uma vez só.</p>
+    ${c && c.fotoDia !== c.hoje ? `<p class="quando" style="margin:0 0 8px;color:var(--warn)">⚠️ A leitura das alunas ativas de hoje (05:25) ainda não rodou${c.fotoDia ? ` — última: ${fmtD(c.fotoDia)}` : ''}. Sem ela o robô não envia.</p>` : ''}
+    <div class="sg-lista">${vai.length ? vai.map(linha).join('') : '<div class="quando" style="margin:0">Ninguém para avisar hoje.</div>'}</div>
+    ${fora.length ? `<details class="sg-fora"><summary>Ficaram de fora (${fora.length})</summary>${fora.map(linha).join('')}</details>` : ''}
+    ${ultHtml}
     <style>.sg-row{padding:7px 0;border-top:1px solid var(--linha-soft);font-size:.88rem}.sg-row:first-child{border-top:0}.sg-row.fora{opacity:.75}.sg-fora{margin-top:8px}.sg-fora summary{cursor:pointer;font-weight:700;font-size:.85rem;color:var(--teal)}.sg-ult{margin-top:10px;font-size:.84rem;color:var(--cinza);line-height:1.5}.sg-ult b{color:var(--tinta)}</style>
   </div>`;
 }
@@ -2324,6 +2348,7 @@ const JOBS_DO_LOG = [
   [/^Aniversário \(grupos|^Aniversariantes/i, 'aniversariantes', false, 'Parabéns nos grupos'],
   [/^Aniversário ex-alunas/i, 'aniversarioEx', false, 'Aniversário das ex-alunas'],
   [/^Renovação/i, 'renovacao', false, 'Aviso de renovação'],
+  [/^Vence hoje — sem renovação/i, 'venceHoje', true, 'Avisa quem vence hoje sem renovação (quem já recebeu não repete)'],
   [/^Saída — não renovou/i, 'saidaGrupos', true, 'Retira dos grupos e manda a mensagem (quem já foi tratada não repete)'],
   [/^Resumo do dia/i, 'resumoDia', false, 'Resumo do dia'],
   [/^Cobrança de inadimplentes/i, 'inadimplentes', true, 'Cobrança: manda só para quem ainda não foi cobrada hoje'],

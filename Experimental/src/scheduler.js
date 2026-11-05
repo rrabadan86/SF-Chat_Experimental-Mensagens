@@ -761,6 +761,7 @@ function iniciarRodarJobWatcher() {
     resumoMensal:      { nome: 'Resumo mensal no WhatsApp [manual]', fn: (pedido) => require('./resumo-mensal').enviar({ mes: pedido && pedido.mes, teste: true, log }), timeoutMs: 12 * 60 * 1000 },
     freeAntecedencia:  { nome: 'Planos FREE — antecedência [manual]', fn: (pedido) => require('./free-antecedencia').runFreeAntecedencia({ dry: !!(pedido && pedido.dry) }) },
     // "↻ Rodar de novo" do Log do painel (falhas de job):
+    venceHoje:         { nome: 'Vence hoje — sem renovação [manual]', fn: () => require('./vence-hoje').runVenceHoje({ log }), timeoutMs: 20 * 60 * 1000 },
     saidaGrupos:       { nome: 'Saída — não renovou [manual]', fn: () => require('./saidas-grupos').runSaidasGrupos({ log }), timeoutMs: 20 * 60 * 1000 },
     saidaGruposDry:    { nome: 'Saída — não renovou (simulação) [manual]', fn: () => require('./saidas-grupos').runSaidasGrupos({ dry: true, log }), timeoutMs: 20 * 60 * 1000 },
     inadimplentesHoje: { nome: 'Cobrança — boleto vence hoje [manual]', fn: () => require('./inadimplentes').runInadimplentes({ dry: false, modo: 'hoje' }), timeoutMs: 20 * 60 * 1000 },
@@ -1117,6 +1118,17 @@ async function main() {
 
   log(`📅 Job RENOVAÇÃO agendado: ${config.schedule.renewal} (14:30 todos os dias)`);
   console.log('   → Avisa a aluna 7 dias antes do vencimento do contrato');
+
+  // Vence hoje — sem renovação (desligado até ligar no painel).
+  if (config.schedule.venceHoje) {
+    cron.schedule(config.schedule.venceHoje, async () => {
+      if (!jobsAtivos.ativo('venceHoje')) { log('⏸️  Vence hoje: desligado no painel — pulando'); return; }
+      log('⏰ Cron disparado: Vence hoje — sem renovação');
+      runJob('Vence hoje — sem renovação', () => require('./vence-hoje').runVenceHoje({ log }), 20 * 60 * 1000, { retry: false })
+        .catch(err => logError('Vence hoje — sem renovação', err));
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job VENCE HOJE agendado: ${config.schedule.venceHoje} — ${jobsAtivos.ativo('venceHoje') ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
+  }
 
   // Saída — não renovou: retira dos grupos e manda a mensagem (desligado até ligar no painel).
   if (config.schedule.saidaGrupos) {

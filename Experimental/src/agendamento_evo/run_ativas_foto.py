@@ -185,7 +185,9 @@ def reconstruir(rows, hoje, por_id=None):
                 junt.append([a, b])
         pessoas.append(junt)
         if por_id is not None and m.get("idMember") is not None:
-            cs = sorted(([str(x.get("startDate"))[:10], (_fim_efetivo(x) or hoje).isoformat(), (x.get("name") or "").strip()]
+            # [início, fim (ou hoje, se não tem), nome, fim REAL ("" = contrato sem data de fim)]
+            cs = sorted(([str(x.get("startDate"))[:10], (_fim_efetivo(x) or hoje).isoformat(), (x.get("name") or "").strip(),
+                          (_fim_efetivo(x).isoformat() if _fim_efetivo(x) else "")]
                          for x in (m.get("memberships") or []) if not ignorado(x) and _d(x.get("startDate")) and _d(x.get("startDate")) <= hoje))
             por_id[str(m.get("idMember"))] = ([[a.isoformat(), b.isoformat()] for a, b in junt if a <= hoje], cs)
     if not pessoas:
@@ -295,7 +297,7 @@ def main():
             p = {"n": nomes.get(k) or str(m.get("firstName") or "").strip() or f"id {k}", "iv": iv, "cs": cs}
             if k in nomes:
                 p["nc"] = 1  # nome completo (do cadastro do EVO)
-            if k in tels and k not in ativas:
+            if k in tels:
                 p["tel"] = tels[k]
             if k in info:
                 p["c"], p["t"] = info[k][0], info[k][1]
@@ -342,10 +344,9 @@ def main():
             nm = " ".join(x for x in (str(d.get("firstName") or "").strip(), str(d.get("lastName") or "").strip()) if x)
             if nm:
                 nomes[idm] = nm
-            if idm not in ativas:
-                t = telefone_do_detalhe(d)
-                if t:
-                    tels[idm] = t
+            t = telefone_do_detalhe(d)
+            if t:
+                tels[idm] = t
         except Exception:
             falhas += 1
             if falhas >= 3:  # EVO instável: fica para a próxima
@@ -357,7 +358,11 @@ def main():
     # busca o cadastro de quem ainda não tem telefone guardado (poucas por dia).
     corte = (hoje - timedelta(days=40)).isoformat()
     pes = h["pessoas"]
-    sem_tel = [k for k in pes if k not in ativas and k not in tels and pes[k]["iv"] and pes[k]["iv"][-1][1] >= corte]
+    # … e de quem está ATIVA com o contrato vencendo nos próximos 3 dias (aviso "vence hoje").
+    ate3 = (hoje + timedelta(days=3)).isoformat()
+    sem_tel = [k for k in pes if k not in tels and pes[k]["iv"] and (
+        (k not in ativas and pes[k]["iv"][-1][1] >= corte) or
+        (k in ativas and any(c[3:4] and c[3] and hoje.isoformat() <= c[3] <= ate3 for c in pes[k].get("cs") or [])))]
     falhas_t = 0
     for idm in sem_tel[:80]:
         try:
