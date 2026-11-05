@@ -121,6 +121,13 @@ const CATALOGO = [
     padrao: 'Olá, {aluna}! Como você está?\n\nHoje, no seu aniversário, a saudade de ter você por aqui apertou ainda mais! 🥳\n\nEspero que o seu dia esteja cheio de comemoração e muita endorfina.\n\nMas lembre-se: nossas portas continuam abertas para quando quiser voltar e começar esse novo ciclo com foco total na sua saúde! 💓\n\nDesejo um feliz aniversário e um ano incrível para você! 💕',
   },
   {
+    chave: 'saida_grupos',
+    titulo: 'Saída — não renovou (retira dos grupos)',
+    quando: 'Para quem está com o contrato vencido há 7 dias e não renovou (contrato na fila conta como renovação). O robô primeiro RETIRA a pessoa de todos os grupos em comum com o número do Studio e depois manda esta mensagem. Se ela não está em nenhum grupo, nada é enviado.',
+    vars: [['nome', 'primeiro nome da aluna']],
+    padrao: 'Oie, {nome}!! Tudo bem?\n\nPoxa, que pena que você não continuará mais conosco! Sentiremos muito a sua falta!\n\nVou te retirar do grupo para que não te atrapalhe com as mensagens da turma!\n\nEspero que possa retornar para o SlimFit em breve!\nUma boa semana!! ❤️❤️❤️',
+  },
+  {
     chave: 'instagram',
     titulo: 'Boas-vindas no Instagram (DM)',
     quando: 'Enviada às 07:00 para novas seguidoras (em teste).',

@@ -715,6 +715,34 @@ async function getCommonGroups(telefone) {
 }
 
 /**
+ * Tira uma pessoa de UM grupo (o número do robô precisa ser administrador).
+ * → { ok: true } ou lança erro (code 'NAO_ADMIN' quando o robô não é admin).
+ * Quem chama deve CONFERIR depois com getCommonGroups (a resposta do WhatsApp
+ * Web varia entre versões; a conferência é o que vale).
+ */
+async function removerDoGrupo(groupId, telefone) {
+  if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
+  const mid = await resolverId(telefone);
+  const chat = await comRetry(() => client.getChatById(groupId));
+  if (!chat || !chat.isGroup) throw new Error('não é um grupo');
+  // Sou admin? (quando dá para saber; se não der, tenta e confere depois)
+  try {
+    const eu = client.info && client.info.wid && client.info.wid._serialized;
+    const lidEu = client.info && client.info.lid && (client.info.lid._serialized || client.info.lid);
+    const p = (chat.participants || []).find(x => x && x.id && (x.id._serialized === eu || (lidEu && x.id._serialized === lidEu)));
+    if (p && !p.isAdmin && !p.isSuperAdmin) { const e = new Error('o número do Studio não é administrador deste grupo'); e.code = 'NAO_ADMIN'; throw e; }
+  } catch (e) { if (e && e.code === 'NAO_ADMIN') throw e; }
+  const r = await comRetry(() => chat.removeParticipants([mid]));
+  // Algumas versões devolvem { <id>: { code, message } } — 2xx = ok.
+  try {
+    const v = r && typeof r === 'object' ? Object.values(r)[0] : null;
+    const code = v && (v.code || v.status);
+    if (code && Number(code) >= 300) throw new Error(`WhatsApp recusou (${code}${v.message ? ': ' + v.message : ''})`);
+  } catch (e) { if (/recusou/.test(e.message)) throw e; }
+  return { ok: true };
+}
+
+/**
  * Envia num grupo MARCANDO (@) uma pessoa. Monta o texto como
  *   textoAntes + @<pessoa> + textoDepois
  * e passa a menção nativa (o número tem que estar no texto E em mentions).
@@ -865,7 +893,7 @@ async function destroy() {
 module.exports = {
   initWhatsApp, isReady, getClient,
   sendTexto, sendMidia, sendGrupo, acharGrupo, listarGrupos,
-  getCommonGroups, sendGrupoComMencao, sendGrupoMidia, sendGrupoMidiaComMencao,
+  getCommonGroups, removerDoGrupo, sendGrupoComMencao, sendGrupoMidia, sendGrupoMidiaComMencao,
   iniciarKeepAlive, destroy, toChatId, MessageMedia,
 };
 

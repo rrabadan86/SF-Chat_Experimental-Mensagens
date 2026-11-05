@@ -95,6 +95,7 @@ const config = {
     morning:          '30 8 * * 1-6',   // 08:30 seg-sáb (confirmação hoje)
     afternoon:        '30 15 * * 0-5',  // 15:30 dom-sex (confirmação amanhã)
     renewal:          '30 14 * * *',    // 14:30 todos os dias (renovação: avisa quem vence em exatos 7 dias)
+    saidaGrupos:      '47 9 * * 1-6',   // 09:47 seg-sáb (não renovou há 7 dias: retira dos grupos + mensagem) — DESLIGADO até ligar no painel
     followupMorning:  '30 10 * * 1-6',  // 10:30 seg-sáb (follow-up ontem manhã)
     followupAfternoon:'0 16 * * 1-6',   // 16:00 seg-sáb (follow-up ontem tarde)
     instagram:        '0 7 * * *',      // 07:00 todos os dias (boas-vindas novos seguidores)

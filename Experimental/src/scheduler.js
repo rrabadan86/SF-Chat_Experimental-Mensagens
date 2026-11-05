@@ -761,6 +761,8 @@ function iniciarRodarJobWatcher() {
     resumoMensal:      { nome: 'Resumo mensal no WhatsApp [manual]', fn: (pedido) => require('./resumo-mensal').enviar({ mes: pedido && pedido.mes, teste: true, log }), timeoutMs: 12 * 60 * 1000 },
     freeAntecedencia:  { nome: 'Planos FREE — antecedência [manual]', fn: (pedido) => require('./free-antecedencia').runFreeAntecedencia({ dry: !!(pedido && pedido.dry) }) },
     // "↻ Rodar de novo" do Log do painel (falhas de job):
+    saidaGrupos:       { nome: 'Saída — não renovou [manual]', fn: () => require('./saidas-grupos').runSaidasGrupos({ log }), timeoutMs: 20 * 60 * 1000 },
+    saidaGruposDry:    { nome: 'Saída — não renovou (simulação) [manual]', fn: () => require('./saidas-grupos').runSaidasGrupos({ dry: true, log }), timeoutMs: 20 * 60 * 1000 },
     inadimplentesHoje: { nome: 'Cobrança — boleto vence hoje [manual]', fn: () => require('./inadimplentes').runInadimplentes({ dry: false, modo: 'hoje' }), timeoutMs: 20 * 60 * 1000 },
     slotsPush:         { nome: 'Grade→formulário [manual]', fn: () => resultadoOuErro(runSlotsPush('pelo painel')), timeoutMs: 3 * 60 * 1000 },
     gradeFixas:        { nome: 'Grade de fixas [manual]',   fn: () => resultadoOuErro(runGradeFixas('pelo painel')), timeoutMs: 16 * 60 * 1000 },
@@ -1115,6 +1117,17 @@ async function main() {
 
   log(`📅 Job RENOVAÇÃO agendado: ${config.schedule.renewal} (14:30 todos os dias)`);
   console.log('   → Avisa a aluna 7 dias antes do vencimento do contrato');
+
+  // Saída — não renovou: retira dos grupos e manda a mensagem (desligado até ligar no painel).
+  if (config.schedule.saidaGrupos) {
+    cron.schedule(config.schedule.saidaGrupos, async () => {
+      if (!jobsAtivos.ativo('saidaGrupos')) { log('⏸️  Saída — não renovou: desligada no painel — pulando'); return; }
+      log('⏰ Cron disparado: Saída — não renovou');
+      runJob('Saída — não renovou', () => require('./saidas-grupos').runSaidasGrupos({ log }), 20 * 60 * 1000, { retry: false })
+        .catch(err => logError('Saída — não renovou', err));
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job SAÍDA (não renovou) agendado: ${config.schedule.saidaGrupos} — ${jobsAtivos.ativo('saidaGrupos') ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
+  }
 
   // Schedule: 16:15 quarta → Convocatória do Circuito (busca a professora de
   // sábado na Grade > Horários e posta no grupo "Circuito Slim").

@@ -2136,6 +2136,7 @@ const HORARIOS_DA_MSG = {
   followup_aluna:      'compartilha:followup', // mesmo job do follow-up — só nota
   no_show:             [['noShowMorning', 'Manhã'], ['noShowAfternoon', 'Tarde']],
   renovacao:           [['renewal', '']],
+  saida_grupos:        [['saidaGrupos', '']],
   aniversario:         [['aniversariantes', '']],
   aniversario_ex:      [['aniversarioEx', '']],
   instagram:           [['instagram', '']],
@@ -2186,7 +2187,7 @@ function cardDeMsg(m, hmap, voltar) {
   }
   const sw = switchEnvio(jobsDoCard(m.chave));
   const opts = /^cobranca_/.test(m.chave) ? { cobranca: true } : undefined;
-  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : '';
+  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : '';
   return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar, opts)}${hbloco}${extra}</div>`;
 }
 
@@ -2219,6 +2220,31 @@ function blocoAnivExcluir() {
     <p class="quando" style="margin:6px 0 0">Não diferencia maiúsculas nem acentos, e vale também para parte do nome: <b>"Equipe"</b> pula "Equipe SlimFit Bueno". Vale no próximo envio, sem reiniciar o robô.</p>
     <style>.ae-fora{opacity:.55;cursor:default}</style>
     <script>function aeAdd(b){ var t=b.closest('form').querySelector('textarea[name=grupos]'); var v=t.value.replace(/\\s+$/,''); t.value=(v?v+'\\n':'')+b.getAttribute('data-g'); b.disabled=true; b.classList.add('ae-fora'); b.textContent='🚫 '+b.getAttribute('data-g'); t.focus(); }</script></div>`;
+}
+
+// Saída — não renovou: quem entra hoje (sem WhatsApp, pelos dados do EVO), quem
+// fica de fora e por quê, a última execução e a simulação (com os grupos).
+function blocoSaidas() {
+  let c = null, reg = { ultimo: null, ultimoSim: null };
+  try { const sg = require('./saidas-grupos'); c = sg.candidatas(); reg = sg.lerRegistro(); } catch (_) {}
+  const ligado = jobsAtivos.ativo('saidaGrupos');
+  const fmtD = (d) => d ? d.split('-').reverse().join('/') : '';
+  const linha = (x) => `<div class="sg-row${x.motivo ? ' fora' : ''}"><b>${esc(x.nome || 'sem nome')}</b> <span class="quando" style="margin:0">venceu ${fmtD(x.fim)}${x.contrato ? ' · ' + esc(x.contrato) : ''}</span>${x.motivo ? `<div class="quando" style="margin:2px 0 0">⏭️ ${esc(x.motivo)}</div>` : ''}</div>`;
+  const vai = c ? c.lista.filter(x => !x.motivo) : [], fora = c ? c.lista.filter(x => x.motivo) : [];
+  const fotoOk = c && c.fotoDia === c.hoje;
+  const ult = reg.ultimo, sim = reg.ultimoSim;
+  const quando = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+  const resumoExec = (r, sim) => !r ? '' : `<div class="sg-ult"><b>${sim ? '🧪 Simulação' : 'Última execução'} (${quando(r.em)}):</b> ${r.tratadas.length ? r.tratadas.map(t => `${esc(t.nome)} — ${t.motivo === 'sem grupo' ? 'não estava em grupo (sem mensagem)' : sim ? 'sairia de: ' + esc(t.grupos.join(', ')) : (t.grupos.length ? 'saiu de: ' + esc(t.grupos.join(', ')) : 'não saiu de nenhum grupo') + (t.ficou && t.ficou.length ? ' · continua em: ' + esc(t.ficou.join(', ')) : '') + (t.enviou ? ' · ✉️ mensagem enviada' : '')}`).join('<br>') : 'ninguém para tratar.'}</div>`;
+  return `<div class="hsec" id="saidas"><div class="hsec-t">Quem entra hoje ${vai.length ? `<span class="badge-ed">${vai.length}</span>` : ''}</div>
+    ${ligado ? '' : '<p class="quando" style="margin:0 0 8px;color:var(--warn)">⏸️ Desligado: nada é feito até você ligar o botão <b>Ativado</b> no topo deste cartão.</p>'}
+    <p class="quando" style="margin:0 0 8px">Contrato SlimFit vencido entre <b>${c ? fmtD(c.de) : '?'}</b> e <b>${c ? fmtD(c.ate) : '?'}</b> (7 a 17 dias atrás) e não renovou. Trancada, contrato na fila e Circuito/VIP vigente não entram. O número do Studio precisa ser <b>administrador</b> dos grupos para conseguir retirar.</p>
+    ${c && !fotoOk ? `<p class="quando" style="margin:0 0 8px;color:var(--warn)">⚠️ A leitura das alunas ativas de hoje (05:25) ainda não rodou${c.fotoDia ? ` — última: ${fmtD(c.fotoDia)}` : ''}. Sem ela o robô não mexe em ninguém.</p>` : ''}
+    <div class="sg-lista">${vai.length ? vai.map(linha).join('') : '<div class="quando" style="margin:0">Ninguém para retirar hoje.</div>'}</div>
+    ${fora.length ? `<details class="sg-fora"><summary>Ficaram de fora (${fora.length})</summary>${fora.map(linha).join('')}</details>` : ''}
+    ${resumoExec(sim, true)}${reg.ultimaAcao && ult && reg.ultimaAcao.em !== ult.em ? resumoExec(reg.ultimaAcao, false) + `<div class="sg-ult">Última execução: ${quando(ult.em)} — ninguém para tratar.</div>` : resumoExec(ult, false)}
+    <form method="POST" action="/saidas/simular" style="margin-top:10px"><button type="submit" class="tbtn">🧪 Simular agora (ver os grupos de cada uma, sem mexer)</button></form>
+    <style>.sg-row{padding:7px 0;border-top:1px solid var(--linha-soft);font-size:.88rem}.sg-row:first-child{border-top:0}.sg-row.fora{opacity:.75}.sg-fora{margin-top:8px}.sg-fora summary{cursor:pointer;font-weight:700;font-size:.85rem;color:var(--teal)}.sg-ult{margin-top:10px;font-size:.84rem;color:var(--cinza);line-height:1.5}.sg-ult b{color:var(--tinta)}</style>
+  </div>`;
 }
 
 function blocoRenovDias() {
@@ -2288,6 +2314,7 @@ const JOBS_DO_LOG = [
   [/^Aniversário \(grupos|^Aniversariantes/i, 'aniversariantes', false, 'Parabéns nos grupos'],
   [/^Aniversário ex-alunas/i, 'aniversarioEx', false, 'Aniversário das ex-alunas'],
   [/^Renovação/i, 'renovacao', false, 'Aviso de renovação'],
+  [/^Saída — não renovou/i, 'saidaGrupos', true, 'Retira dos grupos e manda a mensagem (quem já foi tratada não repete)'],
   [/^Resumo do dia/i, 'resumoDia', false, 'Resumo do dia'],
   [/^Cobrança de inadimplentes/i, 'inadimplentes', true, 'Cobrança: manda só para quem ainda não foi cobrada hoje'],
   [/^Cobrança — boleto vence hoje/i, 'inadimplentesHoje', true, 'Boleto vence hoje: manda só para quem ainda não recebeu hoje'],
@@ -9337,6 +9364,8 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)oksof=1/.test(q)) aviso = '🔄 Robô reiniciando… ele volta ao ar em ~1 minuto (o selo do WhatsApp acima mostra quando reconectar).';
     else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar o robô pelo painel. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
+    else if (/(?:^|&)oksim=1/.test(q)) aviso = '🧪 Simulação pedida ao robô — em 1 a 2 minutos, atualize a página: o resultado aparece no cartão "Saída — não renovou".';
+    else if (/(?:^|&)errsim=1/.test(q)) { aviso = '⚠️ O robô ainda vai rodar outro pedido — tente de novo em 1 minuto.'; erro = true; }
     else if (/(?:^|&)okae=1/.test(q)) aviso = '🚫 Grupos que não recebem o parabéns salvos — já vale no próximo envio.';
     else if (/(?:^|&)errae=1/.test(q)) { aviso = '⚠️ Não consegui salvar os grupos que não recebem o parabéns.'; erro = true; }
     else if (/(?:^|&)okfree=1/.test(q)) aviso = '✅ Planos FREE: configuração salva — já vale na próxima verificação (sem reiniciar).';
@@ -9644,6 +9673,19 @@ const server = http.createServer((req, res) => {
       try { gr = anivExcluir.salvar(new URLSearchParams(corpo).get('grupos') || ''); } catch (_) { ok = false; }
       try { if (ok) auditoria.registrar(sess.usuario, 'aniversario.excluir', gr.join(' | ') || '(nenhum)', ''); } catch (_) {}
       res.writeHead(303, { Location: '/?view=config&' + (ok ? 'okae=1' : 'errae=1') + '#aniv-excluir' }); res.end();
+    });
+  }
+
+  if (req.method === 'POST' && url === '/saidas/simular') {
+    return lerCorpo(req, 1e4, () => {
+      let ok = true;
+      try {
+        const arq = path.resolve(__dirname, '..', 'data', 'rodar-job.json');
+        if (fs.existsSync(arq)) ok = false;
+        else fs.writeFileSync(arq, JSON.stringify({ job: 'saidaGruposDry', id: 'sim' + Date.now().toString(36) }));
+        try { auditoria.registrar(sess.usuario, 'saidas.simular', '', ''); } catch (_) {}
+      } catch (_) { ok = false; }
+      res.writeHead(303, { Location: '/?view=config&' + (ok ? 'oksim=1' : 'errsim=1') + '#saidas' }); res.end();
     });
   }
 

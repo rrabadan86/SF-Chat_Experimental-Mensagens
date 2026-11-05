@@ -255,6 +255,17 @@ def main():
                 p["c"], p["t"] = info[k][0], info[k][1]
                 if info[k][2]:
                     p["f"] = info[k][2]  # próximo contrato na fila (nome, início)
+            # Para quem NÃO está ativa (saídas): renovou com contrato na fila? Tem
+            # Circuito/VIP vigente? (o job de retirada dos grupos não mexe nelas)
+            if k not in info:
+                ms = m.get("memberships") or []
+                fut = [x for x in ms if not ignorado(x) and _d(x.get("startDate")) and _d(x.get("startDate")) > hoje]
+                if fut:
+                    fut.sort(key=lambda x: str(x.get("startDate")))
+                    p["fq"] = [(fut[0].get("name") or "").strip(), str(fut[0].get("startDate"))[:10]]
+                if any(ignorado(x) and _d(x.get("startDate")) and _d(x.get("startDate")) <= hoje
+                       and ((_fim_efetivo(x) or hoje) >= hoje) for x in ms):
+                    p["cv"] = 1
             pes[k] = p
         return pes
 
