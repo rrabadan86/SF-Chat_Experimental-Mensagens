@@ -1531,16 +1531,37 @@ function textosDeCampanha(): Set<string> {
   } catch {}
   return set;
 }
+// Envios automáticos registrados pela própria SoFIA (cobrança, avisos…) em
+// atividade-sofia.jsonl: últimos 8 dígitos → [{ em, preview }] (preview = começo
+// do texto, espaços normalizados).
+function lerAtividadeSofia(): Map<string, Array<{ em: number; preview: string }>> {
+  const mapa = new Map<string, Array<{ em: number; preview: string }>>();
+  try {
+    let linhas = fs.readFileSync(ATIVIDADE_SOFIA, "utf8").split("\n");
+    if (linhas.length > 30000) linhas = linhas.slice(-30000);
+    for (const l of linhas) {
+      const x = l.trim(); if (!x) continue;
+      let o: any; try { o = JSON.parse(x); } catch { continue; }
+      if (!o || !o.ok || o.grupo) continue;
+      const k8 = String(o.destino || "").replace(/\D/g, "").slice(-8); const em = Date.parse(o.ts || "") || 0;
+      const pv = String(o.preview || "").replace(/\s+/g, " ").trim();
+      if (k8 && em && pv.length >= 20) (mapa.get(k8) || mapa.set(k8, []).get(k8)!).push({ em, preview: pv });
+    }
+  } catch {}
+  return mapa;
+}
 function corrigirAutoriaCampanhas() {
   try {
     const set = textosDeCampanha();
     const envios = lerEnviosCampanha(); // últimos 8 dígitos → instantes dos envios
-    if (!set.size && !envios.size) return;
+    const ativ = lerAtividadeSofia();
+    if (!set.size && !envios.size && !ativ.size) return;
     let n = 0;
     for (const [k8full, c] of inbox) {
       const k8 = String(k8full).replace(/\D/g, "").slice(-8);
       const k8j = String((c && c.jid) || "").replace(/\D/g, "").slice(-8);
       const env = (envios.get(k8) || []).concat(envios.get(k8j) || []);
+      const atv = (ativ.get(k8) || []).concat(k8j !== k8 ? (ativ.get(k8j) || []) : []);
       for (const m of (c && c.msgs) || []) {
         if (m.autor !== "aluna") continue;
         const k = normCamp(String(m.texto || ""));
@@ -1548,10 +1569,14 @@ function corrigirAutoriaCampanhas() {
         // Anexo ("📷 Imagem — …") a até 20 s de um envio de campanha para
         // este mesmo número: é a campanha (a aluna não manda a mesma imagem junto).
         const porHorario = RE_ROTULO.test(String(m.texto || "")) && env.some((t) => Math.abs(t - (m.em || 0)) <= 20000);
-        if (porTexto || porHorario) { m.autor = "sofia"; delete m.imp; n++; }
+        // Envio automático da SoFIA (ex.: cobrança) para este número, mesmo começo de
+        // texto, até 3 min de diferença.
+        const corpo = String(m.texto || "").replace(/\s+/g, " ").trim();
+        const porAtividade = atv.some((a) => Math.abs(a.em - (m.em || 0)) <= 180000 && corpo.startsWith(a.preview.slice(0, 60)));
+        if (porTexto || porHorario || porAtividade) { m.autor = "sofia"; delete m.imp; n++; }
       }
     }
-    if (n) { log(`🩹 ${n} mensagem(ns) de campanha que estavam como "da aluna" voltaram para a SoFIA.`); agendarSalvarInbox(); }
+    if (n) { log(`🩹 ${n} mensagem(ns) nossas (campanha/cobrança) que estavam como "da aluna" voltaram para a SoFIA.`); agendarSalvarInbox(); }
   } catch (e: any) { log("aviso: correção de autoria das campanhas falhou: " + (e?.message || e)); }
 }
 
