@@ -1601,10 +1601,10 @@ function paginaMensagens(aviso, erro) {
       const ms = chaves.map(k => lista.find(m => m.chave === k)).filter(Boolean);
       ms.forEach(m => usados.add(m.chave));
       if (!ms.length) return '';
-      return `<details class="msg-bloco" id="blk-${id}" open><summary>${rot} <small>· ${ms.length} mensage${ms.length === 1 ? 'm' : 'ns'}${desc ? ' — ' + desc : ''}</small></summary>${ms.map(cardDe).join('\n')}</details>`;
+      return `<details class="msg-bloco" id="blk-${id}"><summary>${rot} <small>· ${ms.length} mensage${ms.length === 1 ? 'm' : 'ns'}${desc ? ' — ' + desc : ''}</small></summary>${ms.map(cardDe).join('\n')}</details>`;
     }).join('\n');
     const resto = lista.filter(m => !usados.has(m.chave));
-    return html + (resto.length ? `<details class="msg-bloco" id="blk-outras" open><summary>🗂️ Outras <small>· ${resto.length}</small></summary>${resto.map(cardDe).join('\n')}</details>` : '');
+    return html + (resto.length ? `<details class="msg-bloco" id="blk-outras"><summary>🗂️ Outras <small>· ${resto.length}</small></summary>${resto.map(cardDe).join('\n')}</details>` : '');
   };
   const itensIndividuais = emBlocos(indivOrdenado, [
     ['confirmacao', '📅 Confirmação de aula', 'lembrete antes da aula', ['confirmacao_hoje', 'confirmacao_amanha', 'confirmacao_experimental', 'confirmacao_experimental_express']],
@@ -1703,9 +1703,9 @@ function paginaMensagens(aviso, erro) {
   </div>
 ${scriptPreviewTeste()}
 <script>
-  (function(){ // blocos de mensagens: lembra aberto/fechado neste navegador
+  (function(){ // blocos de mensagens: começam FECHADOS; lembra o que foi aberto neste navegador
     [].slice.call(document.querySelectorAll('details.msg-bloco')).forEach(function(d){
-      var k='blk:'+d.id; try{ if(localStorage.getItem(k)==='0') d.open=false; }catch(e){}
+      var k='blk2:'+d.id; try{ if(localStorage.getItem(k)==='1') d.open=true; }catch(e){}
       d.addEventListener('toggle',function(){ try{ localStorage.setItem(k, d.open?'1':'0'); }catch(e){} });
     });
     // Link para um card (#msg-…) dentro de um bloco fechado: abre o bloco.
