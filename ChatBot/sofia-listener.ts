@@ -439,8 +439,8 @@ function agendarReconciliacaoLids() {
   if (reconAgendada) return; reconAgendada = true;
   setTimeout(() => { reconciliarLidsDormentes().catch(() => {}); }, 45000);            // uma vez, ~45s após conectar (Store já carregado)
   setInterval(() => { reconciliarLidsDormentes().catch(() => {}); }, 3 * 3600 * 1000); // de leve, a cada 3h — pega as que ainda escaparem
-  setTimeout(() => { try { reconciliar9Duplicados(); dedupMensagensInbox(); } catch {} }, 8000);              // funde dupes do 9º dígito + limpa mensagens duplicadas logo no boot (não depende do WhatsApp)
-  setInterval(() => { try { reconciliar9Duplicados(); dedupMensagensInbox(); } catch {} }, 3 * 3600 * 1000);  // e de leve, a cada 3h
+  setTimeout(() => { try { reconciliar9Duplicados(); dedupMensagensInbox(); corrigirAutoriaCampanhas(); } catch {} }, 8000);              // funde dupes do 9º dígito + limpa mensagens duplicadas logo no boot (não depende do WhatsApp)
+  setInterval(() => { try { reconciliar9Duplicados(); dedupMensagensInbox(); corrigirAutoriaCampanhas(); } catch {} }, 3 * 3600 * 1000);  // e de leve, a cada 3h
 }
 
 // Chave de inbox para uma mensagem que NÓS iniciamos (campanha): usa a identidade
@@ -1321,6 +1321,7 @@ async function importarHistorico(porChat: number) {
     }
     try { reconciliar9Duplicados(); } catch {} // segurança: funde qualquer par 9-com/sem que tenha entrado no import
     try { dedupMensagensInbox(); } catch {}
+    try { corrigirAutoriaCampanhas(); } catch {}
     salvarInbox();
     gravarImportStatus({ rodando: false, feitos, total: lista.length, novos, terminadoEm: Date.now() });
     log(`✅ histórico importado: ${feitos} conversas lidas, ${novos} com dados, em ${Math.round((Date.now() - t0) / 1000)} s (carregador: ${via || "nenhum"}; mensagens ${diagT.total}, nossas ${diagT.meus}, com fromMe ${diagT.idTrue}, nosso número ${diagT.temMe ? "ok" : "não achado"}).`);
@@ -1512,6 +1513,33 @@ function reconciliar9Duplicados() {
 // ao vivo a SoFIA grava 'sofia', mas o import grava a MESMA mensagem como 'humano'
 // num horário levemente diferente → apareciam duas bolhas iguais (SoFIA + Atendente).
 // Mantém UMA, preferindo a versão ao vivo ('sofia'/'aluna') à importada ('humano').
+// Mensagem NOSSA que entrou como "da aluna" (reimportar antigo): se o texto é o de
+// uma campanha da SoFIA (texto base ou variação), é da SoFIA. Compara o núcleo
+// (sem "📷 Imagem — "), com espaços normalizados; só textos de 25+ caracteres.
+function normCamp(t: string): string { return String(t || "").replace(RE_ROTULO, "").replace(/\s+/g, " ").trim(); }
+function textosDeCampanha(): Set<string> {
+  const set = new Set<string>();
+  try {
+    const o = JSON.parse(fs.readFileSync(path.join(DIR, "campanhas.json"), "utf8"));
+    const lista: any[] = Array.isArray(o) ? o : (o && typeof o === "object" ? Object.values(o) : []);
+    for (const c of lista) for (const t of [c && c.textoBase].concat((c && c.variacoes) || [])) { const n = normCamp(String(t || "")); if (n.length >= 25) set.add(n); }
+  } catch {}
+  return set;
+}
+function corrigirAutoriaCampanhas() {
+  try {
+    const set = textosDeCampanha();
+    if (!set.size) return;
+    let n = 0;
+    for (const [, c] of inbox) for (const m of (c && c.msgs) || []) {
+      if (m.autor !== "aluna") continue;
+      const k = normCamp(String(m.texto || ""));
+      if (k.length >= 25 && set.has(k)) { m.autor = "sofia"; delete m.imp; n++; }
+    }
+    if (n) { log(`🩹 ${n} mensagem(ns) de campanha que estavam como "da aluna" voltaram para a SoFIA.`); agendarSalvarInbox(); }
+  } catch (e: any) { log("aviso: correção de autoria das campanhas falhou: " + (e?.message || e)); }
+}
+
 function dedupMensagensInbox() {
   try {
     let removidas = 0;
@@ -1527,6 +1555,9 @@ function dedupMensagensInbox() {
           // Mesma mensagem com rótulos diferentes (ao vivo × reimportada): fica a
           // gravada ao vivo pela SoFIA, com o texto dela.
           if (m.autor === "sofia" && dup.autor !== "sofia" && String(dup.texto || "") !== txt) { dup.autor = "sofia"; dup.texto = txt; if (m.tipo) dup.tipo = m.tipo; delete dup.por; removidas++; continue; }
+          // Anexo reimportado ("📷 Imagem — …") que ficou como da aluna numa leitura
+          // antiga, e a leitura nova diz que é nosso: vale o nosso.
+          if (dup.autor === "aluna" && m.autor !== "aluna" && RE_ROTULO.test(txt) && /—|^\S+ (Imagem|Vídeo|Documento|Figurinha|Áudio|Localização|Contato)$/.test(txt)) { dup.autor = m.autor; delete dup.imp; if (m.por) dup.por = m.por; else delete dup.por; if (m.tipo) dup.tipo = m.tipo; removidas++; continue; }
           // Se a mantida era a importada ('humano') e esta é ao vivo, promove o autor.
           if (dup.autor === "humano" && m.autor !== "humano") { dup.autor = m.autor; if (m.tipo) dup.tipo = m.tipo; }
           removidas++;
