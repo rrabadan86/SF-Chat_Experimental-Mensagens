@@ -24,16 +24,25 @@ function salvarMapa(m) {
   fs.writeFileSync(ARQUIVO, JSON.stringify(m, null, 2), 'utf8');
 }
 
-// LIGADO por padrão: só está desligado se gravado explicitamente como false.
+// Envios que começam DESLIGADOS (mexem em algo que não tem volta, como tirar
+// alguém de grupo): só rodam depois de ligados no painel em cada unidade.
+const DESLIGADOS_PADRAO = new Set(['saidaGrupos']);
+
+// LIGADO por padrão: só está desligado se gravado explicitamente como false
+// (os de DESLIGADOS_PADRAO, ao contrário, só ligam se gravados como true).
 function ativo(chave) {
   const m = carregar();
-  return m[String(chave)] !== false;
+  const k = String(chave);
+  if (DESLIGADOS_PADRAO.has(k)) return m[k] === true;
+  return m[k] !== false;
 }
 
 // Liga/desliga uma chave. on=true remove a entrada (volta ao padrão ligado).
 function setAtivo(chave, on) {
   const m = carregar();
-  if (on) delete m[String(chave)]; else m[String(chave)] = false;
+  const k = String(chave);
+  if (DESLIGADOS_PADRAO.has(k)) { if (on) m[k] = true; else delete m[k]; }
+  else if (on) delete m[k]; else m[k] = false;
   salvarMapa(m);
   return ativo(chave);
 }
