@@ -186,6 +186,17 @@ function remover(telefone) {
   return true;
 }
 
+// Exclui VÁRIOS contatos de uma vez (lista de telefones). Devolve quantos saíram.
+function removerLote(tels) {
+  const set = new Set((Array.isArray(tels) ? tels : []).map(t => normTel(t)).filter(Boolean));
+  if (!set.size) return 0;
+  const map = carregar();
+  let n = 0;
+  for (const k of Object.keys(map)) if (set.has(k) || set.has(normTel((map[k] || {}).tel))) { delete map[k]; n++; }
+  if (n) salvar(map);
+  return n;
+}
+
 // Edita nome/telefone/tags de um contato. Se o telefone mudar, muda a chave
 // (se o novo número já existir, funde as tags no existente e remove o antigo).
 function editarContato(telOrig, { nome, telefone, tags }) {
@@ -477,7 +488,7 @@ function adicionar({ nome, telefone, tags, instrucoes }) {
 
 module.exports = {
   normTel, variantes9, acharPorTel, carregar, importarCSV, exportarCSV, setTags, listar, tagsDistintas, totalContatos,
-  remover, editarContato, renomearTag, excluirTag, existe, adicionar, ARQUIVO,
+  remover, removerLote, editarContato, renomearTag, excluirTag, existe, adicionar, ARQUIVO,
   tagConfig, definirTagConfig, tagsPorGatilho, criarTag, adicionarTag, removerTag, lerTagsConfig, GATILHOS,
   aplicarTagLote, contarFiltrados,
 };

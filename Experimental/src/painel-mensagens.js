@@ -437,7 +437,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/importar' || url === '/sofia/importar/status') return has('sofia_conversas') || has('sofia_config');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
   if (url === '/sofia/contatos/bloquear') return has('sofia_conversas') || has('sofia_contatos'); // bloquear vem tb do chat (Conversas)
-  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
+  if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/excluir-lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/comparecimento') return has('sofia_contatos') || has('sofia_config'); // agora mora na aba Tags
   if (url === '/sofia/auto-tag-alunas') return has('sofia_contatos') || has('sofia_config'); // auto-tag Aluna/Ex-aluna (aba Tags)
@@ -3905,6 +3905,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     ${r.itens.length ? `<div id="ctSelBar" style="display:none;align-items:center;gap:10px;margin:2px 2px 8px;padding:8px 14px;background:#e7f0ef;border:1px solid #cbe3e2;border-radius:10px;font-weight:700;color:#0e6e6b;font-size:.86rem">
       <span>✅ <span id="ctSelNum">0</span> selecionado(s)</span>
       <button type="button" class="reset" style="padding:3px 10px;font-size:.78rem;margin-left:auto" onclick="limparSelecao()">Limpar seleção</button>
+      <button type="button" id="ctExcLote" onclick="excluirSelecionados()" style="padding:3px 10px;font-size:.78rem;border:1px solid #e3b4b4;background:#fbeeee;color:#a12626;border-radius:8px;font-weight:700;cursor:pointer">🗑️ Excluir selecionados</button>
     </div>` : ''}
 
     ${r.itens.length ? `<div class="ct-wrap">
@@ -4256,6 +4257,20 @@ function paginaSofiaContatos(aviso, erro, params) {
     document.getElementById('ctResModal').style.display='flex';
   }
   function fecharResumo(){ document.getElementById('ctResModal').style.display='none'; }
+  // Exclusão em LOTE: só os marcados. Muitos de uma vez (20+) pede para digitar
+  // a quantidade — evita apagar a base inteira num clique errado.
+  function excluirSelecionados(){
+    var sel=contatosMarcados(); if(!sel.length){ alert('Marque os contatos que quer excluir.'); return; }
+    var n=sel.length;
+    if(!confirm('Excluir '+n+' contato(s) de vez?\\n\\nSaem da lista de Contatos (tags e instruções junto). As conversas da SoFIA não são apagadas. Não dá para desfazer — se quiser, use antes o "Exportar CSV" para guardar uma cópia.')) return;
+    if(n>=20){ var dig=prompt('Para confirmar, digite a quantidade de contatos que serão excluídos ('+n+'):'); if(dig===null) return; if(String(dig).trim()!==String(n)){ alert('Número diferente de '+n+' — nada foi excluído.'); return; } }
+    var b=document.getElementById('ctExcLote'); if(b){ b.disabled=true; b.textContent='Excluindo…'; }
+    fetch('/sofia/contatos/excluir-lote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tels:sel})})
+      .then(function(r){return r.json();}).then(function(j){
+        if(j && j.ok){ alert('✅ '+j.excluidos+' contato(s) excluído(s).'); location.reload(); }
+        else { if(b){ b.disabled=false; b.textContent='🗑️ Excluir selecionados'; } alert('❌ '+((j&&j.erro)||'não consegui excluir')); }
+      }).catch(function(){ if(b){ b.disabled=false; b.textContent='🗑️ Excluir selecionados'; } alert('❌ erro de rede'); });
+  }
   function excluirContato(tel){
     if(!confirm('Excluir este contato de vez?')) return;
     fetch('/sofia/contatos/salvar',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'acao=excluir&telOrig='+encodeURIComponent(tel)})
@@ -9938,6 +9953,20 @@ const server = http.createServer((req, res) => {
         else contatos.editarContato(p.get('telOrig'), { nome: p.get('nome'), telefone: p.get('telefone'), tags: p.get('tags') || '' });
       } catch (_) {}
       voltarContatos(p, res);
+    });
+  }
+  // Excluir vários contatos de uma vez (os marcados na lista).
+  if (req.method === 'POST' && url === '/sofia/contatos/excluir-lote') {
+    return lerCorpo(req, 2e6, corpo => {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
+      const tels = Array.isArray(d.tels) ? d.tels.map(t => String(t || '').trim()).filter(Boolean) : [];
+      if (!tels.length) return res.end(JSON.stringify({ ok: false, erro: 'nenhum contato marcado' }));
+      try {
+        const n = contatos.removerLote(tels);
+        try { auditoria.registrar(sess.usuario, 'contato.excluir-lote', n + ' contato(s)', tels.slice(0, 50).join(',') + (tels.length > 50 ? ',…' : '')); } catch (_) {}
+        return res.end(JSON.stringify({ ok: true, excluidos: n }));
+      } catch (e) { return res.end(JSON.stringify({ ok: false, erro: e.message })); }
     });
   }
   // Bloquear / desbloquear um contato (a Sofia ignora quem está bloqueado).
