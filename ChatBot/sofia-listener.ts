@@ -911,6 +911,19 @@ function textoDoAnexo(tipo: string | undefined, texto: string): string {
   const leg = pareceBase64(t) ? "" : t;
   return leg ? `${rot} — ${leg}` : rot;
 }
+// Mesma mensagem com rótulos diferentes? Ao vivo a SoFIA grava "📷 legenda"; o
+// reimportar grava "📷 Imagem — legenda"; um áudio transcrito ao vivo vira
+// "🎤 transcrição" e no reimportar "🎤 Áudio". Compara o NÚCLEO (sem o rótulo).
+const RE_ROTULO = /^(📷|🎬|📎|💟|🎤|📍|👤)\s*(?:(?:Imagem|Vídeo|Documento|Figurinha|Áudio|Localização|Contato|Anexo)(?=\s|$))?\s*(?:—\s*)?/u;
+function mesmaMensagem(a: string, b: string): boolean {
+  const t1 = String(a || ""), t2 = String(b || "");
+  if (t1 === t2) return true;
+  const m1 = t1.match(RE_ROTULO), m2 = t2.match(RE_ROTULO);
+  if (!m1 || !m2 || m1[1] !== m2[1]) return false;          // só anexos do mesmo tipo
+  const n1 = t1.slice(m1[0].length).trim(), n2 = t2.slice(m2[0].length).trim();
+  if (!n1 || !n2) return true;                               // um deles é só o rótulo ("🎤 Áudio")
+  return n1 === n2;
+}
 // Lê as conversas cruas do WhatsApp Web em DUAS etapas, para o histórico vir
 // completo em TODAS as conversas (antes um teto único de ~2 min era gasto nas
 // primeiras e o resto ficava só com a última mensagem):
@@ -969,9 +982,7 @@ const WA_LISTAR = "(async function(CORTE){\n" + WA_BASE
 const WA_LOTE = "(async function(P){\n" + WA_BASE
   + "  if(!Chat) return { erro:'Nao achei a colecao de conversas (Chat).' };\n"
   + "  var LIM=P.lim, CORTE=P.corte||0, fimBudget=Date.now()+P.budget;\n"
-  + "  function nModels(c){ try { return (c && c.msgs && c.msgs.getModelsArray) ? c.msgs.getModelsArray().length : ((c&&c.msgs&&c.msgs._models&&c.msgs._models.length)||0); } catch(e){ return 0; } }\n"
   + "  function models(c){ try { return (c.msgs && c.msgs.getModelsArray) ? c.msgs.getModelsArray() : ((c.msgs&&c.msgs._models)||[]); } catch(e){ return []; } }\n"
-  + "  function maisAntiga(c){ var a=models(c); return a.length ? ((a[0].t||a[0].timestamp)||0) : 0; }\n"
   // A função que carrega mensagens antigas é de MÓDULO (loadEarlierMsgs(chat)).
   + "  function getLoader(){\n"
   + "    var mods=['WAWebChatLoadMessages','WAWebLoadEarlierMsgsAction','WAWebMsgLoad','WAWebChatLoadUtils'];\n"
@@ -980,16 +991,40 @@ const WA_LOTE = "(async function(P){\n" + WA_BASE
   + "    return null;\n"
   + "  }\n"
   + "  var loader = getLoader();\n"
-  + "  async function carregarAntigas(c){\n"
-  + "    var chamar = loader ? function(){ return loader.fn(c); } : (typeof (c&&c.loadEarlierMsgs)==='function' ? function(){ return c.loadEarlierMsgs(); } : null);\n"
-  + "    if (!chamar) return;\n"
-  + "    for (var p=0;p<10;p++){\n"
-  + "      if (Date.now() >= fimBudget) break;\n"
-  + "      if (nModels(c) >= LIM) break;\n"
-  + "      var ant = maisAntiga(c); if (CORTE && ant && ant < CORTE) break;\n" // já passou do período guardado
-  + "      var loaded; try { loaded = await chamar(); } catch(e){ break; }\n"
-  + "      if (!loaded || !loaded.length) break;\n" // lista vazia = acabou o histórico local
+  // Versão atual do WhatsApp Web: loadEarlierMsgs({ chat }) DEVOLVE as mensagens
+  // antigas (não necessariamente as põe em chat.msgs) — igual à whatsapp-web.js.
+  // Versões antigas recebiam o chat direto. Descobre o jeito na 1ª chamada.
+  + "  var modo = null;\n"
+  + "  async function chamar(c){\n"
+  + "    if (loader){\n"
+  + "      if (modo === 'obj') return await loader.fn({ chat: c });\n"
+  + "      if (modo === 'pos') return await loader.fn(c);\n"
+  + "      var r1 = null; try { r1 = await loader.fn({ chat: c }); } catch(e){ r1 = null; }\n"
+  + "      if (r1 && r1.length){ modo='obj'; return r1; }\n"
+  + "      var r2 = null; try { r2 = await loader.fn(c); } catch(e){ r2 = null; }\n"
+  + "      if (r2 && r2.length){ modo='pos'; return r2; }\n"
+  + "      return r1 || r2;\n"
   + "    }\n"
+  + "    if (typeof (c&&c.loadEarlierMsgs)==='function') return await c.loadEarlierMsgs();\n"
+  + "    return null;\n"
+  + "  }\n"
+  + "  function tDe(m){ return (m&&(m.t||m.timestamp))||0; }\n"
+  + "  function chaveMsg(m){ try { return (m.id && (m.id._serialized || m.id.id)) || ''; } catch(e){ return ''; } }\n"
+  + "  async function carregarAntigas(c){\n"
+  + "    var acc = models(c).slice();\n"
+  + "    for (var p=0;p<15;p++){\n"
+  + "      if (Date.now() >= fimBudget) break;\n"
+  + "      if (acc.length >= LIM) break;\n"
+  + "      var ant = acc.length ? tDe(acc[0]) : 0; if (CORTE && ant && ant < CORTE) break;\n" // já passou do período guardado
+  + "      var loaded; try { loaded = await chamar(c); } catch(e){ break; }\n"
+  + "      if (!loaded || !loaded.length) break;\n" // lista vazia = acabou o histórico
+  + "      acc = Array.prototype.slice.call(loaded).concat(acc);\n"
+  + "    }\n"
+  + "    var visto={}, unicas=[];\n"
+  + "    acc = acc.concat(models(c));\n" // o que a página tiver posto em chat.msgs também conta
+  + "    for (var q=0;q<acc.length;q++){ var m=acc[q]; if(!m || m.isNotification) continue; var k=chaveMsg(m); if(k){ if(visto[k]) continue; visto[k]=1; } unicas.push(m); }\n"
+  + "    unicas.sort(function(a,b){ return tDe(a)-tDe(b); });\n"
+  + "    return unicas;\n"
   + "  }\n"
   + "  var mapa={}; var arr=Chat.getModelsArray(); for (var k=0;k<arr.length;k++){ var s=serial(arr[k]); if(s) mapa[s]=arr[k]; }\n"
   + "  var out=[], feitos=0;\n"
@@ -997,11 +1032,11 @@ const WA_LOTE = "(async function(P){\n" + WA_BASE
   + "    if (i>0 && Date.now() >= fimBudget) break;\n" // teto do lote: devolve até aqui, o próximo lote continua
   + "    feitos++;\n"
   + "    var c = mapa[P.jids[i]]; if(!c){ out.push({ jid:P.jids[i], msgs:[] }); continue; }\n"
-  + "    try { await carregarAntigas(c); } catch(e){}\n"
-  + "    var ms = models(c).slice(-LIM).map(function(m){ var tp=(m&&m.type)||'chat'; var txt=(tp==='chat'||tp==='text') ? ((m&&m.body)||'') : ((m&&m.caption)||''); var mid=String((m&&m.id&&m.id.id)||''); return { fromMe: !!(m&&m.id&&m.id.fromMe), body: txt||'', tipo: tp, t: (m&&(m.t||m.timestamp))||0, web: /^3EB0/i.test(mid) }; });\n"
+  + "    var todas = []; try { todas = await carregarAntigas(c); } catch(e){ todas = models(c); }\n"
+  + "    var ms = todas.slice(-LIM).map(function(m){ var tp=(m&&m.type)||'chat'; var txt=(tp==='chat'||tp==='text') ? ((m&&m.body)||'') : ((m&&m.caption)||''); var mid=String((m&&m.id&&m.id.id)||''); return { fromMe: !!(m&&m.id&&m.id.fromMe), body: txt||'', tipo: tp, t: (m&&(m.t||m.timestamp))||0, web: /^3EB0/i.test(mid) }; });\n"
   + "    out.push({ jid: P.jids[i], msgs: ms });\n"
   + "  }\n"
-  + "  return { chats: out, feitos: feitos, loaderVia: (loader?loader.via:'') };\n"
+  + "  return { chats: out, feitos: feitos, loaderVia: (loader?loader.via:'') + (modo?' ('+modo+')':'') };\n"
   + "})";
 
 type RawItem = { jid: string; id: string; name: string; t: number };
@@ -1238,7 +1273,7 @@ function mesclarImportado(chat: RawChat, telCru: string, lim: number, janelasPor
       if (anexoVelho) { if (texto !== "📎 Anexo") anexoVelho.texto = texto; continue; }
       // Dedup robusto: NÃO reimporta uma mensagem que já existe (mesmo texto num
       // horário próximo), INDEPENDENTE do autor (ao vivo grava segundo, o import, ms).
-      const igual = acc.find((x) => String(x.texto || "") === texto && Math.abs((x.em || 0) - em) < 15000);
+      const igual = acc.find((x) => mesmaMensagem(String(x.texto || ""), texto) && Math.abs((x.em || 0) - em) < 15000);
       if (igual) {
         // Importada antes como "Atendente" genérico (sem quem/como): corrige o autor.
         if (m.fromMe && igual.autor === "humano" && !igual.por && !igual.tipo) { igual.autor = quem.autor; if (quem.por) igual.por = quem.por; if (quem.tipo) igual.tipo = quem.tipo; }
@@ -1405,8 +1440,11 @@ function dedupMensagensInbox() {
       for (const m of c.msgs) {
         const txt = String(m.texto || "");
         const em = m.em || 0;
-        const dup = mantidas.find((x) => String(x.texto || "") === txt && Math.abs((x.em || 0) - em) < 15000);
+        const dup = mantidas.find((x) => mesmaMensagem(String(x.texto || ""), txt) && Math.abs((x.em || 0) - em) < 15000);
         if (dup) {
+          // Mesma mensagem com rótulos diferentes (ao vivo × reimportada): fica a
+          // gravada ao vivo pela SoFIA, com o texto dela.
+          if (m.autor === "sofia" && dup.autor !== "sofia" && String(dup.texto || "") !== txt) { dup.autor = "sofia"; dup.texto = txt; if (m.tipo) dup.tipo = m.tipo; delete dup.por; removidas++; continue; }
           // Se a mantida era a importada ('humano') e esta é ao vivo, promove o autor.
           if (dup.autor === "humano" && m.autor !== "humano") { dup.autor = m.autor; if (m.tipo) dup.tipo = m.tipo; }
           removidas++;
