@@ -2226,10 +2226,19 @@ async function processarFollowups() {
       try {
         // Contexto: as últimas mensagens dessa conversa no inbox.
         const c = inbox.get(tel);
-        const linhasConv = c ? c.msgs.slice(-14).map((m) => ({ autor: m.autor, texto: m.texto })) : [];
+        const linhasConv = c ? c.msgs.slice(-14).map((m) => ({ autor: m.autor, texto: m.texto, tipo: m.tipo })) : [];
         const nomeLead = c ? c.nome || "" : "";
         const msg = (await gerarFollowup(linhasConv, String(ent?.instrucao || ""), { nome: nomeLead })).trim();
         if (!msg) { log(`follow-up de ${tel}: IA não gerou mensagem — pulado.`); return; }
+        // A IA leu a conversa e viu que a lead encerrou (recusou, adiou, se despediu…):
+        // não manda nada. Fica registrado no Log (aba WhatsApp → Log) com o motivo.
+        const pular = /^[\s*_]*PULAR\b\s*:?\s*([\s\S]*)$/i.exec(msg);
+        if (pular) {
+          const motivo = String(pular[1] || "").replace(/^[\s*_:–-]+/, "").replace(/\s+/g, " ").trim().slice(0, 140) || "a conversa foi encerrada pela lead";
+          log(`follow-up de ${tel} pulado — a SoFIA leu a conversa: ${motivo}`);
+          try { registrarAtividadeSofia("Follow-up (não enviado)", tel, "Não enviado — " + motivo, true, "", { pulado: true }); } catch {}
+          return;
+        }
         const alvo = await resolverIdEnvio(tel);
         registrarNaMemoria(tel, "sofia", msg);
         registrarInbox(tel, alvo, "", "sofia", msg, undefined, undefined, "followup");

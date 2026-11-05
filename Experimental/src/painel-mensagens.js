@@ -2461,7 +2461,7 @@ function paginaHoje(dia) {
   };
   const refeitos = lerRefeitos();
   const lista = evs.map(e => {
-    const ic = e.ok ? '✅' : '⚠️';
+    const ic = e.pulado ? '⏭️' : (e.ok ? '✅' : '⚠️'); // ⏭️ = a SoFIA decidiu não enviar (ex.: follow-up de quem encerrou)
     const who = e.grupo ? esc(e.destino || 'grupo') : esc(fmtTel(e.destino));
     const pvText = e.preview || (e.midia ? '📎 mídia' : '');
     // Se guardamos a mensagem inteira e ela é maior que a prévia, mostra "+ ver tudo".

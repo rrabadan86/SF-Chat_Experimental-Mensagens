@@ -1203,12 +1203,12 @@ export async function classificarIntencaoTags(
 // com base nas últimas mensagens da conversa + uma instrução do Studio. Curta,
 // calorosa e no tom da SoFIA. Retorna "" se não conseguir (o chamador não envia).
 export async function gerarFollowup(
-  linhas: { autor: string; texto: string }[],
+  linhas: { autor: string; texto: string; tipo?: string }[],
   instrucao: string,
   opts?: { nome?: string },
 ): Promise<string> {
   const texto = (linhas || [])
-    .map((l) => `${l.autor === "aluna" ? "Aluna" : l.autor === "humano" ? "Atendente" : "SoFIA"}: ${l.texto}`)
+    .map((l) => `${l.autor === "aluna" ? "Aluna" : l.autor === "humano" ? "Atendente" : "SoFIA"}${l.tipo === "followup" ? " (retomada automática)" : ""}: ${l.texto}`)
     .join("\n")
     .slice(0, 6000);
   const instr = (instrucao || "").trim() ||
@@ -1244,7 +1244,17 @@ export async function gerarFollowup(
           "preferência'. No máximo 1 emoji e no máximo 1 ponto de exclamação. Use o contexto da " +
           "conversa abaixo para ser específica quando fizer sentido. Não invente informações, não " +
           "repita algo que você já disse igual, não seja insistente. Português do Brasil. Responda " +
-          "APENAS com o texto da mensagem, sem aspas, sem explicação.\n\nOrientação do Studio: " + instr,
+          "APENAS com o texto da mensagem, sem aspas, sem explicação.\n\n" +
+          // A retomada só vale se a conversa ficou EM ABERTO. Se a própria lead
+          // encerrou, mandar outra mensagem soa insistente — então a IA desiste.
+          "ANTES DE ESCREVER, decida se vale a pena retomar. NÃO escreva a retomada quando a LEAD " +
+          "encerrou a conversa: recusou ou disse que não tem interesse; adiou sem data (ex.: 'quem sabe " +
+          "no futuro', 'agora não', 'mais pra frente', 'vou pensar e te falo'); agradeceu e se despediu; " +
+          "ou já agendou / disse que vai até o Studio. Também não retome se ela respondeu a uma retomada " +
+          "automática anterior encerrando. Nesses casos responda EXATAMENTE: PULAR: <motivo em poucas " +
+          "palavras>. Se ela apenas parou de responder com algo em aberto (uma dúvida, um horário, um " +
+          "convite sem resposta), escreva a retomada normalmente — mesmo que a sua última mensagem tenha " +
+          "sido cordial.\n\nOrientação do Studio: " + instr,
         messages: [{ role: "user", content: `Conversa até aqui:\n\n${texto || "(sem histórico registrado)"}\n\nEscreva a mensagem de retomada:` }],
       }),
     );
