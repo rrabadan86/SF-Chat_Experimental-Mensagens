@@ -443,7 +443,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/auto-tag-alunas') return has('sofia_contatos') || has('sofia_config'); // auto-tag Aluna/Ex-aluna (aba Tags)
   if (url === '/sofia/midia-upload' || url === '/sofia/midia') return has('sofia_config'); // upload/preview das imagens (preços/grade)
   if (url === '/sofia/msgs-anuncio') return has('sofia_config'); // boas-vindas do anúncio que não pausam a SoFIA
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/parear' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/prompt/download') return has('sofia_config');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/parear' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/prompt/download' || url === '/sofia/prompt/previa' || url === '/sofia/prompt/importar') return has('sofia_config');
   return false;
 }
 // WhatsApp é dividido em sub-abas: Configuração, Agendamento, Express e Log.
@@ -5372,7 +5372,10 @@ function paginaSofia(aviso, erro) {
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 0">
             <button type="button" class="reset" onclick="adicionarSecao()">➕ Nova seção</button>
             <button type="button" class="reset" title="Salva um .txt com o roteiro que está valendo agora — bom fazer antes de mexer" onclick="location.href='/sofia/prompt/download'">⬇️ Baixar prompt atual</button>
+            <button type="button" class="reset" title="Troca o prompt inteiro por um .txt (mostra antes o que muda)" onclick="document.getElementById('impFile').click()">⬆️ Importar prompt</button>
+            <input type="file" id="impFile" accept=".txt,text/plain" style="display:none" onchange="impLer(this)">
           </div>
+          <div id="impBox" style="display:none;margin-top:10px;border:1px solid var(--linha);border-radius:12px;padding:12px 14px;background:var(--card)"></div>
         </div>
       </details>
 
@@ -5575,6 +5578,39 @@ function paginaSofia(aviso, erro) {
   function removerSecao(btn){
     if(!confirm('Remover esta seção inteira? (título e conteúdo)')) return;
     var card = btn.closest('.sec-card'); if(card && card.parentNode) card.parentNode.removeChild(card);
+  }
+  // Importar prompt: lê o .txt, mostra o que muda e só grava depois de confirmar.
+  var impTexto='';
+  function impEsc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+  function impFechar(){ document.getElementById('impBox').style.display='none'; impTexto=''; }
+  function impLer(inp){
+    var f=inp.files[0], box=document.getElementById('impBox'); if(!f) return;
+    var r=new FileReader();
+    r.onload=function(){
+      impTexto=String(r.result||''); inp.value='';
+      box.style.display='block'; box.innerHTML='⏳ Lendo o arquivo…';
+      fetch('/sofia/prompt/previa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({texto:impTexto})}).then(function(x){return x.json();}).then(function(d){
+        if(!d.ok){ box.innerHTML='⚠️ '+impEsc(d.erro||'não consegui ler o arquivo'); return; }
+        if(d.valido){ box.innerHTML='<b>'+impEsc(f.name)+'</b><div style="color:#a12626;margin-top:6px">⚠️ '+impEsc(d.valido)+'</div><div style="margin-top:10px"><button type="button" class="reset" onclick="impFechar()">Fechar</button></div>'; return; }
+        var cont={alterada:0,nova:0,removida:0,igual:0}; d.secoes.forEach(function(s){ cont[s.status]++; });
+        var rot={alterada:['✏️ muda','#8a6300'],nova:['➕ nova','#1c8f52'],removida:['🗑️ sai','#a12626']};
+        var linhas=d.secoes.filter(function(s){ return s.status!=='igual'; }).map(function(s){ return '<div style="padding:5px 0;border-top:1px solid var(--linha-soft)"><b style="color:'+rot[s.status][1]+'">'+rot[s.status][0]+'</b> · '+impEsc(s.titulo)+'</div>'; }).join('');
+        box.innerHTML='<b>'+impEsc(f.name)+'</b> — '+d.total+' seções: '+cont.alterada+' mudam, '+cont.nova+' novas, '+cont.removida+' saem, '+cont.igual+' iguais.'
+          +(d.valido?'<div style="color:#a12626;margin-top:8px">⚠️ '+impEsc(d.valido)+'</div>':'')
+          +(linhas?'<div style="margin-top:8px;font-size:.88rem">'+linhas+'</div>':'<div style="margin-top:8px">Nada muda — o arquivo é igual ao prompt atual.</div>')
+          +'<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+((d.valido||!linhas)?'':'<button type="button" class="save" onclick="impConfirmar(this)">Importar e salvar</button>')+'<button type="button" class="reset" onclick="impFechar()">Cancelar</button></div>'
+          +'<div class="quando" style="margin-top:8px">O prompt atual fica guardado: dá para voltar com “Restaurar anterior”. O que você mudou nesta tela e ainda não salvou será descartado.</div>';
+      }).catch(function(){ box.innerHTML='❌ erro de rede — tente de novo.'; });
+    };
+    r.readAsText(f,'utf-8');
+  }
+  function impConfirmar(b){
+    var box=document.getElementById('impBox'); b.disabled=true;
+    fetch('/sofia/prompt/importar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({texto:impTexto})}).then(function(x){return x.json();}).then(function(d){
+      if(!d.ok){ b.disabled=false; box.insertAdjacentHTML('beforeend','<div style="color:#a12626;margin-top:6px">⚠️ '+impEsc(d.erro||'não consegui importar')+'</div>'); return; }
+      box.innerHTML='✅ Prompt importado ('+d.secoes+' seções) — vale na próxima mensagem. Recarregando…';
+      window.onbeforeunload=null; setTimeout(function(){ location.reload(); },900);
+    }).catch(function(){ b.disabled=false; });
   }
   function adicionarSecao(){
     var wrap = document.getElementById('secoes'); if(!wrap) return;
@@ -10377,6 +10413,19 @@ const server = http.createServer((req, res) => {
     });
   }
   // Lista "não responder": números que a SoFIA nunca responde sozinha (mas recebe e pode receber campanha).
+  // Importar prompt (.txt inteiro): prévia (o que muda) e gravação.
+  if (req.method === 'POST' && (url === '/sofia/prompt/previa' || url === '/sofia/prompt/importar')) {
+    return lerCorpo(req, 3e6, corpo => {
+      const resp = (o, st = 200) => { res.writeHead(st, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(o)); };
+      try {
+        const texto = String(JSON.parse(corpo || '{}').texto || '');
+        if (url === '/sofia/prompt/previa') return resp({ ok: true, ...sofia.previaImportacao(texto) });
+        const n = sofia.importarPrompt(texto);
+        try { auditoria.registrar(sess.usuario, 'sofia.prompt-importar', String(n) + ' seções', 'importou o prompt'); } catch (_) {}
+        return resp({ ok: true, secoes: n });
+      } catch (e) { return resp({ ok: false, erro: e.message }, 400); }
+    });
+  }
   // Baixa o prompt ATUAL (o arquivo que a SoFIA usa) como .txt — backup rápido.
   if (req.method === 'GET' && url === '/sofia/prompt/download') {
     try {
