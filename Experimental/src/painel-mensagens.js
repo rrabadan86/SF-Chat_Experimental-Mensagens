@@ -730,6 +730,16 @@ const ESTILO = `
   .acc-sec[open]>summary::after{content:"▾"}
   .acc-sec[open]>*:not(summary){margin:12px}
   .acc-sec[open]>.card{background:var(--bg);box-shadow:none}
+  /* Blocos de mensagens dentro de uma seção (WhatsApp → Configuração): agrupa por
+     assunto (Confirmação, Contratos, Follow-up…), cada um recolhível. */
+  .msg-bloco>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 13px;border:1px solid var(--linha);border-radius:10px;background:var(--card);font-weight:800;font-size:.9rem;color:var(--teal-esc)}
+  .msg-bloco>summary::-webkit-details-marker{display:none}
+  .msg-bloco>summary::after{content:"▸";margin-left:auto;color:var(--teal);font-weight:900}
+  .msg-bloco[open]>summary::after{content:"▾"}
+  .msg-bloco>summary:hover{border-color:var(--teal)}
+  .msg-bloco>summary small{font-weight:600;color:var(--cinza);font-size:.76rem}
+  .msg-bloco[open]>summary{margin-bottom:10px}
+  .msg-bloco>.card{background:var(--card)}
   .vazio{color:var(--cinza);font-size:var(--fs-sm)}
   .wabar{border-radius:12px;padding:10px 14px;margin:14px 0 0;font-weight:600;font-size:var(--fs-sm);display:flex;align-items:center;gap:8px}
   .wabar.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
@@ -1583,8 +1593,30 @@ function paginaMensagens(aviso, erro) {
     ...indiv.filter(m => m.chave === 'aniversario_ex'),
     ...indiv.filter(m => m.chave !== 'aniversario_ex'),
   ];
-  const itensIndividuais = indivOrdenado.map(cardDe).join('\n');
-  const itensGrupo = listaMsgs.filter(m => MSGS_GRUPO.has(m.chave)).map(cardDe).join('\n');
+  // Agrupa os cards por ASSUNTO, em blocos recolhíveis. O que não estiver em
+  // nenhum bloco (mensagem nova) cai em "Outras", para nunca sumir da tela.
+  const emBlocos = (lista, defs) => {
+    const usados = new Set();
+    const html = defs.map(([id, rot, desc, chaves]) => {
+      const ms = chaves.map(k => lista.find(m => m.chave === k)).filter(Boolean);
+      ms.forEach(m => usados.add(m.chave));
+      if (!ms.length) return '';
+      return `<details class="msg-bloco" id="blk-${id}" open><summary>${rot} <small>· ${ms.length} mensage${ms.length === 1 ? 'm' : 'ns'}${desc ? ' — ' + desc : ''}</small></summary>${ms.map(cardDe).join('\n')}</details>`;
+    }).join('\n');
+    const resto = lista.filter(m => !usados.has(m.chave));
+    return html + (resto.length ? `<details class="msg-bloco" id="blk-outras" open><summary>🗂️ Outras <small>· ${resto.length}</small></summary>${resto.map(cardDe).join('\n')}</details>` : '');
+  };
+  const itensIndividuais = emBlocos(indivOrdenado, [
+    ['confirmacao', '📅 Confirmação de aula', 'lembrete antes da aula', ['confirmacao_hoje', 'confirmacao_amanha', 'confirmacao_experimental', 'confirmacao_experimental_express']],
+    ['contratos', '📄 Contratos e renovação', 'vencimento, renovação e saída', ['renovacao', 'vence_hoje', 'saida_grupos']],
+    ['followup', '🔁 Follow-up e remarcação', 'depois da aula experimental', ['followup', 'followup_aluna', 'no_show']],
+    ['aniv-ind', '🎂 Aniversário', '', ['aniversario_ex']],
+  ]);
+  const itensGrupo = emBlocos(listaMsgs.filter(m => MSGS_GRUPO.has(m.chave)), [
+    ['relatorios', '📊 Relatórios para a equipe', 'no grupo da Equipe', ['ausentes', 'aniversariantes_mes', 'renovacoes_mes']],
+    ['aniv-grp', '🎂 Aniversário', 'nos grupos das turmas', ['aniversario']],
+    ['circuito', '🏃 Circuito', '', ['circuito_convocacao', 'circuito_lembrete']],
+  ]);
 
   // Seção final: jobs sem texto editável (só horário).
   const outros = OUTROS_JOBS.map(chave => hmap[chave]).filter(Boolean).map(j => {
@@ -1671,6 +1703,15 @@ function paginaMensagens(aviso, erro) {
   </div>
 ${scriptPreviewTeste()}
 <script>
+  (function(){ // blocos de mensagens: lembra aberto/fechado neste navegador
+    [].slice.call(document.querySelectorAll('details.msg-bloco')).forEach(function(d){
+      var k='blk:'+d.id; try{ if(localStorage.getItem(k)==='0') d.open=false; }catch(e){}
+      d.addEventListener('toggle',function(){ try{ localStorage.setItem(k, d.open?'1':'0'); }catch(e){} });
+    });
+    // Link para um card (#msg-…) dentro de um bloco fechado: abre o bloco.
+    function abrirAlvo(){ try{ var h=location.hash; if(!h) return; var t=document.querySelector(h); var b=t&&t.closest&&t.closest('details.msg-bloco'); if(b) b.open=true; }catch(e){} }
+    abrirAlvo(); window.addEventListener('hashchange', abrirAlvo);
+  })();
   function renderWa(st){
     var e = st && st.estado;
     if(st && st.pairingCode) return '<div class="wa-card warn"><div class="wa-ic">🔢</div><h2>Conectando por código</h2><p>Veja o <b>código</b> no quadro "Conectar por código" abaixo e digite no celular do chip.</p></div>';
