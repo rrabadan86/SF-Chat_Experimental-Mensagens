@@ -3749,13 +3749,25 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   function reimportarHistorico(){
     var b=document.getElementById('btnReimport'); if(!b) return;
     if(b.dataset.busy==='1') return;
-    if(!confirm('Reimportar o histórico do WhatsApp para o painel?\\n\\nRelê as últimas mensagens de cada conversa e repovoa a lista (recupera trechos perdidos). Pode levar 1–2 min e é pesado — faça num momento calmo.')) return;
-    var txt=b.textContent; b.dataset.busy='1'; b.disabled=true; b.textContent='↻ Reimportando…';
+    if(!confirm('Reimportar o histórico do WhatsApp para o painel?\\n\\nRelê as mensagens de cada conversa (das mais recentes para as mais antigas) e completa o que faltar no painel, sem duplicar. Pode levar alguns minutos — o botão mostra o andamento.')) return;
+    var txt=b.textContent; b.dataset.busy='1'; b.disabled=true; b.textContent='↻ Começando…';
     function restaura(){ b.dataset.busy='0'; b.disabled=false; b.textContent=txt; }
+    var inicio=Date.now(), viuRodando=false;
+    function acompanha(){
+      fetch('/sofia/importar/status').then(function(r){return r.json();}).then(function(j){
+        var st=(j&&j.status)||{};
+        if(st.rodando){ viuRodando=true; b.textContent='↻ Lendo '+(st.total?((st.feitos||0)+'/'+st.total):'conversas')+'…'; if(st.feitos && st.feitos%120<40) { try{atualizaInbox();}catch(e){} } return setTimeout(acompanha, 3000); }
+        var terminou = st.terminadoEm && st.terminadoEm>=inicio-5000;
+        var falhou = st.erro && (st.em||0)>=inicio-5000;
+        if(terminou){ try{atualizaInbox();}catch(e){} restaura(); return alert('✅ Histórico reimportado: '+(st.feitos||0)+' conversas lidas.'); }
+        if(falhou){ restaura(); return alert('❌ A reimportação parou: '+st.erro); }
+        if(!viuRodando && Date.now()-inicio>60000){ restaura(); return alert('A SoFIA não respondeu ao pedido em 1 minuto. Ela está ligada? Tente de novo.'); }
+        setTimeout(acompanha, 3000);
+      }).catch(function(){ setTimeout(acompanha, 5000); });
+    }
     fetch('/sofia/importar',{method:'POST'}).then(function(r){return r.json();}).then(function(j){
-      if(j && j.ok){ b.textContent='✓ Reimportando…';
-        setTimeout(function(){ try{atualizaInbox();}catch(e){} restaura(); alert('Reimportação disparada. As conversas vão se completar nos próximos minutos — se faltar algo, aguarde um pouco e recarregue a página.'); }, 8000);
-      } else { restaura(); alert('Não consegui disparar: '+((j&&j.erro)||'erro')); }
+      if(j && j.ok){ setTimeout(acompanha, 2000); }
+      else { restaura(); alert('Não consegui disparar: '+((j&&j.erro)||'erro')); }
     }).catch(function(e){ restaura(); alert('Falha ao disparar: '+e); });
   }
   atualizaInbox(); setInterval(atualizaInbox, ${refreshMs});
