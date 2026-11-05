@@ -123,7 +123,7 @@ const CATALOGO = [
   {
     chave: 'saida_grupos',
     titulo: 'Saída — não renovou (retira dos grupos)',
-    quando: 'Para quem está com o contrato vencido há 7 dias e não renovou (contrato na fila conta como renovação). O robô primeiro RETIRA a pessoa de todos os grupos em comum com o número do Studio e depois manda esta mensagem. Se ela não está em nenhum grupo, nada é enviado.',
+    quando: 'Para quem está com o contrato vencido há alguns dias (você escolhe quantos, abaixo — padrão 7) e não renovou (contrato na fila conta como renovação). O robô primeiro RETIRA a pessoa de todos os grupos em comum com o número do Studio e depois manda esta mensagem. Se ela não está em nenhum grupo, nada é enviado.',
     vars: [['nome', 'primeiro nome da aluna']],
     padrao: 'Oie, {nome}!! Tudo bem?\n\nPoxa, que pena que você não continuará mais conosco! Sentiremos muito a sua falta!\n\nVou te retirar do grupo para que não te atrapalhe com as mensagens da turma!\n\nEspero que possa retornar para o SlimFit em breve!\nUma boa semana!! ❤️❤️❤️',
   },

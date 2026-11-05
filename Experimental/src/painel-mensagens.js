@@ -2237,7 +2237,14 @@ function blocoSaidas() {
   const resumoExec = (r, sim) => !r ? '' : `<div class="sg-ult"><b>${sim ? '🧪 Simulação' : 'Última execução'} (${quando(r.em)}):</b> ${r.tratadas.length ? r.tratadas.map(t => `${esc(t.nome)} — ${t.motivo === 'sem grupo' ? 'não estava em grupo (sem mensagem)' : sim ? 'sairia de: ' + esc(t.grupos.join(', ')) : (t.grupos.length ? 'saiu de: ' + esc(t.grupos.join(', ')) : 'não saiu de nenhum grupo') + (t.ficou && t.ficou.length ? ' · continua em: ' + esc(t.ficou.join(', ')) : '') + (t.enviou ? ' · ✉️ mensagem enviada' : '')}`).join('<br>') : 'ninguém para tratar.'}</div>`;
   return `<div class="hsec" id="saidas"><div class="hsec-t">Quem entra hoje ${vai.length ? `<span class="badge-ed">${vai.length}</span>` : ''}</div>
     ${ligado ? '' : '<p class="quando" style="margin:0 0 8px;color:var(--warn)">⏸️ Desligado: nada é feito até você ligar o botão <b>Ativado</b> no topo deste cartão.</p>'}
-    <p class="quando" style="margin:0 0 8px">Contrato SlimFit vencido entre <b>${c ? fmtD(c.de) : '?'}</b> e <b>${c ? fmtD(c.ate) : '?'}</b> (7 a 17 dias atrás) e não renovou. Trancada, contrato na fila e Circuito/VIP vigente não entram. O número do Studio precisa ser <b>administrador</b> dos grupos para conseguir retirar.</p>
+    <form method="POST" action="/saidas/dias" class="hrow" style="align-items:flex-end;margin:0 0 10px">
+      <div><div class="lbl">Dias depois do vencimento</div>
+        <input type="number" name="dias" min="1" max="60" value="${c ? c.dias : 7}" required style="width:92px">
+      </div>
+      <button type="submit" class="save">Salvar</button>
+      <span class="quando" style="margin:0 0 8px">Renovação com até esse atraso ainda conta como “renovou”. Vale no próximo disparo, sem reiniciar.</span>
+    </form>
+    <p class="quando" style="margin:0 0 8px">Contrato SlimFit vencido entre <b>${c ? fmtD(c.de) : '?'}</b> e <b>${c ? fmtD(c.ate) : '?'}</b> (${c ? c.dias : 7} a ${c ? c.dias + 10 : 17} dias atrás) e não renovou. Trancada, contrato na fila e Circuito/VIP vigente não entram. O número do Studio precisa ser <b>administrador</b> dos grupos para conseguir retirar.</p>
     ${c && !fotoOk ? `<p class="quando" style="margin:0 0 8px;color:var(--warn)">⚠️ A leitura das alunas ativas de hoje (05:25) ainda não rodou${c.fotoDia ? ` — última: ${fmtD(c.fotoDia)}` : ''}. Sem ela o robô não mexe em ninguém.</p>` : ''}
     <div class="sg-lista">${vai.length ? vai.map(linha).join('') : '<div class="quando" style="margin:0">Ninguém para retirar hoje.</div>'}</div>
     ${fora.length ? `<details class="sg-fora"><summary>Ficaram de fora (${fora.length})</summary>${fora.map(linha).join('')}</details>` : ''}
@@ -9364,6 +9371,8 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)oksof=1/.test(q)) aviso = '🔄 Robô reiniciando… ele volta ao ar em ~1 minuto (o selo do WhatsApp acima mostra quando reconectar).';
     else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar o robô pelo painel. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
     else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horários salvos, mas não consegui reiniciar o robô automaticamente. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
+    else if (/(?:^|&)okdias=1/.test(q)) aviso = '✅ Dias depois do vencimento salvos — vale no próximo disparo.';
+    else if (/(?:^|&)errdias=1/.test(q)) { aviso = '⚠️ Use um número de 1 a 60 dias.'; erro = true; }
     else if (/(?:^|&)oksim=1/.test(q)) aviso = '🧪 Simulação pedida ao robô — em 1 a 2 minutos, atualize a página: o resultado aparece no cartão "Saída — não renovou".';
     else if (/(?:^|&)errsim=1/.test(q)) { aviso = '⚠️ O robô ainda vai rodar outro pedido — tente de novo em 1 minuto.'; erro = true; }
     else if (/(?:^|&)okae=1/.test(q)) aviso = '🚫 Grupos que não recebem o parabéns salvos — já vale no próximo envio.';
@@ -9673,6 +9682,15 @@ const server = http.createServer((req, res) => {
       try { gr = anivExcluir.salvar(new URLSearchParams(corpo).get('grupos') || ''); } catch (_) { ok = false; }
       try { if (ok) auditoria.registrar(sess.usuario, 'aniversario.excluir', gr.join(' | ') || '(nenhum)', ''); } catch (_) {}
       res.writeHead(303, { Location: '/?view=config&' + (ok ? 'okae=1' : 'errae=1') + '#aniv-excluir' }); res.end();
+    });
+  }
+
+  if (req.method === 'POST' && url === '/saidas/dias') {
+    return lerCorpo(req, 1e4, corpo => {
+      let n = null;
+      try { n = require('./saidas-grupos').salvarDias(new URLSearchParams(corpo).get('dias')); } catch (_) {}
+      try { if (n != null) auditoria.registrar(sess.usuario, 'saidas.dias', String(n), ''); } catch (_) {}
+      res.writeHead(303, { Location: '/?view=config&' + (n != null ? 'okdias=1' : 'errdias=1') + '#saidas' }); res.end();
     });
   }
 
