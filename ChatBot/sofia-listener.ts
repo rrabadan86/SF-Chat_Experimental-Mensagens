@@ -1449,12 +1449,36 @@ function emitirAcao(telefone: string, nome: string, r: RegraTag, motivo: string,
 // Anti-repetição por (chave|motivo|tag): não dispara o mesmo gatilho de novo
 // dentro da janela de sessão (evita spam de palavra-chave/campanha).
 const gatilhoRecente = new Map<string, number>();
+// Grava os gatilhos recentes em disco: sem isso, um reinício da SoFIA aplicava as
+// tags de novo (ex.: "Contato inicial") e repetia os avisos no WhatsApp.
+const GATILHOS_FILE = path.join(DIR, "sofia-gatilhos-recentes.json");
+let _gatSujo = false;
+(function carregarGatilhos() {
+  try {
+    const o = JSON.parse(fs.readFileSync(GATILHOS_FILE, "utf-8")) || {};
+    const agora = Date.now();
+    for (const k of Object.keys(o)) if (Number(o[k]) > agora) gatilhoRecente.set(k, Number(o[k]));
+  } catch { /* primeira vez */ }
+})();
+function salvarGatilhos() {
+  if (!_gatSujo) return;
+  _gatSujo = false;
+  try {
+    const agora = Date.now(), o: Record<string, number> = {};
+    for (const [k, v] of gatilhoRecente) if (v > agora) o[k] = v;
+    fs.writeFileSync(GATILHOS_FILE + ".tmp", JSON.stringify(o));
+    fs.renameSync(GATILHOS_FILE + ".tmp", GATILHOS_FILE);
+  } catch { _gatSujo = true; }
+}
+{ const t = setInterval(salvarGatilhos, 10000); (t as any).unref?.(); }
+process.on("exit", () => { try { _gatSujo = true; salvarGatilhos(); } catch {} });
 function jaDisparou(chave: string, motivo: string, tag: string): boolean {
   const k = chave + "|" + motivo + "|" + tag;
   const agora = Date.now();
   const ate = gatilhoRecente.get(k) || 0;
   if (agora < ate) return true;
   gatilhoRecente.set(k, agora + janelaSessaoMs());
+  _gatSujo = true;
   return false;
 }
 // Só CONSULTA (não marca) — usado para não pagar a chamada de IA quando a tag já
