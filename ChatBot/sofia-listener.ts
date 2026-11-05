@@ -1058,6 +1058,45 @@ const WA_LOTE = "(async function(P){\n" + WA_BASE
   + "  return { chats: out, feitos: feitos, loaderVia: (loader?loader.via:'') + (modo?' ('+modo+')':''), diag: diag };\n"
   + "})";
 
+// Diagnóstico de UMA conversa (comando "diag-chat"): mostra como o WhatsApp Web
+// guarda cada mensagem (quem enviou, ids) — para entender autorias erradas no
+// reimportar. Grava em sofia-diag-chat.json. Não muda nada.
+const WA_DIAG = "(async function(K8){\n" + WA_BASE
+  + "  if(!Chat) return { erro:'sem colecao Chat' };\n"
+  + "  function u(w){ try { if(!w) return ''; if (typeof w==='string') return w; return String(w._serialized || (w.user? w.user+'@'+(w.server||'') : '')); } catch(e){ return '?'; } }\n"
+  + "  var meU='', meL='';\n"
+  + "  try { var MU=req('WAWebUserPrefsMeUser'); if(MU){ var a1=MU.getMaybeMeUser?MU.getMaybeMeUser():null; if(a1) meU=u(a1); var a2=MU.getMaybeMeLidUser?MU.getMaybeMeLidUser():null; if(a2) meL=u(a2); } } catch(e){}\n"
+  + "  var L=req('WAWebChatLoadMessages'); var arr=Chat.getModelsArray(); var out=[];\n"
+  + "  for (var j=0;j<arr.length;j++){ var c=arr[j]; var id=serial(c); if(!id || id.indexOf('@g.us')>=0) continue;\n"
+  + "    var tels=[id]; try { var ci=c.contact&&c.contact.id; if(ci) tels.push(u(ci)); if(c.contact&&c.contact.phoneNumber) tels.push(u(c.contact.phoneNumber)); } catch(e){}\n"
+  + "    var bate=false; for (var q=0;q<tels.length;q++){ var d=String(tels[q]||'').split('@')[0].replace(/\\D/g,''); if(d && d.slice(-8)===K8) bate=true; }\n"
+  + "    if(!bate) continue;\n"
+  + "    var ms=[]; try { ms=c.msgs.getModelsArray().slice(); } catch(e){}\n"
+  + "    try { for (var p=0;p<4;p++){ var x = L && L.loadEarlierMsgs ? await L.loadEarlierMsgs({ chat: c }) : null; if(!x||!x.length) break; ms = Array.prototype.slice.call(x).concat(ms); } } catch(e){}\n"
+  + "    out.push({ chat: id, tels: tels, msgs: ms.slice(-12).map(function(m){ return { t: m.t, type: m.type, idFromMe: m.id && m.id.fromMe, idSer: String((m.id && m.id._serialized)||'').slice(0,60), idRemote: u(m.id && m.id.remote), from: u(m.from), to: u(m.to), author: u(m.author), isSentByMe: m.isSentByMe, ack: m.ack, isNewMsg: m.isNewMsg, broadcast: !!m.broadcast, isForwarded: !!m.isForwarded, txt: String((m.type==='chat'?m.body:m.caption)||'').slice(0,50) }; }) });\n"
+  + "  }\n"
+  + "  return { me: meU, meLid: meL, chats: out };\n"
+  + "})";
+async function diagChat(tel: string) {
+  const k8 = String(tel || "").replace(/\D/g, "").slice(-8);
+  const arq = path.join(DIR, "sofia-diag-chat.json");
+  try {
+    const page: any = (client as any).pupPage;
+    if (!page || !k8) throw new Error(!k8 ? "telefone vazio" : "página do WhatsApp indisponível");
+    const r: any = await page.evaluate(WA_DIAG + "(" + JSON.stringify(k8) + ")");
+    const camp: any[] = [];
+    try {
+      const o = JSON.parse(fs.readFileSync(path.join(DIR, "campanhas.json"), "utf8"));
+      const lista: any[] = Array.isArray(o) ? o : (o && typeof o === "object" ? Object.values(o) : []);
+      for (const c of lista) for (const e of ((c && c.enviados) || [])) if (String(e && e.tel || "").replace(/\D/g, "").slice(-8) === k8) camp.push({ campanha: c.nome, tel: e.tel, em: new Date(e.em).toISOString() });
+    } catch (e: any) { camp.push({ erro: "campanhas.json: " + (e?.message || e) }); }
+    const ct = inbox.get(chaveInboxExistente(String(tel).replace(/\D/g, "")));
+    const res = { em: new Date().toISOString(), tel, whatsapp: r, campanha: camp, painel: ct ? ct.msgs.slice(-8).map((m) => ({ autor: m.autor, por: m.por, imp: m.imp, em: new Date(m.em).toISOString(), txt: String(m.texto || "").slice(0, 50) })) : null };
+    fs.writeFileSync(arq, JSON.stringify(res, null, 1));
+    log(`🔎 diag-chat ${tel}: gravado em ${arq}`);
+  } catch (e: any) { try { fs.writeFileSync(arq, JSON.stringify({ erro: e?.message || String(e) })); } catch {} log("diag-chat falhou: " + (e?.message || e)); }
+}
+
 type RawItem = { jid: string; id: string; name: string; t: number };
 
 async function listarChatsRaw(corteSeg: number): Promise<RawItem[]> {
@@ -2158,6 +2197,7 @@ setInterval(async () => {
     log(`comando "${cmd && cmd.cmd}" com ${Math.round(idade / 1000)}s de idade — descartado (vale por ${COMANDO_VALIDADE_MS / 1000}s). Clique de novo no painel se ainda quiser.`);
     return;
   }
+  if (cmd && cmd.cmd === "diag-chat") { void diagChat(String(cmd.tel || "")); return; }
   if (cmd && cmd.cmd === "importar-historico") {
     log("📥 comando do painel: importar histórico do WhatsApp…");
     importarHistorico(parseInt(cmd.porChat, 10) || INBOX_MAX_MSGS); // async, não bloqueia
