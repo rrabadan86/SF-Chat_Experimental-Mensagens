@@ -911,99 +911,156 @@ function textoDoAnexo(tipo: string | undefined, texto: string): string {
   const leg = pareceBase64(t) ? "" : t;
   return leg ? `${rot} — ${leg}` : rot;
 }
-async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
+// Lê as conversas cruas do WhatsApp Web em DUAS etapas, para o histórico vir
+// completo em TODAS as conversas (antes um teto único de ~2 min era gasto nas
+// primeiras e o resto ficava só com a última mensagem):
+//   1) lista as conversas de pessoa (sem grupos), da mais recente para a mais antiga;
+//   2) carrega o histórico em LOTES — cada chamada tem o próprio teto de tempo e
+//      devolve até onde chegou; a próxima continua dali.
+// Código em STRING (não função): o tsx/esbuild injeta um helper "__name" nas
+// funções nomeadas que NÃO existe no navegador (ReferenceError ao rodar via
+// page.evaluate). Nesta versão não há window.Store; usamos window.require.
+const WA_BASE = ""
+  + "  var W = window;\n"
+  + "  function req(n){ try { return W.require ? W.require(n) : null; } catch(e){ return null; } }\n"
+  + "  function getChatColl(){\n"
+  + "    try { if (W.Store && W.Store.Chat && W.Store.Chat.getModelsArray) return W.Store.Chat; } catch(e){}\n"
+  + "    var m = req('WAWebCollections');\n"
+  + "    if (m){ if (m.Chat && m.Chat.getModelsArray) return m.Chat; if (m.default && m.default.Chat && m.default.Chat.getModelsArray) return m.default.Chat; }\n"
+  + "    var d = req('WAWebChatCollection');\n"
+  + "    if (d){ if (d.ChatCollection && d.ChatCollection.getModelsArray) return d.ChatCollection; if (d.getModelsArray) return d; if (d.default && d.default.getModelsArray) return d.default; }\n"
+  + "    return null;\n"
+  + "  }\n"
+  + "  function serial(c){ var o=c&&c.id; return o ? (o._serialized || (o.user ? o.user+'@'+(o.server||'') : '')) : ''; }\n"
+  + "  var Chat = getChatColl();\n";
+
+const WA_LISTAR = "(async function(CORTE){\n" + WA_BASE
+  + "  if(!Chat){\n"
+  + "    var diag={ hasStore:!!W.Store, hasRequire: (typeof W.require==='function') };\n"
+  + "    try { var t1=req('WAWebCollections'); diag.collectionsKeys = t1 ? Object.keys(t1).slice(0,50) : null; } catch(e){ diag.collectionsKeys='erro'; }\n"
+  + "    return { erro:'Nao achei a colecao de conversas (Chat).', diag: diag };\n"
+  + "  }\n"
+  + "  var arr = Chat.getModelsArray();\n"
+  + "  function digits(x){ return String(x||'').replace(/\\D/g,''); }\n"
+  + "  function telDe(c, id){\n"
+  + "    if (id.indexOf('@c.us')>=0) return id.split('@')[0];\n"
+  + "    try { var ci=c.contact && c.contact.id; var cis = ci && (ci._serialized || (ci.user?ci.user+'@'+(ci.server||''):'')); if (cis && cis.indexOf('@c.us')>=0) return cis.split('@')[0]; } catch(e){}\n"
+  + "    try { var pn = c.contact && (c.contact.phoneNumber || c.contact.userid || c.contact.verifiedNumber); if(pn){ var d=digits(pn); if(d.length>=10 && d.length<=15) return d; } } catch(e){}\n"
+  + "    return id.split('@')[0];\n" // fallback: dígitos do LID (chave estável)
+  + "  }\n"
+  + "  var out=[], comTel=0, soLid=0, tipos={};\n"
+  + "  for (var j=0;j<arr.length;j++){\n"
+  + "    try {\n"
+  + "      var c=arr[j]; var id=serial(c); if(!id) continue;\n"
+  + "      var sv=(c.id&&c.id.server)||'?'; tipos[sv]=(tipos[sv]||0)+1;\n"
+  + "      if (id.indexOf('@c.us')<0 && id.indexOf('@lid')<0) continue;\n" // pula grupos (@g.us), status, etc.
+  + "      var tel = telDe(c, id); if(!tel || tel.length<8) continue;\n"
+  + "      if (id.indexOf('@c.us')>=0 || (tel !== id.split('@')[0])) comTel++; else soLid++;\n"
+  + "      var name = (c.formattedTitle || c.name || (c.contact && (c.contact.pushname||c.contact.name||c.contact.formattedName||c.contact.verifiedName))) || '';\n"
+  + "      var t = c.t || c.timestamp || 0;\n"
+  + "      if (CORTE && t && t < CORTE) continue;\n" // sem atividade dentro do período guardado
+  + "      out.push({ jid: id, id: tel, name: name, t: t });\n"
+  + "    } catch(e){}\n"
+  + "  }\n"
+  + "  out.sort(function(a,b){ return (b.t||0)-(a.t||0); });\n"
+  + "  return { lista: out, total: arr.length, tipos: tipos, comTel: comTel, soLid: soLid };\n"
+  + "})";
+
+const WA_LOTE = "(async function(P){\n" + WA_BASE
+  + "  if(!Chat) return { erro:'Nao achei a colecao de conversas (Chat).' };\n"
+  + "  var LIM=P.lim, CORTE=P.corte||0, fimBudget=Date.now()+P.budget;\n"
+  + "  function nModels(c){ try { return (c && c.msgs && c.msgs.getModelsArray) ? c.msgs.getModelsArray().length : ((c&&c.msgs&&c.msgs._models&&c.msgs._models.length)||0); } catch(e){ return 0; } }\n"
+  + "  function models(c){ try { return (c.msgs && c.msgs.getModelsArray) ? c.msgs.getModelsArray() : ((c.msgs&&c.msgs._models)||[]); } catch(e){ return []; } }\n"
+  + "  function maisAntiga(c){ var a=models(c); return a.length ? ((a[0].t||a[0].timestamp)||0) : 0; }\n"
+  // A função que carrega mensagens antigas é de MÓDULO (loadEarlierMsgs(chat)).
+  + "  function getLoader(){\n"
+  + "    var mods=['WAWebChatLoadMessages','WAWebLoadEarlierMsgsAction','WAWebMsgLoad','WAWebChatLoadUtils'];\n"
+  + "    var nomes=['loadEarlierMsgs','loadEarlierMessages','loadEarlier','loadMoreMsgs','loadPageMessages'];\n"
+  + "    for (var i=0;i<mods.length;i++){ var m=req(mods[i]); if(!m) continue; var cand=[m, m.default]; for (var ci=0;ci<cand.length;ci++){ var o=cand[ci]; if(!o) continue; for (var j=0;j<nomes.length;j++){ if (typeof o[nomes[j]]==='function') return { fn:o[nomes[j]], via: mods[i]+'.'+nomes[j] }; } } }\n"
+  + "    return null;\n"
+  + "  }\n"
+  + "  var loader = getLoader();\n"
+  + "  async function carregarAntigas(c){\n"
+  + "    var chamar = loader ? function(){ return loader.fn(c); } : (typeof (c&&c.loadEarlierMsgs)==='function' ? function(){ return c.loadEarlierMsgs(); } : null);\n"
+  + "    if (!chamar) return;\n"
+  + "    for (var p=0;p<10;p++){\n"
+  + "      if (Date.now() >= fimBudget) break;\n"
+  + "      if (nModels(c) >= LIM) break;\n"
+  + "      var ant = maisAntiga(c); if (CORTE && ant && ant < CORTE) break;\n" // já passou do período guardado
+  + "      var loaded; try { loaded = await chamar(); } catch(e){ break; }\n"
+  + "      if (!loaded || !loaded.length) break;\n" // lista vazia = acabou o histórico local
+  + "    }\n"
+  + "  }\n"
+  + "  var mapa={}; var arr=Chat.getModelsArray(); for (var k=0;k<arr.length;k++){ var s=serial(arr[k]); if(s) mapa[s]=arr[k]; }\n"
+  + "  var out=[], feitos=0;\n"
+  + "  for (var i=0;i<P.jids.length;i++){\n"
+  + "    if (i>0 && Date.now() >= fimBudget) break;\n" // teto do lote: devolve até aqui, o próximo lote continua
+  + "    feitos++;\n"
+  + "    var c = mapa[P.jids[i]]; if(!c){ out.push({ jid:P.jids[i], msgs:[] }); continue; }\n"
+  + "    try { await carregarAntigas(c); } catch(e){}\n"
+  + "    var ms = models(c).slice(-LIM).map(function(m){ var tp=(m&&m.type)||'chat'; var txt=(tp==='chat'||tp==='text') ? ((m&&m.body)||'') : ((m&&m.caption)||''); var mid=String((m&&m.id&&m.id.id)||''); return { fromMe: !!(m&&m.id&&m.id.fromMe), body: txt||'', tipo: tp, t: (m&&(m.t||m.timestamp))||0, web: /^3EB0/i.test(mid) }; });\n"
+  + "    out.push({ jid: P.jids[i], msgs: ms });\n"
+  + "  }\n"
+  + "  return { chats: out, feitos: feitos, loaderVia: (loader?loader.via:'') };\n"
+  + "})";
+
+type RawItem = { jid: string; id: string; name: string; t: number };
+
+async function listarChatsRaw(corteSeg: number): Promise<RawItem[]> {
   const page: any = (client as any).pupPage;
   if (!page) throw new Error("página do WhatsApp indisponível (pupPage).");
-  const LIM = Math.max(1, Math.min(limMsg || INBOX_MAX_MSGS, 500));
-  // IMPORTANTE: passamos o código como STRING (não como função). O tsx/esbuild
-  // injeta um helper "__name" nas funções nomeadas que NÃO existe no navegador
-  // (ReferenceError: __name is not defined ao rodar via page.evaluate). Em string,
-  // o esbuild não transforma nada, então o código roda intacto na página.
-  // Nesta versão não há window.Store, mas o WhatsApp Web expõe os módulos via
-  // window.require. Lemos a COLEÇÃO de conversas crua (WAWebCollections.Chat),
-  // sem serialização (rápido) e sem varrer contato por contato (lento/inútil).
-  // Código em STRING para o esbuild não injetar o helper __name (inexistente no
-  // navegador).
-  const code = "(async function(LIM){\n"
-    + "  var W = window;\n"
-    + "  var PAGINAS = 8;\n"                       // até 8 páginas de histórico por conversa
-    + "  var fimBudget = Date.now() + 110000;\n"   // teto (~2 min) carregando — margem p/ não estourar o timeout do protocolo
-    + "  function req(n){ try { return W.require ? W.require(n) : null; } catch(e){ return null; } }\n"
-    + "  function nModels(c){ try { return (c && c.msgs && c.msgs.getModelsArray) ? c.msgs.getModelsArray().length : ((c&&c.msgs&&c.msgs._models&&c.msgs._models.length)||0); } catch(e){ return 0; } }\n"
-    // Resolve a função que carrega mensagens antigas: nesta versão é uma função de
-    // MÓDULO (loadEarlierMsgs(chat)), não um método do modelo. Tenta módulos/nomes.
-    + "  function getLoader(){\n"
-    + "    var mods=['WAWebChatLoadMessages','WAWebLoadEarlierMsgsAction','WAWebMsgLoad','WAWebChatLoadUtils'];\n"
-    + "    var nomes=['loadEarlierMsgs','loadEarlierMessages','loadEarlier','loadMoreMsgs','loadPageMessages'];\n"
-    + "    for (var i=0;i<mods.length;i++){ var m=req(mods[i]); if(!m) continue; var cand=[m, m.default]; for (var ci=0;ci<cand.length;ci++){ var o=cand[ci]; if(!o) continue; for (var j=0;j<nomes.length;j++){ if (typeof o[nomes[j]]==='function') return { fn:o[nomes[j]], via: mods[i]+'.'+nomes[j] }; } } }\n"
-    + "    return null;\n"
-    + "  }\n"
-    + "  var loader = getLoader();\n"
-    + "  async function carregarAntigas(c){\n"       // pede ao WhatsApp as mensagens antigas (várias páginas)
-    + "    var chamar = loader ? function(){ return loader.fn(c); }\n"
-    + "                : (typeof (c&&c.loadEarlierMsgs)==='function' ? function(){ return c.loadEarlierMsgs(); } : null);\n"
-    + "    if (!chamar) return;\n"
-    + "    for (var p=0;p<PAGINAS;p++){\n"
-    + "      if (Date.now() >= fimBudget) break;\n"
-    + "      if (nModels(c) >= LIM) break;\n"
-    + "      var loaded; try { loaded = await chamar(); } catch(e){ break; }\n"
-    // decide pelo VALOR DE RETORNO (como a whatsapp-web.js): lista vazia = acabou o histórico local
-    + "      if (!loaded || !loaded.length) break;\n"
-    + "    }\n"
-    + "  }\n"
-    + "  function getChatColl(){\n"
-    + "    try { if (W.Store && W.Store.Chat && W.Store.Chat.getModelsArray) return W.Store.Chat; } catch(e){}\n"
-    + "    var m = req('WAWebCollections');\n"
-    + "    if (m){ if (m.Chat && m.Chat.getModelsArray) return m.Chat; if (m.default && m.default.Chat && m.default.Chat.getModelsArray) return m.default.Chat; }\n"
-    + "    var d = req('WAWebChatCollection');\n"
-    + "    if (d){ if (d.ChatCollection && d.ChatCollection.getModelsArray) return d.ChatCollection; if (d.getModelsArray) return d; if (d.default && d.default.getModelsArray) return d.default; }\n"
-    + "    return null;\n"
-    + "  }\n"
-    + "  var Chat = getChatColl();\n"
-    + "  if(!Chat){\n"
-    + "    var diag={ hasStore:!!W.Store, hasRequire: (typeof W.require==='function') };\n"
-    + "    try { var t1=req('WAWebCollections'); diag.collectionsKeys = t1 ? Object.keys(t1).slice(0,50) : null; } catch(e){ diag.collectionsKeys='erro'; }\n"
-    + "    return { erro:'Nao achei a colecao de conversas (Chat).', diag: diag };\n"
-    + "  }\n"
-    + "  var arr = Chat.getModelsArray();\n"
-    + "  var out=[]; var totMsgs=0;\n"
-    + "  function digits(x){ return String(x||'').replace(/\\D/g,''); }\n"
-    + "  function telDe(c, id){\n"
-    + "    if (id.indexOf('@c.us')>=0) return id.split('@')[0];\n"
-    + "    try { var ci=c.contact && c.contact.id; var cis = ci && (ci._serialized || (ci.user?ci.user+'@'+(ci.server||''):'')); if (cis && cis.indexOf('@c.us')>=0) return cis.split('@')[0]; } catch(e){}\n"
-    + "    try { var pn = c.contact && (c.contact.phoneNumber || c.contact.userid || c.contact.verifiedNumber); if(pn){ var d=digits(pn); if(d.length>=10 && d.length<=15) return d; } } catch(e){}\n"
-    + "    return id.split('@')[0];\n" // fallback: dígitos do LID (chave estável)
-    + "  }\n"
-    + "  var comTel=0, soLid=0;\n"
-    + "  for (var j=0;j<arr.length;j++){\n"
-    + "    try {\n"
-    + "      var c=arr[j]; var idObj=c&&c.id;\n"
-    + "      var id = idObj ? (idObj._serialized || (idObj.user ? idObj.user+'@'+(idObj.server||'') : '')) : '';\n"
-    + "      if(!id) continue;\n"
-    + "      var isUser = (id.indexOf('@c.us')>=0) || (id.indexOf('@lid')>=0);\n"
-    + "      if(!isUser) continue;\n" // pula grupos (@g.us), status, etc.
-    + "      var tel = telDe(c, id);\n"
-    + "      if(!tel || tel.length<8) continue;\n"
-    + "      if (id.indexOf('@c.us')>=0 || (tel !== id.split('@')[0])) comTel++; else soLid++;\n"
-    + "      var name = (c && (c.formattedTitle || c.name || (c.contact && (c.contact.pushname||c.contact.name||c.contact.formattedName||c.contact.verifiedName)))) || '';\n"
-    + "      var t = (c && (c.t||c.timestamp||0)) || 0;\n"
-    + "      try { await carregarAntigas(c); } catch(e){}\n"
-    + "      var models=[]; try { models = (c.msgs && c.msgs.getModelsArray) ? c.msgs.getModelsArray() : ((c.msgs&&c.msgs._models)||[]); } catch(e){ models=[]; }\n"
-    + "      var msgs = models.slice(-LIM).map(function(m){ var tp=(m&&m.type)||'chat'; var txt=(tp==='chat'||tp==='text') ? ((m&&m.body)||'') : ((m&&m.caption)||''); return { fromMe: !!(m&&m.id&&m.id.fromMe), body: txt||'', tipo: tp, t: (m&&(m.t||m.timestamp))||0 }; });\n"
-    + "      totMsgs += msgs.length;\n"
-    + "      out.push({ id: tel, name: name, t: t, msgs: msgs });\n"
-    + "    } catch(e){}\n"
-    + "  }\n"
-    + "  var tipos={}; for (var q=0;q<arr.length;q++){ try { var s=(arr[q]&&arr[q].id&&arr[q].id.server)||'?'; tipos[s]=(tipos[s]||0)+1; } catch(e){} }\n"
-    + "  var loaderDiag=null;\n"
-    + "  if(!loader){ loaderDiag={}; var mm2=['WAWebChatLoadMessages','WAWebLoadEarlierMsgsAction','WAWebMsgLoad','WAWebChatLoadUtils','WAWebChatMsgs']; for (var z=0;z<mm2.length;z++){ try { var mo=req(mm2[z]); loaderDiag[mm2[z]] = mo ? Object.keys(mo).slice(0,40) : null; } catch(e){ loaderDiag[mm2[z]]='erro'; } } var proto0=null; try { proto0 = arr[0] ? Object.getOwnPropertyNames(Object.getPrototypeOf(arr[0])).filter(function(n){return /load|earlier|msg/i.test(n);}).slice(0,20) : null; } catch(e){} loaderDiag._modelMethods = proto0; }\n"
-    + "  return { chats: out, via:'store-raw', total: arr.length, tipos: tipos, comTel: comTel, soLid: soLid, totMsgs: totMsgs, loaderVia: (loader?loader.via:''), loaderDiag: loaderDiag };\n"
-    + "})(" + LIM + ")";
-  const r: any = await page.evaluate(code);
-  if (r && r.via) log(`import: leitura via ${r.via} — ${(r.chats && r.chats.length) || 0} conversas de ${r.total || 0} no store (com telefone: ${r.comTel || 0}, só LID: ${r.soLid || 0}, ${r.totMsgs || 0} mensagens no total). tipos=${JSON.stringify(r.tipos || {})}`);
-  if (r) log(`import: carregador de histórico = ${r.loaderVia || "(nenhum encontrado)"}${r.loaderDiag ? " · diag=" + JSON.stringify(r.loaderDiag) : ""}`);
+  const r: any = await page.evaluate(WA_LISTAR + "(" + Math.floor(corteSeg || 0) + ")");
   if (r && r.erro) throw new Error(r.erro + (r.diag ? " Diag: " + JSON.stringify(r.diag) : ""));
-  return (r && r.chats) || [];
+  log(`import: ${(r && r.lista && r.lista.length) || 0} conversas de pessoa no período, de ${(r && r.total) || 0} no WhatsApp (com telefone: ${(r && r.comTel) || 0}, só LID: ${(r && r.soLid) || 0}). tipos=${JSON.stringify((r && r.tipos) || {})}`);
+  return (r && r.lista) || [];
+}
+
+// Carrega um lote; devolve quantas conversas do lote foram lidas (o resto fica
+// para o próximo lote, porque o teto de tempo acabou).
+async function lerLoteRaw(itens: RawItem[], lim: number, corteSeg: number): Promise<{ chats: RawChat[]; feitos: number; via: string }> {
+  const page: any = (client as any).pupPage;
+  if (!page) throw new Error("página do WhatsApp indisponível (pupPage).");
+  const P = { jids: itens.map((x) => x.jid), lim, corte: Math.floor(corteSeg || 0), budget: 75000 };
+  const r: any = await page.evaluate(WA_LOTE + "(" + JSON.stringify(P) + ")");
+  if (r && r.erro) throw new Error(r.erro);
+  const porJid = new Map(itens.map((x) => [x.jid, x]));
+  const chats: RawChat[] = ((r && r.chats) || []).map((c: any) => { const it = porJid.get(c.jid)!; return { id: it.id, name: it.name, t: it.t, msgs: c.msgs || [] }; });
+  return { chats, feitos: Math.max(1, (r && r.feitos) || chats.length), via: (r && r.loaderVia) || "" };
+}
+
+// Quem mandou cada mensagem "fromMe" importada? O WhatsApp não diz se foi a SoFIA
+// ou uma pessoa, então usamos o que o painel registrou:
+//   • dentro de um período "assumida por X … devolvida" → humano, por X;
+//   • enviada pelo celular (id que não é do WhatsApp Web) → humano "direto pelo WhatsApp";
+//   • o resto (saiu do WhatsApp Web, conversa com a SoFIA) → SoFIA.
+type JanelaHumano = { ini: number; fim: number; por: string };
+function lerJanelasHumano(): Map<string, JanelaHumano[]> {
+  const mapa = new Map<string, JanelaHumano[]>();
+  let linhas: string[] = [];
+  try { linhas = fs.readFileSync(path.join(DIR, "sofia-humano-log.jsonl"), "utf8").split("\n"); } catch { return mapa; }
+  const abertas = new Map<string, JanelaHumano>();
+  for (const l of linhas) {
+    const s = l.trim(); if (!s) continue;
+    let o: any; try { o = JSON.parse(s); } catch { continue; }
+    const k8 = String(o.chave || "").replace(/\D/g, "").slice(-8); if (!k8) continue;
+    const em = Number(o.em) || 0;
+    if (o.acao === "assumir") {
+      if (!abertas.has(k8)) abertas.set(k8, { ini: em, fim: Infinity, por: String(o.por || "") });
+    } else if (o.acao === "devolver") {
+      const j = abertas.get(k8); if (!j) continue;
+      j.fim = em; abertas.delete(k8);
+      (mapa.get(k8) || mapa.set(k8, []).get(k8)!).push(j);
+    }
+  }
+  for (const [k8, j] of abertas) (mapa.get(k8) || mapa.set(k8, []).get(k8)!).push(j);
+  return mapa;
+}
+function autorImportado(m: { fromMe: boolean; web?: boolean }, em: number, janelas: JanelaHumano[] | undefined, confiaWeb: boolean): Pick<InboxMsg, "autor" | "por" | "tipo"> {
+  if (!m.fromMe) return { autor: "aluna" };
+  const j = (janelas || []).find((x) => em >= x.ini - 60000 && em <= x.fim + 60000);
+  if (j) return { autor: "humano", por: j.por || undefined };
+  if (confiaWeb && m.web === false) return { autor: "humano", tipo: "wpp" };
+  return { autor: "sofia" };
 }
 // ── Rede de segurança: mensagens perdidas em REINÍCIO ────────────────────────
 //    O whatsapp-web.js só dispara "message" ENQUANTO conectado. Se a SoFIA está
@@ -1119,63 +1176,89 @@ async function importarHistorico(porChat: number) {
   if (importando) return;
   importando = true;
   const lim = Math.max(1, Math.min(porChat || INBOX_MAX_MSGS, 500));
+  const t0 = Date.now();
   try {
     if (!pronta) { gravarImportStatus({ rodando: false, erro: "O WhatsApp da SoFIA não está conectado.", em: Date.now() }); return; }
     gravarImportStatus({ rodando: true, feitos: 0, total: 0, novos: 0, em: Date.now() });
-    const chats = await lerChatsRaw(lim);
-    // lerChatsRaw já devolve o telefone/LID como `id` (só dígitos, sem @sufixo)
-    // e já filtrou para conversas de pessoa (sem grupos). Usamos direto.
-    const alvos = chats.filter((c) => c.id);
-    let feitos = 0, novos = 0;
-    for (const chat of alvos) {
-      try {
+    const ret = retencaoMs();
+    const corteSeg = ret > 0 ? Math.floor((Date.now() - ret) / 1000) : 0;
+    const lista = await listarChatsRaw(corteSeg);
+    const janelas = lerJanelasHumano();
+    let feitos = 0, novos = 0, via = "";
+    // Mensagens "fromMe" que saem do WhatsApp Web têm id começando com 3EB0. Só
+    // usamos isso para separar "direto pelo celular" se o padrão se confirmar
+    // (se o WhatsApp mudar o formato, tudo cairia como celular).
+    let vistosFromMe = 0, vistosWeb = 0;
+    const pendentes: Array<{ chat: RawChat; tel: string }> = [];
+    for (let i = 0; i < lista.length;) {
+      const lote = lista.slice(i, i + 40);
+      const r = await lerLoteRaw(lote, lim, corteSeg);
+      if (r.via) via = r.via;
+      for (const chat of r.chats) {
         const telCru = String(chat.id).replace(/\D/g, "");
-        if (telCru && telCru.length >= 8) {
-          const tel = chaveInboxExistente(telCru); // casa a variante do 9º dígito já existente (NÃO duplica o card)
-          const ex = inbox.get(tel);
-          const acc: InboxMsg[] = ex ? ex.msgs.slice() : [];
-          // Dedup robusto: NÃO reimporta uma mensagem que já existe (mesmo texto num
-          // horário próximo), INDEPENDENTE do autor. Ao vivo a SoFIA grava 'sofia', mas
-          // o import só sabe 'humano'; e os horários diferem (segundo x milissegundo),
-          // então o antigo dedup por "em|autor" deixava a mesma mensagem entrar 2x.
-          const existe = (texto: string, em: number) =>
-            acc.some((m) => String(m.texto || "") === texto && Math.abs((m.em || 0) - em) < 15000);
-          for (const m of chat.msgs) {
-            const em = m.t ? m.t * 1000 : 0;
-            const texto = textoDoAnexo((m as any).tipo, String(m.body || ""));
-            if (!em || !texto) continue;
-            // Anexo que já estava como "📎 Anexo" (limpeza do texto codificado): troca
-            // pela versão certa (tipo + legenda), sem duplicar.
-            const anexoVelho = acc.find((x) => x.texto === "📎 Anexo" && Math.abs((x.em || 0) - em) < 15000);
-            if (anexoVelho) { if (texto !== "📎 Anexo") anexoVelho.texto = texto; continue; }
-            if (existe(texto, em)) continue;
-            const autor: InboxMsg["autor"] = m.fromMe ? "humano" : "aluna";
-            acc.push({ autor, texto, em });
-          }
-          acc.sort((a, b) => a.em - b.em);
-          const trimmed = acc.slice(-INBOX_MAX_MSGS);
-          // Mesmo sem texto de mensagem, guarda a última atividade (chat.t): a
-          // recepção já vê "esse contato falou antes, última vez em tal data".
-          const ultima = trimmed.length ? trimmed[trimmed.length - 1].em : (chat.t ? chat.t * 1000 : 0);
-          if (ultima) {
-            const nomeChat = (chat.name && !/^\+?[\d ()-]+$/.test(String(chat.name))) ? String(chat.name) : "";
-            inbox.set(tel, { jid: chat.id, nome: (ex && ex.nome) || nomeChat, ultimaEm: Math.max(ultima, (ex && ex.ultimaEm) || 0), msgs: trimmed });
-            novos++;
-          }
-        }
-      } catch (e: any) { log("import chat falhou: " + (e?.message || e)); }
-      feitos++;
-      if (feitos % 50 === 0) { gravarImportStatus({ rodando: true, feitos, total: alvos.length, novos, em: Date.now() }); salvarInbox(); }
+        if (!telCru || telCru.length < 8) continue;
+        for (const m of chat.msgs) if (m.fromMe) { vistosFromMe++; if ((m as any).web) vistosWeb++; }
+        pendentes.push({ chat, tel: telCru });
+      }
+      i += r.feitos;
+      feitos = i;
+      // Grava a cada lote: se algo interromper, o que já veio fica no painel.
+      const confiaWeb = vistosFromMe >= 20 && vistosWeb / vistosFromMe >= 0.3;
+      for (const p of pendentes.splice(0)) if (mesclarImportado(p.chat, p.tel, lim, janelas, confiaWeb)) novos++;
+      salvarInbox();
+      gravarImportStatus({ rodando: true, feitos, total: lista.length, novos, em: Date.now() });
     }
     try { reconciliar9Duplicados(); } catch {} // segurança: funde qualquer par 9-com/sem que tenha entrado no import
+    try { dedupMensagensInbox(); } catch {}
     salvarInbox();
-    gravarImportStatus({ rodando: false, feitos, total: alvos.length, novos, terminadoEm: Date.now() });
-    log(`✅ histórico importado: ${feitos} conversas lidas, ${novos} com dados.`);
+    gravarImportStatus({ rodando: false, feitos, total: lista.length, novos, terminadoEm: Date.now() });
+    log(`✅ histórico importado: ${feitos} conversas lidas, ${novos} com dados, em ${Math.round((Date.now() - t0) / 1000)} s (carregador: ${via || "nenhum"}).`);
   } catch (e: any) {
     const det = (e?.name ? e.name + ": " : "") + (e?.message || String(e));
     gravarImportStatus({ rodando: false, erro: det, em: Date.now() });
     log("import histórico falhou: " + det + (e?.stack ? "\n" + e.stack : ""));
   } finally { importando = false; }
+}
+
+// Junta as mensagens de uma conversa lida do WhatsApp com o que já está no painel.
+function mesclarImportado(chat: RawChat, telCru: string, lim: number, janelasPorTel: Map<string, JanelaHumano[]>, confiaWeb: boolean): boolean {
+  try {
+    const tel = chaveInboxExistente(telCru); // casa a variante do 9º dígito já existente (NÃO duplica o card)
+    const ex = inbox.get(tel);
+    const acc: InboxMsg[] = ex ? ex.msgs.slice() : [];
+    const janelas = janelasPorTel.get(telCru.slice(-8));
+    for (const m of chat.msgs) {
+      const em = m.t ? m.t * 1000 : 0;
+      const texto = textoDoAnexo((m as any).tipo, String(m.body || ""));
+      if (!em || !texto) continue;
+      const quem = autorImportado(m as any, em, janelas, confiaWeb);
+      // Anexo que já estava como "📎 Anexo" (limpeza do texto codificado): troca
+      // pela versão certa (tipo + legenda), sem duplicar.
+      const anexoVelho = acc.find((x) => x.texto === "📎 Anexo" && Math.abs((x.em || 0) - em) < 15000);
+      if (anexoVelho) { if (texto !== "📎 Anexo") anexoVelho.texto = texto; continue; }
+      // Dedup robusto: NÃO reimporta uma mensagem que já existe (mesmo texto num
+      // horário próximo), INDEPENDENTE do autor (ao vivo grava segundo, o import, ms).
+      const igual = acc.find((x) => String(x.texto || "") === texto && Math.abs((x.em || 0) - em) < 15000);
+      if (igual) {
+        // Importada antes como "Atendente" genérico (sem quem/como): corrige o autor.
+        if (m.fromMe && igual.autor === "humano" && !igual.por && !igual.tipo) { igual.autor = quem.autor; if (quem.por) igual.por = quem.por; if (quem.tipo) igual.tipo = quem.tipo; }
+        continue;
+      }
+      const nova: InboxMsg = { autor: quem.autor, texto, em };
+      if (quem.por) nova.por = quem.por;
+      if (quem.tipo) nova.tipo = quem.tipo;
+      acc.push(nova);
+    }
+    acc.sort((a, b) => a.em - b.em);
+    const trimmed = acc.slice(-INBOX_MAX_MSGS);
+    // Mesmo sem texto de mensagem, guarda a última atividade (chat.t): a
+    // recepção já vê "esse contato falou antes, última vez em tal data".
+    const ultima = trimmed.length ? trimmed[trimmed.length - 1].em : (chat.t ? chat.t * 1000 : 0);
+    if (!ultima) return false;
+    const nomeChat = (chat.name && !/^\+?[\d ()-]+$/.test(String(chat.name))) ? String(chat.name) : "";
+    inbox.set(tel, { jid: chat.id, nome: (ex && ex.nome) || nomeChat, ultimaEm: Math.max(ultima, (ex && ex.ultimaEm) || 0), msgs: trimmed });
+    return true;
+  } catch (e: any) { log("import chat falhou: " + (e?.message || e)); return false; }
 }
 
 // ── Histórico de INTERAÇÕES (aba Contatos → Interações do painel) ────────────
