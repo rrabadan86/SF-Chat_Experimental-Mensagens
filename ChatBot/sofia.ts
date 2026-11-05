@@ -1251,7 +1251,9 @@ export async function gerarFollowup(
           "encerrou a conversa: recusou ou disse que não tem interesse; adiou sem data (ex.: 'quem sabe " +
           "no futuro', 'agora não', 'mais pra frente', 'vou pensar e te falo'); agradeceu e se despediu; " +
           "ou já agendou / disse que vai até o Studio. Também não retome se ela respondeu a uma retomada " +
-          "automática anterior encerrando. Nesses casos responda EXATAMENTE: PULAR: <motivo em poucas " +
+          "automática anterior encerrando. Vale o que a LEAD disse por último: se ela encerrou e DEPOIS " +
+          "a SoFIA ainda insistiu (outro convite, outra oferta) sem resposta, isso NÃO reabre a conversa — " +
+          "é para PULAR. Nesses casos responda EXATAMENTE: PULAR: <motivo em poucas " +
           "palavras>. Se ela apenas parou de responder com algo em aberto (uma dúvida, um horário, um " +
           "convite sem resposta), escreva a retomada normalmente — mesmo que a sua última mensagem tenha " +
           "sido cordial.\n\nOrientação do Studio: " + instr,
