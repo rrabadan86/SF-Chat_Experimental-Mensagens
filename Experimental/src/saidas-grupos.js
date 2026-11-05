@@ -3,7 +3,7 @@
  * mensagem de despedida (WhatsApp → Configuração, card "Saída — não renovou").
  *
  * Regras (pedidas pelo Studio):
- *   - Saída = o contrato SlimFit venceu há 7 dias (ou mais, até 17) e ela NÃO
+ *   - Saída = o contrato SlimFit venceu há N dias (painel; padrão 7 — até N+10) e ela NÃO
  *     renovou: não está ativa (trancada conta como ativa), não tem contrato na
  *     FILA (fila = renovou) e não tem Circuito/VIP vigente (continua cliente).
  *   - Primeiro RETIRA de todos os grupos em comum com o número do Studio (o
@@ -24,8 +24,10 @@ const path = require('path');
 const DATA = path.resolve(__dirname, '..', 'data');
 const ATIVAS = path.join(DATA, 'alunas-ativas-historico.json');
 const REG = path.join(DATA, 'saidas-grupos.json');
-const DIAS_VENCIDO = 7;   // tolerância: renovação com até 7 dias de atraso não é saída
-const JANELA = 10;        // procura vencimentos de 7 a 17 dias atrás
+const CFG = path.join(DATA, 'saidas-grupos-cfg.json');
+const DIAS_PADRAO = 7;    // tolerância: renovação com até N dias de atraso não é saída (editável no painel)
+const DIAS_MIN = 1, DIAS_MAX = 60;
+const JANELA = 10;        // procura vencimentos de N a N+10 dias atrás
 const MAX_POR_DIA = 15;   // acima disso a leitura do EVO é suspeita
 const CONTEXTO = 'Saída — não renovou';
 
@@ -36,6 +38,17 @@ const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toL
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 function lerJson(arq, padrao) { try { const o = JSON.parse(fs.readFileSync(arq, 'utf8')); return o && typeof o === 'object' ? o : padrao; } catch (_) { return padrao; } }
+// Quantos dias depois do vencimento ela conta como "não renovou" (painel).
+function diasVencido() {
+  const n = parseInt(lerJson(CFG, {}).dias, 10);
+  return Number.isFinite(n) && n >= DIAS_MIN && n <= DIAS_MAX ? n : DIAS_PADRAO;
+}
+function salvarDias(v) {
+  const n = parseInt(v, 10);
+  if (!Number.isFinite(n) || n < DIAS_MIN || n > DIAS_MAX) return null;
+  try { fs.mkdirSync(DATA, { recursive: true }); fs.writeFileSync(CFG, JSON.stringify({ dias: n }, null, 2)); } catch (_) { return null; }
+  return n;
+}
 function lerRegistro() { const o = lerJson(REG, {}); return { feitos: o.feitos || {}, ultimo: o.ultimo || null, ultimaAcao: o.ultimaAcao || null, ultimoSim: o.ultimoSim || null }; }
 function gravarRegistro(r) { try { fs.mkdirSync(DATA, { recursive: true }); fs.writeFileSync(REG, JSON.stringify(r, null, 2)); } catch (_) {} }
 
@@ -49,11 +62,16 @@ function candidatas({ hoje = hojeSP() } = {}) {
   const reg = lerRegistro();
   let contatosMapa = {};
   try { contatosMapa = require('./contatos').carregar() || {}; } catch (_) {}
-  const porIdEvo = new Map();
-  for (const tel in contatosMapa) { const c = contatosMapa[tel]; if (c && c.idEvo) porIdEvo.set(String(c.idEvo), { tel, c }); }
+  const porIdEvo = new Map(), porTel = new Map();
+  for (const tel in contatosMapa) {
+    const c = contatosMapa[tel]; if (!c) continue;
+    if (c.idEvo) porIdEvo.set(String(c.idEvo), { tel, c });
+    const k = last8(tel); if (k && !porTel.has(k)) porTel.set(k, { tel, c });
+  }
   let tagAluna = '0. Aluna';
   try { tagAluna = require('./auto-tag-alunas').ler().tagAluna || tagAluna; } catch (_) {}
-  const de = somaDias(hoje, -(DIAS_VENCIDO + JANELA)), ate = somaDias(hoje, -DIAS_VENCIDO);
+  const dias = diasVencido();
+  const de = somaDias(hoje, -(dias + JANELA)), ate = somaDias(hoje, -dias);
   const out = [];
   for (const id of Object.keys(pes)) {
     const p = pes[id];
@@ -64,16 +82,19 @@ function candidatas({ hoje = hojeSP() } = {}) {
     if (!fim || fim < de || fim > ate) continue;          // venceu fora da janela 7–17 dias
     const cs = Array.isArray(p.cs) ? p.cs : [];
     const ult = cs.filter(c => c[1] === fim).pop() || cs[cs.length - 1] || [];
-    const ct = porIdEvo.get(String(id));
-    const item = { id, nome: (ct && ct.c.nome) || p.n || '', fim, contrato: ult[2] || '', telefone: ct ? ct.tel : '', motivo: '' };
+    // Contato: pelo código do EVO; senão pelo celular do cadastro do EVO (p.tel);
+    // não está nos Contatos → usa o celular do EVO direto.
+    let ct = porIdEvo.get(String(id)) || (p.tel ? porTel.get(last8(p.tel)) : null) || null;
+    if (!ct && p.tel) ct = { tel: String(p.tel).replace(/\D/g, ''), c: { nome: p.n || '', tags: [] }, soEvo: true };
+    const item = { id, nome: (p.nc && p.n) || (ct && ct.c.nome) || p.n || '', fim, contrato: ult[2] || '', telefone: ct ? ct.tel : '', motivo: '' };
     if (p.fq) item.motivo = `renovou (contrato na fila: ${p.fq[0] || 'novo contrato'}, começa ${p.fq[1] || ''})`;
     else if (p.cv) item.motivo = 'tem Circuito/VIP vigente (continua cliente)';
     else if (reg.feitos[`${id}|${fim}`]) item.motivo = 'já tratada em ' + String(reg.feitos[`${id}|${fim}`].em || '').slice(0, 10).split('-').reverse().join('/');
-    else if (!ct) item.motivo = 'sem telefone nos Contatos (o código do EVO dela não está em nenhum contato)';
+    else if (!ct) item.motivo = 'sem telefone: não está nos Contatos com o código do EVO e o celular do cadastro do EVO ainda não foi lido (a leitura das 05:25 busca)';
     else if ((ct.c.tags || []).some(t => norm(t) === norm(tagAluna))) item.motivo = `ainda está com a tag "${tagAluna}" nos Contatos`;
     out.push(item);
   }
-  return { hoje, fotoDia: (h.ultimo && h.ultimo.dia) || '', de, ate, lista: out.sort((a, b) => a.fim.localeCompare(b.fim) || a.nome.localeCompare(b.nome)) };
+  return { hoje, dias, fotoDia: (h.ultimo && h.ultimo.dia) || '', de, ate, lista: out.sort((a, b) => a.fim.localeCompare(b.fim) || a.nome.localeCompare(b.nome)) };
 }
 
 async function runSaidasGrupos({ dry = false, log = console.log } = {}) {
@@ -158,7 +179,7 @@ async function runSaidasGrupos({ dry = false, log = console.log } = {}) {
   return res;
 }
 
-module.exports = { candidatas, runSaidasGrupos, lerRegistro, DIAS_VENCIDO, JANELA, CONTEXTO };
+module.exports = { candidatas, runSaidasGrupos, lerRegistro, diasVencido, salvarDias, DIAS_MIN, DIAS_MAX, JANELA, CONTEXTO };
 
 if (require.main === module) {
   const dry = process.argv.includes('--dry');

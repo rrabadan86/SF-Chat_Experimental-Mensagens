@@ -107,6 +107,49 @@ def contrato_vigente(m, hoje):
     return "conta", (c.get("name") or "").strip(), tranc, fila
 
 
+def telefone_do_detalhe(d):
+    """Celular do cadastro do EVO (detalhe da cliente). O formato varia: procura
+    em "contacts" (tipo celular/telefone) e em campos com cell/phone/celular no
+    nome. Devolve só dígitos (10 a 13) ou ""."""
+    cands = []
+
+    def dig(v):
+        x = re.sub(r"\D", "", str(v or ""))
+        return x if 10 <= len(x) <= 13 else ""
+
+    for c in (d.get("contacts") or []) if isinstance(d, dict) else []:
+        if not isinstance(c, dict):
+            continue
+        tipo = " ".join(str(c.get(k) or "") for k in ("contactType", "type", "description_type", "idContactType")).lower()
+        val = c.get("description") or c.get("value") or c.get("contact") or ""
+        if "@" in str(val):
+            continue
+        n = dig(str(c.get("ddi") or "") + str(val)) or dig(val)
+        if n:
+            cands.append((0 if re.search(r"cel|mobile|whats", tipo) else 1, n))
+
+    def varrer(o, prof=0):
+        if prof > 3:
+            return
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if isinstance(v, (dict, list)):
+                    varrer(v, prof + 1)
+                elif re.search(r"cell|celular|mobile|phone|telefone|whats", str(k), re.I):
+                    n = dig(v)
+                    if n:
+                        cands.append((0 if re.search(r"cell|celular|mobile|whats", str(k), re.I) else 2, n))
+        elif isinstance(o, list):
+            for v in o:
+                varrer(v, prof + 1)
+
+    varrer(d)
+    if not cands:
+        return ""
+    cands.sort(key=lambda x: x[0])
+    return cands[0][1]
+
+
 def _fim_efetivo(m):
     fim = _d(m.get("endDate"))
     c = _d(m.get("cancelDate"))
@@ -237,6 +280,7 @@ def main():
     # Quem é cada uma (a tela lista as alunas de cada período). Grava antes de
     # buscar os nomes — se o EVO demorar, os números já ficam salvos.
     nomes = h.get("nomes") or {}
+    tels = h.get("tels") or {}  # celular do cadastro de quem saiu (o job de saída dos grupos usa)
 
     def montar_pessoas():
         pes = {}
@@ -251,6 +295,8 @@ def main():
             p = {"n": nomes.get(k) or str(m.get("firstName") or "").strip() or f"id {k}", "iv": iv, "cs": cs}
             if k in nomes:
                 p["nc"] = 1  # nome completo (do cadastro do EVO)
+            if k in tels and k not in ativas:
+                p["tel"] = tels[k]
             if k in info:
                 p["c"], p["t"] = info[k][0], info[k][1]
                 if info[k][2]:
@@ -271,6 +317,7 @@ def main():
 
     def gravar():
         h["nomes"] = nomes
+        h["tels"] = {k: v for k, v in tels.items() if v}
         h["pessoas"] = montar_pessoas()
         os.makedirs(os.path.dirname(ARQ), exist_ok=True)
         tmp = ARQ + ".tmp"
@@ -295,6 +342,10 @@ def main():
             nm = " ".join(x for x in (str(d.get("firstName") or "").strip(), str(d.get("lastName") or "").strip()) if x)
             if nm:
                 nomes[idm] = nm
+            if idm not in ativas:
+                t = telefone_do_detalhe(d)
+                if t:
+                    tels[idm] = t
         except Exception:
             falhas += 1
             if falhas >= 3:  # EVO instável: fica para a próxima
@@ -302,6 +353,25 @@ def main():
         if buscados % 25 == 0:
             gravar()
     gravar()
+    # Celular de quem SAIU nos últimos 40 dias (o job "Saída — não renovou" usa):
+    # busca o cadastro de quem ainda não tem telefone guardado (poucas por dia).
+    corte = (hoje - timedelta(days=40)).isoformat()
+    pes = h["pessoas"]
+    sem_tel = [k for k in pes if k not in ativas and k not in tels and pes[k]["iv"] and pes[k]["iv"][-1][1] >= corte]
+    falhas_t = 0
+    for idm in sem_tel[:80]:
+        try:
+            d = evo._request("GET", f"/api/v1/members/{int(idm)}") or {}
+            tels[idm] = telefone_do_detalhe(d) or ""
+            nm = " ".join(x for x in (str(d.get("firstName") or "").strip(), str(d.get("lastName") or "").strip()) if x)
+            if nm and idm not in nomes:
+                nomes[idm] = nm
+        except Exception:
+            falhas_t += 1
+            if falhas_t >= 3:
+                break
+    if sem_tel:
+        gravar()
     sem_nome_total = sum(1 for k in h["pessoas"] if k not in nomes)
     sem_nome = len(ativas - set(nomes))
     extra = f" · entraram {entraram} · saíram {sairam}" if base else " · primeira foto (entradas/saídas a partir de amanhã)"
