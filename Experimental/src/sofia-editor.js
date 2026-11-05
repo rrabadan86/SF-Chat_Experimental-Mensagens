@@ -334,6 +334,39 @@ function normalizarSecoes(secoes) {
   return out.filter(s => (s.titulo && s.titulo.trim()) || (s.corpo && s.corpo.trim()));
 }
 
+// ── Importar o prompt inteiro de um .txt (painel → "Importar prompt") ───────
+// Prévia: compara seção por seção (pelo título, sem acento/caixa) com o atual.
+function previaImportacao(texto) {
+  const nc = (x) => String(x || '').replace(/\r\n/g, '\n').replace(/\s+$/, '').trim();
+  const novo = normalizarSecoes(parseSecoes(texto));
+  const atual = parseSecoes(ler(F.prompt));
+  const mapA = new Map(atual.map(s => [_normTitulo(s.titulo), s]));
+  const vistos = new Set();
+  const out = [];
+  for (const s of novo) {
+    const k = _normTitulo(s.titulo); vistos.add(k);
+    const a = mapA.get(k);
+    out.push({ titulo: s.titulo, status: !a ? 'nova' : (nc(a.corpo) === nc(s.corpo) ? 'igual' : 'alterada') });
+  }
+  for (const a of atual) if (!vistos.has(_normTitulo(a.titulo))) out.push({ titulo: a.titulo, status: 'removida' });
+  return { secoes: out, total: novo.length, valido: validarImport(novo) };
+}
+function validarImport(secs) {
+  const p = montarPrompt(secs);
+  if (secs.length < 3 || p.trim().length < 200) return 'O arquivo não parece um prompt da SoFIA: precisa ter as seções com linhas "# TÍTULO" (como o que o botão "Baixar prompt atual" gera).';
+  return '';
+}
+// Grava o prompt importado (guarda o atual para o "Restaurar anterior").
+function importarPrompt(texto) {
+  const secs = normalizarSecoes(parseSecoes(texto));
+  const erro = validarImport(secs);
+  if (erro) throw new Error(erro);
+  try { if (existe(F.prompt)) fs.copyFileSync(F.prompt, F.promptBak); } catch (_) {}
+  try { if (existe(F.extracao)) fs.copyFileSync(F.extracao, F.extracaoBak); } catch (_) {} // restaurar volta ao estado de antes da importação
+  gravarArquivo(F.prompt, montarPrompt(secs));
+  return secs.length;
+}
+
 // Estado completo para a página.
 function estado() {
   return {
@@ -1071,7 +1104,7 @@ function gravarAvisoHumano(on, numero, palavras) {
 }
 
 module.exports = {
-  disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado,
+  disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado, previaImportacao, importarPrompt,
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
   conversas, historico, consumirAgendamentos, gravarRegras, consumirEventos, enfileirarAviso, enfileirarResposta, enfileirarAgendamento, lerAgendamentoResult, consumirAgendarInbox, gravarAgendarResultId, registrarAgendou, salvarFotoResposta, lerHumano, controleHumanoDe, humanoDono, lerHumanoLockMin, gravarHumanoLockMin, setControleHumano, lerHumanoLog, registrarTagLog, lerTagLog, lerBloqueios, estaBloqueado, setBloqueio, lerNaoResponder, gravarNaoResponder, estaNaoResponder, lerAlunas, gravarAlunas, dentroJanelaRecepcao, lerEncerradas, estaEncerrada, ultimaAlunaEm, encerradaInfo, setEncerrada, lerFollowupCfg, gravarFollowupCfg, enfileirarFollowup, lerModelos, gravarModelos, MODELOS_VALIDOS, lerTranscricaoOn, gravarTranscricaoOn, enviarComando, lerImportStatus,
