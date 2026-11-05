@@ -1610,6 +1610,7 @@ function paginaMensagens(aviso, erro) {
     ['confirmacao', '📅 Confirmação de aula', 'lembrete antes da aula', ['confirmacao_hoje', 'confirmacao_amanha', 'confirmacao_experimental', 'confirmacao_experimental_express']],
     ['contratos', '📄 Contratos e renovação', 'vencimento, renovação e saída', ['renovacao', 'vence_hoje', 'saida_grupos']],
     ['followup', '🔁 Follow-up e remarcação', 'depois da aula experimental', ['followup', 'followup_aluna', 'no_show']],
+    ['sentimos', '💛 Sentimos sua falta', 'alunas ativas que pararam de vir', ['sentimos_falta_1', 'sentimos_falta_2']],
     ['aniv-ind', '🎂 Aniversário', '', ['aniversario_ex']],
   ]);
   const itensGrupo = emBlocos(listaMsgs.filter(m => MSGS_GRUPO.has(m.chave)), [
@@ -2180,6 +2181,8 @@ const HORARIOS_DA_MSG = {
   no_show:             [['noShowMorning', 'Manhã'], ['noShowAfternoon', 'Tarde']],
   renovacao:           [['renewal', '']],
   saida_grupos:        [['saidaGrupos', '']],
+  sentimos_falta_1:    [['sentimosFalta', '']],
+  sentimos_falta_2:    'compartilha:sentimos', // mesmo disparo de segunda da 1ª — só nota
   vence_hoje:          [['venceHoje', '']],
   aniversario:         [['aniversariantes', '']],
   aniversario_ex:      [['aniversarioEx', '']],
@@ -2220,6 +2223,9 @@ function cardDeMsg(m, hmap, voltar) {
   if (mapa === 'compartilha:followup') {
     hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
       <p class="quando" style="margin:0">Segue o <b>mesmo horário do Follow-up pós-aula (ainda não fechou)</b>, logo acima — é o mesmo disparo, muda só o texto conforme a lead.</p></div>`;
+  } else if (mapa === 'compartilha:sentimos') {
+    hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
+      <p class="quando" style="margin:0">Sai no <b>mesmo disparo de segunda da 1ª mensagem</b>, logo acima (o botão Ativado de lá vale para as duas). Os dias entre a 1ª e a 2ª ficam no cartão da 1ª.</p></div>`;
   } else if (mapa === 'compartilha:cobranca') {
     hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
       <p class="quando" style="margin:0">Segue o <b>mesmo horário da Cobrança — recorrente</b>, logo acima — é o mesmo disparo, muda só o texto conforme o caso (recorrente = link de pagamento; boleto vencido = boleto; saldo devedor sem boleto = este texto, sem link). A <b>"boleto vence HOJE"</b> tem horário/dias próprios (no card dela).</p></div>`;
@@ -2231,7 +2237,7 @@ function cardDeMsg(m, hmap, voltar) {
   }
   const sw = switchEnvio(jobsDoCard(m.chave));
   const opts = /^cobranca_/.test(m.chave) ? { cobranca: true } : undefined;
-  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : '';
+  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : (m.chave === 'sentimos_falta_1') ? blocoSentimos() : '';
   return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar, opts)}${hbloco}${extra}</div>`;
 }
 
@@ -2322,6 +2328,43 @@ function blocoVenceHoje() {
   </div>`;
 }
 
+// Sentimos sua falta: dias configuráveis, quem está esperando a 2ª, a última
+// simulação/execução e o botão de simular (lê o EVO; não envia).
+function blocoSentimos() {
+  let cfg = { diasAusente: 14, diasEntre: 10 }, reg = { alunas: {} }, LIM = { diasAusente: [7, 120], diasEntre: [3, 60] };
+  try { const sf = require('./sentimos-falta'); cfg = sf.lerCfg(); reg = sf.lerRegistro(); LIM = sf.LIM; } catch (_) {}
+  const ligado = jobsAtivos.ativo('sentimosFalta');
+  const br = (iso) => iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '';
+  const quando = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+  const soma = (iso, n) => { const d = new Date(String(iso).slice(0, 10) + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const al = Object.values(reg.alunas || {});
+  const esperando = al.filter(a => a.m1 && !a.m2 && !a.invalido).sort((a, b) => String(a.m1).localeCompare(String(b.m1)));
+  const ambas = al.filter(a => a.m2).length;
+  const linhaRes = (x, sim) => `<div class="sg-row${x.etapa ? '' : ' fora'}"><b>${esc(x.nome)}</b> <span class="quando" style="margin:0">sem vir há ${x.dias != null ? x.dias : '?'} dias${x.ultima ? ' (última presença ' + esc(x.ultima) + ')' : ''}</span>${x.etapa ? `<div class="quando" style="margin:2px 0 0">${sim ? '🧪 receberia' : (x.ok ? '✉️ recebeu' : '⚠️ não saiu' + (x.erro ? ': ' + esc(x.erro) : ''))} a <b>${x.etapa}ª mensagem</b></div>` : `<div class="quando" style="margin:2px 0 0">⏭️ ${esc(x.motivo || '')}</div>`}</div>`;
+  const resumo = (r, sim) => {
+    if (!r) return '';
+    const vai = (r.itens || []).filter(x => x.etapa), fora = (r.itens || []).filter(x => !x.etapa);
+    return `<div class="sg-ult"><b>${sim ? '🧪 Simulação' : 'Último envio'} (${quando(r.em)}):</b> ${r.total || 0} ausente(s) ativa(s)${r.trancadas ? `, ${r.trancadas} trancada(s) fora` : ''} — ${vai.filter(x => x.etapa === 1).length} na 1ª, ${vai.filter(x => x.etapa === 2).length} na 2ª.</div>
+      ${vai.length ? `<div class="sg-lista">${vai.map(x => linhaRes(x, sim)).join('')}</div>` : ''}
+      ${fora.length ? `<details class="sg-fora"><summary>Ficaram de fora (${fora.length})</summary>${fora.map(x => linhaRes(x, sim)).join('')}</details>` : ''}`;
+  };
+  return `<div class="hsec" id="sentimos"><div class="hsec-t">Regras e acompanhamento</div>
+    <p class="quando" data-se-desligado style="margin:0 0 8px;color:var(--warn)${ligado ? ';display:none' : ''}">⏸️ Desligado: nada é enviado até você ligar o botão <b>Ativado</b> no topo deste cartão.</p>
+    <form method="POST" action="/sentimos/cfg" class="hrow" style="align-items:flex-end;margin:0 0 10px;flex-wrap:wrap;gap:12px">
+      <div><div class="lbl">Sem treinar há (dias)</div><input type="number" name="diasAusente" min="${LIM.diasAusente[0]}" max="${LIM.diasAusente[1]}" value="${cfg.diasAusente}" required style="width:92px"></div>
+      <div><div class="lbl">2ª mensagem depois de (dias)</div><input type="number" name="diasEntre" min="${LIM.diasEntre[0]}" max="${LIM.diasEntre[1]}" value="${cfg.diasEntre}" required style="width:92px"></div>
+      <button type="submit" class="save">Salvar</button>
+    </form>
+    <p class="quando" style="margin:0 0 8px">Toda segunda o robô lê no EVO (CRM → Faltantes) as alunas <b>ativas</b> sem presença há <b>${cfg.diasAusente}+ dias</b>. <b>Trancada não recebe.</b> Quem nunca recebeu vai na <b>1ª</b>; quem recebeu a 1ª há <b>${cfg.diasEntre}+ dias</b> e continua sem nenhuma presença nova vai na <b>2ª</b>. Depois da 2ª, nada mais até ela voltar a treinar — se voltar e sumir de novo, recomeça pela 1ª. Como o envio é só às segundas, a 2ª sai na primeira segunda depois desse prazo.</p>
+    <div class="sg-ult"><b>Agora:</b> ${esperando.length} aluna(s) receberam a 1ª e podem receber a 2ª · ${ambas} já receberam as duas.</div>
+    ${esperando.length ? `<details class="sg-fora"><summary>Esperando a 2ª (${esperando.length})</summary>${esperando.map(a => `<div class="sg-row"><b>${esc(a.nome)}</b> <span class="quando" style="margin:0">1ª em ${br(a.m1)} · 2ª a partir de ${br(soma(a.m1, cfg.diasEntre))}, se continuar sem vir</span></div>`).join('')}</details>` : ''}
+    ${resumo(reg.ultimoSim, true)}
+    ${resumo(reg.ultimaAcao, false)}
+    <form method="POST" action="/sentimos/simular" style="margin-top:10px"><button type="submit" class="tbtn">🧪 Simular agora (lê o EVO e mostra quem receberia — não envia)</button></form>
+    <style>.sg-row{padding:7px 0;border-top:1px solid var(--linha-soft);font-size:.88rem}.sg-row:first-child{border-top:0}.sg-row.fora{opacity:.75}.sg-fora{margin-top:8px}.sg-fora summary{cursor:pointer;font-weight:700;font-size:.85rem;color:var(--teal)}.sg-ult{margin-top:10px;font-size:.84rem;color:var(--cinza);line-height:1.5}.sg-ult b{color:var(--tinta)}</style>
+  </div>`;
+}
+
 function blocoRenovDias() {
   const d = renovacaoConfig.diasAntes();
   return `<div class="hsec"><div class="hsec-t">Antecedência do aviso</div>
@@ -2391,6 +2434,7 @@ const JOBS_DO_LOG = [
   [/^Renovação/i, 'renovacao', false, 'Aviso de renovação'],
   [/^Vence hoje — sem renovação/i, 'venceHoje', true, 'Avisa quem vence hoje sem renovação (quem já recebeu não repete)'],
   [/^Saída — não renovou/i, 'saidaGrupos', true, 'Retira dos grupos e manda a mensagem (quem já foi tratada não repete)'],
+  [/^Sentimos sua falta/i, 'sentimosFalta', true, 'Sentimos sua falta: quem já recebeu não repete'],
   [/^Resumo do dia/i, 'resumoDia', false, 'Resumo do dia'],
   [/^Cobrança de inadimplentes/i, 'inadimplentes', true, 'Cobrança: manda só para quem ainda não foi cobrada hoje'],
   [/^Cobrança — boleto vence hoje/i, 'inadimplentesHoje', true, 'Boleto vence hoje: manda só para quem ainda não recebeu hoje'],
@@ -9506,6 +9550,9 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)okdias=1/.test(q)) aviso = '✅ Dias depois do vencimento salvos — vale no próximo disparo.';
     else if (/(?:^|&)errdias=1/.test(q)) { aviso = '⚠️ Use um número de 1 a 60 dias.'; erro = true; }
     else if (/(?:^|&)oksim=1/.test(q)) aviso = '🧪 Simulação pedida ao robô — em 1 a 2 minutos, atualize a página: o resultado aparece no cartão "Saída — não renovou".';
+    else if (/(?:^|&)oksfcfg=1/.test(q)) aviso = '✅ Sentimos sua falta: dias salvos — vale no próximo disparo, sem reiniciar.';
+    else if (/(?:^|&)errsfcfg=1/.test(q)) { aviso = '⚠️ Sentimos sua falta: use de 7 a 120 dias sem treinar e de 3 a 60 dias entre as mensagens.'; erro = true; }
+    else if (/(?:^|&)oksfsim=1/.test(q)) aviso = '🧪 Simulação pedida ao robô — ele lê o EVO (leva uns 5 a 15 minutos). Depois atualize a página: o resultado aparece no cartão "Sentimos sua falta — 1ª mensagem".';
     else if (/(?:^|&)errsim=1/.test(q)) { aviso = '⚠️ O robô ainda vai rodar outro pedido — tente de novo em 1 minuto.'; erro = true; }
     else if (/(?:^|&)okae=1/.test(q)) aviso = '🚫 Grupos que não recebem o parabéns salvos — já vale no próximo envio.';
     else if (/(?:^|&)errae=1/.test(q)) { aviso = '⚠️ Não consegui salvar os grupos que não recebem o parabéns.'; erro = true; }
@@ -9814,6 +9861,28 @@ const server = http.createServer((req, res) => {
       try { gr = anivExcluir.salvar(new URLSearchParams(corpo).get('grupos') || ''); } catch (_) { ok = false; }
       try { if (ok) auditoria.registrar(sess.usuario, 'aniversario.excluir', gr.join(' | ') || '(nenhum)', ''); } catch (_) {}
       res.writeHead(303, { Location: '/?view=config&' + (ok ? 'okae=1' : 'errae=1') + '#aniv-excluir' }); res.end();
+    });
+  }
+
+  if (req.method === 'POST' && url === '/sentimos/cfg') {
+    return lerCorpo(req, 1e4, corpo => {
+      const p = new URLSearchParams(corpo);
+      let r = null;
+      try { r = require('./sentimos-falta').salvarCfg({ diasAusente: p.get('diasAusente'), diasEntre: p.get('diasEntre') }); } catch (_) {}
+      try { if (r) auditoria.registrar(sess.usuario, 'sentimos.cfg', `${r.diasAusente} dias / 2ª após ${r.diasEntre}`, ''); } catch (_) {}
+      res.writeHead(303, { Location: '/?view=config&' + (r ? 'oksfcfg=1' : 'errsfcfg=1') + '#sentimos' }); res.end();
+    });
+  }
+  if (req.method === 'POST' && url === '/sentimos/simular') {
+    return lerCorpo(req, 1e4, () => {
+      let ok = true;
+      try {
+        const arq = path.resolve(__dirname, '..', 'data', 'rodar-job.json');
+        if (fs.existsSync(arq)) ok = false;
+        else fs.writeFileSync(arq, JSON.stringify({ job: 'sentimosFaltaDry', id: 'sim' + Date.now().toString(36) }));
+        try { auditoria.registrar(sess.usuario, 'sentimos.simular', '', ''); } catch (_) {}
+      } catch (_) { ok = false; }
+      res.writeHead(303, { Location: '/?view=config&' + (ok ? 'oksfsim=1' : 'errsim=1') + '#sentimos' }); res.end();
     });
   }
 

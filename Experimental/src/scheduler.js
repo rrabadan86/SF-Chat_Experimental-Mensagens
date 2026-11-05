@@ -764,6 +764,8 @@ function iniciarRodarJobWatcher() {
     venceHoje:         { nome: 'Vence hoje — sem renovação [manual]', fn: () => require('./vence-hoje').runVenceHoje({ log }), timeoutMs: 20 * 60 * 1000 },
     saidaGrupos:       { nome: 'Saída — não renovou [manual]', fn: () => require('./saidas-grupos').runSaidasGrupos({ log }), timeoutMs: 20 * 60 * 1000 },
     saidaGruposDry:    { nome: 'Saída — não renovou (simulação) [manual]', fn: () => require('./saidas-grupos').runSaidasGrupos({ dry: true, log }), timeoutMs: 20 * 60 * 1000 },
+    sentimosFalta:     { nome: 'Sentimos sua falta [manual]', fn: () => require('./sentimos-falta').runSentimosFalta({ log }), timeoutMs: 60 * 60 * 1000 },
+    sentimosFaltaDry:  { nome: 'Sentimos sua falta (simulação) [manual]', fn: () => require('./sentimos-falta').runSentimosFalta({ dry: true, log }), timeoutMs: 40 * 60 * 1000 },
     inadimplentesHoje: { nome: 'Cobrança — boleto vence hoje [manual]', fn: () => require('./inadimplentes').runInadimplentes({ dry: false, modo: 'hoje' }), timeoutMs: 20 * 60 * 1000 },
     slotsPush:         { nome: 'Grade→formulário [manual]', fn: () => resultadoOuErro(runSlotsPush('pelo painel')), timeoutMs: 3 * 60 * 1000 },
     gradeFixas:        { nome: 'Grade de fixas [manual]',   fn: () => resultadoOuErro(runGradeFixas('pelo painel')), timeoutMs: 16 * 60 * 1000 },
@@ -1128,6 +1130,17 @@ async function main() {
         .catch(err => logError('Vence hoje — sem renovação', err));
     }, { timezone: 'America/Sao_Paulo' });
     log(`📅 Job VENCE HOJE agendado: ${config.schedule.venceHoje} — ${jobsAtivos.ativo('venceHoje') ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
+  }
+
+  // Sentimos sua falta: ativas sem presença há N dias (1ª e 2ª mensagem) — toda segunda.
+  if (config.schedule.sentimosFalta) {
+    cron.schedule(config.schedule.sentimosFalta, async () => {
+      if (!jobsAtivos.ativo('sentimosFalta')) { log('⏸️  Sentimos sua falta: desligado no painel — pulando'); return; }
+      log('⏰ Cron disparado: Sentimos sua falta');
+      runJob('Sentimos sua falta', () => require('./sentimos-falta').runSentimosFalta({ log }), 60 * 60 * 1000, { retry: false })
+        .catch(err => logError('Sentimos sua falta', err));
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job SENTIMOS SUA FALTA agendado: ${config.schedule.sentimosFalta} — ${jobsAtivos.ativo('sentimosFalta') ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
   }
 
   // Saída — não renovou: retira dos grupos e manda a mensagem (desligado até ligar no painel).
