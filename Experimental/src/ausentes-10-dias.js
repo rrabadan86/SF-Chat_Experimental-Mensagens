@@ -342,9 +342,9 @@ function ehAtivo(contrato) {
 }
 
 // ─── Coleta as ausentes no EVO ───────────────────────────────────────────────
-async function coletarAusentes() {
+async function coletarAusentes(dias = DIAS_MIN) {
   console.log('\n═══════════════════════════════════════════════════');
-  console.log(`🚶 Buscando ausentes há ${DIAS_MIN} dias ou mais no EVO...`);
+  console.log(`🚶 Buscando ausentes há ${dias} dias ou mais no EVO...`);
   console.log('═══════════════════════════════════════════════════\n');
 
   const browser = await puppeteer.launch({
@@ -376,7 +376,7 @@ async function coletarAusentes() {
     }
     console.log(`   🖼️  Frame alvo: ${frame.url() || '(main)'}`);
 
-    await setDiasSemPresenca(frame, DIAS_MIN);
+    await setDiasSemPresenca(frame, dias);
     await marcarInadimplentes(frame);
     await sleep(800);
     await clicarLupa(frame);
@@ -432,19 +432,22 @@ async function coletarAusentes() {
       return da - db;
     });
 
-    console.log(`\n   ✅ ${unicas.length} aluna(s) ATIVA(s) ausente(s) há ${DIAS_MIN}+ dias\n`);
+    console.log(`\n   ✅ ${unicas.length} aluna(s) ATIVA(s) ausente(s) há ${dias}+ dias\n`);
 
     // ── Cruza com os TRANCAMENTOS (Gerencial > Suspensões) ──────────────────
     // Reaproveita a MESMA sessão logada (page). Aluna cujo trancamento sobrepõe
     // a janela de N dias NÃO é "ausente de verdade" — separa em outra lista.
     // Janela de trancamentos = 30 dias (cobre bem os últimos 10 de ausência,
     // pegando também quem destrancou faz pouco). Configurável via env.
-    const TRANC_DIAS = parseInt(process.env.TRANC_LOOKBACK_DIAS || '30', 10);
+    // Janela maior quando o corte de dias é maior (ex.: "Sentimos sua falta", 14+).
+    const TRANC_DIAS = Math.max(parseInt(process.env.TRANC_LOOKBACK_DIAS || '30', 10), dias + 20);
     let trancamentos = [];
+    let trancOk = true; // false = não deu para ler as suspensões (quem envia direto para a aluna NÃO deve seguir)
     try {
       const { coletarTrancamentos } = require('./suspensoes');
       trancamentos = await coletarTrancamentos(TRANC_DIAS, page);
     } catch (e) {
+      trancOk = false;
       console.log(`   ⚠️  Falha ao ler suspensões (sigo sem excluir trancadas): ${e.message}`);
     }
 
@@ -469,7 +472,7 @@ async function coletarAusentes() {
     }
     console.log(`   🔒 ${trancadas.length} trancada(s) removida(s) da lista de ausentes; ${ausentesReais.length} ausente(s) real(is).\n`);
 
-    return { ausentes: ausentesReais, trancadas };
+    return { ausentes: ausentesReais, trancadas, trancOk };
   } finally {
     await browser.close();
   }

@@ -135,6 +135,20 @@ const CATALOGO = [
     padrao: 'Oie, {nome}!! Tudo bem?\n\nPoxa, que pena que você não continuará mais conosco! Sentiremos muito a sua falta!\n\nVou te retirar do grupo para que não te atrapalhe com as mensagens da turma!\n\nEspero que possa retornar para o SlimFit em breve!\nUma boa semana!! ❤️❤️❤️',
   },
   {
+    chave: 'sentimos_falta_1',
+    titulo: 'Sentimos sua falta — 1ª mensagem',
+    quando: 'Toda segunda (horário abaixo), para a aluna ATIVA e não trancada que está sem treinar há alguns dias (você escolhe quantos, abaixo — padrão 14). Cada aluna recebe uma vez por "sumiço": se ela voltar a treinar e sumir de novo, recomeça.',
+    vars: [['nome', 'primeiro nome da aluna'], ['dias', 'há quantos dias ela não vem (pela última presença no EVO)']],
+    padrao: 'Oi, {nome}! Tudo bem? 💛\n\nSentimos a sua falta aqui no {studio}! Já faz {dias} dias que você não vem treinar com a gente.\n\nAconteceu alguma coisa? Se a rotina apertou, me conta que eu te ajudo a encontrar o melhor horário para você voltar. 😊',
+  },
+  {
+    chave: 'sentimos_falta_2',
+    titulo: 'Sentimos sua falta — 2ª mensagem',
+    quando: 'Para quem recebeu a 1ª mensagem e continua sem treinar (nenhuma presença nova no EVO) depois de alguns dias (você escolhe quantos — padrão 10). Sai no mesmo disparo de segunda da 1ª. Depois da 2ª, nada mais até ela voltar.',
+    vars: [['nome', 'primeiro nome da aluna'], ['dias', 'há quantos dias ela não vem (pela última presença no EVO)']],
+    padrao: 'Oi, {nome}! Tudo bem? 😊\n\nPassando de novo para dizer que a sua turma está te esperando! Já são {dias} dias sem você por aqui, e cada treino conta para os seus resultados. 💪\n\nQue tal voltar esta semana? Me fala o melhor dia que eu já deixo tudo certo para você. 💛',
+  },
+  {
     chave: 'instagram',
     titulo: 'Boas-vindas no Instagram (DM)',
     quando: 'Enviada às 07:00 para novas seguidoras (em teste).',
