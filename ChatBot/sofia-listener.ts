@@ -821,7 +821,7 @@ function retencaoMs(): number {
   const d = Number.isFinite(_retDias) && _retDias >= 0 ? _retDias : 365;
   return d > 0 ? d * 24 * 3600 * 1000 : Number.POSITIVE_INFINITY;
 }
-type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string; tipo?: "followup" | "wpp" | "anuncio"; citacao?: string };
+type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string; tipo?: "followup" | "wpp" | "anuncio"; citacao?: string; imp?: boolean };
 type InboxConversa = { jid: string; nome: string; ultimaEm: number; msgs: InboxMsg[] };
 const inbox = new Map<string, InboxConversa>();
 let inboxTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1026,6 +1026,25 @@ const WA_LOTE = "(async function(P){\n" + WA_BASE
   + "    unicas.sort(function(a,b){ return tDe(a)-tDe(b); });\n"
   + "    return unicas;\n"
   + "  }\n"
+  // QUEM ENVIOU: as mensagens que o loadEarlierMsgs devolve nem sempre trazem
+  // id.fromMe preenchido — aí as NOSSAS (campanha, remarcação…) entravam como da
+  // aluna e o follow-up achava que ela tinha falado. Confere também o id serializado
+  // ("true_…"), isSentByMe e o remetente (from/author) contra o nosso número/LID.
+  + "  var meU='', meL='';\n"
+  + "  try { var MU=req('WAWebUserPrefsMeUser'); if(MU){ var a1=MU.getMaybeMeUser?MU.getMaybeMeUser():(MU.getMeUser?MU.getMeUser():null); if(a1) meU=String(a1.user||''); var a2=MU.getMaybeMeLidUser?MU.getMaybeMeLidUser():null; if(a2) meL=String(a2.user||''); } } catch(e){}\n"
+  + "  function userDe(w){ try { if(!w) return ''; if (typeof w==='string') return w.split('@')[0]; return String(w.user || String(w._serialized||'').split('@')[0] || ''); } catch(e){ return ''; } }\n"
+  + "  var diag={ total:0, idTrue:0, meus:0, temMe: !!(meU||meL) };\n"
+  + "  function ehMeu(m){\n"
+  + "    try {\n"
+  + "      if (m.id && m.id.fromMe===true) { diag.idTrue++; return true; }\n"
+  + "      var s=String((m.id&&(m.id._serialized||(m.id.toString&&m.id.toString())))||'');\n"
+  + "      if (/^true_/.test(s)) return true;\n"
+  + "      if (m.isSentByMe===true) return true;\n"
+  + "      var f=userDe(m.from); if (f && (f===meU || f===meL)) return true;\n"
+  + "      var au=userDe(m.author); if (au && (au===meU || au===meL)) return true;\n"
+  + "    } catch(e){}\n"
+  + "    return false;\n"
+  + "  }\n"
   + "  var mapa={}; var arr=Chat.getModelsArray(); for (var k=0;k<arr.length;k++){ var s=serial(arr[k]); if(s) mapa[s]=arr[k]; }\n"
   + "  var out=[], feitos=0;\n"
   + "  for (var i=0;i<P.jids.length;i++){\n"
@@ -1033,10 +1052,10 @@ const WA_LOTE = "(async function(P){\n" + WA_BASE
   + "    feitos++;\n"
   + "    var c = mapa[P.jids[i]]; if(!c){ out.push({ jid:P.jids[i], msgs:[] }); continue; }\n"
   + "    var todas = []; try { todas = await carregarAntigas(c); } catch(e){ todas = models(c); }\n"
-  + "    var ms = todas.slice(-LIM).map(function(m){ var tp=(m&&m.type)||'chat'; var txt=(tp==='chat'||tp==='text') ? ((m&&m.body)||'') : ((m&&m.caption)||''); var mid=String((m&&m.id&&m.id.id)||''); return { fromMe: !!(m&&m.id&&m.id.fromMe), body: txt||'', tipo: tp, t: (m&&(m.t||m.timestamp))||0, web: /^3EB0/i.test(mid) }; });\n"
+  + "    var ms = todas.slice(-LIM).map(function(m){ var tp=(m&&m.type)||'chat'; var txt=(tp==='chat'||tp==='text') ? ((m&&m.body)||'') : ((m&&m.caption)||''); var mid=String((m&&m.id&&m.id.id)||''); var eu=ehMeu(m); diag.total++; if(eu) diag.meus++; return { fromMe: eu, body: txt||'', tipo: tp, t: (m&&(m.t||m.timestamp))||0, web: /^3EB0/i.test(mid) }; });\n"
   + "    out.push({ jid: P.jids[i], msgs: ms });\n"
   + "  }\n"
-  + "  return { chats: out, feitos: feitos, loaderVia: (loader?loader.via:'') + (modo?' ('+modo+')':'') };\n"
+  + "  return { chats: out, feitos: feitos, loaderVia: (loader?loader.via:'') + (modo?' ('+modo+')':''), diag: diag };\n"
   + "})";
 
 type RawItem = { jid: string; id: string; name: string; t: number };
@@ -1052,7 +1071,7 @@ async function listarChatsRaw(corteSeg: number): Promise<RawItem[]> {
 
 // Carrega um lote; devolve quantas conversas do lote foram lidas (o resto fica
 // para o próximo lote, porque o teto de tempo acabou).
-async function lerLoteRaw(itens: RawItem[], lim: number, corteSeg: number): Promise<{ chats: RawChat[]; feitos: number; via: string }> {
+async function lerLoteRaw(itens: RawItem[], lim: number, corteSeg: number): Promise<{ chats: RawChat[]; feitos: number; via: string; diag: any }> {
   const page: any = (client as any).pupPage;
   if (!page) throw new Error("página do WhatsApp indisponível (pupPage).");
   const P = { jids: itens.map((x) => x.jid), lim, corte: Math.floor(corteSeg || 0), budget: 75000 };
@@ -1060,7 +1079,7 @@ async function lerLoteRaw(itens: RawItem[], lim: number, corteSeg: number): Prom
   if (r && r.erro) throw new Error(r.erro);
   const porJid = new Map(itens.map((x) => [x.jid, x]));
   const chats: RawChat[] = ((r && r.chats) || []).map((c: any) => { const it = porJid.get(c.jid)!; return { id: it.id, name: it.name, t: it.t, msgs: c.msgs || [] }; });
-  return { chats, feitos: Math.max(1, (r && r.feitos) || chats.length), via: (r && r.loaderVia) || "" };
+  return { chats, feitos: Math.max(1, (r && r.feitos) || chats.length), via: (r && r.loaderVia) || "", diag: (r && r.diag) || null };
 }
 
 // Quem mandou cada mensagem "fromMe" importada? O WhatsApp não diz se foi a SoFIA
@@ -1090,7 +1109,22 @@ function lerJanelasHumano(): Map<string, JanelaHumano[]> {
   for (const [k8, j] of abertas) (mapa.get(k8) || mapa.set(k8, []).get(k8)!).push(j);
   return mapa;
 }
-function autorImportado(m: { fromMe: boolean; web?: boolean }, em: number, janelas: JanelaHumano[] | undefined, confiaWeb: boolean): Pick<InboxMsg, "autor" | "por" | "tipo"> {
+// Envios de campanha por telefone (últimos 8 dígitos → instantes): reforço para
+// reconhecer a imagem/legenda da campanha como NOSSA mesmo se o WhatsApp não disser.
+function lerEnviosCampanha(): Map<string, number[]> {
+  const mapa = new Map<string, number[]>();
+  try {
+    const o = JSON.parse(fs.readFileSync(path.join(DIR, "campanhas.json"), "utf8"));
+    const lista: any[] = Array.isArray(o) ? o : (o && typeof o === "object" ? Object.values(o) : []);
+    for (const c of lista) for (const e of ((c && c.enviados) || [])) {
+      const k = String(e && e.tel || "").replace(/\D/g, "").slice(-8); const em = Number(e && e.em) || 0;
+      if (k && em) (mapa.get(k) || mapa.set(k, []).get(k)!).push(em);
+    }
+  } catch {}
+  return mapa;
+}
+function autorImportado(m: { fromMe: boolean; web?: boolean }, em: number, janelas: JanelaHumano[] | undefined, confiaWeb: boolean, envCamp?: number[]): Pick<InboxMsg, "autor" | "por" | "tipo"> {
+  if (!m.fromMe && (envCamp || []).some((t) => Math.abs(t - em) <= 180000)) return { autor: "sofia" }; // saiu na campanha
   if (!m.fromMe) return { autor: "aluna" };
   const j = (janelas || []).find((x) => em >= x.ini - 60000 && em <= x.fim + 60000);
   if (j) return { autor: "humano", por: j.por || undefined };
@@ -1219,6 +1253,8 @@ async function importarHistorico(porChat: number) {
     const corteSeg = ret > 0 ? Math.floor((Date.now() - ret) / 1000) : 0;
     const lista = await listarChatsRaw(corteSeg);
     const janelas = lerJanelasHumano();
+    const envCamp = lerEnviosCampanha();
+    const diagT = { total: 0, idTrue: 0, meus: 0, temMe: false };
     let feitos = 0, novos = 0, via = "";
     // Mensagens "fromMe" que saem do WhatsApp Web têm id começando com 3EB0. Só
     // usamos isso para separar "direto pelo celular" se o padrão se confirmar
@@ -1229,6 +1265,7 @@ async function importarHistorico(porChat: number) {
       const lote = lista.slice(i, i + 40);
       const r = await lerLoteRaw(lote, lim, corteSeg);
       if (r.via) via = r.via;
+      if (r.diag) { diagT.total += r.diag.total || 0; diagT.idTrue += r.diag.idTrue || 0; diagT.meus += r.diag.meus || 0; diagT.temMe = diagT.temMe || !!r.diag.temMe; }
       for (const chat of r.chats) {
         const telCru = String(chat.id).replace(/\D/g, "");
         if (!telCru || telCru.length < 8) continue;
@@ -1239,7 +1276,7 @@ async function importarHistorico(porChat: number) {
       feitos = i;
       // Grava a cada lote: se algo interromper, o que já veio fica no painel.
       const confiaWeb = vistosFromMe >= 20 && vistosWeb / vistosFromMe >= 0.3;
-      for (const p of pendentes.splice(0)) if (mesclarImportado(p.chat, p.tel, lim, janelas, confiaWeb)) novos++;
+      for (const p of pendentes.splice(0)) if (mesclarImportado(p.chat, p.tel, lim, janelas, confiaWeb, envCamp)) novos++;
       salvarInbox();
       gravarImportStatus({ rodando: true, feitos, total: lista.length, novos, em: Date.now() });
     }
@@ -1247,7 +1284,7 @@ async function importarHistorico(porChat: number) {
     try { dedupMensagensInbox(); } catch {}
     salvarInbox();
     gravarImportStatus({ rodando: false, feitos, total: lista.length, novos, terminadoEm: Date.now() });
-    log(`✅ histórico importado: ${feitos} conversas lidas, ${novos} com dados, em ${Math.round((Date.now() - t0) / 1000)} s (carregador: ${via || "nenhum"}).`);
+    log(`✅ histórico importado: ${feitos} conversas lidas, ${novos} com dados, em ${Math.round((Date.now() - t0) / 1000)} s (carregador: ${via || "nenhum"}; mensagens ${diagT.total}, nossas ${diagT.meus}, com fromMe ${diagT.idTrue}, nosso número ${diagT.temMe ? "ok" : "não achado"}).`);
   } catch (e: any) {
     const det = (e?.name ? e.name + ": " : "") + (e?.message || String(e));
     gravarImportStatus({ rodando: false, erro: det, em: Date.now() });
@@ -1256,7 +1293,7 @@ async function importarHistorico(porChat: number) {
 }
 
 // Junta as mensagens de uma conversa lida do WhatsApp com o que já está no painel.
-function mesclarImportado(chat: RawChat, telCru: string, lim: number, janelasPorTel: Map<string, JanelaHumano[]>, confiaWeb: boolean): boolean {
+function mesclarImportado(chat: RawChat, telCru: string, lim: number, janelasPorTel: Map<string, JanelaHumano[]>, confiaWeb: boolean, envCamp?: Map<string, number[]>): boolean {
   try {
     const tel = chaveInboxExistente(telCru); // casa a variante do 9º dígito já existente (NÃO duplica o card)
     const ex = inbox.get(tel);
@@ -1266,7 +1303,7 @@ function mesclarImportado(chat: RawChat, telCru: string, lim: number, janelasPor
       const em = m.t ? m.t * 1000 : 0;
       const texto = textoDoAnexo((m as any).tipo, String(m.body || ""));
       if (!em || !texto) continue;
-      const quem = autorImportado(m as any, em, janelas, confiaWeb);
+      const quem = autorImportado(m as any, em, janelas, confiaWeb, envCamp && envCamp.get(telCru.slice(-8)));
       // Anexo que já estava como "📎 Anexo" (limpeza do texto codificado): troca
       // pela versão certa (tipo + legenda), sem duplicar.
       const anexoVelho = acc.find((x) => x.texto === "📎 Anexo" && Math.abs((x.em || 0) - em) < 15000);
@@ -1276,10 +1313,16 @@ function mesclarImportado(chat: RawChat, telCru: string, lim: number, janelasPor
       const igual = acc.find((x) => mesmaMensagem(String(x.texto || ""), texto) && Math.abs((x.em || 0) - em) < 15000);
       if (igual) {
         // Importada antes como "Atendente" genérico (sem quem/como): corrige o autor.
-        if (m.fromMe && igual.autor === "humano" && !igual.por && !igual.tipo) { igual.autor = quem.autor; if (quem.por) igual.por = quem.por; if (quem.tipo) igual.tipo = quem.tipo; }
+        if (quem.autor !== "aluna" && igual.autor === "humano" && !igual.por && !igual.tipo) { igual.autor = quem.autor; if (quem.por) igual.por = quem.por; if (quem.tipo) igual.tipo = quem.tipo; }
+        // Reimportação anterior pôs uma mensagem NOSSA como da aluna: corrige.
+        else if (quem.autor !== "aluna" && igual.autor === "aluna") { igual.autor = quem.autor; delete igual.imp; if (quem.por) igual.por = quem.por; if (quem.tipo) igual.tipo = quem.tipo; }
+        // Mensagem da aluna que já estava no painel: marca como "veio do reimportar"
+        // para o follow-up não tratá-la como fala nova sem resposta.
+        else if (igual.autor === "aluna") igual.imp = true;
         continue;
       }
       const nova: InboxMsg = { autor: quem.autor, texto, em };
+      if (quem.autor === "aluna") nova.imp = true; // o follow-up ignora (não é fala nova)
       if (quem.por) nova.por = quem.por;
       if (quem.tipo) nova.tipo = quem.tipo;
       acc.push(nova);
