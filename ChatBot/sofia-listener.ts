@@ -1516,25 +1516,40 @@ function reconciliar9Duplicados() {
 // Mensagem NOSSA que entrou como "da aluna" (reimportar antigo): se o texto é o de
 // uma campanha da SoFIA (texto base ou variação), é da SoFIA. Compara o núcleo
 // (sem "📷 Imagem — "), com espaços normalizados; só textos de 25+ caracteres.
-function normCamp(t: string): string { return String(t || "").replace(RE_ROTULO, "").replace(/\s+/g, " ").trim(); }
+function normCamp(t: string): string {
+  let x = String(t || "");
+  for (let i = 0; i < 3 && RE_ROTULO.test(x); i++) x = x.replace(RE_ROTULO, ""); // "📷 Imagem — 📷 🖤 …" → "🖤 …"
+  return x.replace(/\s+/g, " ").trim();
+}
 function textosDeCampanha(): Set<string> {
   const set = new Set<string>();
   try {
     const o = JSON.parse(fs.readFileSync(path.join(DIR, "campanhas.json"), "utf8"));
     const lista: any[] = Array.isArray(o) ? o : (o && typeof o === "object" ? Object.values(o) : []);
     for (const c of lista) for (const t of [c && c.textoBase].concat((c && c.variacoes) || [])) { const n = normCamp(String(t || "")); if (n.length >= 25) set.add(n); }
+    for (const t of Array.from(set)) set.add(normCamp(t)); // variação que já começa com rótulo
   } catch {}
   return set;
 }
 function corrigirAutoriaCampanhas() {
   try {
     const set = textosDeCampanha();
-    if (!set.size) return;
+    const envios = lerEnviosCampanha(); // últimos 8 dígitos → instantes dos envios
+    if (!set.size && !envios.size) return;
     let n = 0;
-    for (const [, c] of inbox) for (const m of (c && c.msgs) || []) {
-      if (m.autor !== "aluna") continue;
-      const k = normCamp(String(m.texto || ""));
-      if (k.length >= 25 && set.has(k)) { m.autor = "sofia"; delete m.imp; n++; }
+    for (const [k8full, c] of inbox) {
+      const k8 = String(k8full).replace(/\D/g, "").slice(-8);
+      const k8j = String((c && c.jid) || "").replace(/\D/g, "").slice(-8);
+      const env = (envios.get(k8) || []).concat(envios.get(k8j) || []);
+      for (const m of (c && c.msgs) || []) {
+        if (m.autor !== "aluna") continue;
+        const k = normCamp(String(m.texto || ""));
+        const porTexto = k.length >= 25 && set.has(k);
+        // Anexo ("📷 Imagem — …") a até 20 s de um envio de campanha para
+        // este mesmo número: é a campanha (a aluna não manda a mesma imagem junto).
+        const porHorario = RE_ROTULO.test(String(m.texto || "")) && env.some((t) => Math.abs(t - (m.em || 0)) <= 20000);
+        if (porTexto || porHorario) { m.autor = "sofia"; delete m.imp; n++; }
+      }
     }
     if (n) { log(`🩹 ${n} mensagem(ns) de campanha que estavam como "da aluna" voltaram para a SoFIA.`); agendarSalvarInbox(); }
   } catch (e: any) { log("aviso: correção de autoria das campanhas falhou: " + (e?.message || e)); }
@@ -1555,11 +1570,13 @@ function dedupMensagensInbox() {
           // Mesma mensagem com rótulos diferentes (ao vivo × reimportada): fica a
           // gravada ao vivo pela SoFIA, com o texto dela.
           if (m.autor === "sofia" && dup.autor !== "sofia" && String(dup.texto || "") !== txt) { dup.autor = "sofia"; dup.texto = txt; if (m.tipo) dup.tipo = m.tipo; delete dup.por; removidas++; continue; }
-          // Anexo reimportado ("📷 Imagem — …") que ficou como da aluna numa leitura
-          // antiga, e a leitura nova diz que é nosso: vale o nosso.
-          if (dup.autor === "aluna" && m.autor !== "aluna" && RE_ROTULO.test(txt) && /—|^\S+ (Imagem|Vídeo|Documento|Figurinha|Áudio|Localização|Contato)$/.test(txt)) { dup.autor = m.autor; delete dup.imp; if (m.por) dup.por = m.por; else delete dup.por; if (m.tipo) dup.tipo = m.tipo; removidas++; continue; }
-          // Se a mantida era a importada ('humano') e esta é ao vivo, promove o autor.
-          if (dup.autor === "humano" && m.autor !== "humano") { dup.autor = m.autor; if (m.tipo) dup.tipo = m.tipo; }
+          // A mesma mensagem como "da aluna" e como NOSSA: a "da aluna" veio de uma
+          // leitura antiga errada do reimportar (o WhatsApp nunca marca a mensagem da
+          // aluna como nossa; o contrário aconteceu). Vale a nossa.
+          if (dup.autor === "aluna" && m.autor !== "aluna") { dup.autor = m.autor; delete dup.imp; if (m.por) dup.por = m.por; else delete dup.por; if (m.tipo) dup.tipo = m.tipo; removidas++; continue; }
+          if (m.autor === "aluna" && dup.autor !== "aluna") { removidas++; continue; } // idem, na ordem inversa: fica a nossa
+          // Mantida = importada como "Atendente" genérico, esta = SoFIA ao vivo: promove.
+          if (dup.autor === "humano" && !dup.por && m.autor === "sofia") { dup.autor = "sofia"; if (m.tipo) dup.tipo = m.tipo; }
           removidas++;
           continue;
         }
