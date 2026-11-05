@@ -1224,7 +1224,9 @@ function scriptPreviewTeste() {
     var id = chavesCsv.split(',').join('_');
     var wrap = document.getElementById('envsw_'+id);
     var st = document.getElementById('envst_'+id);
-    function pinta(v){ if(st) st.textContent = v ? 'Ativado' : 'Desligado'; if(wrap){ wrap.classList.toggle('on', v); wrap.classList.toggle('off', !v); } }
+    function pinta(v){ if(st) st.textContent = v ? 'Ativado' : 'Desligado'; if(wrap){ wrap.classList.toggle('on', v); wrap.classList.toggle('off', !v); }
+      // avisos do cartão que dependem do liga/desliga (ex.: "Saída — não renovou")
+      var card = wrap && wrap.closest('.card'); if(card) [].forEach.call(card.querySelectorAll('[data-se-desligado]'), function(n){ n.style.display = v ? 'none' : ''; }); }
     pinta(on);
     fetch('/envio/ativo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chaves:chavesCsv.split(','),ativo:on})})
       .then(function(r){return r.json();})
@@ -2235,8 +2237,9 @@ function blocoSaidas() {
   const ult = reg.ultimo, sim = reg.ultimoSim;
   const quando = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
   const resumoExec = (r, sim) => !r ? '' : `<div class="sg-ult"><b>${sim ? '🧪 Simulação' : 'Última execução'} (${quando(r.em)}):</b> ${r.tratadas.length ? r.tratadas.map(t => `${esc(t.nome)} — ${t.motivo === 'sem grupo' ? 'não estava em grupo (sem mensagem)' : sim ? 'sairia de: ' + esc(t.grupos.join(', ')) : (t.grupos.length ? 'saiu de: ' + esc(t.grupos.join(', ')) : 'não saiu de nenhum grupo') + (t.ficou && t.ficou.length ? ' · continua em: ' + esc(t.ficou.join(', ')) : '') + (t.enviou ? ' · ✉️ mensagem enviada' : '')}`).join('<br>') : 'ninguém para tratar.'}</div>`;
-  return `<div class="hsec" id="saidas"><div class="hsec-t">Quem entra hoje ${vai.length ? `<span class="badge-ed">${vai.length}</span>` : ''}</div>
-    ${ligado ? '' : '<p class="quando" style="margin:0 0 8px;color:var(--warn)">⏸️ Desligado: nada é feito até você ligar o botão <b>Ativado</b> no topo deste cartão.</p>'}
+  return `<div class="hsec" id="saidas"><div class="hsec-t">Quem entra no próximo disparo ${vai.length ? `<span class="badge-ed">${vai.length}</span>` : ''}</div>
+    <p class="quando" style="margin:0 0 8px">Lista de quem o robô vai <b>retirar dos grupos e mandar a mensagem</b> no próximo horário deste cartão. Quem já foi tratada não aparece de novo.</p>
+    <p class="quando" data-se-desligado style="margin:0 0 8px;color:var(--warn)${ligado ? ';display:none' : ''}">⏸️ Desligado: nada é feito até você ligar o botão <b>Ativado</b> no topo deste cartão.</p>
     <form method="POST" action="/saidas/dias" class="hrow" style="align-items:flex-end;margin:0 0 10px">
       <div><div class="lbl">Dias depois do vencimento</div>
         <input type="number" name="dias" min="1" max="60" value="${c ? c.dias : 7}" required style="width:92px">
