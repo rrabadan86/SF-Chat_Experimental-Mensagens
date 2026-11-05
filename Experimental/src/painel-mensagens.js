@@ -11217,7 +11217,9 @@ function processarFollowups() {
     const c = inbox[chave] || {}; const msgs = c.msgs || [];
     if (!msgs.length) continue;
     let ultimoAluna = 0;
-    for (const m of msgs) if (m.autor === 'aluna' && m.em > ultimoAluna) ultimoAluna = m.em;
+    // m.imp = veio do "Reimportar histórico" (não é fala nova): não conta. Sem isso,
+    // uma reimportação faz conversas antigas parecerem "aluna falou e ficou sem resposta".
+    for (const m of msgs) if (m.autor === 'aluna' && !m.imp && m.em > ultimoAluna) ultimoAluna = m.em;
     if (!ultimoAluna) continue;                              // a lead nunca falou → ignora
     if (cfg.ligadoEm && ultimoAluna < cfg.ligadoEm) continue; // "só daqui pra frente": ignora o acúmulo de antes de ligar
     const idle = agora - (c.ultimaEm || ultimoAluna);
