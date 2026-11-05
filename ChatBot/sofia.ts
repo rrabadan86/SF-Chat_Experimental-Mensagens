@@ -83,7 +83,7 @@ function avisarPrecisaHumano(telefone: string, conversa: Conversa, texto: string
     const aviso = `🙋 *Possível pedido de atendimento humano*\n\nContato: ${tel}\nÚltima mensagem: "${String(texto || "").slice(0, 180)}"\n\nAbra o painel (SoFIA → Conversas) e clique em "assumir" para atender.`;
     fs.appendFileSync(AVISOS_OUT_FILE, JSON.stringify({ numero: cfg.numero, texto: aviso, em: Date.now() }) + "\n");
     marcarAtencao(telefone); // pinta a conversa de vermelho no painel até a recepção assumir
-    conversa.avisouHumano = true;
+    conversa.avisouHumano = true; marcarConversas();
     console.log(`🙋 aviso "precisa de humano" enfileirado para ${cfg.numero} (contato ${tel}).`);
   } catch { /* best-effort */ }
 }
@@ -377,7 +377,7 @@ const solicitarAgendamento = tool(
     const tel = _telefoneDaVez || telefone || "";
     console.log("📋 [SOFIA VAI AGENDAR]", { nome_completo, email, data, horario, tel });
     const r = await bookNoEvo(tel, nome_completo, email, `${data} ${horario}`);
-    if (conversa) conversa.solicitou = true; // a ferramenta cuidou → desliga o fallback automático
+    if (conversa) { conversa.solicitou = true; marcarConversas(); } // a ferramenta cuidou → desliga o fallback automático
     if ("ok" in r) { if (conversa) conversa.resumoEnviado = true; return json({ ok: true, when: r.when }); }
     if ("lotada" in r) return json({ lotada: true, alternativas: r.alternativas });
     return json({ erro: true });
@@ -666,6 +666,7 @@ export function registrarNaMemoria(telefone: string, autor: "aluna" | "sofia" | 
   // guarda "humano" como se fosse a Sofia (é o Studio falando), preservando o texto
   conversa.transcricao.push({ autor: autor === "aluna" ? "aluna" : "sofia", texto });
   conversa.ultimaMensagemEm = Date.now();
+  marcarConversas();
 }
 
 
@@ -754,6 +755,41 @@ export function janelaSessaoMs(): number {
   } catch {}
   return SESSAO_HORAS_PADRAO * 3_600_000;
 }
+
+// A memória das conversas vive na RAM — um reinício da SoFIA (atualização, vigia,
+// queda) fazia ela esquecer tudo e se apresentar de novo no meio da conversa
+// ("Oi! Tudo bem?" outra vez). Agora grava em sofia-conversas.json (só as que
+// ainda estão dentro da janela da sessão) e recupera ao subir. O sessionId da IA
+// continua valendo depois do reinício (a sessão fica em disco), então ela segue
+// do ponto em que parou.
+const CONVERSAS_FILE = path.join(BASE_DIR, "sofia-conversas.json");
+let _convSujo = false;
+function marcarConversas() { _convSujo = true; }
+export function salvarConversasAgora() {
+  if (!_convSujo) return;
+  _convSujo = false;
+  try {
+    const lim = Date.now() - janelaSessaoMs();
+    const o: Record<string, Conversa> = {};
+    for (const [k, c] of conversas) if (c && c.ultimaMensagemEm >= lim) o[k] = { ...c, transcricao: (c.transcricao || []).slice(-80) };
+    fs.writeFileSync(CONVERSAS_FILE + ".tmp", JSON.stringify(o));
+    fs.renameSync(CONVERSAS_FILE + ".tmp", CONVERSAS_FILE);
+  } catch (e: any) { _convSujo = true; console.log("⚠️  não consegui gravar a memória das conversas: " + (e?.message || e)); }
+}
+(function carregarConversas() {
+  try {
+    const o = JSON.parse(fs.readFileSync(CONVERSAS_FILE, "utf-8"));
+    const lim = Date.now() - janelaSessaoMs();
+    let n = 0;
+    for (const k of Object.keys(o || {})) {
+      const c = o[k];
+      if (c && typeof c.ultimaMensagemEm === "number" && c.ultimaMensagemEm >= lim && Array.isArray(c.transcricao)) { conversas.set(k, c); n++; }
+    }
+    if (n) console.log(`💾 SoFIA: ${n} conversa(s) em andamento recuperada(s) — ela continua de onde parou.`);
+  } catch { /* primeira vez / arquivo ausente */ }
+})();
+{ const t = setInterval(salvarConversasAgora, 5000); (t as any).unref?.(); }
+process.on("exit", () => { try { _convSujo = true; salvarConversasAgora(); } catch {} });
 
 // Encerramento MANUAL de conversa (painel → sofia-encerradas.json). Guarda
 // { "<chave>": <em> }. Quando o painel encerra uma conversa à mão, a próxima
@@ -951,6 +987,7 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
   conversa.ultimaMensagemEm = agora;
   conversa.transcricao.push({ autor: "aluna", texto: mensagem });
   conversa.transcricao.push({ autor: "sofia", texto: resposta });
+  marcarConversas(); salvarConversasAgora(); // grava já (um reinício logo depois não perde a resposta)
 
   // Caminho AUTOMÁTICO de agendamento (extrai da conversa e agenda por trás).
   // DESLIGADO por padrão: ele agenda SEM avisar a Sofia do resultado, então numa
@@ -1263,7 +1300,7 @@ async function verificarEDispararAgendamento(telefone: string, conversa: Convers
   if (!completo) return;
 
   await enviarParaSeuSistema(telefone, resumo);
-  conversa.resumoEnviado = true;
+  conversa.resumoEnviado = true; marcarConversas();
 }
 
 // URL e token do seu serviço Python (o formulário que já roda no Render).
