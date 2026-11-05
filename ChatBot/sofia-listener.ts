@@ -831,7 +831,14 @@ function carregarInbox() {
     let lixo = 0;
     // Só aceita entradas no formato do inbox ({ msgs: [...] }). Entre 05 e 06/11 a
     // memória da IA foi gravada por engano neste mesmo arquivo — ignora esse lixo.
-    if (o && typeof o === "object") for (const k of Object.keys(o)) { const c = o[k]; if (c && Array.isArray(c.msgs)) inbox.set(k, c); else lixo++; }
+    let anexos = 0;
+    if (o && typeof o === "object") for (const k of Object.keys(o)) {
+      const c = o[k];
+      if (!(c && Array.isArray(c.msgs))) { lixo++; continue; }
+      for (const m of c.msgs) if (m && pareceBase64(String(m.texto || ""))) { m.texto = "📎 Anexo"; anexos++; } // anexo importado como texto
+      inbox.set(k, c);
+    }
+    if (anexos) { log(`🧹 inbox: ${anexos} anexo(s) que vieram como texto codificado trocados por "📎 Anexo".`); setTimeout(() => { try { salvarInbox(); } catch {} }, 3000); }
     if (lixo) log(`🧹 inbox: ${lixo} entrada(s) fora do formato ignorada(s) (memória gravada por engano no arquivo das conversas).`);
   } catch {}
 }
@@ -887,7 +894,23 @@ function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMs
 const IMPORT_STATUS_FILE = path.join(DIR, "sofia-import-status.json");
 let importando = false;
 function gravarImportStatus(o: any) { try { fs.writeFileSync(IMPORT_STATUS_FILE, JSON.stringify(o), "utf8"); } catch {} }
-type RawChat = { id: string; name: string; t: number; msgs: Array<{ fromMe: boolean; body: string; t: number }> };
+type RawChat = { id: string; name: string; t: number; msgs: Array<{ fromMe: boolean; body: string; t: number; tipo?: string }> };
+
+// Mensagem com anexo: o WhatsApp põe a imagem CODIFICADA (base64) no campo do
+// texto — no inbox vira um bloco ilegível. Mostra o tipo do anexo + a legenda.
+const ROTULO_ANEXO: Record<string, string> = { image: "📷 Imagem", video: "🎬 Vídeo", document: "📎 Documento", sticker: "💟 Figurinha", audio: "🎤 Áudio", ptt: "🎤 Áudio", location: "📍 Localização", vcard: "👤 Contato" };
+function pareceBase64(t: string): boolean {
+  const x = String(t || "");
+  return x.length >= 200 && !/\s/.test(x.slice(0, 200)) && /^[A-Za-z0-9+/=]+$/.test(x.slice(0, 400));
+}
+function textoDoAnexo(tipo: string | undefined, texto: string): string {
+  const t = String(texto || "").trim();
+  const tp = String(tipo || "chat");
+  if (tp === "chat" || tp === "text") return pareceBase64(t) ? "📎 Anexo" : t;
+  const rot = ROTULO_ANEXO[tp] || "📎 Anexo";
+  const leg = pareceBase64(t) ? "" : t;
+  return leg ? `${rot} — ${leg}` : rot;
+}
 async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
   const page: any = (client as any).pupPage;
   if (!page) throw new Error("página do WhatsApp indisponível (pupPage).");
@@ -966,7 +989,7 @@ async function lerChatsRaw(limMsg: number): Promise<RawChat[]> {
     + "      var t = (c && (c.t||c.timestamp||0)) || 0;\n"
     + "      try { await carregarAntigas(c); } catch(e){}\n"
     + "      var models=[]; try { models = (c.msgs && c.msgs.getModelsArray) ? c.msgs.getModelsArray() : ((c.msgs&&c.msgs._models)||[]); } catch(e){ models=[]; }\n"
-    + "      var msgs = models.slice(-LIM).map(function(m){ return { fromMe: !!(m&&m.id&&m.id.fromMe), body: (m&&(m.body||m.caption||''))||'', t: (m&&(m.t||m.timestamp))||0 }; });\n"
+    + "      var msgs = models.slice(-LIM).map(function(m){ var tp=(m&&m.type)||'chat'; var txt=(tp==='chat'||tp==='text') ? ((m&&m.body)||'') : ((m&&m.caption)||''); return { fromMe: !!(m&&m.id&&m.id.fromMe), body: txt||'', tipo: tp, t: (m&&(m.t||m.timestamp))||0 }; });\n"
     + "      totMsgs += msgs.length;\n"
     + "      out.push({ id: tel, name: name, t: t, msgs: msgs });\n"
     + "    } catch(e){}\n"
@@ -1119,8 +1142,12 @@ async function importarHistorico(porChat: number) {
             acc.some((m) => String(m.texto || "") === texto && Math.abs((m.em || 0) - em) < 15000);
           for (const m of chat.msgs) {
             const em = m.t ? m.t * 1000 : 0;
-            const texto = String(m.body || "").trim();
+            const texto = textoDoAnexo((m as any).tipo, String(m.body || ""));
             if (!em || !texto) continue;
+            // Anexo que já estava como "📎 Anexo" (limpeza do texto codificado): troca
+            // pela versão certa (tipo + legenda), sem duplicar.
+            const anexoVelho = acc.find((x) => x.texto === "📎 Anexo" && Math.abs((x.em || 0) - em) < 15000);
+            if (anexoVelho) { if (texto !== "📎 Anexo") anexoVelho.texto = texto; continue; }
             if (existe(texto, em)) continue;
             const autor: InboxMsg["autor"] = m.fromMe ? "humano" : "aluna";
             acc.push({ autor, texto, em });
