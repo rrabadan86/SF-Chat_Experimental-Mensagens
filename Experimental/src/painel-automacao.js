@@ -170,6 +170,15 @@ function processarAgendamentos() {
   try { fuMarcarAgendou(evs.map(ev => ev.telefone)); } catch (_) {} // registra p/ o follow-up NÃO incomodar quem agendou
   try { fuMarcarCanal(evs); } catch (_) {} // guarda o canal (sofia/formulario/express) p/ o Funil não contar Express
   try { fuMarcarAula(evs); } catch (_) {} // guarda dia/hora da aula agendada (mostrado no Funil)
+  // Nome completo do agendamento → nome do contato (regras em contatos.nomeDoAgendamento).
+  for (const ev of evs) {
+    if (!ev.nome) continue;
+    try {
+      const r = contatos.nomeDoAgendamento(ev.telefone, ev.nome);
+      if (r.mudou) console.log(`[contatos] nome atualizado pelo agendamento (${ev.canal || 'sofia'}): "${r.antes || '(vazio)'}" → "${r.depois}"`);
+      else if (r.depois) console.log(`[contatos] nome do agendamento "${r.depois}" NÃO aplicado em "${r.antes}" (${r.motivo})`);
+    } catch (_) {}
+  }
   let autos = [];
   try { autos = contatos.tagsPorGatilho('agendou'); } catch (_) {}
   if (!autos.length) return;

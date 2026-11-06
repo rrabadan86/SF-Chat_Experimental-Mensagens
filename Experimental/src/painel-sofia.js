@@ -838,7 +838,7 @@ function paginaSofiaContatos(aviso, erro, params) {
         <div style="display:flex;align-items:center;gap:10px;min-width:0">
           <input type="checkbox" class="ct-chk" value="${esc(c.tel)}" onclick="event.stopPropagation();atualizarSel()" title="Selecionar" style="flex:none;width:16px;height:16px;margin:0;cursor:pointer">
           <span class="ct-av" style="background:${corAv(nm || c.tel)}">${esc(iniciais(nm, c.tel))}</span>
-          <span class="ct-nm">${esc(nm || '(sem nome)')}</span>
+          <span class="ct-nm">${esc(nm || '(sem nome)')}${c.nomeAgendado ? `<span class="quando" style="display:block;font-size:.72rem;margin:0" title="Nome informado no agendamento — não substituiu o nome do contato (outro primeiro nome ou nome editado pela equipe)">📅 agendou como ${esc(c.nomeAgendado)}</span>` : ''}</span>
           ${bloq ? '<span title="Contato bloqueado" style="flex:none;color:#c0392b;font-size:.9rem">🚫</span>' : ''}
         </div>
       </td>
