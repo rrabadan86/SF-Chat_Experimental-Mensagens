@@ -1331,7 +1331,14 @@ function estimarCampanha(c) {
     while (guarda < 3660) { if (sel.indexOf(d.getDay()) >= 0) { contados++; if (contados >= dias) break; } d.setDate(d.getDate() + 1); guarda++; }
   } else { d.setDate(d.getDate() + (dias - 1)); }
   const fim = `${('0' + d.getDate()).slice(-2)}/${('0' + (d.getMonth() + 1)).slice(-2)}/${d.getFullYear()}`;
-  return { porDia, dias, fim };
+  // Com data de fim antes do término previsto, sobra gente na fila.
+  let naoCabem = 0;
+  if (c.dataFim && d.toISOString().slice(0, 10) > c.dataFim) {
+    let diasAte = 0; const x = new Date(iniStr + 'T12:00:00'), f = new Date(c.dataFim + 'T12:00:00');
+    for (let g = 0; x <= f && g < 3660; g++) { if (!sel.length || sel.length === 7 || sel.indexOf(x.getDay()) >= 0) diasAte++; x.setDate(x.getDate() + 1); }
+    naoCabem = Math.max(0, restantes - diasAte * porDia);
+  }
+  return { porDia, dias, fim, naoCabem };
 }
 const fmtDataBR = (s) => { const p = String(s || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : (s || ''); };
 
@@ -1373,7 +1380,7 @@ function campListHTML(filtro = {}) {
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 0">
         ${c.fotoArquivo ? '<span class="pill" style="border-color:var(--linha)">📷 com foto</span>' : ''}
-        <span class="quando" style="margin:0">${rotStatus[c.status] || c.status}${(c.status === 'pausada' && (c.falhasSeguidas || 0) >= 3) ? ' <span style="color:var(--erro)">(pausada por falhas — verifique a conexão)</span>' : ''}</span>
+        <span class="quando" style="margin:0">${c.fimPorData ? `✔️ encerrada na data de fim (${esc(fmtDataBR(c.dataFim))}) — ${(c.pendentes || []).length} não receberam` : (rotStatus[c.status] || c.status)}${(c.status === 'pausada' && (c.falhasSeguidas || 0) >= 3) ? ' <span style="color:var(--erro)">(pausada por falhas — verifique a conexão)</span>' : ''}</span>
         <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           ${podeIniciar ? btn('iniciar', '▶️ Iniciar', 'save') : ''}
           ${((c.pendentes || []).length && c.status !== 'cancelada') ? `<button type="button" class="save" style="padding:5px 12px;font-size:var(--fs-sm);background:var(--coral,#c0453f)" title="Disparar N mensagens agora, ignorando o teto do dia e o horário" onclick="cpEnviarAgora('${esc(c.id)}',${(c.pendentes || []).length})">🚀 Enviar agora</button>` : ''}
@@ -1386,13 +1393,14 @@ function campListHTML(filtro = {}) {
       <div style="margin:8px 0 0">
         ${uiTrilho(pct, 100, { cor: 'var(--ok)' })}
         <div class="quando" style="margin:4px 0 0">${enviados} enviadas · ${(c.pendentes || []).length} na fila · ${(c.falhas || []).length} falha(s) · ${total} no total · hoje: ${c.enviadosHoje || 0}/${c.limiteDia}</div>
-        <div class="quando" style="margin:2px 0 0">📅 início ${esc(fmtDataBR(c.dataInicio))} · das ${esc(c.janelaIni)} às ${esc(c.janelaFim)} · ${c.delayMinSeg}–${c.delayMaxSeg}s entre envios${est ? ` · <b>término previsto ${est.fim}</b> (~${est.dias} dia${est.dias > 1 ? 's' : ''}, ~${est.porDia}/dia)` : ''} ${(c.status !== 'concluida' && c.status !== 'cancelada') ? `· <a href="javascript:void(0)" onclick="toggleRitmo('${esc(c.id)}')" style="text-decoration:underline">⚙️ ajustar ritmo</a>` : ''}</div>
+        <div class="quando" style="margin:2px 0 0">📅 início ${esc(fmtDataBR(c.dataInicio))}${c.dataFim ? ` · <b>fim ${esc(fmtDataBR(c.dataFim))}</b>` : ''} · das ${esc(c.janelaIni)} às ${esc(c.janelaFim)} · ${c.delayMinSeg}–${c.delayMaxSeg}s entre envios${est ? ` · <b>término previsto ${est.fim}</b> (~${est.dias} dia${est.dias > 1 ? 's' : ''}, ~${est.porDia}/dia)` : ''}${est && est.naoCabem && !c.fimPorData ? ` · <b style="color:#9a5b00">⚠️ até a data de fim ficam ~${est.naoCabem} sem receber</b>` : ''} ${((c.status !== 'concluida' || c.fimPorData) && c.status !== 'cancelada') ? `· <a href="javascript:void(0)" onclick="toggleRitmo('${esc(c.id)}')" style="text-decoration:underline">⚙️ ajustar ritmo${c.fimPorData ? ' / estender a data' : ''}</a>` : ''}</div>
       </div>
       <div class="ritmoBox-${esc(c.id)}" style="display:none;margin:8px 0 0;background:var(--bg);border:1px solid var(--linha);border-radius:10px;padding:10px 12px">
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
           <div><label style="margin:0 0 3px;font-size:.72rem;font-weight:700;color:var(--cinza)">Entre envios (seg) ${avisoI('<b>Risco de suspensão.</b> Intervalo curto demais é o principal motivo de bloqueio do número. Mantenha <b>120 a 180s ou mais</b> para imitar o ritmo de uma pessoa e proteger a conta.')}</label><div style="display:flex;gap:6px;align-items:center"><input type="number" min="1" max="3600" value="${c.delayMinSeg}" id="rmin-${esc(c.id)}" style="width:72px"><span class="quando" style="margin:0">a</span><input type="number" min="1" max="3600" value="${c.delayMaxSeg}" id="rmax-${esc(c.id)}" style="width:72px"></div></div>
           <div><label style="margin:0 0 3px;font-size:.72rem;font-weight:700;color:var(--cinza)">Máx. por dia</label><input type="number" min="1" max="1000" value="${c.limiteDia}" id="rlim-${esc(c.id)}" style="width:84px"></div>
           <div><label style="margin:0 0 3px;font-size:.72rem;font-weight:700;color:var(--cinza)">Janela</label><div style="display:flex;gap:6px;align-items:center"><input type="time" value="${esc(c.janelaIni)}" id="rji-${esc(c.id)}" style="width:auto"><span class="quando" style="margin:0">às</span><input type="time" value="${esc(c.janelaFim)}" id="rjf-${esc(c.id)}" style="width:auto"></div></div>
+          <div><label style="margin:0 0 3px;font-size:.72rem;font-weight:700;color:var(--cinza)">Terminar em (opcional)</label><input type="date" value="${esc(c.dataFim || '')}" id="rfim-${esc(c.id)}" style="width:auto"></div>
           <button type="button" class="save" style="padding:6px 13px" onclick="salvarRitmo('${esc(c.id)}')">Salvar ritmo</button>
           <a href="javascript:void(0)" onclick="toggleRitmo('${esc(c.id)}')" class="quando" style="margin:0;text-decoration:underline">cancelar</a>
         </div>
@@ -1674,6 +1682,7 @@ function paginaSofiaCampanhas(aviso, erro) {
           <div class="cpf-body">
           <div class="cpf-grid-lim">
             <div class="cpf-field"><label>Começar em</label><input type="date" id="cpIni" name="dataInicio" value="${esc(hojeSP())}" min="${esc(hojeSP())}" oninput="estCamp()"></div>
+            <div class="cpf-field"><label>Terminar em <span class="sub">(opcional)</span> ${infoI('Se preencher, a campanha <b>para no fim desse dia</b>, mesmo que ainda tenha contatos na fila — bom para promoções com validade. Em branco, envia até acabar a lista da tag.')}</label><input type="date" id="cpFim" name="dataFim" value="" min="${esc(hojeSP())}" oninput="estCamp()"></div>
             <div class="cpf-field"><label>Máx. por dia</label><div class="cpf-range"><input type="number" id="cpMax" name="limiteDia" min="1" max="1000" value="40" oninput="estCamp()"><span class="cpf-suf">msg</span></div></div>
             <div class="cpf-field"><label>Horário de envio</label><div class="cpf-range"><input type="time" id="cpJi" name="janelaIni" value="09:00" oninput="estCamp()"><span class="cpf-suf">até</span><input type="time" id="cpJf" name="janelaFim" value="20:00" oninput="estCamp()"></div></div>
             <div class="cpf-field"><label>Intervalo entre envios ${avisoI('<b>Não deixe muito curto.</b> Um intervalo baixo é o principal motivo de o WhatsApp bloquear o número. O padrão <b>120 a 180s</b> imita o tempo de digitação de uma pessoa e é bem mais seguro.')}</label><div class="cpf-range"><input type="number" id="cpDmin" name="delayMinSeg" min="1" max="3600" value="120" oninput="estCamp()"><span class="cpf-suf">a</span><input type="number" id="cpDmax" name="delayMaxSeg" min="1" max="3600" value="180" oninput="estCamp()"><span class="cpf-suf">s</span></div></div>
@@ -1748,7 +1757,14 @@ function paginaSofiaCampanhas(aviso, erro) {
             while(guarda<3660){ if(sel.indexOf(d.getDay())>=0){ contados++; if(contados>=envioDias) break; } d.setDate(d.getDate()+1); guarda++; }
             var restr=sel.length<7?' <span style="opacity:.8">('+sel.length+' dia'+(sel.length>1?'s':'')+'/semana)</span>':'';
             el.className='aviso'; el.style.display='block';
-            el.innerHTML='📊 <b>'+n+' contatos</b> nesta tag · ~<b>'+porDia+'/dia</b> · <b>'+envioDias+' dia'+(envioDias>1?'s':'')+'</b> de envio · término previsto: <b>'+fmtD(d)+'</b>'+restr+(porDia<maxd?' <span style="opacity:.8">(a janela de horário limita a '+porDia+'/dia)</span>':'');
+            var fimS=(document.getElementById('cpFim')||{}).value||'', extraFim='';
+            if(fimS){
+              var dF=new Date(fimS+'T12:00:00'), d0=ini?new Date(ini+'T12:00:00'):new Date(), diasAte=0, g2=0;
+              while(d0<=dF && g2<3660){ if(sel.indexOf(d0.getDay())>=0) diasAte++; d0.setDate(d0.getDate()+1); g2++; }
+              var cabem=diasAte*porDia;
+              extraFim = cabem>=n ? ' · ✅ dá tempo até '+fmtD(dF) : ' · ⚠️ <b>até '+fmtD(dF)+' dá para ~'+Math.max(0,cabem)+' de '+n+'</b> — o resto não recebe (aumente o máx. por dia ou a data de fim)';
+            }
+            el.innerHTML='📊 <b>'+n+' contatos</b> nesta tag · ~<b>'+porDia+'/dia</b> · <b>'+envioDias+' dia'+(envioDias>1?'s':'')+'</b> de envio · término previsto: <b>'+fmtD(d)+'</b>'+restr+(porDia<maxd?' <span style="opacity:.8">(a janela de horário limita a '+porDia+'/dia)</span>':'')+extraFim;
           }
           document.addEventListener('DOMContentLoaded',estCamp);
           var _st=selTagEl(); if(_st) _st.addEventListener('change',estCamp);
@@ -1839,9 +1855,10 @@ function paginaSofiaCampanhas(aviso, erro) {
             if(!f.tag.value){ alert('Escolha a tag para quem a campanha vai ser enviada.'); f.tag.focus(); return false; }
             var dias=Array.prototype.map.call(document.querySelectorAll('.cpDia:checked'),function(e){return +e.value;});
             if(!dias.length){ alert('Escolha ao menos um dia da semana para o envio.'); return false; }
+            if(f.dataFim.value && f.dataFim.value < f.dataInicio.value){ alert('A data de fim precisa ser igual ou depois da data de início.'); f.dataFim.focus(); return false; }
             var variacoes=Array.prototype.map.call(document.querySelectorAll('#cpVars .cpVarTa'),function(e){return e.value.trim();}).filter(Boolean);
             if(!confirm('Criar a campanha e preparar o envio? Nada é enviado até você clicar em Iniciar.')) return false;
-            var d={ nome:f.nome.value, tag:f.tag.value, textoBase:f.textoBase.value, limiteDia:f.limiteDia.value, delayMinSeg:f.delayMinSeg.value, delayMaxSeg:f.delayMaxSeg.value, janelaIni:f.janelaIni.value, janelaFim:f.janelaFim.value, dataInicio:f.dataInicio.value, dias:dias, variacoes:variacoes };
+            var d={ nome:f.nome.value, tag:f.tag.value, textoBase:f.textoBase.value, limiteDia:f.limiteDia.value, delayMinSeg:f.delayMinSeg.value, delayMaxSeg:f.delayMaxSeg.value, janelaIni:f.janelaIni.value, janelaFim:f.janelaFim.value, dataInicio:f.dataInicio.value, dataFim:f.dataFim.value, dias:dias, variacoes:variacoes };
             var btn=f.querySelector('button[type=submit]'); if(btn){btn.disabled=true;btn.textContent='Criando…';}
             function post(){ fetch('/sofia/campanhas/criar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(function(r){return r.json();}).then(function(j){ if(j.ok){ location.href='/sofia?view=campanhas&okc=criada'; } else { alert(j.erro||'Erro ao criar campanha'); if(btn){btn.disabled=false;btn.textContent='Criar campanha';} } }).catch(function(){ alert('Erro de rede'); if(btn){btn.disabled=false;btn.textContent='Criar campanha';} }); }
             var file=document.getElementById('cpFoto').files[0];
@@ -1976,7 +1993,7 @@ function paginaSofiaCampanhas(aviso, erro) {
       if(!(mn>0)||!(mx>0)){ alert('Preencha o intervalo entre envios (segundos).'); return; }
       if(mx<mn){ alert('O tempo máximo deve ser maior ou igual ao mínimo.'); return; }
       if(!(lim>0)){ alert('Preencha o máximo por dia.'); return; }
-      var d={ id:id, delayMinSeg:mn, delayMaxSeg:mx, limiteDia:lim, janelaIni:val('rji'), janelaFim:val('rjf') };
+      var d={ id:id, delayMinSeg:mn, delayMaxSeg:mx, limiteDia:lim, janelaIni:val('rji'), janelaFim:val('rjf'), dataFim:val('rfim') };
       fetch('/sofia/campanhas/ritmo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
         .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok){ window.campEditando=false; var b=document.querySelector('.ritmoBox-'+id); if(b)b.style.display='none'; alert('✅ Ritmo atualizado! O término previsto vai recalcular.'); } else { alert('❌ '+((j&&j.erro)||'falha')); } })
         .catch(function(){ alert('❌ erro de rede'); });

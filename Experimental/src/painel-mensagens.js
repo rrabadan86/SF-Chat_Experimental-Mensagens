@@ -2182,6 +2182,7 @@ const server = http.createServer(protegido((req, res) => {
         const alvo = contatos.listar({ tag, pagina: 0, porPagina: 100000 });
         const destinatarios = (alvo.itens || []).map(c => ({ tel: c.tel, nome: c.nome || '' })).filter(x => x.tel);
         if (!destinatarios.length) throw new Error('Nenhum contato com essa tag.');
+        if (d.dataFim && /^\d{4}-\d{2}-\d{2}$/.test(String(d.dataFim)) && String(d.dataFim) < String(d.dataInicio || hojeSP())) throw new Error('A data de fim precisa ser igual ou depois da data de início.');
         const id = 'c' + Date.now();
         let fotoArquivo = '';
         if (d.fotoBase64) { try { fotoArquivo = sofia.salvarFotoCampanha(id, d.fotoBase64); } catch (e) { throw new Error('Foto: ' + e.message); } }
@@ -2192,6 +2193,7 @@ const server = http.createServer(protegido((req, res) => {
             limiteDia: String(d.limiteDia || '40'), delayMinSeg: String(d.delayMinSeg || '120'), delayMaxSeg: String(d.delayMaxSeg || '180'),
             janelaIni: String(d.janelaIni || '09:00'), janelaFim: String(d.janelaFim || '20:00'),
             dataInicio: String(d.dataInicio || hojeSP()),
+            dataFim: /^\d{4}-\d{2}-\d{2}$/.test(String(d.dataFim || '')) ? String(d.dataFim) : '',
             dias: Array.isArray(d.dias) ? d.dias.map(Number).filter(x => x >= 0 && x <= 6) : [],
             variacoes: Array.isArray(d.variacoes) ? d.variacoes.map(s => String(s || '').trim()).filter(Boolean).slice(0, 50) : [],
             fotoArquivo, destinatarios,
@@ -2355,7 +2357,7 @@ const server = http.createServer(protegido((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       const id = String(d.id || ''); if (!id) return res.end(JSON.stringify({ ok: false, erro: 'faltou id' }));
       let nomeC = ''; try { const c = (sofia.lerCampanhas() || []).find(x => String(x.id) === id); if (c) nomeC = c.nome || ''; } catch (_) {}
-      try { sofia.opCampanha({ op: 'ritmo', id, delayMinSeg: d.delayMinSeg, delayMaxSeg: d.delayMaxSeg, limiteDia: d.limiteDia, janelaIni: d.janelaIni, janelaFim: d.janelaFim }); } catch (_) {}
+      try { sofia.opCampanha({ op: 'ritmo', id, delayMinSeg: d.delayMinSeg, delayMaxSeg: d.delayMaxSeg, limiteDia: d.limiteDia, janelaIni: d.janelaIni, janelaFim: d.janelaFim, ...(d.dataFim !== undefined ? { dataFim: String(d.dataFim || '') } : {}) }); } catch (_) {}
       try { auditoria.registrar(quem, 'campanha.ritmo', nomeC || id, `${d.delayMinSeg}-${d.delayMaxSeg}s · ${d.limiteDia}/dia`); } catch (_) {}
       return res.end(JSON.stringify({ ok: true }));
     });
