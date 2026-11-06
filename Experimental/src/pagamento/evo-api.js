@@ -9,15 +9,27 @@
  * aqui vamos devagar: no máximo 1 requisição a cada 400 ms (2,5/s), com nova
  * tentativa em 429/5xx e em conexão derrubada pelo balanceador do EVO.
  */
-require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', '.env') });
+// As credenciais do EVO ficam no .env do agendamento (src/agendamento_evo/.env) —
+// o mesmo que a Grade e o envio da grade para o formulário (push_slots) usam. Lê
+// também o .env do robô e o ambiente do processo; vale o primeiro valor NÃO vazio
+// (o .env do robô costuma ter "EVO_DNS=" em branco, do modelo de instalação).
+const pth = require('path'); const fsx = require('fs');
+const ARQS_ENV = [pth.resolve(__dirname, '..', 'agendamento_evo', '.env'), pth.resolve(__dirname, '..', '..', '.env')];
+function valorEnv(nome) {
+  const limpo = (v) => { const x = String(v == null ? '' : v).trim(); return x && !x.startsWith('#') ? x : ''; };
+  const doProc = limpo(process.env[nome]); if (doProc) return doProc;
+  for (const arq of ARQS_ENV) {
+    try { const v = limpo(require('dotenv').parse(fsx.readFileSync(arq))[nome]); if (v) return v; } catch (_) {}
+  }
+  return '';
+}
 
-const BASE = String(process.env.EVO_BASE_URL || 'https://evo-integracao-api.w12app.com.br').trim().replace(/\/+$/, '');
+const BASE = () => (valorEnv('EVO_BASE_URL') || 'https://evo-integracao-api.w12app.com.br').replace(/\/+$/, '');
 const INTERVALO_MS = parseInt(process.env.PAGAMENTO_EVO_INTERVALO_MS || '400', 10);
 
 function credenciais() {
-  const dns = String(process.env.EVO_DNS || '').trim();
-  const tok = String(process.env.EVO_TOKEN || '').trim();
-  if (!dns || !tok || dns.startsWith('#') || tok.startsWith('#')) throw new Error('EVO_DNS/EVO_TOKEN não configurados no .env do robô.');
+  const dns = valorEnv('EVO_DNS'), tok = valorEnv('EVO_TOKEN');
+  if (!dns || !tok) throw new Error('não achei a chave da API do EVO (EVO_DNS/EVO_TOKEN) em src/agendamento_evo/.env nem no .env do robô.');
   return 'Basic ' + Buffer.from(`${dns}:${tok}`).toString('base64');
 }
 function configurado() { try { credenciais(); return true; } catch (_) { return false; } }
@@ -33,7 +45,7 @@ async function vez() { // fila simples: cada chamada reserva o próximo "horári
 
 async function chamar(endpoint, params = {}) {
   const q = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => [k, String(v)]))).toString();
-  const url = `${BASE}${endpoint}${q ? '?' + q : ''}`;
+  const url = `${BASE()}${endpoint}${q ? '?' + q : ''}`;
   let ultimo;
   for (let t = 1; t <= 4; t++) {
     await vez();
