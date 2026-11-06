@@ -73,7 +73,7 @@ function compactarContrato(c) {
 }
 
 async function syncMes(ano, mes, { log = console.log, completo = false } = {}) {
-  if (!evo.configurado()) throw new Error('EVO_DNS/EVO_TOKEN não configurados no .env do robô.');
+  if (!evo.configurado()) throw new Error('não achei a chave da API do EVO (EVO_DNS/EVO_TOKEN) em src/agendamento_evo/.env nem no .env do robô.');
   const t0 = Date.now();
   const mm = String(mes).padStart(2, '0');
   const hoje = hojeSP();
