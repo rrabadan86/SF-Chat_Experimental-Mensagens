@@ -2327,6 +2327,8 @@ type Campanha = {
   id: string; nome: string; tag: string; textoBase: string; variacoes: string[];
   limiteDia: number; delayMinSeg: number; delayMaxSeg: number; janelaIni: string; janelaFim: string;
   dataInicio: string; // YYYY-MM-DD (não envia antes deste dia)
+  dataFim?: string; // YYYY-MM-DD opcional: depois deste dia a campanha encerra, mesmo com fila
+  fimPorData?: boolean; // encerrada pela data de fim (sobrou gente na fila)
   dias?: number[]; // dias da semana permitidos (0=Dom … 6=Sáb); vazio/ausente = todos
   fotoArquivo?: string; // caminho da imagem a enviar junto (opcional)
   status: "gerando" | "pronta" | "enviando" | "pausada" | "concluida" | "cancelada";
@@ -2419,6 +2421,7 @@ async function processarCampInbox() {
           delayMaxSeg: Math.max(1, parseInt(p.delayMaxSeg, 10) || 180),
           janelaIni: String(p.janelaIni || "09:00"), janelaFim: String(p.janelaFim || "20:00"),
           dataInicio: String(p.dataInicio || hojeSP()),
+          dataFim: /^\d{4}-\d{2}-\d{2}$/.test(String(p.dataFim || "")) ? String(p.dataFim) : "",
           dias: Array.isArray(p.dias) ? p.dias.map((x: any) => Number(x)).filter((x: number) => x >= 0 && x <= 6) : [],
           fotoArquivo: p.fotoArquivo ? String(p.fotoArquivo) : "",
           status: preVars.length ? "pronta" : "gerando", pendentes: dests, enviados: [], falhas: [],
@@ -2469,6 +2472,14 @@ async function processarCampInbox() {
           const iLim = parseInt(String(op.limiteDia), 10); if (Number.isFinite(iLim) && iLim > 0) c.limiteDia = Math.min(1000, iLim);
           if (op.janelaIni && /^\d{2}:\d{2}$/.test(String(op.janelaIni))) c.janelaIni = String(op.janelaIni);
           if (op.janelaFim && /^\d{2}:\d{2}$/.test(String(op.janelaFim))) c.janelaFim = String(op.janelaFim);
+          // Data de fim: "" apaga (envia até acabar a fila); AAAA-MM-DD define. Se a
+          // campanha tinha encerrado pela data e a nova data ainda não passou, volta
+          // para "pausada" — é só clicar em Iniciar para continuar.
+          if (op.dataFim !== undefined) {
+            const df = String(op.dataFim || "");
+            c.dataFim = /^\d{4}-\d{2}-\d{2}$/.test(df) ? df : "";
+            if (c.fimPorData && c.pendentes.length && (!c.dataFim || c.dataFim >= hojeSP())) { c.status = "pausada"; c.fimPorData = false; }
+          }
           c.atualizadoEm = Date.now(); agendarSalvarCampanhas();
           log(`campanha "${c.nome}": ritmo atualizado — ${c.delayMinSeg}-${c.delayMaxSeg}s, teto ${c.limiteDia}/dia, janela ${c.janelaIni}-${c.janelaFim}.`);
         }
@@ -2582,6 +2593,13 @@ async function tickCampanha() {
   if (c.diaRef !== hojeSP()) { c.diaRef = hojeSP(); c.enviadosHoje = 0; } // vira o dia → zera o contador
   if (!c.pendentes.length) { c.status = "concluida"; c.atualizadoEm = Date.now(); agendarSalvarCampanhas(); return; }
   const emRajada = (c.rajadaRestante || 0) > 0;               // "enviar agora": ignora data/dia/janela/teto
+  // Passou da data de fim (opcional) → encerra, mesmo com gente na fila. O "enviar
+  // agora" já em andamento termina antes (foi um pedido explícito).
+  if (c.dataFim && hojeSP() > c.dataFim && !emRajada) {
+    c.status = "concluida"; c.fimPorData = true; c.atualizadoEm = Date.now(); agendarSalvarCampanhas();
+    log(`campanha "${c.nome}": encerrada pela data de fim (${c.dataFim}) — ${c.pendentes.length} contato(s) ficaram sem receber.`);
+    return;
+  }
   if (c.dataInicio && hojeSP() < c.dataInicio && !emRajada) return; // ainda não chegou a data de início
   if (!diaPermitido(c) && !emRajada) return;                  // dia da semana não marcado → espera
   if (!dentroJanela(c.janelaIni, c.janelaFim) && !emRajada) return; // fora do horário → espera
