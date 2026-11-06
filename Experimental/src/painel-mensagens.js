@@ -9251,11 +9251,32 @@ const server = http.createServer((req, res) => {
     const avisoQ = (() => { const a = sp.get('ok'), e = sp.get('erro'); return e ? { aviso: '⚠️ ' + e, erro: true } : a === 'sync' ? { aviso: '🔄 Leitura do EVO pedida ao robô — leva alguns minutos. Atualize a página para ver o andamento.' } : a === 'regras' ? { aviso: '✅ Regras salvas.' } : a === 'prof' ? { aviso: '✅ Percentual salvo.' } : a === 'ocupado' ? { aviso: '⏳ O robô já está rodando outro pedido — tente de novo em 1 minuto.', erro: true } : {}; })();
     if (req.method === 'GET' && url === '/pagamento') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      return res.end(chrome({ tab: 'Pagamento dos professores' }, 'pagamento', pg.pagina({ esc, uiTopo, uiChips, subnav: subnavIndicadores('pagamento'), ym: sp.get('m') || '', prof: sp.get('prof') || '', aviso: avisoQ.aviso })));
+      return res.end(chrome({ tab: 'Pagamento dos professores' }, 'pagamento', pg.pagina({ esc, uiTopo, uiChips, subnav: subnavIndicadores('pagamento'), ym: sp.get('m') || '', prof: sp.get('prof') || '', dia: sp.get('d') || '', aviso: avisoQ.aviso })));
     }
     if (req.method === 'GET' && url === '/pagamento/config') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return res.end(chrome({ tab: 'Pagamento dos professores' }, 'pagamento', pg.paginaConfig({ esc, uiTopo, subnav: subnavIndicadores('pagamento'), aviso: avisoQ.aviso, erro: avisoQ.erro })));
+    }
+    if (req.method === 'GET' && url === '/pagamento/relatorio') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(pg.relatorio({ esc, ym: sp.get('m') || pg.mesAtualSP(), prof: sp.get('prof') || '', studio: process.env.STUDIO_NOME || '' }));
+    }
+    // Ajustes manuais do mês (guardados em data/pagamento/ajustes-AAAA-MM.json).
+    const rotasAjuste = { '/pagamento/excluir': 'excluir', '/pagamento/inserir': 'inserir', '/pagamento/desfazer': 'desfazer', '/pagamento/oculto': 'oculto' };
+    if (req.method === 'POST' && rotasAjuste[url]) {
+      return lerCorpo(req, 1e5, corpo => {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        try {
+          const d = JSON.parse(corpo || '{}'); const aj = require('./pagamento/ajustes'); const ym = String(d.m || '');
+          const acao = rotasAjuste[url];
+          if (acao === 'excluir') aj.excluir(ym, { m: d.m2, nome: d.nome, escopo: d.escopo, prof: d.prof, profNome: d.profNome, s: d.s, sDesc: d.sDesc, motivo: d.motivo }, sess.usuario);
+          else if (acao === 'inserir') aj.inserir(ym, { m: d.m2, nome: d.nome, s: d.s, sDesc: d.sDesc, prof: d.prof, motivo: d.motivo }, sess.usuario);
+          else if (acao === 'desfazer') aj.desfazer(ym, String(d.id || ''));
+          else aj.alternarOculto(ym, String(d.h || ''), sess.usuario);
+          try { auditoria.registrar(sess.usuario, 'pagamento.' + acao, `${ym} ${d.nome || d.h || d.id || ''}`.trim(), String(d.motivo || '').slice(0, 200)); } catch (_) {}
+          return res.end(JSON.stringify({ ok: true }));
+        } catch (e) { return res.end(JSON.stringify({ ok: false, erro: e.message })); }
+      });
     }
     if (req.method === 'POST' && url === '/pagamento/sync') {
       return lerCorpo(req, 1e4, corpo => {
