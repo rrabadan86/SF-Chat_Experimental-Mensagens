@@ -20,6 +20,7 @@
  */
 const sync = require('./sync');
 const pcfg = require('./config');
+const ajustesMod = require('./ajustes');
 
 const DIAS = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 const round2 = (v) => Math.round(v * 100) / 100;
@@ -85,6 +86,7 @@ function freqDoPlano(nome) {
 
 function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
   const ym = `${ano}-${String(mes).padStart(2, '0')}`;
+  const aj = ajustesMod.ler(ym);
   const dados = sync.lerMes(ano, mes);
   if (!dados) return { ok: false, erro: `Ainda não há dados de ${String(mes).padStart(2, '0')}/${ano}. Clique em "Atualizar dados do EVO".`, ym };
   const R = cfg.regras;
@@ -175,20 +177,41 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
   let semLista = 0;
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
+  // Ajustes do mês (guardados): horários ocultos (seg–sex), exclusões e inclusões.
+  const ocultos = new Set((aj.ocultos || []).map(x => x.h));
+  const exclusaoDe = (m, kp, s) => (aj.exclusoes || []).find(x => x.m === m && (x.escopo === 'global' || (x.escopo === 'prof' && x.prof === kp) || (x.escopo === 'sessao' && x.prof === kp && String(x.s) === String(s)))) || null;
+  const insercoesPorSessao = new Map();
+  for (const x of aj.insercoes || []) (insercoesPorSessao.get(String(x.s)) || insercoesPorSessao.set(String(x.s), []).get(String(x.s))).push(x);
+  const alunasMes = new Map(); // idMember → resumo para a "Gestão Central"
+  const DSEM = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  function diasDela(m) {
+    const g = grade.get(m), out = new Set();
+    if (g) for (const x of g) { if ((diaNum(x.ini) ?? 0) <= fimMes.getTime() && (x.fim ? diaNum(x.fim) : Infinity) >= iniMes.getTime()) out.add(`${DIAS[x.wd]} ${String(x.h).slice(0, 5).replace(':', 'h')}`); }
+    else if (inferidas.has(m)) for (const k of inferidas.get(m)) { const [t, wd] = k.split('|'); out.add(`${DIAS[+wd]} ${t.slice(-5).replace(':', 'h')}`); }
+    return [...out];
+  }
+
   for (const a of aulas) {
+    if (ocultos.has(a.h) && dowDe(a.d) >= 1 && dowDe(a.d) <= 5) continue; // horário tirado do cálculo na matriz
     const turma = turmaDe(a);
     const dataAula = dataLocal(a.d);
     const lista = listas[a.s];
+    const kpAula = chaveProf(a);
     if (!lista && a.d <= hoje) semLista++;
     const st = new Map(); // idMember → { n, r, st, naLista }
     for (const e of (lista && lista.e) || []) st.set(e.m, { n: e.n, r: e.r, st: e.st, naLista: true });
     // Fixas da turma que não estão na lista (feriado, aula sem lançamento): contam como falta.
     for (const [m, g] of grade) if (!st.has(m) && ehDaGrade(g, a)) st.set(m, { n: '', r: false, st: 1, naLista: false });
     for (const [m, ts] of inferidas) if (!st.has(m) && ts.has(vagaDe(a))) st.set(m, { n: '', r: false, st: 1, naLista: false });
+    // Incluídas à mão nesta aula: contam com o valor do plano delas.
+    for (const x of insercoesPorSessao.get(String(a.s)) || []) {
+      const ja = st.get(x.m);
+      if (ja) ja.inserida = x; else st.set(x.m, { n: x.nome, r: false, st: 0, naLista: false, inserida: x });
+    }
 
     const alunas = [];
     for (const [m, e] of st) {
-      const presente = e.st === 0;
+      const presente = e.st === 0 || !!e.inserida;
       let cs = ((contratos[m] && contratos[m].c) || []).filter(c => !c.canc || new Date(c.canc) >= iniMes);
       if (!cs.length) {
         if (!presente) continue;
@@ -201,13 +224,26 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
       const c = escolherContrato(cs, turma, dataAula);
       const nome = c.nm || e.n || ('Aluna ' + m);
       const tipo = tipoDePlano(c.plano);
-      const reg = { m, nome, tipo, plano: c.plano, status: statusContrato(c, dataAula), presenca: !e.naLista ? (lista ? 'falta (não lançada)' : 'sem lista') : (e.st === 0 ? 'presente' : e.st === 2 ? 'falta justificada' : 'falta'), mensalidade: 0, contrib: 0, reposicao: false, pagou: pagouNoMes(cs.filter(vigenteNoMes), ano, mes), nota: '' };
+      const reg = { m, nome, tipo, plano: c.plano, status: statusContrato(c, dataAula), presenca: e.inserida && !e.naLista ? (e.st === 0 ? 'presente' : 'falta') : e.inserida ? 'incluída à mão' : !e.naLista ? (lista ? 'falta (não lançada)' : 'sem lista') : (e.st === 0 ? 'presente' : e.st === 2 ? 'falta justificada' : 'falta'), mensalidade: 0, contrib: 0, reposicao: false, pagou: pagouNoMes(cs.filter(vigenteNoMes), ano, mes), nota: '' };
+      if (e.inserida) { reg.inserida = { id: e.inserida.id, por: e.inserida.por, motivo: e.inserida.motivo }; reg.nota = 'incluída à mão' + (e.inserida.motivo ? ': ' + e.inserida.motivo : ''); }
+      { // resumo da aluna no mês (Gestão Central)
+        const r0 = alunasMes.get(m) || { m, nome, tipo, plano: c.plano, pagou: reg.pagou, dias: diasDela(m), profs: new Map(), aulas: 0, excluidaGlobal: null };
+        if (tipo === 'fixo' && r0.tipo !== 'fixo') { r0.tipo = 'fixo'; r0.plano = c.plano; }
+        alunasMes.set(m, r0);
+      }
+      const exc = exclusaoDe(m, kpAula, a.s);
+      if (exc) {
+        Object.assign(reg, { contrib: 0, base: 0, excluida: { id: exc.id, escopo: exc.escopo, motivo: exc.motivo, por: exc.por }, nota: `excluída (${exc.escopo === 'global' ? 'de todas as aulas' : exc.escopo === 'prof' ? 'das aulas deste professor' : 'desta aula'}): ${exc.motivo}` });
+        if (exc.escopo === 'global') alunasMes.get(m).excluidaGlobal = { id: exc.id, motivo: exc.motivo, por: exc.por };
+        alunas.push(reg); continue;
+      }
       if (tipo === 'fixo') {
         const vm = round2(valorMensal(c) * (1 - (R.descontoFixoPct || 0) / 100));
         reg.mensalidade = vm;
         // Reposição: fixa numa aula que não é a da turma dela.
         const g = grade.get(m);
-        if (g) reg.reposicao = !ehDaGrade(g, a) || e.r;
+        if (e.inserida) reg.reposicao = false; // incluída à mão: conta com o valor do plano
+        else if (g) reg.reposicao = !ehDaGrade(g, a) || e.r;
         else if (e.r) reg.reposicao = true;
         else if (inferidas.has(m) && !inferidas.get(m).has(vagaDe(a))) reg.reposicao = true;
         if (reg.reposicao) {
@@ -229,7 +265,8 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
       alunas.push(reg);
     }
     const presencas = alunas.filter(x => x.presenca === 'presente').length;
-    const kp = chaveProf(a);
+    const kp = kpAula;
+    for (const al of alunas) { const r0 = alunasMes.get(al.m); if (r0) { r0.profs.set(kp, a.p || 'Sem professor'); r0.aulas++; } }
     if (!porProf.has(kp)) porProf.set(kp, { chave: kp, nome: a.p || 'Sem professor', aulas: [] });
     porProf.get(kp).aulas.push({ a, turma, alunas, presencas, temLista: !!lista });
   }
@@ -255,7 +292,7 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
       if (x.presencas > R.capacidade) { avs.push(`${x.presencas} presenças (o Studio comporta ${R.capacidade}) — confira o lançamento no EVO`); avisos.push(`${p.nome} · ${x.a.d.split('-').reverse().join('/')} ${x.a.h} ${x.a.n}: ${x.presencas} presenças lançadas (máximo ${R.capacidade}).`); }
       if (!x.temLista && x.a.d <= hoje) avs.push('lista da aula ainda não lida do EVO');
       const t = turmas.get(x.turma) || { nome: x.turma, aulas: [], total: 0 };
-      t.aulas.push({ data: x.a.d, dia: DIAS[dowDe(x.a.d)], hora: x.a.h, atividade: x.a.n, sabado: sab, bruto, valor: round2(valor), regra, presencas: x.presencas, futura: x.a.d > hoje, avisos: avs, alunas: alunas.sort((u, w) => u.nome.localeCompare(w.nome)) });
+      t.aulas.push({ s: x.a.s, wd: dowDe(x.a.d), data: x.a.d, dia: DIAS[dowDe(x.a.d)], hora: x.a.h, atividade: x.a.n, sabado: sab, bruto, valor: round2(valor), regra, presencas: x.presencas, futura: x.a.d > hoje, avisos: avs, alunas: alunas.sort((u, w) => u.nome.localeCompare(w.nome)) });
       t.total = round2(t.total + valor); total += valor;
       turmas.set(x.turma, t);
     }
@@ -263,7 +300,13 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
   }
   if (semLista) avisos.push(`${semLista} aula(s) que já aconteceram estão sem a lista de presença lida do EVO — clique em "Atualizar dados do EVO".`);
   professores.sort((a, b) => a.nome.localeCompare(b.nome));
-  return { ok: true, ym, ano, mes, atualizadoEm: dados.atualizadoEm, professores, total: round2(professores.reduce((s, p) => s + p.total, 0)), avisos, regras: R };
+  // Exclusões/inclusões de cada professor (para o cartão e o relatório).
+  for (const p of professores) {
+    p.exclusoes = (aj.exclusoes || []).filter(x => x.escopo === 'global' ? p.turmas.some(t => t.aulas.some(au => au.alunas.some(al => al.m === x.m))) : x.prof === p.chave);
+    p.insercoes = (aj.insercoes || []).filter(x => x.prof === p.chave);
+  }
+  const alunasLista = [...alunasMes.values()].map(x => Object.assign({}, x, { profs: [...x.profs.values()] })).sort((u, w) => u.nome.localeCompare(w.nome));
+  return { ok: true, ym, ano, mes, atualizadoEm: dados.atualizadoEm, listasEm: Object.values(listas).reduce((mx, l) => (l.em && l.em > mx ? l.em : mx), ''), professores, total: round2(professores.reduce((s, p) => s + p.total, 0)), avisos, regras: R, alunas: alunasLista, ajustes: aj };
 }
 
 module.exports = { calcularMes, tipoDePlano, valorMensal, pagouNoMes, freqDoPlano };
