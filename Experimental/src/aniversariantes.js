@@ -685,6 +685,15 @@ async function main() {
   try {
     for (const aniv of aniversariantes) {
       console.log(`\n👤 ${aniv.nome}...`);
+      // O celular lido na TELA do EVO pode vir errado (o texto da página tem outros
+      // "Celular"). Os Contatos do painel têm o celular de cada aluna vindo da API do
+      // EVO (sincronização diária, com o código dela) — se houver UMA aluna com este
+      // nome completo, vale o celular de lá.
+      const doCrm = celularPeloNome(aniv.nome);
+      if (doCrm && (!aniv.telefone || ult8(doCrm.tel) !== ult8(aniv.telefone))) {
+        console.log(`   🔁 Celular ajustado pelos Contatos do painel (código ${doCrm.idEvo} no EVO): ${aniv.telefone || '(sem)'} → ${doCrm.tel}`);
+        aniv.telefone = doCrm.tel;
+      }
       if (!aniv.telefone) { console.log('   ⏭️  Sem telefone — pulando'); resultados.push({ nome: aniv.nome, grupos: [], status: 'sem-telefone' }); continue; }
 
       // Conferência: o celular do cadastro da aniversariante é de OUTRA aluna? (ex.:
@@ -767,6 +776,21 @@ async function main() {
   fs.writeFileSync(RELATORIO_FILE, JSON.stringify({ executadoEm: ts, resultados }, null, 2), 'utf8');
 
   return { total: aniversariantes.length, resultados };
+}
+
+const ult8 = (t) => String(t || '').replace(/\D/g, '').slice(-8);
+const normNomeCompleto = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+// Celular da aluna pelos Contatos do painel: só quando há EXATAMENTE um contato com
+// código do EVO e o MESMO nome completo (senão null — fica o lido na tela).
+function celularPeloNome(nome) {
+  try {
+    const alvo = normNomeCompleto(nome); if (!alvo || alvo.split(' ').length < 2) return null;
+    const mapa = require('./contatos').carregar();
+    const achados = [];
+    for (const tel in mapa) { const c = mapa[tel]; if (c && c.idEvo && normNomeCompleto(c.nome) === alvo) achados.push({ tel, idEvo: c.idEvo }); }
+    const ids = new Set(achados.map(a => a.idEvo));
+    return ids.size === 1 ? achados[0] : null;
+  } catch (_) { return null; }
 }
 
 // Se o telefone pertence (nos Contatos do painel, com código do EVO) a uma aluna de
