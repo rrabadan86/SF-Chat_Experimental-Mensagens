@@ -1616,7 +1616,10 @@ const server = http.createServer(protegido((req, res) => {
         const achado = contatos.acharPorTel(d.telefone);
         const telAlvo = achado ? achado.chave : d.telefone;
         const tagsAntes = (achado && achado.contato && Array.isArray(achado.contato.tags)) ? achado.contato.tags.slice() : [];
+        const nomeAntes = (achado && achado.contato && achado.contato.nome) || '';
         const c = contatos.adicionar({ nome: d.nome, telefone: telAlvo }); // cria/atualiza (sem mexer nas tags)
+        // Nome digitado/alterado pela equipe na conversa → não é mais trocado pelo do agendamento.
+        if (String(d.nome || '').trim() && String(d.nome).trim() !== String(nomeAntes).trim()) { try { contatos.marcarNomeManual(telAlvo); } catch (_) {} }
         contatos.setTags(telAlvo, d.tags || []);                            // DEFINE o conjunto EXATO (edição manual: não roda transições de funil)
         // Marca no timeline o que MUDOU (add/remove), com quem fez — comparando o
         // conjunto ANTES x o conjunto FINAL de fato gravado.

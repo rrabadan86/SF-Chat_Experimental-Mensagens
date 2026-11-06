@@ -249,13 +249,13 @@ function editarContato(telOrig, { nome, telefone, tags }) {
   const orig = normTel(telOrig);
   if (!map[orig]) return false;
   let c = map[orig];
-  if (nome != null) c.nome = String(nome).trim();
+  if (nome != null) { const nm = String(nome).trim(); if (nm && nm !== c.nome) c.nomeManual = true; c.nome = nm; }
   if (tags != null) c.tags = limparTags(tags);
   const novo = normTel(telefone);
   if (novo && novo !== orig) {
     if (map[novo]) { // já existe → funde as tags e descarta o antigo
       for (const t of c.tags) if (!map[novo].tags.includes(t)) map[novo].tags.push(t);
-      if (nome != null && String(nome).trim()) map[novo].nome = String(nome).trim();
+      if (nome != null && String(nome).trim()) { if (String(nome).trim() !== map[novo].nome) map[novo].nomeManual = true; map[novo].nome = String(nome).trim(); }
       map[novo].atualizadoEm = Date.now();
       delete map[orig];
     } else { // re-chaveia
@@ -266,6 +266,49 @@ function editarContato(telOrig, { nome, telefone, tags }) {
   }
   salvar(map);
   return true;
+}
+
+// Nome completo informado no AGENDAMENTO (SoFIA, Cadastro Express, formulário):
+// atualiza o nome do contato, salvo quando
+//   • a equipe digitou o nome à mão no painel (nomeManual) — nunca é trocado;
+//   • o primeiro nome é outro — e não é um apelido que começa igual, como
+//     "Lu" → "Luciana" (ex.: mãe "Ana Souza" agendando para a filha
+//     "Júlia Souza") — o nome fica como está e o do agendamento é guardado em
+//     nomeAgendado (aparece na lista de Contatos);
+//   • o nome novo não é "completo" (precisa de nome e sobrenome).
+// Devolve { mudou, antes, depois, motivo }.
+const _normNome = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+const _capitalizar = (s) => String(s).trim().replace(/\s+/g, ' ').toLowerCase().replace(/(^|[\s-])([a-zà-ÿ])/g, (m, a, b) => a + b.toUpperCase()).replace(/\b(Da|De|Do|Das|Dos|E)\b/g, w => w.toLowerCase());
+function nomeDoAgendamento(telefone, nomeNovo) {
+  const map = carregar();
+  const achado = acharPorTel(telefone, map);
+  const novoBruto = String(nomeNovo || '').trim().replace(/\s+/g, ' ');
+  const partes = _normNome(novoBruto).split(' ').filter(w => w.length > 1);
+  if (!achado) return { mudou: false, motivo: 'contato não encontrado' };
+  const c = achado.contato;
+  if (partes.length < 2) return { mudou: false, motivo: 'nome incompleto' };
+  // Nome todo em maiúsculas/minúsculas (como a pessoa digitou) → "Marina Ferreira Zanola"
+  const novo = (novoBruto === novoBruto.toUpperCase() || novoBruto === novoBruto.toLowerCase()) ? _capitalizar(novoBruto) : novoBruto;
+  const antes = String(c.nome || '').trim();
+  if (_normNome(antes) === _normNome(novo)) return { mudou: false, motivo: 'igual' };
+  const palavrasAntes = _normNome(antes).split(' ').filter(w => w.length > 1);
+  const primeiroAntes = palavrasAntes[0] || '';
+  // Mesmo primeiro nome, ou apelido de uma palavra que é o começo dele ("Lu" → "Luciana").
+  const mesmaPessoa = !primeiroAntes || primeiroAntes === partes[0] || (palavrasAntes.length === 1 && partes[0].startsWith(primeiroAntes));
+  const motivoNao = c.nomeManual ? 'nome editado no painel' : (!mesmaPessoa ? 'outro primeiro nome' : '');
+  if (motivoNao) {
+    if (c.nomeAgendado !== novo) { c.nomeAgendado = novo; c.atualizadoEm = Date.now(); salvar(map); }
+    return { mudou: false, antes, depois: novo, motivo: motivoNao };
+  }
+  c.nome = novo; delete c.nomeAgendado; c.nomeDoAgendamentoEm = Date.now(); c.atualizadoEm = Date.now();
+  salvar(map);
+  return { mudou: true, antes, depois: novo };
+}
+// Marca que o nome foi digitado pela equipe (não é mais trocado pelo agendamento).
+function marcarNomeManual(telefone) {
+  const map = carregar();
+  const a = acharPorTel(telefone, map); if (!a || a.contato.nomeManual) return false;
+  a.contato.nomeManual = true; salvar(map); return true;
 }
 
 // ── Configuração por tag (automações estilo Zeetech) ────────────────────────
@@ -537,4 +580,5 @@ module.exports = {
   remover: comTrava(remover), removerLote: comTrava(removerLote), editarContato: comTrava(editarContato), renomearTag: comTrava(renomearTag), excluirTag: comTrava(excluirTag), existe, adicionar: comTrava(adicionar), ARQUIVO,
   tagConfig, definirTagConfig: comTrava(definirTagConfig), tagsPorGatilho, criarTag: comTrava(criarTag), adicionarTag: comTrava(adicionarTag), removerTag: comTrava(removerTag), lerTagsConfig, GATILHOS,
   aplicarTagLote: comTrava(aplicarTagLote), contarFiltrados,
+  nomeDoAgendamento: comTrava(nomeDoAgendamento), marcarNomeManual: comTrava(marcarNomeManual),
 };
