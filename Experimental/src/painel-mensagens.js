@@ -283,7 +283,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/auto-tag-alunas') return has('sofia_contatos') || has('sofia_config'); // auto-tag Aluna/Ex-aluna (aba Tags)
   if (url === '/sofia/midia-upload' || url === '/sofia/midia') return has('sofia_config'); // upload/preview das imagens (preços/grade)
   if (url === '/sofia/msgs-anuncio') return has('sofia_config'); // boas-vindas do anúncio que não pausam a SoFIA
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/parear' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/prompt/download' || url === '/sofia/prompt/previa' || url === '/sofia/prompt/importar') return has('sofia_config');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/parear' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/historico-tags' || url === '/sofia/prompt/download' || url === '/sofia/prompt/previa' || url === '/sofia/prompt/importar') return has('sofia_config');
   return false;
 }
 // Rota da aba WhatsApp → sub-permissão. Agendamento = /agendar* e /?view=agendar;
@@ -1432,6 +1432,7 @@ const server = http.createServer(protegido((req, res) => {
     else if (/(?:^|&)okc=criada/.test(q)) aviso = '📣 Campanha criada! A IA está gerando as variações. Quando ficar “pronta”, clique em ▶️ Iniciar para começar o envio.';
     else if (/(?:^|&)okah=1/.test(q)) aviso = 'Aviso "precisa de humano" salvo.';
     else if (/(?:^|&)okalu=1/.test(q)) aviso = '🎓 Regras das alunas salvas! Valem na hora.';
+    else if (/(?:^|&)okhist=1/.test(q)) aviso = '👋 Etiquetas de ex-aluna e de quem já fez experimental salvas! Valem na próxima mensagem.';
     else if (/(?:^|&)oknr=\d+/.test(q)) aviso = '🔕 Lista de "não responder" salva (' + ((q.match(/oknr=(\d+)/) || [])[1] || '0') + ' número(s)).';
     else if (/(?:^|&)okcmp=1/.test(q) && /(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Config salva, mas não consegui reiniciar o robô p/ aplicar o novo horário. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
     else if (/(?:^|&)okcmp=1/.test(q)) aviso = 'Config de presença (troca de tags) salva.';
@@ -2082,6 +2083,17 @@ const server = http.createServer(protegido((req, res) => {
     }
   }
   // Salva as regras da tag "alunas" (janela da recepção + número de aviso).
+  // Ex-alunas e quem já fez experimental (etiquetas) — só essas duas listas.
+  if (req.method === 'POST' && url === '/sofia/historico-tags') {
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      try {
+        sofia.gravarAlunas({ tagsExAluna: p.getAll('tagsExAluna'), tagsFezExp: p.getAll('tagsFezExp') });
+        auditoria.registrar(sess.usuario, 'sofia.historico-tags', '', 'ex-alunas / fez experimental');
+      } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?okhist=1' }); res.end();
+    });
+  }
   if (req.method === 'POST' && url === '/sofia/alunas') {
     return lerCorpo(req, 1e5, corpo => {
       const p = new URLSearchParams(corpo);

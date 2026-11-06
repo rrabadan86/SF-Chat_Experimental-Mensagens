@@ -766,6 +766,11 @@ function gravarAlunas(patch) {
     // (sofia.ts) normaliza acento, numeração e plural, então a grafia não importa.
     tags,
     tag: tags[0], // espelho p/ leitores antigos (sofia.ts prefere "tags")
+    // Ex-aluna / já fez experimental: a SoFIA trata como reencontro (sem apresentação
+    // nem metodologia) e reaproveita o cadastro do EVO ao agendar. Lista vazia =
+    // desligado; sem o campo, a SoFIA usa o padrão ("Ex Aluna" / "Fez Experimental").
+    ...(patch.tagsExAluna !== undefined ? { tagsExAluna: Array.from(new Set([].concat(patch.tagsExAluna).map(t => String(t || '').trim()).filter(Boolean))) } : {}),
+    ...(patch.tagsFezExp !== undefined ? { tagsFezExp: Array.from(new Set([].concat(patch.tagsFezExp).map(t => String(t || '').trim()).filter(Boolean))) } : {}),
     atualizadoEm: new Date().toISOString(),
   });
   gravarArquivo(F.alunas, JSON.stringify(novo, null, 2));

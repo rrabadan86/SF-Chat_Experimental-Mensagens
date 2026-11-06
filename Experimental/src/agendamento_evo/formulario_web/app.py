@@ -1192,8 +1192,24 @@ def api_book_sofia():
                 return jsonify({"ok": False, "motivo": "cadastro_existente", "existente": dup}), 409
         forcar_novo = (acao == "novo")
     else:
-        # SoFIA autônoma: sempre cria novo (não reaproveita/atualiza cadastro alheio).
+        # SoFIA autônoma: sempre cria novo (não reaproveita/atualiza cadastro alheio)…
         forcar_novo = True
+        # …EXCETO ex-aluna / quem já fez experimental (a SoFIA manda reusar_cadastro
+        # pelas tags do painel): o cadastro já existe no EVO e só falta vender a aula.
+        # Reaproveita SÓ se o primeiro nome do cadastro achado pelo telefone bater com
+        # o informado — nome diferente no mesmo telefone é outra pessoa (mãe x filha).
+        if str(dados.get("reusar_cadastro") or "").strip() in ("1", "true", "sim"):
+            try:
+                dup = _dup_por_telefone(evo, telefone)
+            except Exception:  # leitura falhou → segue criando novo (como antes)
+                dup = None
+            def _pn(v):
+                v = unicodedata.normalize("NFD", str(v or "")).encode("ascii", "ignore").decode().lower().split()
+                return v[0] if v else ""
+            if dup and _pn(dup.get("nome")) and _pn(dup.get("nome")) == _pn(nome):
+                forcar_novo = False
+                app.logger.info("book-sofia: reaproveitando o cadastro %s (%s) de quem já é ex-aluna/fez experimental",
+                                dup.get("idProspect"), dup.get("nome"))
     # Para "criar novo": guarda os ids já existentes, p/ detectar se o EVO "mesclou"
     # (não aceitou e-mail/telefone duplicado e devolveu o cadastro antigo).
     ids_antes = set()

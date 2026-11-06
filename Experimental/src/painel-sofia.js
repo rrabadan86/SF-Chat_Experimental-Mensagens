@@ -2066,6 +2066,20 @@ function paginaSofia(aviso, erro) {
   for (const t of tagsSel) { if (!tagsAlu.some(x => x.toLowerCase() === String(t).toLowerCase())) tagsAlu = [t].concat(tagsAlu); }
   const selLower = new Set(tagsSel.map(t => String(t).trim().toLowerCase()));
   const tagsTxt = tagsSel.map(t => esc(t)).join(', ') || 'alunas';
+  // Ex-alunas / já fez experimental: sem configuração, marca as etiquetas do CRM que
+  // terminam em "ex aluna" / "fez experimental" (o mesmo padrão que a SoFIA usa).
+  const chaveT = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/^\s*[a-z]{0,3}[-\s]?\d+[.)\-]\s*/, '').replace(/[^a-z0-9]+/g, '').replace(/s$/, '');
+  const tagsCrm = (() => { try { return contatos.tagsDistintas().map(t => t.tag); } catch (_) { return []; } })();
+  const marcadas = (campo, padrao) => {
+    if (Array.isArray(alu[campo])) return new Set(alu[campo].map(t => String(t).trim().toLowerCase()));
+    const alvos = padrao.map(chaveT);
+    return new Set(tagsCrm.filter(t => alvos.some(a => chaveT(t) === a || chaveT(t).endsWith(a))).map(t => t.toLowerCase()));
+  };
+  const selEx = marcadas('tagsExAluna', ['Ex Aluna']), selFx = marcadas('tagsFezExp', ['Fez Experimental']);
+  const listaHist = (nome, sel) => {
+    let todas = tagsCrm.slice(); for (const t of (Array.isArray(alu[nome]) ? alu[nome] : [])) if (!todas.some(x => x.toLowerCase() === String(t).toLowerCase())) todas = [t].concat(todas);
+    return todas.length ? todas.map(t => `<label class="chk" style="margin:0;font-weight:500"><input type="checkbox" name="${nome}" value="${esc(t)}"${sel.has(String(t).trim().toLowerCase()) ? ' checked' : ''}> ${esc(t)}</label>`).join('') : '<span class="quando" style="margin:0">Nenhuma etiqueta encontrada no CRM.</span>';
+  };
   // Cada seção é um card recolhível (começa MINIMIZADA — só o título aparece) e
   // reordenável (↑ ↓). A ordem no DOM = ordem salva no prompt. O textarea, mesmo
   // recolhido (display:none), continua sendo enviado no POST.
@@ -2279,6 +2293,26 @@ function paginaSofia(aviso, erro) {
             </div>
           </div>
           <div class="acts" style="margin-top:14px"><button type="submit" class="save">Salvar regras das alunas</button></div>
+        </form>
+      </div>
+    </details>
+
+    <details class="acc-sec">
+      <summary class="sec-t" style="cursor:pointer;padding:4px 0">👋 Ex-alunas e quem já fez experimental <small style="font-weight:400;color:var(--cinza)">— a SoFIA não se apresenta de novo e reaproveita o cadastro do EVO</small></summary>
+      <div class="card">
+        <p class="quando" style="margin:0 0 12px">Para quem tem estas etiquetas, a SoFIA <b>não se apresenta como num primeiro contato</b> nem explica a metodologia de novo. <b>Ex-aluna:</b> trata como reencontro e oferece uma <b>aula para ela retomar</b>. <b>Já fez experimental:</b> pergunta o que ela achou da aula, tira dúvidas, fala da promoção vigente e, se ela quiser, agenda uma nova aula. Nos dois casos, ao agendar, o <b>cadastro que já existe no EVO é reaproveitado</b> (só se o nome bater — nome diferente no mesmo telefone vira cadastro novo). Quem é <b>aluna contratada</b> segue as regras de "Alunas contratadas". Desmarque tudo para desligar.</p>
+        <form method="POST" action="/sofia/historico-tags">
+          <div class="cfg-grid">
+            <div>
+              <label>Etiquetas de ex-aluna</label>
+              <div class="cfg-in" style="flex-direction:column;align-items:flex-start;gap:6px;max-height:200px;overflow:auto;padding:8px 10px">${listaHist('tagsExAluna', selEx)}</div>
+            </div>
+            <div>
+              <label>Etiquetas de quem já fez aula experimental</label>
+              <div class="cfg-in" style="flex-direction:column;align-items:flex-start;gap:6px;max-height:200px;overflow:auto;padding:8px 10px">${listaHist('tagsFezExp', selFx)}</div>
+            </div>
+          </div>
+          <div class="acts" style="margin-top:14px"><button type="submit" class="save">Salvar etiquetas</button></div>
         </form>
       </div>
     </details>

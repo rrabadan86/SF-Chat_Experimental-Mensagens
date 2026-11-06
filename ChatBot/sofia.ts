@@ -944,7 +944,10 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
   // responder — assim ela não faz a apresentação de boas-vindas nem pergunta
   // "já conhece a metodologia?" para quem treina há anos, mesmo que a aluna
   // tenha mandado só um "oi" (sem nenhuma palavra-chave de remarcação).
-  const promptDaVez = carregarPrompt() + contextoAluna(telefone) + contextoData();
+  const ctxAluna = contextoAluna(telefone);
+  // Ex-aluna / já fez experimental (tags do painel): reencontro, sem apresentação
+  // nem metodologia de novo. Só vale quando ela NÃO é aluna contratada.
+  const promptDaVez = carregarPrompt() + ctxAluna + (ctxAluna ? "" : contextoHistorico(telefone)) + contextoData();
   const opcoesDaVez: ClaudeAgentOptions = conversa.sessionId
     ? { ...options, resume: conversa.sessionId, systemPrompt: promptDaVez }
     : { ...options, systemPrompt: promptDaVez };
@@ -1427,6 +1430,66 @@ function temTagAluna(telefone: string): boolean {
   return false;
 }
 
+// ── Histórico do contato: ex-aluna / já fez aula experimental ─────────────
+// As etiquetas vêm do painel (SoFIA → Configuração → "Ex-alunas e quem já fez
+// experimental", gravadas em sofia-alunas.json). Sem configuração, vale o padrão
+// "Ex Aluna" e "Fez Experimental" — comparados por chaveTag ("0. Ex Aluna",
+// "FX 5. Fez experimental" etc. caem na mesma chave). Lista vazia = desligado.
+function tagsDoContato(telefone: string): string[] {
+  try {
+    const ult8 = String(telefone || "").replace(/\D/g, "").slice(-8);
+    if (!ult8) return [];
+    const bruto = JSON.parse(fs.readFileSync(CONTATOS_FILE, "utf8"));
+    const lista: any[] = Array.isArray(bruto) ? bruto : Object.values(bruto || {});
+    for (const c of lista) {
+      const t = String(c?.tel || c?.telefone || "").replace(/\D/g, "");
+      if (t && t.endsWith(ult8)) return (c?.tags || []).map((x: any) => chaveTag(x)).filter(Boolean);
+    }
+  } catch { /* sem arquivo/contato */ }
+  return [];
+}
+function listaTagsCfg(campo: "tagsExAluna" | "tagsFezExp", padrao: string[]): Set<string> {
+  let lista = padrao;
+  try {
+    const o = JSON.parse(fs.readFileSync(ALUNAS_FILE, "utf8")) || {};
+    if (Array.isArray(o[campo])) lista = o[campo].map((t: any) => String(t || "").trim()).filter(Boolean);
+  } catch { /* sem arquivo → padrão */ }
+  return new Set(lista.map((t) => chaveTag(t)).filter(Boolean));
+}
+// "exaluna" | "fezexp" | "" — ex-aluna vence quando tem as duas.
+export function historicoDoContato(telefone: string): "exaluna" | "fezexp" | "" {
+  const tags = tagsDoContato(telefone);
+  if (!tags.length) return "";
+  // Compara pelo FINAL da chave: "FX - 5. Fez experimental" vira "fx5fezexperimental"
+  // (o prefixo com hífen não sai no chaveTag) e termina em "fezexperimental".
+  const casa = (alvos: Set<string>) => tags.some((t) => [...alvos].some((a) => t === a || t.endsWith(a)));
+  if (casa(listaTagsCfg("tagsExAluna", ["Ex Aluna"]))) return "exaluna";
+  if (casa(listaTagsCfg("tagsFezExp", ["Fez Experimental"]))) return "fezexp";
+  return "";
+}
+function contextoHistorico(telefone: string): string {
+  try {
+    const h = historicoDoContato(telefone);
+    if (h === "exaluna") return `
+
+# CONTEXTO DESTA CONVERSA (vale ACIMA da seção SAUDAÇÃO INICIAL)
+- Esta pessoa JÁ FOI ALUNA do Studio (ex-aluna). Ela conhece o SlimFit e a nossa metodologia.
+- NÃO se apresente como num primeiro contato, NÃO explique o que é o SlimFit nem a metodologia e NÃO pergunte se ela já conhece o Studio. Isso vale mesmo que a mensagem dela seja só "oi".
+- Trate como um reencontro, com carinho (use o nome dela quando souber). Ex.: "Que bom falar com você de novo, [nome]! 💛"
+- Responda o que ela perguntar (valores e promoção seguem a seção PREÇO E PROMOÇÃO).
+- O convite é para ela VOLTAR a treinar: ofereça agendar uma *aula para ela retomar*. O agendamento é o mesmo da aula experimental (mesmas ferramentas e regras de horário e vaga) — só chame de "aula para você retomar/voltar", e não de "aula experimental para conhecer". O cadastro dela já existe: confirme nome completo e e-mail como de costume que o sistema reaproveita o cadastro.`;
+    if (h === "fezexp") return `
+
+# CONTEXTO DESTA CONVERSA (vale ACIMA da seção SAUDAÇÃO INICIAL)
+- Esta pessoa JÁ FEZ AULA EXPERIMENTAL aqui e ainda não fechou plano. Ela já conhece a nossa metodologia.
+- NÃO se apresente como num primeiro contato, NÃO explique a metodologia de novo e NÃO ofereça "conhecer a metodologia". Isso vale mesmo que a mensagem dela seja só "oi".
+- Pergunte com leveza o que ela achou da aula experimental e tire as dúvidas dela.
+- Fale da promoção vigente quando fizer sentido (valores e promoção seguem a seção PREÇO E PROMOÇÃO — só se a promoção estiver ativa hoje).
+- Se ela quiser fazer uma nova aula, pode agendar normalmente (mesmas ferramentas e regras da aula experimental). O cadastro dela já existe: confirme nome completo e e-mail como de costume que o sistema reaproveita o cadastro.`;
+  } catch { /* sem contexto */ }
+  return "";
+}
+
 // True quando o contato está marcado como "sem interesse" no painel. Usada para
 // NÃO disparar follow-up de reengajamento a quem já disse que não quer — a tag
 // vem escrita como "FX - 0. Sem interesse" (com prefixo de ordenação), então
@@ -1546,6 +1609,10 @@ async function bookNoEvo(telefone: string, nome: string, email: string, when: st
   const corpo: Record<string, string> = { nome, email, telefone, when, origem };
   if (extra.acao_duplicado) corpo.acao_duplicado = String(extra.acao_duplicado);
   if (extra.tipo === "circuito") corpo.tipo = "circuito";
+  // Ex-aluna / já fez experimental agendando pela SoFIA: o cadastro já existe no
+  // EVO — pede para reaproveitá-lo (o formulário só reaproveita se o nome bater;
+  // nome diferente no mesmo telefone = outra pessoa → cadastro novo).
+  if (!origem && historicoDoContato(telefone)) corpo.reusar_cadastro = "1";
   let resp: any;
   try {
     resp = await comRetry(async () => {
