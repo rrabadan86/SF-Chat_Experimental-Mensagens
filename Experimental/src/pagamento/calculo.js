@@ -45,7 +45,8 @@ function statusContrato(c, ref) {
 // Pagou o mês de referência? (só informativo — devedora conta para o professor)
 // MESMA regra do sf-pagamento (temPagamentoNoMes, por COMPETÊNCIA):
 //   null  = sem parcelas do contrato vigente;
-//   parcela(s) com vencimento no mês → pago se alguma foi paga;
+//   parcela(s) da competência do mês → pago se alguma foi paga (no cartão, a
+//   competência é o mês ANTERIOR ao vencimento gravado no EVO);
 //   nenhuma parcela vencendo no mês → NÃO pago (ex.: COPA em 3x jul/ago/set
 //   não tem pagamento em outubro; anual pago à vista também não).
 function pagouNoMes(contratos, ano, mes) {
@@ -54,7 +55,12 @@ function pagouNoMes(contratos, ano, mes) {
   const pago = (r) => r.paid > 0 || !!r.recv;
   const ym = (d) => d ? (+d.slice(0, 4)) * 12 + (+d.slice(5, 7) - 1) : null;
   const ref = ano * 12 + (mes - 1);
-  const doMes = rec.filter(r => ym(r.due) === ref);
+  // Cartão: o EVO grava em "vencimento" a data de LIQUIDAÇÃO (~30 dias depois da
+  // cobrança: cobrança 07/09 → vencimento 07/10). A competência do cartão é o mês
+  // ANTERIOR ao vencimento. Boleto/PIX: vencimento = competência. (sf-pagamento.)
+  const ehCartao = (r) => { const t = String(r.tipo || '').toLowerCase(); return t === 'cartaocredito' || t === 'transacaoonline' || String(r.desc || '').toLowerCase().startsWith('cartão'); };
+  const comp = (r) => { const v = ym(r.due); return v == null ? null : (ehCartao(r) ? v - 1 : v); };
+  const doMes = rec.filter(r => comp(r) === ref);
   if (doMes.length) return doMes.some(pago);
   return false;
 }
@@ -99,7 +105,8 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
   const aulas = dados.aulas || [], listas = dados.listas || {};
   const iniMes = new Date(ano, mes - 1, 1), fimMes = new Date(ano, mes, 0, 23, 59, 59);
   const diasNoMes = new Date(ano, mes, 0).getDate();
-  const vigenteNoMes = (c) => { const i = c.ini ? new Date(c.ini) : null; const f = c.fim ? new Date(c.fim) : null; return !!i && i <= fimMes && (!f || f >= iniMes); };
+  // Rescisão: o contrato termina na data de cancelamento (sf-pagamento, 06/11/2026).
+  const vigenteNoMes = (c) => { const i = c.ini ? new Date(c.ini) : null; const f = c.fim ? new Date(c.fim) : null; if (c.canc && new Date(c.canc) < iniMes) return false; return !!i && i <= fimMes && (!f || f >= iniMes); };
   const turmaDe = (a) => `${a.n} - ${a.h}`;
   const vagaDe = (a) => `${turmaDe(a)}|${dowDe(a.d)}`; // turma num dia da semana (ex.: SLIMFIT A 07:00 às quartas)
   const chaveProf = (a) => a.pi ? a.pi : 'nome:' + norm(a.p || 'sem professor');
@@ -238,8 +245,12 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
       if (semValorEvo && String(c.id).startsWith('v1-')) { reg.nota = 'o EVO não informou o valor do contrato'; semValor.add(nome); }
       if (e.inserida) { reg.inserida = { id: e.inserida.id, por: e.inserida.por, motivo: e.inserida.motivo }; reg.nota = 'incluída à mão' + (e.inserida.motivo ? ': ' + e.inserida.motivo : ''); }
       { // resumo da aluna no mês (Gestão Central)
-        const r0 = alunasMes.get(m) || { m, nome, tipo, plano: c.plano, pagou: reg.pagou, dias: diasDela(m), profs: new Map(), aulas: 0, excluidaGlobal: null };
-        if (tipo === 'fixo' && r0.tipo !== 'fixo') { r0.tipo = 'fixo'; r0.plano = c.plano; }
+        // Mostra o contrato da aula MAIS RECENTE do mês (aluna que trocou de plano no
+        // mês aparece com o novo). Pagamento: como no sf-pagamento, Free conta como
+        // pago; fixa usa a regra de competência sobre os contratos vigentes no mês.
+        const r0 = alunasMes.get(m) || { m, nome, tipo, plano: c.plano, pagou: reg.pagou, dias: diasDela(m), profs: new Map(), aulas: 0, excluidaGlobal: null, ult: '' };
+        if (a.d >= r0.ult) { r0.ult = a.d; r0.tipo = tipo; r0.plano = c.plano; r0.nome = nome; }
+        r0.pagou = r0.tipo === 'fixo' ? reg.pagou : true;
         alunasMes.set(m, r0);
       }
       const exc = exclusaoDe(m, kpAula, a.s);

@@ -20,6 +20,10 @@ const DIR = path.resolve(__dirname, '..', '..', 'data', 'pagamento');
 const ARQ_CONTRATOS = path.join(DIR, 'contratos.json');
 const ARQ_GRADES = path.join(DIR, 'grades.json');
 const ARQ_STATUS = path.join(DIR, 'sync-status.json');
+// Versão da busca aluna por aluna: quando a regra muda, subir o número faz o
+// robô reler (uma vez) os contratos de todas — v2: forma de pagamento/descrição
+// das parcelas e contrato novo trocado no mês.
+const IND_V = 2;
 const arqMes = (ano, mes) => path.join(DIR, `mes-${ano}-${String(mes).padStart(2, '0')}.json`);
 
 const hojeSP = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
@@ -68,7 +72,7 @@ function compactarContrato(c) {
     m: Number(c.idMember), nm: String(c.name || '').trim(), plano: String(c.nameMembership || '').trim(),
     v: Number(c.saleValue) || 0, ini: c.membershipStart || null, fim: c.membershipEnd || null,
     canc: c.cancelDate || null, regCanc: c.registerCancelDate || null,
-    rec: (c.receivables || []).map(r => ({ due: r.dueDate || null, amt: Number(r.ammount) || 0, paid: Number(r.ammountPaid) || 0, recv: r.receivingDate || null, canc: !!r.canceled, tot: Number(r.totalInstallments) || 0, tipo: (r.paymentType && r.paymentType.name) || '' })),
+    rec: (c.receivables || []).map(r => ({ due: r.dueDate || null, amt: Number(r.ammount) || 0, paid: Number(r.ammountPaid) || 0, recv: r.receivingDate || null, canc: !!r.canceled, tot: Number(r.totalInstallments) || 0, tipo: (r.paymentType && r.paymentType.name) || '', desc: String(r.description || '').slice(0, 60) })),
   };
 }
 
@@ -127,7 +131,9 @@ async function syncMes(ano, mes, { log = console.log, completo = false } = {}) {
   log(`   📄 ${ativos.length} contratos ativos e ${cancelados.length} cancelados no mês (lote).`);
 
   const iniMes = new Date(ano, mes - 1, 1), fimMes = new Date(ano, mes, 0, 23, 59, 59);
-  const vigente = (c) => { const ini = c.ini ? new Date(c.ini) : null; const fim = c.fim ? new Date(c.fim) : null; return !!ini && ini <= fimMes && (!fim || fim >= iniMes); };
+  // Vigente no mês: começou até o fim do mês, não terminou antes do início e não foi
+  // rescindido antes do início (rescisão mantém a data de fim original — sf-pagamento).
+  const vigente = (c) => { const ini = c.ini ? new Date(c.ini) : null; const fim = c.fim ? new Date(c.fim) : null; if (c.canc && new Date(c.canc) < iniMes) return false; return !!ini && ini <= fimMes && (!fim || fim >= iniMes); };
   const nasAulas = new Set();
   for (const s of Object.keys(listas)) for (const e of (listas[s].e || [])) nasAulas.add(e.m);
 
@@ -176,11 +182,13 @@ async function syncMes(ano, mes, { log = console.log, completo = false } = {}) {
   const corteInd = Date.now() - (completo ? 0 : 2 * 864e5); // buscada aluna por aluna há menos de 2 dias → não repete
   const precisa = [...relevantes].filter(m => {
     const p = porMembro[m] || {};
-    if (p.indEm && Date.parse(p.indEm) > corteInd) return false;
+    if (p.indEm && Date.parse(p.indEm) > corteInd && p.indV === IND_V) return false; // IND_V novo = relê todas uma vez
     const cs = (p.c || []).filter(c => !c.canc || new Date(c.canc) >= iniMes);
     const vig = cs.filter(vigente);
     if (!vig.length || vig.every(c => /circuito/i.test(c.plano))) return true;
-    return !vig.some(c => (c.rec || []).length);                 // vigente sem parcelas → "Sem dados"
+    // Algum contrato vigente (com valor) SEM parcelas → busca. Ex.: aluna que trocou
+    // de contrato no mês — o antigo tem parcelas, o novo veio sem elas no lote.
+    return vig.some(c => c.v > 0 && !(c.rec || []).length);
   });
   gravarStatus({ etapa: `contratos aluna por aluna (0/${precisa.length})` });
   i = 0; let comParcelas = 0;
@@ -188,8 +196,8 @@ async function syncMes(ano, mes, { log = console.log, completo = false } = {}) {
     try {
       const cs = await evo.paginado('/api/v3/membermembership', { idMember: m });
       const ant = porMembro[m] || {};
-      if (cs.length) { const cc = cs.map(compactarContrato); if (cc.some(c => (c.rec || []).length)) comParcelas++; porMembro[m] = Object.assign({}, ant, { c: cc, indEm: new Date().toISOString(), em: new Date().toISOString() }); }
-      else porMembro[m] = Object.assign({}, ant, { indEm: new Date().toISOString() });
+      if (cs.length) { const cc = cs.map(compactarContrato); if (cc.some(c => (c.rec || []).length)) comParcelas++; porMembro[m] = Object.assign({}, ant, { c: cc, indEm: new Date().toISOString(), indV: IND_V, em: new Date().toISOString() }); }
+      else porMembro[m] = Object.assign({}, ant, { indEm: new Date().toISOString(), indV: IND_V });
     } catch (e) { if (i < 3) log(`   ⚠️  contratos da aluna ${m}: ${e.message}`); }
     if (++i % 40 === 0) { gravarStatus({ etapa: `contratos aluna por aluna (${i}/${precisa.length})` }); gravarJson(ARQ_CONTRATOS, { atualizadoEm: new Date().toISOString(), porMembro }); }
   }
