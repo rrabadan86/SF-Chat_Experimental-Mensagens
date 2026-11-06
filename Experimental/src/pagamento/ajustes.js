@@ -22,15 +22,19 @@ function ler(ym) {
 function gravar(ym, a) { fs.mkdirSync(DIR, { recursive: true }); const t = arq(ym) + '.tmp'; fs.writeFileSync(t, JSON.stringify(a, null, 2)); fs.renameSync(t, arq(ym)); }
 const novoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-function excluir(ym, { m, nome, escopo, prof, profNome, s, sDesc, motivo }, por) {
+function excluir(ym, { m, nome, escopo, prof, profNome, s, sDesc, motivo, de, ate }, por) {
   if (!okYm(ym)) throw new Error('Mês inválido.');
   m = Number(m); if (!m) throw new Error('Aluna inválida.');
-  if (!['sessao', 'prof', 'global'].includes(escopo)) throw new Error('Escolha onde excluir.');
+  // "periodo": todas as aulas da aluna entre de e ate (AAAA-MM-DD), de qualquer
+  // professor — usado na prorrogação do contrato por trancamento.
+  if (!['sessao', 'prof', 'global', 'periodo'].includes(escopo)) throw new Error('Escolha onde excluir.');
+  const dia = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '';
+  if (escopo === 'periodo' && (!dia(de) || !dia(ate) || dia(de) > dia(ate))) throw new Error('Período inválido.');
   motivo = String(motivo || '').trim(); if (motivo.length < 3) throw new Error('Informe o motivo da exclusão.');
-  if (escopo !== 'global' && !prof) throw new Error('Professor não informado.');
+  if (escopo !== 'global' && escopo !== 'periodo' && !prof) throw new Error('Professor não informado.');
   if (escopo === 'sessao' && !s) throw new Error('Aula não informada.');
   const a = ler(ym);
-  a.exclusoes.push({ id: novoId(), m, nome: String(nome || ''), escopo, prof: escopo === 'global' ? '' : String(prof), profNome: String(profNome || ''), s: escopo === 'sessao' ? String(s) : '', sDesc: String(sDesc || ''), motivo: motivo.slice(0, 500), por: por || '', em: new Date().toISOString() });
+  a.exclusoes.push({ id: novoId(), m, nome: String(nome || ''), escopo, prof: (escopo === 'global' || escopo === 'periodo') ? '' : String(prof), profNome: String(profNome || ''), s: escopo === 'sessao' ? String(s) : '', sDesc: String(sDesc || ''), ...(escopo === 'periodo' ? { de: dia(de), ate: dia(ate) } : {}), motivo: motivo.slice(0, 500), por: por || '', em: new Date().toISOString() });
   gravar(ym, a); return a;
 }
 function inserir(ym, { m, nome, s, sDesc, prof, motivo }, por) {

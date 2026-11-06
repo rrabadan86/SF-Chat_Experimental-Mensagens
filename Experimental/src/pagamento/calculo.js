@@ -97,6 +97,27 @@ function valorMensal(c) {
   if (c.ini) { const d = new Date(c.ini); if (d.getFullYear() >= 2026 || (d.getFullYear() === 2025 && d.getMonth() >= 6)) return c.v / 12; }
   return c.v;
 }
+// Prorrogação por trancamento: o EVO estende o FIM do contrato pelos dias trancados,
+// sem parcela nova. Fim original = início + tamanho do plano vendido (palavra no
+// nome ou duração puxada para 1/2/3/4/6/12/24 meses) − 1 dia. Devolve
+// { fimOriginal, fim } (AAAA-MM-DD) se o fim atual passou do original por mais de
+// 3 dias; senão null. Contrato sem fim (recorrente aberto) → null.
+const dia10 = (s) => String(s || '').slice(0, 10);
+const brD = (d) => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '';
+function somaDia(d, n) { const t = new Date(d + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); }
+function prorrogacaoDe(c) {
+  if (!c || !c.ini || !c.fim) return null;
+  const ini = dia10(c.ini), fim = dia10(c.fim);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ini) || !/^\d{4}-\d{2}-\d{2}$/.test(fim)) return null;
+  const n = String(c.plano || '').toLowerCase();
+  let meses = n.includes('anual') ? 12 : n.includes('semestral') ? 6 : n.includes('quadrimestral') ? 4 : (n.includes('trimestral') || n.includes('trim.') || / trm |^trm | trm/.test(n)) ? 3 : n.includes('bimestral') ? 2 : n.includes('mensal') ? 1 : 0;
+  if (!meses) meses = duracaoPadrao((new Date(fim) - new Date(ini)) / 864e5 / 30.44);
+  if (!meses) return null;
+  const t = new Date(ini + 'T12:00:00Z'); t.setUTCMonth(t.getUTCMonth() + meses); t.setUTCDate(t.getUTCDate() - 1);
+  const fimOriginal = t.toISOString().slice(0, 10);
+  if ((new Date(fim) - new Date(fimOriginal)) / 864e5 <= 3) return null;
+  return { fimOriginal, fim };
+}
 // Frequência semanal pelo nome do plano ("3X", "2x", "GRUPO 2").
 function freqDoPlano(nome) {
   const s = String(nome || '').toUpperCase();
@@ -209,7 +230,7 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
 
   // Ajustes do mês (guardados): horários ocultos (seg–sex), exclusões e inclusões.
   const ocultos = new Set((aj.ocultos || []).map(x => x.h));
-  const exclusaoDe = (m, kp, s) => (aj.exclusoes || []).find(x => x.m === m && (x.escopo === 'global' || (x.escopo === 'prof' && x.prof === kp) || (x.escopo === 'sessao' && x.prof === kp && String(x.s) === String(s)))) || null;
+  const exclusaoDe = (m, kp, s, d) => (aj.exclusoes || []).find(x => x.m === m && (x.escopo === 'global' || (x.escopo === 'prof' && x.prof === kp) || (x.escopo === 'sessao' && x.prof === kp && String(x.s) === String(s)) || (x.escopo === 'periodo' && d >= x.de && d <= x.ate))) || null;
   const insercoesPorSessao = new Map();
   for (const x of aj.insercoes || []) (insercoesPorSessao.get(String(x.s)) || insercoesPorSessao.set(String(x.s), []).get(String(x.s))).push(x);
   const alunasMes = new Map(); // idMember → resumo para a "Gestão Central"
@@ -273,10 +294,18 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
         r0.pagou = r0.tipo === 'fixo' ? reg.pagou : true;
         alunasMes.set(m, r0);
       }
-      const exc = exclusaoDe(m, kpAula, a.s);
+      // Prorrogação do contrato (trancamento): a aula cai DEPOIS do fim original do
+      // contrato (pelo tamanho do plano vendido) e até o fim atual — a aluna treina
+      // sem parcela. Só ALERTA na Gestão Central; quem exclui é o operador.
+      const pr = prorrogacaoDe(c);
+      const naProrrog = pr && a.d > pr.fimOriginal && a.d <= pr.fim;
+      if (naProrrog) { const r0 = alunasMes.get(m); r0.prorrog = r0.prorrog || { de: somaDia(pr.fimOriginal, 1), ate: pr.fim, fimOriginal: pr.fimOriginal, aulas: 0 }; }
+      const exc = exclusaoDe(m, kpAula, a.s, a.d);
+      if (naProrrog && !exc) alunasMes.get(m).prorrog.aulas++;
       if (exc) {
-        Object.assign(reg, { contrib: 0, base: 0, excluida: { id: exc.id, escopo: exc.escopo, motivo: exc.motivo, por: exc.por }, nota: `excluída (${exc.escopo === 'global' ? 'de todas as aulas' : exc.escopo === 'prof' ? 'das aulas deste professor' : 'desta aula'}): ${exc.motivo}` });
+        Object.assign(reg, { contrib: 0, base: 0, excluida: { id: exc.id, escopo: exc.escopo, motivo: exc.motivo, por: exc.por }, nota: `excluída (${exc.escopo === 'global' ? 'de todas as aulas' : exc.escopo === 'prof' ? 'das aulas deste professor' : exc.escopo === 'periodo' ? 'no período ' + brD(exc.de) + ' a ' + brD(exc.ate) : 'desta aula'}): ${exc.motivo}` });
         if (exc.escopo === 'global') alunasMes.get(m).excluidaGlobal = { id: exc.id, motivo: exc.motivo, por: exc.por };
+        if (exc.escopo === 'periodo') alunasMes.get(m).excluidaPeriodo = { id: exc.id, motivo: exc.motivo, por: exc.por, de: exc.de, ate: exc.ate };
         alunas.push(reg); continue;
       }
       if (tipo === 'fixo') {
@@ -346,11 +375,11 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
   professores.sort((a, b) => a.nome.localeCompare(b.nome));
   // Exclusões/inclusões de cada professor (para o cartão e o relatório).
   for (const p of professores) {
-    p.exclusoes = (aj.exclusoes || []).filter(x => x.escopo === 'global' ? p.turmas.some(t => t.aulas.some(au => au.alunas.some(al => al.m === x.m))) : x.prof === p.chave);
+    p.exclusoes = (aj.exclusoes || []).filter(x => (x.escopo === 'global' || x.escopo === 'periodo') ? p.turmas.some(t => t.aulas.some(au => au.alunas.some(al => al.m === x.m))) : x.prof === p.chave);
     p.insercoes = (aj.insercoes || []).filter(x => x.prof === p.chave);
   }
   const alunasLista = [...alunasMes.values()].map(x => Object.assign({}, x, { profs: [...x.profs.values()] })).sort((u, w) => u.nome.localeCompare(w.nome));
   return { ok: true, ym, ano, mes, atualizadoEm: dados.atualizadoEm, listasEm: Object.values(listas).reduce((mx, l) => (l.em && l.em > mx ? l.em : mx), ''), professores, total: round2(professores.reduce((s, p) => s + p.total, 0)), avisos, regras: R, alunas: alunasLista, ajustes: aj };
 }
 
-module.exports = { calcularMes, tipoDePlano, valorMensal, pagouNoMes, freqDoPlano, duracaoPadrao };
+module.exports = { calcularMes, tipoDePlano, valorMensal, pagouNoMes, freqDoPlano, duracaoPadrao, prorrogacaoDe };

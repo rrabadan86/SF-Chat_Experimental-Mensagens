@@ -79,6 +79,7 @@ const CSS = `<style>
 .pg-tag{display:inline-block;border:1px solid var(--linha);border-radius:6px;padding:0 6px;font-size:.74rem;margin:1px 0}
 #pgGcTab tr.exc td{opacity:.6}
 dialog#pgDlg{border:1px solid var(--linha);border-radius:12px;padding:18px;max-width:440px;width:92vw;background:var(--card);color:var(--tinta)}
+.pg-prorrog{margin:4px 0 0;padding:6px 9px;border-radius:8px;background:#f1ecfb;border:1px solid #d9cdf3;color:#4b3489;font-size:.78rem;line-height:1.4}
 dialog#pgDlg::backdrop{background:rgba(0,0,0,.35)}
 @media print{nav,.subtabs,.ui-acoes,.ui-linha,.no-print,.hbar{display:none!important}.card{box-shadow:none;border:0}}
 </style>`;
@@ -262,7 +263,7 @@ function cartaoProf(esc, p, ctx) {
     }).join('');
     return `<details class="pg-turma" data-k="tur-${esc(p.chave)}-${esc(t.nome)}"><summary><span><b>${esc(t.nome)}</b><span class="quando" style="display:block;margin:0">${esc(diasTxt)} · ${t.aulas.length} aula${t.aulas.length === 1 ? '' : 's'} no mês</span></span><span class="pg-ses-v"><b>${brl(t.total)}</b><span class="quando" style="display:block;margin:0;text-align:right">total no mês</span></span></summary>${blocos}<div class="pg-somat">Somatório da turma <b>${brl(t.total)}</b></div></details>`;
   }).join('');
-  const exc = (p.exclusoes || []).length || (p.insercoes || []).length ? `<div class="pg-exc"><b>Ajustes manuais deste professor</b>${(p.exclusoes || []).map(x => `<div>✕ <b>${esc(x.nome)}</b> excluída ${x.escopo === 'global' ? 'de todas as aulas do mês' : x.escopo === 'prof' ? 'de todas as aulas deste professor' : 'da aula ' + esc(x.sDesc)} — <i>${esc(x.motivo)}</i> <span class="quando">(${esc(x.por || '')} ${quando(x.em)})</span> <button type="button" class="pg-lnk no-print" data-desfazer="${esc(x.id)}">desfazer</button></div>`).join('')}${(p.insercoes || []).map(x => `<div>＋ <b>${esc(x.nome)}</b> incluída na aula ${esc(x.sDesc)}${x.motivo ? ' — <i>' + esc(x.motivo) + '</i>' : ''} <span class="quando">(${esc(x.por || '')} ${quando(x.em)})</span> <button type="button" class="pg-lnk no-print" data-desfazer="${esc(x.id)}">desfazer</button></div>`).join('')}</div>` : '';
+  const exc = (p.exclusoes || []).length || (p.insercoes || []).length ? `<div class="pg-exc"><b>Ajustes manuais deste professor</b>${(p.exclusoes || []).map(x => `<div>✕ <b>${esc(x.nome)}</b> excluída ${x.escopo === 'global' ? 'de todas as aulas do mês' : x.escopo === 'periodo' ? 'das aulas de ' + br(x.de) + ' a ' + br(x.ate) : x.escopo === 'prof' ? 'de todas as aulas deste professor' : 'da aula ' + esc(x.sDesc)} — <i>${esc(x.motivo)}</i> <span class="quando">(${esc(x.por || '')} ${quando(x.em)})</span> <button type="button" class="pg-lnk no-print" data-desfazer="${esc(x.id)}">desfazer</button></div>`).join('')}${(p.insercoes || []).map(x => `<div>＋ <b>${esc(x.nome)}</b> incluída na aula ${esc(x.sDesc)}${x.motivo ? ' — <i>' + esc(x.motivo) + '</i>' : ''} <span class="quando">(${esc(x.por || '')} ${quando(x.em)})</span> <button type="button" class="pg-lnk no-print" data-desfazer="${esc(x.id)}">desfazer</button></div>`).join('')}</div>` : '';
   return `<details class="card pg-pc" id="prof-${esc(p.chave)}" data-k="prof-${esc(p.chave)}"><summary>
       <span class="pg-av-ini">${esc((p.nome || '?').charAt(0).toUpperCase())}</span>
       <span class="pg-pc-n"><b>${esc(p.nome)}</b><span class="quando" style="display:block;margin:0">${p.pct}% · piso ${brl(p.piso)} · teto ${brl(p.teto)} · ${p.turmas.length} turma${p.turmas.length === 1 ? '' : 's'}${p.configurado ? '' : ' <span class="pg-pill warn">padrão</span>'}</span></span>
@@ -281,11 +282,21 @@ const DIAS_LONGOS = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira',
 function gestaoCentral(esc, alunas) {
   const semPag = alunas.filter(a => a.pagou === false).length, semDados = alunas.filter(a => a.pagou === null).length;
   const pagTxt = (a) => a.pagou === true ? '<span style="color:var(--teal-esc);font-weight:700">Pago</span>' : a.pagou === false ? '<span style="color:#a12626;font-weight:700">Sem pagamento</span>' : '<span style="color:#8a5a00;font-weight:700">Sem dados</span>';
-  const linha = (a) => `<tr data-pag="${a.pagou === true ? 'ok' : 'nao'}"${a.excluidaGlobal ? ' class="exc"' : ''}><td><b>${esc(a.nome)}</b>${a.excluidaGlobal ? `<div class="quando" style="margin:0">excluída do mês: <i>${esc(a.excluidaGlobal.motivo)}</i></div>` : ''}</td><td>${a.tipo === 'fixo' ? 'Fixa' : 'Free'}</td><td class="quando" style="margin:0">${esc(a.plano)}</td><td class="quando" style="margin:0">${esc((a.dias || []).join(', ') || '—')}</td><td>${a.profs.map(n => `<span class="pg-tag">${esc(primeiro(n))}</span>`).join(' ')}</td><td>${pagTxt(a)}</td><td style="text-align:center">${a.excluidaGlobal ? `<button type="button" class="pg-lnk no-print" data-desfazer="${esc(a.excluidaGlobal.id)}">desfazer</button>` : `<button type="button" class="pg-x no-print" title="Excluir de TODAS as aulas do mês" data-exc="${a.m}" data-nome="${esc(a.nome)}" data-global="1">×</button>`}</td></tr>`;
+  const brD = (d) => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '';
+  // Prorrogação do contrato por trancamento: só ALERTA + botão (o operador decide).
+  const prorrogTxt = (a) => {
+    if (a.excluidaGlobal) return '';
+    if (a.excluidaPeriodo) return `<div class="quando" style="margin:2px 0 0">🔒 excluída de ${brD(a.excluidaPeriodo.de)} a ${brD(a.excluidaPeriodo.ate)}: <i>${esc(a.excluidaPeriodo.motivo)}</i> <button type="button" class="pg-lnk no-print" data-desfazer="${esc(a.excluidaPeriodo.id)}">desfazer</button></div>`;
+    if (!a.prorrog || !a.prorrog.aulas) return '';
+    const p = a.prorrog;
+    return `<div class="pg-prorrog">🔒 <b>Prorrogação do trancamento:</b> o contrato terminaria em ${brD(p.fimOriginal)} e foi estendido até ${brD(p.fim || p.ate)} (sem parcela). ${p.aulas} aula(s) deste mês caem no período extra (${brD(p.de)} a ${brD(p.ate)}). <button type="button" class="pg-lnk no-print" data-prorrog="${a.m}" data-nome="${esc(a.nome)}" data-de="${esc(p.de)}" data-ate="${esc(p.ate)}" data-fimorig="${esc(brD(p.fimOriginal))}">Excluir o período de prorrogação</button></div>`;
+  };
+  const nProrrog = alunas.filter(a => !a.excluidaGlobal && !a.excluidaPeriodo && a.prorrog && a.prorrog.aulas).length;
+  const linha = (a) => `<tr data-pag="${a.pagou === true ? 'ok' : 'nao'}"${a.excluidaGlobal ? ' class="exc"' : ''}><td><b>${esc(a.nome)}</b>${a.excluidaGlobal ? `<div class="quando" style="margin:0">excluída do mês: <i>${esc(a.excluidaGlobal.motivo)}</i></div>` : ''}${prorrogTxt(a)}</td><td>${a.tipo === 'fixo' ? 'Fixa' : 'Free'}</td><td class="quando" style="margin:0">${esc(a.plano)}</td><td class="quando" style="margin:0">${esc((a.dias || []).join(', ') || '—')}</td><td>${a.profs.map(n => `<span class="pg-tag">${esc(primeiro(n))}</span>`).join(' ')}</td><td>${pagTxt(a)}</td><td style="text-align:center">${a.excluidaGlobal ? `<button type="button" class="pg-lnk no-print" data-desfazer="${esc(a.excluidaGlobal.id)}">desfazer</button>` : `<button type="button" class="pg-x no-print" title="Excluir de TODAS as aulas do mês" data-exc="${a.m}" data-nome="${esc(a.nome)}" data-global="1">×</button>`}</td></tr>`;
   return `<div class="sec-t">Gestão Central: alunas do mês</div>
   <div class="card" id="pgGestao">
     <p class="quando" style="margin:0 0 8px">Todas as alunas que entraram no cálculo. Excluir aqui tira a aluna de <b style="color:#a12626">todas as aulas do mês</b>, de todos os professores (com motivo, fica registrado).</p>
-    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:.84rem;font-weight:700;margin:0 0 8px"><span>${alunas.length} alunas no total</span><span id="pgGcN">${alunas.length} exibidas</span><span style="color:#a12626">${semPag} sem pagamento no mês</span><span style="color:#8a5a00">${semDados} sem dados de pagamento</span></div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:.84rem;font-weight:700;margin:0 0 8px"><span>${alunas.length} alunas no total</span><span id="pgGcN">${alunas.length} exibidas</span><span style="color:#a12626">${semPag} sem pagamento no mês</span><span style="color:#8a5a00">${semDados} sem dados de pagamento</span>${nProrrog ? `<span style="color:#6b4bb0">🔒 ${nProrrog} com prorrogação de trancamento para conferir</span>` : ''}</div>
     <label class="no-print" style="display:flex;gap:8px;align-items:center;font-size:.85rem;font-weight:700;margin:0 0 8px"><input type="checkbox" id="pgSoSemPag"> Mostrar só alunas sem pagamento identificado</label>
     <div class="pg-wrap"><table class="pg-tab" id="pgGcTab"><thead><tr><th>Nome</th><th>Tipo</th><th>Plano / contrato</th><th>Dias avaliados</th><th>Professores</th><th>Pagamento no mês</th><th>Excluir</th></tr></thead><tbody>${alunas.map(linha).join('')}</tbody></table></div>
   </div>`;
@@ -369,7 +380,7 @@ function scriptPagina(ym) {
   try{var ks=JSON.parse(sessionStorage.getItem('pgAbertos')||'[]');ks.forEach(function(k){var d=document.querySelector('details[data-k="'+k.replace(/"/g,'')+'"]');if(d)d.open=true;});var sy=+sessionStorage.getItem('pgScroll')||0;sessionStorage.removeItem('pgAbertos');sessionStorage.removeItem('pgScroll');if(sy)window.scrollTo(0,sy);}catch(e){}
   var dlg=document.getElementById('pgDlg'),atual=null;
   document.addEventListener('click',function(ev){
-    var b=ev.target.closest&&ev.target.closest('[data-exc],[data-desfazer],[data-oculto],[data-ins]'); if(!b) return;
+    var b=ev.target.closest&&ev.target.closest('[data-exc],[data-desfazer],[data-oculto],[data-ins],[data-prorrog]'); if(!b) return;
     ev.preventDefault(); ev.stopPropagation();
     if(b.hasAttribute('data-exc')){
       atual={m:b.getAttribute('data-exc'),nome:b.getAttribute('data-nome'),prof:b.getAttribute('data-prof')||'',profNome:b.getAttribute('data-profnome')||'',s:b.getAttribute('data-s')||'',sDesc:b.getAttribute('data-sdesc')||''};
@@ -377,6 +388,12 @@ function scriptPagina(ym) {
       document.getElementById('pgDlgNome').textContent=atual.nome+(atual.sDesc?' — aula '+atual.sDesc:'')+(atual.profNome?' · '+atual.profNome:'');
       [].forEach.call(document.querySelectorAll('#pgDlgEsc input'),function(i){var so=i.value==='global';i.parentNode.style.display=(glob&&!so)?'none':'';i.checked=glob?so:i.value==='sessao';});
       document.getElementById('pgDlgMot').value=''; dlg.showModal(); return;
+    }
+    if(b.hasAttribute('data-prorrog')){
+      var de=b.getAttribute('data-de'),ate=b.getAttribute('data-ate'),br=function(d){return d.split('-').reverse().join('/');};
+      if(!confirm('Excluir '+b.getAttribute('data-nome')+' das aulas de '+br(de)+' a '+br(ate)+'?\\n\\nÉ o período em que o contrato foi estendido pelo trancamento (sem parcela). As aulas antes disso continuam contando.')) return;
+      post('/pagamento/excluir',{m2:b.getAttribute('data-prorrog'),nome:b.getAttribute('data-nome'),escopo:'periodo',de:de,ate:ate,motivo:'Prorrogação do trancamento (contrato terminaria em '+b.getAttribute('data-fimorig')+')'}).then(function(j){ if(j.ok) recarregar(); else alert('❌ '+(j.erro||'falhou')); });
+      return;
     }
     if(b.hasAttribute('data-desfazer')){ if(!confirm('Desfazer este ajuste? O cálculo volta a considerar a aluna como antes.')) return; post('/pagamento/desfazer',{id:b.getAttribute('data-desfazer')}).then(function(j){ if(j.ok) recarregar(); else alert('❌ '+(j.erro||'falhou')); }); return; }
     if(b.hasAttribute('data-oculto')){ var h=b.getAttribute('data-oculto'); var tirar=b.classList.contains('pg-x'); if(!confirm(tirar?('Tirar o horário '+h+' (segunda a sexta) do cálculo deste mês?'):('Voltar o horário '+h+' para o cálculo?'))) return; post('/pagamento/oculto',{h:h}).then(function(j){ if(j.ok) recarregar(); else alert('❌ '+(j.erro||'falhou')); }); return; }
@@ -422,7 +439,7 @@ function relatorio({ esc, ym, prof, studio }) {
     ${horas.map(h => `<tr><th>${esc(h)}</th>${dias.map(d => celula(aulas.filter(x => x.a.hora === h && x.a.wd === d))).join('')}</tr>`).join('')}
     <tr class="tot"><th>Total</th>${dias.map(d => { const l = aulas.filter(x => x.a.wd === d); if (!l.length) return '<td></td>'; const t = l.reduce((s, x) => s + x.a.valor, 0); const n = l.filter(x => !/já contada/.test(x.a.regra || '')).length || l.length; return `<td><b>${brl(t / n)}/aula</b><span>${brl(t)}</span></td>`; }).join('')}</tr></tbody></table>`;
   // Alunas removidas manualmente (com motivo) e incluídas.
-  const exc = (p.exclusoes || []).map(x => `<div class="rm"><b>${esc(x.nome)}</b><span>Motivo: ${esc(x.motivo)}${x.escopo === 'sessao' ? ' (aula ' + esc(x.sDesc) + ')' : ''}</span></div>`).join('');
+  const exc = (p.exclusoes || []).map(x => `<div class="rm"><b>${esc(x.nome)}</b><span>Motivo: ${esc(x.motivo)}${x.escopo === 'sessao' ? ' (aula ' + esc(x.sDesc) + ')' : x.escopo === 'periodo' ? ' (aulas de ' + br(x.de) + ' a ' + br(x.ate) + ')' : ''}</span></div>`).join('');
   const ins = (p.insercoes || []).map(x => `<div class="rm"><b>${esc(x.nome)}</b><span>Incluída na aula ${esc(x.sDesc)}${x.motivo ? ' — ' + esc(x.motivo) : ''}</span></div>`).join('');
   const contr = (st) => `<span class="ct ct-${st === 'Ativo' ? 'a' : st === 'Suspenso' ? 's' : 'c'}">${esc(st || '—')}</span>`;
   // Como no relatório antigo: a 2ª aula do sábado (diária já paga) sem ninguém que conte não aparece.
