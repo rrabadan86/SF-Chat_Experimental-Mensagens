@@ -174,6 +174,7 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
 
   const porProf = new Map();
   const avisos = [];
+  const semValor = new Set();
   let semLista = 0;
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
@@ -213,6 +214,13 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
     for (const [m, e] of st) {
       const presente = e.st === 0 || !!e.inserida;
       let cs = ((contratos[m] && contratos[m].c) || []).filter(c => !c.canc || new Date(c.canc) >= iniMes);
+      let semValorEvo = false;
+      if (!cs.some(vigenteNoMes) && contratos[m] && (contratos[m].v1 || []).length) {
+        // O EVO não devolveu o contrato com valor (API v3), mas a lista de ativas
+        // mostra o plano: usa o plano (sem valor) e avisa — melhor que "avulsa".
+        const v1 = contratos[m].v1.map((x, k) => ({ id: 'v1-' + k, m, nm: contratos[m].nome || e.n, plano: x.plano, v: 0, ini: x.ini, fim: x.fim, rec: [] })).filter(vigenteNoMes);
+        if (v1.length) { cs = cs.concat(v1); semValorEvo = true; }
+      }
       if (!cs.length) {
         if (!presente) continue;
         cs = [{ id: 'avulsa', m, nm: e.n || 'Aluna avulsa', plano: 'Plano Avulso/VIP', v: 0, ini: '2000-01-01', fim: '2099-01-01', rec: [] }];
@@ -222,9 +230,10 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
         continue;
       }
       const c = escolherContrato(cs, turma, dataAula);
-      const nome = c.nm || e.n || ('Aluna ' + m);
+      const nome = c.nm || (contratos[m] && contratos[m].nome) || e.n || ('Aluna ' + m);
       const tipo = tipoDePlano(c.plano);
-      const reg = { m, nome, tipo, plano: c.plano, status: statusContrato(c, dataAula), presenca: e.inserida && !e.naLista ? (e.st === 0 ? 'presente' : 'falta') : e.inserida ? 'incluída à mão' : !e.naLista ? (lista ? 'falta (não lançada)' : 'sem lista') : (e.st === 0 ? 'presente' : e.st === 2 ? 'falta justificada' : 'falta'), mensalidade: 0, contrib: 0, reposicao: false, pagou: pagouNoMes(cs.filter(vigenteNoMes), ano, mes), nota: '' };
+      const reg = { m, nome, tipo, plano: c.plano, status: statusContrato(c, dataAula), presenca: e.inserida && !e.naLista ? (e.st === 0 ? 'presente' : 'falta') : e.inserida ? 'incluída à mão' : !e.naLista ? (lista ? 'falta (não lançada)' : 'sem lista') : (e.st === 0 ? 'presente' : e.st === 2 ? 'falta justificada' : 'falta'), mensalidade: 0, contrib: 0, reposicao: false, pagou: pagouNoMes(cs.filter(vigenteNoMes), ano, mes), fim: c.fim || null, nota: '' };
+      if (semValorEvo && String(c.id).startsWith('v1-')) { reg.nota = 'o EVO não informou o valor do contrato'; semValor.add(nome); }
       if (e.inserida) { reg.inserida = { id: e.inserida.id, por: e.inserida.por, motivo: e.inserida.motivo }; reg.nota = 'incluída à mão' + (e.inserida.motivo ? ': ' + e.inserida.motivo : ''); }
       { // resumo da aluna no mês (Gestão Central)
         const r0 = alunasMes.get(m) || { m, nome, tipo, plano: c.plano, pagou: reg.pagou, dias: diasDela(m), profs: new Map(), aulas: 0, excluidaGlobal: null };
@@ -298,6 +307,7 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
     }
     professores.push({ chave: kp, nome: p.nome, pct: v.pct, piso: v.piso, teto: v.teto, configurado: v.configurado, turmas: [...turmas.values()].sort((u, w) => u.nome.localeCompare(w.nome)), total: round2(total), nAulas: p.aulas.length });
   }
+  if (semValor.size) avisos.push(`${semValor.size} aluna(s) fixa(s) sem valor de contrato no EVO (contam R$ 0): ${[...semValor].slice(0, 12).join(', ')}${semValor.size > 12 ? '…' : ''}.`);
   if (semLista) avisos.push(`${semLista} aula(s) que já aconteceram estão sem a lista de presença lida do EVO — clique em "Atualizar dados do EVO".`);
   professores.sort((a, b) => a.nome.localeCompare(b.nome));
   // Exclusões/inclusões de cada professor (para o cartão e o relatório).

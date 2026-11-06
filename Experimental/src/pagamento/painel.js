@@ -102,23 +102,120 @@ function filtrarDia(p, wd) {
   return Object.assign({}, p, { turmas, total: turmas.reduce((s, t) => s + t.total, 0), nAulas: turmas.reduce((s, t) => s + t.aulas.length, 0) });
 }
 
-// Matriz horário × dia: cada célula = R$/aula médio, total e professor(es).
-function matriz(esc, aulasCom, dias, { comX = false, ocultos = [], ym = '' } = {}) {
-  const horas = [...new Set(aulasCom.filter(x => dias.includes(x.a.wd)).map(x => x.a.hora))].sort(); // só horários dos dias da matriz
-  const linha = (h) => {
-    const cels = dias.map(wd => {
-      const cel = aulasCom.filter(x => x.a.hora === h && x.a.wd === wd);
-      if (!cel.length) return '<td class="pg-mz-v">—</td>';
-      const tot = cel.reduce((s, x) => s + x.a.valor, 0);
-      const profs = [...new Set(cel.map(x => primeiro(x.p).toUpperCase()))].join(' · ');
-      return `<td><div class="pg-mz-a">${brl(avg(tot, cel.length))}/aula</div><div class="pg-mz-t">${brl(tot)}</div>${comX ? `<div class="pg-mz-p">${esc(profs)}</div>` : ''}</td>`;
-    }).join('');
-    const x = comX && !dias.includes(6) ? `<button type="button" class="pg-x no-print" title="Tirar o horário ${h} (seg a sex) do cálculo" data-oculto="${esc(h)}">×</button>` : '';
-    return `<tr><th class="pg-mz-h">${esc(h)} ${x}</th>${cels}</tr>`;
+// ── Matriz no PADRÃO da Grade (Indicadores → Grade): tabela de horário × dia
+// com cabeçalho teal, selo colorido, barra, professora e "ver aulas" com os nomes.
+// Selo = R$/aula médio; cor: verde = acima do piso, amarelo = no piso, cinza =
+// diária do sábado. Barra = composição do valor (fixas | Free/reposição) até o teto.
+const nrmFx = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const WDS = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+function matriz(esc, aulasCom, dias, { comX = false, ocultos = [], filtros = false, total = true, comProf = true } = {}) {
+  const usadas = aulasCom.filter(x => dias.includes(x.a.wd));
+  const horas = [...new Set(usadas.map(x => x.a.hora))].sort();
+  const vezes = (wd) => new Set(usadas.filter(x => x.a.wd === wd).map(x => x.a.data)).size;
+  const th = dias.map(wd => `<th>${WDS[wd]}<span class="gr-th-d">${vezes(wd)}x no mês</span></th>`).join('');
+  const cel = (h, wd) => {
+    const cs = usadas.filter(x => x.a.hora === h && x.a.wd === wd);
+    if (!cs.length) return '<td class="gr-empty"></td>';
+    const tot = cs.reduce((s, x) => s + x.a.valor, 0);
+    const pagas = cs.filter(x => !/já contada/.test(x.a.regra || ''));
+    const med = avg(tot, pagas.length || cs.length);
+    const nPiso = cs.filter(x => x.a.regra === 'piso').length;
+    const sab = wd === 6;
+    const tier = sab ? 'nd' : nPiso === cs.length ? 'quase' : 'livre';
+    const tetoRef = Math.max(...cs.map(x => x.teto || 90), 1);
+    const fx = cs.reduce((s, x) => s + x.a.alunas.filter(al => al.tipo === 'fixo').reduce((u, al) => u + al.contrib, 0), 0) / cs.length;
+    const fr = cs.reduce((s, x) => s + x.a.alunas.filter(al => al.tipo !== 'fixo').reduce((u, al) => u + al.contrib, 0), 0) / cs.length;
+    const wFx = Math.min(100, fx / tetoRef * 100), wFr = Math.min(100 - wFx, fr / tetoRef * 100);
+    const profs = [...new Set(cs.map(x => x.p))];
+    const nomes = [...new Set(cs.flatMap(x => x.a.alunas.filter(al => al.contrib > 0 || al.tipo === 'fixo').map(al => al.nome)))];
+    const det = `<details class="gr-det"><summary>👥 ${cs.length} aula${cs.length === 1 ? '' : 's'} · <b>${brl(tot)}</b></summary><ul>${cs.map(x => `<li><b>${br(x.a.data).slice(0, 5)}</b> ${brl(x.a.valor)}${x.a.regra ? ` <span class="gr-semf">${esc(x.a.regra)}</span>` : ''}${x.a.futura ? ' <span class="gr-semf">previsão</span>' : ''} — ${x.a.alunas.filter(al => al.contrib > 0).map(al => esc(primeiro(al.nome))).join(', ') || '<span class="gr-semf">ninguém conta</span>'}</li>`).join('')}</ul></details>`;
+    return `<td class="gr-cel t-${tier}" data-prof="${esc(profs.map(nrmFx).join('|'))}" data-fx="${esc(nomes.join('|'))}"><span class="gr-vg" title="${esc(sab ? 'diária do sábado' : nPiso === cs.length ? 'todas as aulas no piso' : 'valor médio por aula')}">${brl(med)}/aula</span><div class="gr-bar"><span class="fx" style="width:${wFx.toFixed(1)}%"></span><span class="rp" style="width:${wFr.toFixed(1)}%"></span></div>${comProf ? `<div class="gr-prof">${esc(profs.join(' · '))}</div>` : ''}${det}</td>`;
   };
+  const linhas = horas.map(h => {
+    const x = comX && dias.some(d => d >= 1 && d <= 5) ? ` <button type="button" class="pg-x no-print" title="Tirar o horário ${h} (seg a sex) do cálculo" data-oculto="${esc(h)}">×</button>` : '';
+    return `<tr><th class="h">${esc(h)}${x}</th>${dias.map(wd => cel(h, wd)).join('')}</tr>`;
+  }).join('');
+  const linhaTot = total && horas.length ? `<tr class="gr-tot"><th class="h">Total</th>${dias.map(wd => { const cs = usadas.filter(x => x.a.wd === wd); if (!cs.length) return '<td></td>'; const t = cs.reduce((s, x) => s + x.a.valor, 0); const pg = cs.filter(x => !/já contada/.test(x.a.regra || '')).length; return `<td><b>${brl(avg(t, pg || cs.length))}/aula</b><span>${brl(t)}</span></td>`; }).join('')}</tr>` : '';
+  const filtro = filtros ? (() => {
+    const nomes = [...new Set(usadas.map(x => x.p).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt'));
+    const ops = ['<option value="">👩‍🏫 Todas as professoras</option>'].concat(nomes.map(p => `<option value="${esc(nrmFx(p))}">${esc(p)}</option>`)).join('');
+    return `<div class="gr-search no-print"><select class="gr-sel" data-gr-prof>${ops}</select><input type="search" data-gr-busca placeholder="🔍 Buscar aluna — ver em quais aulas ela conta" autocomplete="off"><span class="gr-busca-info" data-gr-info></span></div>`;
+  })() : '';
   const oc = ocultos.length ? `<div class="quando" style="margin:8px 0 0">Tirados do cálculo: ${ocultos.map(o => `<b>${esc(o.h)}</b> (${esc(o.por || '')} ${quando(o.em)}) <button type="button" class="pg-lnk no-print" data-oculto="${esc(o.h)}">voltar</button>`).join(' · ')}</div>` : '';
-  return `<div class="pg-wrap"><table class="pg-mz"><thead><tr><th>Horário</th>${dias.map(d => `<th>${DSEM[d]}</th>`).join('')}</tr></thead><tbody>${horas.map(linha).join('') || `<tr><td colspan="${dias.length + 1}" class="quando">Sem aulas.</td></tr>`}</tbody></table></div>${oc}`;
+  return `<div class="gr-box">${filtro}<div class="gr-wrap"><table class="gr"><thead><tr><th class="h">Horário</th>${th}</tr></thead><tbody>${linhas || `<tr><td colspan="${dias.length + 1}" class="gr-empty" style="padding:14px">Sem aulas.</td></tr>`}${linhaTot}</tbody></table></div>${oc}</div>`;
 }
+
+const CSS_GRADE = `<style>
+.gr-wrap{overflow:auto;border:1px solid var(--linha);border-radius:14px;background:var(--card);box-shadow:0 1px 2px rgba(16,24,40,.04);max-height:78vh}
+table.gr{border-collapse:separate;border-spacing:0;width:100%}
+table.gr th,table.gr td{border-bottom:1px solid var(--linha-soft);border-right:1px solid var(--linha-soft)}
+table.gr thead th{background:var(--teal);color:#fff;font-size:var(--fs-xs);font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:9px 8px;position:sticky;top:0;z-index:3;text-align:center}
+table.gr th.h{background:var(--teal-soft);color:var(--teal-esc);font-weight:700;white-space:nowrap;text-align:center;font-size:var(--fs-sm);position:sticky;left:0;z-index:2;padding:8px 10px;font-variant-numeric:tabular-nums}
+table.gr thead th.h{z-index:4}
+.gr-th-d{display:block;font-size:.64rem;font-weight:600;opacity:.82;letter-spacing:0;text-transform:none;margin-top:1px}
+.gr-cel{min-width:132px;vertical-align:top;padding:8px 10px;background:var(--card)}
+.gr-cel.t-quase{background:#fdfaf2}
+td.gr-empty{background:#fafafa}
+.gr-vg{display:inline-block;font-size:var(--fs-xs);font-weight:800;border-radius:999px;padding:3px 10px;border:1px solid transparent;white-space:nowrap;font-variant-numeric:tabular-nums}
+.t-livre .gr-vg{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-bd)}
+.t-quase .gr-vg{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-bd)}
+.t-nd .gr-vg{background:var(--linha-soft);color:var(--cinza)}
+.gr-bar{height:6px;border-radius:3px;background:var(--linha-soft);margin:7px 0 6px;overflow:hidden;display:flex}
+.gr-bar span{display:block;height:100%}
+.t-livre .gr-bar .fx{background:var(--ok)}.t-quase .gr-bar .fx{background:var(--warn)}.t-nd .gr-bar .fx{background:var(--faint)}
+.gr-bar .rp{background:#5b7cc2;opacity:.62;background-image:repeating-linear-gradient(45deg,transparent,transparent 2px,rgba(255,255,255,.5) 2px,rgba(255,255,255,.5) 4px)}
+.gr-prof{font-size:var(--fs-xs);color:var(--cinza);margin-bottom:3px}
+.gr-det summary{cursor:pointer;font-size:var(--fs-xs);font-weight:700;color:var(--tinta);list-style:none;user-select:none}
+.gr-det summary::-webkit-details-marker{display:none}
+.gr-det summary:hover{color:var(--teal)}
+.gr-det ul{margin:5px 0 0;padding-left:16px}
+.gr-det li{font-size:var(--fs-xs);color:var(--tinta);line-height:1.45}
+.gr-semf{font-size:var(--fs-xs);color:var(--faint)}
+tr.gr-tot th.h,tr.gr-tot td{background:var(--teal-soft)}
+tr.gr-tot td{text-align:center;padding:8px 6px;font-size:var(--fs-xs);font-variant-numeric:tabular-nums}
+tr.gr-tot td b{display:block;color:var(--teal-esc)}
+tr.gr-tot td span{color:var(--cinza)}
+.gr-search{display:flex;align-items:center;gap:10px;margin:0 0 10px;flex-wrap:wrap}
+.gr-search input{flex:1 1 300px;max-width:480px;border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
+.gr-search input:focus,.gr-sel:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(14,110,107,.16)}
+.gr-sel{border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff;color:var(--tinta);max-width:280px;cursor:pointer}
+.gr-prof-hide{display:none !important}
+td.gr-cel.gr-off{background:#fafafa}
+td.gr-cel.gr-off>*{visibility:hidden}
+.gr-busca-info{font-size:var(--fs-xs);color:var(--cinza);font-weight:700;white-space:nowrap}
+.gr-dim{opacity:.24;transition:opacity .12s}
+.gr-cel.gr-hit{box-shadow:inset 0 0 0 2px var(--teal)}
+.gr-leg{display:inline-flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0 0}
+.gr-leg i{display:inline-flex;align-items:center;gap:5px;font-style:normal;color:var(--cinza);font-weight:600;font-size:var(--fs-xs)}
+.gr-leg b{width:10px;height:10px;border-radius:3px;display:inline-block}
+.lg-livre{background:var(--ok)}.lg-quase{background:var(--warn)}
+.lg-repo{background:#5b7cc2;opacity:.75;background-image:repeating-linear-gradient(45deg,transparent,transparent 2px,rgba(255,255,255,.6) 2px,rgba(255,255,255,.6) 4px)}
+.wrap{max-width:1080px}
+</style>`;
+
+// Filtro por professora e busca de aluna (mesma lógica da Grade).
+const JS_GRADE = `<script>(function(){
+  function nrm(s){return String(s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim();}
+  [].forEach.call(document.querySelectorAll('.gr-box'),function(box){
+    var sel=box.querySelector('[data-gr-prof]'), inp=box.querySelector('[data-gr-busca]'), info=box.querySelector('[data-gr-info]');
+    if(!sel&&!inp) return;
+    function aplicar(){
+      var v=sel?sel.value:'', q=inp?nrm(inp.value):'', hits=0;
+      [].forEach.call(box.querySelectorAll('td.gr-cel'),function(td){
+        var prof=(td.getAttribute('data-prof')||'').split('|');
+        var off=!!v && prof.indexOf(v)<0; td.classList.toggle('gr-off',off);
+        var hit=!!q && !off && (td.getAttribute('data-fx')||'').split('|').some(function(n){return nrm(n).indexOf(q)>=0;});
+        td.classList.toggle('gr-hit',hit); td.classList.toggle('gr-dim',!!q && !off && !hit); if(hit) hits++;
+      });
+      [].forEach.call(box.querySelectorAll('table.gr tbody tr:not(.gr-tot)'),function(tr){
+        var tem=[].some.call(tr.querySelectorAll('td.gr-cel'),function(td){return !td.classList.contains('gr-off');});
+        tr.classList.toggle('gr-prof-hide',!!v && !tem);
+      });
+      if(info) info.textContent=q?(hits?hits+' horário(s) em que ela conta':'não conta em nenhum horário'):'';
+    }
+    if(sel) sel.addEventListener('change',aplicar); if(inp) inp.addEventListener('input',aplicar);
+  });
+})();</script>`;
 
 function linhaAluna(esc, x, ctx) {
   const pag = x.pagou === false ? ' · <span style="color:#a12626">não pagou o mês</span>' : '';
@@ -132,7 +229,7 @@ function linhaAluna(esc, x, ctx) {
 
 function cartaoProf(esc, p, ctx) {
   const media = avg(p.total, pagas(p));
-  const todasAulas = p.turmas.flatMap(t => t.aulas.map(a => ({ a, p: p.nome })));
+  const todasAulas = p.turmas.flatMap(t => t.aulas.map(a => ({ a, p: p.nome, teto: p.teto })));
   const dias = [1, 2, 3, 4, 5, 6];
   const turmas = p.turmas.map(t => {
     const porDia = new Map();
@@ -161,7 +258,7 @@ function cartaoProf(esc, p, ctx) {
       <a class="ui-btn sec no-print" href="/pagamento/relatorio?m=${esc(ctx.ym)}&prof=${encodeURIComponent(p.chave)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📄 PDF</a>
     </summary>
     <div class="pg-sub">Matriz de horários — ${esc(primeiro(p.nome))}</div>
-    ${matriz(esc, todasAulas, dias)}
+    ${matriz(esc, todasAulas, dias, { comProf: false })}
     ${turmas}
     ${exc}
     <div class="pg-somat">Total geral do mês <b style="font-size:1.15rem">${brl(p.total)}</b></div>
@@ -213,21 +310,21 @@ function pagina({ esc, uiTopo, uiChips, subnav, ym, prof, dia, aviso }) {
     <div class="stat tot"><div class="n">${brl(total)}</div><div class="l">total geral${wd !== null ? ' · ' + DSEM[wd] : ''}</div></div>
   </div>`;
   const avisos = r.avisos.length ? `<details class="card" style="border-left:4px solid var(--warn)"><summary style="cursor:pointer;font-weight:800">⚠️ Para conferir (${r.avisos.length})</summary>${r.avisos.slice(0, 40).map(a => `<div class="quando" style="margin:4px 0 0">${esc(a)}</div>`).join('')}</details>` : '';
-  const aulasCom = profs.flatMap(p => p.turmas.flatMap(t => t.aulas.map(a => ({ a, p: p.nome }))));
-  const diasMz = wd !== null ? [wd] : [1, 2, 3, 4, 5];
+  const aulasCom = profs.flatMap(p => p.turmas.flatMap(t => t.aulas.map(a => ({ a, p: p.nome, teto: p.teto }))));
+  const diasMz = wd !== null ? [wd] : [1, 2, 3, 4, 5, 6];
   const resumo = `<div class="card pg-res"><div class="pg-sub">Resumo global</div><div class="pg-res-g">
       <div><div class="pg-sub2">Taxa média / aula</div>${profs.map(p => `<div class="pg-res-l"><span>${esc(primeiro(p.nome))}</span><b>${brl(avg(p.total, pagas(p)))}</b></div>`).join('')}</div>
       <div><div class="pg-sub2">Total no mês</div>${profs.map(p => `<div class="pg-res-l"><span>${esc(primeiro(p.nome))}</span><b>${brl(p.total)}</b></div>`).join('')}</div></div></div>`;
   const todas = r.alunas.filter(a => !a.excluidaGlobal).map(a => ({ m: a.m, nome: a.nome }));
 
-  return `<div class="wrap">${subnav}${CSS}
+  return `<div class="wrap">${subnav}${CSS}${CSS_GRADE}
     ${aviso ? `<div class="aviso">${esc(aviso)}</div>` : ''}
     ${topo}
     ${stats}
     ${avisos}
     <div class="sec-t">Matriz de remuneração por grade horária</div>
-    <div class="card">${matriz(esc, aulasCom, diasMz, { comX: true, ocultos: r.ajustes.ocultos || [], ym })}
-      <p class="quando" style="margin:8px 0 0">Cada célula: valor médio por aula, total do mês e professor. O <b>×</b> tira o horário (de segunda a sexta) do cálculo do mês — fica registrado e dá para voltar.${(r.professores.some(p => p.turmas.some(t => t.aulas.some(a => a.wd === 6)))) ? ' Sábado (diária fixa) aparece no cartão de cada professor.' : ''}</p></div>
+    ${matriz(esc, aulasCom, diasMz, { comX: true, ocultos: r.ajustes.ocultos || [], filtros: true })}
+    <p class="quando" style="display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:6px 0 8px"><span class="gr-leg"><i><b class="lg-livre"></b>acima do piso</i><i><b class="lg-quase"></b>no piso</i><i><b class="lg-repo"></b>parte Free/reposição</i></span><span>Selo = valor médio por aula do mês · clique em 👥 para ver as aulas e quem conta · <b>×</b> tira o horário (seg a sex) do cálculo do mês (fica registrado e dá para voltar).</span></p>
     ${resumo}
     <div class="sec-t">Professores</div>
     ${profs.map(p => cartaoProf(esc, p, { ym, todas })).join('') || '<div class="card"><p class="quando" style="margin:0">Nenhuma aula.</p></div>'}
@@ -243,7 +340,7 @@ function pagina({ esc, uiTopo, uiChips, subnav, ym, prof, dia, aviso }) {
       <label style="font-size:.82rem;font-weight:700">Motivo (obrigatório)<textarea id="pgDlgMot" rows="3" style="width:100%;margin-top:4px" placeholder="Ex.: trancou no meio do mês; aluna de cortesia; lançamento errado no EVO"></textarea></label>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button type="button" class="ui-btn sec" id="pgDlgCancel">Cancelar</button><button type="button" class="save" id="pgDlgOk">Excluir</button></div>
     </form></dialog>
-    ${scriptPagina(ym)}
+    ${scriptPagina(ym)}${JS_GRADE}
   </div>`;
 }
 
@@ -280,26 +377,93 @@ function scriptPagina(ym) {
 })();</script>`;
 }
 
-// Relatório de UM professor para imprimir / salvar em PDF (página própria, sem o menu).
+// Relatório de UM professor para imprimir / salvar em PDF — mesmo formato do
+// relatório do sf-pagamento: cabeçalho, contratos a vencer no próximo mês, matriz
+// com total por dia, alunas removidas (com motivo), total a pagar e, por turma,
+// cada aula com a tabela Aluna · Plano · Tipo · Contrato · R$/Aula.
 function relatorio({ esc, ym, prof, studio }) {
   const r = calc.calcularMes(+ym.slice(0, 4), +ym.slice(5, 7));
   const p = r.ok && r.professores.find(x => x.chave === prof);
   if (!p) return `<!doctype html><meta charset="utf-8"><p>Professor ou mês sem dados.</p>`;
-  const aulasCom = p.turmas.flatMap(t => t.aulas.map(a => ({ a, p: p.nome })));
-  const linhasT = p.turmas.map(t => {
-    const porDia = new Map(); for (const a of t.aulas) (porDia.get(a.wd) || porDia.set(a.wd, []).get(a.wd)).push(a);
-    return `<tr class="t"><td colspan="4"><b>${esc(t.nome)}</b></td><td class="n"><b>${brl(t.total)}</b></td></tr>` + [...porDia.entries()].sort((u, w) => u[0] - w[0]).map(([wd, aulas]) => aulas.map(a => `<tr><td>${br(a.data)} ${DSEM[wd].slice(0, 3)}</td><td>${esc(a.hora)}</td><td>${a.alunas.filter(x => x.contrib > 0).map(x => esc(primeiro(x.nome)) + ' ' + brl(x.contrib)).join(', ') || '—'}</td><td>${esc(a.regra || '')}</td><td class="n">${brl(a.valor)}</td></tr>`).join('')).join('');
+  const proxYm = somaMes(ym, 1);
+  const aulas = p.turmas.flatMap(t => t.aulas.map(a => ({ a, t })));
+  const pagasN = aulas.filter(x => !/já contada/.test(x.a.regra || '')).length;
+  // Contratos que vencem no próximo mês: fixas e Free que fizeram aula com o professor.
+  const vence = new Map();
+  for (const { a } of aulas) for (const al of a.alunas) {
+    if (!al.fim || String(al.fim).slice(0, 7) !== proxYm || al.excluida) continue;
+    if (al.tipo === 'fixo' || al.presenca === 'presente') vence.set(al.m, { nome: al.nome, fim: al.fim, tipo: al.tipo });
+  }
+  const venceFix = [...vence.values()].filter(x => x.tipo === 'fixo').sort((u, w) => u.nome.localeCompare(w.nome));
+  const venceFree = [...vence.values()].filter(x => x.tipo !== 'fixo').sort((u, w) => u.nome.localeCompare(w.nome));
+  const chip = (x) => `<div class="chip"><b>${esc(x.nome)}</b><span>Vence em ${br(x.fim)}</span></div>`;
+  // Matriz (seg–sáb) com "Nx no mês" e linha de total.
+  const dias = [1, 2, 3, 4, 5, 6];
+  const horas = [...new Set(aulas.map(x => x.a.hora))].sort();
+  const vezes = (wd) => new Set(aulas.filter(x => x.a.wd === wd).map(x => x.a.data)).size;
+  const celula = (lista) => { if (!lista.length) return '<td class="vz">—</td>'; const t = lista.reduce((s, x) => s + x.a.valor, 0); const n = lista.filter(x => !/já contada/.test(x.a.regra || '')).length || lista.length; return `<td><div class="cel"><b>${brl(t / n)}/aula</b><span>${brl(t)}</span></div></td>`; };
+  const mz = `<table class="mz"><thead><tr><th>Horário</th>${dias.map(d => `<th>${DSEM[d]}<span>${vezes(d)}x no mês</span></th>`).join('')}</tr></thead><tbody>
+    ${horas.map(h => `<tr><th>${esc(h)}</th>${dias.map(d => celula(aulas.filter(x => x.a.hora === h && x.a.wd === d))).join('')}</tr>`).join('')}
+    <tr class="tot"><th>Total</th>${dias.map(d => { const l = aulas.filter(x => x.a.wd === d); if (!l.length) return '<td></td>'; const t = l.reduce((s, x) => s + x.a.valor, 0); const n = l.filter(x => !/já contada/.test(x.a.regra || '')).length || l.length; return `<td><b>${brl(t / n)}/aula</b><span>${brl(t)}</span></td>`; }).join('')}</tr></tbody></table>`;
+  // Alunas removidas manualmente (com motivo) e incluídas.
+  const exc = (p.exclusoes || []).map(x => `<div class="rm"><b>${esc(x.nome)}</b><span>Motivo: ${esc(x.motivo)}${x.escopo === 'sessao' ? ' (aula ' + esc(x.sDesc) + ')' : ''}</span></div>`).join('');
+  const ins = (p.insercoes || []).map(x => `<div class="rm"><b>${esc(x.nome)}</b><span>Incluída na aula ${esc(x.sDesc)}${x.motivo ? ' — ' + esc(x.motivo) : ''}</span></div>`).join('');
+  const contr = (st) => `<span class="ct ct-${st === 'Ativo' ? 'a' : st === 'Suspenso' ? 's' : 'c'}">${esc(st || '—')}</span>`;
+  // Como no relatório antigo: a 2ª aula do sábado (diária já paga) sem ninguém que conte não aparece.
+  const vaziaSab = (a) => /já contada/.test(a.regra || '') && !a.alunas.some(x => x.contrib > 0);
+  const turmas = p.turmas.filter(t => t.aulas.some(a => !vaziaSab(a))).map(t => {
+    const porDia = [...new Set(t.aulas.map(a => a.wd))].sort().map(d => DIAS_LONGOS[d]).join(', ');
+    const sess = t.aulas.filter(a => !vaziaSab(a)).map(a => {
+      const conta = a.alunas.filter(x => x.contrib > 0 || (x.tipo !== 'fixo' && /VIP/.test(x.nota || '')));
+      const linhas = conta.map(x => `<tr><td>${esc(x.nome)}</td><td class="pl">${esc(x.plano)}</td><td><span class="tp tp-${x.tipo === 'fixo' ? 'f' : 'l'}">${x.tipo === 'fixo' ? 'Fixo' : 'Free'}</span></td><td>${contr(x.status)}</td><td class="n"><b>${brl(x.contrib)}</b></td></tr>`).join('');
+      return `<div class="ses"><div class="ses-h"><div><b>${DIAS_LONGOS[a.wd]} — ${br(a.data).slice(0, 5)} às ${esc(a.hora)}${a.sabado && a.regra === 'diária do sábado' ? ' (Diária Fixa Sábado)' : ''}</b><span>1 aula · ${conta.length} aluna(s)${a.futura ? ' · previsão' : ''}</span></div><div class="v">${a.regra === 'piso' ? '<em>Piso aplicado</em> ' : a.regra === 'teto' ? '<em class="te">Teto aplicado</em> ' : ''}<b>${brl(a.valor)}</b><span>${brl(a.valor)}/aula</span></div></div>
+        ${linhas ? `<table class="al"><thead><tr><th>Aluna</th><th>Nome do plano</th><th>Tipo</th><th>Contrato</th><th class="n">R$/Aula</th></tr></thead><tbody>${linhas}</tbody></table>` : '<div class="vz2">Nenhuma aluna com valor nesta aula.</div>'}
+        ${a.regra === 'piso' ? `<div class="nota">Piso aplicado (${brl(p.piso)})</div>` : a.regra && /sábado já/.test(a.regra) ? '<div class="nota">Diária do sábado já contada em outra aula do mesmo dia</div>' : ''}</div>`;
+    }).join('');
+    return `<div class="tur"><div class="tur-h"><div><b>${esc(t.nome)}</b><span>${esc(porDia)} · ${t.aulas.length} aulas totais</span></div><div class="v"><b>${brl(t.total)}</b><span>Total da turma</span></div></div>${sess}</div>`;
   }).join('');
-  const exc = (p.exclusoes || []).map(x => `<li><b>${esc(x.nome)}</b> excluída ${x.escopo === 'global' ? 'de todas as aulas do mês' : x.escopo === 'prof' ? 'das aulas deste professor' : 'da aula ' + esc(x.sDesc)} — ${esc(x.motivo)}</li>`).concat((p.insercoes || []).map(x => `<li><b>${esc(x.nome)}</b> incluída na aula ${esc(x.sDesc)}${x.motivo ? ' — ' + esc(x.motivo) : ''}</li>`)).join('');
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Remuneração — ${esc(p.nome)} — ${esc(rotMes(ym))}</title>
-  <style>body{font-family:Inter,system-ui,sans-serif;color:#1d2b2b;background:#fff;margin:0;padding:28px;font-size:13px}h1{font-size:20px;margin:0}h2{font-size:14px;margin:22px 0 6px}.sub{color:#5e6b6b;margin:4px 0 0}.box{display:flex;gap:24px;flex-wrap:wrap;border:1px solid #d8e4e3;border-radius:10px;padding:12px 16px;margin:16px 0}.box b{display:block;font-size:17px}table{width:100%;border-collapse:collapse}th,td{padding:5px 6px;border-bottom:1px solid #e6eeed;text-align:left;vertical-align:top}th{font-size:11px;text-transform:uppercase;color:#5e6b6b}td.n,th.n{text-align:right;white-space:nowrap}tr.t td{background:#f1f7f6}.pg-mz td,.pg-mz th{text-align:center;font-size:12px}.pg-mz-a{font-weight:700}.pg-mz-t{color:#5e6b6b}.pg-mz-v{color:#b9c4c3}.tot{font-size:18px;text-align:right;margin-top:14px}.acts{margin:0 0 16px}@media print{.acts{display:none}body{padding:0}}</style></head><body>
+  const agora = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const mesNome = rotMes(ym).replace('/', ' ').replace(/^./, c => c.toUpperCase());
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pagamento ${esc(p.nome)} ${esc(ym)}</title>
+  <style>
+  *{box-sizing:border-box}body{font-family:Inter,system-ui,-apple-system,sans-serif;color:#1d2433;background:#fff;margin:0;padding:32px 40px;font-size:12px}
+  .acts{margin:0 0 18px}.acts button{font:inherit;font-weight:700;border:1px solid #0e6e6b;color:#0e6e6b;background:#fff;border-radius:8px;padding:7px 14px;cursor:pointer}
+  .cab{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #e3e7ee;padding-bottom:18px}
+  .cab h1{font-size:22px;margin:0}.cab .sub{color:#6b7385;margin:2px 0 12px}
+  .meta{display:flex;gap:36px}.meta span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#8a92a3}.meta b{font-size:13px}
+  .logo{font-size:30px;font-weight:300;color:#7b8191;letter-spacing:-1px}.logo i{color:#26b3b8;font-style:normal}
+  .box-v{border:1.5px solid #f3c7cf;background:#fff5f6;border-radius:12px;padding:16px 18px;margin:22px 0}.box-v h2{color:#a3173c;font-size:14px;margin:0 0 10px}
+  .box-v h3{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#6b7385;margin:12px 0 6px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}.chip{background:#fff;border:1px solid #e6e9ef;border-radius:8px;padding:7px 12px}.chip b{display:block}.chip span{color:#d23a57;font-size:11px}
+  h2.sec{font-size:14px;margin:26px 0 10px}
+  table{width:100%;border-collapse:collapse}
+  .mz th,.mz td{padding:7px 6px;text-align:center;border-bottom:1px solid #eef0f4}.mz thead th{background:#f3f5f9;color:#6b7385;font-size:10.5px;font-weight:700}.mz thead th span{display:block;font-weight:500;font-size:9.5px}
+  .mz tbody th{text-align:left;font-size:12px}.mz .cel{display:inline-block;background:#eef4fe;border-radius:6px;padding:4px 8px}.mz .cel b{display:block;color:#2f63c6;font-size:11px}.mz .cel span,.mz tr.tot span{display:block;color:#6b7385;font-size:10px}
+  .mz td.vz{color:#c5cad4}.mz tr.tot th,.mz tr.tot td{background:#121a2c;color:#fff}.mz tr.tot td b{display:block;color:#9fb6ff;font-size:11px}.mz tr.tot td span{color:#aab3c6}
+  .box-r{border:1.5px dashed #e7a2ae;background:#fff6f7;border-radius:12px;padding:14px 18px;margin:22px 0}.box-r h2{color:#a3173c;font-size:14px;margin:0 0 8px}
+  .rm{display:grid;grid-template-columns:200px 1fr;gap:10px;padding:3px 0;color:#7a1730}.rm span{color:#7a1730}
+  .total{display:flex;justify-content:flex-end;gap:28px;background:#121a2c;color:#fff;border-radius:12px;padding:16px 22px;margin:18px 0}.total span{display:block;font-size:10px;text-transform:uppercase;color:#aab3c6}.total b{font-size:15px;color:#9fb6ff}.total .g b{font-size:22px}
+  .tur{border:1px solid #e3e7ee;border-radius:12px;margin:18px 0;overflow:hidden;break-inside:auto}
+  .tur-h,.ses-h{display:flex;justify-content:space-between;gap:12px;padding:12px 16px;background:#f7f8fb;border-bottom:1px solid #e3e7ee}.tur-h b{font-size:14px}.tur-h span,.ses-h span{display:block;color:#7b8191;font-size:10.5px}
+  .tur-h .v,.ses-h .v{text-align:right}.tur-h .v b{color:#4f5fd6;font-size:15px}.ses-h{background:#fbfcfd}.ses-h .v b{font-size:13px}.ses-h em{color:#d38a00;font-style:normal;font-size:10.5px;margin-right:6px}.ses-h em.te{color:#a3173c}
+  .al th{font-size:10px;color:#7b8191;text-align:left;padding:6px 12px;background:#f3f5f9}.al td{padding:6px 12px;border-bottom:1px solid #f0f2f6;vertical-align:top}.al td.pl{color:#6b7385;max-width:240px}.al .n,.al th.n{text-align:right}
+  .tp{font-size:10px;border-radius:5px;padding:1px 6px}.tp-f{background:#e9f0fd;color:#2f63c6}.tp-l{background:#f2ebfb;color:#7a43b6}
+  .ct{font-size:10px;border-radius:5px;padding:1px 6px}.ct-a{background:#e8f6ec;color:#1d8a46}.ct-s{background:#fdf5df;color:#a77400}.ct-c{background:#fbe9ec;color:#c22d4b}
+  .nota{background:#eef4fe;color:#6b7385;font-size:10.5px;padding:6px 16px}.vz2{color:#9aa1b0;padding:8px 16px}
+  .fim{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e3e7ee;margin-top:20px;padding-top:12px;color:#8a92a3;font-size:10.5px}.fim .st{background:#e9f0fd;color:#2f63c6;border-radius:5px;padding:3px 10px;font-weight:700}
+  @media print{.acts{display:none}body{padding:0 6px}.tur{break-inside:auto}.ses{break-inside:avoid}}
+  </style></head><body>
   <div class="acts"><button onclick="window.print()">🖨️ Imprimir / salvar em PDF</button></div>
-  <h1>Relatório de remuneração — ${esc(p.nome)}</h1><p class="sub">${esc(studio || 'Studio SlimFit')} · ${esc(rotMes(ym))} · gerado em ${quando(new Date().toISOString())}</p>
-  <div class="box"><span>Percentual<b>${p.pct}%</b></span><span>Piso / teto por aula<b>${brl(p.piso)} / ${brl(p.teto)}</b></span><span>Aulas<b>${p.nAulas}</b></span><span>Média por aula<b>${brl(avg(p.total, pagas(p)))}</b></span><span>Total do mês<b>${brl(p.total)}</b></span></div>
-  <h2>Matriz de horários</h2>${matriz(esc, aulasCom, [1, 2, 3, 4, 5, 6])}
-  <h2>Aulas do mês</h2><table><thead><tr><th>Data</th><th>Hora</th><th>Alunas que contam (valor por aula)</th><th>Regra</th><th class="n">Valor</th></tr></thead><tbody>${linhasT}</tbody></table>
-  ${exc ? `<h2>Ajustes manuais</h2><ul>${exc}</ul>` : ''}
-  <div class="tot">Total do mês: <b>${brl(p.total)}</b></div>
+  <div class="cab"><div><h1>${esc(studio || 'Studio SlimFit')}</h1><div class="sub">Relatório de Remuneração de Professor</div>
+    <div class="meta"><div><span>Professor</span><b>${esc(p.nome)}</b></div><div><span>Período</span><b>${esc(mesNome)}</b></div><div><span>Percentual</span><b>${p.pct}%</b></div><div><span>Gerado em</span><b>${agora}</b></div></div></div>
+    <div class="logo">slim<i>fit</i></div></div>
+  ${venceFix.length || venceFree.length ? `<div class="box-v"><h2>Contratos a Vencer no Próximo Mês (${esc(rotMes(proxYm).replace('/', ' ').replace(/^./, c => c.toUpperCase()))})</h2>${venceFix.length ? `<h3>Alunas fixas</h3><div class="chips">${venceFix.map(chip).join('')}</div>` : ''}${venceFree.length ? `<h3>Alunas Free (fizeram aula com o professor neste mês)</h3><div class="chips">${venceFree.map(chip).join('')}</div>` : ''}</div>` : ''}
+  <h2 class="sec">Matriz de Horários — ${esc(primeiro(p.nome))}</h2>${mz}
+  ${exc || ins ? `<div class="box-r"><h2>Alunas Removidas Manualmente do Mês (Motivos Registrados)</h2>${exc}${ins ? `<h2 style="margin-top:12px">Alunas Incluídas Manualmente</h2>${ins}` : ''}</div>` : ''}
+  <div class="total"><div><span>R$/aula médio</span><b>${brl(avg(p.total, pagasN))}</b></div><div class="g"><span>Total a pagar no mês</span><b>${brl(p.total)}</b></div></div>
+  ${turmas}
+  <div class="total"><div style="margin-right:auto"><span>Total a receber no mês</span><span style="text-transform:none">Soma de todas as turmas — ${p.turmas.length} turma(s)</span></div><div class="g"><b>${brl(p.total)}</b></div></div>
+  <div class="fim"><span class="st">Gerado</span><span>Gerado em ${agora} pelo painel do Studio</span></div>
   </body></html>`;
 }
 

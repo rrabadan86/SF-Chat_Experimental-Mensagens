@@ -100,7 +100,11 @@ async function syncMes(ano, mes, { log = console.log, completo = false } = {}) {
   gravarJson(arqMes(ano, mes), { atualizadoEm: new Date().toISOString(), aulas, listas });
   log(`   👥 ${paraLer.length - falhas} listas lidas${falhas ? `, ${falhas} falharam` : ''}.`);
 
-  // 3) contratos: os ativos + os cancelados a partir do 1º dia do mês
+  // 3) contratos em lote: os ativos + os cancelados a partir do 1º dia do mês.
+  //    O lote do EVO muitas vezes vem SEM as parcelas (receivables) — e às vezes
+  //    sem o contrato vigente (RECORRENTE). Esses são completados no passo 5,
+  //    aluna por aluna (como o sf-pagamento fazia). O que foi buscado aluna por
+  //    aluna (mais completo) não é apagado pelo lote seguinte.
   gravarStatus({ etapa: 'contratos' });
   const ativos = await evo.paginado('/api/v3/membermembership', { statusMemberMembership: 1 });
   const cancelados = await evo.paginado('/api/v3/membermembership', { statusMemberMembership: 2, cancelDateStart: `${ano}-${mm}-01` });
@@ -110,28 +114,43 @@ async function syncMes(ano, mes, { log = console.log, completo = false } = {}) {
     const k = compactarContrato(c); if (!k.m) continue;
     (novos[k.m] = novos[k.m] || {})[k.id] = k;
   }
-  for (const m of Object.keys(novos)) porMembro[m] = { em: new Date().toISOString(), c: Object.values(novos[m]) };
-  log(`   📄 ${ativos.length} contratos ativos e ${cancelados.length} cancelados no mês.`);
+  for (const m of Object.keys(novos)) {
+    const ant = porMembro[m] || {};
+    const porId = {};
+    for (const c of (ant.c || [])) porId[c.id] = c;              // o que já tinha (pode ter parcelas)
+    for (const c of Object.values(novos[m])) {                     // o lote atualiza, sem perder parcelas
+      const velho = porId[c.id];
+      porId[c.id] = (velho && (velho.rec || []).length && !(c.rec || []).length) ? Object.assign({}, c, { rec: velho.rec }) : c;
+    }
+    porMembro[m] = Object.assign({}, ant, { em: new Date().toISOString(), c: Object.values(porId) });
+  }
+  log(`   📄 ${ativos.length} contratos ativos e ${cancelados.length} cancelados no mês (lote).`);
 
-  // Quem aparece nas aulas e não tem contrato vigente no mês (o bulk do EVO às
-  // vezes traz só contratos antigos, ou omite RECORRENTE): busca individual.
   const iniMes = new Date(ano, mes - 1, 1), fimMes = new Date(ano, mes, 0, 23, 59, 59);
   const vigente = (c) => { const ini = c.ini ? new Date(c.ini) : null; const fim = c.fim ? new Date(c.fim) : null; return !!ini && ini <= fimMes && (!fim || fim >= iniMes); };
   const nasAulas = new Set();
   for (const s of Object.keys(listas)) for (const e of (listas[s].e || [])) nasAulas.add(e.m);
-  const faltando = [...nasAulas].filter(m => { const cs = (porMembro[m] && porMembro[m].c) || []; return !cs.some(vigente) || cs.every(c => /circuito/i.test(c.plano)); });
-  gravarStatus({ etapa: `contratos individuais (${faltando.length})` });
-  for (const m of faltando) {
-    try { const cs = await evo.paginado('/api/v3/membermembership', { idMember: m }); if (cs.length) porMembro[m] = { em: new Date().toISOString(), c: cs.map(compactarContrato) }; }
-    catch (e) { log(`   ⚠️  contratos da aluna ${m}: ${e.message}`); }
-  }
-  gravarJson(ARQ_CONTRATOS, { atualizadoEm: new Date().toISOString(), porMembro });
-  log(`   🔎 ${faltando.length} aluna(s) com contrato buscado individualmente.`);
 
-  // 4) grade FIXA: de quem tem contrato vigente no mês ou aparece nas aulas.
+  // 4) alunas ATIVAS do EVO (como o sf-pagamento): quem não apareceu em nenhuma
+  //    lista do mês (ex.: só faltou / feriado) também precisa da grade e do contrato.
+  gravarStatus({ etapa: 'alunas ativas' });
+  const ativasIds = new Set();
+  try {
+    const membros = await evo.paginado('/api/v1/members', { status: 1 });
+    for (const mb of membros) {
+      const id = Number(mb.idMember); if (!id) continue;
+      ativasIds.add(id);
+      const ms = (mb.memberships || []).filter(x => x && x.name && x.startDate).map(x => ({ plano: String(x.name).trim(), ini: x.startDate, fim: x.endDate || null, st: x.membershipStatus || '' }));
+      const nome = [mb.firstName || mb.registerName || '', mb.lastName || ''].join(' ').replace(/\s+/g, ' ').trim();
+      porMembro[id] = Object.assign({ c: [] }, porMembro[id] || {}, { v1: ms, nome: nome || (porMembro[id] && porMembro[id].nome) || '' });
+    }
+    log(`   👩 ${ativasIds.size} alunas ativas no EVO.`);
+  } catch (e) { log(`   ⚠️  lista de alunas ativas: ${e.message}`); }
+
+  // 5) grade FIXA: de quem aparece nas aulas, é ativa ou tem contrato vigente.
   //    Relê quem não foi lida nos últimos 6 dias (ou todas no "completo").
   const gr = lerGrades(); const gPor = gr.porMembro || {};
-  const alvo = new Set(nasAulas);
+  const alvo = new Set([...nasAulas, ...ativasIds]);
   for (const m of Object.keys(porMembro)) if ((porMembro[m].c || []).some(c => vigente(c) && !c.canc)) alvo.add(Number(m));
   const corte = Date.now() - 6 * 864e5;
   const ler = [...alvo].filter(m => completo || !gPor[m] || Date.parse(gPor[m].em || '') < corte);
@@ -146,10 +165,40 @@ async function syncMes(ano, mes, { log = console.log, completo = false } = {}) {
     if (++i % 40 === 0) { gravarStatus({ etapa: `grade fixa das alunas (${i}/${ler.length})` }); gravarJson(ARQ_GRADES, { atualizadoEm: new Date().toISOString(), porMembro: gPor }); }
   }
   gravarJson(ARQ_GRADES, { atualizadoEm: new Date().toISOString(), porMembro: gPor });
+  log(`   🗓️  grade fixa de ${ler.length} aluna(s) atualizada.`);
+
+  // 6) contrato ALUNA POR ALUNA (traz as parcelas e o contrato RECORRENTE que o
+  //    lote omite) para quem conta no mês — nas aulas, na grade do mês ou ativa —
+  //    e está sem contrato vigente, só com Circuito, ou com o vigente SEM parcelas.
+  const temGradeNoMes = (m) => ((gPor[m] && gPor[m].g) || []).some(x => (!x.ini || new Date(x.ini) <= fimMes) && (!x.fim || new Date(x.fim) >= iniMes));
+  const relevantes = new Set([...nasAulas, ...ativasIds]);
+  for (const m of Object.keys(gPor)) if (temGradeNoMes(m)) relevantes.add(Number(m));
+  const corteInd = Date.now() - (completo ? 0 : 2 * 864e5); // buscada aluna por aluna há menos de 2 dias → não repete
+  const precisa = [...relevantes].filter(m => {
+    const p = porMembro[m] || {};
+    if (p.indEm && Date.parse(p.indEm) > corteInd) return false;
+    const cs = (p.c || []).filter(c => !c.canc || new Date(c.canc) >= iniMes);
+    const vig = cs.filter(vigente);
+    if (!vig.length || vig.every(c => /circuito/i.test(c.plano))) return true;
+    return !vig.some(c => (c.rec || []).length);                 // vigente sem parcelas → "Sem dados"
+  });
+  gravarStatus({ etapa: `contratos aluna por aluna (0/${precisa.length})` });
+  i = 0; let comParcelas = 0;
+  for (const m of precisa) {
+    try {
+      const cs = await evo.paginado('/api/v3/membermembership', { idMember: m });
+      const ant = porMembro[m] || {};
+      if (cs.length) { const cc = cs.map(compactarContrato); if (cc.some(c => (c.rec || []).length)) comParcelas++; porMembro[m] = Object.assign({}, ant, { c: cc, indEm: new Date().toISOString(), em: new Date().toISOString() }); }
+      else porMembro[m] = Object.assign({}, ant, { indEm: new Date().toISOString() });
+    } catch (e) { if (i < 3) log(`   ⚠️  contratos da aluna ${m}: ${e.message}`); }
+    if (++i % 40 === 0) { gravarStatus({ etapa: `contratos aluna por aluna (${i}/${precisa.length})` }); gravarJson(ARQ_CONTRATOS, { atualizadoEm: new Date().toISOString(), porMembro }); }
+  }
+  gravarJson(ARQ_CONTRATOS, { atualizadoEm: new Date().toISOString(), porMembro });
+  log(`   🔎 ${precisa.length} aluna(s) com contrato buscado aluna por aluna (${comParcelas} com parcelas).`);
   const seg = Math.round((Date.now() - t0) / 1000);
-  log(`   🗓️  grade fixa de ${ler.length} aluna(s) atualizada. Pronto em ${seg} s.`);
+  log(`   ✅ Pronto em ${seg} s.`);
   gravarStatus({ rodando: false, fim: new Date().toISOString(), etapa: '', ok: true, erro: '', segundos: seg, mes: `${ano}-${mm}` });
-  return { aulas: aulas.length, listas: paraLer.length - falhas, contratos: ativos.length + cancelados.length, grades: ler.length, segundos: seg };
+  return { aulas: aulas.length, listas: paraLer.length - falhas, contratos: ativos.length + cancelados.length, ativas: ativasIds.size, grades: ler.length, individuais: precisa.length, segundos: seg };
 }
 
 // Job da madrugada: mês atual (e, nos 5 primeiros dias, também o mês anterior,
