@@ -43,8 +43,11 @@ function statusContrato(c, ref) {
   return 'Ativo';
 }
 // Pagou o mês de referência? (só informativo — devedora conta para o professor)
-// null = sem dados de parcelas. Plano pago à vista/adiantado (todas as parcelas
-// válidas pagas e nenhuma vencendo no mês) conta como pago.
+// MESMA regra do sf-pagamento (temPagamentoNoMes, por COMPETÊNCIA):
+//   null  = sem parcelas do contrato vigente;
+//   parcela(s) com vencimento no mês → pago se alguma foi paga;
+//   nenhuma parcela vencendo no mês → NÃO pago (ex.: COPA em 3x jul/ago/set
+//   não tem pagamento em outubro; anual pago à vista também não).
 function pagouNoMes(contratos, ano, mes) {
   const rec = contratos.flatMap(c => c.rec || []).filter(r => !r.canc && r.amt > 0 && r.tipo !== 'SaldoDevedor');
   if (!rec.length) return null;
@@ -53,7 +56,6 @@ function pagouNoMes(contratos, ano, mes) {
   const ref = ano * 12 + (mes - 1);
   const doMes = rec.filter(r => ym(r.due) === ref);
   if (doMes.length) return doMes.some(pago);
-  if (rec.every(pago) && rec.some(r => ym(r.due) !== null && ym(r.due) <= ref)) return true;
   return false;
 }
 
