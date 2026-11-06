@@ -6,8 +6,14 @@ import os
 # variáveis para o processo Python filho, então quando o pacote não está
 # instalado (ex.: python3 do sistema sem dependências) seguimos com o ambiente
 # que já veio pronto, em vez de quebrar na importação.
+# FORM_ENV_FILE: .env de OUTRA pasta que vale primeiro (sobrepõe o .env daqui).
+# Usado quando o formulário roda do repositório principal mas mantém o .env da
+# instalação antiga (ex.: Bueno, que rodava de /root/sf-form-real).
+_FORM_ENV_FILE = os.getenv("FORM_ENV_FILE", "").strip()
 try:
     from dotenv import load_dotenv
+    if _FORM_ENV_FILE and os.path.isfile(_FORM_ENV_FILE):
+        load_dotenv(_FORM_ENV_FILE, override=True)
     load_dotenv()
 except ModuleNotFoundError:
     # Sem o pacote python-dotenv: carrega o .env do robô na mão. Sobe a partir
@@ -30,6 +36,8 @@ except ModuleNotFoundError:
         except OSError:
             pass
 
+    if _FORM_ENV_FILE and os.path.isfile(_FORM_ENV_FILE):
+        _apply_env_file(_FORM_ENV_FILE)                   # aplicado antes → vale sobre o daqui
     _here = os.path.dirname(os.path.abspath(__file__))
     for _ in range(6):                                    # sobe até achar o .env
         _cand = os.path.join(_here, ".env")

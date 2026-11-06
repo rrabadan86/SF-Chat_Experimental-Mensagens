@@ -227,6 +227,9 @@ Confirme no log do `-exp`: `📅 Job GRADE DE FIXAS agendado: 47 5 * * *`.
 - ⚠️ **Bueno e Park Sul** rodam o formulário de um **clone separado** do repo
   `sf-formularioexperimental` (`/root/sf-form-<unidade>`) — para atualizar o form, dê o
   `git` **naquela pasta** também (`cd /root/sf-form-<unidade> && git fetch origin main && git reset --hard FETCH_HEAD && pm2 restart <unidade>-form`). **Lago Sul** roda o form do próprio repo principal. Instalações novas (via `--tudo`) usam o clone separado `/root/sf-form-<slug>`.
+- **Migrar para o repo principal** (recomendado — o clone separado ficou sem o Circuito Slim):
+  `bash Experimental/trocar-form-para-repo.sh <unidade>-form /root/sf-form-<unidade>` (Bueno: `slimfit-form /root/sf-form-real`).
+  Mantém a porta, o `.env` e os arquivos de dados da pasta antiga; `--voltar` no fim desfaz.
 - **Lago Sul 2** roda com `GRADE_FIXAS_CRON=47 5 * * *` (05:47) para não concorrer com o Lago Sul 1 (05:40).
 
 ---
