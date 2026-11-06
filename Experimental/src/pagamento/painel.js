@@ -83,8 +83,20 @@ dialog#pgDlg::backdrop{background:rgba(0,0,0,.35)}
 @media print{nav,.subtabs,.ui-acoes,.ui-linha,.no-print,.hbar{display:none!important}.card{box-shadow:none;border:0}}
 </style>`;
 
+// Situação da leitura: "esperando" = pedido feito no painel, robô ainda não começou;
+// "rodando" só vale se começou há menos de 70 min (robô reiniciado no meio não
+// deixa a tela presa em "lendo…").
+function estadoSync() {
+  const fs = require('fs'), path = require('path');
+  const st = sync.lerStatus();
+  const rodando = !!st.rodando && Date.now() - new Date(st.inicio || 0).getTime() < 70 * 60e3;
+  let esperando = false;
+  try { const p = JSON.parse(fs.readFileSync(path.join(sync.DIR, 'pedido.json'), 'utf8')); esperando = !rodando && Date.now() - (p.em || 0) < 15 * 60e3; } catch (_) {}
+  return Object.assign({}, st, { rodando, esperando, travada: !!st.rodando && !rodando });
+}
 function situacaoSync(st) {
-  if (st.rodando) return `⏳ Lendo o EVO (${st.mes ? rotMes(st.mes) : ''}): ${st.etapa || 'começando'}… atualize a página em alguns minutos.`;
+  if (st.esperando) return '⏳ Pedido enviado — aguardando o robô começar a leitura… (esta página se atualiza sozinha)';
+  if (st.rodando) return `⏳ Lendo o EVO (${st.mes ? rotMes(st.mes) : ''}): ${st.etapa || 'começando'}… (esta página se atualiza sozinha; pode levar alguns minutos)`;
   if (st.ok === false) return `⚠️ A última leitura falhou${st.fim ? ' (' + quando(st.fim) + ')' : ''}: ${st.erro || ''}`;
   if (st.fim) return `Última leitura do EVO: ${quando(st.fim)}${st.mes ? ' · ' + rotMes(st.mes) : ''}${st.segundos ? ' · ' + st.segundos + ' s' : ''}. O robô relê toda madrugada.`;
   return 'Ainda não houve leitura do EVO. Clique em "Atualizar dados do EVO".';
@@ -282,22 +294,26 @@ function gestaoCentral(esc, alunas) {
 function pagina({ esc, uiTopo, uiChips, subnav, ym, prof, dia, aviso }) {
   ym = /^\d{4}-\d{2}$/.test(ym || '') ? ym : mesAtualSP();
   const wd = /^[1-6]$/.test(String(dia || '')) ? +dia : null;
-  const st = sync.lerStatus();
+  const st = estadoSync();
+  const ocupado = st.rodando || st.esperando;
+  // Aviso do "?ok=sync": troca pelo andamento real (terminou / lendo / falhou).
+  if (aviso && aviso.startsWith('🔄')) aviso = ocupado ? '' : st.travada ? `⚠️ A leitura começou às ${quando(st.inicio)} e não terminou (o robô pode ter reiniciado). Clique em "Atualizar grade e presença (EVO)" de novo.` : st.ok === false ? '' : st.fim ? `✅ Leitura do EVO terminou às ${quando(st.fim)}${st.mes ? ' (' + rotMes(st.mes) + ')' : ''}${st.segundos ? ' em ' + st.segundos + ' s' : ''}. Os números abaixo já estão atualizados.` : aviso;
   const r = calc.calcularMes(+ym.slice(0, 4), +ym.slice(5, 7));
   const atual = mesAtualSP();
   const qs = (o) => '/pagamento?' + new URLSearchParams(Object.assign({ m: ym }, wd !== null ? { d: wd } : {}, o)).toString();
   const meses = [somaMes(atual, -3), somaMes(atual, -2), somaMes(atual, -1), atual].map(m => [`/pagamento?m=${m}${wd !== null ? '&d=' + wd : ''}`, rotMes(m), m === ym]);
   const diasChips = [['', 'Todos'], ['1', 'Seg'], ['2', 'Ter'], ['3', 'Qua'], ['4', 'Qui'], ['5', 'Sex'], ['6', 'Sáb']].map(([v, l]) => [`/pagamento?m=${ym}${v ? '&d=' + v : ''}`, l, String(wd === null ? '' : wd) === v]);
-  const acoes = `<form method="POST" action="/pagamento/sync" style="margin:0" class="no-print"><input type="hidden" name="m" value="${esc(ym)}"><button class="ui-btn sec" type="submit"${st.rodando ? ' disabled' : ''}>🔄 Atualizar grade e presença (EVO)</button></form>
+  const acoes = `<form method="POST" action="/pagamento/sync" style="margin:0" class="no-print"><input type="hidden" name="m" value="${esc(ym)}"><button class="ui-btn sec" type="submit"${ocupado ? ' disabled' : ''}>🔄 Atualizar grade e presença (EVO)</button></form>
     <a class="ui-btn sec no-print" href="/pagamento/config">⚙️ Regras e percentuais</a>`;
   const linhaAtual = r.ok ? `<div class="ui-nota"><span>Grade atualizada em: <b>${quando(r.atualizadoEm)}</b> · Presença atualizada em: <b>${r.listasEm ? quando(r.listasEm) : '—'}</b></span></div>` : '';
   const topo = uiTopo({
     titulo: 'Cálculo de remuneração',
     sub: `Pagamento dos professores de ${esc(rotMes(ym))}, pelas listas de presença do EVO. Aulas que ainda vão acontecer entram como previsão.`,
     acoes,
-    linhas: [uiChips('Mês', meses), uiChips('Dia da semana', diasChips), linhaAtual, (st.rodando || st.ok === false || !r.ok) ? `<div class="ui-nota${st.ok === false ? ' erro' : ''}"><span>${esc(situacaoSync(st))}</span></div>` : ''],
+    linhas: [uiChips('Mês', meses), uiChips('Dia da semana', diasChips), linhaAtual, (ocupado || st.ok === false || !r.ok) ? `<div class="ui-nota${st.ok === false && !ocupado ? ' erro' : ''}"><span>${esc(situacaoSync(st))}</span></div>` : ''],
   });
-  if (!r.ok) return `<div class="wrap">${subnav}${CSS}${aviso ? `<div class="aviso">${esc(aviso)}</div>` : ''}${topo}<div class="card"><p class="quando" style="margin:0">${esc(r.erro)}</p></div></div>`;
+  const recarregar = ocupado ? '<script>setTimeout(function(){location.reload()},8000)</script>' : '';
+  if (!r.ok) return `<div class="wrap">${subnav}${CSS}${aviso ? `<div class="aviso">${esc(aviso)}</div>` : ''}${topo}<div class="card"><p class="quando" style="margin:0">${esc(r.erro)}</p></div>${recarregar}</div>`;
 
   const profs = r.professores.map(p => filtrarDia(p, wd)).filter(p => p.nAulas);
   const total = profs.reduce((s, p) => s + p.total, 0);
@@ -340,7 +356,7 @@ function pagina({ esc, uiTopo, uiChips, subnav, ym, prof, dia, aviso }) {
       <label style="font-size:.82rem;font-weight:700">Motivo (obrigatório)<textarea id="pgDlgMot" rows="3" style="width:100%;margin-top:4px" placeholder="Ex.: trancou no meio do mês; aluna de cortesia; lançamento errado no EVO"></textarea></label>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button type="button" class="ui-btn sec" id="pgDlgCancel">Cancelar</button><button type="button" class="save" id="pgDlgOk">Excluir</button></div>
     </form></dialog>
-    ${scriptPagina(ym)}${JS_GRADE}
+    ${scriptPagina(ym)}${JS_GRADE}${recarregar}
   </div>`;
 }
 
