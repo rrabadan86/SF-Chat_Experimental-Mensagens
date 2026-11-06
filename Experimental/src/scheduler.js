@@ -764,6 +764,12 @@ function iniciarRodarJobWatcher() {
     venceHoje:         { nome: 'Vence hoje — sem renovação [manual]', fn: () => require('./vence-hoje').runVenceHoje({ log }), timeoutMs: 20 * 60 * 1000 },
     saidaGrupos:       { nome: 'Saída — não renovou [manual]', fn: () => require('./saidas-grupos').runSaidasGrupos({ log }), timeoutMs: 20 * 60 * 1000 },
     saidaGruposDry:    { nome: 'Saída — não renovou (simulação) [manual]', fn: () => require('./saidas-grupos').runSaidasGrupos({ dry: true, log }), timeoutMs: 20 * 60 * 1000 },
+    // Pagamento dos professores: lê o EVO (mês pedido na tela, ou o atual + o anterior nos 5 primeiros dias).
+    pagamentoSync:     { nome: 'Pagamento professores — leitura do EVO [manual]', fn: () => {
+      const arq = require('path').resolve(__dirname, '..', 'data', 'pagamento', 'pedido.json');
+      let op = {}; try { const p = JSON.parse(require('fs').readFileSync(arq, 'utf8')); require('fs').unlinkSync(arq); if (/^\d{4}-\d{2}$/.test(p.ym) && Date.now() - (p.em || 0) < 3600e3) op = { ano: +p.ym.slice(0, 4), mes: +p.ym.slice(5, 7) }; } catch (_) {}
+      return require('./pagamento/sync').runPagamentoSync({ log, ...op });
+    }, timeoutMs: 60 * 60 * 1000 },
     sentimosFalta:     { nome: 'Sentimos sua falta [manual]', fn: () => require('./sentimos-falta').runSentimosFalta({ log }), timeoutMs: 60 * 60 * 1000 },
     sentimosFaltaDry:  { nome: 'Sentimos sua falta (simulação) [manual]', fn: () => require('./sentimos-falta').runSentimosFalta({ dry: true, log }), timeoutMs: 40 * 60 * 1000 },
     inadimplentesHoje: { nome: 'Cobrança — boleto vence hoje [manual]', fn: () => require('./inadimplentes').runInadimplentes({ dry: false, modo: 'hoje' }), timeoutMs: 20 * 60 * 1000 },
@@ -1130,6 +1136,16 @@ async function main() {
         .catch(err => logError('Vence hoje — sem renovação', err));
     }, { timezone: 'America/Sao_Paulo' });
     log(`📅 Job VENCE HOJE agendado: ${config.schedule.venceHoje} — ${jobsAtivos.ativo('venceHoje') ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
+  }
+
+  // Pagamento dos professores (só onde PAGAMENTO_PROFESSORES=1): lê o EVO toda madrugada.
+  if (/^(1|true|sim|on)$/i.test(String(process.env.PAGAMENTO_PROFESSORES || '').trim())) {
+    cron.schedule(process.env.PAGAMENTO_SYNC_CRON || '43 3 * * *', async () => {
+      log('⏰ Cron disparado: Pagamento professores — leitura do EVO');
+      runJob('Pagamento professores — leitura do EVO', () => require('./pagamento/sync').runPagamentoSync({ log }), 60 * 60 * 1000, { retry: false })
+        .catch(err => logError('Pagamento professores — leitura do EVO', err));
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job PAGAMENTO (leitura do EVO) agendado: ${process.env.PAGAMENTO_SYNC_CRON || '43 3 * * *'}`);
   }
 
   // Sentimos sua falta: ativas sem presença há N dias (1ª e 2ª mensagem) — toda segunda.

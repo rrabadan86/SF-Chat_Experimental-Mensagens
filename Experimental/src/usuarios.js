@@ -31,6 +31,7 @@ const TELAS = [
   { key: 'professoras', rot: '👩‍🏫 Professoras', grupo: '📊 Indicadores' },
   { key: 'ativas', rot: '👥 Alunas ativas', grupo: '📊 Indicadores' },
   { key: 'grade', rot: '📋 Grade', grupo: '📊 Indicadores' },
+  { key: 'pagamento', rot: '💰 Pagamento professores', grupo: '📊 Indicadores' }, // só aparece onde PAGAMENTO_PROFESSORES=1
   { key: 'slimclub', rot: '🤝 Slim Club' },
   { key: 'sofia_conversas', rot: '💬 Conversas', grupo: '🤖 Sofia' },
   { key: 'sofia_config', rot: '⚙️ Configuração', grupo: '🤖 Sofia' },
