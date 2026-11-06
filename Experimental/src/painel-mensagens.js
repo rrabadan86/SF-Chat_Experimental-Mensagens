@@ -330,7 +330,7 @@ function lerToken(tok) {
 }
 function lerCookie(req, nome) {
   const raw = req.headers.cookie || '';
-  for (const par of raw.split(';')) { const i = par.indexOf('='); if (i > 0 && par.slice(0, i).trim() === nome) return decodeURIComponent(par.slice(i + 1).trim()); }
+  for (const par of raw.split(';')) { const i = par.indexOf('='); if (i > 0 && par.slice(0, i).trim() === nome) { try { return decodeURIComponent(par.slice(i + 1).trim()); } catch (_) { return ''; } } }
   return '';
 }
 function ehHttps(req) { return (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https'; }
@@ -395,6 +395,10 @@ function decodificarJwt(jwt) {
 }
 
 // Confere usuário+senha no login. Devolve {usuario, admin} ou null.
+const _falhasLogin = new Map(); // chave → [instantes das tentativas erradas]
+function _falhasRecentes(k) { const ag = Date.now(); const arr = (_falhasLogin.get(k) || []).filter(t => ag - t < 15 * 60e3); if (arr.length) _falhasLogin.set(k, arr); else _falhasLogin.delete(k); return arr; }
+function bloqueadoLogin(k) { return _falhasRecentes(k).length >= 10; }
+function falhaLogin(k) { if (_falhasLogin.size > 5000) _falhasLogin.clear(); const arr = _falhasRecentes(k); arr.push(Date.now()); _falhasLogin.set(k, arr); }
 function validarLogin(usuario, senha) {
   const u = String(usuario || '').trim();
   if (SENHA && usuarios.normU(u) === usuarios.normU(USER) && seguraIgual(senha, SENHA)) return { usuario: USER, admin: true };
@@ -1255,7 +1259,7 @@ function scriptPreviewTeste() {
     ta.value = ta.value.slice(0, s) + token + ta.value.slice(e);
     ta.focus(); ta.selectionStart = ta.selectionEnd = s + token.length;
   }
-  function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   function renderEx(txt, chave){
     var ex = EXEMPLOS;
     if(chave && EXEMPLOS_CHAVE[chave]){ ex = {}; for(var g in EXEMPLOS) ex[g]=EXEMPLOS[g]; for(var o in EXEMPLOS_CHAVE[chave]) ex[o]=EXEMPLOS_CHAVE[chave][o]; }
@@ -3344,7 +3348,9 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   var PAUSA_MIN = ${Math.max(1, parseInt(pausaMinIni, 10) || 30)}; // pausa (min) quando respondem direto pelo celular da SoFIA
   function fmtPausa(min){ min=parseInt(min,10)||0; if(min<60) return min+' min'; var h=min/60; var s=Number.isInteger(h)?String(h):h.toFixed(1).replace(/\\.0$/,''); return s+(h===1?' hora':' horas'); }
   function encerrada(c){ return !!(c && (c.enc || (c.ultimaEm && (Date.now()-c.ultimaEm > SESSAO_MS)))); }
-  function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  // Também escapa aspas: o texto vai para atributos (title="…", value="…", href do
+  // link) — sem isso, uma mensagem da lead com " fechava o atributo e injetava código.
+  function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   // URLs viram links clicáveis (abrem em nova aba). Escapa o HTML primeiro e só
   // então linca; tira a pontuação final (ex.: o ")" ou "." logo após o link) de
   // dentro do href. Vale para links que a SoFIA manda e para os que a aluna envia.
@@ -4292,7 +4298,7 @@ function paginaSofiaContatos(aviso, erro, params) {
       return '<button type="button" class="ct-tg'+(on?' on':'')+'" style="'+st+'" onclick="toggleTag(this,\\''+t.replace(/'/g,"\\\\'")+'\\')">'+(on?'✓ ':'')+esc(t)+'</button>';
     }).join('');
   }
-  function esc(s){return String(s).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];});}
+  function esc(s){return String(s).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];});}
   function toggleTag(btn,t){var i=ctTags.indexOf(t);if(i>=0)ctTags.splice(i,1);else ctTags.push(t);renderTags();}
   function addNovaTag(){
     var inp=document.getElementById('ctNovaTag'), t=(inp.value||'').trim();
@@ -4613,7 +4619,7 @@ function paginaSofiaTags(aviso, erro) {
     </div>
   </div>
 <script>
-  function esc(s){return String(s).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];});}
+  function esc(s){return String(s).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];});}
   var TAGS_CFG = ${JSON.stringify(tags.map(t => { const c = contatos.tagConfig(t.tag); return { tag: t.tag, gatilho: c.gatilho, palavras: c.palavras, instrucao: c.instrucao, camp: c.campanhaId, wpp: c.avisarWpp, remove: c.remove, exige: c.exige, enc: c.encerrar }; }))};
   var TODAS_TAGS_LISTA = ${JSON.stringify(tags.map(t => t.tag))};
   var CAMPS_LISTA = ${JSON.stringify((() => { try { return sofia.lerCampanhas().map(c => ({ id: String(c.id), nome: String(c.nome || 'Campanha') })); } catch (_) { return []; } })())};
@@ -9043,7 +9049,21 @@ function lerCorpo(req, limite, cb) {
   req.on('end', () => cb(corpo));
 }
 
-const server = http.createServer((req, res) => {
+// Erro inesperado numa rota → responde 500 e segue no ar (antes, um único pedido
+// malformado — ex.: cookie com "%" inválido — derrubava o painel inteiro).
+function protegido(fn) {
+  return (req, res) => {
+    try { return fn(req, res); }
+    catch (e) {
+      console.error('[painel] erro na rota', req.method, String(req.url || '').split('?')[0], '-', e && e.stack || e);
+      try { if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Erro interno. Tente de novo.'); } catch (_) {}
+    }
+  };
+}
+process.on('uncaughtException', (e) => console.error('[painel] erro não tratado (o painel continua no ar):', e && e.stack || e));
+process.on('unhandledRejection', (e) => console.error('[painel] promessa rejeitada sem tratamento:', e && e.stack || e));
+
+const server = http.createServer(protegido((req, res) => {
   const url = req.url.split('?')[0];
   _navSess = null;
 
@@ -9055,6 +9075,7 @@ const server = http.createServer((req, res) => {
       const q = req.url.split('?')[1] || '';
       let e = '';
       if (/(?:^|&)e=1/.test(q)) e = 'Usuário ou senha incorretos.';
+      else if (/(?:^|&)e=limite/.test(q)) e = 'Muitas tentativas erradas. Aguarde 15 minutos e tente de novo.';
       else if (/(?:^|&)g=naoaut/.test(q)) e = 'Este e-mail do Google não tem acesso. Peça para cadastrarem em Perfis.';
       else if (/(?:^|&)g=erro/.test(q)) e = 'Não consegui entrar com o Google. Tente de novo.';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -9063,8 +9084,12 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST') {
       return lerCorpo(req, 1e5, corpo => {
         const p = new URLSearchParams(corpo);
+        // Limite de tentativas ERRADAS (contra adivinhar senha): 10 por IP e 10 por
+        // usuário a cada 15 min. Só as erradas contam; acertar não é barrado.
+        const ipL = scIp(req), uL = usuarios.normU(p.get('usuario') || '');
+        if (bloqueadoLogin('ip:' + ipL) || (uL && bloqueadoLogin('u:' + uL))) { res.writeHead(303, { Location: '/login?e=limite' }); return res.end(); }
         const ok = validarLogin(p.get('usuario'), p.get('senha') || '');
-        if (!ok) { res.writeHead(303, { Location: '/login?e=1' }); return res.end(); }
+        if (!ok) { falhaLogin('ip:' + ipL); if (uL) falhaLogin('u:' + uL); console.warn(`[painel] login recusado: usuário "${String(p.get('usuario') || '').slice(0, 40)}" ip ${ipL}`); res.writeHead(303, { Location: '/login?e=1' }); return res.end(); }
         try { acessos.registrarLogin(ok.usuario, 'senha'); } catch (_) {}
         setCookieSessao(req, res, criarToken(ok.usuario, criarSessao(ok.usuario, 'senha', req)), lerSessaoDias() * 86400);
         const sess = { admin: ok.admin, telas: ok.admin ? TODAS_TELAS : (usuarios.obter(ok.usuario) || { telas: [] }).telas };
@@ -9177,7 +9202,10 @@ const server = http.createServer((req, res) => {
   _navSess = sess;
   try { acessos.registrarAcesso(sess.usuario); } catch (_) {} // marca "último acesso" (com trava de tempo)
 
-  // ── Grade de matrículas FIXAS (/grade) — qualquer usuário logado ───────────
+  // ── Grade de matrículas FIXAS (/grade) — permissão "Grade" em Perfis ───────
+  // (antes ficava antes da checagem de acesso: qualquer login via a Grade, que traz
+  // TKM/faturamento, e podia disparar a releitura no EVO)
+  if ((url === '/grade' || url.startsWith('/grade/')) && !sess.admin && !(sess.telas || []).includes('grade')) return negarAcesso(res, sess);
   if (req.method === 'GET' && url === '/grade') {
     const semana = new URLSearchParams(req.url.split('?')[1] || '').get('semana');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -9565,7 +9593,7 @@ const server = http.createServer((req, res) => {
       else if (/(?:^|&)ok=excluido/.test(q)) aviso = 'Usuário excluído.';
       else if (/(?:^|&)ok=sessao/.test(q)) aviso = 'Duração da sessão salva. Vale para os próximos logins.';
       else if (/(?:^|&)ok=sess-enc/.test(q)) aviso = 'Sessão encerrada. A pessoa precisará entrar de novo.';
-      else if (/(?:^|&)err=/.test(q)) { aviso = decodeURIComponent((q.match(/err=([^&]*)/) || [])[1] || 'Erro.'); erro = true; }
+      else if (/(?:^|&)err=/.test(q)) { aviso = (() => { try { return decodeURIComponent((q.match(/err=([^&]*)/) || [])[1] || 'Erro.'); } catch (_) { return 'Erro.'; } })(); erro = true; }
       const viewPerfis = new URLSearchParams(q).get('view') || 'usuarios';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return res.end(paginaPerfis(aviso, erro, viewPerfis));
@@ -10079,7 +10107,7 @@ const server = http.createServer((req, res) => {
     else if (/(?:^|&)okcmp=1/.test(q) && /(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Config salva, mas não consegui reiniciar o robô p/ aplicar o novo horário. Rode no servidor: pm2 restart ' + PM2_EXP; erro = true; }
     else if (/(?:^|&)okcmp=1/.test(q)) aviso = 'Config de presença (troca de tags) salva.';
     else if (/(?:^|&)okc=ok/.test(q)) aviso = '✔️ Feito.';
-    else if (/(?:^|&)errc=/.test(q)) { aviso = decodeURIComponent((q.match(/errc=([^&]*)/) || [])[1] || 'Erro na campanha.'); erro = true; }
+    else if (/(?:^|&)errc=/.test(q)) { aviso = (() => { try { return decodeURIComponent((q.match(/errc=([^&]*)/) || [])[1] || 'Erro na campanha.'); } catch (_) { return 'Erro.'; } })(); erro = true; }
     const sp = new URLSearchParams(q);
     // Endereço antigo do Funil (SoFIA → Funil) → Indicadores → Funil, mantendo os filtros.
     if (sp.get('view') === 'funil') { sp.delete('view'); res.writeHead(302, { Location: '/funil' + (sp.toString() ? '?' + sp.toString() : '') }); return res.end(); }
@@ -11228,7 +11256,7 @@ const server = http.createServer((req, res) => {
 
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('Não encontrado.');
-});
+}));
 
 // ── Automação por tag (gatilho → aplica tag + avisa no WhatsApp) ─────────────
 // Gatilhos detectados AQUI (painel): 'agendou' (sofia-agendou.jsonl, escrito pela
