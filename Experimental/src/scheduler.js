@@ -767,7 +767,7 @@ function iniciarRodarJobWatcher() {
     // Pagamento dos professores: lê o EVO (mês pedido na tela, ou o atual + o anterior nos 5 primeiros dias).
     pagamentoSync:     { nome: 'Pagamento professores — leitura do EVO [manual]', fn: () => {
       const arq = require('path').resolve(__dirname, '..', 'data', 'pagamento', 'pedido.json');
-      let op = {}; try { const p = JSON.parse(require('fs').readFileSync(arq, 'utf8')); require('fs').unlinkSync(arq); if (/^\d{4}-\d{2}$/.test(p.ym) && Date.now() - (p.em || 0) < 3600e3) op = { ano: +p.ym.slice(0, 4), mes: +p.ym.slice(5, 7) }; } catch (_) {}
+      let op = {}; try { const p = JSON.parse(require('fs').readFileSync(arq, 'utf8')); require('fs').unlinkSync(arq); if (/^\d{4}-\d{2}$/.test(p.ym) && Date.now() - (p.em || 0) < 3600e3) op = { ano: +p.ym.slice(0, 4), mes: +p.ym.slice(5, 7), manual: true }; } catch (_) {}
       return require('./pagamento/sync').runPagamentoSync({ log, ...op });
     }, timeoutMs: 60 * 60 * 1000 },
     sentimosFalta:     { nome: 'Sentimos sua falta [manual]', fn: () => require('./sentimos-falta').runSentimosFalta({ log }), timeoutMs: 60 * 60 * 1000 },

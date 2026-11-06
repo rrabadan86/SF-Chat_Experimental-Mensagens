@@ -76,7 +76,7 @@ function compactarContrato(c) {
   };
 }
 
-async function syncMes(ano, mes, { log = console.log, completo = false } = {}) {
+async function syncMes(ano, mes, { log = console.log, completo = false, manual = false } = {}) {
   if (!evo.configurado()) throw new Error('não achei a chave da API do EVO (EVO_DNS/EVO_TOKEN) em src/agendamento_evo/.env nem no .env do robô.');
   const t0 = Date.now();
   const mm = String(mes).padStart(2, '0');
@@ -179,11 +179,18 @@ async function syncMes(ano, mes, { log = console.log, completo = false } = {}) {
   const temGradeNoMes = (m) => ((gPor[m] && gPor[m].g) || []).some(x => (!x.ini || new Date(x.ini) <= fimMes) && (!x.fim || new Date(x.fim) >= iniMes));
   const relevantes = new Set([...nasAulas, ...ativasIds]);
   for (const m of Object.keys(gPor)) if (temGradeNoMes(m)) relevantes.add(Number(m));
-  const corteInd = Date.now() - (completo ? 0 : 2 * 864e5); // buscada aluna por aluna há menos de 2 dias → não repete
+  // Buscada aluna por aluna há menos de 2 dias → não repete (só na leitura da
+  // madrugada). Clique no painel ("Atualizar…") relê o contrato de todas: é quando
+  // alguém acabou de corrigir algo no EVO (ex.: data de início do contrato).
+  const corteInd = Date.now() - (completo || manual ? 0 : 2 * 864e5);
   const precisa = [...relevantes].filter(m => {
     const p = porMembro[m] || {};
-    if (p.indEm && Date.parse(p.indEm) > corteInd && p.indV === IND_V) return false; // IND_V novo = relê todas uma vez
     const cs = (p.c || []).filter(c => !c.canc || new Date(c.canc) >= iniMes);
+    // Esteve nas aulas do mês mas tem contrato que só começa depois do mês (renovação
+    // agendada; ou início que pode ter sido corrigido no EVO) → sempre relê. O lote
+    // não traz os RECORRENTES, então sem isso a data antiga ficaria guardada.
+    if (nasAulas.has(m) && cs.some(c => c.ini && new Date(c.ini) > fimMes)) return true;
+    if (p.indEm && Date.parse(p.indEm) > corteInd && p.indV === IND_V) return false; // IND_V novo = relê todas uma vez
     const vig = cs.filter(vigente);
     if (!vig.length || vig.every(c => /circuito/i.test(c.plano))) return true;
     // Algum contrato vigente (com valor) SEM parcelas → busca. Ex.: aluna que trocou
@@ -211,9 +218,9 @@ async function syncMes(ano, mes, { log = console.log, completo = false } = {}) {
 
 // Job da madrugada: mês atual (e, nos 5 primeiros dias, também o mês anterior,
 // que é o que vai ser pago).
-async function runPagamentoSync({ log = console.log, completo = false, ano, mes } = {}) {
+async function runPagamentoSync({ log = console.log, completo = false, manual = false, ano, mes } = {}) {
   try {
-    if (ano && mes) return await syncMes(ano, mes, { log, completo });
+    if (ano && mes) return await syncMes(ano, mes, { log, completo, manual });
     const h = hojeSP(); const a = +h.slice(0, 4), m = +h.slice(5, 7), d = +h.slice(8, 10);
     const res = [];
     if (d <= 5) { const pm = m === 1 ? 12 : m - 1, pa = m === 1 ? a - 1 : a; res.push(await syncMes(pa, pm, { log, completo })); }
