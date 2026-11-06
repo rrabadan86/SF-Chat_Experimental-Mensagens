@@ -413,6 +413,7 @@ function telaDaUrl(u) {
   if (u === '/funil') return 'funil'; // Indicadores → Funil (checkbox em Perfis; quem via pela SoFIA Conversas continua vendo)
   if (u === '/professoras' || u.startsWith('/professoras/')) return 'professoras'; // Indicadores → Professoras (checkbox em Perfis)
   if (u === '/ativas' || u.startsWith('/ativas/')) return 'ativas'; // Indicadores → Alunas ativas (checkbox em Perfis)
+  if (u === '/pagamento' || u.startsWith('/pagamento/')) return 'pagamento'; // Indicadores → Pagamento professores (checkbox em Perfis)
   if (u === '/clube' || u.startsWith('/clube/')) return 'slimclub'; // validação do Slim Club (checkbox em Perfis)
   if (u === '/formularios' || u.startsWith('/formularios/')) return 'formularios'; // formulários de campanha (checkbox em Perfis)
   return 'msg';
@@ -474,6 +475,7 @@ function primeiraTela(sess) {
   if (sess.telas.includes('professoras')) return '/professoras';
   if (sess.telas.includes('ativas')) return '/ativas';
   if (sess.telas.includes('grade')) return '/grade';
+  if (PAGAMENTO_ATIVO && sess.telas.includes('pagamento')) return '/pagamento';
   return '';
 }
 
@@ -1040,6 +1042,8 @@ const ESTILO = `
 // Menu de abas, mostrando só as telas que o usuário logado pode ver (+ Perfis p/ admin).
 // A aba Instagram fica escondida (o Studio não usa). Volta com PAINEL_INSTAGRAM=1 no .env.
 const IG_NO_PAINEL = /^(1|true|sim|on)$/i.test(String(process.env.PAINEL_INSTAGRAM || '').trim());
+// Pagamento dos professores (porte do sf-pagamento): só nas unidades com PAGAMENTO_PROFESSORES=1 no .env.
+const PAGAMENTO_ATIVO = /^(1|true|sim|on)$/i.test(String(process.env.PAGAMENTO_PROFESSORES || '').trim());
 function navTabs(ativo) {
   const sess = _navSess || { admin: true, telas: usuarios.TELAS_KEYS };
   const pode = k => sess.admin || (sess.telas || []).includes(k);
@@ -1053,8 +1057,8 @@ function navTabs(ativo) {
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp', 'msg');
   if (IG_NO_PAINEL) html += item('ig', '/instagram', '📸', 'Instagram');
   // Indicadores = Funil + Formulário + Professoras + Grade, cada um com a sua permissão. Abre no primeiro permitido.
-  const indHref = podeFunil(sess) ? '/funil' : pode('ind') ? '/indicadores' : pode('professoras') ? '/professoras' : pode('ativas') ? '/ativas' : pode('grade') ? '/grade' : '';
-  if (indHref) html += cel(indHref, ativo === 'grade' || ativo === 'funil' || ativo === 'ind' || ativo === 'professoras' || ativo === 'ativas', '📊', 'Indicadores', 'grade');
+  const indHref = podeFunil(sess) ? '/funil' : pode('ind') ? '/indicadores' : pode('professoras') ? '/professoras' : pode('ativas') ? '/ativas' : pode('grade') ? '/grade' : (PAGAMENTO_ATIVO && pode('pagamento')) ? '/pagamento' : '';
+  if (indHref) html += cel(indHref, ativo === 'grade' || ativo === 'funil' || ativo === 'ind' || ativo === 'professoras' || ativo === 'ativas' || ativo === 'pagamento', '📊', 'Indicadores', 'grade');
   if (pode('slimclub')) { // número = o que espera a recepção (cadastros, alterações, reclamações)
     const n = slimclub.pendenciasRecepcao();
     html += item('slimclub', '/clube', '🤝', 'Slim Club' + (n ? ` <span class="nav-badge" title="${n} para a recepção ver">${n}</span>` : ''));
@@ -3131,6 +3135,7 @@ function subnavIndicadores(view) {
   if (pode('professoras')) its += `<a href="/professoras"${view === 'professoras' ? ' class="on"' : ''}>Professoras</a>`;
   if (pode('ativas')) its += `<a href="/ativas"${view === 'ativas' ? ' class="on"' : ''}>Alunas ativas</a>`;
   if (pode('grade')) its += `<a href="/grade"${view === 'grade' ? ' class="on"' : ''}>Grade</a>`;
+  if (PAGAMENTO_ATIVO && pode('pagamento')) its += `<a href="/pagamento"${view === 'pagamento' ? ' class="on"' : ''}>💰 Pagamento</a>`;
   return IND_CSS + (its ? `<div class="subtabs">${its}</div>` : '');
 }
 
@@ -9235,6 +9240,74 @@ const server = http.createServer((req, res) => {
   }
   else if (tela === 'funil') { if (!podeFunil(sess)) return negarAcesso(res, sess); }
   else if (tela && !sess.admin && !(sess.telas || []).includes(tela)) return negarAcesso(res, sess);
+
+  // ── Indicadores → 💰 Pagamento dos professores (permissão "pagamento" — barrada acima) ──
+  if (url === '/pagamento' || url.startsWith('/pagamento/')) {
+    if (!PAGAMENTO_ATIVO) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Pagamento dos professores não está ligado nesta unidade (PAGAMENTO_PROFESSORES=1 no .env).'); }
+    const pg = require('./pagamento/painel');
+    const pcfg = require('./pagamento/config');
+    const sp = new URLSearchParams(req.url.split('?')[1] || '');
+    const voltar = (loc) => { res.writeHead(303, { Location: loc }); res.end(); };
+    const avisoQ = (() => { const a = sp.get('ok'), e = sp.get('erro'); return e ? { aviso: '⚠️ ' + e, erro: true } : a === 'sync' ? { aviso: '🔄 Leitura do EVO pedida ao robô — leva alguns minutos. Atualize a página para ver o andamento.' } : a === 'regras' ? { aviso: '✅ Regras salvas.' } : a === 'prof' ? { aviso: '✅ Percentual salvo.' } : a === 'ocupado' ? { aviso: '⏳ O robô já está rodando outro pedido — tente de novo em 1 minuto.', erro: true } : {}; })();
+    if (req.method === 'GET' && url === '/pagamento') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(chrome({ tab: 'Pagamento dos professores' }, 'pagamento', pg.pagina({ esc, uiTopo, uiChips, subnav: subnavIndicadores('pagamento'), ym: sp.get('m') || '', prof: sp.get('prof') || '', aviso: avisoQ.aviso })));
+    }
+    if (req.method === 'GET' && url === '/pagamento/config') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(chrome({ tab: 'Pagamento dos professores' }, 'pagamento', pg.paginaConfig({ esc, uiTopo, subnav: subnavIndicadores('pagamento'), aviso: avisoQ.aviso, erro: avisoQ.erro })));
+    }
+    if (req.method === 'POST' && url === '/pagamento/sync') {
+      return lerCorpo(req, 1e4, corpo => {
+        const m = new URLSearchParams(corpo).get('m') || '';
+        const arq = path.resolve(__dirname, '..', 'data', 'rodar-job.json');
+        if (fs.existsSync(arq)) return voltar('/pagamento?m=' + encodeURIComponent(m) + '&ok=ocupado');
+        try {
+          fs.mkdirSync(path.resolve(__dirname, '..', 'data', 'pagamento'), { recursive: true });
+          if (/^\d{4}-\d{2}$/.test(m)) fs.writeFileSync(path.resolve(__dirname, '..', 'data', 'pagamento', 'pedido.json'), JSON.stringify({ ym: m, em: Date.now() }));
+          fs.writeFileSync(arq, JSON.stringify({ job: 'pagamentoSync', id: 'pg' + Date.now().toString(36) }));
+          auditoria.registrar(sess.usuario, 'pagamento.sync', m, '');
+        } catch (_) {}
+        voltar('/pagamento?m=' + encodeURIComponent(m) + '&ok=sync');
+      });
+    }
+    if (req.method === 'POST' && url === '/pagamento/regras') {
+      return lerCorpo(req, 1e5, corpo => {
+        const p = Object.fromEntries(new URLSearchParams(corpo));
+        try { pcfg.salvarRegras(p); auditoria.registrar(sess.usuario, 'pagamento.regras', JSON.stringify(p).slice(0, 300), ''); voltar('/pagamento/config?ok=regras'); }
+        catch (e) { voltar('/pagamento/config?erro=' + encodeURIComponent(e.message)); }
+      });
+    }
+    if (req.method === 'POST' && url === '/pagamento/professor') {
+      return lerCorpo(req, 1e4, corpo => {
+        const p = Object.fromEntries(new URLSearchParams(corpo));
+        try { pcfg.salvarProfessor(p.chave, p.nome, p); auditoria.registrar(sess.usuario, 'pagamento.professor', `${p.nome}: ${p.pct}% piso ${p.piso} teto ${p.teto} desde ${p.desde}`, ''); voltar('/pagamento/config?ok=prof'); }
+        catch (e) { voltar('/pagamento/config?erro=' + encodeURIComponent(e.message)); }
+      });
+    }
+    if (req.method === 'POST' && url === '/pagamento/professor/remover') {
+      return lerCorpo(req, 1e4, corpo => {
+        const p = Object.fromEntries(new URLSearchParams(corpo));
+        try { pcfg.removerVigencia(p.chave, p.desde); auditoria.registrar(sess.usuario, 'pagamento.professor.remover', `${p.chave} desde ${p.desde}`, ''); } catch (_) {}
+        voltar('/pagamento/config?ok=prof');
+      });
+    }
+    if (req.method === 'POST' && url === '/pagamento/importar') {
+      return lerCorpo(req, 2e6, corpo => {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        try {
+          const d = JSON.parse(corpo || '{}');
+          const sync = require('./pagamento/sync'); const nomes = {};
+          const atual = pg.mesAtualSP();
+          for (let k = 0; k < 6; k++) { let a = +atual.slice(0, 4), m = +atual.slice(5, 7) - k; while (m < 1) { m += 12; a--; } const md = sync.lerMes(a, m); for (const au of (md && md.aulas) || []) if (au.pi && au.p) nomes[au.p] = au.pi; }
+          const r = pcfg.importarCsvSupabase(d.csv || '', nomes);
+          auditoria.registrar(sess.usuario, 'pagamento.importar', `${r.importados} registro(s)`, '');
+          return res.end(JSON.stringify({ ok: true, ...r }));
+        } catch (e) { return res.end(JSON.stringify({ ok: false, erro: e.message })); }
+      });
+    }
+    res.writeHead(404); return res.end();
+  }
 
   // ── Indicadores → Funil (permissão "funil" — barrada acima) ──
   if (req.method === 'GET' && url === '/funil') {
