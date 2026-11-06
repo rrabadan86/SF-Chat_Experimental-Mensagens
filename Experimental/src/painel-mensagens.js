@@ -626,7 +626,7 @@ const server = http.createServer(protegido((req, res) => {
         try {
           const d = JSON.parse(corpo || '{}'); const aj = require('./pagamento/ajustes'); const ym = String(d.m || '');
           const acao = rotasAjuste[url];
-          if (acao === 'excluir') aj.excluir(ym, { m: d.m2, nome: d.nome, escopo: d.escopo, prof: d.prof, profNome: d.profNome, s: d.s, sDesc: d.sDesc, motivo: d.motivo }, sess.usuario);
+          if (acao === 'excluir') aj.excluir(ym, { m: d.m2, nome: d.nome, escopo: d.escopo, prof: d.prof, profNome: d.profNome, s: d.s, sDesc: d.sDesc, motivo: d.motivo, de: d.de, ate: d.ate }, sess.usuario);
           else if (acao === 'inserir') aj.inserir(ym, { m: d.m2, nome: d.nome, s: d.s, sDesc: d.sDesc, prof: d.prof, motivo: d.motivo }, sess.usuario);
           else if (acao === 'desfazer') aj.desfazer(ym, String(d.id || ''));
           else aj.alternarOculto(ym, String(d.h || ''), sess.usuario);
