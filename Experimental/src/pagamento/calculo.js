@@ -65,6 +65,18 @@ function pagouNoMes(contratos, ano, mes) {
   return false;
 }
 
+// Duração do contrato em meses, puxada para o tamanho de plano vendido (1, 2, 3, 6,
+// 12 ou 24 meses). Trancamento/férias ADIA o fim no EVO: anual de 17/03/2026 vira
+// "até 15/04/2027" = 13 meses, e R$ 7.044 ÷ 13 dava R$ 541,85 em vez de R$ 587.
+// Usa o maior tamanho padrão que cabe (com folga de ~18 dias para contrato um pouco
+// mais curto); se passar do padrão por mais de 2,5 meses, não é prorrogação → usa a
+// duração arredondada, como antes.
+function duracaoPadrao(mesesExatos) {
+  const PADRAO = [1, 2, 3, 6, 12, 24];
+  const s = PADRAO.filter(x => x <= mesesExatos + 0.6).pop();
+  if (!s || mesesExatos - s > 2.5) return Math.round(mesesExatos);
+  return s;
+}
 // Mensalidade (valor de 1 mês) a partir do contrato — mesma lógica do sf-pagamento.
 function valorMensal(c) {
   const n = String(c.plano || '').toLowerCase();
@@ -72,11 +84,12 @@ function valorMensal(c) {
   if (n.includes('anual')) meses = 12;
   else if (n.includes('semestral')) meses = 6;
   else if (n.includes('trimestral') || n.includes('trim.') || / trm |^trm | trm/.test(n)) meses = 3;
+  else if (n.includes('quadrimestral')) meses = 4;
   else if (n.includes('bimestral')) meses = 2;
   else if (n.includes('mensal')) meses = 1;
   if (meses) return c.v / meses;
   let dur = 0;
-  if (c.ini && c.fim) dur = Math.round((new Date(c.fim) - new Date(c.ini)) / 864e5 / 30.44);
+  if (c.ini && c.fim) dur = duracaoPadrao((new Date(c.fim) - new Date(c.ini)) / 864e5 / 30.44);
   const rec = (c.rec || []).find(r => !r.canc && r.tot > 1);
   if (dur >= 2 && dur <= 24) return c.v / dur;
   if (dur === 1) return c.v;
@@ -340,4 +353,4 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
   return { ok: true, ym, ano, mes, atualizadoEm: dados.atualizadoEm, listasEm: Object.values(listas).reduce((mx, l) => (l.em && l.em > mx ? l.em : mx), ''), professores, total: round2(professores.reduce((s, p) => s + p.total, 0)), avisos, regras: R, alunas: alunasLista, ajustes: aj };
 }
 
-module.exports = { calcularMes, tipoDePlano, valorMensal, pagouNoMes, freqDoPlano };
+module.exports = { calcularMes, tipoDePlano, valorMensal, pagouNoMes, freqDoPlano, duracaoPadrao };
