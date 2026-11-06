@@ -143,17 +143,24 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
     }
   }
 
-  // Quantas aulas a aluna FIXA tem no mês (pela grade dela, ou pelas turmas inferidas).
+  // Por quantas aulas dividir a mensalidade da FIXA — regra do sf-pagamento:
+  // frequência do plano × semanas do mês (2x em mês de 31 dias = round(2×31/7) = 9;
+  // 3x = 13; FLEX 2X fixa + 2X = 18). Só sem frequência no nome do plano usa a grade
+  // dela, as turmas inferidas pela presença ou, por último, as aulas da turma.
+  // (Contar pela grade distorcia: grade que começa/termina no meio do mês dividia por
+  // 2 ou 3 aulas; grade com mais horários que o plano dividia por mais.)
   const cacheAulasDela = new Map();
   function aulasNoMesDela(m, plano, turmaAtual) {
-    if (cacheAulasDela.has(m)) return cacheAulasDela.get(m);
+    const ck = m + '|' + plano;
+    if (cacheAulasDela.has(ck)) return cacheAulasDela.get(ck);
     let n = 0, fonte = '';
+    const f = freqDoPlano(plano);
+    if (f) { n = Math.round(f * diasNoMes / 7); fonte = 'plano'; }
     const g = grade.get(m);
-    if (g) { n = aulas.filter(a => ehDaGrade(g, a)).length; fonte = 'grade'; }
-    else if (inferidas.has(m)) { for (const k of inferidas.get(m)) n += (aulasDaVaga.get(k) || []).length; fonte = 'presença'; }
-    if (!n) { const f = freqDoPlano(plano); if (f) { n = Math.round(f * diasNoMes / 7); fonte = 'plano'; } }
+    if (!n && g) { n = aulas.filter(a => ehDaGrade(g, a)).length; fonte = 'grade'; }
+    if (!n && inferidas.has(m)) { for (const k of inferidas.get(m)) n += (aulasDaVaga.get(k) || []).length; fonte = 'presença'; }
     if (!n) { n = (aulasDaTurma.get(turmaAtual) || []).length; fonte = 'turma'; }
-    const r = { n, fonte }; cacheAulasDela.set(m, r); return r;
+    const r = { n, fonte }; cacheAulasDela.set(ck, r); return r;
   }
 
   // Escolhe o contrato que vale para a aluna nesta aula (mesma pontuação do sf-pagamento).
@@ -271,7 +278,8 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
         if (reg.reposicao) {
           if (!presente) continue;
           // Fixa em reposição não gera valor — só se tiver um plano Free vigente (conta como Free).
-          const free = cs.find(x => tipoDePlano(x.plano) === 'free' && vigenteNoMes(x));
+          // (o Free tem de valer NA DATA da aula — sf-pagamento; rescindido antes não vale)
+          const free = cs.find(x => tipoDePlano(x.plano) === 'free' && (!x.ini || diaNum(x.ini) <= diaNum(a.d)) && (!x.fim || diaNum(x.fim) >= diaNum(a.d)) && (!x.canc || diaNum(x.canc) > diaNum(a.d)));
           if (!free) { reg.nota = 'reposição (conta na turma dela)'; alunas.push(reg); continue; }
           Object.assign(reg, { tipo: 'free', plano: free.plano, mensalidade: 0, contrib: ehVip(nome) ? 0 : R.freeValor, nota: 'reposição com plano Free' });
           alunas.push(reg); continue;
