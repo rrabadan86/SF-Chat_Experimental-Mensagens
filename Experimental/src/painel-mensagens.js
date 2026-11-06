@@ -9053,6 +9053,14 @@ function lerCorpo(req, limite, cb) {
 // malformado — ex.: cookie com "%" inválido — derrubava o painel inteiro).
 function protegido(fn) {
   return (req, res) => {
+    // Cabeçalhos de proteção: o painel só pode ser aberto dentro de um quadro (iframe)
+    // do próprio painel — outro site não consegue "esconder" o painel na página dele
+    // para induzir cliques (clickjacking). As páginas públicas (formulário/Slim Club)
+    // ficam liberadas para poderem ser incorporadas em sites/redes.
+    try {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      if (!/^\/(formulario|slimclub)/i.test(String(req.url || ''))) { res.setHeader('X-Frame-Options', 'SAMEORIGIN'); res.setHeader('Content-Security-Policy', "frame-ancestors 'self'"); }
+    } catch (_) {}
     try { return fn(req, res); }
     catch (e) {
       console.error('[painel] erro na rota', req.method, String(req.url || '').split('?')[0], '-', e && e.stack || e);
@@ -9131,19 +9139,13 @@ const server = http.createServer(protegido((req, res) => {
     }
     if (req.method === 'POST') {
       return lerCorpo(req, 1e6, corpo => {
-        // DEBUG TEMPORÁRIO: registra TODO webhook que chega, para diagnosticar por
-        // que o comentário "não aparece". Mostra tamanho, se a assinatura confere e
-        // o "object" (se vier "page" em vez de "instagram", o processar ignora). Pode
-        // remover depois que o recebimento estiver confirmado.
+        // Registra só o que precisa de atenção (assinatura inválida ou evento que o
+        // processar ignora) — antes, um log de diagnóstico gravava TODO webhook.
         const assinOk = igApi.assinaturaValida(corpo, req.headers['x-hub-signature-256']);
-        let dbg = null; try { dbg = JSON.parse(corpo); } catch (_) {}
-        const resumo = dbg ? `object=${dbg.object} entradas=${Array.isArray(dbg.entry) ? dbg.entry.length : 0}`
-          + (dbg.entry && dbg.entry[0] ? ` changes=${(dbg.entry[0].changes || []).map(c => c.field).join(',') || '-'} messaging=${(dbg.entry[0].messaging || []).length}` : '')
-          : '(corpo não-JSON)';
-        console.log(`[ig-webhook] POST ${corpo.length}B assinatura=${assinOk ? 'ok' : 'INVALIDA'} ${resumo}`);
-        if (!assinOk) { res.writeHead(403, { 'Content-Type': 'text/plain' }); return res.end('bad signature'); }
-        res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('EVENT_RECEIVED'); // responde rápido; processa depois
         let body = null; try { body = JSON.parse(corpo); } catch (_) { body = null; }
+        if (!assinOk) { console.log(`[ig-webhook] POST ${corpo.length}B com assinatura INVÁLIDA — ignorado`); res.writeHead(403, { 'Content-Type': 'text/plain' }); return res.end('bad signature'); }
+        if (!body || body.object !== 'instagram') console.log(`[ig-webhook] evento ignorado: ${body ? 'object=' + body.object : 'corpo não-JSON'}`);
+        res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('EVENT_RECEIVED'); // responde rápido; processa depois
         if (body) igApi.processar(body).catch(e => console.log('[ig-api] processar:', e.message));
       });
     }

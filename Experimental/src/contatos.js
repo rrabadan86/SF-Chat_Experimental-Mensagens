@@ -63,6 +63,37 @@ function gravarAtomico(arq, conteudo) {
   fs.writeFileSync(tmp, conteudo, 'utf8');
   fs.renameSync(tmp, arq);
 }
+// ── Trava entre processos ───────────────────────────────────────────────────
+// O painel e o robô (comparecimento, auto-tag, sentimos-falta…) gravam este mesmo
+// arquivo em processos separados. Cada alteração faz ler → mudar → gravar; sem
+// trava, se os dois fizessem isso ao mesmo tempo, o último apagava a mudança do
+// outro (ex.: tag aplicada no painel enquanto o robô marcava comparecimento).
+// A trava é um diretório (mkdir é atômico); reentrante no mesmo processo; uma
+// trava esquecida (processo morto) é desfeita depois de 15 s.
+const TRAVA = ARQUIVO + '.lock';
+let _travaNivel = 0;
+function _dormir(ms) { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch (_) {} }
+function travar() {
+  if (_travaNivel++ > 0) return;
+  try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
+  const ate = Date.now() + 8000;
+  for (;;) {
+    try { fs.mkdirSync(TRAVA); try { fs.writeFileSync(path.join(TRAVA, 'pid'), String(process.pid)); } catch (_) {} return; } catch (e) {
+      if (e.code !== 'EEXIST') return; // sem permissão etc.: segue sem trava (como antes)
+      try { if (Date.now() - fs.statSync(TRAVA).mtimeMs > 15000) { fs.rmSync(TRAVA, { recursive: true, force: true }); continue; } } catch (_) { continue; }
+      if (Date.now() > ate) { console.warn('[contatos] trava ocupada há 8 s — seguindo sem ela'); return; }
+      _dormir(25);
+    }
+  }
+}
+function destravar() {
+  if (_travaNivel <= 0) { _travaNivel = 0; return; }
+  if (--_travaNivel > 0) return;
+  try { fs.rmSync(TRAVA, { recursive: true, force: true }); } catch (_) {}
+}
+// Executa a alteração inteira (ler → mudar → gravar) com a trava.
+const comTrava = (fn) => function (...args) { travar(); try { return fn.apply(this, args); } finally { destravar(); } };
+
 function salvar(map) {
   try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); }
   catch (_) {}
@@ -500,9 +531,10 @@ function adicionar({ nome, telefone, tags, instrucoes }) {
   return c;
 }
 
+// As funções que GRAVAM saem embrulhadas na trava; as de leitura, não.
 module.exports = {
-  normTel, variantes9, acharPorTel, carregar, importarCSV, exportarCSV, setTags, listar, tagsDistintas, totalContatos,
-  remover, removerLote, editarContato, renomearTag, excluirTag, existe, adicionar, ARQUIVO,
-  tagConfig, definirTagConfig, tagsPorGatilho, criarTag, adicionarTag, removerTag, lerTagsConfig, GATILHOS,
-  aplicarTagLote, contarFiltrados,
+  normTel, variantes9, acharPorTel, carregar, importarCSV: comTrava(importarCSV), exportarCSV, setTags: comTrava(setTags), listar, tagsDistintas, totalContatos,
+  remover: comTrava(remover), removerLote: comTrava(removerLote), editarContato: comTrava(editarContato), renomearTag: comTrava(renomearTag), excluirTag: comTrava(excluirTag), existe, adicionar: comTrava(adicionar), ARQUIVO,
+  tagConfig, definirTagConfig: comTrava(definirTagConfig), tagsPorGatilho, criarTag: comTrava(criarTag), adicionarTag: comTrava(adicionarTag), removerTag: comTrava(removerTag), lerTagsConfig, GATILHOS,
+  aplicarTagLote: comTrava(aplicarTagLote), contarFiltrados,
 };
