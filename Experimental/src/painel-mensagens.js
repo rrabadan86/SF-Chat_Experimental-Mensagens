@@ -2180,8 +2180,21 @@ const server = http.createServer(protegido((req, res) => {
       try {
         if (!tag || !textoBase) throw new Error('Preencha a tag e a mensagem.');
         const alvo = contatos.listar({ tag, pagina: 0, porPagina: 100000 });
-        const destinatarios = (alvo.itens || []).map(c => ({ tel: c.tel, nome: c.nome || '' })).filter(x => x.tel);
+        let destinatarios = (alvo.itens || []).map(c => ({ tel: c.tel, nome: c.nome || '', _cad: Number(c.criadoEm) || 0 })).filter(x => x.tel);
         if (!destinatarios.length) throw new Error('Nenhum contato com essa tag.');
+        // Ordem de envio: "recentes" = quem conversou com a SoFIA mais recentemente
+        // primeiro (conversas + histórico de interações); quem nunca conversou vai
+        // depois, pelos cadastrados mais recentemente. Se faltar tempo/data de fim,
+        // quem fica de fora são os contatos mais frios. "lista" = ordem da tag.
+        if (String(d.ordem || 'recentes') === 'recentes') {
+          const ult8 = (t) => String(t || '').replace(/\D/g, '').slice(-8);
+          const toque = new Map();
+          const marca = (k, ts) => { const u = ult8(k); if (u && ts > (toque.get(u) || 0)) toque.set(u, ts); };
+          try { const cv = sofia.conversas(); for (const k in cv) marca(k, Number(cv[k] && cv[k].ultimaEm) || 0); } catch (_) {}
+          try { const h = sofia.historico(); for (const k in h) for (const ss of ((h[k] && h[k].sessoes) || [])) marca(k, Number(ss.fimEm || ss.inicioEm) || 0); } catch (_) {}
+          destinatarios.sort((x, y) => ((toque.get(ult8(y.tel)) || 0) - (toque.get(ult8(x.tel)) || 0)) || (y._cad - x._cad));
+        }
+        destinatarios = destinatarios.map(({ tel, nome }) => ({ tel, nome }));
         if (d.dataFim && /^\d{4}-\d{2}-\d{2}$/.test(String(d.dataFim)) && String(d.dataFim) < String(d.dataInicio || hojeSP())) throw new Error('A data de fim precisa ser igual ou depois da data de início.');
         const id = 'c' + Date.now();
         let fotoArquivo = '';
@@ -2199,7 +2212,7 @@ const server = http.createServer(protegido((req, res) => {
             fotoArquivo, destinatarios,
           },
         });
-        try { auditoria.registrar(sess.usuario, 'campanha.criar', nome, 'tag: ' + tag + ' · ' + destinatarios.length + ' contato(s)'); } catch (_) {}
+        try { auditoria.registrar(sess.usuario, 'campanha.criar', nome, 'tag: ' + tag + ' · ' + destinatarios.length + ' contato(s) · ordem: ' + (String(d.ordem || 'recentes') === 'recentes' ? 'mais recentes primeiro' : 'lista')); } catch (_) {}
         res.end(JSON.stringify({ ok: true }));
       } catch (e) {
         res.end(JSON.stringify({ ok: false, erro: e.message }));
