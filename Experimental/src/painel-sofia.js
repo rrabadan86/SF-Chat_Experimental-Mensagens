@@ -2075,7 +2075,7 @@ function paginaSofia(aviso, erro) {
     const alvos = padrao.map(chaveT);
     return new Set(tagsCrm.filter(t => alvos.some(a => chaveT(t) === a || chaveT(t).endsWith(a))).map(t => t.toLowerCase()));
   };
-  const selEx = marcadas('tagsExAluna', ['Ex Aluna']), selFx = marcadas('tagsFezExp', ['Fez Experimental']);
+  const selEx = marcadas('tagsExAluna', ['Ex Aluna']), selFx = marcadas('tagsFezExp', ['Fez aula Experimental', 'Fez Experimental']);
   const listaHist = (nome, sel) => {
     let todas = tagsCrm.slice(); for (const t of (Array.isArray(alu[nome]) ? alu[nome] : [])) if (!todas.some(x => x.toLowerCase() === String(t).toLowerCase())) todas = [t].concat(todas);
     return todas.length ? todas.map(t => `<label class="chk" style="margin:0;font-weight:500"><input type="checkbox" name="${nome}" value="${esc(t)}"${sel.has(String(t).trim().toLowerCase()) ? ' checked' : ''}> ${esc(t)}</label>`).join('') : '<span class="quando" style="margin:0">Nenhuma etiqueta encontrada no CRM.</span>';

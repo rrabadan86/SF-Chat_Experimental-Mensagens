@@ -1433,7 +1433,7 @@ function temTagAluna(telefone: string): boolean {
 // ── Histórico do contato: ex-aluna / já fez aula experimental ─────────────
 // As etiquetas vêm do painel (SoFIA → Configuração → "Ex-alunas e quem já fez
 // experimental", gravadas em sofia-alunas.json). Sem configuração, vale o padrão
-// "Ex Aluna" e "Fez Experimental" — comparados por chaveTag ("0. Ex Aluna",
+// "Ex Aluna" e "Fez aula Experimental" — comparados por chaveTag ("0. Ex Aluna",
 // "FX 5. Fez experimental" etc. caem na mesma chave). Lista vazia = desligado.
 function tagsDoContato(telefone: string): string[] {
   try {
@@ -1464,7 +1464,7 @@ export function historicoDoContato(telefone: string): "exaluna" | "fezexp" | "" 
   // (o prefixo com hífen não sai no chaveTag) e termina em "fezexperimental".
   const casa = (alvos: Set<string>) => tags.some((t) => [...alvos].some((a) => t === a || t.endsWith(a)));
   if (casa(listaTagsCfg("tagsExAluna", ["Ex Aluna"]))) return "exaluna";
-  if (casa(listaTagsCfg("tagsFezExp", ["Fez Experimental"]))) return "fezexp";
+  if (casa(listaTagsCfg("tagsFezExp", ["Fez aula Experimental", "Fez Experimental"]))) return "fezexp";
   return "";
 }
 function contextoHistorico(telefone: string): string {
