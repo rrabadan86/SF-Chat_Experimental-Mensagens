@@ -231,7 +231,7 @@ const JS_GRADE = `<script>(function(){
 
 function linhaAluna(esc, x, ctx) {
   const pag = x.pagou === false ? ' · <span style="color:#a12626">não pagou o mês</span>' : '';
-  const calc = x.tipo === 'fixo' && x.aulasMes && !x.excluida ? ` <span class="quando" title="mensalidade (já com o desconto) ÷ aulas dela no mês × %">(${brl(x.mensalidade)} ÷ ${x.aulasMes} × ${ctx.pct}%)</span>` : '';
+  const calc = x.tipo === 'fixo' && x.aulasMes && !x.excluida ? ` <span class="quando" title="mensalidade (já com o desconto) ÷ aulas do plano no mês (frequência × semanas) × %">(${brl(x.mensalidade)} ÷ ${x.aulasMes} × ${ctx.pct}%)</span>` : '';
   const acao = x.excluida
     ? `<button type="button" class="pg-lnk no-print" data-desfazer="${esc(x.excluida.id)}">desfazer exclusão</button>`
     : x.inserida ? `<button type="button" class="pg-lnk no-print" data-desfazer="${esc(x.inserida.id)}">tirar inclusão</button>`
