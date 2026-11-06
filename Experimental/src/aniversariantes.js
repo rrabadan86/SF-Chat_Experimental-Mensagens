@@ -687,6 +687,18 @@ async function main() {
       console.log(`\n👤 ${aniv.nome}...`);
       if (!aniv.telefone) { console.log('   ⏭️  Sem telefone — pulando'); resultados.push({ nome: aniv.nome, grupos: [], status: 'sem-telefone' }); continue; }
 
+      // Conferência: o celular do cadastro da aniversariante é de OUTRA aluna? (ex.:
+      // Natália com o celular da sobrinha Mariana no EVO → o parabéns saía nos grupos
+      // da Mariana, marcando a Mariana). Só confia em contato com código do EVO (o nome
+      // veio do EVO, não de apelido do WhatsApp) e compara o primeiro nome.
+      const dono = donoDoTelefone(aniv.telefone, aniv.nome);
+      if (dono) {
+        console.log(`   ⛔ O celular ${aniv.telefone} está cadastrado para ${dono.nome} (código ${dono.idEvo} no EVO), não para ${aniv.nome} — NÃO enviei. Corrija o celular no cadastro do EVO.`);
+        try { require('./notificar').alertar('Aniversário não enviado', `${aniv.nome}: o celular do cadastro (${aniv.telefone}) é da aluna ${dono.nome} (código ${dono.idEvo}). Corrija no EVO — o parabéns não foi enviado para não marcar a pessoa errada.`, { tags: 'birthday,warning' }); } catch (_) {}
+        resultados.push({ nome: aniv.nome, grupos: [], status: 'telefone-de-outra-aluna', donoTelefone: `${dono.nome} (${dono.idEvo})` });
+        continue;
+      }
+
       // Grupos em comum via API nativa (getCommonGroups) → [{ id, name }]
       let grupos = [];
       try { grupos = await wa.getCommonGroups(aniv.telefone); }
@@ -755,6 +767,19 @@ async function main() {
   fs.writeFileSync(RELATORIO_FILE, JSON.stringify({ executadoEm: ts, resultados }, null, 2), 'utf8');
 
   return { total: aniversariantes.length, resultados };
+}
+
+// Se o telefone pertence (nos Contatos do painel, com código do EVO) a uma aluna de
+// OUTRO primeiro nome, devolve { nome, idEvo } dela; senão null.
+function donoDoTelefone(tel, nomeAniv) {
+  try {
+    const r = require('./contatos').acharPorTel(tel);
+    const c = r && r.contato;
+    if (!c || !c.idEvo || !c.nome) return null;
+    const pn = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().split(/\s+/)[0] || '';
+    if (!pn(nomeAniv) || pn(c.nome) === pn(nomeAniv)) return null;
+    return { nome: c.nome, idEvo: c.idEvo };
+  } catch (_) { return null; }
 }
 
 // Exporta para o scheduler (sempre em modo de envio real)
