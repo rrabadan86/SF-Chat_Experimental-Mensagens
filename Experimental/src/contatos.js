@@ -46,13 +46,27 @@ function acharPorTel(telefone, map) {
 }
 
 function carregar() {
-  try { const o = JSON.parse(fs.readFileSync(ARQUIVO, 'utf8')); return (o && typeof o === 'object') ? o : {}; }
-  catch (_) { return {}; }
+  let txt = null;
+  try { txt = fs.readFileSync(ARQUIVO, 'utf8'); } catch (_) { return {}; } // ainda não existe
+  try { const o = JSON.parse(txt); return (o && typeof o === 'object') ? o : {}; }
+  catch (e) {
+    // Arquivo existe mas está corrompido: guarda uma cópia ANTES de seguir vazio —
+    // senão o próximo salvar() gravaria {} por cima e a base inteira se perderia.
+    try { const bk = ARQUIVO + '.corrompido-' + Date.now(); if (txt && txt.trim() && !carregar._bk) { carregar._bk = true; fs.writeFileSync(bk, txt); console.error(`[${path.basename(ARQUIVO)}] arquivo corrompido — cópia em ${bk}`); } } catch (_) {}
+    return {};
+  }
+}
+// Grava num arquivo temporário e troca de uma vez (rename): um desligamento no meio
+// da gravação não deixa o JSON pela metade.
+function gravarAtomico(arq, conteudo) {
+  const tmp = arq + '.tmp-' + process.pid;
+  fs.writeFileSync(tmp, conteudo, 'utf8');
+  fs.renameSync(tmp, arq);
 }
 function salvar(map) {
   try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); }
   catch (_) {}
-  fs.writeFileSync(ARQUIVO, JSON.stringify(map), 'utf8');
+  gravarAtomico(ARQUIVO, JSON.stringify(map));
 }
 
 function limparTags(v) {
@@ -234,7 +248,7 @@ function lerTagsConfig() {
 }
 function salvarTagsConfig(map) {
   try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
-  fs.writeFileSync(ARQUIVO_TAGCFG, JSON.stringify(map, null, 2), 'utf8');
+  gravarAtomico(ARQUIVO_TAGCFG, JSON.stringify(map, null, 2));
 }
 // Gatilhos possíveis: '' (nenhum) | 'agendou' | 'novo' | 'palavra' | 'ia' | 'humano' | 'encerrou' | 'campanha'.
 //  • 'palavra' → casa por palavra-chave (contém), detectado no listener sem IA.
