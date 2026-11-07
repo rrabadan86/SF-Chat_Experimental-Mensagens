@@ -1342,6 +1342,48 @@ function estimarCampanha(c) {
 }
 const fmtDataBR = (s) => { const p = String(s || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : (s || ''); };
 
+// ── Resultado das campanhas ─────────────────────────────────────────────────
+// Para cada contato que RECEBEU a campanha (enviados[].em), cruza:
+//   • respondeu: mensagem dela nas Conversas (ou sessão nova no histórico de
+//     interações) até 7 dias depois do envio;
+//   • agendou: aula experimental agendada (SoFIA, formulário ou Express) até 30
+//     dias depois do envio;
+//   • virou aluna: hoje tem a etiqueta de aluna e NÃO tinha quando a campanha foi
+//     criada (foto tirada na criação — só para campanhas criadas a partir desta
+//     versão; nas antigas fica "—").
+// A lista de campanhas se atualiza a cada poucos segundos: o cálculo fica em cache
+// por 60 s.
+const CAMP_SNAP_FILE = path.join(__dirname, '..', 'data', 'campanhas-snapshot.json');
+const ult8c = (t) => String(t || '').replace(/\D/g, '').slice(-8);
+const chaveTagC = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/^\s*[a-z]{0,3}[-\s]?\d+[.)\-]\s*/, '').replace(/[^a-z0-9]+/g, '').replace(/s$/, '');
+const ehTagAluna = (t) => { const k = chaveTagC(t); return k === 'aluna' || /\d+aluna$/.test(k) || k === 'alunaativa'; };
+let _resCampCache = { em: 0, mapa: null };
+function resultadosCampanhas(campanhas) {
+  if (_resCampCache.mapa && Date.now() - _resCampCache.em < 60000) return _resCampCache.mapa;
+  const respPor = new Map(), agPor = new Map(), alunaHoje = new Set();
+  const add = (m, k, ts) => { if (!k || !ts) return; (m.get(k) || m.set(k, []).get(k)).push(ts); };
+  try { const cv = sofia.conversas(); for (const k in cv) for (const mm of ((cv[k] && cv[k].msgs) || [])) if (mm && mm.autor === 'aluna' && !mm.imp) add(respPor, ult8c(k), Number(mm.em) || 0); } catch (_) {}
+  try { const h = sofia.historico(); for (const k in h) for (const ss of ((h[k] && h[k].sessoes) || [])) add(respPor, ult8c(k), Number(ss.inicioEm) || 0); } catch (_) {}
+  try { const ag = JSON.parse(fs.readFileSync(path.join(sofia.DIR, 'sofia-agendaram-aula.json'), 'utf8')) || {}; for (const k in ag) add(agPor, ult8c(k), Number(ag[k] && ag[k].em) || 0); } catch (_) {}
+  try { const mp = contatos.carregar(); for (const t in mp) if ((mp[t].tags || []).some(ehTagAluna)) alunaHoje.add(ult8c(t)); } catch (_) {}
+  let snap = {}; try { snap = JSON.parse(fs.readFileSync(CAMP_SNAP_FILE, 'utf8')) || {}; } catch (_) {}
+  const D = 864e5, mapa = {};
+  for (const c of campanhas) {
+    const env = c.enviados || []; if (!env.length) continue;
+    const antes = snap[c.id] && Array.isArray(snap[c.id].alunas) ? new Set(snap[c.id].alunas) : null;
+    let resp = 0, ag = 0, alunas = 0;
+    for (const e of env) {
+      const k = ult8c(e.tel), t0 = Number(e.em) || 0;
+      if ((respPor.get(k) || []).some(ts => ts > t0 && ts <= t0 + 7 * D)) resp++;
+      if ((agPor.get(k) || []).some(ts => ts > t0 && ts <= t0 + 30 * D)) ag++;
+      if (antes && alunaHoje.has(k) && !antes.has(k)) alunas++;
+    }
+    mapa[c.id] = { env: env.length, resp, ag, alunas: antes ? alunas : null };
+  }
+  _resCampCache = { em: Date.now(), mapa };
+  return mapa;
+}
+
 // Só a LISTA de campanhas (usada tanto na página quanto no fragmento que o painel
 // busca a cada poucos segundos para atualizar o progresso SEM recarregar a página).
 function campListHTML(filtro = {}) {
@@ -1364,7 +1406,11 @@ function campListHTML(filtro = {}) {
     });
     if (!campanhas.length) return `<p class="vazio">Nenhuma campanha iniciada nesse período${totalAntes ? ` (de ${totalAntes} no total)` : ''}.</p>`;
   }
+  const resultados = resultadosCampanhas(campanhas);
   return campanhas.map(c => {
+    const rs = resultados[c.id];
+    const pctR = (n) => rs && rs.env ? ` <span style="opacity:.75">(${Math.round(n / rs.env * 100)}%)</span>` : '';
+    const linhaRes = rs ? `<div class="quando" style="margin:4px 0 0">📈 <b>Resultado:</b> ${rs.resp} ${rs.resp === 1 ? 'respondeu' : 'responderam'}${pctR(rs.resp)} · <b>${rs.ag} ${rs.ag === 1 ? 'agendou' : 'agendaram'}</b>${pctR(rs.ag)} · ${rs.alunas === null ? '<span title="Disponível para campanhas criadas a partir desta versão">viraram alunas: —</span>' : `<b>${rs.alunas} ${rs.alunas === 1 ? 'virou aluna' : 'viraram alunas'}</b>${pctR(rs.alunas)}`} <span title="Respondeu: até 7 dias depois do envio · Agendou: até 30 dias · Virou aluna: ganhou a etiqueta de aluna depois que a campanha foi criada">ⓘ</span></div>` : '';
     const total = (c.enviados ? c.enviados.length : 0) + (c.pendentes ? c.pendentes.length : 0) + (c.falhas ? c.falhas.length : 0);
     const enviados = c.enviados ? c.enviados.length : 0;
     const pct = total ? Math.round((enviados + (c.falhas ? c.falhas.length : 0)) / total * 100) : 0;
@@ -1394,6 +1440,7 @@ function campListHTML(filtro = {}) {
         ${uiTrilho(pct, 100, { cor: 'var(--ok)' })}
         <div class="quando" style="margin:4px 0 0">${enviados} enviadas · ${(c.pendentes || []).length} na fila · ${(c.falhas || []).length} falha(s) · ${total} no total · hoje: ${c.enviadosHoje || 0}/${c.limiteDia}</div>
         <div class="quando" style="margin:2px 0 0">📅 início ${esc(fmtDataBR(c.dataInicio))}${c.dataFim ? ` · <b>fim ${esc(fmtDataBR(c.dataFim))}</b>` : ''} · das ${esc(c.janelaIni)} às ${esc(c.janelaFim)} · ${c.delayMinSeg}–${c.delayMaxSeg}s entre envios${est ? ` · <b>término previsto ${est.fim}</b> (~${est.dias} dia${est.dias > 1 ? 's' : ''}, ~${est.porDia}/dia)` : ''}${est && est.naoCabem && !c.fimPorData ? ` · <b style="color:#9a5b00">⚠️ até a data de fim ficam ~${est.naoCabem} sem receber</b>` : ''} ${((c.status !== 'concluida' || c.fimPorData) && c.status !== 'cancelada') ? `· <a href="javascript:void(0)" onclick="toggleRitmo('${esc(c.id)}')" style="text-decoration:underline">⚙️ ajustar ritmo${c.fimPorData ? ' / estender a data' : ''}</a>` : ''}</div>
+        ${linhaRes}
       </div>
       <div class="ritmoBox-${esc(c.id)}" style="display:none;margin:8px 0 0;background:var(--bg);border:1px solid var(--linha);border-radius:10px;padding:10px 12px">
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">

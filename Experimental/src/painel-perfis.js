@@ -29,11 +29,93 @@ function subnavPerfis(view) {
   const item = (v, rot) => `<a href="/perfis${v === 'usuarios' ? '' : '?view=' + v}"${view === v ? ' class="on"' : ''}>${rot}</a>`;
   return `<div class="subtabs">${item('usuarios', 'Usuários')}${item('acessos', 'Acessos')}${item('auditoria', 'Auditoria')}</div>`;
 }
-function paginaPerfis(aviso, erro, view) {
+// ── Auditoria: filtros, rótulos e exportação ────────────────────────────────
+// Área = o começo do código da ação ("campanha.criar" → "campanha").
+const AREAS_AUD = { campanha: 'Campanhas', sofia: 'SoFIA (configuração)', conversa: 'Conversas', contato: 'Contatos', perfil: 'Perfis e acessos', pagamento: 'Pagamento', slimclub: 'Slim Club', formularios: 'Formulários', robo: 'Robô / WhatsApp', log: 'Log de envios', evo: 'EVO', express: 'Cadastro Express', ativas: 'Alunas ativas', professoras: 'Professoras', audio: 'Áudios', aniversario: 'Aniversários', sentimos: 'Sentimos sua falta', saidas: 'Saídas de grupo', renovacao: 'Renovação', free: 'Antecedência do Free', grade: 'Grade', mensagem: 'Mensagens' };
+const areaDe = (acao) => String(acao || '').split('.')[0];
+const ROT_ACAO_EXTRA = {
+  'aniversario.excluir': '🎂 Mudou os grupos que não recebem o aniversário', 'ativas.atualizar': '🔄 Atualizou as alunas ativas no EVO',
+  'ativas.resumo.salvar': '⚙️ Mudou o resumo mensal', 'ativas.resumo.enviar': '📤 Enviou o resumo mensal', 'ativas.resumo-semana.salvar': '⚙️ Mudou o resumo semanal', 'ativas.resumo-semana.enviar': '📤 Enviou o resumo semanal',
+  'audio.salvar': '🎙️ Salvou áudio de professora', 'audio.remover': '🗑️ Removeu áudio de professora',
+  'campanha.iniciar': '▶️ Iniciou campanha', 'campanha.pausar': '⏸️ Pausou campanha', 'campanha.cancelar': '🚫 Cancelou campanha', 'campanha.reenviar': '🔁 Reenviou campanha para um número', 'campanha.remover-fila': '➖ Tirou número da fila da campanha', 'campanha.variacao-excluir': '🗑️ Excluiu variação da campanha',
+  'contato.excluir-lote': '🗑️ Excluiu contatos em lote', 'evo.2fa': '🔐 Digitou o código do EVO (2FA)', 'evo.credenciais': '🔑 Mudou o login do EVO',
+  'express.circuito-servico': '⚙️ Mudou o serviço do Circuito (Express)', 'free.config': '⚙️ Mudou a antecedência do Free',
+  'formularios.apagar-resposta': '🗑️ Apagou resposta de formulário', 'formularios.duplicar': '📄 Duplicou formulário', 'formularios.etiquetar': '🏷️ Etiquetou respostas de formulário', 'formularios.excluir': '🗑️ Excluiu formulário', 'formularios.exportar': '⬇️ Exportou respostas de formulário', 'formularios.zerar-acessos': '🔄 Zerou acessos de formulário',
+  'log.reenviar': '🔁 Reenviou mensagem pelo Log', 'log.rodar-job': '▶️ Rodou um envio na hora',
+  'pagamento.excluir': '✕ Excluiu aluna do pagamento', 'pagamento.inserir': '＋ Incluiu aluna numa aula (pagamento)', 'pagamento.desfazer': '↩️ Desfez ajuste do pagamento', 'pagamento.oculto': '👁️ Mostrou/ocultou horário no pagamento',
+  'pagamento.importar': '📥 Importou percentuais', 'pagamento.professor': '⚙️ Mudou percentual de professor', 'pagamento.professor.remover': '🗑️ Removeu vigência de professor', 'pagamento.regras': '⚙️ Mudou regras do pagamento', 'pagamento.sync': '🔄 Pediu leitura do EVO (pagamento)',
+  'professoras.desde': '⚙️ Mudou o início dos indicadores de professoras', 'professoras.ler-evo': '🔄 Pediu leitura do EVO (professoras)',
+  'renovacao.dias': '⚙️ Mudou os dias da renovação', 'robo.parear': '📱 Pareou o WhatsApp do robô', 'saidas.dias': '⚙️ Mudou as saídas de grupo', 'saidas.simular': '🧪 Simulou as saídas de grupo',
+  'sentimos.cfg': '⚙️ Mudou o "Sentimos sua falta"', 'sentimos.simular': '🧪 Simulou o "Sentimos sua falta"',
+  'sofia.apikey': '🔑 Mudou a chave da IA', 'sofia.transcricaokey': '🔑 Mudou a chave de transcrição', 'sofia.autotagalunas': '🏷️ Mudou a etiqueta automática de alunas', 'sofia.historico-tags': '👋 Mudou as etiquetas de ex-aluna / fez experimental', 'sofia.parear': '📱 Pareou o WhatsApp da SoFIA', 'sofia.prompt-importar': '📥 Importou o prompt da SoFIA',
+  'slimclub.reclamacao-resolver': '✅ Resolveu reclamação do Slim Club', 'slimclub.reclamacao-reabrir': '↩️ Reabriu reclamação do Slim Club',
+};
+const ROT_ACAO = Object.assign({}, ROT_ACAO_EXTRA, {
+    'campanha.criar': '📣 Criou campanha', 'campanha.iniciar': '▶️ Iniciou campanha', 'campanha.retomar': '▶️ Retomou campanha',
+    'campanha.pausar': '⏸️ Pausou campanha', 'campanha.cancelar': '🚫 Cancelou campanha', 'campanha.excluir': '🗑️ Excluiu campanha', 'campanha.enviar-agora': '🚀 Enviou agora (campanha)', 'campanha.ritmo': '⚙️ Ajustou ritmo da campanha',
+    'conversa.assumir': '🧑 Assumiu conversa', 'conversa.devolver': '🤖 Devolveu à SoFIA', 'conversa.encerrar': '🔒 Encerrou conversa', 'conversa.agendar': '📅 Agendou no EVO',
+    'contato.bloquear': '🚫 Bloqueou contato', 'contato.desbloquear': '✅ Desbloqueou contato',
+    'sofia.ligar': '▶️ Ligou a SoFIA', 'sofia.pausar': '⏸️ Pausou a SoFIA', 'sofia.reiniciar': '🔄 Reiniciou a SoFIA',
+    'sofia.desconectar': '📴 Desconectou WhatsApp da SoFIA', 'sofia.config': '⚙️ Salvou configuração/prompt', 'sofia.nao-responder': '🔕 Atualizou "não responder"', 'sofia.alunas': '🎓 Atualizou regras das alunas', 'sofia.prompt-download': '⬇️ Baixou o prompt',
+    'robo.reiniciar': '🔄 Reiniciou o robô', 'robo.desconectar': '📴 Desconectou WhatsApp do robô',
+    'perfil.criar': '👤 Criou usuário', 'perfil.excluir': '🗑️ Excluiu usuário', 'perfil.telas': '🔑 Mudou telas de acesso',
+    'perfil.senha': '🔑 Redefiniu senha', 'perfil.email': '📧 Alterou e-mail', 'perfil.admin': '👑 Mudou administrador',
+    'perfil.sessao': '⏲️ Mudou duração da sessão', 'perfil.sessao-encerrar': '🚪 Encerrou uma sessão',
+    'slimclub.aprovar': '🤝 Aprovou cadastro do Slim Club', 'slimclub.recusar': '🚫 Recusou cadastro do Slim Club', 'slimclub.pendente': '↩️ Voltou cadastro do Slim Club para pendente',
+    'slimclub.excluir': '🗑️ Excluiu cadastro do Slim Club', 'slimclub.apagar': '🧹 Apagou de vez cadastro excluído do Slim Club', 'slimclub.excluir-dona': '🗑️ Aluna excluiu o próprio anúncio do Slim Club',
+    'slimclub.aprovar-alteracao': '✏️ Aprovou alteração no Slim Club', 'slimclub.recusar-alteracao': '🚫 Recusou alteração no Slim Club',
+    'slimclub.parceira-nova': '🤝 Cadastrou empresa parceira no Slim Club', 'slimclub.parceira-editar': '✏️ Editou empresa parceira no Slim Club',
+    'slimclub.novo-codigo': '🔑 Gerou outro código de conferência do Slim Club',
+    'slimclub.reclamacao-resolver': '✅ Resolveu reclamação do Slim Club', 'slimclub.reclamacao-reabrir': '↩️ Reabriu reclamação do Slim Club', 'slimclub.config': '⚙️ Mudou o aviso do Slim Club',
+});
+const rotuloGenerico = (acao) => { const a = areaDe(acao); return (AREAS_AUD[a] ? AREAS_AUD[a] + ': ' : '') + String(acao || '').split('.').slice(1).join(' ').replace(/-/g, ' '); };
+const normAud = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function filtroAudNorm(f) {
+  const d = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '';
+  return { u: String(f.u || '').trim(), area: String(f.area || '').trim(), q: String(f.q || '').trim().slice(0, 100), de: d(f.de), ate: d(f.ate) };
+}
+function filtrarAuditoria(logs, fa) {
+  const diaSP = (ts) => { try { return new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); } catch (_) { return ''; } };
+  const q = normAud(fa.q);
+  return logs.filter(l => (!fa.u || l.usuario === fa.u) && (!fa.area || areaDe(l.acao) === fa.area)
+    && (!fa.de || diaSP(l.em) >= fa.de) && (!fa.ate || diaSP(l.em) <= fa.ate)
+    && (!q || normAud(`${l.usuario} ${l.acao} ${l.alvo} ${l.detalhe}`).includes(q)));
+}
+function formFiltroAuditoria(todos, fa, nFiltrados, nMostrados) {
+  const usuariosAud = [...new Set(todos.map(l => l.usuario))].sort();
+  const areas = [...new Set(todos.map(l => areaDe(l.acao)))].sort((a, b) => String(AREAS_AUD[a] || a).localeCompare(AREAS_AUD[b] || b));
+  const qs = new URLSearchParams(Object.assign({ view: 'auditoria' }, Object.fromEntries(Object.entries(fa).filter(([, v]) => v)))).toString();
+  return `<form method="GET" action="/perfis" class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin:0 0 12px">
+    <input type="hidden" name="view" value="auditoria">
+    <div><label style="margin:0 0 3px;font-size:.72rem">Quem</label><select name="u"><option value="">Todos</option>${usuariosAud.map(u => `<option value="${esc(u)}"${u === fa.u ? ' selected' : ''}>${esc(u)}</option>`).join('')}</select></div>
+    <div><label style="margin:0 0 3px;font-size:.72rem">Área</label><select name="area"><option value="">Todas</option>${areas.map(a => `<option value="${esc(a)}"${a === fa.area ? ' selected' : ''}>${esc(AREAS_AUD[a] || a)}</option>`).join('')}</select></div>
+    <div><label style="margin:0 0 3px;font-size:.72rem">De</label><input type="date" name="de" value="${esc(fa.de)}"></div>
+    <div><label style="margin:0 0 3px;font-size:.72rem">Até</label><input type="date" name="ate" value="${esc(fa.ate)}"></div>
+    <div style="flex:1;min-width:160px"><label style="margin:0 0 3px;font-size:.72rem">Buscar</label><input type="text" name="q" value="${esc(fa.q)}" placeholder="nome, telefone, campanha…"></div>
+    <button type="submit" class="save" style="padding:8px 14px">Filtrar</button>
+    ${(fa.u || fa.area || fa.q || fa.de || fa.ate) ? '<a class="reset" href="/perfis?view=auditoria" style="padding:8px 12px">Limpar</a>' : ''}
+    <a class="reset" href="/perfis/auditoria.csv?${esc(qs)}" style="padding:8px 12px">⬇️ Exportar CSV</a>
+  </form>
+  <p class="quando" style="margin:0 0 10px">${nFiltrados} registro(s)${nFiltrados > nMostrados ? ` — mostrando os ${nMostrados} mais recentes (o CSV leva todos)` : ''} · de ${todos.length} guardados (o painel mantém as ~2.000 ações mais recentes).</p>`;
+}
+// CSV (separador ";" e BOM — abre direto no Excel em português).
+function auditoriaCsv(filtro) {
+  let todos = []; try { todos = auditoria.ler(5000); } catch (_) {}
+  const linhas = filtrarAuditoria(todos, filtroAudNorm(filtro || {}));
+  const cel = (v) => { const t = String(v == null ? '' : v); return /[;"\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+  const quando = (ts) => { try { return new Date(ts).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }); } catch (_) { return ''; } };
+  const rot = (a) => ROT_ACAO[a] || rotuloGenerico(a);
+  return '\ufeff' + ['Quando;Usuário;Ação;Código da ação;Sobre;Detalhe'].concat(linhas.map(l => [quando(l.em), l.usuario, rot(l.acao), l.acao, l.alvo, l.detalhe].map(cel).join(';'))).join('\r\n');
+}
+
+function paginaPerfis(aviso, erro, view, filtroAud = {}) {
   view = PERFIS_SUBS.includes(view) ? view : 'usuarios';
   const lista = usuarios.listar();
   let ults = {}; try { ults = acessos.ultimosAcessos(); } catch (_) {}          // { usuario: ts }
-  let logsAud = []; try { logsAud = auditoria.ler(150); } catch (_) {}          // registro de atividades (recente→antigo)
+  let logsAudTodos = []; try { logsAudTodos = auditoria.ler(5000); } catch (_) {}  // registro de atividades (recente→antigo) — tudo o que está guardado
+  const fa = filtroAudNorm(filtroAud);
+  const logsAudFiltrados = filtrarAuditoria(logsAudTodos, fa);
+  const logsAud = logsAudFiltrados.slice(0, 300);
   const sessDias = lerSessaoDias();                                             // duração da sessão (dias), editável só aqui
   const meuSid = (E._navSess && E._navSess.sid) || '';                              // a sessão de quem está vendo esta página
   const uaCurto = (ua) => { ua = String(ua || ''); const nav = /Edg\//.test(ua) ? 'Edge' : /OPR\/|Opera/.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : ''; const so = /Android/.test(ua) ? 'Android' : /iPhone|iPad|iPod/.test(ua) ? 'iPhone/iPad' : /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : ''; const mob = /Mobile|Android|iPhone|iPad|iPod/.test(ua) ? '📱' : '💻'; const txt = [nav, so].filter(Boolean).join(' · '); return mob + ' ' + (txt || 'desconhecido'); };
@@ -86,29 +168,12 @@ function paginaPerfis(aviso, erro, view) {
     </details>`).join('') : '<p class="vazio">Nenhum usuário criado ainda. Crie o primeiro abaixo.</p>';
 
   // Rótulos amigáveis das ações auditadas (código estável → texto com ícone).
-  const rotAcao = {
-    'campanha.criar': '📣 Criou campanha', 'campanha.iniciar': '▶️ Iniciou campanha', 'campanha.retomar': '▶️ Retomou campanha',
-    'campanha.pausar': '⏸️ Pausou campanha', 'campanha.cancelar': '🚫 Cancelou campanha', 'campanha.excluir': '🗑️ Excluiu campanha', 'campanha.enviar-agora': '🚀 Enviou agora (campanha)', 'campanha.ritmo': '⚙️ Ajustou ritmo da campanha',
-    'conversa.assumir': '🧑 Assumiu conversa', 'conversa.devolver': '🤖 Devolveu à SoFIA', 'conversa.encerrar': '🔒 Encerrou conversa', 'conversa.agendar': '📅 Agendou no EVO',
-    'contato.bloquear': '🚫 Bloqueou contato', 'contato.desbloquear': '✅ Desbloqueou contato',
-    'sofia.ligar': '▶️ Ligou a SoFIA', 'sofia.pausar': '⏸️ Pausou a SoFIA', 'sofia.reiniciar': '🔄 Reiniciou a SoFIA',
-    'sofia.desconectar': '📴 Desconectou WhatsApp da SoFIA', 'sofia.config': '⚙️ Salvou configuração/prompt', 'sofia.nao-responder': '🔕 Atualizou "não responder"', 'sofia.alunas': '🎓 Atualizou regras das alunas', 'sofia.prompt-download': '⬇️ Baixou o prompt',
-    'robo.reiniciar': '🔄 Reiniciou o robô', 'robo.desconectar': '📴 Desconectou WhatsApp do robô',
-    'perfil.criar': '👤 Criou usuário', 'perfil.excluir': '🗑️ Excluiu usuário', 'perfil.telas': '🔑 Mudou telas de acesso',
-    'perfil.senha': '🔑 Redefiniu senha', 'perfil.email': '📧 Alterou e-mail', 'perfil.admin': '👑 Mudou administrador',
-    'perfil.sessao': '⏲️ Mudou duração da sessão', 'perfil.sessao-encerrar': '🚪 Encerrou uma sessão',
-    'slimclub.aprovar': '🤝 Aprovou cadastro do Slim Club', 'slimclub.recusar': '🚫 Recusou cadastro do Slim Club', 'slimclub.pendente': '↩️ Voltou cadastro do Slim Club para pendente',
-    'slimclub.excluir': '🗑️ Excluiu cadastro do Slim Club', 'slimclub.apagar': '🧹 Apagou de vez cadastro excluído do Slim Club', 'slimclub.excluir-dona': '🗑️ Aluna excluiu o próprio anúncio do Slim Club',
-    'slimclub.aprovar-alteracao': '✏️ Aprovou alteração no Slim Club', 'slimclub.recusar-alteracao': '🚫 Recusou alteração no Slim Club',
-    'slimclub.parceira-nova': '🤝 Cadastrou empresa parceira no Slim Club', 'slimclub.parceira-editar': '✏️ Editou empresa parceira no Slim Club',
-    'slimclub.novo-codigo': '🔑 Gerou outro código de conferência do Slim Club',
-    'slimclub.reclamacao-resolver': '✅ Resolveu reclamação do Slim Club', 'slimclub.reclamacao-reabrir': '↩️ Reabriu reclamação do Slim Club', 'slimclub.config': '⚙️ Mudou o aviso do Slim Club',
-  };
+  const rotAcao = ROT_ACAO;
   const fmtAlvo = (acao, alvo) => { const d = String(alvo || '').replace(/\D/g, ''); return (/^conversa\.|^contato\./.test(acao) && d.length >= 10) ? fmtTel(alvo) : alvo; };
   const auditoriaLinhas = logsAud.map(l => `<tr style="border-bottom:1px solid var(--linha)">
     <td style="padding:7px 10px;white-space:nowrap;font-variant-numeric:tabular-nums">${fmtAcesso(l.em)}</td>
     <td style="padding:7px 10px;font-weight:600;white-space:nowrap">${esc(l.usuario)}</td>
-    <td style="padding:7px 10px">${esc(rotAcao[l.acao] || l.acao)}</td>
+    <td style="padding:7px 10px">${esc(rotAcao[l.acao] || rotuloGenerico(l.acao))}</td>
     <td style="padding:7px 10px;color:var(--cinza)">${esc(fmtAlvo(l.acao, l.alvo))}${l.detalhe ? ` <span style="color:var(--faint)">· ${esc(l.detalhe)}</span>` : ''}</td>
   </tr>`).join('');
 
@@ -180,6 +245,7 @@ function paginaPerfis(aviso, erro, view) {
     <div class="sec-t">📜 Auditoria <small style="font-weight:600;color:var(--cinza)">— quem fez o quê</small></div>
     <div class="card">
       <p class="quando" style="margin:0 0 12px">Registro das ações de <b>impacto e segurança</b>: campanhas (criar/iniciar/pausar/cancelar/excluir), configuração/prompt da SoFIA, gestão de usuários, bloqueio/encerramento de conversa e reiniciar/desconectar. Mostra os 150 mais recentes.</p>
+      ${formFiltroAuditoria(logsAudTodos, fa, logsAudFiltrados.length, logsAud.length)}
       ${logsAud.length ? `<div style="overflow-x:auto"><table class="ui-tab">
         <thead><tr>
           <th>Quando</th>
@@ -201,5 +267,6 @@ function paginaPerfis(aviso, erro, view) {
 }
 
 module.exports = {
+  auditoriaCsv,
   SESSAO_DIAS_FILE, SESSAO_DIAS_DEFAULT, lerSessaoDias, PERFIS_SUBS, subnavPerfis, paginaPerfis,
 };
