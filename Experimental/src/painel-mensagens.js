@@ -923,9 +923,17 @@ const server = http.createServer(protegido((req, res) => {
       else if (/(?:^|&)ok=sessao/.test(q)) aviso = 'Duração da sessão salva. Vale para os próximos logins.';
       else if (/(?:^|&)ok=sess-enc/.test(q)) aviso = 'Sessão encerrada. A pessoa precisará entrar de novo.';
       else if (/(?:^|&)err=/.test(q)) { aviso = (() => { try { return decodeURIComponent((q.match(/err=([^&]*)/) || [])[1] || 'Erro.'); } catch (_) { return 'Erro.'; } })(); erro = true; }
-      const viewPerfis = new URLSearchParams(q).get('view') || 'usuarios';
+      const spP = new URLSearchParams(q);
+      const viewPerfis = spP.get('view') || 'usuarios';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      return res.end(paginaPerfis(aviso, erro, viewPerfis));
+      return res.end(paginaPerfis(aviso, erro, viewPerfis, { u: spP.get('u'), area: spP.get('area'), q: spP.get('q'), de: spP.get('de'), ate: spP.get('ate') }));
+    }
+    // Auditoria em CSV (com os mesmos filtros da tela). Perfis = só admin (checado acima).
+    if (req.method === 'GET' && url === '/perfis/auditoria.csv') {
+      const spP = new URLSearchParams(req.url.split('?')[1] || '');
+      const csv = require('./painel-perfis').auditoriaCsv({ u: spP.get('u'), area: spP.get('area'), q: spP.get('q'), de: spP.get('de'), ate: spP.get('ate') });
+      res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="auditoria-${new Date().toISOString().slice(0, 10)}.csv"`, 'Cache-Control': 'no-store' });
+      return res.end(csv);
     }
     if (req.method === 'POST' && url === '/perfis/criar') {
       return lerCorpo(req, 1e5, corpo => {
@@ -2197,6 +2205,17 @@ const server = http.createServer(protegido((req, res) => {
         destinatarios = destinatarios.map(({ tel, nome }) => ({ tel, nome }));
         if (d.dataFim && /^\d{4}-\d{2}-\d{2}$/.test(String(d.dataFim)) && String(d.dataFim) < String(d.dataInicio || hojeSP())) throw new Error('A data de fim precisa ser igual ou depois da data de início.');
         const id = 'c' + Date.now();
+        // Foto de quem JÁ era aluna na criação — o resultado da campanha conta como
+        // "virou aluna" só quem ganhou a etiqueta depois.
+        try {
+          const ehAl = (t) => { const k = String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/^\s*[a-z]{0,3}[-\s]?\d+[.)\-]\s*/, '').replace(/[^a-z0-9]+/g, '').replace(/s$/, ''); return k === 'aluna' || /\d+aluna$/.test(k) || k === 'alunaativa'; };
+          const mp = contatos.carregar(); const alunas = [];
+          for (const x of destinatarios) { const r = contatos.acharPorTel(x.tel, mp); if (r && (r.contato.tags || []).some(ehAl)) alunas.push(String(x.tel).replace(/\D/g, '').slice(-8)); }
+          const arqSnap = path.join(__dirname, '..', 'data', 'campanhas-snapshot.json');
+          let snap = {}; try { snap = JSON.parse(fs.readFileSync(arqSnap, 'utf8')) || {}; } catch (_) {}
+          snap[id] = { em: Date.now(), alunas };
+          fs.writeFileSync(arqSnap + '.tmp', JSON.stringify(snap)); fs.renameSync(arqSnap + '.tmp', arqSnap);
+        } catch (_) {}
         let fotoArquivo = '';
         if (d.fotoBase64) { try { fotoArquivo = sofia.salvarFotoCampanha(id, d.fotoBase64); } catch (e) { throw new Error('Foto: ' + e.message); } }
         sofia.opCampanha({
