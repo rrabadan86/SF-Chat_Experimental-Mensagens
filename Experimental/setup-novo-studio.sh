@@ -169,10 +169,13 @@ if [ "$AUTO_PULL" = "1" ] && [ "${SETUP_JA_ATUALIZOU:-}" != "1" ] \
 fi
 SOFIA_DIR="${SOFIA_DIR:-$HOME/sofia-data-$SLUG}"   # dados vivos, FORA do repo
 
-# Formulário (roda no PRÓPRIO VPS, sob /agendamentoexperimental) — repo separado,
-# clonado numa pasta por unidade. O painel serve a subpasta via Caddy (ver wire_caddy).
+# Formulário (roda no PRÓPRIO VPS, sob /agendamentoexperimental). PADRÃO: roda do
+# PRÓPRIO repositório (Experimental/src/agendamento_evo) — o mesmo código do resto,
+# atualizado pelo slimfit-atualizar (tem o Circuito Slim etc.). O repo separado
+# antigo (sf-formularioexperimental) ficou para trás; só é usado se você passar
+# FORM_DIR=<outra pasta> no ambiente. O painel serve a subpasta via Caddy (wire_caddy).
 FORM_REPO_URL="${FORM_REPO_URL:-https://github.com/rrabadan86/sf-formularioexperimental.git}"
-FORM_DIR="${FORM_DIR:-$HOME/sf-form-$SLUG}"
+FORM_DIR="${FORM_DIR:-$EXP_DIR/src/agendamento_evo}"
 FORM_PREFIX="/agendamentoexperimental"
 
 P_PAINEL="${SLUG}-painel"
@@ -685,11 +688,21 @@ else
   echo "   ⚠️  python3 não encontrado — o agendamento (push_slots) não vai rodar."
 fi
 
-# ---- Formulário (repo separado) — clona + venv (o .env é montado no --start) ----
+# ---- Formulário — venv (o .env é montado no --start) ----
+# Padrão: o form é o do PRÓPRIO repo (FORM_DIR = $PY_DIR), cujo venv (com gunicorn,
+# que está no requirements.txt) acabou de ser montado acima — nada a clonar.
+if [ "$FORM_DIR" = "$PY_DIR" ]; then
+  if [ -x "$PY_DIR/.venv/bin/gunicorn" ]; then
+    echo "✅ Formulário: roda do próprio repositório ($PY_DIR) — venv pronto."
+  else
+    echo "🐍 Formulário: instalando o gunicorn no venv do repositório…"
+    "$PY_DIR/.venv/bin/pip" install -q gunicorn >/dev/null 2>&1 || echo "   ⚠️  não instalei o gunicorn — rode: $PY_DIR/.venv/bin/pip install gunicorn"
+  fi
+# ---- (legado) Formulário em repo separado — clona + venv ----
 # O form roda no PRÓPRIO VPS sob /agendamentoexperimental (ver Fase 5 do /implantacao).
 # Aqui só clonamos e preparamos o venv; o .env dele é gerado no --start a partir do
 # Experimental/.env já preenchido (evita digitar o EVO duas vezes).
-if command -v git >/dev/null 2>&1; then
+elif command -v git >/dev/null 2>&1; then
   if [ -d "$FORM_DIR/.git" ]; then
     echo "⏭️  Formulário já clonado em $FORM_DIR — atualizando (git pull)…"
     ( cd "$FORM_DIR" && git pull --ff-only >/dev/null 2>&1 ) || echo "   ⚠️  não atualizei o form (siga com o que está)."
@@ -929,7 +942,7 @@ echo "                          (confira EVO_URL e os *_PATH/*_HASH: tenant=$EVO
 echo "                          GRUPO_EQUIPE (nome EXATO do grupo da equipe no WhatsApp — ou defina no painel)"
 echo "   • $CHATBOT_DIR/.env  → ANTHROPIC_API_KEY, SOFIA_BOOK_URL"
 echo "   • Confira que SOFIA_DIR é IGUAL nos dois arquivos."
-echo "   • No .env do formulário no VPS (~/sf-form-<slug>, sob /agendamentoexperimental):"
+echo "   • No .env do formulário ($FORM_DIR/.env, sob /agendamentoexperimental — o --start gera sozinho):"
 echo "     use os MESMOS TRÊS tokens — FORM_SLOTS_TOKEN, FORM_OUTBOX_TOKEN e SOFIA_TOKEN"
 echo "     (os valores gerados estão nos .env acima). Ver Fase 5 do /implantacao."
 echo
