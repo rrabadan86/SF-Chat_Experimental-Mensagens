@@ -1072,6 +1072,28 @@ const server = http.createServer(protegido((req, res) => {
       }
     });
   }
+  // Pacote com TODAS as imagens das mensagens: baixar (para levar a outra unidade
+  // ou para o padrão do repositório) e importar.
+  if (req.method === 'GET' && url === '/mensagem/fotos/exportar') {
+    const unidade = String(process.env.STUDIO_NOME || '').trim();
+    const pac = mensagens.exportarFotos(unidade);
+    const nome = 'imagens-mensagens-' + (unidade.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'unidade') + '.json';
+    try { auditoria.registrar(sess.usuario, 'mensagem.fotos.exportar', `${Object.keys(pac.fotos).length} imagem(ns)`, ''); } catch (_) {}
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="${nome}"`, 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify(pac));
+  }
+  if (req.method === 'POST' && url === '/mensagem/fotos/importar') {
+    return lerCorpo(req, 120e6, corpo => {
+      try {
+        const d = JSON.parse(corpo || '{}');
+        const r = mensagens.importarFotos(d.pacote, { substituir: d.substituir !== false });
+        try { auditoria.registrar(sess.usuario, 'mensagem.fotos.importar', `${r.importadas.length} imagem(ns)`, (d.pacote && d.pacote.unidade) ? 'de ' + d.pacote.unidade : ''); } catch (_) {}
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, ...r }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+  }
   if (req.method === 'POST' && url === '/mensagem/foto/remover') {
     return lerCorpo(req, 1e5, corpo => {
       try { mensagens.removerFoto(JSON.parse(corpo || '{}').chave); } catch (_) {}
@@ -1101,7 +1123,7 @@ const server = http.createServer(protegido((req, res) => {
   if (req.method === 'GET' && url === '/mensagem/audio') {
     const q = new URLSearchParams(req.url.split('?')[1] || '');
     const grupo = q.get('grupo') || '', slug = audiosMsg.slugProf(q.get('slug') || '');
-    const caminho = audiosMsg.GRUPOS[grupo] && slug ? (audiosMsg.arquivoPainel(grupo, slug) || (audiosMsg.GRUPOS[grupo].legado ? audiosMsg.arquivoLegado(slug) : null)) : null;
+    const caminho = audiosMsg.GRUPOS[grupo] && slug ? (audiosMsg.arquivoPainel(grupo, slug) || (audiosMsg.GRUPOS[grupo].legado && audiosMsg.legadoAtivo() ? audiosMsg.arquivoLegado(slug) : null)) : null;
     if (!caminho || !fs.existsSync(caminho)) { res.writeHead(404); return res.end('nao encontrado'); }
     const ext = caminho.split('.').pop().toLowerCase();
     const tipo = { ogg: 'audio/ogg', opus: 'audio/ogg', oga: 'audio/ogg', mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav' }[ext] || 'application/octet-stream';

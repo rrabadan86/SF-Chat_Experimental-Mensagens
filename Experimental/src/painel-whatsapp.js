@@ -205,6 +205,38 @@ function paginaMensagens(aviso, erro) {
     ${barraTeste()}
     ${card2FA()}
     <form id="fh" method="POST" action="/horarios/salvar" onsubmit="var b=document.getElementById('btnH');if(b){b.disabled=true;b.textContent='Salvando e reiniciando o robô…';}"></form>
+    <details class="acc-sec" id="fotosPac" data-nosec="1" style="margin-top:8px">
+      <summary>🖼️ Imagens de todas as mensagens — levar para outra unidade</summary>
+      <div class="card">
+        <p class="quando" style="margin:0 0 10px">Baixe <b>um arquivo</b> com as imagens de todas as mensagens desta unidade e importe no painel de outra unidade — sem subir uma por uma.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <a class="tbtn" href="/mensagem/fotos/exportar" style="text-decoration:none">⬇️ Baixar as imagens desta unidade</a>
+          <input type="file" id="fpArq" accept=".json,application/json" style="display:none" onchange="fpImportar(this)">
+          <button type="button" class="tbtn" onclick="document.getElementById('fpArq').click()">⬆️ Importar imagens de outra unidade</button>
+          <label class="chk" style="margin:0;font-weight:500"><input type="checkbox" id="fpSubst" checked> substituir as imagens que já existem aqui</label>
+        </div>
+        <p id="fpMsg" class="quando" style="margin:8px 0 0"></p>
+      </div>
+    </details>
+    <script>
+    function fpImportar(inp){
+      var f=inp.files&&inp.files[0]; if(!f) return; var msg=document.getElementById('fpMsg');
+      msg.style.color=''; msg.textContent='⏳ Lendo o arquivo…';
+      var rd=new FileReader(); rd.onload=function(){
+        var pac; try{ pac=JSON.parse(rd.result); }catch(e){ msg.style.color='var(--erro)'; msg.textContent='❌ Este arquivo não é um pacote de imagens (.json baixado de outro painel).'; inp.value=''; return; }
+        var n=Object.keys((pac&&pac.fotos)||{}).length;
+        if(!confirm('Importar '+n+' imagem(ns)'+(pac&&pac.unidade?' de '+pac.unidade:'')+'?')){ inp.value=''; msg.textContent=''; return; }
+        msg.textContent='⏳ Importando '+n+' imagem(ns)…';
+        fetch('/mensagem/fotos/importar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pacote:pac, substituir:document.getElementById('fpSubst').checked})})
+          .then(function(r){return r.json();}).then(function(j){
+            if(!j.ok){ msg.style.color='var(--erro)'; msg.textContent='❌ '+(j.erro||'falhou'); return; }
+            msg.style.color='var(--ok)'; msg.textContent='✅ '+j.importadas.length+' importada(s)'+(j.puladas.length?' · '+j.puladas.length+' pulada(s)':'')+(j.erros.length?' · '+j.erros.length+' com erro':'')+'. Recarregando…';
+            setTimeout(function(){ location.reload(); },1500);
+          }).catch(function(){ msg.style.color='var(--erro)'; msg.textContent='❌ erro de rede'; });
+        inp.value='';
+      }; rd.readAsText(f);
+    }
+    </script>
     <div class="sec-t" id="sec-indiv">Mensagens individuais <small style="font-weight:600;color:var(--cinza)">(enviadas 1 para 1, direto para a aluna)</small></div>
     ${itensIndividuais}
     <div class="sec-t" id="sec-grupo">Mensagens em grupo <small style="font-weight:600;color:var(--cinza)">(enviadas nos grupos do WhatsApp)</small></div>

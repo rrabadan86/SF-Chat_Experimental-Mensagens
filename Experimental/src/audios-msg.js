@@ -16,8 +16,10 @@
  * áudio enviado (mp3, m4a, wav…) é convertido na hora; sem ffmpeg, só .ogg/.opus
  * vão como voz (os outros formatos vão como arquivo de áudio).
  *
- * Follow-up: se a professora não tem áudio no painel, vale o áudio antigo da
- * pasta audios/ (AUDIO_MAP do .env) — nada muda para quem já usa.
+ * Follow-up: os áudios antigos da pasta audios/ (AUDIO_MAP do .env; sem ele, o
+ * mapa padrão do Setor Bueno — ver config.js) são COPIADOS uma vez para o painel
+ * (data/mensagens-audios/followup/) e passam a ser áudios normais: dá para
+ * trocar e REMOVER. Depois disso a pasta antiga não é mais consultada.
  */
 const fs = require('fs');
 const path = require('path');
@@ -48,6 +50,37 @@ const GRUPOS = {
     fs.renameSync(velha, velha + '.migrado');
   } catch (_) {}
 })();
+
+// Áudios antigos (pasta audios/ + AUDIO_MAP) → áudios do painel, UMA vez. Marca
+// com .legado-migrado para não recopiar o que a unidade remover depois.
+const LEGADO_FLAG = path.join(DIR, '.legado-migrado');
+function migrarLegado() {
+  try {
+    if (fs.existsSync(LEGADO_FLAG)) return;
+    const cfg = require('./config').audio;
+    const nomes = lerNomes();
+    let n = 0;
+    const copiados = new Set(); // apelidos (ex.: "bia" e "beatriz" → o mesmo arquivo): copia uma vez só
+    for (const slug of Object.keys((cfg && cfg.map) || {})) {
+      if (arquivoPainel('followup', slug)) continue;
+      const leg = arquivoLegado(slug);
+      if (!leg || copiados.has(leg)) continue;
+      copiados.add(leg);
+      // prefere o .ogg (vai como nota de voz) quando o legado tem os dois
+      const ogg = leg.replace(/\.[^.]+$/, '.ogg');
+      const src = fs.existsSync(ogg) ? ogg : leg;
+      const dest = path.join(DIR, 'followup', slug + path.extname(src).toLowerCase());
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.copyFileSync(src, dest);
+      if (!nomes[slug]) nomes[slug] = slug.charAt(0).toUpperCase() + slug.slice(1);
+      n++;
+    }
+    if (n) gravarNomes(nomes);
+    fs.mkdirSync(DIR, { recursive: true });
+    fs.writeFileSync(LEGADO_FLAG, new Date().toISOString() + ` — ${n} áudio(s) antigo(s) copiado(s) para o painel\n`);
+  } catch (_) {}
+}
+function legadoAtivo() { return !fs.existsSync(LEGADO_FLAG); }
 
 function grupoDaChave(chave) {
   for (const g of Object.keys(GRUPOS)) if (GRUPOS[g].chaves.includes(chave)) return g;
@@ -93,9 +126,10 @@ function arquivoLegado(slug) {
 
 /** Caminho do áudio para a professora da aula (ou null). Usado pelos envios. */
 function caminho(grupo, professora) {
+  migrarLegado();
   const slug = slugProf(professora);
   if (!slug) return null;
-  return arquivoPainel(grupo, slug) || (GRUPOS[grupo] && GRUPOS[grupo].legado ? arquivoLegado(slug) : null);
+  return arquivoPainel(grupo, slug) || (GRUPOS[grupo] && GRUPOS[grupo].legado && legadoAtivo() ? arquivoLegado(slug) : null);
 }
 
 function temFfmpeg() {
@@ -104,12 +138,13 @@ function temFfmpeg() {
 
 /** Lista para o painel: [{ slug, nome, arquivo, origem: 'painel'|'sistema'|'', voz }]. */
 function listar(grupo, professorasConhecidas) {
+  migrarLegado();
   const nomes = lerNomes();
   const porSlug = new Map();
   const add = (nome) => { const s = slugProf(nome); if (s && !porSlug.has(s)) porSlug.set(s, String(nome).trim()); };
   (professorasConhecidas || []).forEach(add);
   try { for (const f of fs.readdirSync(path.join(DIR, grupo))) { const s = f.replace(/\.[^.]+$/, ''); if (!porSlug.has(s)) porSlug.set(s, nomes[s] || s); } } catch (_) {}
-  if (GRUPOS[grupo] && GRUPOS[grupo].legado) {
+  if (GRUPOS[grupo] && GRUPOS[grupo].legado && legadoAtivo()) {
     try { for (const s of Object.keys(require('./config').audio.map || {})) if (!porSlug.has(s) && arquivoLegado(s)) porSlug.set(s, nomes[s] || s.charAt(0).toUpperCase() + s.slice(1)); } catch (_) {}
   }
   const out = [];
@@ -117,7 +152,7 @@ function listar(grupo, professorasConhecidas) {
   const legadosVistos = new Set();
   for (const [slug, nome] of porSlug) {
     const p = arquivoPainel(grupo, slug);
-    const l = !p && GRUPOS[grupo] && GRUPOS[grupo].legado ? arquivoLegado(slug) : null;
+    const l = !p && GRUPOS[grupo] && GRUPOS[grupo].legado && legadoAtivo() ? arquivoLegado(slug) : null;
     // Apelidos do AUDIO_MAP (ex.: "bia" e "beatriz" → o mesmo arquivo): mostra uma vez só.
     if (l && !conhecidas.has(slug) && legadosVistos.has(l)) continue;
     if (l) legadosVistos.add(l);
@@ -174,4 +209,4 @@ function remover(grupo, profOuSlug, { manterNome } = {}) {
   if (!manterNome) { /* o nome fica guardado para o caso de subir de novo */ }
 }
 
-module.exports = { GRUPOS, DIR, grupoDaChave, slugProf, caminho, listar, salvar, remover, temFfmpeg, arquivoPainel, arquivoLegado, VOZ };
+module.exports = { GRUPOS, DIR, grupoDaChave, slugProf, caminho, listar, salvar, remover, temFfmpeg, arquivoPainel, arquivoLegado, legadoAtivo, migrarLegado, VOZ };
