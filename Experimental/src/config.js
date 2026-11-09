@@ -155,6 +155,14 @@ const config = {
   config.evo.appBase = `#/app/${config.evo.tenant}/${config.evo.branch}`;
 })();
 
+// Os áudios antigos de follow-up (pasta audios/ do repositório) são do SETOR BUENO
+// (slimfit/15). Sem AUDIO_MAP no .env, o mapa padrão (Tay, Luiza, Raissa, Bia) só
+// vale lá — antes valia em toda unidade (e a unidade nova "herdava" os áudios do
+// Bueno, sem poder removê-los).
+if (!process.env.AUDIO_MAP && !(config.evo.tenant === 'slimfit' && String(config.evo.branch) === '15')) {
+  config.audio.map = {};
+}
+
 // Aplica os horários editados no painel (data/horarios.json) por cima dos
 // padrões acima. Só afeta as chaves editáveis (as demais ficam intactas).
 try {

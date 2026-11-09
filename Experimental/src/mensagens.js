@@ -356,6 +356,43 @@ function removerFoto(chave) {
 //  • 'ausentes'  — listagem de texto no grupo da equipe (enviada sem mídia).
 const SEM_FOTO = new Set(['instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje', 'cobranca_saldo', 'cobranca_app_reativado']);
 function aceitaFoto(chave) { const m = CATALOGO.find(x => x.chave === chave); return !!(m && !SEM_FOTO.has(m.chave)); }
+// ── Pacote de imagens (exportar/importar entre unidades) ─────────────────────
+// Um .json { tipo, versao, unidade, em, fotos: { <chave>: "data:image/...;base64,..." } }.
+// O painel baixa o pacote de uma unidade e importa em outra. O MESMO formato fica
+// no repositório (Experimental/padrao/mensagens-fotos.json) como imagens padrão de
+// uma unidade NOVA.
+const PACOTE_PADRAO = path.resolve(__dirname, '..', 'padrao', 'mensagens-fotos.json');
+function exportarFotos(unidade) {
+  const fotos = {};
+  for (const m of CATALOGO) {
+    if (!aceitaFoto(m.chave)) continue;
+    const p = fotoPath(m.chave); if (!p) continue;
+    const ext = path.extname(p).slice(1).toLowerCase();
+    const tipo = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    try { fotos[m.chave] = `data:${tipo};base64,` + fs.readFileSync(p).toString('base64'); } catch (_) {}
+  }
+  return { tipo: 'slimfit-mensagens-fotos', versao: 1, unidade: unidade || '', em: new Date().toISOString(), fotos };
+}
+// substituir=false: só preenche as mensagens que ainda NÃO têm imagem.
+function importarFotos(pacote, { substituir = true } = {}) {
+  const fotos = pacote && typeof pacote === 'object' ? (pacote.fotos || pacote) : null;
+  if (!fotos || typeof fotos !== 'object') throw new Error('arquivo inválido (não é um pacote de imagens).');
+  const r = { importadas: [], puladas: [], erros: [] };
+  for (const [chave, dataUrl] of Object.entries(fotos)) {
+    if (!aceitaFoto(chave)) { r.puladas.push(chave); continue; }
+    if (!substituir && fotoPath(chave)) { r.puladas.push(chave); continue; }
+    try { salvarFoto(chave, dataUrl); r.importadas.push(chave); } catch (e) { r.erros.push(`${chave}: ${e.message}`); }
+  }
+  return r;
+}
+// Unidade NOVA (sem data/mensagens-fotos): nasce com as imagens padrão do repo.
+(function semearFotos() {
+  try {
+    if (fs.existsSync(FOTOS_DIR) || !fs.existsSync(PACOTE_PADRAO)) return;
+    importarFotos(JSON.parse(fs.readFileSync(PACOTE_PADRAO, 'utf8')), { substituir: false });
+  } catch (_) {}
+})();
+
 function salvarFoto(chave, dataUrl) {
   if (!aceitaFoto(chave)) throw new Error('Esta mensagem não aceita foto.');
   const m = /^data:(image\/(png|jpe?g|webp));base64,(.+)$/i.exec(dataUrl || '');
@@ -389,6 +426,6 @@ function listar() {
 
 module.exports = {
   render, renderTexto, partes, texto, salvarOverride, listar, carregarOverrides,
-  fotoPath, fotoNome, salvarFoto, removerFoto, aceitaFoto, FOTOS_DIR,
+  fotoPath, fotoNome, salvarFoto, removerFoto, aceitaFoto, FOTOS_DIR, exportarFotos, importarFotos,
   CATALOGO, PADROES, EXEMPLOS, exemplosCompletos, exemplosDe, exemplosPorChave, ARQUIVO,
 };

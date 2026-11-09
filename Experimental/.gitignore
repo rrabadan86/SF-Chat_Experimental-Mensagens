@@ -137,3 +137,8 @@ data/*.tmp
 data/.slimclub-segredo
 data/auto-tag-ultimo.json
 data/circuito-servico.txt
+
+# áudios das professoras (painel) e bloqueio do app — estado por VPS
+data/mensagens-audios/
+data/bloqueio-app.json
+data/bloqueio-app-estado.json
