@@ -316,7 +316,20 @@ function marcarNomeManual(telefone) {
 // data/tags-config.json. Hoje o gatilho é "a SoFIA agendou uma aula
 // experimental"; quando dispara, as tags com autoAgendou são aplicadas ao
 // contato e os números em avisarWpp recebem um recado.
+// Unidade NOVA (sem data/tags-config.json): nasce com as tags/automações padrão do
+// repositório (Experimental/tags-config.default.json — as automações da SoFIA e as
+// tags que o robô usa). Sem isso o painel publicava regras VAZIAS e apagava as
+// automações semeadas no SOFIA_DIR. Só semeia se o arquivo NÃO existe (quem apagou
+// as tags de propósito fica com {} e não é ressemeado).
+const TAGCFG_PADRAO = path.resolve(__dirname, '..', 'tags-config.default.json');
+function semearTagsConfig() {
+  try {
+    const o = JSON.parse(fs.readFileSync(TAGCFG_PADRAO, 'utf8'));
+    if (o && typeof o === 'object' && Object.keys(o).length && !fs.existsSync(ARQUIVO_TAGCFG)) salvarTagsConfig(o);
+  } catch (_) {}
+}
 function lerTagsConfig() {
+  if (!fs.existsSync(ARQUIVO_TAGCFG)) semearTagsConfig();
   try { const o = JSON.parse(fs.readFileSync(ARQUIVO_TAGCFG, 'utf8')); return (o && typeof o === 'object') ? o : {}; }
   catch (_) { return {}; }
 }
