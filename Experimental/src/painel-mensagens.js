@@ -2030,7 +2030,7 @@ const server = http.createServer(protegido((req, res) => {
   if (req.method === 'GET' && url === '/sofia/estado') {
     const st = sofia.waStatus() || {};
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    return res.end(JSON.stringify({ estado: st.estado || '', qr: st.qr || '', codigo: st.codigo || '', atualizadoEm: st.atualizadoEm || '' }));
+    return res.end(JSON.stringify({ estado: st.estado || '', qr: st.qr || '', codigo: st.codigo || '', erro: st.erro || '', atualizadoEm: st.atualizadoEm || '' }));
   }
   if (req.method === 'POST' && url === '/sofia/toggle') {
     return lerCorpo(req, 1e5, () => {
