@@ -12,7 +12,7 @@ de instalação do zero ainda não cobriam (a página **/grade** e o **TKM/fatur
 
 ## 0. Instalar uma unidade nova (do zero) — `setup-novo-studio.sh`
 
-Um comando (`--tudo`) instala o sistema, clona o formulário, cria os `.env`, sobe os
+Um comando (`--tudo`) instala o sistema (com o formulário do próprio repositório), cria os `.env`, sobe os
 **4 processos** (`<slug>-painel/exp/sofia/form`) e **configura o Caddy (HTTPS) sozinho**.
 O **único** passo manual é apontar o **DNS**.
 
@@ -62,7 +62,14 @@ Lista **atividades** (idActivity → nome) e **serviços** (idService → nome).
 atividade **SlimFit** e o serviço **"Aula experimental"** e grave os ids — no `nano` —
 **nos DOIS .env** (o formulário é quem agenda):
 - `~/SF-Chat_Experimental-Mensagens/Experimental/.env` → `EVO_ACTIVITY_ID=` / `EVO_SERVICE_ID=`
-- `/root/sf-form-<slug>/.env` → idem; depois `pm2 restart <slug>-form`
+- `~/SF-Chat_Experimental-Mensagens/Experimental/src/agendamento_evo/.env` (o .env do
+  formulário) → idem; depois `pm2 restart <slug>-form`
+
+Atalho: já dá para passar os **nomes** na instalação (`--evo-activity "SLIMFIT B"
+--evo-service "EXPERIMENTAL SLIMFIT"`) e pular este passo.
+
+> O formulário agora roda do **próprio repositório** (`Experimental/src/agendamento_evo`),
+> atualizado pelo `slimfit-atualizar` — não há mais clone separado (`sf-form-<slug>`).
 
 > Não é urgente: a experimental só usa esses ids **quando alguém agenda**.
 

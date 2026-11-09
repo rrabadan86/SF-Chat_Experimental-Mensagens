@@ -4,3 +4,8 @@ __pycache__/
 .venv/
 web_outbox.jsonl
 web_puxados.json
+# dados do formulário quando roda do próprio repositório (estado por VPS)
+web_bookings.jsonl
+web_indicadores.jsonl
+slots_pushed.json
+confirmacoes_outbox*.json*
