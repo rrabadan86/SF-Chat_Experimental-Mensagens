@@ -1222,6 +1222,31 @@ const server = http.createServer(protegido((req, res) => {
       }
     });
   }
+  // Bloqueio do app por inadimplência (bloqueio-app.js): modo + dias, exceções e
+  // "tirar da lista". Não precisa reiniciar — o robô lê a cada cobrança.
+  if (req.method === 'POST' && (url === '/cobranca/bloqueio-app' || url === '/cobranca/bloqueio-app/excecao' || url === '/cobranca/bloqueio-app/esquecer')) {
+    return lerCorpo(req, 1e5, corpo => {
+      try {
+        const ba = require('./bloqueio-app');
+        const p = new URLSearchParams(corpo);
+        if (url === '/cobranca/bloqueio-app') {
+          const c = ba.salvarConfig({ modo: p.get('modo'), dias: p.get('dias') });
+          try { auditoria.registrar(sess.usuario, 'app.bloqueio.config', 'Bloqueio do app', `modo=${c.modo} dias=${c.dias}`); } catch (_) {}
+        } else if (url === '/cobranca/bloqueio-app/excecao') {
+          const rem = p.get('remover') === '1';
+          ba.excecao(p.get('id'), p.get('nome'), { remover: rem, por: sess.usuario });
+          try { auditoria.registrar(sess.usuario, rem ? 'app.excecao.remover' : 'app.excecao', p.get('nome') || p.get('id'), rem ? 'volta a poder ser bloqueada' : 'não bloquear o app'); } catch (_) {}
+        } else {
+          ba.esquecer(p.get('id'));
+          try { auditoria.registrar(sess.usuario, 'app.esquecer', p.get('id'), 'tirada da lista do robô'); } catch (_) {}
+        }
+        res.writeHead(303, { Location: '/sofia?view=cobranca#sec-app' }); return res.end();
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(paginaCobranca('Erro ao salvar o Bloqueio do app: ' + e.message, true));
+      }
+    });
+  }
   // Config dos planos FREE (desmarcação por antecedência): liga/desliga + intervalo
   // (horas) + janela (dias). Não precisa reiniciar — o robô lê a cada verificação.
   if (req.method === 'POST' && url === '/free/config') {

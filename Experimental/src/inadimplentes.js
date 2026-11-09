@@ -108,7 +108,9 @@ function acharTelefone(obj, prof = 0) {
   return null;
 }
 
-async function lerInadimplentes() {
+// aoTerminar(ctx, leitura): roda no FIM da leitura, ainda logado no EVO (usado pelo
+// Bloqueio do app — bloqueio-app.js). leitura = { atrasos, semLeitura, completa }.
+async function lerInadimplentes({ aoTerminar = null } = {}) {
   const diasMin = cfg.lerDias(); // limite configurável no painel
   console.log('\n═══════════════════════════════════════════════════');
   console.log('💳 Inadimplentes — lendo débitos vencidos no EVO...');
@@ -265,6 +267,17 @@ async function lerInadimplentes() {
 
   const resultados = [];
   const vistos = new Set(); // idCliente já incluído (dedup entre passes)
+  // Para o Bloqueio do app: atraso de TODA aluna com débito (independe do link/
+  // telefone e do "vencido há X+ dias" da cobrança) e quem não deu para ler.
+  const atrasos = new Map();
+  const semLeitura = new Set();
+  let segCompleta = false;
+  const anotarAtraso = (id, nome, dias, tipo, celular) => {
+    if (!id || dias == null) return;
+    const k = String(id); const a = atrasos.get(k);
+    if (!a || dias > a.dias) atrasos.set(k, { id: k, nome, dias, tipo, celular: celular || (a && a.celular) || '' });
+    else if (!a.celular && celular) a.celular = celular;
+  };
   try {
     // 1) LOGIN
     console.log('🔐 Login no EVO...');
@@ -296,13 +309,15 @@ async function lerInadimplentes() {
       contrato: String(r.contrato || '').replace(/\s+/g, ' ').trim(),
     })).filter(c => c.idCliente);
     console.log(`👥 "Com débito": ${candidatas.length} candidata(s)${pag.total ? ` (EVO informa ${pag.total})` : ''}.`);
+    segCompleta = candidatas.length > 0 && (!pag.total || candidatas.length >= pag.total);
 
     for (const c of candidatas) {
       if (!ehRecorrente(c.contrato)) { console.log(`   ⏭️  ${c.nome}: não é recorrente (${c.contrato || 'contrato sem nome'}) — vai para boleto/saldo devedor.`); continue; }
       linkAtual = null;
-      if (!(await abrirPerfil(c))) { console.log(`   ⚠️  ${c.nome}: não li o perfil (pulando).`); continue; }
+      if (!(await abrirPerfil(c))) { semLeitura.add(String(c.idCliente)); console.log(`   ⚠️  ${c.nome}: não li o perfil (pulando).`); continue; }
 
       const dias = diasDeAtraso(perfilAtual.vencimento);
+      if (perfilAtual.vencimento) anotarAtraso(c.idCliente, c.nome, dias, 'recorrente', c.celular); else semLeitura.add(String(c.idCliente));
       if (dias == null || dias < diasMin) { console.log(`   ⏭️  ${c.nome}: venc. ${fmtData(perfilAtual.vencimento)} (atraso ${dias}d) — < ${diasMin}d.`); continue; }
 
       // Gera o link SEM cobrar: Saldo devedor → "ENVIAR COBRANÇA".
@@ -364,6 +379,13 @@ async function lerInadimplentes() {
     } catch (e) { console.log('   · (erro na busca ampla:', e.message, '— usando a carga padrão.)'); }
 
     const hojeDias = (iso) => diasDeAtraso(iso);
+    // Bloqueio do app: todo boleto em aberto já vencido conta (com o id do pagador;
+    // o id da ficha, quando abrirmos, corrige abaixo).
+    for (const b of (listaBoletos || [])) {
+      if (b.FL_CANCELADO === true || b.FL_CANCELADO === 1 || b.RECEBIMENTO) continue;
+      const d = hojeDias(b.DT_VENCIMENTO);
+      if (d != null && d > 0 && b.ID_CLIENTE_PAGADOR) anotarAtraso(b.ID_CLIENTE_PAGADOR, b.NOME, d, 'boleto', '');
+    }
     let nCanc = 0, nPago = 0, nForaJanela = 0;
     const boletosAbertos = (listaBoletos || []).filter(b => {
       if (b.FL_CANCELADO === true || b.FL_CANCELADO === 1) { nCanc++; return false; }
@@ -393,6 +415,10 @@ async function lerInadimplentes() {
       // Já com o cliente carregado, vai para a aba Boletos (dispara /api/v1/boletos
       // com os urlBoleto). O id vem da URL da ficha (pode diferir do ID_CLIENTE_PAGADOR).
       const mId = /cadastro\/(\d+)\//.exec(page.url());
+      if (mId && String(mId[1]) !== String(idCliente) && dias > 0) { // a ficha tem outro id: anota o atraso nela também
+        anotarAtraso(mId[1], b.NOME, dias, 'boleto', telefoneAtual || '');
+        const a = atrasos.get(String(idCliente)); if (a) a.idFicha = String(mId[1]);
+      }
       if (mId) await irPara(`clientes/cadastro/${mId[1]}//financeiro/boletos`, 6000);
       for (let i = 0; i < 24 && !boletosCliente; i++) await sleep(500);
       // link do boleto: casa pelo ID_BOLETO; senão, o mais próximo do vencimento.
@@ -405,6 +431,7 @@ async function lerInadimplentes() {
       }
       if (!urlBoleto) { console.log(`   ⚠️  ${b.NOME}: não achei o urlBoleto (pulando).`); continue; }
       const celular = telefoneAtual || '';
+      { const a = atrasos.get(String(idCliente)); if (a && !a.celular && celular) a.celular = celular; }
       resultados.push({ idCliente, nome: b.NOME, celular, tipo: 'boleto', venceHoje: dias === 0, vencimento: b.DT_VENCIMENTO, vencimentoFmt: fmtData(b.DT_VENCIMENTO), diasAtraso: dias, valor: b.VALOR, link: urlBoleto });
       vistos.add(String(idCliente));
       console.log(`   🧾 ${b.NOME} | venc. ${fmtData(b.DT_VENCIMENTO)} (${dias === 0 ? 'HOJE' : dias + 'd'}) | boleto | ${celular ? 'tel OK' : 'SEM TEL'} | link OK`);
@@ -418,14 +445,23 @@ async function lerInadimplentes() {
     for (const c of restantes) {
       telefoneAtual = null;
       await abrirPerfil(c);
-      if (!perfilAtual || !perfilAtual.vencimento) { console.log(`   ⚠️  ${c.nome}: não li o saldo devedor no perfil (pulando).`); continue; }
+      if (!perfilAtual || !perfilAtual.vencimento) { semLeitura.add(String(c.idCliente)); console.log(`   ⚠️  ${c.nome}: não li o saldo devedor no perfil (pulando).`); continue; }
       const dias = diasDeAtraso(perfilAtual.vencimento);
+      if (perfilAtual.valor > 0) anotarAtraso(c.idCliente, c.nome, dias, 'saldo', c.celular || telefoneAtual || '');
       if (dias == null || dias < diasMin) { console.log(`   ⏭️  ${c.nome}: próxima parcela ${fmtData(perfilAtual.vencimento)} (atraso ${dias}d) — < ${diasMin}d.`); continue; }
       if (!(perfilAtual.valor > 0)) { console.log(`   ⏭️  ${c.nome}: sem valor vencido no perfil (pulando).`); continue; }
       const celular = c.celular || telefoneAtual || '';
       resultados.push({ idCliente: c.idCliente, nome: c.nome, celular, tipo: 'saldo', vencimento: perfilAtual.vencimento, vencimentoFmt: fmtData(perfilAtual.vencimento), diasAtraso: dias, valor: perfilAtual.valor, link: '' });
       vistos.add(String(c.idCliente));
       console.log(`   💰 ${c.nome} | venc. ${fmtData(perfilAtual.vencimento)} (${dias}d) | ${fmtBRL(perfilAtual.valor)} | saldo devedor | ${celular ? 'tel OK' : 'SEM TEL'}`);
+    }
+
+    // ════════ PASSO D — BLOQUEIO DO APP (bloqueio-app.js), ainda logado ════════
+    if (typeof aoTerminar === 'function') {
+      // Boleto cuja ficha tem outro id: o bloqueio usa o id da FICHA (o do pagador sai).
+      for (const a of [...atrasos.values()]) if (a.idFicha && atrasos.has(a.idFicha)) atrasos.delete(a.id);
+      try { await aoTerminar({ page, irPara }, { atrasos, semLeitura, completa: segCompleta && Array.isArray(listaBoletos) }); }
+      catch (e) { console.log('   ⚠️  Bloqueio do app falhou:', e && e.message); }
     }
   } finally {
     try { await browser.close(); } catch (_) {}
@@ -445,7 +481,13 @@ async function lerInadimplentes() {
 async function runInadimplentes({ dry = false, modo = 'todos' } = {}) {
   const mensagens = require('./mensagens');
   const diasMin = cfg.lerDias();
-  const lista = await lerInadimplentes();
+  // Bloqueio do app (painel → Cobrança): roda junto com a cobrança regular (não na
+  // "boleto vence hoje" nem no dry/CLI), na mesma sessão do EVO.
+  const bloqueio = require('./bloqueio-app');
+  const aoTerminar = (!dry && modo !== 'hoje' && bloqueio.lerConfig().modo !== 'desligado')
+    ? (ctx, leitura) => bloqueio.executar(ctx, leitura, { outboxFile: OUTBOX_FILE })
+    : null;
+  const lista = await lerInadimplentes({ aoTerminar });
   const res = { enfileirados: 0, skipped: 0, failed: 0, details: [] };
   if (!lista.length) { console.log('   📭 Ninguém a cobrar — nada a enfileirar.'); return res; }
 

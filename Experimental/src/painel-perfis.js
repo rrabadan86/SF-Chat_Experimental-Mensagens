@@ -31,9 +31,10 @@ function subnavPerfis(view) {
 }
 // ── Auditoria: filtros, rótulos e exportação ────────────────────────────────
 // Área = o começo do código da ação ("campanha.criar" → "campanha").
-const AREAS_AUD = { campanha: 'Campanhas', sofia: 'SoFIA (configuração)', conversa: 'Conversas', contato: 'Contatos', perfil: 'Perfis e acessos', pagamento: 'Pagamento', slimclub: 'Slim Club', formularios: 'Formulários', robo: 'Robô / WhatsApp', log: 'Log de envios', evo: 'EVO', express: 'Cadastro Express', ativas: 'Alunas ativas', professoras: 'Professoras', audio: 'Áudios', aniversario: 'Aniversários', sentimos: 'Sentimos sua falta', saidas: 'Saídas de grupo', renovacao: 'Renovação', free: 'Antecedência do Free', grade: 'Grade', mensagem: 'Mensagens' };
+const AREAS_AUD = { campanha: 'Campanhas', sofia: 'SoFIA (configuração)', conversa: 'Conversas', contato: 'Contatos', perfil: 'Perfis e acessos', pagamento: 'Pagamento', slimclub: 'Slim Club', formularios: 'Formulários', robo: 'Robô / WhatsApp', log: 'Log de envios', evo: 'EVO', express: 'Cadastro Express', ativas: 'Alunas ativas', professoras: 'Professoras', audio: 'Áudios', aniversario: 'Aniversários', sentimos: 'Sentimos sua falta', saidas: 'Saídas de grupo', renovacao: 'Renovação', free: 'Antecedência do Free', grade: 'Grade', mensagem: 'Mensagens', app: 'Bloqueio do app' };
 const areaDe = (acao) => String(acao || '').split('.')[0];
 const ROT_ACAO_EXTRA = {
+  'app.bloquear': '📵 Robô excluiu o login do app (inadimplência)', 'app.reativar': '✅ Robô recriou o login do app', 'app.bloqueio.config': '⚙️ Mudou o bloqueio do app', 'app.excecao': '🛡️ Marcou aluna para não bloquear o app', 'app.excecao.remover': '↩️ Tirou aluna das exceções do app', 'app.esquecer': '➖ Tirou aluna da lista de bloqueio do app',
   'aniversario.excluir': '🎂 Mudou os grupos que não recebem o aniversário', 'ativas.atualizar': '🔄 Atualizou as alunas ativas no EVO',
   'ativas.resumo.salvar': '⚙️ Mudou o resumo mensal', 'ativas.resumo.enviar': '📤 Enviou o resumo mensal', 'ativas.resumo-semana.salvar': '⚙️ Mudou o resumo semanal', 'ativas.resumo-semana.enviar': '📤 Enviou o resumo semanal',
   'audio.salvar': '🎙️ Salvou áudio de professora', 'audio.remover': '🗑️ Removeu áudio de professora',
