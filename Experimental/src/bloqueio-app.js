@@ -125,23 +125,26 @@ function _lerQuadroNoNavegador(acao) {
   // ter ícones dentro (ex.: o relógio do histórico), então não exigimos "folha".
   const proprio = (el) => n(Array.from(el.childNodes).filter(x => x.nodeType === 3).map(x => x.textContent).join(' '));
   const subiuDemais = (t) => t.includes('informacoes adicionais') || t.includes('nota fiscal') || t.length > 1500;
-  // O quadro = o MENOR bloco que contém o título "Área do aluno" (visível) e o
-  // botão Excluir/Criar acesso (visível) — sem limite de níveis (o EVO aninha
-  // muito). Esse bloco não pode englobar o resto da ficha.
+  // O quadro = o MAIOR bloco em volta do botão Excluir/Criar acesso que ainda NÃO
+  // engloba o resto da ficha (no EVO: "Login: … RESETAR SENHA EXCLUIR"). O título
+  // "Área do aluno" fica DENTRO dele ou LOGO ANTES (irmão), sem texto no meio.
   // Texto do botão: aceita uma palavra de ícone antes (ex.: "delete excluir"), nada mais.
   const eh = (b, alvo) => { const t = n(b.textContent); return t === alvo || (t.endsWith(' ' + alvo) && t.split(' ').length === alvo.split(' ').length + 1); };
   const alvos = botoesDe(document).filter(b => eh(b, 'excluir') || eh(b, 'criar acesso'));
   const titulos = Array.from(document.querySelectorAll('*')).filter(el => proprio(el) === 'area do aluno');
-  let quadro = null, menor = Infinity;
-  for (const tit of titulos.filter(visivel)) {
-    const anc = new Set(); for (let el = tit; el; el = el.parentElement) anc.add(el);
-    for (const b of alvos) {
-      let el = b; while (el && !anc.has(el)) el = el.parentElement;
-      if (!el) continue;
-      const t = n(el.textContent);
-      if (subiuDemais(t)) continue;
-      if (t.length < menor) { quadro = el; menor = t.length; }
+  const logoAntes = (tit, bloco) => {
+    if (!(tit.compareDocumentPosition(bloco) & Node.DOCUMENT_POSITION_FOLLOWING)) return false;
+    try { const r = document.createRange(); r.setStartAfter(tit); r.setEndBefore(bloco); return n(r.toString()).length <= 40; } catch (_) { return false; }
+  };
+  let quadro = null;
+  for (const b of alvos) {
+    let topo = null;
+    for (let el = b.parentElement, i = 0; el && i < 30; el = el.parentElement, i++) {
+      if (subiuDemais(n(el.textContent))) break;
+      topo = el;
     }
+    if (!topo) continue;
+    if (titulos.filter(visivel).some(t => topo.contains(t) || logoAntes(t, topo))) { quadro = topo; break; }
   }
   if (!titulos.length && !quadro) return { achou: false };
   if (!quadro) {
