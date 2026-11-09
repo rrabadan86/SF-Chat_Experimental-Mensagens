@@ -1230,7 +1230,7 @@ const server = http.createServer(protegido((req, res) => {
         const ba = require('./bloqueio-app');
         const p = new URLSearchParams(corpo);
         if (url === '/cobranca/bloqueio-app') {
-          const c = ba.salvarConfig({ modo: p.get('modo'), dias: p.get('dias') });
+          const c = ba.salvarConfig({ modo: p.get('modo'), dias: p.get('dias'), avisarGrupo: p.get('temGrupo') ? p.get('avisarGrupo') === '1' : null });
           try { auditoria.registrar(sess.usuario, 'app.bloqueio.config', 'Bloqueio do app', `modo=${c.modo} dias=${c.dias}`); } catch (_) {}
         } else if (url === '/cobranca/bloqueio-app/excecao') {
           const rem = p.get('remover') === '1';

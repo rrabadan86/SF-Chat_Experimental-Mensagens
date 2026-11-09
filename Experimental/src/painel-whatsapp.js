@@ -1210,6 +1210,7 @@ function blocoBloqueioApp() {
           <input type="number" name="dias" min="3" max="90" value="${esc(cfg.dias)}" required style="width:64px;margin:0 6px;padding:6px;border:1px solid var(--linha);border-radius:8px;text-align:center">
           dias de atraso
         </label>
+        <label style="display:flex;gap:6px;align-items:center;flex-basis:100%"><input type="hidden" name="temGrupo" value="1"><input type="checkbox" name="avisarGrupo" value="1"${cfg.avisarGrupo ? ' checked' : ''}> Avisar no grupo da Equipe quem foi bloqueada/reativada (só com o bloqueio ligado)</label>
         <button type="submit" class="save" style="padding:8px 16px">Salvar</button>
       </form>
       <div class="ba-sub">${u && u.modo === 'teste' ? 'Último teste — quem seria bloqueada' : 'Última execução'}</div>
