@@ -60,10 +60,12 @@ function lerConfig() {
     modo: MODOS.includes(o.modo) ? o.modo : 'desligado',
     dias: Number.isFinite(dias) && dias >= DIAS_MIN && dias <= DIAS_MAX ? Math.round(dias) : DIAS_PADRAO,
     excecoes: (o.excecoes && typeof o.excecoes === 'object') ? o.excecoes : {},
+    avisarGrupo: o.avisarGrupo !== false, // resumo no grupo da Equipe (padrão: sim)
   };
 }
-function salvarConfig({ modo, dias }) {
+function salvarConfig({ modo, dias, avisarGrupo }) {
   const c = lerConfig();
+  if (avisarGrupo != null) c.avisarGrupo = !!avisarGrupo;
   if (modo != null) { if (!MODOS.includes(modo)) throw new Error('modo inválido'); c.modo = modo; }
   if (dias != null && dias !== '') {
     const n = parseInt(dias, 10);
@@ -244,6 +246,25 @@ function avisarReativacao(b, outboxFile) {
     return true;
   } catch (_) { return false; }
 }
+// "ANA PAULA SOUZA" → "Ana Paula Souza"
+const nomeBonito = (nome) => String(nome || '').toLowerCase().replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase()).replace(/\b(Da|De|Do|Das|Dos|E)\b/g, (x) => x.toLowerCase());
+const TIPO_TXT = { recorrente: 'cartão recorrente', boleto: 'boleto', saldo: 'saldo devedor' };
+function textoGrupo(u, falhas) {
+  const p = ['📵 *Bloqueio do app — inadimplência*'];
+  if (u.bloqueadas.length) p.push(`\n*Login do app EXCLUÍDO* (${u.dias}+ dias de atraso):\n` + u.bloqueadas.map(b => `• ${nomeBonito(b.nome)} — ${b.dias} dias (${TIPO_TXT[b.tipo] || b.tipo})`).join('\n'));
+  if (u.reativadas.length) p.push('\n*Acesso REATIVADO:*\n' + u.reativadas.map(r => `• ${nomeBonito(r.nome)} — ${/exce/.test(r.motivo || '') ? 'exceção marcada no painel' : 'pagou'}${r.avisou ? '; a SoFIA avisou a aluna (senha padrão)' : r.jaTinha ? '; a recepção já tinha recriado' : /exce/.test(r.motivo || '') ? '; avise a aluna que a senha voltou à padrão' : '; ⚠️ sem telefone: avise que a senha voltou à padrão'}`).join('\n'));
+  if (falhas.length) p.push('\n⚠️ *Não consegui reativar* — criar pela recepção (Cadastro → Área do aluno → Criar acesso):\n' + falhas.map(f => `• ${nomeBonito(f.nome)} — ${f.motivo}`).join('\n'));
+  if (u.reativadas.length || falhas.length) p.push('\nSenha padrão ao recriar: 3 primeiras letras do nome + nascimento (ddmmaaaa).');
+  return p.join('\n');
+}
+async function avisarGrupo(texto, log) {
+  try {
+    const grupo = require('./grupos').equipe();
+    await require('./wa-client').sendGrupo(grupo, texto, 'Bloqueio do app');
+    log(`   📣 resumo do bloqueio postado no grupo "${grupo}".`);
+    return true;
+  } catch (e) { log('   ⚠️  não consegui postar no grupo: ' + (e && e.message)); return false; }
+}
 function alertar(titulo, msg) {
   try { require('./notificar').alertar(titulo, msg).catch(() => {}); } catch (_) {}
 }
@@ -265,6 +286,7 @@ async function executar(ctx, leitura, { log = console.log, outboxFile } = {}) {
   const est = lerEstado();
   const agora = new Date().toISOString();
   const ultima = { em: agora, modo: cfg.modo, dias: cfg.dias, completa: !!leitura.completa, candidatas: [], bloqueadas: [], reativadas: [], erros: [], seriamReativadas: [] };
+  const falhasReativar = []; // só as NOVAS (1ª vez que falhou) — não repete no grupo todo dia
   const hist = (acao, b, detalhe) => est.historico.push({ em: new Date().toISOString(), acao, id: String(b.id), nome: b.nome, detalhe: detalhe || '' });
   log(`\n📵 Bloqueio do app — modo ${cfg.modo.toUpperCase()} · a partir de ${cfg.dias} dia(s) de atraso`);
 
@@ -321,14 +343,17 @@ async function executar(ctx, leitura, { log = console.log, outboxFile } = {}) {
       if (!f.temAcesso) r = await criarAcesso(ctx);
       if (!r.ok) {
         ultima.erros.push(`${b.nome}: ${r.motivo}`);
+        if (!b.falha) falhasReativar.push({ nome: b.nome, motivo: r.motivo });
         if (!b.falha) alertar('App não reativado', `${b.nome} quitou, mas o robô não conseguiu recriar o acesso ao app: ${r.motivo}. Crie pela recepção (Cadastro → Área do aluno → Criar acesso).`);
         b.falha = r.motivo;
         log(`   ⚠️  ${b.nome}: não reativei — ${r.motivo}`);
         continue;
       }
-      const avisou = f.temAcesso ? false : avisarReativacao(b, outboxFile); // se a recepção já recriou, não avisa de novo
+      // Só a SoFIA avisa quando PAGOU (o texto agradece o pagamento). Exceção (acordo) ou
+      // acesso já recriado pela recepção: não manda — o grupo da Equipe avisa a recepção.
+      const avisou = (f.temAcesso || ehExcecao) ? false : avisarReativacao(b, outboxFile);
       delete est.bloqueadas[k];
-      ultima.reativadas.push({ id: k, nome: b.nome, motivo, avisou });
+      ultima.reativadas.push({ id: k, nome: b.nome, motivo, avisou, jaTinha: !!f.temAcesso });
       hist('reativada', b, motivo + (f.temAcesso ? ' — a recepção já tinha recriado' : avisou ? ' — SoFIA avisou a aluna' : ' — sem telefone, aluna não avisada'));
       auditar('app.reativar', b.nome, motivo);
       gravarEstado(est);
@@ -336,6 +361,9 @@ async function executar(ctx, leitura, { log = console.log, outboxFile } = {}) {
     } catch (e) { ultima.erros.push(`${b.nome}: ${e.message}`); }
   }
 
+  if (cfg.modo === 'ligado' && cfg.avisarGrupo && (ultima.bloqueadas.length || ultima.reativadas.length || falhasReativar.length)) {
+    ultima.grupo = await avisarGrupo(textoGrupo(ultima, falhasReativar), log);
+  }
   est.ultima = ultima;
   gravarEstado(est);
   const nS = ultima.candidatas.filter(c => c.status === 'seria').length;
@@ -343,5 +371,5 @@ async function executar(ctx, leitura, { log = console.log, outboxFile } = {}) {
   return ultima;
 }
 
-module.exports = { lerConfig, salvarConfig, excecao, lerEstado, esquecer, executar, MODOS, DIAS_PADRAO, DIAS_MIN, DIAS_MAX, CFG_FILE, EST_FILE,
+module.exports = { textoGrupo, lerConfig, salvarConfig, excecao, lerEstado, esquecer, executar, MODOS, DIAS_PADRAO, DIAS_MIN, DIAS_MAX, CFG_FILE, EST_FILE,
   _abrirFicha: abrirFicha, _excluirAcesso: excluirAcesso, _criarAcesso: criarAcesso }; // _ = teste manual (bloqueio-app-teste.js)
