@@ -125,35 +125,38 @@ function _lerQuadroNoNavegador(acao) {
   // ter ícones dentro (ex.: o relógio do histórico), então não exigimos "folha".
   const proprio = (el) => n(Array.from(el.childNodes).filter(x => x.nodeType === 3).map(x => x.textContent).join(' '));
   const subiuDemais = (t) => t.includes('informacoes adicionais') || t.includes('nota fiscal') || t.length > 1500;
-  // 1) Pelos BOTÕES visíveis "Excluir"/"Criar acesso": sobe até o bloco que tem o
-  //    título "Área do aluno" (sem passar para o resto da ficha).
-  let quadro = null;
-  const alvos = botoesDe(document).filter(b => ['excluir', 'criar acesso'].includes(n(b.textContent)));
-  for (const b of alvos) {
-    for (let el = b.parentElement, i = 0; el && i < 8; el = el.parentElement, i++) {
-      const t = n(el.textContent);
-      if (subiuDemais(t)) break;
-      if (t.includes('area do aluno')) { quadro = el; break; }
-    }
-    if (quadro) break;
-  }
-  // 2) Pelo TÍTULO visível "Área do aluno" (todas as ocorrências, não só a 1ª).
+  // O quadro = o MENOR bloco que contém o título "Área do aluno" (visível) e o
+  // botão Excluir/Criar acesso (visível) — sem limite de níveis (o EVO aninha
+  // muito). Esse bloco não pode englobar o resto da ficha.
+  // Texto do botão: aceita uma palavra de ícone antes (ex.: "delete excluir"), nada mais.
+  const eh = (b, alvo) => { const t = n(b.textContent); return t === alvo || (t.endsWith(' ' + alvo) && t.split(' ').length === alvo.split(' ').length + 1); };
+  const alvos = botoesDe(document).filter(b => eh(b, 'excluir') || eh(b, 'criar acesso'));
   const titulos = Array.from(document.querySelectorAll('*')).filter(el => proprio(el) === 'area do aluno');
-  if (!quadro) {
-    for (const tit of titulos.filter(visivel)) {
-      for (let el = tit.parentElement, i = 0; el && i < 8; el = el.parentElement, i++) {
-        const t = n(el.textContent);
-        if (subiuDemais(t)) break;
-        if (botoesDe(el).some(x => ['excluir', 'criar acesso'].includes(n(x.textContent)))) { quadro = el; break; }
-      }
-      if (quadro) break;
+  let quadro = null, menor = Infinity;
+  for (const tit of titulos.filter(visivel)) {
+    const anc = new Set(); for (let el = tit; el; el = el.parentElement) anc.add(el);
+    for (const b of alvos) {
+      let el = b; while (el && !anc.has(el)) el = el.parentElement;
+      if (!el) continue;
+      const t = n(el.textContent);
+      if (subiuDemais(t)) continue;
+      if (t.length < menor) { quadro = el; menor = t.length; }
     }
   }
   if (!titulos.length && !quadro) return { achou: false };
-  if (!quadro) return { achou: true, quadro: false, texto: `títulos "Área do aluno": ${titulos.length} (visíveis ${titulos.filter(visivel).length}) · botões Excluir/Criar acesso visíveis: ${alvos.length}` };
+  if (!quadro) {
+    // diagnóstico: como o botão está aninhado (para ajustar sem adivinhar)
+    let cad = '';
+    const b = alvos[0];
+    for (let el = b, i = 0; el && i < 18; el = el.parentElement, i++) {
+      const t = n(el.textContent);
+      cad += `\n      ${i}. <${el.tagName.toLowerCase()}${el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : ''}> ${t.length} letras${t.includes('area do aluno') ? ' [título]' : ''}${t.includes('informacoes adicionais') ? ' [inf. adicionais]' : ''}${t.includes('nota fiscal') ? ' [nota fiscal]' : ''}`;
+    }
+    return { achou: true, quadro: false, texto: `títulos "Área do aluno": ${titulos.length} (visíveis ${titulos.filter(visivel).length}) · botões Excluir/Criar acesso visíveis: ${alvos.length}${b ? ' · caminho do botão:' + cad : ''}` };
+  }
   const texto = n(quadro.textContent);
-  const bExcluir = botoesDe(quadro).find(b => n(b.textContent) === 'excluir');
-  const bCriar = botoesDe(quadro).find(b => n(b.textContent) === 'criar acesso');
+  const bExcluir = botoesDe(quadro).find(b => eh(b, 'excluir'));
+  const bCriar = botoesDe(quadro).find(b => eh(b, 'criar acesso'));
   const temAcesso = !!bExcluir && /login\s*:/.test(texto);
   const semAcesso = !!bCriar || texto.includes('sem acesso');
   if (acao === 'excluir' && temAcesso) { bExcluir.scrollIntoView({ block: 'center' }); bExcluir.click(); return { achou: true, quadro: true, clicou: true }; }
