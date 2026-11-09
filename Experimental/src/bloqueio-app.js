@@ -118,22 +118,39 @@ const primeiroNome = (nome) => {
 // Acha o quadro pelo título "Área do aluno" e devolve o estado dele. Roda no
 // navegador. Nunca considera um botão fora do quadro.
 function _lerQuadroNoNavegador(acao) {
-  const n = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const n = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
   const visivel = (el) => !!(el && (el.offsetWidth > 0 || el.offsetHeight > 0));
-  let titulo = null;
-  for (const el of document.querySelectorAll('h1,h2,h3,h4,h5,h6,span,div,p,strong,b,label,mat-card-title')) {
-    if (el.children.length === 0 && n(el.textContent) === 'area do aluno') { titulo = el; break; }
-  }
-  if (!titulo) return { achou: false };
   const botoesDe = (c) => Array.from(c.querySelectorAll('button,a,[role="button"]')).filter(visivel);
+  // Texto PRÓPRIO do elemento (só os nós de texto diretos): o título do quadro pode
+  // ter ícones dentro (ex.: o relógio do histórico), então não exigimos "folha".
+  const proprio = (el) => n(Array.from(el.childNodes).filter(x => x.nodeType === 3).map(x => x.textContent).join(' '));
+  const subiuDemais = (t) => t.includes('informacoes adicionais') || t.includes('nota fiscal') || t.length > 1500;
+  // 1) Pelos BOTÕES visíveis "Excluir"/"Criar acesso": sobe até o bloco que tem o
+  //    título "Área do aluno" (sem passar para o resto da ficha).
   let quadro = null;
-  for (let el = titulo.parentElement, i = 0; el && i < 8; el = el.parentElement, i++) {
-    const t = n(el.textContent);
-    if (t.includes('informacoes adicionais') || t.includes('nota fiscal') || t.length > 1500) break; // subiu demais
-    const bs = botoesDe(el).map(b => n(b.textContent));
-    if (bs.some(b => b === 'excluir' || b === 'criar acesso')) { quadro = el; break; }
+  const alvos = botoesDe(document).filter(b => ['excluir', 'criar acesso'].includes(n(b.textContent)));
+  for (const b of alvos) {
+    for (let el = b.parentElement, i = 0; el && i < 8; el = el.parentElement, i++) {
+      const t = n(el.textContent);
+      if (subiuDemais(t)) break;
+      if (t.includes('area do aluno')) { quadro = el; break; }
+    }
+    if (quadro) break;
   }
-  if (!quadro) return { achou: true, quadro: false, texto: n(titulo.parentElement && titulo.parentElement.textContent).slice(0, 300) };
+  // 2) Pelo TÍTULO visível "Área do aluno" (todas as ocorrências, não só a 1ª).
+  const titulos = Array.from(document.querySelectorAll('*')).filter(el => proprio(el) === 'area do aluno');
+  if (!quadro) {
+    for (const tit of titulos.filter(visivel)) {
+      for (let el = tit.parentElement, i = 0; el && i < 8; el = el.parentElement, i++) {
+        const t = n(el.textContent);
+        if (subiuDemais(t)) break;
+        if (botoesDe(el).some(x => ['excluir', 'criar acesso'].includes(n(x.textContent)))) { quadro = el; break; }
+      }
+      if (quadro) break;
+    }
+  }
+  if (!titulos.length && !quadro) return { achou: false };
+  if (!quadro) return { achou: true, quadro: false, texto: `títulos "Área do aluno": ${titulos.length} (visíveis ${titulos.filter(visivel).length}) · botões Excluir/Criar acesso visíveis: ${alvos.length}` };
   const texto = n(quadro.textContent);
   const bExcluir = botoesDe(quadro).find(b => n(b.textContent) === 'excluir');
   const bCriar = botoesDe(quadro).find(b => n(b.textContent) === 'criar acesso');
