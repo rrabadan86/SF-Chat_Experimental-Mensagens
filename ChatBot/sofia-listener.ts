@@ -1997,6 +1997,7 @@ function marcarCobrancaEnviada(idCliente: any, nome: string, tipo: string) {
 const ATIVIDADE_SOFIA = COBRANCA_OUTBOX.replace(/cobranca-outbox\.jsonl.*$/, "atividade-sofia.jsonl");
 const CONTEXTO_COBRANCA: Record<string, string> = {
   recorrente: "Cobrança — recorrente", boleto: "Cobrança — boleto", saldo: "Cobrança — saldo devedor", teste: "Cobrança — teste",
+  app: "App — acesso reativado",
 };
 function registrarAtividadeCobranca(ent: any, telefone: string, texto: string, ok: boolean, erro?: string) {
   registrarAtividadeSofia(CONTEXTO_COBRANCA[String(ent?.tipo || "")] || "Cobrança", telefone, texto, ok, erro);

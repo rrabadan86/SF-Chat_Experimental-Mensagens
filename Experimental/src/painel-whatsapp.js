@@ -134,7 +134,7 @@ function paginaMensagens(aviso, erro) {
   // A do Instagram é editada na aba "📸 Instagram" (fica tudo do IG lá).
   const MSGS_GRUPO = new Set(['ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'aniversario', 'circuito_convocacao', 'circuito_lembrete']);
   // 'instagram' fica na aba Instagram; as cobranças ficam na aba SoFIA → Cobrança.
-  const COBRANCA_MSGS = new Set(['cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje', 'cobranca_saldo']);
+  const COBRANCA_MSGS = new Set(['cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje', 'cobranca_saldo', 'cobranca_app_reativado']);
   const listaMsgs = mensagens.listar().filter(m => m.chave !== 'instagram' && !COBRANCA_MSGS.has(m.chave));
   // Individuais (1 p/ 1): "Aniversário — ex-alunas" (reativação, direto no WhatsApp)
   // aparece no TOPO, acima de "Confirmação — aula de hoje".
@@ -740,6 +740,7 @@ const HORARIOS_DA_MSG = {
   cobranca_boleto:      'compartilha:cobranca', // mesmo disparo da cobrança (recorrente) — só nota
   cobranca_saldo:       'compartilha:cobranca', // idem (saldo devedor sem boleto/recorrente)
   cobranca_boleto_hoje: [['inadimplentesHoje', '']], // horário/dias PRÓPRIOS (independentes das outras cobranças)
+  cobranca_app_reativado: 'compartilha:bloqueioapp', // sai quando o robô reativa o app (Bloqueio do app ligado)
 };
 // Mensagens de GRUPO que têm job agendado próprio (não estão no HORARIOS_DA_MSG
 // porque o horário delas é dia-do-mês/semana fixo, não editável aqui) — mas o
@@ -776,6 +777,9 @@ function cardDeMsg(m, hmap, voltar) {
   } else if (mapa === 'compartilha:cobranca') {
     hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
       <p class="quando" style="margin:0">Segue o <b>mesmo horário da Cobrança — recorrente</b>, logo acima — é o mesmo disparo, muda só o texto conforme o caso (recorrente = link de pagamento; boleto vencido = boleto; saldo devedor sem boleto = este texto, sem link). A <b>"boleto vence HOJE"</b> tem horário/dias próprios (no card dela).</p></div>`;
+  } else if (mapa === 'compartilha:bloqueioapp') {
+    hbloco = `<div class="hsec"><div class="hsec-t">Quando sai</div>
+      <p class="quando" style="margin:0">Não tem horário próprio: sai <b>na hora em que o robô recria o acesso ao app</b> (na cobrança do dia seguinte ao pagamento), só com o <b>Bloqueio do app ligado</b>.</p></div>`;
   } else if (Array.isArray(mapa)) {
     const linhas = mapa.map(([chave, sub]) => hmap[chave] ? blocoHorario(hmap[chave], sub) : '').join('');
     const editouHora = mapa.some(([chave]) => hmap[chave] && hmap[chave].editado);
@@ -1170,6 +1174,53 @@ function paginaHoje(dia) {
   return chrome({ tab: 'Log', h1: 'Log — o que o robô fez', p: ehHoje ? 'Todos os envios de <b>hoje</b>, em tempo quase real.' : `Envios do dia <b>${esc(fmtData(d))}</b>.` }, 'msg', corpo);
 }
 
+// ── Bloqueio do app por inadimplência (bloqueio-app.js) ─────────────────────
+function blocoBloqueioApp() {
+  let cfg, est;
+  try { const ba = require('./bloqueio-app'); cfg = ba.lerConfig(); est = ba.lerEstado(); } catch (e) { return `<div class="card">Bloqueio do app indisponível: ${esc(e.message)}</div>`; }
+  const dt = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+  const TIPO = { recorrente: 'cartão recorrente', boleto: 'boleto', saldo: 'saldo devedor' };
+  const btnEx = (id, nome, rot) => `<form method="POST" action="/cobranca/bloqueio-app/excecao" style="display:inline;margin:0"><input type="hidden" name="id" value="${esc(id)}"><input type="hidden" name="nome" value="${esc(nome)}"><button type="submit" class="ba-btn" title="Esta aluna não é bloqueada (ex.: acordo de pagamento)">${rot || '🛡️ Não bloquear'}</button></form>`;
+  const cobrancaOn = jobsAtivos.ativo('inadimplentes') && config.jobAtivo('inadimplentes');
+  const MODO_TXT = { desligado: 'Desligado', teste: '🧪 Modo teste — só lista, não bloqueia', ligado: '📵 Ligado — bloqueia e reativa de verdade' };
+  const u = est.ultima;
+  let ultimaHtml = '<p class="quando" style="margin:0">Ainda não rodou. Roda junto com a cobrança (logo depois da leitura dos débitos no EVO).</p>';
+  if (u) {
+    const ST = { seria: '🧪 seria bloqueada', bloqueada: '📵 bloqueada', 'sem-acesso': '— já sem acesso ao app', erro: '⚠️ erro', fila: '⏳ fica para amanhã (limite do dia)' };
+    const cand = (u.candidatas || []).map(c => `<tr><td>${esc(c.nome)}</td><td class="num">${esc(c.dias)}d</td><td>${esc(TIPO[c.tipo] || c.tipo || '')}</td><td>${esc(ST[c.status] || c.status)}${c.motivo ? `<br><small style="color:var(--cinza)">${esc(c.motivo)}</small>` : ''}</td><td>${c.status === 'seria' || c.status === 'erro' || c.status === 'fila' ? btnEx(c.id, c.nome) : ''}</td></tr>`).join('');
+    const reat = [...(u.reativadas || []).map(r => `<li>✅ <b>${esc(r.nome)}</b> — ${esc(r.motivo)}${r.avisou ? ' · SoFIA avisou' : ''}</li>`), ...(u.seriamReativadas || []).map(r => `<li>🧪 <b>${esc(r.nome)}</b> seria reativada — ${esc(r.motivo)}</li>`)].join('');
+    ultimaHtml = `<p class="quando" style="margin:0 0 8px">Em <b>${esc(dt(u.em))}</b> · modo <b>${esc(u.modo)}</b> · a partir de <b>${esc(u.dias)}</b> dias${u.completa ? '' : ' · <span style="color:var(--erro)">a leitura do EVO veio incompleta — quem quitou só é reativada na próxima leitura completa</span>'}</p>
+      ${cand ? `<div style="overflow-x:auto"><table class="ba-tab"><thead><tr><th>Aluna</th><th>Atraso</th><th>Tipo</th><th>Situação</th><th></th></tr></thead><tbody>${cand}</tbody></table></div>` : '<p class="quando" style="margin:0">Ninguém novo com atraso para bloquear.</p>'}
+      ${reat ? `<ul class="ba-lista">${reat}</ul>` : ''}
+      ${(u.erros || []).length ? `<p class="quando" style="color:var(--erro);margin:6px 0 0">${u.erros.map(esc).join('<br>')}</p>` : ''}`;
+  }
+  const bloq = Object.values(est.bloqueadas || {});
+  const bloqHtml = bloq.length ? `<div style="overflow-x:auto"><table class="ba-tab"><thead><tr><th>Aluna</th><th>Bloqueada em</th><th>Atraso</th><th></th></tr></thead><tbody>${bloq.map(b => `<tr><td>${esc(b.nome)}${b.falha ? `<br><small style="color:var(--erro)">⚠️ não reativei: ${esc(b.falha)}</small>` : ''}</td><td>${esc(dt(b.em))}</td><td class="num">${esc(b.dias)}d</td><td style="white-space:nowrap">${btnEx(b.id, b.nome, '🛡️ Reativar (exceção)')} <form method="POST" action="/cobranca/bloqueio-app/esquecer" style="display:inline;margin:0" onsubmit="return confirm('Tirar da lista do robô? Ele não vai mais reativar esta aluna sozinho — use se a recepção já resolveu à mão.')"><input type="hidden" name="id" value="${esc(b.id)}"><button type="submit" class="ba-btn">Tirar da lista</button></form></td></tr>`).join('')}</tbody></table></div>` : '<p class="quando" style="margin:0">Nenhuma aluna bloqueada pelo robô agora.</p>';
+  const exc = Object.entries(cfg.excecoes || {});
+  const excHtml = exc.length ? `<ul class="ba-lista">${exc.map(([id, x]) => `<li><b>${esc(x.nome || id)}</b> <small style="color:var(--cinza)">desde ${esc(dt(x.em))}${x.por ? ' · ' + esc(x.por) : ''}</small> <form method="POST" action="/cobranca/bloqueio-app/excecao" style="display:inline;margin:0"><input type="hidden" name="id" value="${esc(id)}"><input type="hidden" name="remover" value="1"><button type="submit" class="ba-btn">Remover</button></form></li>`).join('')}</ul>` : '<p class="quando" style="margin:0">Nenhuma. Use <b>🛡️ Não bloquear</b> na lista acima (ex.: aluna com acordo de pagamento).</p>';
+  return `<style>.ba-tab{width:100%;border-collapse:collapse;font-size:.88rem}.ba-tab th,.ba-tab td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--linha);vertical-align:top}.ba-tab th{font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;color:var(--cinza)}.ba-tab .num{font-variant-numeric:tabular-nums;white-space:nowrap}.ba-btn{font:inherit;font-size:.8rem;padding:4px 10px;border:1px solid var(--linha);border-radius:8px;background:transparent;color:inherit;cursor:pointer}.ba-btn:hover{border-color:var(--cinza)}.ba-lista{margin:8px 0 0;padding-left:18px;font-size:.9rem;line-height:1.6}.ba-sub{font-weight:700;font-size:.85rem;margin:14px 0 6px}</style>
+    <div class="sec-t" id="sec-app">Bloqueio do app <small style="font-weight:600;color:var(--cinza)">(login do app da aluna inadimplente)</small></div>
+    <div class="card">
+      <div class="chead" style="margin:0"><h2 style="font-size:.98rem">📵 Excluir o login do app de quem está devendo</h2></div>
+      <p class="quando" style="margin:6px 0 10px">Quem está com pagamento vencido há <b>${esc(cfg.dias)} dias ou mais</b> tem o login do app excluído no EVO (Cadastro → Área do aluno → Excluir) e não consegue agendar pelo app. Quando quitar, o robô clica em <b>Criar acesso</b> e a SoFIA avisa a aluna (senha volta à padrão — mensagem abaixo). Roda junto com a cobrança, logo depois da leitura dos débitos. Só reativa quem <b>o robô</b> bloqueou.</p>
+      ${cobrancaOn ? '' : '<p class="quando" style="color:var(--erro);margin:0 0 10px">⚠️ A cobrança está desligada nesta unidade — o bloqueio só roda junto com ela.</p>'}
+      <form method="POST" action="/cobranca/bloqueio-app" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <select name="modo" style="padding:7px;border:1px solid var(--linha);border-radius:8px;font:inherit">${['desligado', 'teste', 'ligado'].map(m => `<option value="${m}"${cfg.modo === m ? ' selected' : ''}>${MODO_TXT[m]}</option>`).join('')}</select>
+        <label style="font-weight:700">a partir de
+          <input type="number" name="dias" min="3" max="90" value="${esc(cfg.dias)}" required style="width:64px;margin:0 6px;padding:6px;border:1px solid var(--linha);border-radius:8px;text-align:center">
+          dias de atraso
+        </label>
+        <button type="submit" class="save" style="padding:8px 16px">Salvar</button>
+      </form>
+      <div class="ba-sub">${u && u.modo === 'teste' ? 'Último teste — quem seria bloqueada' : 'Última execução'}</div>
+      ${ultimaHtml}
+      <div class="ba-sub">Bloqueadas pelo robô agora (${bloq.length})</div>
+      ${bloqHtml}
+      <div class="ba-sub">Exceções — nunca bloquear (${exc.length})</div>
+      ${excHtml}
+    </div>`;
+}
+
 // ── Página: SoFIA → Cobrança ────────────────────────────────────────────────
 // As mensagens de cobrança de inadimplentes, enviadas PELO número da SoFIA.
 // Reaproveita o render dos cards (texto + horário + switch) da aba Mensagens.
@@ -1177,7 +1228,7 @@ function paginaCobranca(aviso, erro) {
   const hmap = {};
   horarios.listar().forEach(j => { hmap[j.chave] = j; });
   const VOLTAR = '/sofia?view=cobranca';
-  const cards = ['cobranca_recorrente', 'cobranca_boleto', 'cobranca_saldo', 'cobranca_boleto_hoje']
+  const cards = ['cobranca_recorrente', 'cobranca_boleto', 'cobranca_saldo', 'cobranca_boleto_hoje', 'cobranca_app_reativado']
     .map(ch => mensagens.listar().find(m => m.chave === ch))
     .filter(Boolean).map(m => cardDeMsg(m, hmap, VOLTAR)).join('\n');
   const corpo = `<div class="wrap">
@@ -1198,6 +1249,7 @@ function paginaCobranca(aviso, erro) {
         <button type="submit" class="save" style="padding:8px 16px">Salvar</button>
       </form>
     </div>
+    ${blocoBloqueioApp()}
     <div class="sec-t" id="sec-msgs">Mensagens de cobrança <small style="font-weight:600;color:var(--cinza)">(texto, horário e dias de cada tipo)</small></div>
     ${cards || '<div class="card">Mensagens de cobrança não encontradas no catálogo.</div>'}
     <div class="hbar">
