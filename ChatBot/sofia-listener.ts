@@ -44,8 +44,8 @@ const WEB_VERSION_URL = process.env.WA_WEB_VERSION_URL
   || "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1046618780-alpha.html";
 const VERSAO_FIXA_DESLIGADA = /^(off|none|nao|não|0)$/i.test(String(WEB_VERSION_URL).trim());
 
-function setStatus(estado: string, qr = "", codigo = "") {
-  try { fs.writeFileSync(STATUS_FILE, JSON.stringify({ estado, qr, codigo, atualizadoEm: new Date().toISOString() }), "utf8"); } catch {}
+function setStatus(estado: string, qr = "", codigo = "", erro = "") {
+  try { fs.writeFileSync(STATUS_FILE, JSON.stringify({ estado, qr, codigo, ...(erro ? { erro } : {}), atualizadoEm: new Date().toISOString() }), "utf8"); } catch {}
 }
 const log = (m: string) => console.log(`[sofia] ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} ${m}`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -232,6 +232,11 @@ let PAIR_NUMBER = (process.env.SOFIA_PAIR_NUMBER || "").replace(/\D/g, "");
 let codigoPareamento = "";   // último código emitido (mantido estável p/ dar tempo de digitar)
 let codigoEm = 0;            // quando foi emitido
 let modoPareamento = false;  // enquanto true, NÃO reiniciamos por watchdog (esperando você digitar)
+let pedindoCodigo = false;   // um pedido de código em andamento (não empilha outro a cada "qr")
+// O WhatsApp às vezes NÃO responde o pedido de código (ex.: número com "não é possível
+// conectar novos dispositivos no momento") e a promessa fica pendurada para sempre —
+// o painel ficava sem código e sem erro. Damos um prazo e voltamos ao QR com aviso.
+const CODIGO_TIMEOUT_MS = parseInt(process.env.SOFIA_PAIR_TIMEOUT_MS || "45000", 10);
 // Reaproveita o MESMO código por alguns minutos: o evento "qr" dispara a cada
 // ~20s, mas trocar o código a cada refresh faz o que você digitou expirar.
 const CODIGO_VALIDADE_MS = parseInt(process.env.SOFIA_PAIR_TTL_MS || "180000", 10); // 3 min
@@ -609,8 +614,13 @@ client.on("qr", async (qr) => {
       setStatus("codigo", dataUrl, codigoPareamento); // mesmo código + QR atualizado
       return;
     }
+    if (pedindoCodigo) { setStatus("qr", dataUrl); return; } // já pedimos; aguardando o WhatsApp
+    pedindoCodigo = true;
+    log(`🔢 pedindo o código de pareamento ao WhatsApp (número ${PAIR_NUMBER})…`);
     try {
-      const bruto = String(await (client as any).requestPairingCode(PAIR_NUMBER)).toUpperCase().replace(/\s|-/g, "");
+      const pedido = (client as any).requestPairingCode(PAIR_NUMBER);
+      const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error(`o WhatsApp não respondeu em ${Math.round(CODIGO_TIMEOUT_MS / 1000)}s — o número pode estar impedido de conectar aparelhos agora; espere algumas horas e tente de novo`)), CODIGO_TIMEOUT_MS));
+      const bruto = String(await Promise.race([pedido, prazo])).toUpperCase().replace(/\s|-/g, "");
       const fmt = bruto.length === 8 ? `${bruto.slice(0, 4)}-${bruto.slice(4)}` : bruto;
       codigoPareamento = fmt; codigoEm = agora;
       log(`🔑 CÓDIGO DE PAREAMENTO: ${fmt}  (número ${PAIR_NUMBER}) — vale ~${Math.round(CODIGO_VALIDADE_MS / 60000)} min, digite com calma. (ou escaneie o QR)`);
@@ -619,9 +629,9 @@ client.on("qr", async (qr) => {
       setStatus("codigo", dataUrl, fmt);
     } catch (e: any) {
       log(`falha ao gerar código de pareamento (${e?.message || e}) — caindo para o QR.`);
-      modoPareamento = false;
-      setStatus("qr", dataUrl);
-    }
+      modoPareamento = false; PAIR_NUMBER = ""; // volta ao QR de vez (não fica pedindo código a cada refresh)
+      setStatus("qr", dataUrl, "", `Não consegui gerar o código: ${e?.message || e}`);
+    } finally { pedindoCodigo = false; }
     return; // em modo código, não sobrescreve o status com o QR
   }
 
