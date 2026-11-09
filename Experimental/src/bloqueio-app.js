@@ -320,4 +320,5 @@ async function executar(ctx, leitura, { log = console.log, outboxFile } = {}) {
   return ultima;
 }
 
-module.exports = { lerConfig, salvarConfig, excecao, lerEstado, esquecer, executar, MODOS, DIAS_PADRAO, DIAS_MIN, DIAS_MAX, CFG_FILE, EST_FILE };
+module.exports = { lerConfig, salvarConfig, excecao, lerEstado, esquecer, executar, MODOS, DIAS_PADRAO, DIAS_MIN, DIAS_MAX, CFG_FILE, EST_FILE,
+  _abrirFicha: abrirFicha, _excluirAcesso: excluirAcesso, _criarAcesso: criarAcesso }; // _ = teste manual (bloqueio-app-teste.js)
