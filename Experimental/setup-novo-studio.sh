@@ -925,12 +925,14 @@ aplicar_segredos
 if [ "$TUDO" = "1" ]; then
   echo
   echo "▶️  --tudo: validando a configuração e subindo tudo…"
-  env SETUP_JA_ATUALIZOU=1 bash "$0" --slug "$SLUG" --check || {
+  # Repassa tenant/branch: sem eles o 2º passo cai no padrão (slimfit/15) e mostra um
+  # aviso enganoso de "unidade original" (os .env já estão com os caminhos certos).
+  env SETUP_JA_ATUALIZOU=1 bash "$0" --slug "$SLUG" --evo-tenant "$EVO_TENANT" --evo-branch "$EVO_BRANCH" --check || {
     echo "❌ Validação falhou — ajuste o que faltou e rode:"
-    echo "     bash setup-novo-studio.sh --slug $SLUG --start --domain $DOMAIN"
+    echo "     bash setup-novo-studio.sh --slug $SLUG --evo-tenant $EVO_TENANT --evo-branch $EVO_BRANCH --start --domain $DOMAIN"
     exit 1
   }
-  exec env SETUP_JA_ATUALIZOU=1 bash "$0" --slug "$SLUG" --start \
+  exec env SETUP_JA_ATUALIZOU=1 bash "$0" --slug "$SLUG" --start --evo-tenant "$EVO_TENANT" --evo-branch "$EVO_BRANCH" \
        --port "$PAINEL_PORT" --form-port "$FORM_PORT" ${DOMAIN:+--domain "$DOMAIN"}
 fi
 
