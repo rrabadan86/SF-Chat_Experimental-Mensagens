@@ -768,6 +768,9 @@ function iniciarRodarJobWatcher() {
     // "↻ Rodar de novo" do Log do painel (falhas de job):
     semResposta:       { nome: 'Confirmação sem resposta (2ª mensagem) [manual]', fn: () => require('./confirmacao-sem-resposta').runSegundaMensagem({ log }), timeoutMs: 25 * 60 * 1000 },
     semRespostaDry:    { nome: 'Confirmação sem resposta (simulação) [manual]', fn: () => require('./confirmacao-sem-resposta').runSegundaMensagem({ log, dry: true }), timeoutMs: 25 * 60 * 1000 },
+    encerramento:      { nome: 'Follow-up encerramento [manual]', fn: () => require('./followup-encerramento').runEncerramento({ log }), timeoutMs: 25 * 60 * 1000 },
+    encerramentoDry:   { nome: 'Follow-up encerramento (simulação) [manual]', fn: () => require('./followup-encerramento').runEncerramento({ log, dry: true }), timeoutMs: 25 * 60 * 1000 },
+    encerramentoTeste: { nome: 'Follow-up encerramento (teste do painel) [manual]', fn: (pedido) => require('./followup-encerramento').testar({ etapa: pedido && pedido.etapa, tel: pedido && pedido.tel }), timeoutMs: 5 * 60 * 1000 },
     semRespostaTeste:  { nome: 'Confirmação sem resposta (teste do painel) [manual]', fn: (pedido) => require('./confirmacao-sem-resposta').testar({ etapa: pedido && pedido.etapa, tel: pedido && pedido.tel, log }), timeoutMs: 5 * 60 * 1000 },
     semRespostaEquipe: { nome: 'Confirmação sem resposta (lista da equipe) [manual]', fn: () => require('./confirmacao-sem-resposta').runListaEquipe({ log }), timeoutMs: 25 * 60 * 1000 },
     assinaturas:       { nome: 'Contrato sem assinatura [manual]', fn: () => require('./assinaturas').runAssinaturas({ log }), timeoutMs: 20 * 60 * 1000 },
@@ -1153,6 +1156,19 @@ async function main() {
         .catch(err => logError(`Confirmação sem resposta (${oque})`, err));
     }, { timezone: 'America/Sao_Paulo' });
     log(`📅 Job CONFIRMAÇÃO SEM RESPOSTA (${oque}) agendado: ${config.schedule[chave]} — ${jobsAtivos.ativo(chave) ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
+  }
+
+  // Follow-up — ENCERRAMENTO: no dia seguinte ao follow-up pós-aula, para quem não
+  // respondeu (desligado até ligar). Cada horário cuida de um follow-up (manhã/tarde).
+  for (const [chave, periodo] of [['encerramentoManha', 'manha'], ['encerramentoTarde', 'tarde']]) {
+    if (!config.schedule[chave]) continue;
+    agendar(chave, config.schedule[chave], async () => {
+      if (!jobsAtivos.ativo(chave)) { log(`⏸️  Follow-up — encerramento (${periodo}) desligado no painel — pulando`); return; }
+      log(`⏰ Cron disparado: Follow-up — encerramento (${periodo})`);
+      runJob(`Follow-up encerramento (${periodo})`, () => require('./followup-encerramento').runEncerramento({ log, periodo }), 25 * 60 * 1000, { retry: false })
+        .catch(err => logError(`Follow-up encerramento (${periodo})`, err));
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job FOLLOW-UP ENCERRAMENTO (${periodo}) agendado: ${config.schedule[chave]} — ${jobsAtivos.ativo(chave) ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
   }
 
   // Contrato sem assinatura: lembrete com o link (desligado até ligar no painel).

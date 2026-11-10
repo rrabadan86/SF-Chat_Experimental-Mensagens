@@ -159,7 +159,7 @@ function paginaMensagens(aviso, erro) {
   const itensIndividuais = emBlocos(indivOrdenado, [
     ['confirmacao', '📅 Confirmação de aula', 'lembrete antes da aula', ['confirmacao_hoje', 'confirmacao_amanha', 'confirmacao_sem_resposta', 'confirmacao_sem_resposta_equipe', 'confirmacao_experimental', 'confirmacao_experimental_express']],
     ['contratos', '📄 Contratos e renovação', 'vencimento, renovação e saída', ['renovacao', 'vence_hoje', 'assinatura_contrato', 'saida_grupos']],
-    ['followup', '🔁 Follow-up e remarcação', 'depois da aula experimental', ['followup', 'followup_aluna', 'no_show']],
+    ['followup', '🔁 Follow-up e remarcação', 'depois da aula experimental', ['followup', 'followup_encerramento', 'followup_aluna', 'no_show']],
     ['sentimos', '💛 Sentimos sua falta', 'alunas ativas que pararam de vir', ['sentimos_falta_1', 'sentimos_falta_2']],
     ['aniv-ind', '🎂 Aniversário', '', ['aniversario_ex']],
   ]);
@@ -817,6 +817,7 @@ const HORARIOS_DA_MSG = {
   followup:            [['followupMorning', 'Manhã'], ['followupAfternoon', 'Tarde']],
   followup_aluna:      'compartilha:followup', // mesmo job do follow-up — só nota
   no_show:             [['noShowMorning', 'Manhã'], ['noShowAfternoon', 'Tarde']],
+  followup_encerramento: [['encerramentoManha', 'para o follow-up da manhã (de ontem)'], ['encerramentoTarde', 'para o follow-up da tarde (de ontem)']],
   renovacao:           [['renewal', '']],
   saida_grupos:        [['saidaGrupos', '']],
   sentimos_falta_1:    [['sentimosFalta', '']],
@@ -880,7 +881,7 @@ function cardDeMsg(m, hmap, voltar) {
   }
   const sw = switchEnvio(jobsDoCard(m.chave));
   const opts = /^cobranca_/.test(m.chave) ? { cobranca: true } : undefined;
-  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : (m.chave === 'assinatura_contrato') ? blocoAssinaturas() : (m.chave === 'confirmacao_sem_resposta') ? blocoTesteSemResposta() : (m.chave === 'sentimos_falta_1') ? blocoSentimos() : '';
+  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : (m.chave === 'assinatura_contrato') ? blocoAssinaturas() : (m.chave === 'confirmacao_sem_resposta') ? blocoTesteSemResposta() : (m.chave === 'followup_encerramento') ? blocoTesteEncerramento() : (m.chave === 'sentimos_falta_1') ? blocoSentimos() : '';
   return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar, opts)}${hbloco}${extra}</div>`;
 }
 
@@ -993,6 +994,38 @@ function blocoTesteSemResposta() {
       var msg=document.getElementById('srMsg'), tel=(document.getElementById('telTeste')||{}).value||'';
       msg.style.color=''; msg.textContent='⏳ Pedido enviado ao robô…'; btn.disabled=true;
       fetch('/confirmacao/sem-resposta/teste',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({etapa:etapa,tel:tel})}).then(function(r){return r.json();}).then(function(j){
+        if(!j.ok){ btn.disabled=false; msg.style.color='var(--erro)'; msg.textContent='❌ '+(j.erro||'falhou'); return; }
+        var ini=Date.now();
+        (function poll(){ fetch('/confirmacao/sem-resposta/teste/status?id='+encodeURIComponent(j.id),{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){
+          if(s.estado==='ok'){ btn.disabled=false; msg.style.color='var(--ok)'; msg.textContent='✅ '+(s.msg||'feito'); return; }
+          if(s.estado==='erro'){ btn.disabled=false; msg.style.color='var(--erro)'; msg.textContent='❌ '+(s.msg||'falhou'); return; }
+          if(Date.now()-ini>180000){ btn.disabled=false; msg.style.color='var(--erro)'; msg.textContent='⚠️ O robô não respondeu em 3 min — ele está rodando?'; return; }
+          msg.textContent=s.estado==='esperando'?'⏳ '+s.msg:'⏳ O robô está conferindo…'; setTimeout(poll,2500);
+        }).catch(function(){ setTimeout(poll,4000); }); })();
+      }).catch(function(){ btn.disabled=false; msg.style.color='var(--erro)'; msg.textContent='❌ erro de rede'; });
+    }
+    </script>
+  </div>`;
+}
+
+// 🧪 Teste do encerramento do follow-up com o Número para testes.
+function blocoTesteEncerramento() {
+  return `<div class="hsec"><div class="hsec-t">🧪 Testar com o seu número</div>
+    <p class="quando" style="margin:0 0 8px">Usa o <b>Número para testes</b> (lá em cima). Nada vai para leads. Funciona mesmo com o envio desligado.</p>
+    <ol class="quando" style="margin:0 0 8px;padding-left:18px;line-height:1.6">
+      <li>Mande um follow-up de teste para o seu celular.</li>
+      <li>No celular: <b>responda</b>, <b>reaja</b> (❤️ 👍), ou <b>não faça nada</b>. Depois clique em <b>Conferir agora</b> — se você não respondeu, chega o encerramento; se respondeu, nada é enviado.</li>
+    </ol>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="tbtn" onclick="feTeste('followup',this)">1) Mandar follow-up de teste</button>
+      <button type="button" class="tbtn" onclick="feTeste('conferir',this)">2) Conferir agora</button>
+    </div>
+    <p id="feMsg" class="quando" style="margin:8px 0 0"></p>
+    <script>
+    function feTeste(etapa,btn){
+      var msg=document.getElementById('feMsg'), tel=(document.getElementById('telTeste')||{}).value||'';
+      msg.style.color=''; msg.textContent='⏳ Pedido enviado ao robô…'; btn.disabled=true;
+      fetch('/followup/encerramento/teste',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({etapa:etapa,tel:tel})}).then(function(r){return r.json();}).then(function(j){
         if(!j.ok){ btn.disabled=false; msg.style.color='var(--erro)'; msg.textContent='❌ '+(j.erro||'falhou'); return; }
         var ini=Date.now();
         (function poll(){ fetch('/confirmacao/sem-resposta/teste/status?id='+encodeURIComponent(j.id),{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){
@@ -1128,6 +1161,8 @@ const JOBS_DO_LOG = [
   [/^Cobrança de inadimplentes/i, 'inadimplentes', true, 'Cobrança: manda só para quem ainda não foi cobrada hoje'],
   [/^Cobrança — boleto vence hoje/i, 'inadimplentesHoje', true, 'Boleto vence hoje: manda só para quem ainda não recebeu hoje'],
   [/^Planos FREE/i, 'freeAntecedencia', true, 'Planos FREE'],
+  [/^Follow-up encerramento \(simulação/i, 'encerramentoDry', true, 'Simulação do encerramento (não envia)'],
+  [/^Follow-up encerramento/i, 'encerramento', true, 'Encerramento: só manda para quem ainda não recebeu'],
   [/^Confirmação sem resposta \(2ª mensagem\)|^Confirmação sem resposta \(simulação/i, 'semResposta', true, 'Confirmação sem resposta: só manda para quem ainda não recebeu a 2ª mensagem'],
   [/^Confirmação sem resposta \(lista da equipe\)/i, 'semRespostaEquipe', true, 'Confirmação sem resposta: cada pessoa entra na lista uma vez'],
   [/^Grade→formulário/i, 'slotsPush', true, 'Atualiza os horários do formulário'],

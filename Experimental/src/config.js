@@ -105,6 +105,8 @@ const config = {
     saidaGrupos:      '47 9 * * 1-6',   // 09:47 seg-sáb (não renovou há 7 dias: retira dos grupos + mensagem) — DESLIGADO até ligar no painel
     followupMorning:  '30 10 * * 1-6',  // 10:30 seg-sáb (follow-up ontem manhã)
     followupAfternoon:'0 16 * * 1-6',   // 16:00 seg-sáb (follow-up ontem tarde)
+    encerramentoManha: '45 10 * * 1-6', // 10:45 seg-sáb (encerramento: follow-up da manhã de ontem sem resposta) — DESLIGADO até ligar
+    encerramentoTarde: '15 16 * * 1-6', // 16:15 seg-sáb (idem, follow-up da tarde)
     instagram:        '0 7 * * *',      // 07:00 todos os dias (boas-vindas novos seguidores)
     aniversariantes:  '0 8 * * *',      // 08:00 todos os dias (parabéns nos grupos)
     aniversarioEx:    '3 8 * * *',      // 08:03 todos os dias (parabéns direto p/ ex-alunas — reativação)
