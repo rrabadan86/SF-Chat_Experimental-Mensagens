@@ -25,11 +25,16 @@ const ULTIMO_ARQ = path.resolve(__dirname, '..', 'data', 'auto-tag-ultimo.json')
 function registrarSincronizacao(r) {
   try {
     fs.mkdirSync(path.dirname(ULTIMO_ARQ), { recursive: true });
-    fs.writeFileSync(ULTIMO_ARQ, JSON.stringify({ em: new Date().toISOString(), abortado: !!r.abortado }), 'utf8');
+    fs.writeFileSync(ULTIMO_ARQ, JSON.stringify({ em: new Date().toISOString(), abortado: !!r.abortado, motivo: r.motivoAborto || '',
+      novas: r.alunasNovas || 0, atualizadas: r.alunasAtualizadas || 0, ex: r.exAlunas || 0, semTelefone: r.semTelefone || 0 }), 'utf8');
   } catch (_) { /* registro é opcional */ }
 }
 function ultimaSincronizacao() {
   try { const o = JSON.parse(fs.readFileSync(ULTIMO_ARQ, 'utf8')); return (o && o.em) || ''; } catch (_) { return ''; }
+}
+// Resultado da última sincronização (para o painel): { em, abortado, motivo, novas, atualizadas, ex, semTelefone } ou null.
+function ultimoResultado() {
+  try { const o = JSON.parse(fs.readFileSync(ULTIMO_ARQ, 'utf8')); return (o && o.em) ? o : null; } catch (_) { return null; }
 }
 const PADRAO = { on: false, tagAluna: '0. Aluna', tagExAluna: '0. Ex Aluna' };
 
@@ -183,7 +188,7 @@ function limparDuplicatas({ dry = true } = {}) {
   return acoes;
 }
 
-module.exports = { ler, gravar, sincronizarTags, limparDuplicatas, ultimaSincronizacao, PADRAO };
+module.exports = { ler, gravar, sincronizarTags, limparDuplicatas, ultimaSincronizacao, ultimoResultado, PADRAO };
 
 // CLI de limpeza de duplicatas: node src/auto-tag-alunas.js --limpar [--run]
 if (require.main === module) {

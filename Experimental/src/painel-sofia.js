@@ -1508,9 +1508,21 @@ function paginaSofiaTags(aviso, erro) {
     </div>
 
     <details class="acc-sec">
-      <summary class="sec-t" style="cursor:pointer;padding:4px 0">Alunas / Ex-alunas automáticas <small style="font-weight:400;color:var(--cinza)">— junto da planilha (1x/dia), etiqueta pelo EVO</small></summary>
+      <summary class="sec-t" style="cursor:pointer;padding:4px 0">Alunas / Ex-alunas automáticas <small style="font-weight:400;color:var(--cinza)">— na leitura diária das alunas ativas, etiqueta pelo EVO</small></summary>
       <div class="card">
-        <p class="quando" style="margin:0 0 12px">Toda vez que a <b>planilha de aniversários</b> roda (1x/dia), o robô também <b>etiqueta o CRM da SoFIA</b> pela situação no EVO: quem tem <b>contrato vigente</b> (aluna ativa — "SIM" na planilha) recebe a tag de <b>aluna</b> (<b>cadastra o contato</b> se ainda não existir); quem <b>saiu</b> (perdeu o vínculo) recebe a de <b>ex-aluna</b>. Casa por <b>telefone</b>. <b>Trava de segurança:</b> se a leitura do EVO vier suspeita, <b>não rebaixa</b> ninguém para ex-aluna. Só age <b>daqui pra frente</b> (quem já saiu antes e nunca teve a tag de aluna não é mexido).</p>
+        ${(function () {
+          const r = (function () { try { return autoTagAlunas.ultimoResultado(); } catch (_) { return null; } })();
+          let leituraOn = true; try { leituraOn = require('./jobs-ativos').ativo('planilhaAniv'); } catch (_) {}
+          const q = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+          const st = !r ? '<b>⚠️ Ainda não rodou nesta unidade.</b> Use o botão abaixo para rodar agora.'
+            : r.abortado ? `Última leitura: <b>${q(r.em)}</b> — <span style="color:var(--warn)">⚠️ trava de segurança: ${esc(r.motivo || 'leitura suspeita do EVO')}</span>`
+            : `Última leitura: <b>${q(r.em)}</b> — ${r.novas || 0} cadastrada(s) e ${r.atualizadas || 0} passada(s) a aluna; ${r.ex || 0} passada(s) a ex-aluna${r.semTelefone ? `; ${r.semTelefone} ativa(s) sem telefone no EVO (não etiquetadas)` : ''}.`;
+          return `<div style="margin:0 0 12px;padding:9px 12px;border:1px solid var(--linha);border-radius:10px;background:var(--bg);font-size:.86rem;line-height:1.5">${st}`
+            + (!atCfg.on ? `<div style="color:var(--warn);margin-top:4px">⏸️ A etiquetagem está <b>desligada</b> nesta unidade — marque <b>Ligado</b> abaixo e clique em <b>Salvar</b> (sem isso, rodar não muda nenhuma tag).</div>` : '')
+            + (!leituraOn ? `<div style="color:var(--warn);margin-top:4px">⏸️ A <b>leitura diária das alunas ativas</b> está <b>desligada</b> — sem ela as tags não são atualizadas. Ligue em <a href="/?view=config#sec-outros">WhatsApp → Configuração → Outros envios</a>.</div>` : '')
+            + `<form method="POST" action="/sofia/auto-tag-alunas/rodar" style="margin:8px 0 0" onsubmit="var b=this.querySelector('button');b.disabled=true;b.textContent='⏳ Pedido enviado ao robô…';"><button type="submit" class="tbtn">▶️ Rodar agora (lê o EVO e atualiza as tags)</button> <span class="quando" style="margin:0">leva alguns minutos; o resultado aparece aqui e no Log</span></form></div>`;
+        })()}
+        <p class="quando" style="margin:0 0 12px">Uma vez por dia, na <b>leitura das alunas ativas</b> (14h, em WhatsApp → Configuração → Outros envios), o robô também <b>etiqueta o CRM da SoFIA</b> pela situação no EVO: quem tem <b>contrato vigente</b> (aluna ativa — "SIM" na planilha) recebe a tag de <b>aluna</b> (<b>cadastra o contato</b> se ainda não existir); quem <b>saiu</b> (perdeu o vínculo) recebe a de <b>ex-aluna</b>. Casa por <b>telefone</b>. <b>Trava de segurança:</b> se a leitura do EVO vier suspeita, <b>não rebaixa</b> ninguém para ex-aluna. Só age <b>daqui pra frente</b> (quem já saiu antes e nunca teve a tag de aluna não é mexido).</p>
         <form method="POST" action="/sofia/auto-tag-alunas">
           <label class="chk" style="margin:0 0 12px"><input type="checkbox" name="on" value="1"${atCfg.on ? ' checked' : ''}> Ligado</label>
           <div style="display:flex;gap:16px;flex-wrap:wrap">

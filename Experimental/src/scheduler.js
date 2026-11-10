@@ -752,7 +752,7 @@ function iniciarRodarJobWatcher() {
     renovacoesMesGrupo:{ nome: 'Contratos a vencer no mês [manual]', fn: (pedido) => require('./renovacoes-mes-grupo').runRenovacoesMesGrupo({ mes: pedido && pedido.mes }) },
     resumoDia:         { nome: 'Resumo do dia [manual]',        fn: () => require('./resumo-dia').runResumoDia() },
     ausentes:          { nome: 'Ausentes 10 dias [manual]',     fn: () => require('./ausentes-10-dias').runAusentes10Dias() },
-    planilha:          { nome: 'Planilha de aniversários [manual]', fn: () => require('./planilha-aniversarios').runPlanilhaAniversarios() },
+    planilha:          { nome: 'Leitura das alunas ativas — tags Aluna/Ex-aluna + planilha [manual]', fn: () => require('./planilha-aniversarios').runPlanilhaAniversarios(), timeoutMs: 20 * 60 * 1000 },
     // abre a ficha de cada devedora no EVO (pode passar dos 5 min padrão)
     inadimplentes:     { nome: 'Cobrança de inadimplentes [manual]', fn: () => require('./inadimplentes').runInadimplentes({ dry: false }), timeoutMs: 20 * 60 * 1000 },
     historicoExperimentais: { nome: 'Histórico de experimentais (professoras) [manual]', fn: () => require('./historico-experimentais').runHistoricoExperimentais(), timeoutMs: 45 * 60 * 1000 },
@@ -1423,13 +1423,13 @@ async function main() {
 
   // Schedule: 06:30 segunda → Planilha Google de alunas ativas + aniversários
   cron.schedule(config.schedule.planilhaAniv, async () => {
-    log('⏰ Cron disparado: Planilha de aniversários');
-    if (!jobsAtivos.ativo('planilhaAniv')) { log('⏸️  Planilha desligada no painel — pulando'); return; }
+    log('⏰ Cron disparado: Leitura das alunas ativas (tags + planilha)');
+    if (!jobsAtivos.ativo('planilhaAniv')) { log('⏸️  Leitura das alunas ativas desligada no painel — pulando (tags Aluna/Ex-aluna não atualizam)'); return; }
     if (!(await esperarVez('Planilha'))) return; // ocupado: espera a vez em vez de pular
     const start = new Date();
-    comRetry('Planilha de aniversários', () => require('./planilha-aniversarios').runPlanilhaAniversarios())
-      .then(() => log('✅ Planilha de aniversários concluída'))
-      .catch(err => logError('Planilha de aniversários', err))
+    comRetry('Leitura das alunas ativas (tags + planilha)', () => require('./planilha-aniversarios').runPlanilhaAniversarios())
+      .then(() => log('✅ Leitura das alunas ativas (tags + planilha) concluída'))
+      .catch(err => logError('Leitura das alunas ativas (tags + planilha)', err))
       .finally(() => {
         jobRunning = false;
         log(`⏱️  Planilha finalizada em ${((new Date() - start) / 1000).toFixed(1)}s\n`);

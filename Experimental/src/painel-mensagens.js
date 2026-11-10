@@ -324,7 +324,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/campanhas/remover-fila') return has('sofia_campanhas') || has('sofia_conversas'); // "Não enviar para ela" também nas Conversas
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/comparecimento') return has('sofia_contatos') || has('sofia_config'); // agora mora na aba Tags
-  if (url === '/sofia/auto-tag-alunas') return has('sofia_contatos') || has('sofia_config'); // auto-tag Aluna/Ex-aluna (aba Tags)
+  if (url === '/sofia/auto-tag-alunas' || url === '/sofia/auto-tag-alunas/rodar') return has('sofia_contatos') || has('sofia_config'); // auto-tag Aluna/Ex-aluna (aba Tags)
   if (url === '/sofia/midia-upload' || url === '/sofia/midia') return has('sofia_config'); // upload/preview das imagens (preços/grade)
   if (url === '/sofia/msgs-anuncio') return has('sofia_config'); // boas-vindas do anúncio que não pausam a SoFIA
   if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/parear' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/historico-tags' || url === '/sofia/prompt/download' || url === '/sofia/prompt/previa' || url === '/sofia/prompt/importar') return has('sofia_config');
@@ -1551,6 +1551,8 @@ const server = http.createServer(protegido((req, res) => {
     else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar a SoFIA pelo painel. Rode no servidor: pm2 restart ' + PM2_SOFIA; erro = true; }
     else if (/(?:^|&)okc=criada/.test(q)) aviso = '📣 Campanha criada! A IA está gerando as variações. Quando ficar “pronta”, clique em ▶️ Iniciar para começar o envio.';
     else if (/(?:^|&)okah=1/.test(q)) aviso = 'Aviso "precisa de humano" salvo.';
+    else if (/(?:^|&)okrodar=1/.test(q)) aviso = '▶️ Pedido enviado ao robô: ele vai ler as alunas ativas no EVO e atualizar as tags Aluna/Ex-aluna. Leva alguns minutos — recarregue esta tela para ver o resultado.';
+    else if (/(?:^|&)errrodar=1/.test(q)) { aviso = '⚠️ O robô já está com outro envio manual na fila. Espere um minuto e tente de novo.'; erro = true; }
     else if (/(?:^|&)okalu=1/.test(q)) aviso = '🎓 Regras das alunas salvas! Valem na hora.';
     else if (/(?:^|&)okhist=1/.test(q)) aviso = '👋 Etiquetas de ex-aluna e de quem já fez experimental salvas! Valem na próxima mensagem.';
     else if (/(?:^|&)oknr=\d+/.test(q)) aviso = '🔕 Lista de "não responder" salva (' + ((q.match(/oknr=(\d+)/) || [])[1] || '0') + ' número(s)).';
@@ -2157,6 +2159,19 @@ const server = http.createServer(protegido((req, res) => {
       try { autoTagAlunas.gravar({ on: p.get('on') === '1', tagAluna: p.get('tagAluna') || '', tagExAluna: p.get('tagExAluna') || '' }); } catch (_) {}
       try { auditoria.registrar(sess.usuario, 'sofia.autotagalunas', 'Auto-tag Aluna/Ex-aluna', p.get('on') === '1' ? 'ligada' : 'desligada'); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?view=tags&ok=1' }); res.end();
+    });
+  }
+  // "Rodar agora" da auto-tag: pede ao robô a leitura das alunas ativas (mesmo job das 14h).
+  if (req.method === 'POST' && url === '/sofia/auto-tag-alunas/rodar') {
+    return lerCorpo(req, 1e4, () => {
+      let ok = true;
+      try {
+        const arq = path.resolve(__dirname, '..', 'data', 'rodar-job.json');
+        if (fs.existsSync(arq)) ok = false;
+        else fs.writeFileSync(arq, JSON.stringify({ job: 'planilha', id: 'tag' + Date.now().toString(36) }));
+        try { auditoria.registrar(sess.usuario, 'sofia.autotag.rodar', 'Auto-tag Aluna/Ex-aluna', ''); } catch (_) {}
+      } catch (_) { ok = false; }
+      res.writeHead(303, { Location: '/sofia?view=tags&' + (ok ? 'okrodar=1' : 'errrodar=1') }); res.end();
     });
   }
   // Salvar config do aviso "precisa de humano".
