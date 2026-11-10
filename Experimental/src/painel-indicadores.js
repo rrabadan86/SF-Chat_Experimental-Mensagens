@@ -2007,10 +2007,50 @@ function paginaSaude(list, extra = {}) {
   } catch (_) { cardJobs = ''; corJobs = 'ok'; }
   cardJobs = cardJobs.replace('class="card sd-card"', 'class="card sd-card" style="grid-column:1/-1"'); // cartão largo (lista de envios)
 
+  // ── Versão do sistema: ver o que há de novo e atualizar pelo painel (só admin) ──
+  let cardVersao = '';
+  if ((E._navSess || { admin: true }).admin) {
+    let v = {}, st = { estado: 'nunca' };
+    try { const at = require('./atualizacao-painel'); v = at.ultimaVerificacao() || {}; st = at.status(); } catch (_) {}
+    const dhv = (ms) => { try { return new Date(ms).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ''); } catch (_) { return ''; } };
+    const novas = Array.isArray(v.novas) ? v.novas : [];
+    const corV = st.estado === 'erro' || st.estado === 'travada' ? 'warn' : novas.length ? 'warn' : 'ok';
+    const pillV = st.estado === 'rodando' ? '⏳ Atualizando' : novas.length ? `🟡 ${novas.length} novidade(s)` : v.verificadoEm ? '🟢 Atualizado' : '⚪ Não verificado';
+    const listaNovas = novas.length ? `<div style="margin:4px 0 0"><b>O que vem na nova versão:</b><ul style="margin:4px 0 0;padding-left:18px">${novas.slice(0, 15).map(n => `<li>${esc(n.titulo)} <span class="sd-muted">(${dhv(n.em)})</span></li>`).join('')}${novas.length > 15 ? `<li class="sd-muted">… e mais ${novas.length - 15}</li>` : ''}</ul></div>` : '';
+    const ultAtual = st.estado !== 'nunca' ? `<span class="sd-muted">Última atualização pelo painel: ${dhv(st.inicio)}${st.por ? ' por ' + esc(st.por) : ''} — ${st.estado === 'ok' ? '✅ concluída' : st.estado === 'erro' ? '❌ terminou com problema' : st.estado === 'travada' ? '⚠️ não terminou' : '⏳ em andamento'}</span>` : '';
+    cardVersao = card('Versão do sistema', corV, pillV, [
+      v.atual ? `Versão instalada: <b>${dhv(v.atual.em)}</b> <span class="sd-muted">— ${esc(v.atual.titulo || '')}</span>` : '<span class="sd-muted">Não consegui ler a versão instalada.</span>',
+      v.verificadoEm ? (novas.length ? `<b>Há ${novas.length} atualização(ões) nova(s)</b> <span class="sd-muted">(verificado ${dhv(v.verificadoEm)})</span>` + listaNovas : `✅ Está na versão mais nova <span class="sd-muted">(verificado ${dhv(v.verificadoEm)})</span>`) : '<span class="sd-muted">Ainda não verificado — clique em "Verificar atualizações".</span>',
+      `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button type="button" class="ui-btn sec" onclick="svVerificar(this)">🔍 Verificar atualizações</button>
+        <button type="button" class="ui-btn" id="svBtnAtu" onclick="svAtualizar(this)"${st.estado === 'rodando' ? ' disabled' : ''}>⬆️ Atualizar agora</button>
+        <span id="svMsg" class="sd-muted"></span></div>
+       <span class="sd-muted">Faz o mesmo que o <code>slimfit-atualizar</code>: baixa a versão nova e reinicia o painel, o robô e a SoFIA de <b>todas as unidades deste servidor</b> (1 a 2 minutos; envios que estiverem rodando são interrompidos — evite os horários de envio).</span>`,
+      ultAtual,
+      `<pre id="svLog" style="display:${st.estado !== 'nunca' && st.log ? 'block' : 'none'};max-height:320px;overflow:auto;background:var(--bg);border:1px solid var(--linha);border-radius:10px;padding:10px;font-size:.76rem;white-space:pre-wrap;margin:0">${esc(st.log || '')}</pre>
+      <script>
+      function svVerificar(btn){ var m=document.getElementById('svMsg'); btn.disabled=true; m.textContent='⏳ consultando o GitHub…';
+        fetch('/sistema/versao/verificar',{method:'POST'}).then(function(r){return r.json();}).then(function(j){ if(!j.ok){ btn.disabled=false; m.textContent='❌ '+(j.erro||'falhou'); return; } location.reload(); }).catch(function(){ btn.disabled=false; m.textContent='❌ erro de rede'; }); }
+      function svAtualizar(btn){ if(!confirm('Atualizar agora? O painel, o robô e a SoFIA de todas as unidades deste servidor vão reiniciar (1 a 2 minutos).')) return;
+        var m=document.getElementById('svMsg'); btn.disabled=true; m.textContent='⏳ iniciando…';
+        fetch('/sistema/atualizar',{method:'POST'}).then(function(r){return r.json();}).then(function(j){ if(!j.ok){ btn.disabled=false; m.textContent='❌ '+(j.erro||'falhou'); return; } svAcompanhar(); }).catch(function(){ btn.disabled=false; m.textContent='❌ erro de rede'; }); }
+      function svAcompanhar(){ var m=document.getElementById('svMsg'), lg=document.getElementById('svLog'), ini=Date.now(), falhas=0;
+        (function poll(){ fetch('/sistema/atualizar/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){ falhas=0;
+          if(s.log){ lg.style.display='block'; lg.textContent=s.log; lg.scrollTop=lg.scrollHeight; }
+          if(s.estado==='ok'){ m.textContent='✅ Tudo atualizado e no ar — recarregando…'; setTimeout(function(){ location.reload(); },3000); return; }
+          if(s.estado==='erro'){ m.textContent='❌ Terminou com problema — veja o registro abaixo.'; document.getElementById('svBtnAtu').disabled=false; return; }
+          if(s.estado==='travada'){ m.textContent='⚠️ Não terminou em 20 min — confira no servidor.'; return; }
+          m.textContent='⏳ atualizando… (o painel reinicia no meio — normal)'; setTimeout(poll,2500);
+        }).catch(function(){ falhas++; m.textContent='⏳ painel reiniciando… aguarde'; if(Date.now()-ini<1200000) setTimeout(poll,3000); }); })(); }
+      ${st.estado === 'rodando' ? 'svAcompanhar();' : ''}
+      </script>`,
+    ]).replace('class="card sd-card"', 'class="card sd-card" style="grid-column:1/-1"');
+  }
+
   E._saudeCor = { cor: [corExp, corSof, corEvo, corForm, corServ, corLid, corJobs].concat(IG_NO_PAINEL ? [corIg] : []).reduce(pior, 'ok'), em: Date.now() };
   const corpo = `<div class="wrap">
     ${uiTopo({ titulo: 'Saúde do sistema', sub: 'O estado de cada parte da automação num lugar só: verde funcionando, amarelo atenção, vermelho com problema.', acoes: '<a href="/saude" class="ui-btn sec">↻ Atualizar</a>' })}
-    <div class="sd-grid">${cardExp}${cardSof}${cardEvo}${IG_NO_PAINEL ? cardIg : ''}${cardForm}${cardServ}${cardLid}${cardJobs}</div>
+    <div class="sd-grid">${cardExp}${cardSof}${cardEvo}${IG_NO_PAINEL ? cardIg : ''}${cardForm}${cardServ}${cardLid}${cardJobs}${cardVersao}</div>
   </div>`;
   return chrome({ tab: 'Saúde', h1: 'Saúde', p: 'Estado de robô, SoFIA, painel e formulário.' }, 'saude', corpo);
 }
