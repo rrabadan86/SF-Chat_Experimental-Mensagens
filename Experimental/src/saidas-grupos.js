@@ -3,6 +3,8 @@
  * mensagem de despedida (WhatsApp → Configuração, card "Saída — não renovou").
  *
  * Regras (pedidas pelo Studio):
+ *   - RESCISÃO (contrato cancelado antes do fim): entra já no DIA SEGUINTE ao
+ *     cancelamento (até N+10 dias) — quem rescindiu não vai "renovar atrasada".
  *   - Saída = o contrato SlimFit venceu há N dias (painel; padrão 7 — até N+10) e ela NÃO
  *     renovou: não está ativa (trancada conta como ativa), não tem contrato na
  *     FILA (fila = renovou) e não tem Circuito/VIP vigente (continua cliente).
@@ -72,6 +74,7 @@ function candidatas({ hoje = hojeSP() } = {}) {
   try { tagAluna = require('./auto-tag-alunas').ler().tagAluna || tagAluna; } catch (_) {}
   const dias = diasVencido();
   const de = somaDias(hoje, -(dias + JANELA)), ate = somaDias(hoje, -dias);
+  const ateResc = somaDias(hoje, -1);
   const out = [];
   for (const id of Object.keys(pes)) {
     const p = pes[id];
@@ -79,14 +82,16 @@ function candidatas({ hoje = hojeSP() } = {}) {
     const iv = Array.isArray(p.iv) ? p.iv : [];
     if (!iv.length) continue;
     const fim = iv[iv.length - 1][1];
-    if (!fim || fim < de || fim > ate) continue;          // venceu fora da janela 7–17 dias
     const cs = Array.isArray(p.cs) ? p.cs : [];
     const ult = cs.filter(c => c[1] === fim).pop() || cs[cs.length - 1] || [];
+    const resc = ult[4] === 1;                            // rescindiu (cancelado antes do fim)
+    // venceu fora da janela N–N+10 dias; rescisão: do dia seguinte ao cancelamento até N+10
+    if (!fim || fim < de || fim > (resc ? ateResc : ate)) continue;
     // Contato: pelo código do EVO; senão pelo celular do cadastro do EVO (p.tel);
     // não está nos Contatos → usa o celular do EVO direto.
     let ct = porIdEvo.get(String(id)) || (p.tel ? porTel.get(last8(p.tel)) : null) || null;
     if (!ct && p.tel) ct = { tel: String(p.tel).replace(/\D/g, ''), c: { nome: p.n || '', tags: [] }, soEvo: true };
-    const item = { id, nome: (p.nc && p.n) || (ct && ct.c.nome) || p.n || '', fim, contrato: ult[2] || '', telefone: ct ? ct.tel : '', motivo: '' };
+    const item = { id, nome: (p.nc && p.n) || (ct && ct.c.nome) || p.n || '', fim, contrato: ult[2] || '', rescindido: resc, telefone: ct ? ct.tel : '', motivo: '' };
     if (p.fq) item.motivo = `renovou (contrato na fila: ${p.fq[0] || 'novo contrato'}, começa ${p.fq[1] || ''})`;
     else if (p.cv) item.motivo = 'tem Circuito/VIP vigente (continua cliente)';
     else if (reg.feitos[`${id}|${fim}`]) item.motivo = 'já tratada em ' + String(reg.feitos[`${id}|${fim}`].em || '').slice(0, 10).split('-').reverse().join('/');

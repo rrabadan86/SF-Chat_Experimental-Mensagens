@@ -862,7 +862,7 @@ function blocoSaidas() {
   try { const sg = require('./saidas-grupos'); c = sg.candidatas(); reg = sg.lerRegistro(); } catch (_) {}
   const ligado = jobsAtivos.ativo('saidaGrupos');
   const fmtD = (d) => d ? d.split('-').reverse().join('/') : '';
-  const linha = (x) => `<div class="sg-row${x.motivo ? ' fora' : ''}"><b>${esc(x.nome || 'sem nome')}</b> <span class="quando" style="margin:0">venceu ${fmtD(x.fim)}${x.contrato ? ' · ' + esc(x.contrato) : ''}</span>${x.motivo ? `<div class="quando" style="margin:2px 0 0">⏭️ ${esc(x.motivo)}</div>` : ''}</div>`;
+  const linha = (x) => `<div class="sg-row${x.motivo ? ' fora' : ''}"><b>${esc(x.nome || 'sem nome')}</b> <span class="quando" style="margin:0">${x.rescindido ? 'rescindiu em' : 'venceu'} ${fmtD(x.fim)}${x.contrato ? ' · ' + esc(x.contrato) : ''}</span>${x.motivo ? `<div class="quando" style="margin:2px 0 0">⏭️ ${esc(x.motivo)}</div>` : ''}</div>`;
   const vai = c ? c.lista.filter(x => !x.motivo) : [], fora = c ? c.lista.filter(x => x.motivo) : [];
   const fotoOk = c && c.fotoDia === c.hoje;
   const ult = reg.ultimo, sim = reg.ultimoSim;
@@ -878,7 +878,7 @@ function blocoSaidas() {
       <button type="submit" class="save">Salvar</button>
       <span class="quando" style="margin:0 0 8px">Renovação com até esse atraso ainda conta como “renovou”. Vale no próximo disparo, sem reiniciar.</span>
     </form>
-    <p class="quando" style="margin:0 0 8px">Contrato SlimFit vencido entre <b>${c ? fmtD(c.de) : '?'}</b> e <b>${c ? fmtD(c.ate) : '?'}</b> (${c ? c.dias : 7} a ${c ? c.dias + 10 : 17} dias atrás) e não renovou. Trancada, contrato na fila e Circuito/VIP vigente não entram. O número do Studio precisa ser <b>administrador</b> dos grupos para conseguir retirar.</p>
+    <p class="quando" style="margin:0 0 8px">Contrato SlimFit vencido entre <b>${c ? fmtD(c.de) : '?'}</b> e <b>${c ? fmtD(c.ate) : '?'}</b> (${c ? c.dias : 7} a ${c ? c.dias + 10 : 17} dias atrás) e não renovou. Contrato <b>rescindido</b> entra já no dia seguinte ao cancelamento. Trancada, contrato na fila e Circuito/VIP vigente não entram. O número do Studio precisa ser <b>administrador</b> dos grupos para conseguir retirar.</p>
     ${c && !fotoOk ? `<p class="quando" style="margin:0 0 8px;color:var(--warn)">⚠️ A leitura das alunas ativas de hoje (05:25) ainda não rodou${c.fotoDia ? ` — última: ${fmtD(c.fotoDia)}` : ''}. Sem ela o robô não mexe em ninguém.</p>` : ''}
     <div class="sg-lista">${vai.length ? vai.map(linha).join('') : '<div class="quando" style="margin:0">Ninguém para retirar hoje.</div>'}</div>
     ${fora.length ? `<details class="sg-fora"><summary>Ficaram de fora (${fora.length})</summary>${fora.map(linha).join('')}</details>` : ''}
