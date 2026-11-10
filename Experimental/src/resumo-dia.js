@@ -73,10 +73,13 @@ function montarMensagem(cats, dataStr) {
   const rescisoes = (cats.rescisoes || [])
     .slice()
     .map(c => `• ${c.name}${c.contrato ? ' — ' + c.contrato : ''}`);
+  // Embaixo de cada nome: o que ela contou à SoFIA (objetivo, restrição, preocupação).
+  const ROT_FICHA = [['objetivo', '🎯'], ['restricao', '🩹'], ['preocupacao', '💬']];
   const amanha = (cats.amanha || [])
     .slice()
     .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
-    .map(c => `• ${c.time || '--:--'} — ${c.name}`);
+    .map(c => `• ${c.time || '--:--'} — ${c.name}`
+      + (c.ficha ? ROT_FICHA.filter(([k]) => c.ficha[k]).map(([k, ic]) => `\n   ${ic} ${c.ficha[k]}`).join('') : ''));
 
   const trancadas = (cats.trancadas || [])
     .slice()
@@ -93,6 +96,26 @@ function montarMensagem(cats, dataStr) {
     + bloco('✂️ *Rescisões*', rescisoes, 'nenhuma rescisão hoje') + '\n\n'
     + bloco(`📅 *Experimentais de amanhã${dmAmanha ? ' (' + dmAmanha + ')' : ''}*`, amanha, 'nenhuma agendada para amanhã') + '\n\n'
     + bloco('🔒 *Trancadas hoje*', trancadas, 'nenhuma trancada hoje');
+}
+
+// Ficha da lead guardada pela SoFIA no agendamento (sofia-fichas.json), casada
+// pelo NOME do EVO: mesmo primeiro nome e mais um nome em comum (ou nome único).
+// A mais recente vence. Remarcou? A lista de amanhã vem do EVO, então a ficha
+// aparece na véspera da nova data.
+const palavrasNome = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  .replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 1 && !['da', 'de', 'do', 'das', 'dos'].includes(w));
+function fichaPorNome(nome, fichas) {
+  const a = palavrasNome(nome);
+  if (!a.length) return null;
+  let melhor = null;
+  for (const f of Object.values(fichas || {})) {
+    const b = palavrasNome(f && f.nome);
+    if (!b.length || b[0] !== a[0] || !f.campos) continue;
+    const comuns = b.filter(w => a.includes(w)).length;
+    if (comuns < 2 && Math.min(a.length, b.length) > 1) continue;
+    if (!melhor || (f.em || 0) > (melhor.em || 0)) melhor = f;
+  }
+  return melhor ? melhor.campos : null;
 }
 
 async function coletar(dataStr) {
@@ -165,7 +188,10 @@ async function coletar(dataStr) {
       faltaram: todas.filter(c => faltou(c) && !ehTeste(c)),
       fecharam,
       rescisoes,
-      amanha: amanha.filter(c => !ehTeste(c)),
+      amanha: (() => {
+        let fichas = {}; try { fichas = require('./sofia-editor').lerFichas(); } catch (_) {}
+        return amanha.filter(c => !ehTeste(c)).map(c => ({ ...c, ficha: fichaPorNome(c.name, fichas) }));
+      })(),
       amanhaData,
       trancadas: trancadas.filter(c => !ehTeste(c)),
     };
@@ -219,7 +245,7 @@ async function runResumoDia() {
   return { enviado: true, total: totalRelevante };
 }
 
-module.exports = { runResumoDia, montarMensagem };
+module.exports = { runResumoDia, montarMensagem, fichaPorNome };
 
 if (require.main === module) {
   runResumoDia()

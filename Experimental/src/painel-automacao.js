@@ -179,6 +179,12 @@ function processarAgendamentos() {
       else if (r.depois) console.log(`[contatos] nome do agendamento "${r.depois}" NÃO aplicado em "${r.antes}" (${r.motivo})`);
     } catch (_) {}
   }
+  // Ficha da lead (o que ela contou à SoFIA) → guardada para o Resumo do dia da
+  // véspera da aula. Express é feito pela recepção: não tem conversa.
+  for (const ev of evs) {
+    if (String(ev.canal || '').toLowerCase() === 'express') continue;
+    try { sofia.enfileirarPedidoFicha({ telefone: ev.telefone, nome: ev.nome || '', quando: ev.when || '' }); } catch (_) {}
+  }
   let autos = [];
   try { autos = contatos.tagsPorGatilho('agendou'); } catch (_) {}
   if (!autos.length) return;

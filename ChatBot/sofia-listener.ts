@@ -2179,24 +2179,63 @@ function conversaPorTel(tel: string): InboxConversa | undefined {
 }
 // "💬 O que ela contou" para o aviso de agendamento: últimas mensagens (14 dias) da
 // conversa; só quando a lead escreveu algo de fato. "" quando não há nada útil.
-const fichaCache = new Map<string, { em: number; txt: string }>(); // vários avisos do mesmo agendamento → 1 chamada
-async function fichaParaAviso(tel: string): Promise<string> {
+type Ficha = { campos: Record<string, string>; linhas: string[] };
+const fichaCache = new Map<string, { em: number; f: Ficha }>(); // aviso + pedido do mesmo agendamento → 1 chamada
+async function obterFicha(tel: string): Promise<Ficha> {
   const k = String(tel).replace(/\D/g, "").slice(-8);
   const cache = fichaCache.get(k);
-  if (cache && Date.now() - cache.em < 10 * 60000) return cache.txt;
-  const txt = await montarFicha(tel);
-  fichaCache.set(k, { em: Date.now(), txt });
-  return txt;
+  if (cache && Date.now() - cache.em < 10 * 60000) return cache.f;
+  const f = await montarFicha(tel);
+  fichaCache.set(k, { em: Date.now(), f });
+  return f;
 }
-async function montarFicha(tel: string): Promise<string> {
+async function montarFicha(tel: string): Promise<Ficha> {
+  const vazio: Ficha = { campos: {}, linhas: [] };
   const c = conversaPorTel(tel);
-  if (!c) return "";
+  if (!c) return vazio;
   const desde = Date.now() - 14 * 86400000;
   const msgs = c.msgs.filter((m) => m.em >= desde).slice(-80);
-  if (msgs.filter((m) => m.autor === "aluna" && String(m.texto || "").trim().length > 3).length < 2) return "";
-  const linhas = await fichaDaLead(msgs.map((m) => ({ autor: m.autor, texto: String(m.texto || "") })));
-  return linhas.length ? `\n\n💬 *O que ela contou:*\n${linhas.join("\n")}` : "";
+  if (msgs.filter((m) => m.autor === "aluna" && String(m.texto || "").trim().length > 3).length < 2) return vazio;
+  return fichaDaLead(msgs.map((m) => ({ autor: m.autor, texto: String(m.texto || "") })));
 }
+const textoFicha = (f: Ficha) => f.linhas.length ? `\n\n💬 *O que ela contou:*\n${f.linhas.join("\n")}` : "";
+async function fichaParaAviso(tel: string): Promise<string> { return textoFicha(await obterFicha(tel)); }
+
+// Fichas guardadas (30 dias) para o RESUMO DO DIA: na véspera da aula, o robô
+// mostra o que a lead contou embaixo do nome dela em "Experimentais de amanhã".
+//   sofia-fichas.json → { últimos8: { nome, quando, campos, em } }
+// O painel pede a ficha de TODO agendamento (sofia-fichas-pedidos.jsonl), com ou
+// sem número de aviso configurado; o aviso usa a mesma ficha (cache).
+const FICHAS_FILE = path.join(DIR, "sofia-fichas.json");
+const FICHAS_PEDIDOS = path.join(DIR, "sofia-fichas-pedidos.jsonl");
+function salvarFicha(tel: string, nome: string, quando: string, f: Ficha) {
+  if (!Object.keys(f.campos).length) return;
+  let mapa: Record<string, any> = {};
+  try { mapa = JSON.parse(fs.readFileSync(FICHAS_FILE, "utf8")) || {}; } catch {}
+  const corte = Date.now() - 30 * 86400000;
+  for (const k of Object.keys(mapa)) if (!mapa[k] || (mapa[k].em || 0) < corte) delete mapa[k];
+  mapa[String(tel).replace(/\D/g, "").slice(-8)] = { nome: String(nome || ""), quando: String(quando || ""), campos: f.campos, em: Date.now() };
+  try { fs.writeFileSync(FICHAS_FILE + ".tmp", JSON.stringify(mapa)); fs.renameSync(FICHAS_FILE + ".tmp", FICHAS_FILE); } catch {}
+}
+let processandoFichas = false;
+async function processarPedidosFicha() {
+  if (processandoFichas) return;
+  let tam = 0; try { tam = fs.statSync(FICHAS_PEDIDOS).size; } catch { return; }
+  if (!tam) return;
+  processandoFichas = true;
+  const tmp = FICHAS_PEDIDOS + "." + Date.now() + ".proc";
+  let linhas: string[] = [];
+  try { fs.renameSync(FICHAS_PEDIDOS, tmp); linhas = fs.readFileSync(tmp, "utf8").split("\n").map((l) => l.trim()).filter(Boolean); fs.rmSync(tmp, { force: true }); }
+  catch { processandoFichas = false; return; }
+  for (const l of linhas) {
+    let ent: any = null; try { ent = JSON.parse(l); } catch { continue; }
+    const tel = String(ent?.telefone || "").replace(/\D/g, "");
+    if (!tel) continue;
+    try { salvarFicha(tel, String(ent?.nome || ""), String(ent?.quando || ""), await obterFicha(tel)); } catch { /* best-effort */ }
+  }
+  processandoFichas = false;
+}
+setInterval(() => { processarPedidosFicha().catch(() => { processandoFichas = false; }); }, 3000);
 let processandoAvisos = false;
 async function processarAvisos() {
   if (processandoAvisos || !pronta) return;
