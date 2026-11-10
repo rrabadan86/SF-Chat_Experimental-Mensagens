@@ -52,6 +52,8 @@ class WhatsAppSender {
       if (success) await this.enviarAudioDaProfessora(student.phone, chaveFoto, student.professor);
 
       if (success) {
+        // Confirmação de hoje/amanhã: registra para a "Confirmação sem resposta".
+        try { require('./confirmacao-sem-resposta').registrarEnvio({ telefone: student.phone, nome: student.name, horario: student.time, chave: chaveFoto }); } catch (_) {}
         results.sent++;
         results.details.push({ name: student.name, phone: student.phone, status: 'sent' });
       } else {

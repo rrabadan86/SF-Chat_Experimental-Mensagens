@@ -550,6 +550,60 @@ async function sendRawTexto(id, texto) {
   return res;
 }
 
+// ── Mensagens que o PRÓPRIO robô mandou (ids) ───────────────────────────────
+// Para saber, numa conversa, o que foi o robô e o que alguém da recepção escreveu
+// à mão no celular do studio (Confirmação sem resposta). Guarda os últimos 4000.
+const IDS_ROBO_FILE = path.resolve(__dirname, '..', 'data', 'wa-ids-robo.json');
+let _idsRobo = null;
+function idsRobo() {
+  if (_idsRobo) return _idsRobo;
+  try { _idsRobo = JSON.parse(require('fs').readFileSync(IDS_ROBO_FILE, 'utf8')); if (!Array.isArray(_idsRobo)) _idsRobo = []; } catch (_) { _idsRobo = []; }
+  return _idsRobo;
+}
+function idCurto(x) {
+  if (!x) return '';
+  if (typeof x === 'object') return String((x.id && (x.id.id || x.id._serialized)) || x.id || '').split('_').pop();
+  return String(x).split('_').pop();
+}
+function lembrarIdRobo(r) {
+  try {
+    const id = idCurto(r);
+    if (!id) return;
+    const arr = idsRobo(); arr.push(id);
+    if (arr.length > 4000) arr.splice(0, arr.length - 4000);
+    require('fs').writeFileSync(IDS_ROBO_FILE, JSON.stringify(arr));
+  } catch (_) { /* nunca derruba o envio */ }
+}
+
+// Ela RESPONDEU depois de `desdeMs`? Lê as últimas mensagens da conversa:
+//   respondeu = qualquer mensagem dela (texto, áudio, figurinha, foto, ligação)
+//               ou REAÇÃO (❤️ 👍…) em qualquer mensagem do studio;
+//   humano    = alguém do studio escreveu À MÃO (mensagem nossa que não foi o robô).
+// Só ter LIDO não conta. Se não conseguir ler a conversa, lança erro (o job não envia).
+async function conferirResposta(telefone, desdeMs) {
+  if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
+  const id = await resolverId(telefone);
+  try { await garantirChat(id); } catch (_) {}
+  const chat = await comRetry(() => client.getChatById(id), 3, 3000);
+  const msgs = await comRetry(() => chat.fetchMessages({ limit: 50 }), 3, 3000);
+  const meus = new Set(idsRobo());
+  const SISTEMA = new Set(['e2e_notification', 'notification_template', 'notification', 'protocol', 'gp2', 'broadcast_notification']);
+  const r = { respondeu: false, reagiu: false, humano: false, lidas: 0 };
+  for (const m of msgs || []) {
+    if (((m.timestamp || 0) * 1000) < desdeMs - 5000 || SISTEMA.has(m.type)) continue;
+    r.lidas++;
+    if (!m.fromMe) { r.respondeu = true; continue; }
+    if (!meus.has(idCurto(m))) r.humano = true;
+    if (m.hasReaction) {
+      try {
+        const grupos = await m.getReactions();
+        if ((grupos || []).some(g => (g.senders || []).length > (g.hasReactionByMe ? 1 : 0))) { r.respondeu = true; r.reagiu = true; }
+      } catch (_) { /* sem reações legíveis */ }
+    }
+  }
+  return r;
+}
+
 // Monta o texto de fallback SEM a @marcação: junta o antes + depois e limpa o
 // espaço/pontuação que sobra onde estava o @ (o nome já aparece na mensagem).
 function semMencao(textoAntes, textoDepois) {
@@ -583,6 +637,7 @@ async function sendTexto(telefone, texto, contexto, chaveFoto) {
     } else {
       r = await comRetry(() => sendRawTexto(id, texto));
     }
+    lembrarIdRobo(r);
     atividade.registrar({ destino: telefone, preview: (fotoPath ? '📎 ' : '') + texto, midia: !!fotoPath, ok: true, contexto, chaveFoto: fotoPath ? chaveFoto : '' });
     return r;
   } catch (e) {
@@ -622,6 +677,7 @@ async function sendMidia(telefone, urlOuCaminho, { legenda = '', comoVoz = false
       log(`mídia via sendMessage falhou (${eMedia && eMedia.message}) — mandando só a legenda em texto (mídia indisponível no bug atual).`);
       r = await comRetry(() => sendRawTexto(id, legenda));
     }
+    lembrarIdRobo(r);
     atividade.registrar({ destino: telefone, preview: legenda || (comoVoz ? '🎤 áudio' : '📎 mídia'), midia: true, ok: true, contexto });
     return r;
   } catch (e) {
@@ -894,7 +950,7 @@ module.exports = {
   initWhatsApp, isReady, getClient,
   sendTexto, sendMidia, sendGrupo, acharGrupo, listarGrupos,
   getCommonGroups, removerDoGrupo, sendGrupoComMencao, sendGrupoMidia, sendGrupoMidiaComMencao,
-  iniciarKeepAlive, destroy, toChatId, MessageMedia,
+  iniciarKeepAlive, destroy, toChatId, MessageMedia, conferirResposta,
 };
 
 // ── Standalone: escanear o QR pela 1ª vez e deixar a sessão salva ────────────

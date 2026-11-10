@@ -53,6 +53,22 @@ const CATALOGO = [
     padrao: 'Oie, {nome}! 🎉 Tudo bem? Aqui é do *{studio}*.\n\nSua aula experimental ficou confirmada para *{quando}*.\nQualquer dúvida, ou se precisar remarcar, é só me chamar por aqui. ❤️\n\n*Endereço:* [ENDEREÇO DA UNIDADE]\n*Localização:* [LINK DO MAPA DA UNIDADE]\n\nChegue 10 minutinhos antes para conhecer o Studio com calma! 💪\nSeja muito bem-vinda ao #SlimFit - A Revolução do Treinamento Feminino! ❤️',
   },
   {
+    chave: 'confirmacao_sem_resposta',
+    titulo: 'Confirmação — sem resposta (2ª mensagem)',
+    quando: 'Sai só para quem NÃO respondeu nem reagiu (❤️ 👍…) à confirmação da aula de hoje ou de amanhã, e com quem a recepção não falou à mão depois. Uma vez por aula. Só ter lido não conta como resposta.',
+    vars: [['nome', 'primeiro nome da lead'], ['horario', 'horário da aula'], ['quando', '"hoje", "amanhã" ou "no dia dd/mm"']],
+    padrao: 'Oi, {nome}! 😊 Passando só para confirmar: podemos contar com você {quando} às {horario}?\n\nÉ só responder com um 👍 — estamos te esperando! 💪',
+    exemplos: { quando: 'hoje', horario: '16:15' },
+  },
+  {
+    chave: 'confirmacao_sem_resposta_equipe',
+    titulo: 'Confirmação — sem resposta (lista para o grupo da equipe)',
+    quando: 'Vai para o GRUPO DA EQUIPE com quem recebeu a 2ª mensagem e continua sem responder (aula ainda pela frente), para a recepção ligar ou mandar um áudio. Cada pessoa entra uma vez.',
+    vars: [['lista', 'uma linha por pessoa: horário (dia) — nome — telefone']],
+    padrao: '📵 *Não responderam a confirmação da aula experimental*\n\n{lista}\n\nVale uma ligação ou um áudio da recepção 💚',
+    exemplos: { lista: '• 16:15 (hoje) — Lilian Carneiro — (62) 98322-0000\n• 18:15 (hoje) — Carla Mendes — (62) 99111-2222' },
+  },
+  {
     chave: 'followup',
     titulo: 'Follow-up pós-aula (ainda não fechou)',
     quando: 'Enviada 10:30 / 16:00 para quem fez a experimental no dia anterior.',
@@ -361,7 +377,7 @@ function removerFoto(chave) {
 // Todas as mensagens de WhatsApp aceitam foto (flyer), MENOS as text-only:
 //  • 'instagram' — DM do Instagram (canal diferente, tratado na aba Instagram);
 //  • 'ausentes'  — listagem de texto no grupo da equipe (enviada sem mídia).
-const SEM_FOTO = new Set(['instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje', 'cobranca_saldo', 'cobranca_app_reativado']);
+const SEM_FOTO = new Set(['confirmacao_sem_resposta_equipe', 'instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje', 'cobranca_saldo', 'cobranca_app_reativado']);
 function aceitaFoto(chave) { const m = CATALOGO.find(x => x.chave === chave); return !!(m && !SEM_FOTO.has(m.chave)); }
 // ── Pacote de imagens (exportar/importar entre unidades) ─────────────────────
 // Um .json { tipo, versao, unidade, em, fotos: { <chave>: "data:image/...;base64,..." } }.
