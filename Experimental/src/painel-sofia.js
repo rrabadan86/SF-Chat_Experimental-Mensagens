@@ -2576,6 +2576,63 @@ function paginaSofia(aviso, erro) {
         </div>
       </details>
 
+      <details class="acc-sec" id="simSec">
+        <summary class="sec-t">🧪 Testar a SoFIA <small style="font-weight:400;color:var(--cinza)">— converse como se fosse uma lead; nada é enviado, agendado ou gravado</small></summary>
+        <div class="card">
+          <p class="quando" style="margin:0 0 10px">A SoFIA responde com o mesmo modelo e o mesmo roteiro, mas <b>nada sai daqui</b>: não manda WhatsApp, não agenda nem remarca no EVO, não mexe em tags nem nas conversas reais. Horários e vagas são consultados de verdade. Embaixo de cada resposta aparece o que ela <i>teria feito</i> (ex.: "agendaria a aula"). Funciona mesmo com a SoFIA pausada. Cada mensagem tem o custo normal de uma resposta (aparece em Custo IA → Simulador).</p>
+          <label class="chk" style="margin:0 0 10px"><input type="checkbox" id="simRasc" checked> Usar o roteiro do editor acima, <b>inclusive mudanças ainda não salvas</b> (desmarque para testar o que está valendo hoje)</label>
+          <div id="simChat" class="sim-chat"><div class="sim-vazio">Escreva a primeira mensagem como se fosse uma lead. Ex.: "Oi, quanto custa?"</div></div>
+          <div style="display:flex;gap:8px;margin-top:8px;align-items:flex-end">
+            <textarea id="simTxt" rows="2" placeholder="Mensagem da lead… (Enter envia, Shift+Enter quebra linha)" style="flex:1;resize:vertical;min-height:44px" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();simEnviar();}"></textarea>
+            <button type="button" class="tbtn" id="simBtn" onclick="simEnviar()" style="flex:none">Enviar</button>
+          </div>
+          <div style="margin-top:8px"><button type="button" class="reset" onclick="simNova()" style="padding:6px 12px">↺ Começar outra conversa</button></div>
+          <style>
+            .sim-chat{height:380px;overflow-y:auto;background:var(--bg);border:1px solid var(--linha);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+            .sim-b{max-width:82%;padding:8px 12px;border-radius:12px;font-size:.9rem;line-height:1.45;overflow-wrap:anywhere}
+            .sim-lead{align-self:flex-end;background:#d9fdd3;color:#111b21;border-bottom-right-radius:4px}
+            .sim-sofia{align-self:flex-start;background:var(--card);color:var(--tinta);border:1px solid var(--linha);border-bottom-left-radius:4px}
+            .sim-f{margin-top:6px;padding-top:6px;border-top:1px dashed var(--linha);font-size:.76rem;color:var(--cinza)}
+            .sim-erro{align-self:center;color:var(--warn);font-size:.84rem;background:none}
+            .sim-dig{color:var(--cinza);font-style:italic}
+            .sim-vazio{margin:auto;color:var(--cinza);font-size:.86rem;text-align:center}
+          </style>
+          <script>
+          (function(){
+            var sessao='s'+Date.now().toString(36), ocupado=false;
+            var FER={verificar_disponibilidade:'🗓️ conferiu o horário',consultar_vaga:'👥 consultou a vaga',turmas_do_dia:'📋 viu as turmas do dia',solicitar_agendamento:'📅 agendaria a aula (simulado — nada foi agendado)',remarcar_aula:'🔁 remarcaria a aula (simulado)',desmarcar_experimental:'❌ desmarcaria a experimental (simulado)',remarcar_experimental:'🔁 remarcaria a experimental (simulado)',consultar_agenda_aluna:'🔎 tentou ver a agenda da aluna',consultar_contrato_aluna:'🔎 tentou ver o contrato da aluna','enviar_midia:grade':'🖼️ enviaria a imagem da grade','enviar_midia:precos':'🖼️ enviaria a tabela de preços'};
+            var esc=function(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
+            function bolha(quem,html){var c=document.getElementById('simChat');var v=c.querySelector('.sim-vazio');if(v)v.remove();var d=document.createElement('div');d.className='sim-b sim-'+quem;d.innerHTML=html;c.appendChild(d);c.scrollTop=c.scrollHeight;return d;}
+            function fim(el,cls,txt){ocupado=false;document.getElementById('simBtn').disabled=false;el.className='sim-b '+cls;el.textContent=txt;}
+            window.simNova=function(){sessao='s'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);document.getElementById('simChat').innerHTML='<div class="sim-vazio">Conversa nova. Escreva a primeira mensagem como se fosse uma lead.</div>';};
+            window.simEnviar=function(){
+              var ta=document.getElementById('simTxt'),t=ta.value.trim(); if(!t||ocupado) return;
+              ocupado=true; document.getElementById('simBtn').disabled=true; ta.value=''; bolha('lead',esc(t).replace(/\\n/g,'<br>'));
+              var el=bolha('sofia','<span class="sim-dig">SoFIA digitando…</span>');
+              var fd=new URLSearchParams(); fd.append('sessao',sessao); fd.append('texto',t);
+              if(document.getElementById('simRasc').checked){ fd.append('rascunho','1'); [].forEach.call(document.querySelectorAll('#secoes .sec-card'),function(c){var ti=c.querySelector('input[name="titulo[]"]'),co=c.querySelector('textarea[name="corpo[]"]');fd.append('titulo[]',ti?ti.value:'');fd.append('corpo[]',co?co.value:'');}); }
+              fetch('/sofia/simulador/enviar',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:fd.toString()}).then(function(r){return r.json();}).then(function(j){
+                if(!j.ok) throw new Error(j.erro||'não consegui enviar o teste');
+                var ini=Date.now();
+                (function poll(){
+                  fetch('/sofia/simulador/resultado?id='+encodeURIComponent(j.id),{cache:'no-store'}).then(function(r){return r.json();}).then(function(x){
+                    var r=x&&x.r;
+                    if(r){ if(r.erro) return fim(el,'sim-erro','⚠️ '+r.erro);
+                      ocupado=false; document.getElementById('simBtn').disabled=false;
+                      var f=(r.ferramentas||[]).map(function(n){return FER[n]||('🔧 '+n);});
+                      el.innerHTML=esc(r.resposta||'(sem resposta)').replace(/\\n/g,'<br>')+(f.length?'<div class="sim-f">'+f.map(esc).join(' · ')+'</div>':'');
+                      document.getElementById('simChat').scrollTop=1e9; return; }
+                    if(Date.now()-ini>150000) return fim(el,'sim-erro','⚠️ A SoFIA não respondeu em 2,5 min. Confira se ela está rodando (Saúde do sistema → SoFIA).');
+                    setTimeout(poll,1500);
+                  }).catch(function(){ setTimeout(poll,2500); });
+                })();
+              }).catch(function(e){ fim(el,'sim-erro','⚠️ '+e.message); });
+            };
+          })();
+          </script>
+        </div>
+      </details>
+
       <details class="acc-sec">
         <summary class="sec-t">Script de integração <small style="font-weight:400;color:var(--cinza)">— dados enviados ao EVO</small></summary>
       <div class="card">
@@ -2883,7 +2940,7 @@ function paginaSofiaCusto(aviso, erro, params) {
   // Gasto por TIPO (tudo que gasta token: conversas, gerador de frases, resumos,
   // tags por intenção, follow-up).
   let porTipo = []; try { porTipo = sofia.lerCustoPorTipo(ini, fim || hojeStr); } catch (_) {}
-  const rotTipo = { conversa: '💬 Conversas', gerador: '✨ Gerador de frases', resumo: '📝 Resumos de interações', tags: '🏷️ Tags por intenção', followup: '🔁 Follow-up', ficha: '🗂️ Ficha da lead (aviso de agendamento)' };
+  const rotTipo = { conversa: '💬 Conversas', gerador: '✨ Gerador de frases', resumo: '📝 Resumos de interações', tags: '🏷️ Tags por intenção', followup: '🔁 Follow-up', ficha: '🗂️ Ficha da lead (aviso de agendamento)', simulador: '🧪 Simulador (testes no painel)' };
   const totTipo = porTipo.reduce((a, t) => a + (t.usd || 0), 0);
   const tipoRows = porTipo.map(t => uiBarra({ largo: true, rot: `${rotTipo[t.tipo] || esc(t.tipo)} <small style="color:var(--faint);font-weight:600">· ${t.n}×</small>`, n: t.usd, max: totTipo, valor: `${brl(t.usd)} <small>· ${ktok(t.inTok + t.outTok)} tok</small>` })).join('');
   const tipoBloco = tipoRows

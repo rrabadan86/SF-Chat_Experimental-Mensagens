@@ -327,7 +327,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/auto-tag-alunas' || url === '/sofia/auto-tag-alunas/rodar') return has('sofia_contatos') || has('sofia_config'); // auto-tag Aluna/Ex-aluna (aba Tags)
   if (url === '/sofia/midia-upload' || url === '/sofia/midia') return has('sofia_config'); // upload/preview das imagens (preços/grade)
   if (url === '/sofia/msgs-anuncio') return has('sofia_config'); // boas-vindas do anúncio que não pausam a SoFIA
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/parear' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/historico-tags' || url === '/sofia/prompt/download' || url === '/sofia/prompt/previa' || url === '/sofia/prompt/importar') return has('sofia_config');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/parear' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/historico-tags' || url === '/sofia/prompt/download' || url === '/sofia/prompt/previa' || url === '/sofia/prompt/importar' || url === '/sofia/simulador/enviar' || url === '/sofia/simulador/resultado') return has('sofia_config');
   return false;
 }
 // Rota da aba WhatsApp → sub-permissão. Agendamento = /agendar* e /?view=agendar;
@@ -2195,6 +2195,29 @@ const server = http.createServer(protegido((req, res) => {
         return resp({ ok: true, secoes: n });
       } catch (e) { return resp({ ok: false, erro: e.message }, 400); }
     });
+  }
+  // Simulador ("Testar a SoFIA"): enfileira a mensagem de teste; o listener responde
+  // sem enviar nada. Com rascunho=1, usa as seções do editor (sem salvar).
+  if (req.method === 'POST' && url === '/sofia/simulador/enviar') {
+    return lerCorpo(req, 4e6, corpo => {
+      const resp = (o, st = 200) => { res.writeHead(st, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(o)); };
+      try {
+        const p = new URLSearchParams(corpo);
+        const texto = String(p.get('texto') || '').trim(), sessao = String(p.get('sessao') || '').trim();
+        if (!texto || !sessao) return resp({ ok: false, erro: 'mensagem vazia' }, 400);
+        let secoes = null;
+        if (p.get('rascunho') === '1') {
+          const ts = p.getAll('titulo[]'), cs = p.getAll('corpo[]'); secoes = [];
+          for (let i = 0; i < ts.length; i++) { const t = (ts[i] || '').trim(), c = cs[i] || ''; if (t || c.trim()) secoes.push({ titulo: t || ('SEÇÃO ' + (i + 1)), corpo: c }); }
+        }
+        return resp({ ok: true, id: sofia.enfileirarSimulacao({ sessao, texto, secoes }) });
+      } catch (e) { return resp({ ok: false, erro: e.message }, 500); }
+    });
+  }
+  if (req.method === 'GET' && url === '/sofia/simulador/resultado') {
+    const id = new URLSearchParams(req.url.split('?')[1] || '').get('id') || '';
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ ok: true, r: id ? sofia.lerSimulacao(id) : null }));
   }
   // Baixa o prompt ATUAL (o arquivo que a SoFIA usa) como .txt — backup rápido.
   if (req.method === 'GET' && url === '/sofia/prompt/download') {
