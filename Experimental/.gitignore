@@ -142,3 +142,6 @@ data/circuito-servico.txt
 data/mensagens-audios/
 data/bloqueio-app.json
 data/bloqueio-app-estado.json
+data/assinaturas.json
+data/assinaturas-cfg.json
+data/assinaturas-pendentes.json
