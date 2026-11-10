@@ -128,6 +128,13 @@ const CATALOGO = [
     padrao: 'Oi, {nome}! 😊\nPassando para lembrar que o seu plano {vencimento}.\nPara você não ficar sem treinar, que tal já renovarmos? Pode ser o mesmo plano ou, se preferir, outra frequência. 💛\nQualquer dúvida, estou por aqui!',
   },
   {
+    chave: 'assinatura_contrato',
+    titulo: 'Contrato sem assinatura',
+    quando: 'Lembrete para a aluna ativa cujo contrato vigente ainda NÃO foi assinado no EVO. Leva o link de assinatura DELA ({link} — mantenha no texto). Sai nos dias/horário deste cartão (no máximo uma vez por dia); quando ela assina, para sozinho. Dá para marcar alunas para não receber.',
+    vars: [['nome', 'primeiro nome da aluna'], ['plano', 'nome do plano/contrato no EVO'], ['link', 'link de assinatura do contrato dela — mantenha o {link} no texto']],
+    padrao: 'Oi, {nome}! Tudo bem? 💛\n\nO contrato do seu plano no {studio} ainda está aguardando a sua assinatura digital.\n\nÉ rapidinho, é só tocar no link abaixo:\n{link}\n\nQualquer dúvida, é só me chamar! 😊',
+  },
+  {
     chave: 'saida_grupos',
     titulo: 'Saída — não renovou (retira dos grupos)',
     quando: 'Para quem está com o contrato vencido há alguns dias (você escolhe quantos, abaixo — padrão 7) e não renovou (contrato na fila conta como renovação). O robô primeiro RETIRA a pessoa de todos os grupos em comum com o número do Studio e depois manda esta mensagem. Se ela não está em nenhum grupo, nada é enviado.',

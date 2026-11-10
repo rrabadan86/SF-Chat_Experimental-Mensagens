@@ -761,6 +761,7 @@ function iniciarRodarJobWatcher() {
     resumoMensal:      { nome: 'Resumo mensal no WhatsApp [manual]', fn: (pedido) => require('./resumo-mensal').enviar({ mes: pedido && pedido.mes, teste: true, log }), timeoutMs: 12 * 60 * 1000 },
     freeAntecedencia:  { nome: 'Planos FREE — antecedência [manual]', fn: (pedido) => require('./free-antecedencia').runFreeAntecedencia({ dry: !!(pedido && pedido.dry) }) },
     // "↻ Rodar de novo" do Log do painel (falhas de job):
+    assinaturas:       { nome: 'Contrato sem assinatura [manual]', fn: () => require('./assinaturas').runAssinaturas({ log }), timeoutMs: 20 * 60 * 1000 },
     venceHoje:         { nome: 'Vence hoje — sem renovação [manual]', fn: () => require('./vence-hoje').runVenceHoje({ log }), timeoutMs: 20 * 60 * 1000 },
     saidaGrupos:       { nome: 'Saída — não renovou [manual]', fn: () => require('./saidas-grupos').runSaidasGrupos({ log }), timeoutMs: 20 * 60 * 1000 },
     saidaGruposDry:    { nome: 'Saída — não renovou (simulação) [manual]', fn: () => require('./saidas-grupos').runSaidasGrupos({ dry: true, log }), timeoutMs: 20 * 60 * 1000 },
@@ -1126,6 +1127,17 @@ async function main() {
 
   log(`📅 Job RENOVAÇÃO agendado: ${config.schedule.renewal} (14:30 todos os dias)`);
   console.log('   → Avisa a aluna 7 dias antes do vencimento do contrato');
+
+  // Contrato sem assinatura: lembrete com o link (desligado até ligar no painel).
+  if (config.schedule.assinaturas) {
+    cron.schedule(config.schedule.assinaturas, async () => {
+      if (!jobsAtivos.ativo('assinaturas')) { log('⏸️  Contrato sem assinatura: desligado no painel — pulando'); return; }
+      log('⏰ Cron disparado: Contrato sem assinatura');
+      runJob('Contrato sem assinatura', () => require('./assinaturas').runAssinaturas({ log }), 20 * 60 * 1000, { retry: false })
+        .catch(err => logError('Contrato sem assinatura', err));
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job CONTRATO SEM ASSINATURA agendado: ${config.schedule.assinaturas} — ${jobsAtivos.ativo('assinaturas') ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
+  }
 
   // Vence hoje — sem renovação (desligado até ligar no painel).
   if (config.schedule.venceHoje) {

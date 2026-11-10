@@ -95,6 +95,7 @@ const config = {
     morning:          '30 8 * * 1-6',   // 08:30 seg-sáb (confirmação hoje)
     afternoon:        '30 15 * * 0-5',  // 15:30 dom-sex (confirmação amanhã)
     renewal:          '30 14 * * *',    // 14:30 todos os dias (renovação: avisa quem vence em exatos 7 dias)
+    assinaturas:      '43 10 * * 1,3,5', // 10:43 seg/qua/sex (contrato sem assinatura: lembrete com o link) — DESLIGADO até ligar no painel
     venceHoje:        '17 9 * * 1-6',   // 09:17 seg-sáb (contrato vence hoje e não tem nada na fila) — DESLIGADO até ligar no painel
     sentimosFalta:    '37 10 * * 1',    // 10:37 segunda (ativas sem presença há 14+ dias: 1ª e 2ª mensagem) — DESLIGADO até ligar no painel
     saidaGrupos:      '47 9 * * 1-6',   // 09:47 seg-sáb (não renovou há 7 dias: retira dos grupos + mensagem) — DESLIGADO até ligar no painel

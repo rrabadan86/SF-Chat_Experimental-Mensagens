@@ -158,7 +158,7 @@ function paginaMensagens(aviso, erro) {
   };
   const itensIndividuais = emBlocos(indivOrdenado, [
     ['confirmacao', '📅 Confirmação de aula', 'lembrete antes da aula', ['confirmacao_hoje', 'confirmacao_amanha', 'confirmacao_experimental', 'confirmacao_experimental_express']],
-    ['contratos', '📄 Contratos e renovação', 'vencimento, renovação e saída', ['renovacao', 'vence_hoje', 'saida_grupos']],
+    ['contratos', '📄 Contratos e renovação', 'vencimento, renovação e saída', ['renovacao', 'vence_hoje', 'assinatura_contrato', 'saida_grupos']],
     ['followup', '🔁 Follow-up e remarcação', 'depois da aula experimental', ['followup', 'followup_aluna', 'no_show']],
     ['sentimos', '💛 Sentimos sua falta', 'alunas ativas que pararam de vir', ['sentimos_falta_1', 'sentimos_falta_2']],
     ['aniv-ind', '🎂 Aniversário', '', ['aniversario_ex']],
@@ -763,6 +763,7 @@ const HORARIOS_DA_MSG = {
   sentimos_falta_1:    [['sentimosFalta', '']],
   sentimos_falta_2:    'compartilha:sentimos', // mesmo disparo de segunda da 1ª — só nota
   vence_hoje:          [['venceHoje', '']],
+  assinatura_contrato: [['assinaturas', '']],
   aniversario:         [['aniversariantes', '']],
   aniversario_ex:      [['aniversarioEx', '']],
   instagram:           [['instagram', '']],
@@ -820,7 +821,7 @@ function cardDeMsg(m, hmap, voltar) {
   }
   const sw = switchEnvio(jobsDoCard(m.chave));
   const opts = /^cobranca_/.test(m.chave) ? { cobranca: true } : undefined;
-  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : (m.chave === 'sentimos_falta_1') ? blocoSentimos() : '';
+  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : (m.chave === 'assinatura_contrato') ? blocoAssinaturas() : (m.chave === 'sentimos_falta_1') ? blocoSentimos() : '';
   return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar, opts)}${hbloco}${extra}</div>`;
 }
 
@@ -907,6 +908,31 @@ function blocoVenceHoje() {
     <div class="sg-lista">${vai.length ? vai.map(linha).join('') : '<div class="quando" style="margin:0">Ninguém para avisar hoje.</div>'}</div>
     ${fora.length ? `<details class="sg-fora"><summary>Ficaram de fora (${fora.length})</summary>${fora.map(linha).join('')}</details>` : ''}
     ${ultHtml}
+    <style>.sg-row{padding:7px 0;border-top:1px solid var(--linha-soft);font-size:.88rem}.sg-row:first-child{border-top:0}.sg-row.fora{opacity:.75}.sg-fora{margin-top:8px}.sg-fora summary{cursor:pointer;font-weight:700;font-size:.85rem;color:var(--teal)}.sg-ult{margin-top:10px;font-size:.84rem;color:var(--cinza);line-height:1.5}.sg-ult b{color:var(--tinta)}</style>
+  </div>`;
+}
+
+// Contrato sem assinatura: quem recebe no próximo disparo (última leitura do
+// EVO), com "Não enviar" por aluna e o botão de ler o EVO de novo.
+function blocoAssinaturas() {
+  let c = null, reg = {};
+  try { const as = require('./assinaturas'); c = as.candidatas(); reg = as.lerRegistro(); } catch (_) {}
+  const ligado = jobsAtivos.ativo('assinaturas');
+  const quando = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+  const btn = (x, remover) => `<form method="POST" action="/assinaturas/excluir" style="display:inline;margin:0 0 0 8px"><input type="hidden" name="id" value="${esc(x.id)}"><input type="hidden" name="nome" value="${esc(x.nome)}">${remover ? '<input type="hidden" name="remover" value="1">' : ''}<button type="submit" class="tbtn" style="padding:2px 9px;font-size:.76rem">${remover ? 'Voltar a enviar' : 'Não enviar'}</button></form>`;
+  const linha = (x) => `<div class="sg-row${x.motivo ? ' fora' : ''}"><b>${esc(x.nome || 'sem nome')}</b> <span class="quando" style="margin:0">${esc(x.plano || '')}${x.envios ? ` · ${x.envios} lembrete(s), último em ${quando(x.ultimo)}` : ''}</span>${x.motivo === 'marcada para não receber' ? btn(x, true) : (!x.motivo || x.motivo === 'já recebeu hoje') ? btn(x, false) : ''}${x.motivo ? `<div class="quando" style="margin:2px 0 0">⏭️ ${esc(x.motivo)}</div>` : ''}</div>`;
+  // uma linha por aluna (duas pendências da mesma aluna recebem um lembrete só)
+  const vistos = new Set(); const lista = c ? c.lista.filter(x => { const k = x.id + '|' + (x.motivo ? 'f' : 'v'); if (vistos.has(k)) return false; vistos.add(k); return true; }) : [];
+  const vai = lista.filter(x => !x.motivo), fora = lista.filter(x => x.motivo);
+  const ult = reg.ultimaAcao;
+  const ultHtml = ult ? `<div class="sg-ult"><b>Último envio (${quando(ult.em)}):</b> ${ult.enviados.map(t => esc(t.nome) + (t.ok ? ' ✉️' : ' ⚠️ ' + esc(t.erro || 'falhou'))).join(' · ')}</div>` : '';
+  return `<div class="hsec" id="assinaturas"><div class="hsec-t">Quem recebe no próximo disparo ${vai.length ? `<span class="badge-ed">${vai.length}</span>` : ''}</div>
+    <p class="quando" data-se-desligado style="margin:0 0 8px;color:var(--warn)${ligado ? ';display:none' : ''}">⏸️ Desligado: nada é enviado até você ligar o botão <b>Ativado</b> no topo deste cartão.</p>
+    <p class="quando" style="margin:0 0 8px">Alunas ativas com contrato vigente que ainda <b>não foi assinado</b> no EVO. Cada uma recebe no máximo uma vez por dia, nos dias/horário acima; quando assina, sai da lista sozinha. ${c && c.em ? `Lista lida no EVO em <b>${quando(c.em)}</b> (o robô lê de novo a cada disparo).` : 'A lista ainda não foi lida no EVO.'}</p>
+    <div class="sg-lista">${vai.length ? vai.map(linha).join('') : '<div class="quando" style="margin:0">Ninguém para lembrar.</div>'}</div>
+    ${fora.length ? `<details class="sg-fora"><summary>Ficaram de fora (${fora.length})</summary>${fora.map(linha).join('')}</details>` : ''}
+    ${ultHtml}
+    <form method="POST" action="/assinaturas/atualizar" style="margin-top:10px" onsubmit="var b=this.querySelector('button');b.disabled=true;b.textContent='⏳ Lendo o EVO…';"><button type="submit" class="tbtn">🔄 Ler o EVO agora (não envia nada)</button></form>
     <style>.sg-row{padding:7px 0;border-top:1px solid var(--linha-soft);font-size:.88rem}.sg-row:first-child{border-top:0}.sg-row.fora{opacity:.75}.sg-fora{margin-top:8px}.sg-fora summary{cursor:pointer;font-weight:700;font-size:.85rem;color:var(--teal)}.sg-ult{margin-top:10px;font-size:.84rem;color:var(--cinza);line-height:1.5}.sg-ult b{color:var(--tinta)}</style>
   </div>`;
 }
@@ -1002,6 +1028,7 @@ const JOBS_DO_LOG = [
   [/^Aniversário ex-alunas/i, 'aniversarioEx', false, 'Aniversário das ex-alunas'],
   [/^Renovação/i, 'renovacao', false, 'Aviso de renovação'],
   [/^Vence hoje — sem renovação/i, 'venceHoje', true, 'Avisa quem vence hoje sem renovação (quem já recebeu não repete)'],
+  [/^Contrato sem assinatura/i, 'assinaturas', true, 'Lembrete de assinatura: quem já recebeu hoje não repete'],
   [/^Saída — não renovou/i, 'saidaGrupos', true, 'Retira dos grupos e manda a mensagem (quem já foi tratada não repete)'],
   [/^Sentimos sua falta/i, 'sentimosFalta', true, 'Sentimos sua falta: quem já recebeu não repete'],
   [/^Resumo do dia/i, 'resumoDia', false, 'Resumo do dia'],

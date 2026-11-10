@@ -1445,6 +1445,27 @@ const server = http.createServer(protegido((req, res) => {
     });
   }
 
+  // Contrato sem assinatura: "Não enviar"/"Voltar a enviar" por aluna e ler o EVO agora.
+  if (req.method === 'POST' && url === '/assinaturas/excluir') {
+    return lerCorpo(req, 1e4, corpo => {
+      let ok = true;
+      try {
+        const p = new URLSearchParams(corpo); const rem = p.get('remover') === '1';
+        require('./assinaturas').excluir(p.get('id'), p.get('nome'), { remover: rem, por: sess.usuario });
+        try { auditoria.registrar(sess.usuario, rem ? 'assinaturas.voltar' : 'assinaturas.excluir', p.get('nome') || p.get('id'), ''); } catch (_) {}
+      } catch (_) { ok = false; }
+      res.writeHead(303, { Location: '/?view=config' + (ok ? '' : '&erro=assinatura') + '#assinaturas' }); res.end();
+    });
+  }
+  if (req.method === 'POST' && url === '/assinaturas/atualizar') {
+    return lerCorpo(req, 1e4, async () => {
+      let ok = true;
+      try { await require('./assinaturas').atualizarPendentes(); } catch (e) { ok = false; }
+      try { auditoria.registrar(sess.usuario, 'assinaturas.ler', '', ok ? 'ok' : 'falhou'); } catch (_) {}
+      res.writeHead(303, { Location: '/?view=config' + (ok ? '' : '&erro=assinatura') + '#assinaturas' }); res.end();
+    });
+  }
+
   if (req.method === 'POST' && url === '/saidas/simular') {
     return lerCorpo(req, 1e4, () => {
       let ok = true;
