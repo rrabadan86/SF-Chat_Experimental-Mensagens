@@ -967,6 +967,45 @@ function paginaSofiaFunil(params) {
   };
   const detalheHtml = detAg.length ? `<div class="sec-t">Quem agendou no período <small style="font-weight:600;color:var(--cinza)">(${detAg.length}${canalSel === 'todos' ? '' : ' · ' + rotSel})</small></div>
     <div class="card" id="fuDet"><div id="fuFiltroInfo" class="ui-nota" style="margin:0 0 6px;display:none"></div><div class="ip-lista">${detAg.sort((a, b) => b.em - a.em).map(linhaDet).join('')}</div></div>` : '';
+  // ── Por que não agendaram (SoFIA): motivo que a IA dá quando a conversa encerra ──
+  // Conta a ÚLTIMA conversa encerrada de cada pessoa no período; quem agendou depois
+  // dela, alunas e quem não é cliente ficam de fora.
+  let motivosHtml = '';
+  if (canalSel === 'todos' || canalSel === 'sofia') {
+    const MOTIVOS = [['preco', '💰 Preço / valor'], ['horario', '🕐 Horário não serve'], ['distancia', '📍 Distância / localização'], ['pensando', '🤔 Vai pensar'], ['saude', '🩹 Saúde / liberação médica'], ['sumiu', '👻 Parou de responder'], ['outro', '❔ Outro']];
+    let hist = {}; try { hist = sofia.historico() || {}; } catch (_) {}
+    const porMot = {}; let nMot = 0, semMot = 0;
+    const dm = (ms) => { try { return new Date(ms).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' }); } catch (_) { return ''; } };
+    for (const k in hist) {
+      const ses = (hist[k] && Array.isArray(hist[k].sessoes)) ? hist[k].sessoes : [];
+      let alvo = null;
+      for (const se of ses) if (se && se.status === 'encerrada' && se.fimEm && dentro(diaDe(se.fimEm)) && (!alvo || se.fimEm > alvo.fimEm)) alvo = se;
+      if (!alvo) continue;
+      const l8 = last8(k);
+      if (temCrm && !cont8[l8]) continue; // excluída de Contatos (ex.: teste)
+      const agendouDepois = (tagLogMap[l8] || []).some(e => e && e.acao === 'add' && (e.motivo === 'agendou' || agTagsLc.includes(String(e.tag || '').trim())) && (e.em || 0) >= (alvo.inicioEm || 0) - 3600e3);
+      if (agendouDepois) continue;
+      let tagsC = []; try { const r = contatos.acharPorTel(k, contatosMap); tagsC = (r && r.contato && r.contato.tags) || []; } catch (_) {}
+      if (tAluna && tagsC.includes(tAluna)) continue; // já é aluna
+      const mo = String(alvo.motivo || '');
+      if (!mo) { if (alvo.resumoPronto) semMot++; continue; }
+      if (mo === 'agendou' || mo === 'aluna' || mo === 'nao_lead') continue;
+      const chave = MOTIVOS.some(x => x[0] === mo) ? mo : 'outro';
+      (porMot[chave] = porMot[chave] || []).push({ nome: nomeDe(k, inbox[k] || (inbox8[l8] && inbox8[l8].c)), tel: k, resumo: String(alvo.resumo || ''), em: alvo.fimEm });
+      nMot++;
+    }
+    const ord = MOTIVOS.filter(([c]) => porMot[c] && porMot[c].length).sort((x, y) => porMot[y[0]].length - porMot[x[0]].length);
+    const barrasMot = ord.map(([c, rot]) => uiBarra({ rot: esc(rot), n: porMot[c].length, max: nMot, cor: 'var(--coral-esc)', attrs: ` onclick="var d=document.getElementById('mot-${c}');if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'nearest'});}"` })).join('');
+    const listas = ord.map(([c, rot]) => `<details id="mot-${c}" class="mot-det"><summary>${esc(rot)} <span class="quando" style="margin:0">(${porMot[c].length})</span></summary>`
+      + porMot[c].sort((a, b) => b.em - a.em).slice(0, 60).map(p => `<div class="mot-p"><a href="${linkContato(p.tel)}"><b>${esc(p.nome)}</b></a> <span class="quando" style="margin:0">${dm(p.em)}</span>${p.resumo ? `<div class="quando" style="margin:2px 0 0">${esc(p.resumo.slice(0, 260))}${p.resumo.length > 260 ? '…' : ''}</div>` : ''}</div>`).join('')
+      + (porMot[c].length > 60 ? `<div class="quando">…e mais ${porMot[c].length - 60}.</div>` : '') + '</details>').join('');
+    motivosHtml = `<div class="sec-t">Por que não agendaram <small style="font-weight:600;color:var(--cinza)">(conversas com a SoFIA · ${esc(rotulo)})</small></div>
+    <div class="card">
+      ${nMot ? barrasMot + `<div style="margin-top:10px">${listas}</div>` : `<div class="vazio">${semMot ? 'Nenhuma conversa classificada neste período ainda.' : 'Sem conversas encerradas sem agendamento neste período.'}</div>`}
+      <p class="quando" style="margin:10px 0 0">A SoFIA classifica o motivo quando a conversa encerra (junto do resumo). Conta a última conversa de cada pessoa no período; quem agendou depois, alunas e quem não é cliente (fornecedor, engano) ficam de fora. Clique numa barra para ver as pessoas e o resumo.${semMot ? ` <b>${semMot}</b> conversa(s) do período encerraram antes desta função existir e não têm motivo.` : ''}</p>
+      <style>.mot-det{border-top:1px solid var(--linha-soft);padding:6px 0}.mot-det>summary{cursor:pointer;font-weight:700}.mot-p{padding:6px 0 6px 14px;border-bottom:1px dashed var(--linha-soft)}.mot-p a{color:var(--teal-esc);text-decoration:none}.mot-p a:hover{text-decoration:underline}.mot-p:last-child{border-bottom:0}</style>
+    </div>`;
+  }
   const corpo = `<div class="wrap">
     ${subnavIndicadores('funil')}
     ${uiTopo({
@@ -993,6 +1032,7 @@ function paginaSofiaFunil(params) {
       ${(!compCfg.on || !atCfg.on) ? `<p class="quando" style="margin:8px 0 0;color:var(--warn)">⚠️ ${!compCfg.on ? '“Presença da experimental” está desligada (SoFIA → Tags) — sem ela, ninguém sai de “aguardando”. ' : ''}${!atCfg.on ? '“Alunas / Ex-alunas automáticas” está desligado (SoFIA → Tags) — sem ele, o fechamento de contrato não aparece.' : ''}</p>` : ''}
       ${canalSel === 'formulario' && podeVerInd ? `<p style="margin:12px 0 0;text-align:right"><a href="/indicadores?dias=${diasInd}" class="ui-btn sec" style="display:inline-block;white-space:normal;text-align:center">Ver detalhes do formulário (por dia, horários de pico, origens e links) →</a></p>` : ''}
     </div>
+    ${motivosHtml}
     ${detalheHtml}
     </div>
     <style>
