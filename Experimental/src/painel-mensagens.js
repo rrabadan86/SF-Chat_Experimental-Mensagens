@@ -34,6 +34,14 @@ const igcookies = require('./instagram-cookies');
 const igforcar = require('./ig-forcar');
 const jobsAtivos = require('./jobs-ativos'); // liga/desliga de cada envio
 const inadConfig = require('./inadimplentes-config'); // "vencido há X+ dias" (configurável)
+// Número para o código de pareamento: só dígitos e, se veio SEM o DDI (10–11
+// dígitos: DDD + número), põe o 55 do Brasil. Sem isso "61992285266" virava
+// um número da AUSTRÁLIA (+61) e o celular recusava o código.
+function numeroPareamento(v) {
+  let d = String(v || '').replace(/\D/g, '');
+  if (/^\d{10,11}$/.test(d) && !d.startsWith('55')) d = '55' + d;
+  return d;
+}
 const freeCfg = require('./free-antecedencia-config'); // planos FREE: intervalo (horas) + janela (dias)
 const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
@@ -2202,7 +2210,7 @@ const server = http.createServer(protegido((req, res) => {
   if (req.method === 'POST' && url === '/sofia/parear') {
     return lerCorpo(req, 1e5, corpo => {
       let d = {}; try { d = JSON.parse(corpo || '{}'); } catch (_) {}
-      const numero = String(d.numero || '').replace(/\D/g, '');
+      const numero = numeroPareamento(d.numero);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       if (numero.length < 10) return res.end(JSON.stringify({ ok: false, erro: 'número inválido (use DDI+DDD+número)' }));
       try {
@@ -2606,7 +2614,7 @@ const server = http.createServer(protegido((req, res) => {
   if (req.method === 'POST' && url === '/wa/parear') {
     return lerCorpo(req, 1e4, (corpo) => {
       let numero = '';
-      try { numero = String((JSON.parse(corpo) || {}).numero || '').replace(/\D/g, ''); } catch (_) {}
+      try { numero = numeroPareamento((JSON.parse(corpo) || {}).numero); } catch (_) {}
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       if (numero.length < 10 || numero.length > 15) return res.end(JSON.stringify({ ok: false, erro: 'Número inválido. Use DDI+DDD+número, só dígitos (ex.: 5562999998010).' }));
       try {
