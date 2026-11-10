@@ -22,6 +22,7 @@ const { AsyncLocalStorage } = require('async_hooks');
 const ARQ = path.resolve(__dirname, '..', 'data', 'jobs-disparos.json');
 const als = new AsyncLocalStorage();
 let est = null;
+let anteriores = {}; // registrados do boot anterior (para saber desde quando cada horário vale)
 
 function ler() {
   try { const o = JSON.parse(fs.readFileSync(ARQ, 'utf8')); return (o && typeof o === 'object') ? o : null; } catch (_) { return null; }
@@ -39,6 +40,7 @@ function gravar() {
 // monitoramento começou (antes disso não dá para dizer que um job "não rodou").
 function iniciar() {
   const o = ler() || {};
+  anteriores = o.registrados || {};
   est = { desde: o.desde || new Date().toISOString(), boot: new Date().toISOString(), registrados: {}, disparos: o.disparos || {}, falhas: o.falhas || {} };
   gravar();
 }
@@ -46,7 +48,12 @@ function iniciar() {
 // Substitui cron.schedule(expr, fn, opts) no scheduler.
 function agendar(cron, chave, expr, fn, opts) {
   if (!est) iniciar();
-  est.registrados[chave] = { expr: String(expr), tz: (opts && opts.timezone) || '' };
+  // "desde": quando ESTE horário passou a valer no robô. Mesmo horário do boot
+  // anterior → mantém; envio novo ou horário mudado → agora (não acusa "não rodou"
+  // por um horário de hoje que já tinha passado quando ele foi ligado).
+  const ant = anteriores[chave];
+  const desdeChave = (ant && ant.expr === String(expr) && ant.desde) ? ant.desde : new Date().toISOString();
+  est.registrados[chave] = { expr: String(expr), tz: (opts && opts.timezone) || '', desde: desdeChave };
   gravar();
   return cron.schedule(expr, function (...a) {
     try { est.disparos[chave] = new Date().toISOString(); gravar(); } catch (_) {}
@@ -123,7 +130,7 @@ function situacao(agora = Date.now()) {
     const falhaEm = f ? (Date.parse(f.em) || 0) : 0;
     let estado = 'ok';
     if (falhaEm && falhaEm >= disparo && agora - falhaEm < FALHA_VALE_MS) estado = 'falhou';
-    else if (previsto && previsto >= desde && disparo < previsto - 2 * 60000) estado = 'perdeu';
+    else if (previsto && previsto >= Math.max(desde, Date.parse(r.desde || '') || 0) && disparo < previsto - 2 * 60000) estado = 'perdeu';
     else if (!disparo) estado = 'aguardando';
     itens.push({ chave, expr: r.expr, previsto, disparo, falha: estado === 'falhou' ? { em: falhaEm, msg: f.msg || '' } : null, estado });
   }
