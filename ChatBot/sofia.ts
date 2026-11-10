@@ -947,7 +947,8 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
   const ctxAluna = contextoAluna(telefone);
   // Ex-aluna / já fez experimental (tags do painel): reencontro, sem apresentação
   // nem metodologia de novo. Só vale quando ela NÃO é aluna contratada.
-  const promptDaVez = carregarPrompt() + ctxAluna + (ctxAluna ? "" : contextoHistorico(telefone)) + contextoData();
+  const promptBase = carregarPrompt();
+  const promptDaVez = promptBase + ctxAluna + (ctxAluna ? "" : contextoHistorico(telefone)) + contextoData(promptBase);
   const opcoesDaVez: ClaudeAgentOptions = conversa.sessionId
     ? { ...options, resume: conversa.sessionId, systemPrompt: promptDaVez }
     : { ...options, systemPrompt: promptDaVez };
@@ -1547,17 +1548,39 @@ function contextoAluna(telefone: string): string {
 // decidir sozinha se uma promoção com validade por mês/período está vigente —
 // sem cron nem "job da meia-noite" (vira na hora que a próxima mensagem chega).
 // Fica no FIM (junto do contexto de aluna) para não quebrar o cache do prompt.
-function contextoData(): string {
+// Promoção do prompt: lê "Nome:" e "Validade: de DD/MM/AAAA a DD/MM/AAAA" do bloco
+// PROMOÇÃO e diz se está VIGENTE hoje. A SoFIA errava essa conta de datas (ou
+// escolhia a frase do valor cheio) — agora o veredito vem pronto, calculado aqui.
+function statusPromocao(prompt: string, hojeIso: string): { nome: string; de: string; ate: string; ativa: boolean } | null {
+  try {
+    const i = prompt.search(/^\s*PROMO[ÇC][ÃA]O\s*:/im);
+    if (i < 0) return null;
+    const bloco = prompt.slice(i, i + 3000);
+    if (/^\s*PROMO[ÇC][ÃA]O\s*:\s*nenhuma/im.test(bloco)) return null;
+    const v = /Validade\s*:[^\n]*?(\d{2})\/(\d{2})\/(\d{4})[^\n]*?(\d{2})\/(\d{2})\/(\d{4})/i.exec(bloco);
+    if (!v) return null;
+    const de = `${v[3]}-${v[2]}-${v[1]}`, ate = `${v[6]}-${v[5]}-${v[4]}`;
+    const n = /Nome\s*:\s*\*?([^*\n]+)\*?/i.exec(bloco);
+    return { nome: (n ? n[1] : "").trim(), de: `${v[1]}/${v[2]}/${v[3]}`, ate: `${v[4]}/${v[5]}/${v[6]}`, ativa: hojeIso >= de && hojeIso <= ate };
+  } catch { return null; }
+}
+
+function contextoData(prompt = ""): string {
   try {
     const opts = { timeZone: "America/Sao_Paulo" } as const;
     const data = new Date().toLocaleDateString("pt-BR", { ...opts, day: "2-digit", month: "2-digit", year: "numeric" });
     const diaSemana = new Date().toLocaleDateString("pt-BR", { ...opts, weekday: "long" });
     const mesAno = new Date().toLocaleDateString("pt-BR", { ...opts, month: "long", year: "numeric" });
+    const hojeIso = new Date().toLocaleDateString("en-CA", opts);
+    const p = statusPromocao(prompt, hojeIso);
+    const linhaPromo = !p ? "" : p.ativa
+      ? `\n- PROMOÇÃO HOJE: *ATIVA* — ${p.nome ? `*${p.nome}* ` : ""}(válida de ${p.de} a ${p.ate}). Já está calculado: NÃO refaça a conta de datas. Sempre que falar de preço/valores, use a FRASE DA PROMOÇÃO da seção PREÇO E PROMOÇÃO — é proibido responder só com "nossos planos começam em R$…" sem a promoção.`
+      : `\n- PROMOÇÃO HOJE: *INATIVA* (${p.nome ? `${p.nome}, ` : ""}validade ${p.de} a ${p.ate}). Já está calculado: fale só o valor cheio e NUNCA mencione essa promoção, desconto ou vouchers.`;
     return `
 
 # DATA DE HOJE (fonte da verdade para datas — vale acima de qualquer texto)
 - Hoje é ${data} (${diaSemana}), horário de Brasília. Estamos em ${mesAno}.
-- Use SEMPRE esta data para decidir se uma promoção com validade por mês/período está vigente. NUNCA suponha o mês por conta própria.`;
+- Use SEMPRE esta data para decidir se uma promoção com validade por mês/período está vigente. NUNCA suponha o mês por conta própria.${linhaPromo}`;
   } catch { return ""; }
 }
 
