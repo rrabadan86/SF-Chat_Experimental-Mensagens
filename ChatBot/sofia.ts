@@ -902,7 +902,7 @@ let _conversaDaVez: Conversa | null = null;
 // Por isso só disparamos em frases que praticamente só uma auto-resposta de
 // empresa contém (a empresa se apresentando / avisando ausência) — nunca em uma
 // simples pergunta sobre horário. Pode ser desligado com SOFIA_DETECTAR_AUTOMATICA=0.
-function pareceMensagemAutomatica(texto: string): boolean {
+export function pareceMensagemAutomatica(texto: string): boolean {
   if (String(process.env.SOFIA_DETECTAR_AUTOMATICA || "1") === "0") return false;
   const t = String(texto || "")
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")   // sem acento

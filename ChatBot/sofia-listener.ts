@@ -24,7 +24,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
-import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirEClassificar, fichaDaLead, simularResposta, gerarFollowup, classificarIntencaoTags, agendarManual, temTagSemInteresse } from "./sofia";
+import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirEClassificar, fichaDaLead, simularResposta, pareceMensagemAutomatica, gerarFollowup, classificarIntencaoTags, agendarManual, temTagSemInteresse } from "./sofia";
 
 // Pasta dos arquivos da Sofia. Por padrão, a pasta de trabalho (comportamento
 // atual). Se SOFIA_DIR estiver definida, usa ela — permite guardar prompt/estado
@@ -831,7 +831,7 @@ function retencaoMs(): number {
   const d = Number.isFinite(_retDias) && _retDias >= 0 ? _retDias : 365;
   return d > 0 ? d * 24 * 3600 * 1000 : Number.POSITIVE_INFINITY;
 }
-type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string; tipo?: "followup" | "wpp" | "anuncio"; citacao?: string; imp?: boolean };
+type InboxMsg = { autor: "aluna" | "sofia" | "humano"; texto: string; em: number; foto?: string; por?: string; tipo?: "followup" | "wpp" | "anuncio" | "automatica"; citacao?: string; imp?: boolean };
 type InboxConversa = { jid: string; nome: string; ultimaEm: number; msgs: InboxMsg[] };
 const inbox = new Map<string, InboxConversa>();
 let inboxTimer: ReturnType<typeof setTimeout> | null = null;
@@ -846,6 +846,8 @@ function carregarInbox() {
       const c = o[k];
       if (!(c && Array.isArray(c.msgs))) { lixo++; continue; }
       for (const m of c.msgs) if (m && pareceBase64(String(m.texto || ""))) { m.texto = "📎 Anexo"; anexos++; } // anexo importado como texto
+      // Marca respostas automáticas antigas (de antes do aviso existir) para o painel explicar.
+      for (const m of c.msgs) if (m && m.autor === "aluna" && !m.tipo) { try { if (pareceMensagemAutomatica(String(m.texto || ""))) m.tipo = "automatica"; } catch {} }
       inbox.set(k, c);
     }
     if (anexos) { log(`🧹 inbox: ${anexos} anexo(s) que vieram como texto codificado trocados por "📎 Anexo".`); setTimeout(() => { try { salvarInbox(); } catch {} }, 3000); }
@@ -892,7 +894,9 @@ function registrarInbox(chave: string, jid: string, nome: string, autor: InboxMs
   if (c.msgs.length > INBOX_MAX_MSGS) c.msgs.splice(0, c.msgs.length - INBOX_MAX_MSGS);
   c.ultimaEm = em;
   agendarSalvarInbox();
-  registrarSessao(chave, nome || c.nome, autor, t || "📷 (foto)", em);
+  // Resposta automática de outro WhatsApp (ausência/saudação): não abre interação
+  // (nem "novo contato", nem "encerrou sem agendamento") — não é conversa de verdade.
+  if (tipo !== "automatica") registrarSessao(chave, nome || c.nome, autor, t || "📷 (foto)", em);
 }
 
 // ── Importar histórico existente do WhatsApp para a inbox (uma vez) ──────────
@@ -2903,8 +2907,13 @@ async function processarTextoDaAluna(msg: any, texto: string, textoInbox?: strin
   const nomeAluna = (msg._data && msg._data.notifyName) || "";
   const citacao = extrairCitacao(msg); // mensagem citada (responder do WhatsApp) → aparece no painel
   marcarEntrada(chave, texto); // registra p/ detectar o eco "fromMe" do patrocinado
-  registrarInbox(chave, msg.from, nomeAluna, "aluna", textoInbox || texto, undefined, undefined, undefined, citacao); // painel ao vivo
-  try { checarGatilhosAluna(chave, nomeAluna, texto); } catch (e: any) { log("gatilhos: " + (e?.message || e)); }
+  // Mensagem automática de outro negócio (ex.: "agradecemos o seu contato… retornaremos"):
+  // aparece no painel com o aviso, mas NÃO aplica tags nem conta no funil (a SoFIA
+  // também não responde — veja responderComMemoria).
+  const automatica = pareceMensagemAutomatica(texto);
+  registrarInbox(chave, msg.from, nomeAluna, "aluna", textoInbox || texto, undefined, undefined, automatica ? "automatica" : undefined, citacao); // painel ao vivo
+  if (automatica) log(`🤖 ${chave}: resposta automática de outro WhatsApp — sem tags e sem resposta.`);
+  else { try { checarGatilhosAluna(chave, nomeAluna, texto); } catch (e: any) { log("gatilhos: " + (e?.message || e)); } }
   agendarResposta(chave, msg.from, telefone, texto); // debounce + resposta
 }
 
