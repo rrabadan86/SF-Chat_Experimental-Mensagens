@@ -176,7 +176,7 @@ function paginaMensagens(aviso, erro) {
       <div class="hsec" style="border:0;margin:8px 0 0;padding:0">${blocoHorario(j, '')}</div>${j.chave === 'resumoSemana' ? '<p class="quando" style="margin:8px 0 0">Grupos, o que vai na mensagem, prévia e envio de teste: <a href="/ativas/resumo?t=semana">Indicadores → Alunas ativas → Resumos no WhatsApp</a>.</p>' : ''}</div>`;
   }).join('\n');
 
-  const corpo = `<div class="wrap">
+  const corpo = `<div class="wrap" data-sempre-fechado>
     ${subnavMensagens('config')}
     ${uiTopo({ titulo: 'WhatsApp do robô', sub: 'Conexão do número do robô, o texto de cada mensagem automática, fotos, horários e quem recebe. Clique no título de uma seção para abrir ou fechar.',
       linhas: [uiChips('Ir para', [['#waBanner', '📶 Conexão'], ['#sec-indiv', '👤 Mensagens individuais'], ['#sec-grupo', '👥 Mensagens em grupo'], ['#sec-outros', '⚙️ Outros envios'], ['#sec-free', '🆓 Planos FREE']])] })}
@@ -286,11 +286,8 @@ function paginaMensagens(aviso, erro) {
   </div>
 ${scriptPreviewTeste()}
 <script>
-  (function(){ // blocos de mensagens: começam FECHADOS; lembra o que foi aberto neste navegador
-    [].slice.call(document.querySelectorAll('details.msg-bloco')).forEach(function(d){
-      var k='blk2:'+d.id; try{ if(localStorage.getItem(k)==='1') d.open=true; }catch(e){}
-      d.addEventListener('toggle',function(){ try{ localStorage.setItem(k, d.open?'1':'0'); }catch(e){} });
-    });
+  (function(){ // blocos de mensagens: começam SEMPRE fechados (não memoriza o que foi aberto)
+    try{ for(var i=localStorage.length-1;i>=0;i--){ var kk=localStorage.key(i); if(kk && kk.indexOf('blk2:')===0) localStorage.removeItem(kk); } }catch(e){} // limpa a memória antiga
     // Link para um card (#msg-…) dentro de um bloco fechado: abre o bloco.
     function abrirAlvo(){ try{ var h=location.hash; if(!h) return; var t=document.querySelector(h); var b=t&&t.closest&&t.closest('details.msg-bloco'); if(b) b.open=true; }catch(e){} }
     abrirAlvo(); window.addEventListener('hashchange', abrirAlvo);

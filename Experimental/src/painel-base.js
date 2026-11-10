@@ -375,8 +375,14 @@ const ESTILO = `
   .msg-bloco[open]>summary::after{content:"▾"}
   .msg-bloco>summary:hover{border-color:var(--teal)}
   .msg-bloco>summary small{font-weight:600;color:var(--cinza);font-size:.76rem}
-  .msg-bloco[open]>summary{margin-bottom:10px}
+  .msg-bloco{margin:0 0 10px}
+  /* Grupo ABERTO vira uma moldura: o título em cima e os cartões DENTRO, recuados —
+     fica claro que "Confirmação — aula de hoje" faz parte de "Confirmação de aula". */
+  .msg-bloco[open]{border:1px solid var(--teal);border-radius:11px;background:var(--bg);padding-bottom:2px}
+  .msg-bloco[open]>summary{border:0;border-bottom:1px solid var(--avi-bd);border-radius:10px 10px 0 0;background:var(--avi-bg);margin:0 0 10px}
   .msg-bloco>.card{background:var(--card)}
+  .msg-bloco[open]>.card{margin:0 10px 10px 22px}
+  @media (max-width:640px){ .msg-bloco[open]>.card{margin:0 6px 8px 10px} }
   .vazio{color:var(--cinza);font-size:var(--fs-sm)}
   .wabar{border-radius:12px;padding:10px 14px;margin:14px 0 0;font-weight:600;font-size:var(--fs-sm);display:flex;align-items:center;gap:8px}
   .wabar.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
@@ -793,6 +799,8 @@ ${corpo}
    lugar — só os envolve, então tudo continua salvando igual. */
 (function(){
   try{
+    var sempreFechado=!!document.querySelector('[data-sempre-fechado]');
+    var alvo=null; try{ if(location.hash && location.hash.length>1) alvo=document.querySelector(location.hash); }catch(e){}
     var heads=[].slice.call(document.querySelectorAll('.wrap .sec-t')).filter(function(h){
       return h.tagName!=='SUMMARY' && !h.closest('details') && !h.hasAttribute('data-nosec');
     });
@@ -811,11 +819,17 @@ ${corpo}
       var sum=document.createElement('summary'); sum.className='sec-t'; sum.innerHTML=h.innerHTML;
       det.appendChild(sum); sibs.forEach(function(s){ det.appendChild(s); });
       var key='sec:'+location.pathname+':'+(sum.textContent||'').replace(/\\s+/g,' ').trim().slice(0,60);
-      var aberto=true; try{ if(localStorage.getItem(key)==='0') aberto=false; }catch(e){}
+      // Tela marcada com data-sempre-fechado (ex.: WhatsApp → Configuração): abre
+      // SEMPRE recolhida e não memoriza o que foi aberto. Nas outras, lembra.
+      var aberto=true;
+      if(sempreFechado) aberto=false;
+      else { try{ if(localStorage.getItem(key)==='0') aberto=false; }catch(e){} }
+      if(alvo && det.contains(alvo)) aberto=true;   // link/volta para um item desta seção (#…): abre
       det.open=aberto;
-      det.addEventListener('toggle',function(){ try{ localStorage.setItem(key, det.open?'1':'0'); }catch(e){} });
+      if(!sempreFechado) det.addEventListener('toggle',function(){ try{ localStorage.setItem(key, det.open?'1':'0'); }catch(e){} });
       h.parentNode.replaceChild(det,h);
     });
+    if(alvo){ try{ var d0=alvo.closest('details'); while(d0){ d0.open=true; d0=d0.parentElement&&d0.parentElement.closest('details'); } alvo.scrollIntoView({block:'start'}); }catch(e){} }
     // Índice "Ir para": abre a seção antes de rolar até ela.
     document.addEventListener('click',function(ev){
       var a=ev.target.closest && ev.target.closest('a[href^="#sec-"]'); if(!a) return;
