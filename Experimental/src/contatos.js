@@ -591,7 +591,7 @@ function adicionar({ nome, telefone, tags, instrucoes }) {
 module.exports = {
   normTel, variantes9, acharPorTel, carregar, importarCSV: comTrava(importarCSV), exportarCSV, setTags: comTrava(setTags), listar, tagsDistintas, totalContatos,
   remover: comTrava(remover), removerLote: comTrava(removerLote), editarContato: comTrava(editarContato), renomearTag: comTrava(renomearTag), excluirTag: comTrava(excluirTag), existe, adicionar: comTrava(adicionar), ARQUIVO,
-  tagConfig, definirTagConfig: comTrava(definirTagConfig), tagsPorGatilho, criarTag: comTrava(criarTag), adicionarTag: comTrava(adicionarTag), removerTag: comTrava(removerTag), lerTagsConfig, GATILHOS,
+  tagConfig, definirTagConfig: comTrava(definirTagConfig), tagsPorGatilho, criarTag: comTrava(criarTag), adicionarTag: comTrava(adicionarTag), removerTag: comTrava(removerTag), lerTagsConfig, salvarTagsConfig, GATILHOS,
   aplicarTagLote: comTrava(aplicarTagLote), contarFiltrados,
   nomeDoAgendamento: comTrava(nomeDoAgendamento), marcarNomeManual: comTrava(marcarNomeManual),
 };

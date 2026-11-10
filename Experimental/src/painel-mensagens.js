@@ -1116,6 +1116,46 @@ const server = http.createServer(protegido((req, res) => {
       }
     });
   }
+  // ── Copiar a configuração para outra unidade (config-unidade.js) — só admin ──
+  if (url === '/config-unidade/exportar' || url === '/config-unidade/previa' || url === '/config-unidade/importar' || url === '/config-unidade/desfazer') {
+    if (!sess.admin) return negarAcesso(res, sess);
+    const cu = require('./config-unidade');
+    const resp = (o, st = 200) => { res.writeHead(st, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(o)); };
+    if (req.method === 'GET' && url === '/config-unidade/exportar') {
+      const unidade = String(process.env.STUDIO_NOME || '').trim();
+      const comFotos = new URLSearchParams(req.url.split('?')[1] || '').get('fotos') !== '0';
+      const pac = cu.exportar(unidade, { fotos: comFotos });
+      const slug = unidade.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'unidade';
+      try { auditoria.registrar(sess.usuario, 'config.exportar', unidade || '', comFotos ? 'com imagens' : 'sem imagens'); } catch (_) {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="configuracao-${slug}.json"`, 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify(pac));
+    }
+    if (req.method === 'POST' && url === '/config-unidade/previa') {
+      return lerCorpo(req, 150e6, corpo => { try { return resp({ ok: true, ...cu.previa(JSON.parse(corpo || '{}').pacote) }); } catch (e) { return resp({ ok: false, erro: e.message }, 400); } });
+    }
+    if (req.method === 'POST' && url === '/config-unidade/importar') {
+      return lerCorpo(req, 150e6, corpo => {
+        let r;
+        try {
+          const d = JSON.parse(corpo || '{}');
+          r = cu.importar(d.pacote, d.partes, sess.usuario);
+          try { auditoria.registrar(sess.usuario, 'config.importar', (d.pacote && d.pacote.unidade) ? 'de ' + d.pacote.unidade : '', r.feito.join(', ')); } catch (_) {}
+        } catch (e) { return resp({ ok: false, erro: e.message }, 400); }
+        if (r.tags) { try { publicarRegras(); } catch (_) {} } // a SoFIA lê as regras novas na hora
+        if (!r.horarios) return resp({ ok: true, ...r });
+        exec('pm2 restart ' + PM2_EXP + ' --update-env', { timeout: 25000 }, (err) => resp({ ok: true, ...r, reiniciou: !err }));
+      });
+    }
+    if (req.method === 'POST' && url === '/config-unidade/desfazer') {
+      return lerCorpo(req, 1e4, () => {
+        let r;
+        try { r = cu.desfazer(); try { auditoria.registrar(sess.usuario, 'config.desfazer', r.origem ? 'importação de ' + r.origem : '', ''); } catch (_) {} }
+        catch (e) { return resp({ ok: false, erro: e.message }, 400); }
+        try { publicarRegras(); } catch (_) {}
+        exec('pm2 restart ' + PM2_EXP + ' --update-env', { timeout: 25000 }, (err) => resp({ ok: true, ...r, reiniciou: !err }));
+      });
+    }
+  }
   // Pacote com TODAS as imagens das mensagens: baixar (para levar a outra unidade
   // ou para o padrão do repositório) e importar.
   if (req.method === 'GET' && url === '/mensagem/fotos/exportar') {

@@ -1108,6 +1108,17 @@ function gravarAvisoHumano(on, numero, palavras) {
   return o;
 }
 
+// ── Copiar configuração entre unidades (config-unidade.js) ──
+function textoPrompt() { return ler(F.prompt); }
+function textoExtracao() { return ler(F.extracao); }
+function textoFollowupCfg() { return ler(F.followupCfg); }
+// Grava textos crus (importação/desfazer). Guarda o .bak como o "Restaurar anterior" do painel.
+function gravarTextosSofia({ prompt, extracao, followupCfg }) {
+  if (typeof prompt === 'string' && prompt.trim()) { try { if (existe(F.prompt)) fs.copyFileSync(F.prompt, F.promptBak); } catch (_) {} gravarArquivo(F.prompt, prompt); }
+  if (typeof extracao === 'string' && extracao.trim()) { try { if (existe(F.extracao)) fs.copyFileSync(F.extracao, F.extracaoBak); } catch (_) {} gravarArquivo(F.extracao, extracao); }
+  if (typeof followupCfg === 'string' && followupCfg.trim()) gravarArquivo(F.followupCfg, followupCfg);
+}
+
 // ── Simulador ("Testar a SoFIA"): o painel enfileira, o listener responde sem enviar nada.
 const SIM_IN = path.join(DIR, 'sofia-simulador.jsonl');
 const SIM_RES = path.join(DIR, 'sofia-simulador-res.json');
@@ -1124,7 +1135,7 @@ function lerSimulacao(id) {
 }
 
 module.exports = {
-  enfileirarSimulacao, lerSimulacao,
+  enfileirarSimulacao, lerSimulacao, textoPrompt, textoExtracao, textoFollowupCfg, gravarTextosSofia,
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado, previaImportacao, importarPrompt,
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
