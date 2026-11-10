@@ -529,10 +529,20 @@ async function runPlanilhaAniversarios() {
     return { alunas: 0 };
   }
 
-  const res = await sincronizar(alunas);
+  // A planilha do Google e a auto-tag são INDEPENDENTES: se a planilha falhar
+  // (ex.: SHEETS_ID sem o google-sa.json), as tags Aluna/Ex-aluna do CRM ainda
+  // são atualizadas — antes o erro da planilha impedia a auto-tag de rodar.
+  let res = null, erroPlanilha = null;
+  try { res = await sincronizar(alunas); }
+  catch (e) { erroPlanilha = e; console.log('\n⚠️  Planilha do Google não foi atualizada:', e && e.message); }
   // Auto-tag "0. Aluna" / "0. Ex Aluna" no CRM da SoFIA (só se ligado no painel).
-  try { const at = require('./auto-tag-alunas').sincronizarTags(alunas, { dry: false }); _logAutoTag(at); if (res && typeof res === 'object') res.autoTag = at; }
+  let at = null;
+  try { at = require('./auto-tag-alunas').sincronizarTags(alunas, { dry: false }); _logAutoTag(at); if (res && typeof res === 'object') res.autoTag = at; }
   catch (e) { console.log('   ⚠️ auto-tag pulada:', e && e.message); }
+  if (erroPlanilha) {
+    if (at && !at.desligado) erroPlanilha.message = `${erroPlanilha.message} (as tags Aluna/Ex-aluna foram atualizadas mesmo assim)`;
+    throw erroPlanilha;
+  }
   console.log('\n✅ Concluído.');
   return res;
 }
