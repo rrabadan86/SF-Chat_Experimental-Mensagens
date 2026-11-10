@@ -1284,6 +1284,23 @@ const server = http.createServer(protegido((req, res) => {
       } catch (e) { return resp({ ok: false, erro: e.message }, 500); }
     });
   }
+  // Teste do ENCERRAMENTO do follow-up (card do encerramento).
+  if (req.method === 'POST' && url === '/followup/encerramento/teste') {
+    return lerCorpo(req, 1e4, corpo => {
+      const resp = (o, st = 200) => { res.writeHead(st, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(o)); };
+      try {
+        const d = JSON.parse(corpo || '{}');
+        const tel = String(d.tel || '').replace(/\D/g, ''), etapa = String(d.etapa || '');
+        if (tel.length < 10) return resp({ ok: false, erro: 'Preencha o "Número para testes" lá em cima (com DDD).' }, 400);
+        if (!['followup', 'conferir'].includes(etapa)) return resp({ ok: false, erro: 'etapa inválida' }, 400);
+        const arq = path.resolve(__dirname, '..', 'data', 'rodar-job.json');
+        if (fs.existsSync(arq)) return resp({ ok: false, erro: 'O robô já tem outro pedido na fila — tente em 1 minuto.' }, 409);
+        const id = 'fet' + Date.now().toString(36);
+        fs.writeFileSync(arq, JSON.stringify({ job: 'encerramentoTeste', etapa, tel, id }));
+        return resp({ ok: true, id });
+      } catch (e) { return resp({ ok: false, erro: e.message }, 500); }
+    });
+  }
   if (req.method === 'GET' && url === '/confirmacao/sem-resposta/teste/status') {
     const id = new URLSearchParams(req.url.split('?')[1] || '').get('id') || '';
     const st = statusRodarJob(id) || { estado: 'pendente', msg: '' };

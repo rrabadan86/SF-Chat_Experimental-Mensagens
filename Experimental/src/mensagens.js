@@ -69,6 +69,14 @@ const CATALOGO = [
     exemplos: { lista: '• 16:15 (hoje) — Lilian Carneiro — (62) 98322-0000\n• 18:15 (hoje) — Carla Mendes — (62) 99111-2222' },
   },
   {
+    chave: 'followup_encerramento',
+    titulo: 'Follow-up — encerramento (sem resposta)',
+    quando: 'Sai no DIA SEGUINTE ao follow-up pós-aula, só para quem NÃO respondeu nem reagiu ao follow-up, com quem a recepção não falou à mão e que não virou aluna. Um horário para o follow-up da manhã e outro para o da tarde. Uma vez por follow-up.',
+    vars: [['nome', 'primeiro nome da aluna'], ['professora', 'primeiro nome da professora da aula']],
+    padrao: 'Oie, {nome}! Tudo bem? 😊\n\nAqui é a {professora}, a professora que te deu a aula experimental no Studio SlimFit! 💪🏼\n\nComo não tive notícias suas, vou encerrar seu atendimento por aqui. Mas antes queria te fazer uma perguntinha rápida: o que pesou na sua decisão?\n\n1️⃣ Quero fazer mais uma aula experimental\n2️⃣ O horário não encaixou\n3️⃣ O valor\n4️⃣ Agora não é o momento\n\nÉ só responder com o número! Tenho certeza que teríamos ótimos resultados juntas. 🫶🏼',
+    exemplos: { professora: 'Tay' },
+  },
+  {
     chave: 'followup',
     titulo: 'Follow-up pós-aula (ainda não fechou)',
     quando: 'Enviada 10:30 / 16:00 para quem fez a experimental no dia anterior.',

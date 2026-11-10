@@ -19,6 +19,8 @@ const CATALOGO = [
   { chave: 'afternoon',         titulo: 'Confirmação — aula de amanhã', padrao: '30 15 * * 0-5' },
   { chave: 'followupMorning',   titulo: 'Follow-up pós-aula (manhã)',   padrao: '30 10 * * 1-6' },
   { chave: 'followupAfternoon', titulo: 'Follow-up pós-aula (tarde)',   padrao: '0 16 * * 1-6' },
+  { chave: 'encerramentoManha', titulo: 'Follow-up — encerramento (follow-up da manhã)', padrao: '45 10 * * 1-6' },
+  { chave: 'encerramentoTarde', titulo: 'Follow-up — encerramento (follow-up da tarde)', padrao: '15 16 * * 1-6' },
   { chave: 'noShowMorning',     titulo: 'Faltou / no-show (manhã)',     padrao: '30 11 * * 1-6' },
   { chave: 'noShowAfternoon',   titulo: 'Faltou / no-show (tarde)',     padrao: '30 19 * * 1-6' },
   { chave: 'renewal',           titulo: 'Renovação de contrato',        padrao: '30 14 * * *' },

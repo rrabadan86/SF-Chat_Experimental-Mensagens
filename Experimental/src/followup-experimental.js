@@ -636,7 +636,13 @@ async function runFollowup(periodoFiltro, dataOverride = null) {
       let status = '❌';
       try {
         const ok = await sendFollowupMessage(page, aluno.phone, texto, audioPath, aluno.virouAluna ? 'followup_aluna' : 'followup');
-        if (ok) { enviadas++; status = '✅'; } else falhas++;
+        if (ok) {
+          enviadas++; status = '✅';
+          // "Ainda não fechou": registra para o ENCERRAMENTO do dia seguinte (se ela não responder).
+          if (!aluno.virouAluna && !process.argv.includes('--dry')) {
+            try { require('./followup-encerramento').registrarFollowup({ telefone: aluno.phone, nome: aluno.name, professora: aluno.professor, periodo: periodoFiltro }); } catch (_) {}
+          }
+        } else falhas++;
       } catch (err) {
         console.log(`   ❌ Erro: ${err.message}`);
         falhas++;
