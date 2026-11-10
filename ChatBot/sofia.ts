@@ -1150,6 +1150,54 @@ export async function resumirConversa(linhas: { autor: string; texto: string }[]
   }
 }
 
+// Resumo + MOTIVO de quem não agendou, numa chamada só (usado quando a sessão
+// encerra). O motivo alimenta "Por que não agendaram" em Indicadores → Funil.
+// Códigos: agendou | preco | horario | distancia | pensando | saude | sumiu |
+// aluna | nao_lead | outro. Em falha de JSON, cai no resumo comum (sem motivo).
+export const MOTIVOS_NAO_AGENDOU = ["agendou", "preco", "horario", "distancia", "pensando", "saude", "sumiu", "aluna", "nao_lead", "outro"];
+export async function resumirEClassificar(linhas: { autor: string; texto: string }[]): Promise<{ resumo: string; motivo: string }> {
+  const texto = (linhas || [])
+    .map((l) => `${l.autor === "aluna" ? "Aluna" : l.autor === "humano" ? "Atendente" : "SoFIA"}: ${l.texto}`)
+    .join("\n")
+    .slice(0, 8000);
+  if (!texto.trim()) return { resumo: "", motivo: "" };
+  if (!(linhas || []).some((l) => l.autor === "aluna")) return { resumo: await resumirConversa(linhas), motivo: "" };
+  try {
+    const resp = await comRetry(() =>
+      anthropic.messages.create({
+        model: MODELO_EXTRACAO,
+        max_tokens: 320,
+        system:
+          "Você analisa atendimentos de um Studio de treinamento para mulheres (SlimFit) entre a pessoa (Aluna) e a SoFIA (assistente). " +
+          'Responda APENAS um JSON: {"resumo": "...", "motivo": "..."}. ' +
+          "resumo: 2 a 4 frases em português do Brasil dizendo o que a pessoa queria e como terminou. Objetivo e fiel, sem listas. " +
+          "motivo: UM destes códigos, pelo desfecho da conversa — " +
+          "agendou (marcou aula experimental nesta conversa); " +
+          "preco (achou caro, só quis saber o valor, pediu desconto e não seguiu); " +
+          "horario (nenhum horário serve, trabalha no horário das aulas); " +
+          "distancia (mora longe, localização ruim); " +
+          "pensando (vai pensar, só pesquisando, vai ver depois, precisa falar com alguém); " +
+          "saude (lesão, gravidez, aguardando liberação médica); " +
+          "sumiu (parou de responder sem dar motivo); " +
+          "aluna (já é aluna ou ex-aluna tratando de outro assunto: aula, plano, pagamento); " +
+          "nao_lead (não é cliente: fornecedor, engano, propaganda, vaga de emprego); " +
+          "outro (nenhum dos anteriores). Não invente.",
+        messages: [{ role: "user", content: `Atendimento:\n\n${texto}` }],
+      }),
+    );
+    registrarUso("resumo", MODELO_EXTRACAO, resp);
+    const bruto = resp.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.TextBlock).text).join("");
+    const m = bruto.match(/\{[\s\S]*\}/);
+    const o = m ? JSON.parse(m[0]) : null;
+    if (!o || typeof o.resumo !== "string") return { resumo: bruto.trim().slice(0, 1200), motivo: "" };
+    const motivo = String(o.motivo || "").trim().toLowerCase();
+    return { resumo: o.resumo.trim(), motivo: MOTIVOS_NAO_AGENDOU.includes(motivo) ? motivo : "outro" };
+  } catch (e: any) {
+    console.log("⚠️  resumirEClassificar falhou:", e?.message ?? e);
+    return { resumo: "", motivo: "" };
+  }
+}
+
 // Ficha da lead para o AVISO DE AGENDAMENTO da recepção: o que a lead contou na
 // conversa (objetivo, restrição física, como conheceu, preocupação). A SoFIA não
 // atende depois do agendamento — ela só passa adiante o que ouviu, para a

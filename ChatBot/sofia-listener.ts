@@ -24,7 +24,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
-import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirConversa, fichaDaLead, gerarFollowup, classificarIntencaoTags, agendarManual, temTagSemInteresse } from "./sofia";
+import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirEClassificar, fichaDaLead, gerarFollowup, classificarIntencaoTags, agendarManual, temTagSemInteresse } from "./sofia";
 
 // Pasta dos arquivos da Sofia. Por padrão, a pasta de trabalho (comportamento
 // atual). Se SOFIA_DIR estiver definida, usa ela — permite guardar prompt/estado
@@ -1398,7 +1398,7 @@ function mesclarImportado(chat: RawChat, telCru: string, lim: number, janelasPor
 //    — leve e discreto). O arquivo cresce para sempre; o painel só lê.
 const HISTORICO_FILE = path.join(DIR, "sofia-historico.json");
 type SessaoMsg = { autor: string; texto: string };
-type Sessao = { id: string; inicioEm: number; fimEm: number; nMsgs: number; status: "ativa" | "encerrada"; resumo: string; resumoPronto: boolean; _buf?: SessaoMsg[] };
+type Sessao = { id: string; inicioEm: number; fimEm: number; nMsgs: number; status: "ativa" | "encerrada"; resumo: string; resumoPronto: boolean; motivo?: string; _buf?: SessaoMsg[] };
 type HistContato = { nome: string; sessoes: Sessao[] };
 const historico = new Map<string, HistContato>();
 let histTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1661,7 +1661,8 @@ async function fecharSessao(chave: string, sess: Sessao) {
     const c = inbox.get(chave);
     if (c) linhas = c.msgs.filter((m) => m.em >= sess.inicioEm && m.em <= sess.fimEm + 1000).map((m) => ({ autor: m.autor, texto: m.texto }));
   }
-  try { sess.resumo = await resumirConversa(linhas); } catch { sess.resumo = ""; }
+  // Resumo + motivo (por que não agendou → Indicadores → Funil), numa chamada só.
+  try { const r = await resumirEClassificar(linhas); sess.resumo = r.resumo; if (r.motivo) sess.motivo = r.motivo; } catch { sess.resumo = ""; }
   sess.resumoPronto = true;
   delete sess._buf;
   agendarSalvarHistorico();
