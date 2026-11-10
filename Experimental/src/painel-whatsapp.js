@@ -1163,6 +1163,7 @@ const JOBS_DO_LOG = [
   [/^Cobrança de inadimplentes/i, 'inadimplentes', true, 'Cobrança: manda só para quem ainda não foi cobrada hoje'],
   [/^Cobrança — boleto vence hoje/i, 'inadimplentesHoje', true, 'Boleto vence hoje: manda só para quem ainda não recebeu hoje'],
   [/^Planos FREE/i, 'freeAntecedencia', true, 'Planos FREE'],
+  [/^Leitura das alunas ativas|^Planilha/i, 'planilha', true, 'Leitura das alunas ativas (tags + planilha)'],
   [/^Follow-up encerramento \(simulação/i, 'encerramentoDry', true, 'Simulação do encerramento (não envia)'],
   [/^Follow-up encerramento|^Faltou encerramento/i, 'encerramento', true, 'Encerramento: só manda para quem ainda não recebeu'],
   [/^Confirmação sem resposta \(2ª mensagem\)|^Confirmação sem resposta \(simulação/i, 'semResposta', true, 'Confirmação sem resposta: só manda para quem ainda não recebeu a 2ª mensagem'],
