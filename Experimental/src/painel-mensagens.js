@@ -1116,6 +1116,25 @@ const server = http.createServer(protegido((req, res) => {
       }
     });
   }
+  // ── Atualizar o sistema pelo painel (Saúde → Versão do sistema) — só admin ──
+  if (url === '/sistema/versao/verificar' || url === '/sistema/atualizar' || url === '/sistema/atualizar/status') {
+    if (!sess.admin) return negarAcesso(res, sess);
+    const at = require('./atualizacao-painel');
+    const resp = (o, st = 200) => { res.writeHead(st, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(o)); };
+    if (req.method === 'GET' && url === '/sistema/atualizar/status') return resp({ ok: true, ...at.status() });
+    if (req.method === 'POST' && url === '/sistema/versao/verificar') {
+      return lerCorpo(req, 1e4, () => { try { return resp({ ok: true, ...at.verificar() }); } catch (e) { return resp({ ok: false, erro: 'não consegui consultar o GitHub: ' + String((e && (e.stderr || e.message)) || e).split('\n')[0] }, 500); } });
+    }
+    if (req.method === 'POST' && url === '/sistema/atualizar') {
+      return lerCorpo(req, 1e4, () => {
+        try {
+          const st = at.iniciar(sess.usuario);
+          try { auditoria.registrar(sess.usuario, 'sistema.atualizar', '', ''); } catch (_) {}
+          return resp({ ok: true, ...st });
+        } catch (e) { return resp({ ok: false, erro: e.message }, 409); }
+      });
+    }
+  }
   // ── Copiar a configuração para outra unidade (config-unidade.js) — só admin ──
   if (url === '/config-unidade/exportar' || url === '/config-unidade/previa' || url === '/config-unidade/importar' || url === '/config-unidade/desfazer') {
     if (!sess.admin) return negarAcesso(res, sess);
