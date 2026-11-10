@@ -1150,6 +1150,53 @@ export async function resumirConversa(linhas: { autor: string; texto: string }[]
   }
 }
 
+// Ficha da lead para o AVISO DE AGENDAMENTO da recepção: o que a lead contou na
+// conversa (objetivo, restrição física, como conheceu, preocupação). A SoFIA não
+// atende depois do agendamento — ela só passa adiante o que ouviu, para a
+// recepcionista e a professora já chegarem sabendo quem é a pessoa.
+// Devolve linhas "• Rótulo: texto" (só o que foi DITO) ou [] (nada útil / falha).
+export async function fichaDaLead(linhas: { autor: string; texto: string }[]): Promise<string[]> {
+  const texto = (linhas || [])
+    .map((l) => `${l.autor === "aluna" ? "Lead" : l.autor === "humano" ? "Atendente" : "SoFIA"}: ${l.texto}`)
+    .join("\n")
+    .slice(-8000);
+  if (!texto.trim()) return [];
+  try {
+    const resp = await comRetry(() =>
+      anthropic.messages.create({
+        model: MODELO_EXTRACAO,
+        max_tokens: 300,
+        system:
+          "Você prepara a ficha de uma lead que acabou de agendar uma aula experimental num Studio de treinamento para mulheres (SlimFit). " +
+          "Leia a conversa entre a lead e a SoFIA (assistente) e extraia SOMENTE o que a LEAD disse sobre ela mesma. " +
+          "Responda APENAS um JSON com estas chaves (string vazia quando ela não disse nada a respeito): " +
+          '{"objetivo": "o que ela quer alcançar (ex.: emagrecer, voltar a treinar, fortalecer)", ' +
+          '"restricao": "lesão, dor, gravidez, cirurgia, problema de saúde ou limitação física", ' +
+          '"origem": "como conheceu o Studio (Instagram, indicação de alguém, passou na frente...)", ' +
+          '"preocupacao": "dúvida ou receio que ela demonstrou (preço, horário, vergonha, nunca treinou...)", ' +
+          '"outro": "algum detalhe pessoal útil para criar vínculo (ex.: vem com a irmã, mudou-se para o bairro)"}. ' +
+          "Frases curtas, no máximo 15 palavras cada, em português do Brasil. Não invente nada; não repita o horário da aula nem o preço informado pela SoFIA.",
+        messages: [{ role: "user", content: `Conversa:\n\n${texto}` }],
+      }),
+    );
+    registrarUso("ficha", MODELO_EXTRACAO, resp);
+    const bruto = resp.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.TextBlock).text).join("");
+    const m = bruto.match(/\{[\s\S]*\}/);
+    if (!m) return [];
+    const o = JSON.parse(m[0]) || {};
+    const rot: [string, string][] = [["objetivo", "Objetivo"], ["restricao", "Restrição"], ["origem", "Conheceu pelo"], ["preocupacao", "Preocupação"], ["outro", "Detalhe"]];
+    const out: string[] = [];
+    for (const [k, r] of rot) {
+      const v = String(o[k] || "").replace(/\s+/g, " ").trim();
+      if (v && !/^(n[ãa]o (informad|dit|mencion)|nenhum|-|n\/a)/i.test(v)) out.push(`• ${r}: ${v.slice(0, 140)}`);
+    }
+    return out;
+  } catch (e: any) {
+    console.log("⚠️  fichaDaLead falhou:", e?.message ?? e);
+    return [];
+  }
+}
+
 // Classifica a conversa contra uma lista de regras de tag por INTENÇÃO (gatilho
 // 'ia'). Cada regra tem { tag, instrucao }. A SoFIA lê a conversa e devolve os
 // NOMES das tags cuja intenção se aplica AGORA (com base na última mensagem da

@@ -88,7 +88,7 @@ function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra, canal
     // Diferencia por QUAL canal veio o agendamento (só faz sentido no 'agendou').
     const canalRot = { formulario: '📲 via Formulário', sofia: '🤖 via SoFIA' }[String(canal || '').toLowerCase()] || '';
     const texto = `${cab}\n👤 ${nome || '(sem nome)'}\n📱 ${fmtTelAviso(tel)}${extra ? `\n${extra}` : ''}\n🏷️ ${tag}${canalRot ? `\n${canalRot}` : ''}`;
-    try { sofia.enfileirarAviso(avisarWpp, texto, { sobre: tel, tag, motivo }); } catch (_) {}
+    try { sofia.enfileirarAviso(avisarWpp, texto, { sobre: tel, tag, motivo, canal }); } catch (_) {}
   }
 }
 // Publica as regras que o LISTENER precisa (só os gatilhos dele).

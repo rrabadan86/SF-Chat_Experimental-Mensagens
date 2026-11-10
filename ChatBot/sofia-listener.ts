@@ -24,7 +24,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
-import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirConversa, gerarFollowup, classificarIntencaoTags, agendarManual, temTagSemInteresse } from "./sofia";
+import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirConversa, fichaDaLead, gerarFollowup, classificarIntencaoTags, agendarManual, temTagSemInteresse } from "./sofia";
 
 // Pasta dos arquivos da Sofia. Por padrão, a pasta de trabalho (comportamento
 // atual). Se SOFIA_DIR estiver definida, usa ela — permite guardar prompt/estado
@@ -2162,6 +2162,40 @@ setTimeout(limparFotosAntigas, 30000);            // uma vez no boot
 //    como conversa, entraria nas automações e no follow-up). O resultado vai para o
 //    Log do painel e, com `sobre`, vira uma marca na conversa da aluna.
 const AVISOS_FILE = path.join(DIR, "sofia-avisos.jsonl");
+// Conversa da lead pelo telefone (a chave do inbox pode estar com/sem 55 ou 9º dígito).
+function conversaPorTel(tel: string): InboxConversa | undefined {
+  const d = String(tel || "").replace(/\D/g, "");
+  if (!d) return undefined;
+  const direta = inbox.get(d) || inbox.get("55" + d);
+  if (direta) return direta;
+  const fim = d.slice(-8);
+  let melhor: InboxConversa | undefined;
+  for (const [k, c] of inbox) {
+    const bate = k.replace(/\D/g, "").slice(-8) === fim || String(c.jid || "").split("@")[0].replace(/\D/g, "").slice(-8) === fim;
+    if (bate && (!melhor || c.ultimaEm > melhor.ultimaEm)) melhor = c;
+  }
+  return melhor;
+}
+// "💬 O que ela contou" para o aviso de agendamento: últimas mensagens (14 dias) da
+// conversa; só quando a lead escreveu algo de fato. "" quando não há nada útil.
+const fichaCache = new Map<string, { em: number; txt: string }>(); // vários avisos do mesmo agendamento → 1 chamada
+async function fichaParaAviso(tel: string): Promise<string> {
+  const k = String(tel).replace(/\D/g, "").slice(-8);
+  const cache = fichaCache.get(k);
+  if (cache && Date.now() - cache.em < 10 * 60000) return cache.txt;
+  const txt = await montarFicha(tel);
+  fichaCache.set(k, { em: Date.now(), txt });
+  return txt;
+}
+async function montarFicha(tel: string): Promise<string> {
+  const c = conversaPorTel(tel);
+  if (!c) return "";
+  const desde = Date.now() - 14 * 86400000;
+  const msgs = c.msgs.filter((m) => m.em >= desde).slice(-80);
+  if (msgs.filter((m) => m.autor === "aluna" && String(m.texto || "").trim().length > 3).length < 2) return "";
+  const linhas = await fichaDaLead(msgs.map((m) => ({ autor: m.autor, texto: String(m.texto || "") })));
+  return linhas.length ? `\n\n💬 *O que ela contou:*\n${linhas.join("\n")}` : "";
+}
 let processandoAvisos = false;
 async function processarAvisos() {
   if (processandoAvisos || !pronta) return;
@@ -2175,9 +2209,13 @@ async function processarAvisos() {
   for (const l of linhas) {
     let ent: any = null; try { ent = JSON.parse(l); } catch { continue; }
     const numero = String(ent?.numero || "").replace(/\D/g, "");
-    const texto = String(ent?.texto || "");
+    let texto = String(ent?.texto || "");
     if (!numero || !texto) continue;
     const extra = { sobre: String(ent?.sobre || "").replace(/\D/g, ""), tag: String(ent?.tag || ""), motivo: String(ent?.motivo || "") };
+    // Agendamento com conversa na SoFIA → acrescenta a ficha da lead (o que ela contou).
+    if (extra.motivo === "agendou" && extra.sobre && String(ent?.canal || "") !== "express") {
+      try { texto += await fichaParaAviso(extra.sobre); } catch { /* aviso sai sem a ficha */ }
+    }
     try {
       const alvo = await resolverIdEnvio(numero); await enviar(alvo, texto); log(`aviso enviado para ${numero}.`);
       registrarAtividadeSofia("Aviso para a recepção", numero, texto, true, "", extra);

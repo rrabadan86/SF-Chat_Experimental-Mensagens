@@ -2883,7 +2883,7 @@ function paginaSofiaCusto(aviso, erro, params) {
   // Gasto por TIPO (tudo que gasta token: conversas, gerador de frases, resumos,
   // tags por intenção, follow-up).
   let porTipo = []; try { porTipo = sofia.lerCustoPorTipo(ini, fim || hojeStr); } catch (_) {}
-  const rotTipo = { conversa: '💬 Conversas', gerador: '✨ Gerador de frases', resumo: '📝 Resumos de interações', tags: '🏷️ Tags por intenção', followup: '🔁 Follow-up' };
+  const rotTipo = { conversa: '💬 Conversas', gerador: '✨ Gerador de frases', resumo: '📝 Resumos de interações', tags: '🏷️ Tags por intenção', followup: '🔁 Follow-up', ficha: '🗂️ Ficha da lead (aviso de agendamento)' };
   const totTipo = porTipo.reduce((a, t) => a + (t.usd || 0), 0);
   const tipoRows = porTipo.map(t => uiBarra({ largo: true, rot: `${rotTipo[t.tipo] || esc(t.tipo)} <small style="color:var(--faint);font-weight:600">· ${t.n}×</small>`, n: t.usd, max: totTipo, valor: `${brl(t.usd)} <small>· ${ktok(t.inTok + t.outTok)} tok</small>` })).join('');
   const tipoBloco = tipoRows
