@@ -1901,10 +1901,49 @@ function paginaSaude(list, extra = {}) {
     bkp ? `🗄️ Último backup dos dados <b>${bId.txt}</b> (${bkp.n} cópia${bkp.n === 1 ? '' : 's'} guardada${bkp.n === 1 ? '' : 's'}).${diasBkp > 2 ? ' <b>Faz mais de 2 dias</b> — confira o cron do backup.' : ''}` : '<span class="sd-muted">🗄️ Sem backup em <code>backups/</code> — configure o cron do <code>backup-dados.js</code>.</span>',
   ]);
 
-  E._saudeCor = { cor: [corExp, corSof, corEvo, corForm, corServ, corLid].concat(IG_NO_PAINEL ? [corIg] : []).reduce(pior, 'ok'), em: Date.now() };
+  // ── Envios automáticos: cada job agendado rodou no horário? falhou? ─────
+  // O robô registra cada disparo/falha em data/jobs-disparos.json (jobs-batimento.js).
+  const TIT_EXTRA = {
+    aniversMesGrupo: 'Aniversariantes do mês (grupo da equipe)', renovacoesMesGrupo: 'Contratos a vencer no mês (grupo da equipe)',
+    presentesPend: 'Presentes de tempo de casa pendentes', ausentes10: 'Ausentes há mais de 10 dias (grupo)',
+    histExperimentais: 'Histórico de experimentais (professoras)', ativasFoto: 'Alunas ativas (leitura do EVO)',
+    gradeFixas: 'Grade de fixas', slotsPushDia: 'Horários do formulário (dia)', slotsPushNoite: 'Horários do formulário (noite)',
+    pagamentoSync: 'Pagamento dos professores (leitura do EVO)', freeAntecedencia: 'Planos FREE — antecedência',
+  };
+  let corJobs = 'ok', cardJobs = '';
+  try {
+    const titulos = Object.fromEntries(require('./horarios').CATALOGO.map(j => [j.chave, j.titulo]));
+    const jobsAtv = require('./jobs-ativos');
+    const sit = require('./jobs-batimento').situacao();
+    const dh = (ms) => { try { return new Date(ms).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ''); } catch (_) { return ''; } };
+    if (!sit) {
+      corJobs = 'warn';
+      cardJobs = card('Envios automáticos', 'warn', '🟡 Sem dados', ['<span class="sd-muted">O robô ainda não registrou os horários dos envios. Depois de atualizar, reinicie o robô (<code>slimfit-atualizar</code> já faz isso).</span>']);
+    } else {
+      const nomeDe = (k) => titulos[k] || TIT_EXTRA[k] || k;
+      const itens = sit.itens.filter(i => { try { return jobsAtv.ativo(i.chave); } catch (_) { return true; } })
+        .sort((x, y) => nomeDe(x.chave).localeCompare(nomeDe(y.chave), 'pt-BR'));
+      const falhas = itens.filter(i => i.estado === 'falhou'), perdidos = itens.filter(i => i.estado === 'perdeu');
+      corJobs = falhas.length ? 'erro' : perdidos.length ? 'warn' : 'ok';
+      const pill = falhas.length ? `🔴 ${falhas.length} com falha` : perdidos.length ? `🟡 ${perdidos.length} não rodou` : '🟢 Em dia';
+      const linhaProb = (i) => i.estado === 'falhou'
+        ? `🔴 <b>${esc(nomeDe(i.chave))}</b> — falhou em ${dh(i.falha.em)}: <span class="sd-muted">${esc(i.falha.msg)}</span>`
+        : `🟡 <b>${esc(nomeDe(i.chave))}</b> — deveria ter rodado em <b>${dh(i.previsto)}</b> e não rodou${i.disparo ? ` <span class="sd-muted">(último disparo: ${dh(i.disparo)})</span>` : ''}`;
+      const tabela = itens.map(i => `<tr><td>${i.estado === 'falhou' ? '🔴' : i.estado === 'perdeu' ? '🟡' : i.estado === 'aguardando' ? '⚪' : '🟢'} ${esc(nomeDe(i.chave))}</td><td class="sd-muted">${i.previsto ? dh(i.previsto) : '—'}</td><td class="sd-muted">${i.disparo ? dh(i.disparo) : 'ainda não'}</td></tr>`).join('');
+      cardJobs = card('Envios automáticos', corJobs, pill, [
+        `${itens.length} envio(s) ligado(s) conferido(s): ${itens.length - falhas.length - perdidos.length} em dia${perdidos.length ? `, <b>${perdidos.length} não rodou</b>` : ''}${falhas.length ? `, <b>${falhas.length} falhou</b>` : ''}.`,
+        ...falhas.map(linhaProb), ...perdidos.map(linhaProb),
+        (falhas.length || perdidos.length) ? '<span class="sd-muted">"Não rodou" = o robô estava fora do ar, travado ou reiniciou depois do horário. Para rodar agora, use <b>↻ Rodar de novo</b> no <a href="/hoje">Log</a> ou o envio de teste. Falhas somem do cartão no próximo horário do envio (ou depois de 24h).</span>' : '',
+        `<details><summary class="sd-muted" style="cursor:pointer">Ver todos os horários</summary><div style="overflow-x:auto"><table style="width:100%;font-size:.84rem;margin-top:6px"><tr><th style="text-align:left">Envio</th><th style="text-align:left">Último horário previsto</th><th style="text-align:left">Último disparo</th></tr>${tabela}</table></div><span class="sd-muted">Conferindo desde ${dh(sit.desde)} · robô iniciado em ${dh(sit.boot)}.</span></details>`,
+      ]);
+    }
+  } catch (_) { cardJobs = ''; corJobs = 'ok'; }
+  cardJobs = cardJobs.replace('class="card sd-card"', 'class="card sd-card" style="grid-column:1/-1"'); // cartão largo (lista de envios)
+
+  E._saudeCor = { cor: [corExp, corSof, corEvo, corForm, corServ, corLid, corJobs].concat(IG_NO_PAINEL ? [corIg] : []).reduce(pior, 'ok'), em: Date.now() };
   const corpo = `<div class="wrap">
     ${uiTopo({ titulo: 'Saúde do sistema', sub: 'O estado de cada parte da automação num lugar só: verde funcionando, amarelo atenção, vermelho com problema.', acoes: '<a href="/saude" class="ui-btn sec">↻ Atualizar</a>' })}
-    <div class="sd-grid">${cardExp}${cardSof}${cardEvo}${IG_NO_PAINEL ? cardIg : ''}${cardForm}${cardServ}${cardLid}</div>
+    <div class="sd-grid">${cardExp}${cardSof}${cardEvo}${IG_NO_PAINEL ? cardIg : ''}${cardForm}${cardServ}${cardLid}${cardJobs}</div>
   </div>`;
   return chrome({ tab: 'Saúde', h1: 'Saúde', p: 'Estado de robô, SoFIA, painel e formulário.' }, 'saude', corpo);
 }
