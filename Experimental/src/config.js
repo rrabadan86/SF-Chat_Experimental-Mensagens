@@ -118,6 +118,8 @@ const config = {
     ausentes10:       '10 6 * * 1',     // 06:10 toda segunda (alunas ausentes >10 dias no grupo da equipe)
     resumoDia:        '45 19 * * *',    // 19:45 todos os dias (resumo do dia das experimentais no grupo)
     noShowMorning:    '30 11 * * 1-6',  // 11:30 seg-sáb (faltas nas aulas da manhã → remarcar)
+    noShowEncerraManha: '45 11 * * 1-6', // 11:45 seg-sáb (encerramento: falta da manhã de ontem sem resposta) — DESLIGADO até ligar
+    noShowEncerraTarde: '50 19 * * 1-6', // 19:50 seg-sáb (idem, falta da tarde/noite)
     noShowAfternoon:  '30 19 * * 1-6',  // 19:30 seg-sáb (faltas nas aulas da tarde/noite → remarcar)
     slotsPushDia:     `${[FORM_SLOTS_MINUTO, (FORM_SLOTS_MINUTO + 30) % 60].sort((a, b) => a - b).join(',')} 7-21 * * *`,   // a cada 30 min, 07h-21h (grade fresca p/ pegar desmarcações da aluna no app; minuto escalonável p/ 2 lojas)
     slotsPushNoite:   `${FORM_SLOTS_MINUTO} 22,1,4 * * *`, // a cada ~3h de madrugada (22h, 01h, 04h) — alivia o pico do EVO
