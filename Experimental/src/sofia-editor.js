@@ -487,7 +487,7 @@ function enfileirarAviso(numero, texto, meta) {
   const n = String(numero || '').replace(/\D/g, '');
   if (!n || !texto) return false;
   const m = meta || {};
-  fs.appendFileSync(F.avisos, JSON.stringify({ numero: n, texto: String(texto), em: Date.now(), sobre: String(m.sobre || '').replace(/\D/g, ''), tag: String(m.tag || ''), motivo: String(m.motivo || '') }) + '\n', 'utf8');
+  fs.appendFileSync(F.avisos, JSON.stringify({ numero: n, texto: String(texto), em: Date.now(), sobre: String(m.sobre || '').replace(/\D/g, ''), tag: String(m.tag || ''), motivo: String(m.motivo || ''), ...(m.canal ? { canal: String(m.canal) } : {}) }) + '\n', 'utf8');
   return true;
 }
 
