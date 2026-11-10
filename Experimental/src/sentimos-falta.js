@@ -87,6 +87,32 @@ function resolvedorTelefone() {
   };
 }
 
+// Contrato ATIVO hoje? Usa a leitura diária das alunas ativas (API do EVO). O
+// CRM → Faltantes às vezes ainda lista quem RESCINDIU ou venceu — essas ficam de
+// fora. Sem leitura recente (≤ 3 dias) ou nome não encontrado → não filtra.
+const normEvo = (s) => norm(s).replace(/^\d+\s*[-–—]?\s*/, '');
+function filtroContratoAtivo(hoje = hojeSP()) {
+  const h = lerJson(ATIVAS, {});
+  const ult = h.ultimo || {};
+  const ids = new Set((ult.ids || []).map(String));
+  const dd = ult.dia ? diasEntreDatas(ult.dia, hoje) : null;
+  if (!ids.size || dd === null || dd > 3) return () => '';
+  const pes = h.pessoas || {};
+  const porNome = new Map(), repetido = new Set();
+  for (const id of Object.keys(pes)) {
+    const k = normEvo(pes[id] && pes[id].n); if (!k) continue;
+    if (porNome.has(k)) repetido.add(k); else porNome.set(k, id);
+  }
+  return (nome) => {
+    const k = normEvo(nome);
+    const id = repetido.has(k) ? null : porNome.get(k);
+    if (!id || ids.has(String(id))) return '';
+    const cs = Array.isArray(pes[id].cs) ? pes[id].cs : [];
+    const u = cs[cs.length - 1] || [];
+    return u[4] === 1 ? 'contrato RESCINDIDO no EVO — não é mais aluna' : 'contrato não está mais ativo no EVO (venceu ou foi cancelado)';
+  };
+}
+
 /**
  * Decide, para cada ausente, o que fazer agora. Não envia nada.
  * ausentes: [{ nome, ultima ('dd/mm/aaaa'), telefone }]
@@ -94,6 +120,7 @@ function resolvedorTelefone() {
  */
 function decidir(ausentes, { hoje = hojeSP(), cfg = lerCfg(), reg = lerRegistro() } = {}) {
   const tel = resolvedorTelefone();
+  const contratoFora = filtroContratoAtivo(hoje);
   const out = [];
   for (const a of ausentes || []) {
     const chave = norm(a.nome); if (!chave) continue;
@@ -102,6 +129,8 @@ function decidir(ausentes, { hoje = hojeSP(), cfg = lerCfg(), reg = lerRegistro(
     const r = reg.alunas[chave];
     const t = tel(a.nome, a.telefone);
     const item = { chave, nome: a.nome, ultima: a.ultima || '', dias, etapa: 0, motivo: '', telefone: t.tel, fonteTel: t.fonte };
+    const fora = contratoFora(a.nome);
+    if (fora) { item.motivo = fora; out.push(item); continue; }
     // Ciclo novo: nunca recebeu, ou a última presença mudou (ela veio e sumiu de novo).
     const cicloNovo = !r || String(r.ultima || '') !== String(a.ultima || '');
     if (cicloNovo) item.etapa = 1;
@@ -112,7 +141,10 @@ function decidir(ausentes, { hoje = hojeSP(), cfg = lerCfg(), reg = lerRegistro(
       else item.motivo = `recebeu a 1ª em ${brDe(r.m1)} — a 2ª sai a partir de ${brDe(somaDias(String(r.m1).slice(0, 10), cfg.diasEntre))} (se continuar sem vir)`;
     }
     // Trava: o EVO às vezes lista quem veio há pouco — só conta a partir do corte.
-    if (item.etapa && dias !== null && dias < cfg.diasAusente) { item.motivo = `última presença há ${dias} dia(s) — menos que ${cfg.diasAusente}`; item.etapa = 0; }
+    if (item.etapa && dias !== null && dias < cfg.diasAusente) {
+      item.motivo = a.destrancou ? `destrancou em ${a.destrancou} — a contagem começa aí: ${dias} dia(s), menos que ${cfg.diasAusente}` : `última presença há ${dias} dia(s) — menos que ${cfg.diasAusente}`;
+      item.etapa = 0;
+    }
     if (item.etapa && !item.telefone) { item.motivo = 'sem telefone (não está nos Contatos com o código do EVO e o EVO não mostrou celular)'; item.etapa = 0; }
     out.push(item);
   }
@@ -141,6 +173,20 @@ async function runSentimosFalta({ dry = false, log = console.log, ausentes = nul
     // Sem a lista de trancamentos não dá para garantir que trancada fica de fora.
     if (trancOk === false && !dry) throw new Error('não consegui ler os trancamentos no EVO — para não escrever para trancada, não enviei nada. Tente de novo pelo Log (↻ Rodar de novo).');
   }
+  // TRANCADAS: ainda trancada → fora. Já destrancou → volta para a lista, mas os
+  // dias contam a partir do dia seguinte ao fim do trancamento (não da última
+  // presença de antes de trancar).
+  const hoje = hojeSP();
+  const aindaTrancadas = [];
+  lidas = (lidas || []).slice();
+  for (const t of trancadas || []) {
+    const fimIso = isoDeBr(t.fim);
+    if (!fimIso || fimIso >= hoje) { aindaTrancadas.push(t); continue; }
+    const volta = somaDias(fimIso, 1), ultIso = isoDeBr(t.ultima);
+    const base = (!ultIso || volta > ultIso) ? volta : ultIso;
+    lidas.push({ ...t, ultima: brDe(base), destrancou: t.fim });
+  }
+  trancadas = aindaTrancadas;
   const reg = lerRegistro();
   const itens = decidir(lidas, { cfg, reg });
   const vai = itens.filter(x => x.etapa);
