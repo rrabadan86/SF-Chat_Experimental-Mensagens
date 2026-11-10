@@ -788,7 +788,8 @@ function paginaSofiaFunil(params) {
   // Canal escolhido no filtro: todos | sofia | formulario | express.
   const canalSel = ['sofia', 'formulario', 'express'].includes(params.canal) ? params.canal : 'todos';
   // Conversas reais com a SoFIA no período (a pessoa escreveu) — base do funil da SoFIA.
-  const conversou = (c) => Array.isArray(c && c.msgs) && c.msgs.some(m => m && m.autor === 'aluna');
+  // Resposta automática do WhatsApp da pessoa (tipo 'automatica') não conta como conversa.
+  const conversou = (c) => Array.isArray(c && c.msgs) && c.msgs.some(m => m && m.autor === 'aluna' && m.tipo !== 'automatica');
   const inbox8 = {};
   let convs = 0;
   for (const k in inbox) {
