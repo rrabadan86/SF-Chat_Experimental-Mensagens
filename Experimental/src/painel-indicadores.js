@@ -1967,14 +1967,40 @@ function paginaSaude(list, extra = {}) {
       const falhas = itens.filter(i => i.estado === 'falhou'), perdidos = itens.filter(i => i.estado === 'perdeu');
       corJobs = falhas.length ? 'erro' : perdidos.length ? 'warn' : 'ok';
       const pill = falhas.length ? `🔴 ${falhas.length} com falha` : perdidos.length ? `🟡 ${perdidos.length} não rodou` : '🟢 Em dia';
-      const linhaProb = (i) => i.estado === 'falhou'
+      // ▶️ Rodar agora: horário do envio → job manual do robô (o mesmo do "↻ Rodar de novo" do Log).
+      // seguro=false: rodar de novo pode mandar outra vez para quem já recebeu → pede confirmação.
+      const RODAR = {
+        morning: ['confirmacaoHoje', false], afternoon: ['confirmacaoAmanha', false], followupMorning: ['followupMorning', false], followupAfternoon: ['followupAfternoon', false],
+        noShowMorning: ['noShowMorning', false], noShowAfternoon: ['noShowAfternoon', false], aniversariantes: ['aniversariantes', false], aniversarioEx: ['aniversarioEx', false],
+        renewal: ['renovacao', false], resumoDia: ['resumoDia', false], venceHoje: ['venceHoje', true], assinaturas: ['assinaturas', true], saidaGrupos: ['saidaGrupos', true],
+        sentimosFalta: ['sentimosFalta', true], inadimplentes: ['inadimplentes', true], inadimplentesHoje: ['inadimplentesHoje', true], freeAntecedencia: ['freeAntecedencia', true],
+        encerramentoManha: ['encerramento', true], encerramentoTarde: ['encerramento', true], noShowEncerraManha: ['encerramento', true], noShowEncerraTarde: ['encerramento', true],
+        semResposta1: ['semResposta', true], semResposta2: ['semResposta', true], semRespostaEquipe1: ['semRespostaEquipe', true], semRespostaEquipe2: ['semRespostaEquipe', true],
+        slotsPushDia: ['slotsPush', true], slotsPushNoite: ['slotsPush', true], gradeFixas: ['gradeFixas', true], ativasFoto: ['ativasFoto', true],
+        histExperimentais: ['historicoExperimentais', true], planilhaAniv: ['planilha', true],
+      };
+      const btnRodar = (i) => { const r = RODAR[i.chave]; return r ? ` <button type="button" class="ui-btn sec" style="padding:3px 10px;font-size:.78rem;margin-left:6px" onclick="sdRodar(this,'${r[0]}',${r[1] ? 'true' : 'false'})">▶️ Rodar agora</button><span class="sd-muted sd-rodar-msg" style="margin-left:6px"></span>` : ''; };
+      const linhaProb = (i) => (i.estado === 'falhou'
         ? `🔴 <b>${esc(nomeDe(i.chave))}</b> — falhou em ${dh(i.falha.em)}: <span class="sd-muted">${esc(i.falha.msg)}</span>`
-        : `🟡 <b>${esc(nomeDe(i.chave))}</b> — deveria ter rodado em <b>${dh(i.previsto)}</b> e não rodou${i.disparo ? ` <span class="sd-muted">(último disparo: ${dh(i.disparo)})</span>` : ''}`;
+        : `🟡 <b>${esc(nomeDe(i.chave))}</b> — deveria ter rodado em <b>${dh(i.previsto)}</b> e não rodou${i.disparo ? ` <span class="sd-muted">(último disparo: ${dh(i.disparo)})</span>` : ''}`) + btnRodar(i);
       const tabela = itens.map(i => `<tr><td>${i.estado === 'falhou' ? '🔴' : i.estado === 'perdeu' ? '🟡' : i.estado === 'aguardando' ? '⚪' : '🟢'} ${esc(nomeDe(i.chave))}</td><td class="sd-muted">${i.previsto ? dh(i.previsto) : '—'}</td><td class="sd-muted">${i.disparo ? dh(i.disparo) : 'ainda não'}</td></tr>`).join('');
       cardJobs = card('Envios automáticos', corJobs, pill, [
         `${itens.length} envio(s) ligado(s) conferido(s): ${itens.length - falhas.length - perdidos.length} em dia${perdidos.length ? `, <b>${perdidos.length} não rodou</b>` : ''}${falhas.length ? `, <b>${falhas.length} falhou</b>` : ''}.`,
         ...falhas.map(linhaProb), ...perdidos.map(linhaProb),
-        (falhas.length || perdidos.length) ? '<span class="sd-muted">"Não rodou" = o robô estava fora do ar, travado ou reiniciou depois do horário. Para rodar agora, use <b>↻ Rodar de novo</b> no <a href="/hoje">Log</a> ou o envio de teste. Falhas somem do cartão no próximo horário do envio (ou depois de 24h).</span>' : '',
+        (falhas.length || perdidos.length) ? '<span class="sd-muted">"Não rodou" = o robô estava fora do ar, travado ou reiniciou depois do horário. <b>▶️ Rodar agora</b> pede ao robô para rodar o envio na hora (o resultado aparece ao lado e no <a href="/hoje">Log</a>). Falhas somem do cartão no próximo horário do envio (ou depois de 24h).</span>'
+          + `<script>function sdRodar(btn,job,seguro){
+              if(!seguro && !confirm('Este envio pode mandar de novo para quem já recebeu hoje. Rodar mesmo assim?')) return;
+              var m=btn.nextElementSibling; btn.disabled=true; m.textContent='⏳ pedido enviado ao robô…';
+              fetch('/hoje/rodar-job',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job:job})}).then(function(r){return r.json();}).then(function(j){
+                if(!j.ok){ btn.disabled=false; m.textContent='❌ '+(j.erro||'falhou'); return; }
+                var ini=Date.now();(function poll(){ fetch('/hoje/rodar-job/status?id='+encodeURIComponent(j.id),{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){
+                  if(s.estado==='ok'){ m.textContent='✅ rodou'+(s.msg?' — '+s.msg:''); return; }
+                  if(s.estado==='erro'){ btn.disabled=false; m.textContent='❌ '+(s.msg||'falhou'); return; }
+                  if(Date.now()-ini>1500000){ btn.disabled=false; m.textContent='⚠️ sem resposta do robô'; return; }
+                  m.textContent=s.estado==='esperando'?'⏳ '+(s.msg||'esperando a vez'):s.estado==='rodando'?'⏳ rodando…':'⏳ na fila do robô…'; setTimeout(poll,4000);
+                }).catch(function(){ setTimeout(poll,6000); }); })();
+              }).catch(function(){ btn.disabled=false; m.textContent='❌ erro de rede'; });
+            }</script>` : '',
         `<details><summary class="sd-muted" style="cursor:pointer">Ver todos os horários</summary><div style="overflow-x:auto"><table style="width:100%;font-size:.84rem;margin-top:6px"><tr><th style="text-align:left">Envio</th><th style="text-align:left">Último horário previsto</th><th style="text-align:left">Último disparo</th></tr>${tabela}</table></div><span class="sd-muted">Conferindo desde ${dh(sit.desde)} · robô iniciado em ${dh(sit.boot)}.</span></details>`,
       ]);
     }
