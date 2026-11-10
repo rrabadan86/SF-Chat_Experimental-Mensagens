@@ -1138,15 +1138,17 @@ async function main() {
 
   // Confirmação SEM RESPOSTA: 2ª mensagem para quem não respondeu/reagiu e lista
   // no grupo da equipe de quem continua sem responder (desligados até ligar).
-  for (const [chave, oque, fn] of [
-    ['semResposta1', '2ª mensagem', 'runSegundaMensagem'], ['semResposta2', '2ª mensagem', 'runSegundaMensagem'],
-    ['semRespostaEquipe1', 'lista da equipe', 'runListaEquipe'], ['semRespostaEquipe2', 'lista da equipe', 'runListaEquipe'],
+  // Cada horário cuida de UMA confirmação: 1 = "aula de hoje", 2 = "aula de amanhã"
+  // (na lista da equipe: Equipe2 = de hoje, Equipe1 = de amanhã, no dia da aula cedo).
+  for (const [chave, oque, fn, tipo] of [
+    ['semResposta1', '2ª mensagem', 'runSegundaMensagem', 'confirmacao_hoje'], ['semResposta2', '2ª mensagem', 'runSegundaMensagem', 'confirmacao_amanha'],
+    ['semRespostaEquipe1', 'lista da equipe', 'runListaEquipe', 'confirmacao_amanha'], ['semRespostaEquipe2', 'lista da equipe', 'runListaEquipe', 'confirmacao_hoje'],
   ]) {
     if (!config.schedule[chave]) continue;
     agendar(chave, config.schedule[chave], async () => {
       if (!jobsAtivos.ativo(chave)) { log(`⏸️  Confirmação sem resposta (${oque}) desligada no painel — pulando`); return; }
       log(`⏰ Cron disparado: Confirmação sem resposta (${oque})`);
-      runJob(`Confirmação sem resposta (${oque})`, () => require('./confirmacao-sem-resposta')[fn]({ log }), 25 * 60 * 1000, { retry: false })
+      runJob(`Confirmação sem resposta (${oque})`, () => require('./confirmacao-sem-resposta')[fn]({ log, chave: tipo }), 25 * 60 * 1000, { retry: false })
         .catch(err => logError(`Confirmação sem resposta (${oque})`, err));
     }, { timezone: 'America/Sao_Paulo' });
     log(`📅 Job CONFIRMAÇÃO SEM RESPOSTA (${oque}) agendado: ${config.schedule[chave]} — ${jobsAtivos.ativo(chave) ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
