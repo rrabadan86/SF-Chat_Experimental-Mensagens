@@ -237,6 +237,66 @@ function paginaMensagens(aviso, erro) {
       }; rd.readAsText(f);
     }
     </script>
+    ${(E._navSess || { admin: true }).admin ? (() => {
+      const ult = (() => { try { return require('./config-unidade').ultimoBackup(); } catch (_) { return null; } })();
+      const dataUlt = ult && ult.em ? new Date(ult.em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+      return `<details class="acc-sec" id="cfgPac" data-nosec="1" style="margin-top:8px">
+      <summary>📦 Copiar a configuração para outra unidade</summary>
+      <div class="card">
+        <p class="quando" style="margin:0 0 6px">Um arquivo com <b>textos das mensagens, imagens, horários dos envios, tags e automações, roteiro da SoFIA, script de integração e follow-up</b>. Baixe aqui e importe no painel da outra unidade; lá você escolhe o que trazer e confere antes.</p>
+        <p class="quando" style="margin:0 0 10px">Não vão no arquivo: números de WhatsApp de aviso, campanhas, áudios das professoras, grupos, dados do EVO, contatos e conversas. As tags são <b>somadas</b> às que já existem na outra unidade, e cada tag mantém o número de aviso de lá.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <a class="ui-btn" href="/config-unidade/exportar" style="text-decoration:none">⬇️ Baixar a configuração desta unidade</a>
+          <a class="ui-btn sec" href="/config-unidade/exportar?fotos=0" style="text-decoration:none">sem as imagens (arquivo menor)</a>
+          <input type="file" id="cuArq" accept=".json,application/json" style="display:none" onchange="cuLer(this)">
+          <button type="button" class="tbtn" onclick="document.getElementById('cuArq').click()">⬆️ Importar de outra unidade</button>
+          ${ult ? `<button type="button" class="reset" onclick="cuDesfazer()" style="padding:8px 12px" title="Volta ao que estava antes da importação${ult.origem ? ' de ' + esc(ult.origem) : ''}">↩️ Desfazer a última importação (${dataUlt})</button>` : ''}
+        </div>
+        <div id="cuBox" style="display:none;margin-top:12px;border:1px solid var(--linha);border-radius:12px;padding:12px 14px;background:var(--card)"></div>
+        <p id="cuMsg" class="quando" style="margin:8px 0 0"></p>
+      </div>
+    </details>
+    <script>
+    var cuPac=null;
+    function cuEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+    function cuLer(inp){
+      var f=inp.files&&inp.files[0]; if(!f) return; var msg=document.getElementById('cuMsg'), box=document.getElementById('cuBox');
+      msg.style.color=''; msg.textContent='⏳ Lendo o arquivo…'; box.style.display='none';
+      var rd=new FileReader(); rd.onload=function(){
+        inp.value='';
+        try{ cuPac=JSON.parse(rd.result); }catch(e){ msg.style.color='var(--erro)'; msg.textContent='❌ Este arquivo não é um pacote de configuração.'; return; }
+        fetch('/config-unidade/previa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pacote:cuPac})}).then(function(r){return r.json();}).then(function(j){
+          if(!j.ok){ msg.style.color='var(--erro)'; msg.textContent='❌ '+(j.erro||'arquivo inválido'); return; }
+          msg.textContent='';
+          var linhas=j.partes.map(function(p){ return '<label class="chk" style="margin:0 0 8px;font-weight:500;align-items:flex-start'+(p.tem?'':';opacity:.5')+'"><input type="checkbox" name="cuParte" value="'+p.chave+'"'+(p.tem?' checked':' disabled')+'> <span><b>'+cuEsc(p.rotulo)+'</b><br><span class="quando" style="margin:0">no arquivo: '+cuEsc(p.pacote||'nada')+' · aqui hoje: '+cuEsc(p.aqui)+'</span></span></label>'; }).join('');
+          box.innerHTML='<div style="font-weight:700;margin:0 0 8px">Arquivo '+(j.unidade?'de <b>'+cuEsc(j.unidade)+'</b>':'')+(j.em?' · gerado em '+cuEsc(new Date(j.em).toLocaleString('pt-BR')):'')+'</div>'
+            +'<p class="quando" style="margin:0 0 10px">Marque o que trazer. O que estiver marcado <b>substitui</b> o desta unidade (as tags são somadas). Antes, o painel guarda uma cópia do que existe hoje para você poder desfazer.</p>'
+            +linhas+'<div style="display:flex;gap:8px;margin-top:6px"><button type="button" class="tbtn" onclick="cuImportar()">📥 Importar o que está marcado</button><button type="button" class="reset" onclick="document.getElementById(\\'cuBox\\').style.display=\\'none\\'">Cancelar</button></div>';
+          box.style.display='block';
+        }).catch(function(){ msg.style.color='var(--erro)'; msg.textContent='❌ erro de rede'; });
+      }; rd.readAsText(f);
+    }
+    function cuImportar(){
+      var partes=[].map.call(document.querySelectorAll('input[name=cuParte]:checked'),function(i){return i.value;}), msg=document.getElementById('cuMsg');
+      if(!partes.length){ alert('Marque pelo menos uma parte.'); return; }
+      if(!confirm('Substituir nesta unidade: '+partes.length+' parte(s)? Dá para desfazer depois.')) return;
+      msg.style.color=''; msg.textContent='⏳ Importando…'+(partes.indexOf('horarios')>=0?' (o robô reinicia para valer os horários)':'');
+      fetch('/config-unidade/importar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pacote:cuPac,partes:partes})}).then(function(r){return r.json();}).then(function(j){
+        if(!j.ok){ msg.style.color='var(--erro)'; msg.textContent='❌ '+(j.erro||'falhou'); return; }
+        msg.style.color='var(--ok)'; msg.textContent='✅ Importado: '+j.feito.join(', ')+'.'+(j.horarios?(j.reiniciou?' Robô reiniciado com os novos horários.':' ⚠️ Não consegui reiniciar o robô — reinicie para valer os horários.'):'')+' Confira os textos que citam a unidade (nome, endereço, link do mapa).';
+        document.getElementById('cuBox').style.display='none'; setTimeout(function(){ location.reload(); },4000);
+      }).catch(function(){ msg.style.color='var(--erro)'; msg.textContent='❌ erro de rede'; });
+    }
+    function cuDesfazer(){
+      if(!confirm('Voltar a configuração para como estava antes da última importação?')) return;
+      var msg=document.getElementById('cuMsg'); msg.style.color=''; msg.textContent='⏳ Desfazendo…';
+      fetch('/config-unidade/desfazer',{method:'POST'}).then(function(r){return r.json();}).then(function(j){
+        if(!j.ok){ msg.style.color='var(--erro)'; msg.textContent='❌ '+(j.erro||'falhou'); return; }
+        msg.style.color='var(--ok)'; msg.textContent='✅ Voltou a configuração de antes da importação.'; setTimeout(function(){ location.reload(); },2500);
+      }).catch(function(){ msg.style.color='var(--erro)'; msg.textContent='❌ erro de rede'; });
+    }
+    </script>`;
+    })() : ''}
     <div class="sec-t" id="sec-indiv">Mensagens individuais <small style="font-weight:600;color:var(--cinza)">(enviadas 1 para 1, direto para a aluna)</small></div>
     ${itensIndividuais}
     <div class="sec-t" id="sec-grupo">Mensagens em grupo <small style="font-weight:600;color:var(--cinza)">(enviadas nos grupos do WhatsApp)</small></div>
