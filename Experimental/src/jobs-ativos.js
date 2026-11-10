@@ -26,7 +26,7 @@ function salvarMapa(m) {
 
 // Envios que começam DESLIGADOS (mexem em algo que não tem volta, como tirar
 // alguém de grupo): só rodam depois de ligados no painel em cada unidade.
-const DESLIGADOS_PADRAO = new Set(['saidaGrupos', 'venceHoje', 'sentimosFalta', 'assinaturas']);
+const DESLIGADOS_PADRAO = new Set(['saidaGrupos', 'venceHoje', 'sentimosFalta', 'assinaturas', 'semResposta1', 'semResposta2', 'semRespostaEquipe1', 'semRespostaEquipe2']);
 
 // LIGADO por padrão: só está desligado se gravado explicitamente como false
 // (os de DESLIGADOS_PADRAO, ao contrário, só ligam se gravados como true).

@@ -157,7 +157,7 @@ function paginaMensagens(aviso, erro) {
     return html + (resto.length ? `<details class="msg-bloco" id="blk-outras"><summary>🗂️ Outras <small>· ${resto.length}</small></summary>${resto.map(cardDe).join('\n')}</details>` : '');
   };
   const itensIndividuais = emBlocos(indivOrdenado, [
-    ['confirmacao', '📅 Confirmação de aula', 'lembrete antes da aula', ['confirmacao_hoje', 'confirmacao_amanha', 'confirmacao_experimental', 'confirmacao_experimental_express']],
+    ['confirmacao', '📅 Confirmação de aula', 'lembrete antes da aula', ['confirmacao_hoje', 'confirmacao_amanha', 'confirmacao_sem_resposta', 'confirmacao_sem_resposta_equipe', 'confirmacao_experimental', 'confirmacao_experimental_express']],
     ['contratos', '📄 Contratos e renovação', 'vencimento, renovação e saída', ['renovacao', 'vence_hoje', 'assinatura_contrato', 'saida_grupos']],
     ['followup', '🔁 Follow-up e remarcação', 'depois da aula experimental', ['followup', 'followup_aluna', 'no_show']],
     ['sentimos', '💛 Sentimos sua falta', 'alunas ativas que pararam de vir', ['sentimos_falta_1', 'sentimos_falta_2']],
@@ -812,6 +812,8 @@ function paginaWa() {
 const HORARIOS_DA_MSG = {
   confirmacao_hoje:    [['morning', '']],
   confirmacao_amanha:  [['afternoon', '']],
+  confirmacao_sem_resposta:        [['semResposta1', '1º horário'], ['semResposta2', '2º horário']],
+  confirmacao_sem_resposta_equipe: [['semRespostaEquipe1', '1º horário'], ['semRespostaEquipe2', '2º horário']],
   followup:            [['followupMorning', 'Manhã'], ['followupAfternoon', 'Tarde']],
   followup_aluna:      'compartilha:followup', // mesmo job do follow-up — só nota
   no_show:             [['noShowMorning', 'Manhã'], ['noShowAfternoon', 'Tarde']],
@@ -1092,6 +1094,8 @@ const JOBS_DO_LOG = [
   [/^Cobrança de inadimplentes/i, 'inadimplentes', true, 'Cobrança: manda só para quem ainda não foi cobrada hoje'],
   [/^Cobrança — boleto vence hoje/i, 'inadimplentesHoje', true, 'Boleto vence hoje: manda só para quem ainda não recebeu hoje'],
   [/^Planos FREE/i, 'freeAntecedencia', true, 'Planos FREE'],
+  [/^Confirmação sem resposta \(2ª mensagem\)|^Confirmação sem resposta \(simulação/i, 'semResposta', true, 'Confirmação sem resposta: só manda para quem ainda não recebeu a 2ª mensagem'],
+  [/^Confirmação sem resposta \(lista da equipe\)/i, 'semRespostaEquipe', true, 'Confirmação sem resposta: cada pessoa entra na lista uma vez'],
   [/^Grade→formulário/i, 'slotsPush', true, 'Atualiza os horários do formulário'],
   [/^Grade de fixas/i, 'gradeFixas', true, 'Atualiza a grade de matrículas'],
   [/^Alunas ativas \(EVO\)/i, 'ativasFoto', true, 'Relê as alunas ativas no EVO'],

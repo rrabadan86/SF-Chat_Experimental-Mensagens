@@ -766,6 +766,9 @@ function iniciarRodarJobWatcher() {
     resumoMensal:      { nome: 'Resumo mensal no WhatsApp [manual]', fn: (pedido) => require('./resumo-mensal').enviar({ mes: pedido && pedido.mes, teste: true, log }), timeoutMs: 12 * 60 * 1000 },
     freeAntecedencia:  { nome: 'Planos FREE — antecedência [manual]', fn: (pedido) => require('./free-antecedencia').runFreeAntecedencia({ dry: !!(pedido && pedido.dry) }) },
     // "↻ Rodar de novo" do Log do painel (falhas de job):
+    semResposta:       { nome: 'Confirmação sem resposta (2ª mensagem) [manual]', fn: () => require('./confirmacao-sem-resposta').runSegundaMensagem({ log }), timeoutMs: 25 * 60 * 1000 },
+    semRespostaDry:    { nome: 'Confirmação sem resposta (simulação) [manual]', fn: () => require('./confirmacao-sem-resposta').runSegundaMensagem({ log, dry: true }), timeoutMs: 25 * 60 * 1000 },
+    semRespostaEquipe: { nome: 'Confirmação sem resposta (lista da equipe) [manual]', fn: () => require('./confirmacao-sem-resposta').runListaEquipe({ log }), timeoutMs: 25 * 60 * 1000 },
     assinaturas:       { nome: 'Contrato sem assinatura [manual]', fn: () => require('./assinaturas').runAssinaturas({ log }), timeoutMs: 20 * 60 * 1000 },
     venceHoje:         { nome: 'Vence hoje — sem renovação [manual]', fn: () => require('./vence-hoje').runVenceHoje({ log }), timeoutMs: 20 * 60 * 1000 },
     saidaGrupos:       { nome: 'Saída — não renovou [manual]', fn: () => require('./saidas-grupos').runSaidasGrupos({ log }), timeoutMs: 20 * 60 * 1000 },
@@ -1132,6 +1135,22 @@ async function main() {
 
   log(`📅 Job RENOVAÇÃO agendado: ${config.schedule.renewal} (14:30 todos os dias)`);
   console.log('   → Avisa a aluna 7 dias antes do vencimento do contrato');
+
+  // Confirmação SEM RESPOSTA: 2ª mensagem para quem não respondeu/reagiu e lista
+  // no grupo da equipe de quem continua sem responder (desligados até ligar).
+  for (const [chave, oque, fn] of [
+    ['semResposta1', '2ª mensagem', 'runSegundaMensagem'], ['semResposta2', '2ª mensagem', 'runSegundaMensagem'],
+    ['semRespostaEquipe1', 'lista da equipe', 'runListaEquipe'], ['semRespostaEquipe2', 'lista da equipe', 'runListaEquipe'],
+  ]) {
+    if (!config.schedule[chave]) continue;
+    agendar(chave, config.schedule[chave], async () => {
+      if (!jobsAtivos.ativo(chave)) { log(`⏸️  Confirmação sem resposta (${oque}) desligada no painel — pulando`); return; }
+      log(`⏰ Cron disparado: Confirmação sem resposta (${oque})`);
+      runJob(`Confirmação sem resposta (${oque})`, () => require('./confirmacao-sem-resposta')[fn]({ log }), 25 * 60 * 1000, { retry: false })
+        .catch(err => logError(`Confirmação sem resposta (${oque})`, err));
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job CONFIRMAÇÃO SEM RESPOSTA (${oque}) agendado: ${config.schedule[chave]} — ${jobsAtivos.ativo(chave) ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
+  }
 
   // Contrato sem assinatura: lembrete com o link (desligado até ligar no painel).
   if (config.schedule.assinaturas) {
