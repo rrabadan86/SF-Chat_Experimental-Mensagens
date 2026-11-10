@@ -73,9 +73,10 @@ async function situacao(wa, r) {
 }
 const MOTIVO = { respondeu: 'respondeu', reagiu: 'reagiu à mensagem', recepcao: 'a recepção já falou com ela' };
 
-async function runSegundaMensagem({ log = console.log, dry = false } = {}) {
+// chave (opcional): só as confirmações daquele tipo ('confirmacao_hoje' | 'confirmacao_amanha').
+async function runSegundaMensagem({ log = console.log, dry = false, chave = '' } = {}) {
   const o = ler(), agora = Date.now();
-  const fila = Object.entries(o).filter(([, r]) => !r.segunda && !r.resolvido && agora - (r.enviadoEm || 0) >= ESPERA_2A_MS && aulaMs(r) - agora >= ANTECEDENCIA_MS);
+  const fila = Object.entries(o).filter(([, r]) => (!chave || r.chave === chave) && !r.segunda && !r.resolvido && agora - (r.enviadoEm || 0) >= ESPERA_2A_MS && aulaMs(r) - agora >= ANTECEDENCIA_MS);
   log(`📵 Confirmação sem resposta — 2ª mensagem: ${fila.length} para conferir.`);
   if (fila.length > MAX_POR_VEZ) throw new Error(`${fila.length} de uma vez (limite ${MAX_POR_VEZ}) — não enviei nada.`);
   const wa = require('./wa-client');
@@ -98,9 +99,9 @@ async function runSegundaMensagem({ log = console.log, dry = false } = {}) {
   return res;
 }
 
-async function runListaEquipe({ log = console.log, dry = false } = {}) {
+async function runListaEquipe({ log = console.log, dry = false, chave = '' } = {}) {
   const o = ler(), agora = Date.now();
-  const fila = Object.entries(o).filter(([, r]) => r.segunda && !r.listado && !r.resolvido && agora - (r.segunda.em || 0) >= ESPERA_LISTA_MS && aulaMs(r) > agora);
+  const fila = Object.entries(o).filter(([, r]) => (!chave || r.chave === chave) && r.segunda && !r.listado && !r.resolvido && agora - (r.segunda.em || 0) >= ESPERA_LISTA_MS && aulaMs(r) > agora);
   log(`📵 Confirmação sem resposta — lista da equipe: ${fila.length} para conferir.`);
   const wa = require('./wa-client');
   const lista = [];

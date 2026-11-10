@@ -55,7 +55,7 @@ const CATALOGO = [
   {
     chave: 'confirmacao_sem_resposta',
     titulo: 'Confirmação — sem resposta (2ª mensagem)',
-    quando: 'Sai só para quem NÃO respondeu nem reagiu (❤️ 👍…) à confirmação da aula de hoje ou de amanhã, e com quem a recepção não falou à mão depois. Uma vez por aula. Só ter lido não conta como resposta.',
+    quando: 'Sai só para quem NÃO respondeu nem reagiu (❤️ 👍…) à confirmação e com quem a recepção não falou à mão depois. Um horário para quem recebeu a "aula de hoje" e outro para a "aula de amanhã" — deixe pelo menos 1h30 depois da confirmação. Uma vez por aula. Só ter lido não conta como resposta.',
     vars: [['nome', 'primeiro nome da lead'], ['horario', 'horário da aula'], ['quando', '"hoje", "amanhã" ou "no dia dd/mm"']],
     padrao: 'Oi, {nome}! 😊 Passando só para confirmar: podemos contar com você {quando} às {horario}?\n\nÉ só responder com um 👍 — estamos te esperando! 💪',
     exemplos: { quando: 'hoje', horario: '16:15' },
@@ -63,7 +63,7 @@ const CATALOGO = [
   {
     chave: 'confirmacao_sem_resposta_equipe',
     titulo: 'Confirmação — sem resposta (lista para o grupo da equipe)',
-    quando: 'Vai para o GRUPO DA EQUIPE com quem recebeu a 2ª mensagem e continua sem responder (aula ainda pela frente), para a recepção ligar ou mandar um áudio. Cada pessoa entra uma vez.',
+    quando: 'Vai para o GRUPO DA EQUIPE com quem recebeu a 2ª mensagem e continua sem responder (aula ainda pela frente), para a recepção ligar ou mandar um áudio. Um horário para a "aula de hoje" (ex.: 13:00) e outro para a "aula de amanhã" (no dia da aula, cedo). Cada pessoa entra uma vez.',
     vars: [['lista', 'uma linha por pessoa: horário (dia) — nome — telefone']],
     padrao: '📵 *Não responderam a confirmação da aula experimental*\n\n{lista}\n\nVale uma ligação ou um áudio da recepção 💚',
     exemplos: { lista: '• 16:15 (hoje) — Lilian Carneiro — (62) 98322-0000\n• 18:15 (hoje) — Carla Mendes — (62) 99111-2222' },

@@ -812,8 +812,8 @@ function paginaWa() {
 const HORARIOS_DA_MSG = {
   confirmacao_hoje:    [['morning', '']],
   confirmacao_amanha:  [['afternoon', '']],
-  confirmacao_sem_resposta:        [['semResposta1', '1º horário'], ['semResposta2', '2º horário']],
-  confirmacao_sem_resposta_equipe: [['semRespostaEquipe1', '1º horário'], ['semRespostaEquipe2', '2º horário']],
+  confirmacao_sem_resposta:        [['semResposta1', 'para a confirmação da aula de hoje'], ['semResposta2', 'para a confirmação da aula de amanhã']],
+  confirmacao_sem_resposta_equipe: [['semRespostaEquipe2', 'para a confirmação da aula de hoje'], ['semRespostaEquipe1', 'para a confirmação da aula de amanhã (no dia da aula)']],
   followup:            [['followupMorning', 'Manhã'], ['followupAfternoon', 'Tarde']],
   followup_aluna:      'compartilha:followup', // mesmo job do follow-up — só nota
   no_show:             [['noShowMorning', 'Manhã'], ['noShowAfternoon', 'Tarde']],
