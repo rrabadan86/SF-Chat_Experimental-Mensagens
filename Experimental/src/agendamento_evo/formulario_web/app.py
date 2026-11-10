@@ -1263,6 +1263,10 @@ def api_book_sofia():
             "contactId": "sofia-" + (telefone or ""),
             "name": nome, "phone": br_phone_with_9(telefone),
             "when": res.when, "message": msg, "status": "pending",
+            # "express" → o robô usa o texto/flyer PRÓPRIO do Cadastro Express
+            # (enviar_confirmacoes.js: ehExpress). Sem isso o Express saía com o
+            # texto genérico do formulário.
+            **({"origem": origem} if origem else {}),
         })
     except Exception:
         app.logger.exception("Sofia: agendou mas falhou ao enfileirar a confirmação")
