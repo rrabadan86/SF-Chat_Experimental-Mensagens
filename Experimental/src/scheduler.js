@@ -11,6 +11,9 @@ const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-ef
 const atividade = require('./atividade'); // registro do que o robô fez (aba "Hoje")
 const igcfg = require('./instagram-config'); // liga/desliga o Instagram pelo painel
 const jobsAtivos = require('./jobs-ativos'); // liga/desliga de cada envio pelo painel
+// Agenda um job E registra disparo/falha (Saúde → Envios automáticos).
+const batimento = require('./jobs-batimento');
+const agendar = (chave, expr, fn, opts) => batimento.agendar(cron, chave, expr, fn, opts);
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
@@ -237,6 +240,8 @@ function logError(msg, err, opts = {}) {
   const line = `[${ts}] ❌ ${msg}: ${err?.message || err} — ⚠️ NADA foi enviado neste job.`;
   console.error(line);
   if (err?.stack) console.error(err.stack);
+  // Saúde → Envios automáticos: marca a falha no job agendado em execução.
+  try { batimento.falhou(`${msg}: ${err?.message || err}`); } catch (_) {}
   // Alerta push (ntfy) — best-effort, nunca derruba nada. O anti-spam do módulo
   // impede repetição do mesmo alerta em 30 min (evita enxurrada de push).
   try {
@@ -1010,7 +1015,7 @@ async function main() {
   }
 
   // Schedule: 08:30 seg-sáb → Aulas de hoje após 12h
-  cron.schedule(config.schedule.morning, async () => {
+  agendar('morning', config.schedule.morning, async () => {
     log('⏰ Cron disparado: Job Manhã');
     if (!jobsAtivos.ativo('morning')) { log('⏸️  Confirmação HOJE desligada no painel — pulando'); return; }
     runJob('Manhã (hoje)', executeMorningJob).catch(err => {
@@ -1022,7 +1027,7 @@ async function main() {
   console.log('   → Busca aulas de hoje após 12h');
 
   // Schedule: 15:30 dom-sex → Aulas de amanhã até 11:30
-  cron.schedule(config.schedule.afternoon, async () => {
+  agendar('afternoon', config.schedule.afternoon, async () => {
     log('⏰ Cron disparado: Job Tarde');
     if (!jobsAtivos.ativo('afternoon')) { log('⏸️  Confirmação AMANHÃ desligada no painel — pulando'); return; }
     runJob('Tarde (amanhã)', executeAfternoonJob).catch(err => {
@@ -1034,7 +1039,7 @@ async function main() {
   console.log('   → Busca aulas de amanhã até 11:30');
 
   // Schedule: 10:30 seg-sáb → Follow-up presença manhã (ontem antes das 12h)
-  cron.schedule(config.schedule.followupMorning, async () => {
+  agendar('followupMorning', config.schedule.followupMorning, async () => {
     log('⏰ Cron disparado: Follow-up Manhã');
     if (!jobsAtivos.ativo('followupMorning')) { log('⏸️  Follow-up Manhã desligado no painel — pulando'); return; }
     if (!(await esperarVez('Follow-up Manhã'))) return; // ocupado: espera a vez em vez de pular
@@ -1053,7 +1058,7 @@ async function main() {
   console.log('   → Follow-up de ontem (aulas antes das 12h) com Presença');
 
   // Schedule: 16:00 seg-sáb → Follow-up presença tarde (ontem a partir das 12h)
-  cron.schedule(config.schedule.followupAfternoon, async () => {
+  agendar('followupAfternoon', config.schedule.followupAfternoon, async () => {
     log('⏰ Cron disparado: Follow-up Tarde');
     if (!jobsAtivos.ativo('followupAfternoon')) { log('⏸️  Follow-up Tarde desligado no painel — pulando'); return; }
     if (!(await esperarVez('Follow-up Tarde'))) return; // ocupado: espera a vez em vez de pular
@@ -1072,7 +1077,7 @@ async function main() {
   console.log('   → Follow-up de ontem (aulas a partir das 12h) com Presença');
 
   // Schedule: 11:30 seg-sáb → Faltas (no-show) das aulas da MANHÃ
-  cron.schedule(config.schedule.noShowMorning, async () => {
+  agendar('noShowMorning', config.schedule.noShowMorning, async () => {
     log('⏰ Cron disparado: Faltas (no-show) Manhã');
     if (!jobsAtivos.ativo('noShowMorning')) { log('⏸️  Faltas Manhã desligado no painel — pulando'); return; }
     if (!(await esperarVez('No-show Manhã'))) return; // ocupado: espera a vez em vez de pular
@@ -1091,7 +1096,7 @@ async function main() {
   console.log('   → Faltas das aulas da manhã → convida a remarcar');
 
   // Schedule: 19:30 seg-sáb → Faltas (no-show) das aulas da TARDE/NOITE
-  cron.schedule(config.schedule.noShowAfternoon, async () => {
+  agendar('noShowAfternoon', config.schedule.noShowAfternoon, async () => {
     log('⏰ Cron disparado: Faltas (no-show) Tarde/Noite');
     if (!jobsAtivos.ativo('noShowAfternoon')) { log('⏸️  Faltas Tarde/Noite desligado no painel — pulando'); return; }
     if (!(await esperarVez('No-show Tarde/Noite'))) return; // ocupado: espera a vez em vez de pular
@@ -1110,7 +1115,7 @@ async function main() {
   console.log('   → Faltas da tarde/noite → convida a remarcar');
 
   // Schedule: 14:30 todos os dias → Renovação (avisa quem vence em exatos 7 dias)
-  cron.schedule(config.schedule.renewal, async () => {
+  agendar('renewal', config.schedule.renewal, async () => {
     log('⏰ Cron disparado: Renovação de contratos');
     if (!jobsAtivos.ativo('renewal')) { log('⏸️  Renovação desligada no painel — pulando'); return; }
     if (!(await esperarVez('Renovação'))) return; // ocupado: espera a vez em vez de pular
@@ -1130,7 +1135,7 @@ async function main() {
 
   // Contrato sem assinatura: lembrete com o link (desligado até ligar no painel).
   if (config.schedule.assinaturas) {
-    cron.schedule(config.schedule.assinaturas, async () => {
+    agendar('assinaturas', config.schedule.assinaturas, async () => {
       if (!jobsAtivos.ativo('assinaturas')) { log('⏸️  Contrato sem assinatura: desligado no painel — pulando'); return; }
       log('⏰ Cron disparado: Contrato sem assinatura');
       runJob('Contrato sem assinatura', () => require('./assinaturas').runAssinaturas({ log }), 20 * 60 * 1000, { retry: false })
@@ -1141,7 +1146,7 @@ async function main() {
 
   // Vence hoje — sem renovação (desligado até ligar no painel).
   if (config.schedule.venceHoje) {
-    cron.schedule(config.schedule.venceHoje, async () => {
+    agendar('venceHoje', config.schedule.venceHoje, async () => {
       if (!jobsAtivos.ativo('venceHoje')) { log('⏸️  Vence hoje: desligado no painel — pulando'); return; }
       log('⏰ Cron disparado: Vence hoje — sem renovação');
       runJob('Vence hoje — sem renovação', () => require('./vence-hoje').runVenceHoje({ log }), 20 * 60 * 1000, { retry: false })
@@ -1152,7 +1157,7 @@ async function main() {
 
   // Pagamento dos professores (só onde PAGAMENTO_PROFESSORES=1): lê o EVO toda madrugada.
   if (/^(1|true|sim|on)$/i.test(String(process.env.PAGAMENTO_PROFESSORES || '').trim())) {
-    cron.schedule(process.env.PAGAMENTO_SYNC_CRON || '43 3 * * *', async () => {
+    agendar('pagamentoSync', process.env.PAGAMENTO_SYNC_CRON || '43 3 * * *', async () => {
       log('⏰ Cron disparado: Pagamento professores — leitura do EVO');
       runJob('Pagamento professores — leitura do EVO', () => require('./pagamento/sync').runPagamentoSync({ log }), 60 * 60 * 1000, { retry: false })
         .catch(err => logError('Pagamento professores — leitura do EVO', err));
@@ -1162,7 +1167,7 @@ async function main() {
 
   // Sentimos sua falta: ativas sem presença há N dias (1ª e 2ª mensagem) — toda segunda.
   if (config.schedule.sentimosFalta) {
-    cron.schedule(config.schedule.sentimosFalta, async () => {
+    agendar('sentimosFalta', config.schedule.sentimosFalta, async () => {
       if (!jobsAtivos.ativo('sentimosFalta')) { log('⏸️  Sentimos sua falta: desligado no painel — pulando'); return; }
       log('⏰ Cron disparado: Sentimos sua falta');
       runJob('Sentimos sua falta', () => require('./sentimos-falta').runSentimosFalta({ log }), 60 * 60 * 1000, { retry: false })
@@ -1173,7 +1178,7 @@ async function main() {
 
   // Saída — não renovou: retira dos grupos e manda a mensagem (desligado até ligar no painel).
   if (config.schedule.saidaGrupos) {
-    cron.schedule(config.schedule.saidaGrupos, async () => {
+    agendar('saidaGrupos', config.schedule.saidaGrupos, async () => {
       if (!jobsAtivos.ativo('saidaGrupos')) { log('⏸️  Saída — não renovou: desligada no painel — pulando'); return; }
       log('⏰ Cron disparado: Saída — não renovou');
       runJob('Saída — não renovou', () => require('./saidas-grupos').runSaidasGrupos({ log }), 20 * 60 * 1000, { retry: false })
@@ -1187,7 +1192,7 @@ async function main() {
   if (!config.jobAtivo('circuito_convocacao')) {
     log('📅 Job CIRCUITO (convocatória) DESATIVADO nesta unidade (JOBS_OFF).');
   } else if (config.schedule.circuitoConvoca) {
-    cron.schedule(config.schedule.circuitoConvoca, async () => {
+    agendar('circuitoConvoca', config.schedule.circuitoConvoca, async () => {
       log('⏰ Cron disparado: Circuito — convocatória');
       if (!jobsAtivos.ativo('circuitoConvoca')) { log('⏸️  Circuito convocatória desligado no painel — pulando'); return; }
       agendarCircuitoConvocacao();
@@ -1202,7 +1207,7 @@ async function main() {
   if (!config.jobAtivo('circuito_lembrete')) {
     log('📅 Job CIRCUITO (lembrete) DESATIVADO nesta unidade (JOBS_OFF).');
   } else if (config.schedule.circuitoLembrete) {
-    cron.schedule(config.schedule.circuitoLembrete, async () => {
+    agendar('circuitoLembrete', config.schedule.circuitoLembrete, async () => {
       log('⏰ Cron disparado: Circuito — lembrete');
       if (!jobsAtivos.ativo('circuitoLembrete')) { log('⏸️  Circuito lembrete desligado no painel — pulando'); return; }
       agendarCircuitoLembrete();
@@ -1235,14 +1240,14 @@ async function main() {
       const p = String(cronExpr).trim().split(/\s+/);         // [M, H, dom, mon, DOW]
       if (p.length === 5) { p[1] = `*/${intervalo}`; cronExpr = p.join(' '); }
     }
-    cron.schedule(cronExpr, comparecimentoRunner, { timezone: 'America/Sao_Paulo' });
+    agendar('comparecimento', cronExpr, comparecimentoRunner, { timezone: 'America/Sao_Paulo' });
     log(`📅 Job PRESENÇA (troca de tags) agendado: ${cronExpr}${intervalo ? ` (a cada ${intervalo}h)` : ''}`);
   }
 
   // Schedule: 10:45 (manhã) e 15:45 (tarde) → dispara os ENVIOS AGENDADOS no
   // painel para o dia+turno atual (texto ou foto com legenda).
   function agendarEnvios(turno, label) {
-    cron.schedule(turno === 'manha' ? config.schedule.agendadosManha : config.schedule.agendadosTarde, async () => {
+    agendar(turno === 'manha' ? 'agendadosManha' : 'agendadosTarde', turno === 'manha' ? config.schedule.agendadosManha : config.schedule.agendadosTarde, async () => {
       log(`⏰ Cron disparado: Envios agendados — ${turno}`);
       if (!jobsAtivos.ativo(turno === 'manha' ? 'agendadosManha' : 'agendadosTarde')) { log(`⏸️  Envios agendados (${turno}) desligado no painel — pulando`); return; }
       if (!(await esperarVez(`Agendados (${turno})`))) return; // ocupado: espera a vez em vez de pular
@@ -1267,7 +1272,7 @@ async function main() {
   } else {
     // Cobrança "regular": recorrente (cartão) + boleto VENCIDO — NÃO inclui a "boleto vence hoje".
     if (config.schedule.inadimplentes) {
-      cron.schedule(config.schedule.inadimplentes, async () => {
+      agendar('inadimplentes', config.schedule.inadimplentes, async () => {
         log('⏰ Cron disparado: Cobrança (recorrente + boleto vencido)');
         if (!jobsAtivos.ativo('inadimplentes')) { log('⏸️  Cobrança desligada no painel — pulando'); return; }
         agendarInadimplentes(1, 'regular');
@@ -1277,7 +1282,7 @@ async function main() {
     }
     // Cobrança "boleto vence HOJE": horário/dias PRÓPRIOS (independentes), editáveis no painel.
     if (config.schedule.inadimplentesHoje) {
-      cron.schedule(config.schedule.inadimplentesHoje, async () => {
+      agendar('inadimplentesHoje', config.schedule.inadimplentesHoje, async () => {
         log('⏰ Cron disparado: Cobrança — boleto vence hoje');
         if (!jobsAtivos.ativo('inadimplentes')) { log('⏸️  Cobrança desligada no painel — pulando'); return; }
         agendarInadimplentes(1, 'hoje');
@@ -1301,7 +1306,7 @@ async function main() {
     // start, mudar N no painel passa a exigir reiniciar o scheduler.
     const horasFree = require('./free-antecedencia-config').lerHoras();
     const cronFree = `2 */${horasFree} * * *`;
-    cron.schedule(cronFree, async () => {
+    agendar('freeAntecedencia', cronFree, async () => {
       if (!jobsAtivos.ativo('freeAntecedencia')) return;  // desligado no painel
       log(`⏰ Planos FREE: disparo agendado (${cronFree})`);
       agendarFreeAntecedencia();
@@ -1321,12 +1326,12 @@ async function main() {
   // (O Render é mantido acordado pela ponte de confirmações, que bate a cada 1 min.)
   let _slotsAgendado = false;
   if (config.schedule.slotsPushDia) {
-    cron.schedule(config.schedule.slotsPushDia, runSlotsPush, { timezone: 'America/Sao_Paulo' });
+    agendar('slotsPushDia', config.schedule.slotsPushDia, runSlotsPush, { timezone: 'America/Sao_Paulo' });
     log(`📅 Job GRADE→FORMULÁRIO (dia) agendado: ${config.schedule.slotsPushDia} (a cada 60 min, 07h-21h)`);
     _slotsAgendado = true;
   }
   if (config.schedule.slotsPushNoite) {
-    cron.schedule(config.schedule.slotsPushNoite, runSlotsPush, { timezone: 'America/Sao_Paulo' });
+    agendar('slotsPushNoite', config.schedule.slotsPushNoite, runSlotsPush, { timezone: 'America/Sao_Paulo' });
     log(`📅 Job GRADE→FORMULÁRIO (noite) agendado: ${config.schedule.slotsPushNoite} (a cada ~3h, 22h-06h)`);
     _slotsAgendado = true;
   }
@@ -1335,7 +1340,7 @@ async function main() {
   // presença, contrato) e guarda o histórico para Indicadores → Professoras.
   // Só lê (não envia nada). Usa o EVO, então espera a vez do jobRunning.
   if (config.schedule.histExperimentais) {
-    cron.schedule(config.schedule.histExperimentais, () => {
+    agendar('histExperimentais', config.schedule.histExperimentais, () => {
       log('⏰ Cron disparado: Histórico de experimentais (professoras)');
       runJob('Histórico de experimentais (professoras)', () => require('./historico-experimentais').runHistoricoExperimentais({ extras: 60 }), 60 * 60 * 1000).catch(err => logError('Histórico de experimentais', err));
     }, { timezone: 'America/Sao_Paulo' });
@@ -1343,12 +1348,12 @@ async function main() {
   }
 
   if (config.schedule.ativasFoto) {
-    cron.schedule(config.schedule.ativasFoto, () => runAtivasFoto(), { timezone: 'America/Sao_Paulo' });
+    agendar('ativasFoto', config.schedule.ativasFoto, () => runAtivasFoto(), { timezone: 'America/Sao_Paulo' });
     log(`📅 Job FOTO DE ALUNAS ATIVAS agendado: ${config.schedule.ativasFoto} (Indicadores → Alunas ativas)`);
   }
 
   if (config.schedule.gradeFixas) {
-    cron.schedule(config.schedule.gradeFixas, () => runGradeFixas('agendado'), { timezone: 'America/Sao_Paulo' });
+    agendar('gradeFixas', config.schedule.gradeFixas, () => runGradeFixas('agendado'), { timezone: 'America/Sao_Paulo' });
     log(`📅 Job GRADE DE FIXAS agendado: ${config.schedule.gradeFixas} (atualiza a página /grade)`);
   }
   if (_slotsAgendado) {
@@ -1365,7 +1370,7 @@ async function main() {
   // Sempre agenda; liga/desliga é decidido NO DISPARO por instagram-config
   // (data/instagram-config.json, controlado no painel) ou pelo .env IG_ENABLED.
   // Assim o Studio religa/pausa pelo painel sem reiniciar o robô.
-  cron.schedule(config.schedule.instagram, async () => {
+  agendar('instagram', config.schedule.instagram, async () => {
     if (!igcfg.ligado()) { log('⏸️  Instagram DESLIGADO (painel/.env) — pulando o disparo de hoje'); return; }
     if (!jobsAtivos.ativo('instagram')) { log('⏸️  Instagram desligado no painel (envio) — pulando'); return; }
     log('⏰ Cron disparado: Instagram boas-vindas');
@@ -1384,7 +1389,7 @@ async function main() {
   console.log('   → Boas-vindas a novos seguidores (perfil logado no Instagram)');
 
   // Schedule: 08:00 todos os dias → Parabéns às aniversariantes nos grupos
-  cron.schedule(config.schedule.aniversariantes, async () => {
+  agendar('aniversariantes', config.schedule.aniversariantes, async () => {
     log('⏰ Cron disparado: Aniversariantes');
     if (!jobsAtivos.ativo('aniversariantes')) { log('⏸️  Aniversariantes desligado no painel — pulando'); return; }
     if (!(await esperarVez('Aniversariantes'))) return; // ocupado: espera a vez em vez de pular
@@ -1403,7 +1408,7 @@ async function main() {
   console.log('   → Parabéns nos grupos em comum (perfil SlimFit)');
 
   // Schedule: 08:03 todos os dias → Parabéns DIRETO para EX-ALUNAS (reativação)
-  cron.schedule(config.schedule.aniversarioEx, async () => {
+  agendar('aniversarioEx', config.schedule.aniversarioEx, async () => {
     log('⏰ Cron disparado: Aniversário ex-alunas');
     if (!jobsAtivos.ativo('aniversarioEx')) { log('⏸️  Aniversário ex-alunas desligado no painel — pulando'); return; }
     if (!(await esperarVez('Aniversário ex-alunas'))) return; // ocupado: espera a vez em vez de pular
@@ -1422,7 +1427,7 @@ async function main() {
   console.log('   → Parabéns direto no WhatsApp de quem já foi aluna (EVO status "Inativos")');
 
   // Schedule: 06:30 segunda → Planilha Google de alunas ativas + aniversários
-  cron.schedule(config.schedule.planilhaAniv, async () => {
+  agendar('planilhaAniv', config.schedule.planilhaAniv, async () => {
     log('⏰ Cron disparado: Leitura das alunas ativas (tags + planilha)');
     if (!jobsAtivos.ativo('planilhaAniv')) { log('⏸️  Leitura das alunas ativas desligada no painel — pulando (tags Aluna/Ex-aluna não atualizam)'); return; }
     if (!(await esperarVez('Planilha'))) return; // ocupado: espera a vez em vez de pular
@@ -1440,7 +1445,7 @@ async function main() {
   console.log('   → Alunas ativas + aniversários → Google Sheets (preserva sua coluna)');
 
   // Schedule: 05:30 todo dia 01 → Lista de aniversariantes do mês no grupo da equipe
-  cron.schedule(config.schedule.aniversMesGrupo, async () => {
+  agendar('aniversMesGrupo', config.schedule.aniversMesGrupo, async () => {
     log('⏰ Cron disparado: Aniversariantes do mês (grupo da equipe)');
     if (!jobsAtivos.ativo('aniversMesGrupo')) { log('⏸️  Aniversariantes do mês desligado no painel — pulando'); return; }
     if (!(await esperarVez('Aniversariantes-mês'))) return; // ocupado: espera a vez em vez de pular
@@ -1458,7 +1463,7 @@ async function main() {
   console.log('   → Lista de aniversariantes do mês no grupo "SlimFit Equipe" (perfil das confirmações)');
 
   // Schedule: 09:07 todo dia 28 → Contratos a vencer no MÊS SEGUINTE no grupo da equipe
-  cron.schedule(config.schedule.renovacoesMesGrupo, async () => {
+  agendar('renovacoesMesGrupo', config.schedule.renovacoesMesGrupo, async () => {
     log('⏰ Cron disparado: Contratos a vencer no mês (grupo da equipe)');
     if (!jobsAtivos.ativo('renovacoesMesGrupo')) { log('⏸️  Contratos a vencer no mês desligado no painel — pulando'); return; }
     if (!(await esperarVez('Renovações-mês'))) return; // ocupado: espera a vez em vez de pular
@@ -1479,7 +1484,7 @@ async function main() {
   if (!config.jobAtivo('presentes')) {
     log('📅 Job PRESENTES DESATIVADO nesta unidade (JOBS_OFF).');
   } else {
-    cron.schedule(config.schedule.presentesPend, async () => {
+    agendar('presentesPend', config.schedule.presentesPend, async () => {
       log('⏰ Cron disparado: Presentes pendentes (grupo da equipe)');
       if (!jobsAtivos.ativo('presentesPend')) { log('⏸️  Presentes pendentes desligado no painel — pulando'); return; }
       if (!(await esperarVez('Presentes pendentes'))) return; // ocupado: espera a vez em vez de pular
@@ -1503,7 +1508,7 @@ async function main() {
   try { const hr = require('./horarios').parse(require('./horarios').cronDe('resumoSemana')); log(`📅 Resumo da semana (WhatsApp): ${hr.dias.map(d => ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d]).join(', ')} às ${hr.hora}${jobsAtivos.ativo('resumoSemana') ? '' : ' — DESLIGADO no painel'}`); } catch (_) {}
 
   // Schedule: 06:10 toda segunda → Alunas ausentes há 10+ dias no grupo da equipe
-  cron.schedule(config.schedule.ausentes10, async () => {
+  agendar('ausentes10', config.schedule.ausentes10, async () => {
     log('⏰ Cron disparado: Ausentes 10 dias');
     if (!jobsAtivos.ativo('ausentes10')) { log('⏸️  Ausentes 10 dias desligado no painel — pulando'); return; }
     if (!(await esperarVez('Ausentes 10 dias'))) return; // ocupado: espera a vez em vez de pular
@@ -1521,7 +1526,7 @@ async function main() {
   console.log('   → Alunas ativas ausentes há 10+ dias no grupo "SlimFit Equipe"');
 
   // Schedule: 19:45 todos os dias → Resumo do dia das experimentais no grupo
-  cron.schedule(config.schedule.resumoDia, async () => {
+  agendar('resumoDia', config.schedule.resumoDia, async () => {
     log('⏰ Cron disparado: Resumo do dia');
     if (!jobsAtivos.ativo('resumoDia')) { log('⏸️  Resumo do dia desligado no painel — pulando'); return; }
     if (!(await esperarVez('Resumo do dia'))) return; // ocupado: espera a vez em vez de pular

@@ -12,6 +12,7 @@ está implementado. Quando uma for aprovada, ela sai desta lista.
 | A1 | Respostas da experimental caem na SoFIA | Confirmação e mensagem de falta sairiam pelo número da SoFIA; se a lead responder "não vou poder", a SoFIA remarca sozinha. | O objetivo é criar relacionamento com uma pessoa; esse contato fica com a recepção. |
 | A2 | SoFIA atende aluna o dia todo | Hoje ela não responde aluna no horário da recepção (05:45–16:30). Passaria a responder sempre no que resolve sozinha (remarcar, contrato, reposições). | Por enquanto não. |
 | A3 | Trancamento pela SoFIA | A SoFIA já informa os dias disponíveis; faria o trancamento pelo site do EVO (a API não tem esse comando). | Por enquanto não. É a mais arriscada. |
+| A4 | Fila da recepção no painel (era C4) | Lista diária do que precisa de uma pessoa: quem fez a experimental ontem e não fechou, alunas sumidas, quem pediu humano na SoFIA, contratos sem assinatura. A recepção faz o contato; o sistema só monta a lista. | Ainda não vamos implementar. |
 
 ## B. Recusadas ("não precisa")
 
@@ -25,6 +26,7 @@ está implementado. Quando uma for aprovada, ela sai desta lista.
 | B6 | Campanha pula quem está em conversa | A campanha adiaria quem está sendo atendida ou escreveu nas últimas horas. | Não precisa pular; ficou só o aviso 📣 e o botão "Não enviar para ela". |
 | B7 | Aluna pede boleto/PIX e a SoFIA envia | SoFIA mandaria o boleto, o PIX ou o link de pagamento da própria aluna. | Não precisa. |
 | B8 | Renovação e matrícula com link de contratação | Mensagem de renovação e SoFIA mandariam link para contratar online. | Não precisa. |
+| B9 | Mensagem de contrato sem assinatura pela SoFIA | Mandaria pelo número da SoFIA para ela responder dúvidas sobre o link. | Aluna é relacionamento: continua saindo pelo robô (celular do studio). |
 
 ## C. Sugeridas e ainda sem resposta
 
@@ -33,7 +35,6 @@ está implementado. Quando uma for aprovada, ela sai desta lista.
 | C1 | SoFIA apaga sozinha o login travado | Se falhar 3 vezes seguidas ao abrir o WhatsApp, apaga o login antigo e mostra QR novo (evita o que aconteceu no Guará). |
 | C2 | Mensagem para a aluna no momento do bloqueio do app | "Seu acesso ao app foi suspenso por pendência financeira; volta sozinho ao regularizar." |
 | C3 | Entrada da aluna nova: boas-vindas e grupos | O acesso ao app já é criado pelo EVO. Faltaria mandar boas-vindas e colocar nos grupos. |
-| C4 | Fila da recepção no painel | Lista única do que sobrou para um humano resolver, com o motivo de cada caso. |
 
 ## D. Descartadas porque já existem
 
