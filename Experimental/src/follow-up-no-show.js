@@ -82,6 +82,8 @@ async function runNoShow(periodoFiltro) {
       try {
         await enviarUma(page, destino, texto, 'no_show');
         enviadas++;
+        // Registra para o ENCERRAMENTO do dia seguinte (se ela não responder). Teste não conta.
+        if (!argTeste) { try { require('./followup-encerramento').registrarFollowup({ telefone: destino, nome: aluno.name, periodo: periodoFiltro, origem: 'noshow' }); } catch (_) {} }
         console.log('   ✅ Enviada');
       } catch (err) {
         falhas++;

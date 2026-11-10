@@ -69,6 +69,13 @@ const CATALOGO = [
     exemplos: { lista: '• 16:15 (hoje) — Lilian Carneiro — (62) 98322-0000\n• 18:15 (hoje) — Carla Mendes — (62) 99111-2222' },
   },
   {
+    chave: 'noshow_encerramento',
+    titulo: 'Faltou — encerramento (sem resposta)',
+    quando: 'Sai no DIA SEGUINTE à mensagem de falta (no-show), só para quem NÃO respondeu nem reagiu, com quem a recepção não falou à mão, que não agendou de novo e que não virou aluna. Um horário para a falta da manhã e outro para a da tarde/noite. Uma vez por falta.',
+    vars: [['nome', 'primeiro nome da aluna']],
+    padrao: 'Oie, tudo bem?!\n\nPoxa, que pena que não tive um retorno seu. Por isso vou encerrar o nosso atendimento! 🥲\n\nEspero que possa vir fazer parte do Slim futuramente! 🫶🏼\n\nEstamos à disposição!',
+  },
+  {
     chave: 'followup_encerramento',
     titulo: 'Follow-up — encerramento (sem resposta)',
     quando: 'Sai no DIA SEGUINTE ao follow-up pós-aula, só para quem NÃO respondeu nem reagiu ao follow-up, com quem a recepção não falou à mão e que não virou aluna. Um horário para o follow-up da manhã e outro para o da tarde. Uma vez por follow-up.',
