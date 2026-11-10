@@ -1268,12 +1268,13 @@ export async function resumirEClassificar(linhas: { autor: string; texto: string
 // atende depois do agendamento — ela só passa adiante o que ouviu, para a
 // recepcionista e a professora já chegarem sabendo quem é a pessoa.
 // Devolve linhas "• Rótulo: texto" (só o que foi DITO) ou [] (nada útil / falha).
-export async function fichaDaLead(linhas: { autor: string; texto: string }[]): Promise<string[]> {
+export async function fichaDaLead(linhas: { autor: string; texto: string }[]): Promise<{ campos: Record<string, string>; linhas: string[] }> {
   const texto = (linhas || [])
     .map((l) => `${l.autor === "aluna" ? "Lead" : l.autor === "humano" ? "Atendente" : "SoFIA"}: ${l.texto}`)
     .join("\n")
     .slice(-8000);
-  if (!texto.trim()) return [];
+  const vazio = { campos: {}, linhas: [] as string[] };
+  if (!texto.trim()) return vazio;
   try {
     const resp = await comRetry(() =>
       anthropic.messages.create({
@@ -1295,18 +1296,18 @@ export async function fichaDaLead(linhas: { autor: string; texto: string }[]): P
     registrarUso("ficha", MODELO_EXTRACAO, resp);
     const bruto = resp.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.TextBlock).text).join("");
     const m = bruto.match(/\{[\s\S]*\}/);
-    if (!m) return [];
+    if (!m) return vazio;
     const o = JSON.parse(m[0]) || {};
     const rot: [string, string][] = [["objetivo", "Objetivo"], ["restricao", "Restrição"], ["origem", "Conheceu pelo"], ["preocupacao", "Preocupação"], ["outro", "Detalhe"]];
-    const out: string[] = [];
+    const out: string[] = [], campos: Record<string, string> = {};
     for (const [k, r] of rot) {
-      const v = String(o[k] || "").replace(/\s+/g, " ").trim();
-      if (v && !/^(n[ãa]o (informad|dit|mencion)|nenhum|-|n\/a)/i.test(v)) out.push(`• ${r}: ${v.slice(0, 140)}`);
+      const v = String(o[k] || "").replace(/\s+/g, " ").trim().slice(0, 140);
+      if (v && !/^(n[ãa]o (informad|dit|mencion)|nenhum|-|n\/a)/i.test(v)) { campos[k] = v; out.push(`• ${r}: ${v}`); }
     }
-    return out;
+    return { campos, linhas: out };
   } catch (e: any) {
     console.log("⚠️  fichaDaLead falhou:", e?.message ?? e);
-    return [];
+    return vazio;
   }
 }
 

@@ -1108,6 +1108,18 @@ function gravarAvisoHumano(on, numero, palavras) {
   return o;
 }
 
+// ── Ficha da lead (o que ela contou) para o Resumo do dia ──
+// O painel pede a ficha de cada agendamento; a SoFIA gera e guarda em sofia-fichas.json.
+function enfileirarPedidoFicha({ telefone, nome, quando }) {
+  const t = String(telefone || '').replace(/\D/g, '');
+  if (!t) return false;
+  fs.appendFileSync(path.join(DIR, 'sofia-fichas-pedidos.jsonl'), JSON.stringify({ telefone: t, nome: String(nome || ''), quando: String(quando || ''), em: Date.now() }) + '\n', 'utf8');
+  return true;
+}
+function lerFichas() {
+  try { const o = JSON.parse(fs.readFileSync(path.join(DIR, 'sofia-fichas.json'), 'utf8')); return (o && typeof o === 'object') ? o : {}; } catch (_) { return {}; }
+}
+
 // ── Copiar configuração entre unidades (config-unidade.js) ──
 function textoPrompt() { return ler(F.prompt); }
 function textoExtracao() { return ler(F.extracao); }
@@ -1135,7 +1147,7 @@ function lerSimulacao(id) {
 }
 
 module.exports = {
-  enfileirarSimulacao, lerSimulacao, textoPrompt, textoExtracao, textoFollowupCfg, gravarTextosSofia,
+  enfileirarPedidoFicha, lerFichas, enfileirarSimulacao, lerSimulacao, textoPrompt, textoExtracao, textoFollowupCfg, gravarTextosSofia,
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado, previaImportacao, importarPrompt,
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
