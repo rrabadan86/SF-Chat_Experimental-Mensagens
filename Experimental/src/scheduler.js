@@ -768,6 +768,7 @@ function iniciarRodarJobWatcher() {
     // "↻ Rodar de novo" do Log do painel (falhas de job):
     semResposta:       { nome: 'Confirmação sem resposta (2ª mensagem) [manual]', fn: () => require('./confirmacao-sem-resposta').runSegundaMensagem({ log }), timeoutMs: 25 * 60 * 1000 },
     semRespostaDry:    { nome: 'Confirmação sem resposta (simulação) [manual]', fn: () => require('./confirmacao-sem-resposta').runSegundaMensagem({ log, dry: true }), timeoutMs: 25 * 60 * 1000 },
+    semRespostaTeste:  { nome: 'Confirmação sem resposta (teste do painel) [manual]', fn: (pedido) => require('./confirmacao-sem-resposta').testar({ etapa: pedido && pedido.etapa, tel: pedido && pedido.tel, log }), timeoutMs: 5 * 60 * 1000 },
     semRespostaEquipe: { nome: 'Confirmação sem resposta (lista da equipe) [manual]', fn: () => require('./confirmacao-sem-resposta').runListaEquipe({ log }), timeoutMs: 25 * 60 * 1000 },
     assinaturas:       { nome: 'Contrato sem assinatura [manual]', fn: () => require('./assinaturas').runAssinaturas({ log }), timeoutMs: 20 * 60 * 1000 },
     venceHoje:         { nome: 'Vence hoje — sem renovação [manual]', fn: () => require('./vence-hoje').runVenceHoje({ log }), timeoutMs: 20 * 60 * 1000 },
@@ -826,7 +827,7 @@ function iniciarRodarJobWatcher() {
         const enviou = atividade.enviosOk() - enviosAntes;
         if (!rodou) status(pedido, { estado: 'erro', msg: 'o robô não conseguiu a vez para rodar — tente de novo em alguns minutos' });
         else if (falha) status(pedido, { estado: 'erro', msg: String((falha && falha.message) || falha).split('\n')[0].slice(0, 300) });
-        else status(pedido, { estado: 'ok', msg: enviou ? `${enviou} mensagem(ns) enviada(s)` : String((resultado && resultado.msg) || '').slice(0, 200) });
+        else status(pedido, { estado: 'ok', msg: (resultado && resultado.msg) ? String(resultado.msg).slice(0, 300) : enviou ? `${enviou} mensagem(ns) enviada(s)` : '' });
       });
   }, 4000);
   if (t.unref) t.unref();
