@@ -158,6 +158,12 @@ def _fim_efetivo(m):
     return fim
 
 
+def _rescindido(m):
+    """Contrato encerrado ANTES do fim (cancelDate < endDate) = rescisão."""
+    fim, c = _d(m.get("endDate")), _d(m.get("cancelDate"))
+    return bool(c and (not fim or c < fim))
+
+
 def reconstruir(rows, hoje, por_id=None):
     """Série diária de ativas / entraram / novas / saíram pelos contratos.
     `por_id` (opcional) recebe { id: [[início, fim]…] } de cada pessoa."""
@@ -185,9 +191,10 @@ def reconstruir(rows, hoje, por_id=None):
                 junt.append([a, b])
         pessoas.append(junt)
         if por_id is not None and m.get("idMember") is not None:
-            # [início, fim (ou hoje, se não tem), nome, fim REAL ("" = contrato sem data de fim)]
+            # [início, fim (ou hoje, se não tem), nome, fim REAL ("" = contrato sem data de fim),
+            #  1 = RESCINDIDO (cancelado antes do fim) / 0]
             cs = sorted(([str(x.get("startDate"))[:10], (_fim_efetivo(x) or hoje).isoformat(), (x.get("name") or "").strip(),
-                          (_fim_efetivo(x).isoformat() if _fim_efetivo(x) else "")]
+                          (_fim_efetivo(x).isoformat() if _fim_efetivo(x) else ""), 1 if _rescindido(x) else 0]
                          for x in (m.get("memberships") or []) if not ignorado(x) and _d(x.get("startDate")) and _d(x.get("startDate")) <= hoje))
             por_id[str(m.get("idMember"))] = ([[a.isoformat(), b.isoformat()] for a, b in junt if a <= hoje], cs)
     if not pessoas:
