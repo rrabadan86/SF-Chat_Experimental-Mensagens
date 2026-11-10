@@ -1267,6 +1267,29 @@ const server = http.createServer(protegido((req, res) => {
     });
   }
 
+  // Teste da "Confirmação sem resposta" com o número de testes (card da 2ª mensagem).
+  if (req.method === 'POST' && url === '/confirmacao/sem-resposta/teste') {
+    return lerCorpo(req, 1e4, corpo => {
+      const resp = (o, st = 200) => { res.writeHead(st, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(o)); };
+      try {
+        const d = JSON.parse(corpo || '{}');
+        const tel = String(d.tel || '').replace(/\D/g, ''), etapa = String(d.etapa || '');
+        if (tel.length < 10) return resp({ ok: false, erro: 'Preencha o "Número para testes" lá em cima (com DDD).' }, 400);
+        if (!['confirmar', 'conferir', 'lista'].includes(etapa)) return resp({ ok: false, erro: 'etapa inválida' }, 400);
+        const arq = path.resolve(__dirname, '..', 'data', 'rodar-job.json');
+        if (fs.existsSync(arq)) return resp({ ok: false, erro: 'O robô já tem outro pedido na fila — tente em 1 minuto.' }, 409);
+        const id = 'srt' + Date.now().toString(36);
+        fs.writeFileSync(arq, JSON.stringify({ job: 'semRespostaTeste', etapa, tel, id }));
+        return resp({ ok: true, id });
+      } catch (e) { return resp({ ok: false, erro: e.message }, 500); }
+    });
+  }
+  if (req.method === 'GET' && url === '/confirmacao/sem-resposta/teste/status') {
+    const id = new URLSearchParams(req.url.split('?')[1] || '').get('id') || '';
+    const st = statusRodarJob(id) || { estado: 'pendente', msg: '' };
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ estado: st.estado, msg: st.msg || '' }));
+  }
   if (req.method === 'GET' && url === '/hoje/rodar-job/status') {
     const id = new URLSearchParams(req.url.split('?')[1] || '').get('id') || '';
     const st = statusRodarJob(id) || { estado: 'pendente', msg: '' };

@@ -880,7 +880,7 @@ function cardDeMsg(m, hmap, voltar) {
   }
   const sw = switchEnvio(jobsDoCard(m.chave));
   const opts = /^cobranca_/.test(m.chave) ? { cobranca: true } : undefined;
-  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : (m.chave === 'assinatura_contrato') ? blocoAssinaturas() : (m.chave === 'sentimos_falta_1') ? blocoSentimos() : '';
+  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : (m.chave === 'assinatura_contrato') ? blocoAssinaturas() : (m.chave === 'confirmacao_sem_resposta') ? blocoTesteSemResposta() : (m.chave === 'sentimos_falta_1') ? blocoSentimos() : '';
   return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar, opts)}${hbloco}${extra}</div>`;
 }
 
@@ -973,6 +973,40 @@ function blocoVenceHoje() {
 
 // Contrato sem assinatura: quem recebe no próximo disparo (última leitura do
 // EVO), com "Não enviar" por aluna e o botão de ler o EVO de novo.
+// 🧪 Teste da "Confirmação sem resposta" com o Número para testes (sem esperar os horários).
+function blocoTesteSemResposta() {
+  return `<div class="hsec"><div class="hsec-t">🧪 Testar com o seu número</div>
+    <p class="quando" style="margin:0 0 8px">Usa o <b>Número para testes</b> (lá em cima). Nada vai para leads nem para o grupo. Funciona mesmo com o envio desligado.</p>
+    <ol class="quando" style="margin:0 0 8px;padding-left:18px;line-height:1.6">
+      <li>Mande uma confirmação de teste para o seu celular.</li>
+      <li>No celular: <b>responda</b>, <b>reaja</b> (❤️ 👍), ou <b>não faça nada</b>. Depois clique em <b>Conferir agora</b> — se você não respondeu, chega a 2ª mensagem; se respondeu, nada é enviado.</li>
+      <li><b>Lista da equipe</b>: se continuou sem responder, a lista que iria para o grupo chega no seu celular.</li>
+    </ol>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="tbtn" onclick="srTeste('confirmar',this)">1) Mandar confirmação de teste</button>
+      <button type="button" class="tbtn" onclick="srTeste('conferir',this)">2) Conferir agora</button>
+      <button type="button" class="tbtn" onclick="srTeste('lista',this)">3) Lista da equipe</button>
+    </div>
+    <p id="srMsg" class="quando" style="margin:8px 0 0"></p>
+    <script>
+    function srTeste(etapa,btn){
+      var msg=document.getElementById('srMsg'), tel=(document.getElementById('telTeste')||{}).value||'';
+      msg.style.color=''; msg.textContent='⏳ Pedido enviado ao robô…'; btn.disabled=true;
+      fetch('/confirmacao/sem-resposta/teste',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({etapa:etapa,tel:tel})}).then(function(r){return r.json();}).then(function(j){
+        if(!j.ok){ btn.disabled=false; msg.style.color='var(--erro)'; msg.textContent='❌ '+(j.erro||'falhou'); return; }
+        var ini=Date.now();
+        (function poll(){ fetch('/confirmacao/sem-resposta/teste/status?id='+encodeURIComponent(j.id),{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){
+          if(s.estado==='ok'){ btn.disabled=false; msg.style.color='var(--ok)'; msg.textContent='✅ '+(s.msg||'feito'); return; }
+          if(s.estado==='erro'){ btn.disabled=false; msg.style.color='var(--erro)'; msg.textContent='❌ '+(s.msg||'falhou'); return; }
+          if(Date.now()-ini>180000){ btn.disabled=false; msg.style.color='var(--erro)'; msg.textContent='⚠️ O robô não respondeu em 3 min — ele está rodando?'; return; }
+          msg.textContent=s.estado==='esperando'?'⏳ '+s.msg:'⏳ O robô está conferindo…'; setTimeout(poll,2500);
+        }).catch(function(){ setTimeout(poll,4000); }); })();
+      }).catch(function(){ btn.disabled=false; msg.style.color='var(--erro)'; msg.textContent='❌ erro de rede'; });
+    }
+    </script>
+  </div>`;
+}
+
 function blocoAssinaturas() {
   let c = null, reg = {};
   try { const as = require('./assinaturas'); c = as.candidatas(); reg = as.lerRegistro(); } catch (_) {}

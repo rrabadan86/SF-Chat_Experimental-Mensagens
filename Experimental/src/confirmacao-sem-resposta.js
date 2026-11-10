@@ -76,7 +76,7 @@ const MOTIVO = { respondeu: 'respondeu', reagiu: 'reagiu à mensagem', recepcao:
 // chave (opcional): só as confirmações daquele tipo ('confirmacao_hoje' | 'confirmacao_amanha').
 async function runSegundaMensagem({ log = console.log, dry = false, chave = '' } = {}) {
   const o = ler(), agora = Date.now();
-  const fila = Object.entries(o).filter(([, r]) => (!chave || r.chave === chave) && !r.segunda && !r.resolvido && agora - (r.enviadoEm || 0) >= ESPERA_2A_MS && aulaMs(r) - agora >= ANTECEDENCIA_MS);
+  const fila = Object.entries(o).filter(([, r]) => !r.teste && (!chave || r.chave === chave) && !r.segunda && !r.resolvido && agora - (r.enviadoEm || 0) >= ESPERA_2A_MS && aulaMs(r) - agora >= ANTECEDENCIA_MS);
   log(`📵 Confirmação sem resposta — 2ª mensagem: ${fila.length} para conferir.`);
   if (fila.length > MAX_POR_VEZ) throw new Error(`${fila.length} de uma vez (limite ${MAX_POR_VEZ}) — não enviei nada.`);
   const wa = require('./wa-client');
@@ -101,7 +101,7 @@ async function runSegundaMensagem({ log = console.log, dry = false, chave = '' }
 
 async function runListaEquipe({ log = console.log, dry = false, chave = '' } = {}) {
   const o = ler(), agora = Date.now();
-  const fila = Object.entries(o).filter(([, r]) => (!chave || r.chave === chave) && r.segunda && !r.listado && !r.resolvido && agora - (r.segunda.em || 0) >= ESPERA_LISTA_MS && aulaMs(r) > agora);
+  const fila = Object.entries(o).filter(([, r]) => !r.teste && (!chave || r.chave === chave) && r.segunda && !r.listado && !r.resolvido && agora - (r.segunda.em || 0) >= ESPERA_LISTA_MS && aulaMs(r) > agora);
   log(`📵 Confirmação sem resposta — lista da equipe: ${fila.length} para conferir.`);
   const wa = require('./wa-client');
   const lista = [];
@@ -126,7 +126,47 @@ async function runListaEquipe({ log = console.log, dry = false, chave = '' } = {
   return { listadas: lista.length };
 }
 
-module.exports = { registrarEnvio, runSegundaMensagem, runListaEquipe, ler, aulaMs, CONTEXTO_2A, CONTEXTO_EQUIPE };
+// ── Teste pelo painel (card da 2ª mensagem → 🧪 Testar com o seu número) ──
+// 1) confirmar: manda uma confirmação de TESTE para o número e registra;
+// 2) conferir:  confere a conversa AGORA (sem esperar 1h30) e manda a 2ª mensagem se ela não respondeu;
+// 3) lista:     a lista que iria para o grupo da equipe vai para o próprio número de teste.
+async function testar({ etapa, tel, log = console.log } = {}) {
+  const t = String(tel || '').replace(/\D/g, '');
+  if (t.length < 10) throw new Error('número de teste inválido');
+  const wa = require('./wa-client');
+  const o = ler(), k = `${t.slice(-8)}|teste`;
+  const hhmm = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+  if (etapa === 'confirmar') {
+    const horario = hhmm(Date.now() + 3 * 3600e3);
+    const texto = '🧪 *TESTE* — ' + mensagens.render('confirmacao_hoje', { nome: 'Teste', horario, professora: '', data: '' });
+    await wa.sendTexto(t, texto, 'Confirmação — sem resposta (teste)', 'confirmacao_hoje');
+    o[k] = { tel: t, nome: 'Teste', horario, dataAula: hojeSP(), chave: 'teste', enviadoEm: Date.now(), teste: true };
+    gravar(o);
+    return { msg: 'Confirmação de teste enviada. Agora responda, reaja ou ignore no celular e clique em "2) Conferir agora".' };
+  }
+  const r = o[k];
+  if (!r) throw new Error('mande primeiro a confirmação de teste (botão 1).');
+  let st;
+  try { st = await situacao(wa, r); } catch (e) { throw new Error('não consegui ler a conversa: ' + e.message); }
+  log(`🧪 Teste sem resposta (${etapa}): ${st}`);
+  if (st !== 'silencio') return { msg: `Resultado: ${MOTIVO[st]} → nada seria enviado (está certo).` };
+  if (etapa === 'conferir') {
+    if (r.segunda) return { msg: 'Continua sem resposta. A 2ª mensagem já foi enviada neste teste → clique em "3) Lista da equipe".' };
+    await wa.sendTexto(t, mensagens.render('confirmacao_sem_resposta', { nome: 'Teste', horario: r.horario, quando: 'hoje' }), 'Confirmação — sem resposta (teste)', 'confirmacao_sem_resposta');
+    o[k].segunda = { em: Date.now() }; gravar(o);
+    return { msg: 'Sem resposta → 2ª mensagem enviada. Responda/reaja ou ignore e clique em "3) Lista da equipe".' };
+  }
+  if (etapa === 'lista') {
+    if (!r.segunda) return { msg: 'Primeiro clique em "2) Conferir agora" (a lista só inclui quem recebeu a 2ª mensagem).' };
+    const texto = '🧪 *TESTE* (iria para o grupo da equipe)\n\n' + mensagens.render('confirmacao_sem_resposta_equipe', { lista: `• ${r.horario} (hoje) — Teste — ${fmtTel(t)}` });
+    await wa.sendTexto(t, texto, 'Confirmação — sem resposta (teste)');
+    delete o[k]; gravar(o);
+    return { msg: 'Continua sem resposta → a lista da equipe foi enviada para o seu número de teste. Teste concluído.' };
+  }
+  throw new Error('etapa desconhecida');
+}
+
+module.exports = { registrarEnvio, runSegundaMensagem, runListaEquipe, testar, ler, aulaMs, CONTEXTO_2A, CONTEXTO_EQUIPE };
 
 if (require.main === module) {
   (async () => {
