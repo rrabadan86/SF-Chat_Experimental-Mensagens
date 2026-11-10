@@ -37,6 +37,41 @@ const inadConfig = require('./inadimplentes-config'); // "vencido há X+ dias" (
 // Número para o código de pareamento: só dígitos e, se veio SEM o DDI (10–11
 // dígitos: DDD + número), põe o 55 do Brasil. Sem isso "61992285266" virava
 // um número da AUSTRÁLIA (+61) e o celular recusava o código.
+// Quem VAI receber uma campanha (está na fila de uma campanha que ainda envia):
+// { last8: { id, nome, pos, total, prev } }. Quem já recebeu não está na fila.
+// Mostrado nas Conversas (📣) para o atendente não ser pego de surpresa.
+function filaCampanhasPorTel() {
+  const out = {};
+  let camps = []; try { camps = sofia.lerCampanhas() || []; } catch (_) { return out; }
+  const agora = new Date();
+  const hoje = agora.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const hhmm = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hour12: false });
+  const dow = new Date(hoje + 'T12:00:00Z').getUTCDay();
+  const fmtD = (d) => String(d || '').split('-').reverse().slice(0, 2).join('/');
+  for (const c of camps) {
+    if (!['enviando', 'pronta', 'pausada'].includes(c.status)) continue;
+    const pend = Array.isArray(c.pendentes) ? c.pendentes : [];
+    if (!pend.length) continue;
+    const lim = Math.max(1, Number(c.limiteDia) || 1);
+    const diaOk = !Array.isArray(c.dias) || !c.dias.length || c.dias.includes(dow);
+    const janelaOk = !c.janelaFim || hhmm < c.janelaFim;
+    const comecou = !c.dataInicio || c.dataInicio <= hoje;
+    const restHoje = (c.status === 'enviando' && comecou && diaOk && janelaOk) ? Math.max(0, lim - (c.diaRef === hoje ? (Number(c.enviadosHoje) || 0) : 0)) : 0;
+    pend.forEach((d, i) => {
+      const k8 = String((d && d.tel) || '').replace(/\D/g, '').slice(-8);
+      if (!k8 || out[k8]) return;
+      const pos = i + 1;
+      let prev;
+      if (c.status === 'pausada') prev = 'a campanha está pausada';
+      else if (c.status === 'pronta') prev = 'a campanha ainda não foi iniciada';
+      else if (!comecou) prev = 'a campanha começa em ' + fmtD(c.dataInicio);
+      else if (pos <= restHoje) prev = 'deve sair hoje';
+      else { const n = Math.ceil((pos - restHoje) / lim); prev = n === 1 ? 'deve sair no próximo dia de envio' : `deve sair em uns ${n} dias de envio`; }
+      out[k8] = { id: String(c.id), nome: String(c.nome || 'Campanha'), pos, total: pend.length, prev };
+    });
+  }
+  return out;
+}
 function numeroPareamento(v) {
   let d = String(v || '').replace(/\D/g, '');
   if (/^\d{10,11}$/.test(d) && !d.startsWith('55')) d = '55' + d;
@@ -286,6 +321,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
   if (url === '/sofia/contatos/bloquear') return has('sofia_conversas') || has('sofia_contatos'); // bloquear vem tb do chat (Conversas)
   if (url === '/sofia/contatos/importar' || url === '/sofia/contatos/salvar' || url === '/sofia/contatos/tag' || url === '/sofia/contatos/lote' || url === '/sofia/contatos/excluir-lote' || url === '/sofia/contatos/interacoes' || url === '/sofia/contatos/modelo.csv' || url === '/sofia/contatos/exportar' || url === '/sofia/contatos/tagcfg' || url === '/sofia/contatos/criar-tag') return has('sofia_contatos');
+  if (url === '/sofia/campanhas/remover-fila') return has('sofia_campanhas') || has('sofia_conversas'); // "Não enviar para ela" também nas Conversas
   if (url === '/sofia/campanhas' || url.startsWith('/sofia/campanhas/')) return has('sofia_campanhas');
   if (url === '/sofia/comparecimento') return has('sofia_contatos') || has('sofia_config'); // agora mora na aba Tags
   if (url === '/sofia/auto-tag-alunas') return has('sofia_contatos') || has('sofia_config'); // auto-tag Aluna/Ex-aluna (aba Tags)
@@ -1714,6 +1750,7 @@ const server = http.createServer(protegido((req, res) => {
     try { const tl = sofia.lerTagLog() || {}; for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].tagLog = tl[l8] || []; } } catch (_) {} // histórico de tags aplicadas por automação (para o timeline)
     try { const av = avisosPorAluna(); for (const k in obj) obj[k].avisos = av[String(k).replace(/\D/g, '').slice(-8)] || []; } catch (_) {} // avisos para a recepção sobre esta aluna (marca "🔔 Recepção avisada")
     try { for (const k in obj) obj[k].fuEspera = E.fuEsperando[k] || ''; } catch (_) {} // follow-up pronto, segurando pelo horário?
+    try { const fc = filaCampanhasPorTel(); for (const k in obj) { const v = fc[String(k).replace(/\D/g, '').slice(-8)]; obj[k].campanha = v || null; } } catch (_) {} // 📣 vai receber uma campanha (está na fila)?
     try { const at = sofia.lerAtencao() || {}; const a8 = {}; for (const kk in at) a8[String(kk).replace(/\D/g, '').slice(-8)] = 1; for (const k in obj) obj[k].atencao = !!(at[k] || a8[String(k).replace(/\D/g, '').slice(-8)]); } catch (_) {} // pediu atendimento humano?
     try { const agSet = new Set((fuLerJson(FU_AGENDOU_FILE, []) || []).map(x => String(x).replace(/\D/g, '').slice(-8))); let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {} for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].agendou = agSet.has(l8) || (obj[k].tagsContato || []).some(t => agTags.includes(t)); } } catch (_) {} // agendou aula experimental? (mesma lógica do follow-up)
     let wa = ''; try { wa = (sofia.waStatus() || {}).estado || ''; } catch (_) {} // online/off-line do WhatsApp da SoFIA

@@ -478,7 +478,10 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center"><input id="agData" type="date" style="font-size:.85rem"><input id="agHora" type="time" step="900" style="font-size:.85rem"><button type="button" class="save" onclick="enviarAgendamento()" style="padding:7px 14px">Agendar no EVO</button><a href="javascript:void(0)" onclick="toggleAgendar()" class="quando" style="margin:0;text-decoration:underline">cancelar</a></div>'
       +'<div id="agMsg" class="quando" style="margin:8px 0 0;min-height:16px"></div>'
       +'<p class="quando" style="margin:6px 0 0">Cadastra e marca no EVO, igual a SoFIA. Turma cheia → mostra alternativas.</p></div>') : '';
-    chat.innerHTML = header+tagLinha+editor+agBox+'<div id="bolhas" style="flex:1;min-height:120px;overflow:auto;padding-right:4px">'+bolhas+fim+'</div>'+composer;
+    var cpBox = c.campanha ? ('<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-2px 0 10px;padding:7px 10px;background:#eef0fb;border:1px solid #d9dcf5;border-radius:10px;font-size:.82rem;color:#3d4196">'
+      +'<span>📣 Vai receber a campanha <b>'+escH(c.campanha.nome)+'</b> · '+escH(c.campanha.prev)+' <span style="opacity:.75">(posição '+c.campanha.pos+' de '+c.campanha.total+' na fila)</span></span>'
+      +'<button type="button" class="reset" onclick="naoEnviarCampanha()" style="padding:3px 10px;font-size:.78rem;margin-left:auto">Não enviar para ela</button></div>') : '';
+    chat.innerHTML = header+tagLinha+cpBox+editor+agBox+'<div id="bolhas" style="flex:1;min-height:120px;overflow:auto;padding-right:4px">'+bolhas+fim+'</div>'+composer;
     if(tagEdAberto){ ncRenderTags(); ncAtualizaStatus(); }
     var ta=document.getElementById('msgTxt'); if(ta) ta.value=rascunhos[k]||'';
     msgFotoMostra(k); // reexibe a prévia se havia foto anexada nessa conversa
@@ -541,6 +544,15 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     if(novo && !confirm('Bloquear este contato? A SoFIA vai IGNORAR por completo as mensagens dele (não responde, não registra).')) return;
     fetch('/sofia/contatos/bloquear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tel:k,ativo:novo})})
       .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].bloq=novo; ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[k],k); } else { alert(j.erro||'Não consegui atualizar o bloqueio.'); } })
+      .catch(function(){ alert('Erro de rede.'); });
+  }
+  // 📣 Tira esta pessoa da fila da campanha (não vai receber).
+  function naoEnviarCampanha(){
+    var k=selecionada; if(!k) return;
+    var c=ultimoData[k]||{}; var cp=c.campanha; if(!cp) return;
+    if(!confirm('Tirar '+(c.nome||'esta pessoa')+' da campanha "'+cp.nome+'"?\\n\\nEla não vai receber esta campanha.')) return;
+    fetch('/sofia/campanhas/remover-fila',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'id='+encodeURIComponent(cp.id)+'&tel='+encodeURIComponent(k)})
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k])ultimoData[k].campanha=null; ultimoRender={chave:null,n:-1,humano:null}; renderInbox(ultimoData); } else { alert(j.erro||'Não consegui tirar da campanha.'); } })
       .catch(function(){ alert('Erro de rede.'); });
   }
   function encerrarConversa(){
@@ -702,7 +714,8 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var agMini=c.agendou?'<span title="Aula experimental agendada" style="font-size:.8rem;flex:none">📅</span>':'';
       var blq=c.bloq?'<span title="Contato bloqueado" style="display:inline-block;background:var(--erro-bg);color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🚫 bloqueado</span>':'';
       // Cartão v2: avatar (iniciais) + nome/hora + telefone + chips de status/tag numa linha.
-      var chips=[blq,at,tgs,hb,enc,fu].join(''); // já vêm como <span>…</span> estilizados
+      var cp=c.campanha?'<span title="Vai receber a campanha &quot;'+escH(c.campanha.nome)+'&quot; — '+escH(c.campanha.prev)+'" style="display:inline-block;background:#eef0fb;color:#4b4fb0;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">📣 campanha</span>':'';
+      var chips=[blq,at,cp,tgs,hb,enc,fu].join(''); // já vêm como <span>…</span> estilizados
       var cls='cv-item'+(on?' on':'')+((c.atencao&&!on)?' aten':'');
       var av='<div class="cv-av" style="background:'+corAv(c.nome||k)+'">'+escH(iniciais(c.nome,k))+(pendente?'<span class="cv-badge" title="aguardando resposta"></span>':'')+'</div>';
       var itemHtml='<div class="'+cls+'" onclick="abrir(\\''+k+'\\')">'+av
