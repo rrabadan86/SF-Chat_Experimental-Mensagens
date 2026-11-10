@@ -730,6 +730,71 @@ const options: ClaudeAgentOptions = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════
+// SIMULADOR (painel → SoFIA → Configuração → "Testar a SoFIA")
+// ══════════════════════════════════════════════════════════════════════════
+// Conversa de TESTE: mesmo modelo e mesmo prompt (ou o rascunho do editor, sem
+// salvar), mas NADA sai daqui: não manda WhatsApp, não agenda, não remarca, não
+// mexe em tags nem na memória das conversas reais. Consultas de horário/vaga são
+// reais (só leem); as que mudariam algo devolvem uma resposta "de mentira" marcada
+// como simulação. Ferramentas chamadas aparecem no painel para conferir o fluxo.
+const SIM_AVISO = "SIMULADOR: nada foi feito de verdade (teste do painel).";
+let _simFerramentas: string[] = [];
+function simStub<T extends { name: string; handler: any }>(t: T, resposta: (a: any) => any): T {
+  return { ...t, handler: async (a: any) => { _simFerramentas.push(t.name); return json({ ...resposta(a || {}), simulacao: SIM_AVISO }); } };
+}
+function simReal<T extends { name: string; handler: any }>(t: T): T {
+  return { ...t, handler: async (a: any, x: any) => { _simFerramentas.push(t.name); return t.handler(a, x); } };
+}
+const servidorSim = createSdkMcpServer({
+  name: "slimfit",
+  version: "1.0.0",
+  tools: [
+    { ...enviarMidia, handler: async ({ tipo }: any) => {
+      _simFerramentas.push(`enviar_midia:${tipo}`);
+      const M = midiasAtuais(); const link = tipo === "grade" ? M.grade_link : M.precos_link;
+      return { content: [{ type: "text" as const, text: `Imagem "${tipo}" enviada. Link: ${link}` }] };
+    } },
+    simReal(verificarDisponibilidade), simReal(consultarVaga), simReal(turmasDoDia),
+    simStub(solicitarAgendamento, (a) =>
+      (!a.nome_completo || String(a.nome_completo).trim().split(/\s+/).length < 2) ? { faltando: "nome_completo" }
+        : (!a.email || !/\S+@\S+\.\S+/.test(String(a.email))) ? { faltando: "email" }
+          : (!a.data || !a.horario) ? { faltando: "horario" }
+            : { ok: true, when: `${a.data} ${a.horario}` }),
+    simStub(consultarAgendaAluna, () => ({ erro: "No simulador não há aluna cadastrada: trate como lead." })),
+    simStub(consultarContratoAluna, () => ({ erro: "No simulador não há aluna cadastrada: trate como lead." })),
+    simStub(remarcarAula, () => ({ ok: true })),
+    simStub(desmarcarExperimental, () => ({ ok: true })),
+    simStub(remarcarExperimental, () => ({ ok: true })),
+  ],
+});
+const simSessoes = new Map<string, { sessionId?: string; em: number }>();
+export async function simularResposta(sessao: string, mensagem: string, promptRascunho?: string): Promise<{ resposta: string; ferramentas: string[] }> {
+  for (const [k, v] of simSessoes) if (Date.now() - v.em > 6 * 3600e3) simSessoes.delete(k); // limpa testes velhos
+  const est = simSessoes.get(sessao) || { em: Date.now() };
+  const base = (promptRascunho && promptRascunho.trim()) ? promptRascunho : carregarPrompt();
+  const opc: ClaudeAgentOptions = { ...options, mcpServers: { slimfit: servidorSim }, systemPrompt: base + contextoData(base), ...(est.sessionId ? { resume: est.sessionId } : {}) };
+  _simFerramentas = [];
+  let resposta = "", sessionId: string | undefined;
+  await comRetry(async () => {
+    resposta = ""; _simFerramentas = [];
+    for await (const msg of query({ prompt: mensagem, options: opc })) {
+      if (msg.type === "system" && msg.subtype === "init") sessionId = msg.session_id;
+      if (msg.type === "result") {
+        sessionId = msg.session_id ?? sessionId;
+        try {
+          const u: any = (msg as any).usage || {};
+          registrarCusto({ tipo: "simulador", model: MODELO_CONVERSA, inTok: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0), outTok: u.output_tokens || 0, usd: (msg as any).total_cost_usd || 0 });
+        } catch { /* best-effort */ }
+        if (msg.subtype === "success") resposta = msg.result;
+        else throw Object.assign(new Error("Agent SDK result de erro"), { status: 529 });
+      }
+    }
+  });
+  simSessoes.set(sessao, { sessionId: sessionId || est.sessionId, em: Date.now() });
+  return { resposta, ferramentas: _simFerramentas.slice() };
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // 5) MEMÓRIA POR TELEFONE + JANELA DE 12H
 // ══════════════════════════════════════════════════════════════════════════
 interface Conversa {

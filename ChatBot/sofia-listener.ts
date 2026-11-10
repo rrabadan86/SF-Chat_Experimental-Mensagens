@@ -24,7 +24,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
-import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirEClassificar, fichaDaLead, gerarFollowup, classificarIntencaoTags, agendarManual, temTagSemInteresse } from "./sofia";
+import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirEClassificar, fichaDaLead, simularResposta, gerarFollowup, classificarIntencaoTags, agendarManual, temTagSemInteresse } from "./sofia";
 
 // Pasta dos arquivos da Sofia. Por padrão, a pasta de trabalho (comportamento
 // atual). Se SOFIA_DIR estiver definida, usa ela — permite guardar prompt/estado
@@ -2228,6 +2228,47 @@ async function processarAvisos() {
   processandoAvisos = false;
 }
 setInterval(() => { processarAvisos().catch(() => {}); }, 2000);
+
+// ── Simulador (painel → "Testar a SoFIA"): o painel enfileira {id, sessao, texto,
+//    prompt?} em sofia-simulador.jsonl; aqui a SoFIA responde SEM enviar nada (veja
+//    simularResposta) e grava o resultado em sofia-simulador-res.json (últimos 40).
+//    Funciona mesmo com a SoFIA pausada ou o WhatsApp desconectado.
+const SIM_IN = path.join(DIR, "sofia-simulador.jsonl");
+const SIM_RES = path.join(DIR, "sofia-simulador-res.json");
+let processandoSim = false;
+function gravarSimRes(id: string, o: any) {
+  let mapa: Record<string, any> = {};
+  try { mapa = JSON.parse(fs.readFileSync(SIM_RES, "utf8")) || {}; } catch {}
+  mapa[id] = { ...o, em: Date.now() };
+  const ids = Object.keys(mapa).sort((a, b) => (mapa[a].em || 0) - (mapa[b].em || 0));
+  for (const k of ids.slice(0, Math.max(0, ids.length - 40))) delete mapa[k];
+  try { fs.writeFileSync(SIM_RES + ".tmp", JSON.stringify(mapa)); fs.renameSync(SIM_RES + ".tmp", SIM_RES); } catch {}
+}
+async function processarSimulador() {
+  if (processandoSim) return;
+  let tam = 0; try { tam = fs.statSync(SIM_IN).size; } catch { return; }
+  if (!tam) return;
+  processandoSim = true;
+  const tmp = SIM_IN + "." + Date.now() + ".proc";
+  let linhas: string[] = [];
+  try { fs.renameSync(SIM_IN, tmp); linhas = fs.readFileSync(tmp, "utf8").split("\n").map((l) => l.trim()).filter(Boolean); fs.rmSync(tmp, { force: true }); }
+  catch { processandoSim = false; return; }
+  for (const l of linhas) {
+    let ent: any = null; try { ent = JSON.parse(l); } catch { continue; }
+    const id = String(ent?.id || ""), sessao = String(ent?.sessao || ""), texto = String(ent?.texto || "").trim();
+    if (!id || !sessao || !texto) continue;
+    if (Date.now() - Number(ent?.em || 0) > 5 * 60000) { gravarSimRes(id, { erro: "pedido expirou" }); continue; }
+    try {
+      const r = await simularResposta(sessao, texto, typeof ent?.prompt === "string" ? ent.prompt : undefined);
+      gravarSimRes(id, { resposta: r.resposta, ferramentas: r.ferramentas });
+      log(`simulador: respondeu o teste ${id}.`);
+    } catch (e: any) {
+      gravarSimRes(id, { erro: e?.message || String(e) });
+    }
+  }
+  processandoSim = false;
+}
+setInterval(() => { processarSimulador().catch(() => { processandoSim = false; }); }, 1500);
 
 // ── Follow-up: o painel decide QUEM precisa (esfriou sem agendar) e enfileira
 //    {tel, instrucao} em sofia-followup.jsonl; aqui a Sofia GERA a mensagem com IA

@@ -1108,7 +1108,23 @@ function gravarAvisoHumano(on, numero, palavras) {
   return o;
 }
 
+// ── Simulador ("Testar a SoFIA"): o painel enfileira, o listener responde sem enviar nada.
+const SIM_IN = path.join(DIR, 'sofia-simulador.jsonl');
+const SIM_RES = path.join(DIR, 'sofia-simulador-res.json');
+// secoes (opcional) = rascunho do editor (titulo/corpo) → o teste usa esse texto em vez do salvo.
+function enfileirarSimulacao({ sessao, texto, secoes }) {
+  const id = 'sim' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const linha = { id, sessao: String(sessao || '').slice(0, 60), texto: String(texto || '').slice(0, 2000), em: Date.now() };
+  if (Array.isArray(secoes) && secoes.length) linha.prompt = montarPrompt(normalizarSecoes(secoes));
+  fs.appendFileSync(SIM_IN, JSON.stringify(linha) + '\n', 'utf8');
+  return id;
+}
+function lerSimulacao(id) {
+  try { const m = JSON.parse(fs.readFileSync(SIM_RES, 'utf8')) || {}; return m[id] || null; } catch (_) { return null; }
+}
+
 module.exports = {
+  enfileirarSimulacao, lerSimulacao,
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado, previaImportacao, importarPrompt,
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
   lerPausaMin, gravarPausaMin, lerSessaoHoras, gravarSessaoHoras, lerHealthMin, gravarHealthMin, lerAgruparSeg, gravarAgruparSeg, lerQuietoCfg, gravarQuietoCfg, lerInboxDias, gravarInboxDias, lerRitmo, gravarRitmo, waStatus,
