@@ -93,14 +93,6 @@ const CATALOGO = [
     exemplos: { plano: 'SLIM 3X SEMESTRAL', assinatura: '\n\n✍️ Para finalizar, é só assinar o seu contrato por aqui: https://evo-totem.w12app.com.br/EXEMPLO', link: 'https://evo-totem.w12app.com.br/EXEMPLO' },
   },
   {
-    chave: 'boasvindas_equipe',
-    titulo: 'Boas-vindas — aviso para o grupo da equipe',
-    quando: 'Vai para o GRUPO DA EQUIPE logo depois das boas-vindas, com as alunas novas e as que voltaram (renovação não entra), para colocá-las nos grupos das turmas.',
-    vars: [['lista', 'uma linha por aluna: nome — plano (aluna nova / voltou)']],
-    padrao: '🎉 *Novas alunas — colocar nos grupos*\n\n{lista}',
-    exemplos: { lista: '• Ana Souza — SLIM 3X MENSAL (aluna nova 🎉)\n• Carla Mendes — SLIM 2X MENSAL (voltou 💚)' },
-  },
-  {
     chave: 'indicacao_30d',
     titulo: 'Indicação — 30 dias de aluna',
     quando: 'Sai 30 dias depois que a aluna começou (aluna nova ou que voltou), se ela continua ativa. Uma vez por entrada.',
@@ -438,7 +430,7 @@ function removerFoto(chave) {
 // Todas as mensagens de WhatsApp aceitam foto (flyer), MENOS as text-only:
 //  • 'instagram' — DM do Instagram (canal diferente, tratado na aba Instagram);
 //  • 'ausentes'  — listagem de texto no grupo da equipe (enviada sem mídia).
-const SEM_FOTO = new Set(['boasvindas_equipe', 'confirmacao_sem_resposta_equipe', 'instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje', 'cobranca_saldo', 'cobranca_app_reativado']);
+const SEM_FOTO = new Set(['confirmacao_sem_resposta_equipe', 'instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje', 'cobranca_saldo', 'cobranca_app_reativado']);
 function aceitaFoto(chave) { const m = CATALOGO.find(x => x.chave === chave); return !!(m && !SEM_FOTO.has(m.chave)); }
 // ── Pacote de imagens (exportar/importar entre unidades) ─────────────────────
 // Um .json { tipo, versao, unidade, em, fotos: { <chave>: "data:image/...;base64,..." } }.

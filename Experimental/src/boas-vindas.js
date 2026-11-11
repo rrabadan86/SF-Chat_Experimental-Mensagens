@@ -12,8 +12,9 @@
  *   Cada tipo tem a sua mensagem (editável) e pode ser ligado/desligado no card.
  *   {assinatura} = "✍️ … assine aqui: <link>" se o contrato ainda não foi assinado
  *   (link do EVO), ou vazio; {link} = só o link. Só vale DAQUI PRA FRENTE (contratos
- *   a partir da 1ª execução). Aviso para a recepção no grupo da equipe (novas e
- *   retornos), para colocar a aluna nos grupos.
+ *   a partir da 1ª execução). As novas e as que voltaram entram no RESUMO DO DIA
+ *   (grupo da equipe), no bloco "Alunas novas — colocar nos grupos" (opção
+ *   "equipe" no card) — sem mensagem separada.
  *
  * Indicação (job indicacao30): 30 dias depois do INÍCIO do período (nova ou retorno),
  *   se ela continua ativa — convite para trazer uma amiga. Uma vez por entrada.
@@ -158,11 +159,7 @@ async function runBoasVindas({ log = console.log, dry = false } = {}) {
     gravarJson(REG, reg);
     await sleep(8000 + Math.floor(Math.random() * 2000));
   }
-  if (equipe.length && cfg.equipe && !dry) {
-    const linhas = equipe.map(x => `• ${x.nome} — ${x.plano || 'plano'} ${x.tipo === 'retorno' ? '(voltou 💚)' : '(aluna nova 🎉)'}`).join('\n');
-    try { await wa.sendGrupo(require('./grupos').equipe(), mensagens.render('boasvindas_equipe', { lista: linhas }), 'Boas-vindas — aviso à equipe'); log('   📣 Aviso postado no grupo da equipe.'); }
-    catch (e) { log(`   ⚠️  Não consegui avisar o grupo da equipe: ${e.message}`); }
-  }
+  if (equipe.length && cfg.equipe && !dry) log(`   📋 ${equipe.length} aluna(s) vão para o Resumo do dia (colocar nos grupos).`);
   log(`🎉 Boas-vindas: ${res.enviadas} ${dry ? 'simulada(s)' : 'enviada(s)'}, ${res.erros} erro(s).`);
   return res;
 }
@@ -189,4 +186,19 @@ async function runIndicacao({ log = console.log, dry = false } = {}) {
   return res;
 }
 
-module.exports = { entradas, paraIndicacao, runBoasVindas, runIndicacao, lerCfg, salvarCfg, lerReg };
+// Para o RESUMO DO DIA: novas e que voltaram com boas-vindas enviadas e ainda não
+// listadas no resumo (até 10 dias — não se perde se o resumo não sair num dia).
+function pendentesEquipe() {
+  if (!lerCfg().equipe) return [];
+  const reg = lerReg(), corte = Date.now() - 10 * 86400e3;
+  return Object.entries(reg.feitos)
+    .filter(([, f]) => f && (f.tipo === 'nova' || f.tipo === 'retorno') && !f.invalido && !f.equipeEm && (Date.parse(f.em) || 0) >= corte)
+    .map(([chave, f]) => ({ chave, nome: f.nome || '', plano: f.plano || '', tipo: f.tipo }));
+}
+function marcarEquipe(chaves) {
+  const reg = lerReg(), em = new Date().toISOString();
+  for (const k of chaves || []) if (reg.feitos[k]) reg.feitos[k].equipeEm = em;
+  gravarJson(REG, reg);
+}
+
+module.exports = { entradas, paraIndicacao, runBoasVindas, runIndicacao, lerCfg, salvarCfg, lerReg, pendentesEquipe, marcarEquipe };

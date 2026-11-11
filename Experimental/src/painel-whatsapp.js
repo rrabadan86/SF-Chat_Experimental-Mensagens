@@ -158,7 +158,7 @@ function paginaMensagens(aviso, erro) {
   };
   const itensIndividuais = emBlocos(indivOrdenado, [
     ['leads', '💬 Leads da SoFIA', 'quem conversou com a SoFIA e parou de responder', ['retomada_sofia']],
-    ['alunas-novas', '🎉 Alunas novas', 'boas-vindas, renovação e indicação', ['boasvindas_nova', 'boasvindas_retorno', 'boasvindas_renovacao', 'boasvindas_equipe', 'indicacao_30d']],
+    ['alunas-novas', '🎉 Alunas novas', 'boas-vindas, renovação e indicação', ['boasvindas_nova', 'boasvindas_retorno', 'boasvindas_renovacao', 'indicacao_30d']],
     ['confirmacao', '📅 Confirmação de aula', 'lembrete antes da aula', ['confirmacao_hoje', 'confirmacao_amanha', 'confirmacao_sem_resposta', 'confirmacao_sem_resposta_equipe', 'confirmacao_experimental', 'confirmacao_experimental_express']],
     ['contratos', '📄 Contratos e renovação', 'vencimento, renovação e saída', ['renovacao', 'vence_hoje', 'assinatura_contrato', 'saida_grupos']],
     ['followup', '🔁 Follow-up e remarcação', 'depois da aula experimental', ['followup', 'followup_encerramento', 'followup_aluna', 'no_show', 'noshow_encerramento']],
@@ -824,7 +824,6 @@ const HORARIOS_DA_MSG = {
   boasvindas_nova:       [['boasVindas', '']],
   boasvindas_retorno:    'compartilha:boasvindas',
   boasvindas_renovacao:  'compartilha:boasvindas',
-  boasvindas_equipe:     'compartilha:boasvindas',
   indicacao_30d:         [['indicacao30', '']],
   noshow_encerramento:   [['noShowEncerraManha', 'para a falta da manhã (de ontem)'], ['noShowEncerraTarde', 'para a falta da tarde/noite (de ontem)']],
   renovacao:           [['renewal', '']],
@@ -1064,10 +1063,10 @@ function blocoBoasVindas() {
   const vai = lista.filter(x => !x.motivo), fora = lista.filter(x => x.motivo);
   return `<div class="hsec" id="boasvindas"><div class="hsec-t">Para quem</div>
     <form method="POST" action="/boasvindas/cfg" style="margin:0">
-      <div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 8px">${chk('nova', 'Aluna nova')}${chk('retorno', 'Ex-aluna voltando')}${chk('renovacao', 'Renovação')}${chk('equipe', 'Aviso no grupo da equipe')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 8px">${chk('nova', 'Aluna nova')}${chk('retorno', 'Ex-aluna voltando')}${chk('renovacao', 'Renovação')}${chk('equipe', 'Listar no Resumo do dia (para colocar nos grupos)')}</div>
       <button type="submit" class="save">Salvar</button>
     </form>
-    <p class="quando" style="margin:8px 0 0">O robô lê os contratos no EVO de manhã (05:25). Aluna <b>nova</b> = primeiro contrato no Studio; <b>voltou</b> = já foi aluna, ficou um tempo fora e voltou; <b>renovou</b> = contrato novo emendado no anterior. Se o contrato ainda não foi assinado, a mensagem leva o link de assinatura ({assinatura}). ${cfg.desde ? `Vale para contratos a partir de <b>${br(cfg.desde)}</b>.` : 'Só vale <b>daqui pra frente</b>: a partir do dia em que rodar pela primeira vez.'}</p>
+    <p class="quando" style="margin:8px 0 0">O robô lê os contratos no EVO de manhã (05:25). Aluna <b>nova</b> = primeiro contrato no Studio; <b>voltou</b> = já foi aluna, ficou um tempo fora e voltou; <b>renovou</b> = contrato novo emendado no anterior. Se o contrato ainda não foi assinado, a mensagem leva o link de assinatura ({assinatura}). As novas e as que voltaram aparecem no <b>Resumo do dia</b> do grupo da equipe, no bloco "Alunas novas — colocar nos grupos". ${cfg.desde ? `Vale para contratos a partir de <b>${br(cfg.desde)}</b>.` : 'Só vale <b>daqui pra frente</b>: a partir do dia em que rodar pela primeira vez.'}</p>
   </div>
   <div class="hsec"><div class="hsec-t">Contratos novos (últimos 3 dias)</div>
     <div class="sg-ult"><b>${vai.length}</b> receberia(m) se rodasse agora · ${fora.length} fora</div>
