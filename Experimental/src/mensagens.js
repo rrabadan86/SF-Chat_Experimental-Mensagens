@@ -69,6 +69,13 @@ const CATALOGO = [
     exemplos: { lista: '• 16:15 (hoje) — Lilian Carneiro — (62) 98322-0000\n• 18:15 (hoje) — Carla Mendes — (62) 99111-2222' },
   },
   {
+    chave: 'retomada_sofia',
+    titulo: 'Retomada — parou de responder a SoFIA (pelo número do Studio)',
+    quando: 'Sai pelo número do STUDIO para quem conversou com a SoFIA e parou de responder (mesma janela do filtro "😴 Sem resposta há…" das Conversas: SoFIA → Configuração). Não vai para quem a recepção já chamou pelo Studio, quem agendou, alunas, "sem interesse", bloqueadas e respostas automáticas. Uma vez por período de silêncio.',
+    vars: [['nome', 'primeiro nome da pessoa']],
+    padrao: 'Oiee, {nome}! Tudo bem? 😊\n\nAqui é a Lorena, do Studio SlimFit! Vi que você conversou com a nossa assistente virtual, a SoFIA, e vou continuar o seu atendimento por aqui.\n\nSomos um Studio de Personal exclusivo para mulheres, com atenção de perto e resultados reais. 💪🏼 Neste vídeo eu explico rapidinho como funciona: https://www.instagram.com/reel/Crluss-AWPu/\n\nQue tal conhecer na prática com uma aula experimental? Me diz o melhor dia e horário pra você! ❤️',
+  },
+  {
     chave: 'noshow_encerramento',
     titulo: 'Faltou — encerramento (sem resposta)',
     quando: 'Sai no DIA SEGUINTE à mensagem de falta (no-show), só para quem NÃO respondeu nem reagiu, com quem a recepção não falou à mão, que não agendou de novo e que não virou aluna. Um horário para a falta da manhã e outro para a da tarde/noite. Uma vez por falta.',

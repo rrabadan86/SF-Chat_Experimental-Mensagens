@@ -118,6 +118,7 @@ const config = {
     ausentes10:       '10 6 * * 1',     // 06:10 toda segunda (alunas ausentes >10 dias no grupo da equipe)
     resumoDia:        '45 19 * * *',    // 19:45 todos os dias (resumo do dia das experimentais no grupo)
     noShowMorning:    '30 11 * * 1-6',  // 11:30 seg-sáb (faltas nas aulas da manhã → remarcar)
+    retomadaSofia:    '0 10 * * 1-6',   // 10:00 seg-sáb (retomada pelo Studio de quem parou de responder a SoFIA) — DESLIGADO até ligar
     noShowEncerraManha: '45 11 * * 1-6', // 11:45 seg-sáb (encerramento: falta da manhã de ontem sem resposta) — DESLIGADO até ligar
     noShowEncerraTarde: '50 19 * * 1-6', // 19:50 seg-sáb (idem, falta da tarde/noite)
     noShowAfternoon:  '30 19 * * 1-6',  // 19:30 seg-sáb (faltas nas aulas da tarde/noite → remarcar)

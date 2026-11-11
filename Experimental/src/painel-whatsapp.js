@@ -157,6 +157,7 @@ function paginaMensagens(aviso, erro) {
     return html + (resto.length ? `<details class="msg-bloco" id="blk-outras"><summary>🗂️ Outras <small>· ${resto.length}</small></summary>${resto.map(cardDe).join('\n')}</details>` : '');
   };
   const itensIndividuais = emBlocos(indivOrdenado, [
+    ['leads', '💬 Leads da SoFIA', 'quem conversou com a SoFIA e parou de responder', ['retomada_sofia']],
     ['confirmacao', '📅 Confirmação de aula', 'lembrete antes da aula', ['confirmacao_hoje', 'confirmacao_amanha', 'confirmacao_sem_resposta', 'confirmacao_sem_resposta_equipe', 'confirmacao_experimental', 'confirmacao_experimental_express']],
     ['contratos', '📄 Contratos e renovação', 'vencimento, renovação e saída', ['renovacao', 'vence_hoje', 'assinatura_contrato', 'saida_grupos']],
     ['followup', '🔁 Follow-up e remarcação', 'depois da aula experimental', ['followup', 'followup_encerramento', 'followup_aluna', 'no_show', 'noshow_encerramento']],
@@ -818,6 +819,7 @@ const HORARIOS_DA_MSG = {
   followup_aluna:      'compartilha:followup', // mesmo job do follow-up — só nota
   no_show:             [['noShowMorning', 'Manhã'], ['noShowAfternoon', 'Tarde']],
   followup_encerramento: [['encerramentoManha', 'para o follow-up da manhã (de ontem)'], ['encerramentoTarde', 'para o follow-up da tarde (de ontem)']],
+  retomada_sofia:        [['retomadaSofia', '']],
   noshow_encerramento:   [['noShowEncerraManha', 'para a falta da manhã (de ontem)'], ['noShowEncerraTarde', 'para a falta da tarde/noite (de ontem)']],
   renovacao:           [['renewal', '']],
   saida_grupos:        [['saidaGrupos', '']],
@@ -882,7 +884,7 @@ function cardDeMsg(m, hmap, voltar) {
   }
   const sw = switchEnvio(jobsDoCard(m.chave));
   const opts = /^cobranca_/.test(m.chave) ? { cobranca: true } : undefined;
-  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : (m.chave === 'assinatura_contrato') ? blocoAssinaturas() : (m.chave === 'confirmacao_sem_resposta') ? blocoTesteSemResposta() : (m.chave === 'followup_encerramento') ? blocoTesteEncerramento('followup') : (m.chave === 'noshow_encerramento') ? blocoTesteEncerramento('noshow') : (m.chave === 'sentimos_falta_1') ? blocoSentimos() : '';
+  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : (m.chave === 'assinatura_contrato') ? blocoAssinaturas() : (m.chave === 'confirmacao_sem_resposta') ? blocoTesteSemResposta() : (m.chave === 'retomada_sofia') ? blocoRetomada() : (m.chave === 'followup_encerramento') ? blocoTesteEncerramento('followup') : (m.chave === 'noshow_encerramento') ? blocoTesteEncerramento('noshow') : (m.chave === 'sentimos_falta_1') ? blocoSentimos() : '';
   return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar, opts)}${hbloco}${extra}</div>`;
 }
 
@@ -1042,6 +1044,27 @@ function blocoTesteEncerramento(origem) {
   </div>`;
 }
 
+// Retomada (SoFIA → Studio): quem está no ponto AGORA (prévia — a conversa do Studio
+// é conferida na hora do envio: quem a recepção já chamou fica de fora).
+function blocoRetomada() {
+  let lista = [], cfg = { horas: 24, dias: 3 }, reg = {};
+  try { lista = require('./retomada-sofia').candidatas(); } catch (_) {}
+  try { cfg = require('./sofia-editor').lerQuietoCfg(); } catch (_) {}
+  try { reg = require('./retomada-sofia').ler(); } catch (_) {}
+  const vai = lista.filter(x => !x.motivo), fora = lista.filter(x => x.motivo);
+  const quando = (ms) => { try { return new Date(ms).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ''); } catch (_) { return ''; } };
+  const linha = (x) => `<div class="sg-row${x.motivo ? ' fora' : ''}"><b>${esc(x.nome || x.chave)}</b> <span class="quando" style="margin:0">última mensagem dela ${quando(x.ultimaContato)}${x.motivo ? ' — ' + esc(x.motivo) : ''}</span></div>`;
+  const enviadas = Object.values(reg).filter(r => r.enviadoEm).sort((a, b) => b.enviadoEm - a.enviadoEm).slice(0, 8);
+  return `<div class="hsec"><div class="hsec-t">Quem está no ponto agora</div>
+    <p class="quando" style="margin:0 0 8px">Mesma lista do filtro <b>😴 Sem resposta há ${esc(String(cfg.horas))}h+ (${esc(String(cfg.dias))}d)</b> das Conversas da SoFIA (ajuste em SoFIA → Configuração). Na hora do envio o robô ainda confere a conversa do <b>Studio</b>: quem a recepção já chamou por lá, ou que escreveu para o Studio, fica de fora.</p>
+    <div class="sg-ult"><b>${vai.length}</b> receberia(m) se rodasse agora · ${fora.length} fora da regra</div>
+    ${vai.length ? `<div class="sg-lista">${vai.slice(0, 40).map(linha).join('')}</div>` : ''}
+    ${fora.length ? `<details class="sg-fora"><summary>Ficaram de fora (${fora.length})</summary>${fora.map(linha).join('')}</details>` : ''}
+    ${enviadas.length ? `<details class="sg-fora"><summary>Últimas retomadas enviadas (${enviadas.length})</summary>${enviadas.map(r => `<div class="sg-row"><b>${esc(r.nome || '')}</b> <span class="quando" style="margin:0">${quando(r.enviadoEm)}</span></div>`).join('')}</details>` : ''}
+    <style>.sg-row{padding:7px 0;border-top:1px solid var(--linha-soft);font-size:.88rem}.sg-row:first-child{border-top:0}.sg-row.fora{opacity:.75}</style>
+  </div>`;
+}
+
 function blocoAssinaturas() {
   let c = null, reg = {};
   try { const as = require('./assinaturas'); c = as.candidatas(); reg = as.lerRegistro(); } catch (_) {}
@@ -1164,6 +1187,8 @@ const JOBS_DO_LOG = [
   [/^Cobrança — boleto vence hoje/i, 'inadimplentesHoje', true, 'Boleto vence hoje: manda só para quem ainda não recebeu hoje'],
   [/^Planos FREE/i, 'freeAntecedencia', true, 'Planos FREE'],
   [/^Leitura das alunas ativas|^Planilha/i, 'planilha', true, 'Leitura das alunas ativas (tags + planilha)'],
+  [/^Retomada SoFIA \(simulação/i, 'retomadaDry', true, 'Simulação da retomada (não envia)'],
+  [/^Retomada SoFIA/i, 'retomada', true, 'Retomada: só manda para quem ainda não recebeu neste período'],
   [/^Follow-up encerramento \(simulação/i, 'encerramentoDry', true, 'Simulação do encerramento (não envia)'],
   [/^Follow-up encerramento|^Faltou encerramento/i, 'encerramento', true, 'Encerramento: só manda para quem ainda não recebeu'],
   [/^Confirmação sem resposta \(2ª mensagem\)|^Confirmação sem resposta \(simulação/i, 'semResposta', true, 'Confirmação sem resposta: só manda para quem ainda não recebeu a 2ª mensagem'],

@@ -768,6 +768,8 @@ function iniciarRodarJobWatcher() {
     // "↻ Rodar de novo" do Log do painel (falhas de job):
     semResposta:       { nome: 'Confirmação sem resposta (2ª mensagem) [manual]', fn: () => require('./confirmacao-sem-resposta').runSegundaMensagem({ log }), timeoutMs: 25 * 60 * 1000 },
     semRespostaDry:    { nome: 'Confirmação sem resposta (simulação) [manual]', fn: () => require('./confirmacao-sem-resposta').runSegundaMensagem({ log, dry: true }), timeoutMs: 25 * 60 * 1000 },
+    retomada:          { nome: 'Retomada SoFIA [manual]', fn: () => require('./retomada-sofia').runRetomada({ log }), timeoutMs: 25 * 60 * 1000 },
+    retomadaDry:       { nome: 'Retomada SoFIA (simulação) [manual]', fn: () => require('./retomada-sofia').runRetomada({ log, dry: true }), timeoutMs: 25 * 60 * 1000 },
     encerramento:      { nome: 'Follow-up encerramento [manual]', fn: () => require('./followup-encerramento').runEncerramento({ log }), timeoutMs: 25 * 60 * 1000 },
     encerramentoDry:   { nome: 'Follow-up encerramento (simulação) [manual]', fn: () => require('./followup-encerramento').runEncerramento({ log, dry: true }), timeoutMs: 25 * 60 * 1000 },
     encerramentoTeste: { nome: 'Encerramento (teste do painel) [manual]', fn: (pedido) => require('./followup-encerramento').testar({ etapa: pedido && pedido.etapa, tel: pedido && pedido.tel, origem: pedido && pedido.origem }), timeoutMs: 5 * 60 * 1000 },
@@ -1173,6 +1175,17 @@ async function main() {
         .catch(err => logError(`${rot} (${periodo})`, err));
     }, { timezone: 'America/Sao_Paulo' });
     log(`📅 Job ${rot.toUpperCase()} (${periodo}) agendado: ${config.schedule[chave]} — ${jobsAtivos.ativo(chave) ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
+  }
+
+  // Retomada pelo Studio de quem parou de responder a SoFIA (desligado até ligar).
+  if (config.schedule.retomadaSofia) {
+    agendar('retomadaSofia', config.schedule.retomadaSofia, async () => {
+      if (!jobsAtivos.ativo('retomadaSofia')) { log('⏸️  Retomada (SoFIA) desligada no painel — pulando'); return; }
+      log('⏰ Cron disparado: Retomada (parou de responder a SoFIA)');
+      runJob('Retomada SoFIA', () => require('./retomada-sofia').runRetomada({ log }), 25 * 60 * 1000, { retry: false })
+        .catch(err => logError('Retomada SoFIA', err));
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job RETOMADA (SoFIA → Studio) agendado: ${config.schedule.retomadaSofia} — ${jobsAtivos.ativo('retomadaSofia') ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
   }
 
   // Contrato sem assinatura: lembrete com o link (desligado até ligar no painel).
