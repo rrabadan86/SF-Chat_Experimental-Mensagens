@@ -81,6 +81,32 @@ const fmtBRL = (n) => {
 };
 
 // Dias de atraso entre uma data (ISO) e hoje, no fuso de São Paulo (só data).
+// Corpo da CarregarListaBoletos com período amplo (últimos `janela` dias até hoje)
+// e página grande, mantendo o formato de data e os demais campos que a tela usa.
+function corpoAmplo(corpo, janela) {
+  try {
+    const p = new URLSearchParams(corpo);
+    const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const ini = new Date(agora.getTime() - janela * 86400000);
+    const fmt = (d, iso) => iso ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      : `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    const datas = [...p.entries()].filter(([, v]) => /^\d{2}\/\d{2}\/\d{4}|^\d{4}-\d{2}-\d{2}/.test(v));
+    for (const [k, v] of datas) {
+      const iso = /^\d{4}-/.test(v);
+      if (/ini|inicio|start|^de$|_de$|from/i.test(k)) p.set(k, fmt(ini, iso));
+      else if (/fim|final|end|ate|até|^to$|_to$/i.test(k)) p.set(k, fmt(agora, iso));
+    }
+    for (const k of ['pageSize', 'take', 'PageSize']) if (p.has(k)) p.set(k, '1000');
+    if (p.has('page')) p.set('page', '1');
+    return p.toString();
+  } catch (_) { return null; }
+}
+// Só nomes dos campos e as datas (para o log; sem dados de aluna).
+function resumoCorpo(corpo) {
+  try { return [...new URLSearchParams(corpo).entries()].map(([k, v]) => /\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}|^(true|false|\d{1,4})$/.test(v) ? `${k}=${v}` : k).join('&').slice(0, 400); } catch (_) { return '?'; }
+}
+const semAcento = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
 function diasDeAtraso(iso) {
   if (!iso) return null;
   const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -135,6 +161,10 @@ async function lerInadimplentes({ aoTerminar = null } = {}) {
   let listaBoletos = null;     // snapshot da tela global de boletos
   let boletosCliente = null;   // boletos (com urlBoleto) do cliente em foco
   let telefoneAtual = null;    // telefone do cliente em foco (para boleto)
+  let corpoBoletosTela = null; // corpo da CarregarListaBoletos que a PRÓPRIA tela enviou (modelo p/ a busca ampla)
+  page.on('request', (req) => {
+    try { if (!corpoBoletosTela && req.method() === 'POST' && /CarregarListaBoletos/i.test(req.url())) corpoBoletosTela = req.postData() || null; } catch (_) {}
+  });
   page.on('response', async (res) => {
     try {
       if (res.status() !== 200) return;
@@ -231,18 +261,19 @@ async function lerInadimplentes({ aoTerminar = null } = {}) {
     await page.keyboard.press('Backspace').catch(() => {});
     await campo.type(String(nome), { delay: 55 });
     await sleep(5000); await fecharPopupNovaTela(page);
-    const partes = String(nome).toLowerCase().split(/\s+/).filter(Boolean);
+    const partes = semAcento(nome).split(/\s+/).filter(Boolean);
     const clicou = await page.evaluate(({ alvo, partes }) => {
+      const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
       for (const el of document.querySelectorAll('a,td,span,div')) {
-        const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        const t = norm(el.textContent);
         if (t === alvo && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
       }
       for (const el of document.querySelectorAll('a,td,span')) {
-        const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        const t = norm(el.textContent);
         if (partes[0] && t.includes(partes[0]) && t.includes(partes[partes.length - 1]) && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.scrollIntoView({ block: 'center' }); el.click(); return true; }
       }
       return false;
-    }, { alvo: String(nome).toLowerCase(), partes });
+    }, { alvo: semAcento(nome), partes });
     if (!clicou) { console.log('      (não achei o resultado da busca)'); return false; }
     await sleep(5000); await fecharPopupNovaTela(page);
     await page.evaluate(() => { for (const el of document.querySelectorAll('button,a,span,div,li')) { const t = (el.textContent || '').trim().toLowerCase().replace(/\s+/g, ' '); if ((t === 'ver perfil' || t === 'person ver perfil') && (el.offsetWidth > 0 || el.offsetHeight > 0)) { el.click(); return; } } });
@@ -355,7 +386,15 @@ async function lerInadimplentes({ aoTerminar = null } = {}) {
       const frame = page.frames().find(f => /evo3\.w12app|\/Financeiro\//i.test(f.url())) || null;
       console.log(`   · iframe evo3: ${frame ? 'encontrado' : 'NÃO encontrado (usando carga padrão)'}`);
       if (frame) {
-        const body = `sort=&page=1&pageSize=1000&group=&filter=&aberto=true&pago=false&cancelado=false&ID_CLIENTE=0&ID_FORNECEDOR=0&ID_FUNCIONARIO=0&ID_PROSPECT=0&ID_PERSONAL=0&ID_CONVENIO=0&dtIni=${encodeURIComponent(dtIni)}&dtFim=${encodeURIComponent(dtFim)}`;
+        const fixo = `sort=&page=1&pageSize=1000&group=&filter=&aberto=true&pago=false&cancelado=false&ID_CLIENTE=0&ID_FORNECEDOR=0&ID_FUNCIONARIO=0&ID_PROSPECT=0&ID_PERSONAL=0&ID_CONVENIO=0&dtIni=${encodeURIComponent(dtIni)}&dtFim=${encodeURIComponent(dtFim)}`;
+        // De preferência, o MESMO corpo que a tela mandou (o EVO muda os campos de vez
+        // em quando → o corpo fixo passou a dar erro 500), só trocando período e tamanho.
+        const doModelo = corpoBoletosTela ? corpoAmplo(corpoBoletosTela, JANELA) : null;
+        if (corpoBoletosTela) console.log(`   · modelo da tela: ${resumoCorpo(corpoBoletosTela)}`);
+        const tentativas = doModelo && doModelo !== corpoBoletosTela ? [doModelo, fixo] : [fixo];
+        let ampla = false;
+        for (const body of tentativas) {
+        if (ampla) break;
         const resp = await frame.evaluate(async (body) => {
           try {
             const r = await fetch('/Financeiro/Boletos/CarregarListaBoletos', {
@@ -370,11 +409,14 @@ async function lerInadimplentes({ aoTerminar = null } = {}) {
         if (resp && resp.ok && resp.text) {
           const d = JSON.parse(resp.text);
           const l = Array.isArray(d) ? d : (d.Data || d.data || d.$values || []);
-          if (Array.isArray(l)) listaBoletos = l;
-          console.log(`   · busca ampla [${dtIni} → ${dtFim}]: ${l.length} boleto(s) em aberto.`);
+          if (Array.isArray(l)) { listaBoletos = l; ampla = true; }
+          console.log(`   · busca ampla [${dtIni} → ${dtFim}] ${body === fixo ? '(corpo fixo)' : '(modelo da tela)'}: ${l.length} boleto(s) em aberto.`);
         } else {
-          console.log(`   · busca ampla falhou (${resp && (resp.status || resp.error)}) — usando a carga padrão.`);
+          const det = resp && resp.text ? ' — ' + String(resp.text).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160) : '';
+          console.log(`   · busca ampla ${body === fixo ? '(corpo fixo)' : '(modelo da tela)'} falhou (${resp && (resp.status || resp.error)})${det}`);
         }
+        }
+        if (!ampla) console.log(`   ⚠️  Só a carga padrão da tela (${listaBoletos ? listaBoletos.length : 0}) — boletos vencidos fora desse período podem ficar sem cobrança.`);
       }
     } catch (e) { console.log('   · (erro na busca ampla:', e.message, '— usando a carga padrão.)'); }
 
@@ -410,7 +452,13 @@ async function lerInadimplentes({ aoTerminar = null } = {}) {
       if (vistos.has(String(idCliente))) { console.log(`   ⏭️  ${b.NOME}: já incluída pelo recorrente.`); continue; }
       const dias = hojeDias(b.DT_VENCIMENTO);
       boletosCliente = null; telefoneAtual = null;
-      const ok = await abrirFichaBusca(b.NOME);
+      let ok = await abrirFichaBusca(b.NOME);
+      if (!ok) {
+        // Plano B: direto pelo ID do boleto (pagador) — a busca por nome falha às vezes.
+        console.log(`      (busca pelo nome falhou — tento direto pelo id ${idCliente})`);
+        await irPara(`clientes/cadastro/${idCliente}//perfil`, 6000);
+        ok = new RegExp(`cadastro/${idCliente}/`).test(page.url());
+      }
       if (!ok) { console.log(`   ⚠️  ${b.NOME} (id ${idCliente}): não abri a ficha (pulando).`); continue; }
       // Já com o cliente carregado, vai para a aba Boletos (dispara /api/v1/boletos
       // com os urlBoleto). O id vem da URL da ficha (pode diferir do ID_CLIENTE_PAGADOR).
