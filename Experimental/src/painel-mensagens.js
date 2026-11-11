@@ -1523,8 +1523,8 @@ const server = http.createServer(protegido((req, res) => {
     return lerCorpo(req, 1e4, corpo => {
       const p = new URLSearchParams(corpo);
       let r = null;
-      try { r = require('./boas-vindas').salvarCfg({ nova: p.get('nova') === '1', retorno: p.get('retorno') === '1', renovacao: p.get('renovacao') === '1', equipe: p.get('equipe') === '1' }); } catch (_) {}
-      try { if (r) auditoria.registrar(sess.usuario, 'boasvindas.cfg', ['nova', 'retorno', 'renovacao', 'equipe'].filter(k => r[k]).join(', ') || 'nenhum', ''); } catch (_) {}
+      try { r = require('./boas-vindas').salvarCfg({ nova: p.get('nova') === '1', retorno: p.get('retorno') === '1', renovacao: p.get('renovacao') === '1' }); } catch (_) {}
+      try { if (r) auditoria.registrar(sess.usuario, 'boasvindas.cfg', ['nova', 'retorno', 'renovacao'].filter(k => r[k]).join(', ') || 'nenhum', ''); } catch (_) {}
       res.writeHead(303, { Location: '/?view=config&' + (r ? 'okbvcfg=1' : 'errbvcfg=1') + '#boasvindas' }); res.end();
     });
   }
