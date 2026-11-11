@@ -663,8 +663,28 @@ function lerCustoPorTipo(ini, fim) {
 // quantos LIDs já tiveram o telefone descoberto; semTel = LIDs que nunca deram
 // telefone (se crescer, é sinal de que o WhatsApp começou a esconder o número).
 function lerLidStats() {
-  try { const o = JSON.parse(ler(F.lidStats)); if (!o || typeof o !== 'object') return null; return { mapeados: +o.mapeados || 0, semTel: +o.semTel || 0, ultimoSemTelEm: +o.ultimoSemTelEm || 0, em: +o.em || 0 }; }
-  catch (_) { return null; }
+  try {
+    const o = JSON.parse(ler(F.lidStats)); if (!o || typeof o !== 'object') return null;
+    const r = { mapeados: +o.mapeados || 0, semTel: +o.semTel || 0, ultimoSemTelEm: +o.ultimoSemTelEm || 0, em: +o.em || 0, semTelBruto: +o.semTel || 0 };
+    // Só conta LID de quem CONVERSOU de fato (tem conversa com mensagem da pessoa).
+    // O listener anota também LIDs vistos de passagem (conversas antigas não lidas
+    // do celular, mensagens que a equipe mandou pelo próprio aparelho...) — numa
+    // unidade sem nenhum contato ainda, isso acendia o alerta à toa.
+    if (Array.isArray(o.semTelLista)) {
+      const convs = conversas();
+      const porDig = new Map();
+      for (const [k, c] of Object.entries(convs)) porDig.set(String(k).replace(/\D/g, ''), c);
+      let n = 0, ult = 0;
+      for (const lid of o.semTelLista) {
+        const c = porDig.get(String(lid).replace(/\D/g, ''));
+        const dela = (c && Array.isArray(c.msgs) ? c.msgs : []).filter(m => m && m.autor === 'aluna');
+        if (!dela.length) continue;
+        n++; for (const m of dela) if ((m.em || 0) > ult) ult = m.em;
+      }
+      r.semTel = n; r.ultimoSemTelEm = ult;
+    }
+    return r;
+  } catch (_) { return null; }
 }
 function lerRascunhoCampanha(id) {
   if (!id) return { pronto: false };
