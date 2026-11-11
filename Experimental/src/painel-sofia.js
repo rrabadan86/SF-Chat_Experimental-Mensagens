@@ -15,7 +15,7 @@ const {
   _pm2Slug, esc, subnavSofia, chrome, podeSofiaSub, uiTopo, hojeSP, uiTrilho, lerCompCfg, blocoHorario, infoI, PM2_SOFIA, uiChips, uiDatas, uiBarra, uiPessoa,
 } = require('./painel-base');
 
-const PM2_PAINEL = (process.env.PM2_APP_PAINEL || (_pm2Slug ? _pm2Slug + '-painel' : 'slimfit-painel')).trim();
+const PM2_PAINEL = require('./pm2-nomes').nome('painel');
 
 // ── Cotação do dólar (US$ → R$) para mostrar o custo da IA em reais ──────────
 // Busca a cotação atual numa API pública (awesomeapi), com cache em memória +
