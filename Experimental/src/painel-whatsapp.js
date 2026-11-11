@@ -1054,7 +1054,7 @@ function blocoTesteEncerramento(origem) {
 
 // Boas-vindas: tipos ligados + quem entrou nos últimos dias (prévia pela leitura do EVO).
 function blocoBoasVindas() {
-  let cfg = { nova: true, retorno: true, renovacao: true, equipe: true, desde: '' }, lista = [];
+  let cfg = { nova: true, retorno: true, renovacao: true, desde: '' }, lista = [];
   try { const bv = require('./boas-vindas'); cfg = bv.lerCfg(); lista = bv.entradas(); } catch (_) {}
   const TIPO = { nova: '🎉 aluna nova', retorno: '💚 voltou', renovacao: '🔁 renovou' };
   const br = (d) => d ? d.split('-').reverse().join('/') : '';
@@ -1063,10 +1063,10 @@ function blocoBoasVindas() {
   const vai = lista.filter(x => !x.motivo), fora = lista.filter(x => x.motivo);
   return `<div class="hsec" id="boasvindas"><div class="hsec-t">Para quem</div>
     <form method="POST" action="/boasvindas/cfg" style="margin:0">
-      <div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 8px">${chk('nova', 'Aluna nova')}${chk('retorno', 'Ex-aluna voltando')}${chk('renovacao', 'Renovação')}${chk('equipe', 'Listar no Resumo do dia (para colocar nos grupos)')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 8px">${chk('nova', 'Aluna nova')}${chk('retorno', 'Ex-aluna voltando')}${chk('renovacao', 'Renovação')}</div>
       <button type="submit" class="save">Salvar</button>
     </form>
-    <p class="quando" style="margin:8px 0 0">O robô lê os contratos no EVO de manhã (05:25). Aluna <b>nova</b> = primeiro contrato no Studio; <b>voltou</b> = já foi aluna, ficou um tempo fora e voltou; <b>renovou</b> = contrato novo emendado no anterior. Se o contrato ainda não foi assinado, a mensagem leva o link de assinatura ({assinatura}). As novas e as que voltaram aparecem no <b>Resumo do dia</b> do grupo da equipe, no bloco "Alunas novas — colocar nos grupos". ${cfg.desde ? `Vale para contratos a partir de <b>${br(cfg.desde)}</b>.` : 'Só vale <b>daqui pra frente</b>: a partir do dia em que rodar pela primeira vez.'}</p>
+    <p class="quando" style="margin:8px 0 0">O robô lê os contratos no EVO de manhã (05:25). Aluna <b>nova</b> = primeiro contrato no Studio; <b>voltou</b> = já foi aluna, ficou um tempo fora e voltou; <b>renovou</b> = contrato novo emendado no anterior. Se o contrato ainda não foi assinado, a mensagem leva o link de assinatura ({assinatura}). Quem fechou no dia já aparece no <b>Resumo do dia</b> do grupo da equipe ("Fechou contrato"). ${cfg.desde ? `Vale para contratos a partir de <b>${br(cfg.desde)}</b>.` : 'Só vale <b>daqui pra frente</b>: a partir do dia em que rodar pela primeira vez.'}</p>
   </div>
   <div class="hsec"><div class="hsec-t">Contratos novos (últimos 3 dias)</div>
     <div class="sg-ult"><b>${vai.length}</b> receberia(m) se rodasse agora · ${fora.length} fora</div>

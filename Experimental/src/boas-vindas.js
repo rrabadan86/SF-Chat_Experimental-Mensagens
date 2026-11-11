@@ -12,14 +12,13 @@
  *   Cada tipo tem a sua mensagem (editável) e pode ser ligado/desligado no card.
  *   {assinatura} = "✍️ … assine aqui: <link>" se o contrato ainda não foi assinado
  *   (link do EVO), ou vazio; {link} = só o link. Só vale DAQUI PRA FRENTE (contratos
- *   a partir da 1ª execução). As novas e as que voltaram entram no RESUMO DO DIA
- *   (grupo da equipe), no bloco "Alunas novas — colocar nos grupos" (opção
- *   "equipe" no card) — sem mensagem separada.
+ *   a partir da 1ª execução). (Quem fechou no dia já aparece no Resumo do dia,
+ *   bloco "Fechou contrato" — não há aviso separado para a equipe.)
  *
  * Indicação (job indicacao30): 30 dias depois do INÍCIO do período (nova ou retorno),
  *   se ela continua ativa — convite para trazer uma amiga. Uma vez por entrada.
  *
- *   data/boas-vindas-cfg.json → { nova, retorno, renovacao, equipe, desde }
+ *   data/boas-vindas-cfg.json → { nova, retorno, renovacao, desde }
  *   data/boas-vindas.json     → { feitos: { "<id>|<início>": {...} }, indicacao: { ... } }
  */
 const fs = require('fs');
@@ -46,7 +45,7 @@ const bonito = (n) => String(n || '').toLowerCase().replace(/(^|\s)(\S)/g, (x, a
 
 function lerCfg() {
   const o = lerJson(CFG, {});
-  return { nova: o.nova !== false, retorno: o.retorno !== false, renovacao: o.renovacao !== false, equipe: o.equipe !== false, desde: /^\d{4}-\d{2}-\d{2}$/.test(o.desde || '') ? o.desde : '' };
+  return { nova: o.nova !== false, retorno: o.retorno !== false, renovacao: o.renovacao !== false, desde: /^\d{4}-\d{2}-\d{2}$/.test(o.desde || '') ? o.desde : '' };
 }
 function salvarCfg(v) { const c = Object.assign(lerCfg(), v || {}); gravarJson(CFG, c); return c; }
 function lerReg() { const o = lerJson(REG, {}); return { feitos: o.feitos || {}, indicacao: o.indicacao || {} }; }
@@ -138,7 +137,7 @@ async function runBoasVindas({ log = console.log, dry = false } = {}) {
   if (!fila.length) return { enviadas: 0 };
   const links = await linksAssinatura(log);
   const wa = require('./wa-client');
-  const res = { enviadas: 0, erros: 0 }, equipe = [];
+  const res = { enviadas: 0, erros: 0 };
   for (const x of fila) {
     const lk = (links.get(x.id) || []).find(l => l.inicio === x.inicio) || (links.get(x.id) || [])[0];
     const link = lk ? lk.link : '';
@@ -151,7 +150,6 @@ async function runBoasVindas({ log = console.log, dry = false } = {}) {
       await wa.sendTexto(x.telefone, texto, CONTEXTO[x.tipo], MSG[x.tipo]);
       reg.feitos[`${x.id}|${x.inicio}`] = { em: new Date().toISOString(), tipo: x.tipo, nome: x.nome, plano: x.plano };
       res.enviadas++; log(`   🎉 ${x.nome}: boas-vindas (${x.tipo}) enviada.`);
-      if (x.tipo !== 'renovacao') equipe.push(x);
     } catch (e) {
       res.erros++; log(`   ⚠️  ${x.nome}: não enviei — ${e.message}`);
       if (e && e.code === 'INVALIDO') reg.feitos[`${x.id}|${x.inicio}`] = { em: new Date().toISOString(), tipo: x.tipo, nome: x.nome, invalido: true };
@@ -159,7 +157,6 @@ async function runBoasVindas({ log = console.log, dry = false } = {}) {
     gravarJson(REG, reg);
     await sleep(8000 + Math.floor(Math.random() * 2000));
   }
-  if (equipe.length && cfg.equipe && !dry) log(`   📋 ${equipe.length} aluna(s) vão para o Resumo do dia (colocar nos grupos).`);
   log(`🎉 Boas-vindas: ${res.enviadas} ${dry ? 'simulada(s)' : 'enviada(s)'}, ${res.erros} erro(s).`);
   return res;
 }
@@ -186,19 +183,4 @@ async function runIndicacao({ log = console.log, dry = false } = {}) {
   return res;
 }
 
-// Para o RESUMO DO DIA: novas e que voltaram com boas-vindas enviadas e ainda não
-// listadas no resumo (até 10 dias — não se perde se o resumo não sair num dia).
-function pendentesEquipe() {
-  if (!lerCfg().equipe) return [];
-  const reg = lerReg(), corte = Date.now() - 10 * 86400e3;
-  return Object.entries(reg.feitos)
-    .filter(([, f]) => f && (f.tipo === 'nova' || f.tipo === 'retorno') && !f.invalido && !f.equipeEm && (Date.parse(f.em) || 0) >= corte)
-    .map(([chave, f]) => ({ chave, nome: f.nome || '', plano: f.plano || '', tipo: f.tipo }));
-}
-function marcarEquipe(chaves) {
-  const reg = lerReg(), em = new Date().toISOString();
-  for (const k of chaves || []) if (reg.feitos[k]) reg.feitos[k].equipeEm = em;
-  gravarJson(REG, reg);
-}
-
-module.exports = { entradas, paraIndicacao, runBoasVindas, runIndicacao, lerCfg, salvarCfg, lerReg, pendentesEquipe, marcarEquipe };
+module.exports = { entradas, paraIndicacao, runBoasVindas, runIndicacao, lerCfg, salvarCfg, lerReg };
