@@ -390,10 +390,17 @@ function definirTagConfig(tag, cfg) {
 // Aplica as regras de exclusão entre tags: se um contato tem uma tag cuja config
 // diz "remover X", tira X do conjunto. Usado ao adicionar/definir tags de um
 // contato (transição de funil, ex.: entrar em "Agendou" tira "Contato inicial").
-function tagsAposRegras(tags) {
+// `nova` = a tag que está sendo APLICADA agora. Ela nunca é apagada pela regra de
+// uma tag que a pessoa já tinha ("Ao aplicar ESTA tag, remover…" vale para quem
+// chega). Antes, quem tinha "Fez Aula Experimental" (que remove "Sem interesse")
+// recebia "Sem interesse" da SoFIA e a tag sumia na mesma hora — o log dizia
+// "aplicada" e o contato ficava sem ela. Sem `nova` (ou com protegerNova=false),
+// mantém o comportamento antigo: a regra de qualquer tag presente vale.
+function tagsAposRegras(tags, nova, protegerNova = true) {
   let cfg = {}; try { cfg = lerTagsConfig(); } catch (_) {}
   const set = new Set(tags);
-  for (const t of tags) { const rem = normCfg(cfg[t]).remove || []; for (const r of rem) if (r !== t) set.delete(r); }
+  const prot = nova && protegerNova ? String(nova) : '';
+  for (const t of tags) { const rem = normCfg(cfg[t]).remove || []; for (const r of rem) if (r !== t && r !== prot) set.delete(r); }
   return [...set];
 }
 // Cria uma tag "conhecida" (aparece nas listas mesmo sem contato).
@@ -436,11 +443,14 @@ function adicionarTag(telefone, nome, tag, opts) {
   if (opts && opts.idEvo && /^\d+$/.test(String(opts.idEvo))) c.idEvo = String(opts.idEvo);
   tag = String(tag || '').trim();
   if (tag && !c.tags.includes(tag)) c.tags.push(tag);
-  c.tags = tagsAposRegras(c.tags); // aplica transições (ex.: sai de "Contato inicial")
+  // aplica transições (ex.: sai de "Contato inicial"). A tag aplicada agora fica,
+  // exceto quando opts.ceder (gatilhos genéricos, ex.: "mandou mensagem" → "Contato
+  // inicial" não deve voltar a quem já está mais à frente no funil).
+  c.tags = tagsAposRegras(c.tags, tag, !(opts && opts.ceder));
   c.atualizadoEm = Date.now();
   map[chave] = c;
   salvar(map);
-  return true;
+  return !tag || c.tags.includes(tag); // false = a tag cedeu à regra de outra que ela já tinha
 }
 
 // Remove UMA tag de um contato (não mexe nas outras). Usado por automações de
@@ -484,7 +494,7 @@ function aplicarTagLote({ q = '', tag = '', bloq = '', bloqueados = [], tels = n
     if (rm) set.delete(rm);
     if (add) set.add(add);
     // Regras de funil só quando ADICIONA (senão remover poderia tirar outras tags).
-    let novo = add ? tagsAposRegras([...set]) : [...set];
+    let novo = add ? tagsAposRegras([...set], add) : [...set];
     const mudou = novo.length !== antes.length || novo.some(t => !antes.includes(t));
     c.tags = novo;
     if (mudou) { c.atualizadoEm = agora; mudados.push(normTel(c.tel)); }

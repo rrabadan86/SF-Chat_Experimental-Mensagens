@@ -180,7 +180,7 @@ function limparDuplicatas({ dry = true } = {}) {
       const tags = (map[o] && map[o].tags) || [];
       acoes.push({ manter: principal, manterNome: (map[principal] && map[principal].nome) || '', remover: o, nome: (map[o] && map[o].nome) || '', tags });
       if (!dry) {
-        try { for (const t of tags) contatos.adicionarTag(principal, (map[principal] && map[principal].nome) || (map[o] && map[o].nome) || '', t); } catch (_) {}
+        try { for (const t of tags) contatos.adicionarTag(principal, (map[principal] && map[principal].nome) || (map[o] && map[o].nome) || '', t, { ceder: true }); } catch (_) {}
         try { contatos.remover(o); } catch (_) {}
       }
     }
