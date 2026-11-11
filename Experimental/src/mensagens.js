@@ -107,6 +107,13 @@ const CATALOGO = [
     padrao: 'Oiee, {nome}! Tudo bem? 😊\n\nAqui é a Lorena, do Studio SlimFit! Vi que você conversou com a nossa assistente virtual, a SoFIA, e vou continuar o seu atendimento por aqui.\n\nSomos um Studio de Personal exclusivo para mulheres, com atenção de perto e resultados reais. 💪🏼 Neste vídeo eu explico rapidinho como funciona: https://www.instagram.com/reel/Crluss-AWPu/\n\nQue tal conhecer na prática com uma aula experimental? Me diz o melhor dia e horário pra você! ❤️',
   },
   {
+    chave: 'retomada_encerramento',
+    titulo: 'Retomada — encerramento (sem resposta)',
+    quando: 'Sai pelo número do STUDIO no DIA SEGUINTE à mensagem de retomada, só para quem NÃO respondeu nem reagiu (nem no Studio nem na SoFIA), com quem a recepção não falou à mão, que não agendou e que não virou aluna. Uma vez por retomada.',
+    vars: [['nome', 'primeiro nome da pessoa']],
+    padrao: 'Oie, {nome}! Tudo bem?\n\nPoxa, que pena que não tive um retorno seu. Por isso vou encerrar o nosso atendimento! 🥲\n\nCaso queira agendar uma aula experimental para conhecer nossa metodologia, basta falar novamente comigo ou acessar diretamente o nosso formulário: {formulario}\n\nEspero que possa vir fazer parte do Slim futuramente! 🫶🏼\n\nEstamos à disposição!',
+  },
+  {
     chave: 'noshow_encerramento',
     titulo: 'Faltou — encerramento (sem resposta)',
     quando: 'Sai no DIA SEGUINTE à mensagem de falta (no-show), só para quem NÃO respondeu nem reagiu, com quem a recepção não falou à mão, que não agendou de novo e que não virou aluna. Um horário para a falta da manhã e outro para a da tarde/noite. Uma vez por falta.',
@@ -350,7 +357,13 @@ function globais() {
     saudacao,
     hoje: agora.toLocaleDateString('pt-BR', opt),
     dia_semana: agora.toLocaleDateString('pt-BR', Object.assign({ weekday: 'long' }, opt)),
+    ...(linkFormulario() ? { formulario: linkFormulario() } : {}),
   };
+}
+// Link do formulário de agendamento da aula experimental (FORM_CLOUD_URL do .env).
+function linkFormulario() {
+  const f = String(process.env.FORM_CLOUD_URL || '').trim().replace(/\/+$/, '');
+  return f ? f + '/' : '';
 }
 // Tags globais, para o painel listar como clicáveis em toda mensagem.
 const GLOBAIS_TAGS = [
@@ -358,6 +371,7 @@ const GLOBAIS_TAGS = [
   ['studio', 'nome do Studio'],
   ['hoje', 'data de hoje (ex.: 24/08/2026)'],
   ['dia_semana', 'dia da semana (ex.: segunda-feira)'],
+  ['formulario', 'link do formulário de agendamento da aula experimental'],
 ];
 
 // Valores de EXEMPLO para pré-visualizar/testar uma mensagem (o que a aluna

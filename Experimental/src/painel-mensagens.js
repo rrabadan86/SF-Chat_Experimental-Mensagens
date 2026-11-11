@@ -1318,7 +1318,7 @@ const server = http.createServer(protegido((req, res) => {
         const tel = String(d.tel || '').replace(/\D/g, ''), etapa = String(d.etapa || '');
         if (tel.length < 10) return resp({ ok: false, erro: 'Preencha o "Número para testes" lá em cima (com DDD).' }, 400);
         if (!['followup', 'enviar', 'conferir'].includes(etapa)) return resp({ ok: false, erro: 'etapa inválida' }, 400);
-        const origem = d.origem === 'noshow' ? 'noshow' : 'followup';
+        const origem = ['noshow', 'retomada'].includes(d.origem) ? d.origem : 'followup';
         const arq = path.resolve(__dirname, '..', 'data', 'rodar-job.json');
         if (fs.existsSync(arq)) return resp({ ok: false, erro: 'O robô já tem outro pedido na fila — tente em 1 minuto.' }, 409);
         const id = 'fet' + Date.now().toString(36);

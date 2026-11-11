@@ -22,6 +22,7 @@ const CATALOGO = [
   { chave: 'boasVindas',        titulo: 'Boas-vindas (aluna nova, voltou, renovou)', padrao: '7 10 * * *' },
   { chave: 'indicacao30',       titulo: 'Indicação — 30 dias de aluna', padrao: '22 11 * * 1-6' },
   { chave: 'retomadaSofia',     titulo: 'Retomada — parou de responder a SoFIA (pelo Studio)', padrao: '0 10 * * 1-6' },
+  { chave: 'retomadaEncerra',   titulo: 'Retomada — encerramento (sem resposta)', padrao: '30 10 * * 1-6' },
   { chave: 'noShowEncerraManha', titulo: 'Faltou — encerramento (falta da manhã)', padrao: '45 11 * * 1-6' },
   { chave: 'noShowEncerraTarde', titulo: 'Faltou — encerramento (falta da tarde/noite)', padrao: '50 19 * * 1-6' },
   { chave: 'encerramentoManha', titulo: 'Follow-up — encerramento (follow-up da manhã)', padrao: '45 10 * * 1-6' },
