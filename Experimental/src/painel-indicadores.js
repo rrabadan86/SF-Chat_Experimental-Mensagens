@@ -1977,7 +1977,7 @@ function paginaSaude(list, extra = {}) {
         encerramentoManha: ['encerramento', true], encerramentoTarde: ['encerramento', true], noShowEncerraManha: ['encerramento', true], noShowEncerraTarde: ['encerramento', true],
         semResposta1: ['semResposta', true], semResposta2: ['semResposta', true], semRespostaEquipe1: ['semRespostaEquipe', true], semRespostaEquipe2: ['semRespostaEquipe', true],
         slotsPushDia: ['slotsPush', true], slotsPushNoite: ['slotsPush', true], gradeFixas: ['gradeFixas', true], ativasFoto: ['ativasFoto', true],
-        histExperimentais: ['historicoExperimentais', true], planilhaAniv: ['planilha', true], retomadaSofia: ['retomada', true],
+        histExperimentais: ['historicoExperimentais', true], planilhaAniv: ['planilha', true], retomadaSofia: ['retomada', true], boasVindas: ['boasVindas', true], indicacao30: ['indicacao', true],
       };
       const btnRodar = (i) => { const r = RODAR[i.chave]; return r ? ` <button type="button" class="ui-btn sec" style="padding:3px 10px;font-size:.78rem;margin-left:6px" onclick="sdRodar(this,'${r[0]}',${r[1] ? 'true' : 'false'})">▶️ Rodar agora</button><span class="sd-muted sd-rodar-msg" style="margin-left:6px"></span>` : ''; };
       const linhaProb = (i) => (i.estado === 'falhou'
