@@ -1047,15 +1047,27 @@ function blocoTesteEncerramento(origem) {
 // Retomada (SoFIA → Studio): quem está no ponto AGORA (prévia — a conversa do Studio
 // é conferida na hora do envio: quem a recepção já chamou fica de fora).
 function blocoRetomada() {
-  let lista = [], cfg = { horas: 24, dias: 3 }, reg = {};
+  let lista = [], cfg = { horas: 24, dias: 3 }, reg = {}, rtCfg = { tags: [] }, todasTags = [];
   try { lista = require('./retomada-sofia').candidatas(); } catch (_) {}
+  try { rtCfg = require('./retomada-sofia').lerCfg(); } catch (_) {}
+  try { todasTags = require('./contatos').tagsDistintas().map(x => x.tag); } catch (_) {}
+  for (const t of rtCfg.tags) if (!todasTags.includes(t)) todasTags.unshift(t);
+  const marcadas = new Set(rtCfg.tags);
   try { cfg = require('./sofia-editor').lerQuietoCfg(); } catch (_) {}
   try { reg = require('./retomada-sofia').ler(); } catch (_) {}
   const vai = lista.filter(x => !x.motivo), fora = lista.filter(x => x.motivo);
   const quando = (ms) => { try { return new Date(ms).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ''); } catch (_) { return ''; } };
   const linha = (x) => `<div class="sg-row${x.motivo ? ' fora' : ''}"><b>${esc(x.nome || x.chave)}</b> <span class="quando" style="margin:0">última mensagem dela ${quando(x.ultimaContato)}${x.motivo ? ' — ' + esc(x.motivo) : ''}</span></div>`;
   const enviadas = Object.values(reg).filter(r => r.enviadoEm).sort((a, b) => b.enviadoEm - a.enviadoEm).slice(0, 8);
-  return `<div class="hsec"><div class="hsec-t">Quem está no ponto agora</div>
+  return `<div class="hsec" id="retomada"><div class="hsec-t">Para quem</div>
+    <form method="POST" action="/retomada/cfg" style="margin:0 0 6px">
+      <p class="quando" style="margin:0 0 6px">Só para quem tem <b>alguma</b> destas tags (nenhuma marcada = qualquer tag). Ex.: <b>FX - 2. Encerrado sem agendamento</b>.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:4px 14px;max-height:180px;overflow:auto;padding:6px 0">${todasTags.map(t => `<label class="chk" style="margin:0;font-weight:500"><input type="checkbox" name="tag" value="${esc(t)}"${marcadas.has(t) ? ' checked' : ''}> ${esc(t)}</label>`).join('') || '<span class="quando">Nenhuma tag cadastrada.</span>'}</div>
+      <button type="submit" class="save">Salvar</button>
+      <span class="quando" style="margin-left:8px">${rtCfg.tags.length ? `Hoje: só <b>${rtCfg.tags.map(esc).join('</b>, <b>')}</b>` : 'Hoje: <b>qualquer tag</b>'}</span>
+    </form>
+  </div>
+  <div class="hsec"><div class="hsec-t">Quem está no ponto agora</div>
     <p class="quando" style="margin:0 0 8px">Mesma lista do filtro <b>😴 Sem resposta há ${esc(String(cfg.horas))}h+ (${esc(String(cfg.dias))}d)</b> das Conversas da SoFIA (ajuste em SoFIA → Configuração). Na hora do envio o robô ainda confere a conversa do <b>Studio</b>: quem a recepção já chamou por lá, ou que escreveu para o Studio, fica de fora.</p>
     <div class="sg-ult"><b>${vai.length}</b> receberia(m) se rodasse agora · ${fora.length} fora da regra</div>
     ${vai.length ? `<div class="sg-lista">${vai.slice(0, 40).map(linha).join('')}</div>` : ''}

@@ -1054,6 +1054,8 @@ const server = http.createServer(protegido((req, res) => {
     else if (/(?:^|&)errdias=1/.test(q)) { aviso = '⚠️ Use um número de 1 a 60 dias.'; erro = true; }
     else if (/(?:^|&)oksim=1/.test(q)) aviso = '🧪 Simulação pedida ao robô — em 1 a 2 minutos, atualize a página: o resultado aparece no cartão "Saída — não renovou".';
     else if (/(?:^|&)oksfcfg=1/.test(q)) aviso = '✅ Sentimos sua falta: dias salvos — vale no próximo disparo, sem reiniciar.';
+    else if (/(?:^|&)okrtcfg=1/.test(q)) aviso = '✅ Retomada (SoFIA → Studio): tags salvas — vale no próximo disparo, sem reiniciar.';
+    else if (/(?:^|&)errrtcfg=1/.test(q)) { aviso = '⚠️ Não consegui salvar as tags da retomada.'; erro = true; }
     else if (/(?:^|&)errsfcfg=1/.test(q)) { aviso = '⚠️ Sentimos sua falta: use de 7 a 120 dias sem treinar e de 3 a 60 dias entre as mensagens.'; erro = true; }
     else if (/(?:^|&)oksfsim=1/.test(q)) aviso = '🧪 Simulação pedida ao robô — ele lê o EVO (leva uns 5 a 15 minutos). Depois atualize a página: o resultado aparece no cartão "Sentimos sua falta — 1ª mensagem".';
     else if (/(?:^|&)errsim=1/.test(q)) { aviso = '⚠️ O robô ainda vai rodar outro pedido — tente de novo em 1 minuto.'; erro = true; }
@@ -1514,6 +1516,16 @@ const server = http.createServer(protegido((req, res) => {
     });
   }
 
+  // Retomada (SoFIA → Studio): só para quem tem as tags escolhidas.
+  if (req.method === 'POST' && url === '/retomada/cfg') {
+    return lerCorpo(req, 1e5, corpo => {
+      const p = new URLSearchParams(corpo);
+      let r = null;
+      try { r = require('./retomada-sofia').salvarCfg({ tags: p.getAll('tag') }); } catch (_) {}
+      try { if (r) auditoria.registrar(sess.usuario, 'retomada.cfg', r.tags.length ? r.tags.join(', ') : 'qualquer tag', ''); } catch (_) {}
+      res.writeHead(303, { Location: '/?view=config&' + (r ? 'okrtcfg=1' : 'errrtcfg=1') + '#retomada' }); res.end();
+    });
+  }
   if (req.method === 'POST' && url === '/sentimos/cfg') {
     return lerCorpo(req, 1e4, corpo => {
       const p = new URLSearchParams(corpo);
