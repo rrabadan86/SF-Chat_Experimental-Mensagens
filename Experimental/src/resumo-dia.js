@@ -94,6 +94,7 @@ function montarMensagem(cats, dataStr) {
     + bloco('❌ *Experimentais que faltaram*', faltaram, 'nenhuma') + '\n\n'
     + bloco('🎉 *Fechou contrato*', fecharam, 'nenhum fechamento hoje') + '\n\n'
     + bloco('✂️ *Rescisões*', rescisoes, 'nenhuma rescisão hoje') + '\n\n'
+    + ((cats.alunasNovas || []).length ? bloco('🆕 *Alunas novas — colocar nos grupos*', cats.alunasNovas.map(x => `• ${x.nome} — ${x.plano || 'plano'} ${x.tipo === 'retorno' ? '(voltou 💚)' : '(aluna nova 🎉)'}`), '') + '\n\n' : '')
     + bloco(`📅 *Experimentais de amanhã${dmAmanha ? ' (' + dmAmanha + ')' : ''}*`, amanha, 'nenhuma agendada para amanhã') + '\n\n'
     + bloco('🔒 *Trancadas hoje*', trancadas, 'nenhuma trancada hoje');
 }
@@ -223,6 +224,9 @@ async function runResumoDia() {
     }
   }
   if (!cats) throw ultimoErro;
+  // Alunas novas / que voltaram com boas-vindas enviadas (boas-vindas.js) — para a
+  // equipe colocar nos grupos das turmas. Marcadas como listadas depois do envio.
+  try { cats.alunasNovas = require('./boas-vindas').pendentesEquipe(); } catch (_) { cats.alunasNovas = []; }
   console.log(`   🔁 Reposições: ${cats.reposicoes.length} | ✅ Fizeram: ${cats.fizeram.length} | ❌ Faltaram: ${cats.faltaram.length} | 🎉 Fecharam: ${cats.fecharam.length} | ✂️ Rescisões: ${(cats.rescisoes || []).length} | 📅 Amanhã: ${(cats.amanha || []).length} | 🔒 Trancadas: ${(cats.trancadas || []).length}\n`);
 
   const msg = montarMensagem(cats, dataStr);
@@ -230,7 +234,7 @@ async function runResumoDia() {
   console.log(msg);
   console.log('──────────────────────────────────────────────────\n');
 
-  const totalRelevante = cats.reposicoes.length + cats.fizeram.length + cats.faltaram.length + cats.fecharam.length + (cats.rescisoes || []).length + (cats.amanha || []).length;
+  const totalRelevante = cats.reposicoes.length + cats.fizeram.length + cats.faltaram.length + cats.fecharam.length + (cats.rescisoes || []).length + (cats.amanha || []).length + (cats.alunasNovas || []).length;
   if (totalRelevante === 0) {
     console.log('📭 Nada de experimental/reposição hoje — NÃO enviei (evita resumo vazio).\n');
     return { enviado: false, total: 0 };
@@ -242,6 +246,7 @@ async function runResumoDia() {
   await wa.initWhatsApp();
   await wa.sendGrupo(GRUPO, msg);
   console.log(`✅ Resumo do dia enviado no grupo "${GRUPO}".\n`);
+  if ((cats.alunasNovas || []).length) { try { require('./boas-vindas').marcarEquipe(cats.alunasNovas.map(x => x.chave)); } catch (_) {} }
   return { enviado: true, total: totalRelevante };
 }
 
