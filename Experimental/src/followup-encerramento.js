@@ -143,4 +143,4 @@ async function testar({ etapa, tel, origem = 'followup' } = {}) {
   return { msg: 'Sem resposta → mensagem de encerramento enviada. Teste concluído.' };
 }
 
-module.exports = { registrarFollowup, runEncerramento, testar, ler, CONTEXTO };
+module.exports = { registrarFollowup, runEncerramento, testar, ler, virouAluna, agendouDepois, CONTEXTO };
