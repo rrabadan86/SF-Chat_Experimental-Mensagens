@@ -25,8 +25,9 @@ const E = require('./painel-estado');
 // ou, se precisar, os nomes exatos: PM2_APP_EXP / PM2_APP_PAINEL / PM2_APP_SOFIA.
 // Sem nada no .env, mantém os nomes legados do Bueno (nada muda lá).
 const _pm2Slug = (process.env.PM2_SLUG || '').trim();
-const PM2_EXP = (process.env.PM2_APP_EXP || (_pm2Slug ? _pm2Slug + '-exp' : 'slimfit-exp')).trim();
-const PM2_SOFIA = (process.env.PM2_APP_SOFIA || (_pm2Slug ? _pm2Slug + '-sofia' : 'sofia-listener')).trim();
+// Conferido no PM2 quando o .env não diz o nome exato (ver pm2-nomes.js).
+const PM2_EXP = require('./pm2-nomes').nome('exp');
+const PM2_SOFIA = require('./pm2-nomes').nome('sofia');
 // Config do job de comparecimento (lida/gravada direto do JSON — NÃO requerer
 // comparecimento.js aqui, para não carregar o puppeteer/EVO no painel).
 const COMP_CFG_FILE = path.resolve(__dirname, '..', 'data', 'comparecimento.json');

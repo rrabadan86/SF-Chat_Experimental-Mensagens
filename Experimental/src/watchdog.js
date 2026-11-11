@@ -25,8 +25,9 @@ const ESTADO_FILE = path.resolve(__dirname, '..', 'data', 'watchdog-estado.json'
 // FIXOS 'slimfit-exp,slimfit-painel' → numa unidade nova (ex.: lagosul1) o
 // watchdog vigiava processos que não existiam e o robô ficava sem "conserto".
 const _wdSlug = (process.env.PM2_SLUG || '').trim();
-const PROC_EXP = (process.env.PM2_APP_EXP || (_wdSlug ? _wdSlug + '-exp' : 'slimfit-exp')).trim();
-const PROC_PAINEL = (process.env.PM2_APP_PAINEL || (_wdSlug ? _wdSlug + '-painel' : 'slimfit-painel')).trim();
+// Sem nome exato no .env, confere no PM2 qual processo roda desta pasta (pm2-nomes.js).
+const PROC_EXP = require('./pm2-nomes').nome('exp');
+const PROC_PAINEL = require('./pm2-nomes').nome('painel');
 const PROCESSOS = (process.env.WATCHDOG_PROCS || `${PROC_EXP},${PROC_PAINEL}`).split(',').map(s => s.trim()).filter(Boolean);
 const WA_MAX_MIN = parseInt(process.env.WATCHDOG_WA_MIN || '30', 10); // WhatsApp caído por mais que isso → alerta
 const PM2_BIN = process.env.PM2_BIN || 'pm2';
