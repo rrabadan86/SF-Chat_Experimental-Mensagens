@@ -1054,6 +1054,8 @@ const server = http.createServer(protegido((req, res) => {
     else if (/(?:^|&)errdias=1/.test(q)) { aviso = '⚠️ Use um número de 1 a 60 dias.'; erro = true; }
     else if (/(?:^|&)oksim=1/.test(q)) aviso = '🧪 Simulação pedida ao robô — em 1 a 2 minutos, atualize a página: o resultado aparece no cartão "Saída — não renovou".';
     else if (/(?:^|&)oksfcfg=1/.test(q)) aviso = '✅ Sentimos sua falta: dias salvos — vale no próximo disparo, sem reiniciar.';
+    else if (/(?:^|&)okbvex=1/.test(q)) aviso = '✅ Boas-vindas: lista atualizada.';
+    else if (/(?:^|&)errbvex=1/.test(q)) { aviso = '⚠️ Não consegui atualizar a lista das boas-vindas.'; erro = true; }
     else if (/(?:^|&)okbvcfg=1/.test(q)) aviso = '✅ Boas-vindas: tipos salvos — vale no próximo disparo, sem reiniciar.';
     else if (/(?:^|&)errbvcfg=1/.test(q)) { aviso = '⚠️ Não consegui salvar os tipos das boas-vindas.'; erro = true; }
     else if (/(?:^|&)okrtcfg=1/.test(q)) aviso = '✅ Retomada (SoFIA → Studio): tags salvas — vale no próximo disparo, sem reiniciar.';
@@ -1518,6 +1520,17 @@ const server = http.createServer(protegido((req, res) => {
     });
   }
 
+  // Boas-vindas: "🚫 Não enviar" / "↩️ Voltar a enviar" de um contrato da prévia.
+  if (req.method === 'POST' && url === '/boasvindas/excluir') {
+    return lerCorpo(req, 1e4, corpo => {
+      const p = new URLSearchParams(corpo);
+      let ok = true;
+      try { require('./boas-vindas').excluir({ id: p.get('id'), inicio: p.get('inicio'), nome: p.get('nome'), por: sess.usuario || '', remover: p.get('remover') === '1' }); }
+      catch (_) { ok = false; }
+      try { if (ok) auditoria.registrar(sess.usuario, p.get('remover') === '1' ? 'boasvindas.incluir' : 'boasvindas.excluir', String(p.get('nome') || ''), String(p.get('inicio') || '')); } catch (_) {}
+      res.writeHead(303, { Location: '/?view=config&' + (ok ? 'okbvex=1' : 'errbvex=1') + '#boasvindas' }); res.end();
+    });
+  }
   // Boas-vindas: quais tipos enviar (nova / voltou / renovou / aviso à equipe).
   if (req.method === 'POST' && url === '/boasvindas/cfg') {
     return lerCorpo(req, 1e4, corpo => {

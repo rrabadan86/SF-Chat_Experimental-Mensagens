@@ -64,7 +64,9 @@ function entradas({ hoje = hojeSP(), cfg = lerCfg(), reg = lerReg() } = {}) {
   const ids = new Set(((h.ultimo || {}).ids || []).map(String));
   const pes = h.pessoas || {};
   const tel = resolvedorTel();
-  const de = cfg.desde && cfg.desde > somaDias(hoje, -JANELA_DIAS) ? cfg.desde : somaDias(hoje, -JANELA_DIAS);
+  // Ainda não rodou: a 1ª execução vale a partir de ONTEM — a prévia mostra o mesmo.
+  const inicio = cfg.desde || somaDias(hoje, -1);
+  const de = inicio > somaDias(hoje, -JANELA_DIAS) ? inicio : somaDias(hoje, -JANELA_DIAS);
   const out = [];
   for (const id of ids) {
     const p = pes[id]; if (!p) continue;
@@ -77,7 +79,10 @@ function entradas({ hoje = hojeSP(), cfg = lerCfg(), reg = lerReg() } = {}) {
     const per = iv[idxPer];
     const tipo = !per ? 'nova' : (per[0] < ini ? 'renovacao' : (idxPer > 0 ? 'retorno' : 'nova'));
     const item = { id, nome: bonito(p.n || ''), plano: c[2] || '', inicio: ini, tipo, telefone: tel(id, p), motivo: '' };
-    if (reg.feitos[`${id}|${ini}`]) item.motivo = 'já recebeu';
+    item.chave = `${id}|${ini}`;
+    const f = reg.feitos[item.chave];
+    if (f && f.excluida) { item.motivo = `marcada para não receber${f.por ? ' por ' + f.por : ''}`; item.excluida = true; }
+    else if (f) item.motivo = 'já recebeu';
     else if (!cfg[tipo]) item.motivo = `${tipo === 'renovacao' ? 'renovação' : tipo === 'retorno' ? 'ex-aluna voltando' : 'aluna nova'}: desligado no card`;
     else if (!item.telefone) item.motivo = 'sem telefone ainda (a leitura de amanhã tenta de novo)';
     out.push(item);
@@ -183,4 +188,14 @@ async function runIndicacao({ log = console.log, dry = false } = {}) {
   return res;
 }
 
-module.exports = { entradas, paraIndicacao, runBoasVindas, runIndicacao, lerCfg, salvarCfg, lerReg };
+// "🚫 Não enviar" no card (ex.: já mandaram à mão). remover=true desfaz.
+function excluir({ id, inicio, nome, por = '', remover = false }) {
+  const k = `${String(id || '').trim()}|${String(inicio || '').trim()}`;
+  if (!/^\d+\|\d{4}-\d{2}-\d{2}$/.test(k)) throw new Error('contrato inválido');
+  const reg = lerReg();
+  if (remover) { if (reg.feitos[k] && reg.feitos[k].excluida) delete reg.feitos[k]; }
+  else reg.feitos[k] = { em: new Date().toISOString(), excluida: true, nome: String(nome || '').slice(0, 120), por: String(por || '').slice(0, 60) };
+  gravarJson(REG, reg);
+}
+
+module.exports = { entradas, paraIndicacao, runBoasVindas, runIndicacao, lerCfg, salvarCfg, lerReg, excluir };

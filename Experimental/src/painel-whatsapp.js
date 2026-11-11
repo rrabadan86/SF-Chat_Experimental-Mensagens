@@ -1059,7 +1059,8 @@ function blocoBoasVindas() {
   const TIPO = { nova: '🎉 aluna nova', retorno: '💚 voltou', renovacao: '🔁 renovou' };
   const br = (d) => d ? d.split('-').reverse().join('/') : '';
   const chk = (k, rot) => `<label class="chk" style="margin:0;font-weight:500"><input type="checkbox" name="${k}" value="1"${cfg[k] ? ' checked' : ''}> ${rot}</label>`;
-  const linha = (x) => `<div class="sg-row${x.motivo ? ' fora' : ''}"><b>${esc(x.nome)}</b> <span class="quando" style="margin:0">${TIPO[x.tipo]} · ${esc(x.plano)} · começou ${br(x.inicio)}${x.motivo ? ' — ' + esc(x.motivo) : ''}</span></div>`;
+  const btn = (x) => (x.excluida || x.motivo !== 'já recebeu') ? `<form method="POST" action="/boasvindas/excluir" style="display:inline;margin:0 0 0 8px"><input type="hidden" name="id" value="${esc(x.id)}"><input type="hidden" name="inicio" value="${esc(x.inicio)}"><input type="hidden" name="nome" value="${esc(x.nome)}">${x.excluida ? '<input type="hidden" name="remover" value="1"><button type="submit" class="reset" style="padding:2px 9px;font-size:.76rem">↩️ Voltar a enviar</button>' : '<button type="submit" class="reset" style="padding:2px 9px;font-size:.76rem">🚫 Não enviar</button>'}</form>` : '';
+  const linha = (x) => `<div class="sg-row${x.motivo ? ' fora' : ''}"><b>${esc(x.nome)}</b> <span class="quando" style="margin:0">${TIPO[x.tipo]} · ${esc(x.plano)} · começou ${br(x.inicio)}${x.motivo ? ' — ' + esc(x.motivo) : ''}</span>${btn(x)}</div>`;
   const vai = lista.filter(x => !x.motivo), fora = lista.filter(x => x.motivo);
   return `<div class="hsec" id="boasvindas"><div class="hsec-t">Para quem</div>
     <form method="POST" action="/boasvindas/cfg" style="margin:0">
@@ -1068,7 +1069,8 @@ function blocoBoasVindas() {
     </form>
     <p class="quando" style="margin:8px 0 0">O robô lê os contratos no EVO de manhã (05:25). Aluna <b>nova</b> = primeiro contrato no Studio; <b>voltou</b> = já foi aluna, ficou um tempo fora e voltou; <b>renovou</b> = contrato novo emendado no anterior. Se o contrato ainda não foi assinado, a mensagem leva o link de assinatura ({assinatura}). Quem fechou no dia já aparece no <b>Resumo do dia</b> do grupo da equipe ("Fechou contrato"). ${cfg.desde ? `Vale para contratos a partir de <b>${br(cfg.desde)}</b>.` : 'Só vale <b>daqui pra frente</b>: a partir do dia em que rodar pela primeira vez.'}</p>
   </div>
-  <div class="hsec"><div class="hsec-t">Contratos novos (últimos 3 dias)</div>
+  <div class="hsec"><div class="hsec-t">Contratos novos (últimos 3 dias${cfg.desde ? '' : ', a partir de ontem'})</div>
+    <p class="quando" style="margin:0 0 6px">Já mandou à mão para alguma? Clique em <b>🚫 Não enviar</b> na linha dela.</p>
     <div class="sg-ult"><b>${vai.length}</b> receberia(m) se rodasse agora · ${fora.length} fora</div>
     ${vai.length ? `<div class="sg-lista">${vai.map(linha).join('')}</div>` : ''}
     ${fora.length ? `<details class="sg-fora"><summary>Ficaram de fora (${fora.length})</summary>${fora.map(linha).join('')}</details>` : ''}
