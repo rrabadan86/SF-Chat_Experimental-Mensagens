@@ -24,12 +24,20 @@ const path = require('path');
 const mensagens = require('./mensagens');
 
 const ARQ = path.resolve(__dirname, '..', 'data', 'retomada-sofia.json');
+const CFG = path.resolve(__dirname, '..', 'data', 'retomada-sofia-cfg.json');
 const CONTEXTO = 'Retomada — parou de responder a SoFIA';
 const MAX_POR_VEZ = 60;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 function ler() { try { const o = JSON.parse(fs.readFileSync(ARQ, 'utf8')); return (o && typeof o === 'object') ? o : {}; } catch (_) { return {}; } }
 function gravar(o) { try { fs.mkdirSync(path.dirname(ARQ), { recursive: true }); fs.writeFileSync(ARQ + '.tmp', JSON.stringify(o)); fs.renameSync(ARQ + '.tmp', ARQ); } catch (_) {} }
+// Só para quem tem ALGUMA destas tags (vazio = qualquer tag). Ex.: "FX - 2. Encerrado sem agendamento".
+function lerCfg() { try { const o = JSON.parse(fs.readFileSync(CFG, 'utf8')) || {}; return { tags: Array.isArray(o.tags) ? o.tags.map(String).filter(Boolean) : [] }; } catch (_) { return { tags: [] }; } }
+function salvarCfg({ tags }) {
+  const c = { tags: [...new Set((tags || []).map(t => String(t).trim()).filter(Boolean))] };
+  fs.mkdirSync(path.dirname(CFG), { recursive: true }); fs.writeFileSync(CFG, JSON.stringify(c, null, 2));
+  return c;
+}
 const semAcento = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const primeiro = (n) => { const p = String(n || '').trim().split(/\s+/)[0] || ''; return p ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : ''; };
 // Telefone de verdade (55 + DDD + número); chave só com LID não serve para o Studio.
@@ -50,6 +58,7 @@ function candidatas(agora = Date.now()) {
   let contatos = null; try { contatos = require('./contatos'); } catch (_) {}
   let tagAluna = '0. aluna'; try { tagAluna = semAcento(require('./auto-tag-alunas').ler().tagAluna || tagAluna).trim(); } catch (_) {}
   const reg = ler();
+  const soTags = lerCfg().tags.map(t => semAcento(t).trim());
   const out = [];
   for (const [chave, c] of Object.entries(convs)) {
     const msgs = Array.isArray(c && c.msgs) ? c.msgs : [];
@@ -68,6 +77,7 @@ function candidatas(agora = Date.now()) {
     else if (reg[l8] && reg[l8].ultimaContato === ult) item.motivo = 'já recebeu a retomada neste período';
     else if (tags.includes(tagAluna) || fe.virouAluna(tel)) item.motivo = 'é aluna';
     else if (tags.some(t => /sem interesse/.test(t))) item.motivo = 'tag "sem interesse"';
+    else if (soTags.length && !tags.some(t => soTags.includes(t.trim()))) item.motivo = 'não tem a tag escolhida';
     else if (fe.agendouDepois(tel, agora - 30 * 86400e3)) item.motivo = 'agendou aula experimental';
     else { try { if (sofia.estaBloqueado(chave) || sofia.estaNaoResponder(chave)) item.motivo = 'bloqueada / "não responder" na SoFIA'; } catch (_) {} }
     out.push(item);
@@ -111,4 +121,4 @@ async function runRetomada({ log = console.log, dry = false } = {}) {
   return res;
 }
 
-module.exports = { candidatas, runRetomada, ler, CONTEXTO };
+module.exports = { candidatas, runRetomada, ler, lerCfg, salvarCfg, CONTEXTO };
