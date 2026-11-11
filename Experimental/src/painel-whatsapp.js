@@ -157,7 +157,7 @@ function paginaMensagens(aviso, erro) {
     return html + (resto.length ? `<details class="msg-bloco" id="blk-outras"><summary>🗂️ Outras <small>· ${resto.length}</small></summary>${resto.map(cardDe).join('\n')}</details>` : '');
   };
   const itensIndividuais = emBlocos(indivOrdenado, [
-    ['leads', '💬 Leads da SoFIA', 'quem conversou com a SoFIA e parou de responder', ['retomada_sofia']],
+    ['leads', '💬 Leads da SoFIA', 'quem conversou com a SoFIA e parou de responder', ['retomada_sofia', 'retomada_encerramento']],
     ['alunas-novas', '🎉 Alunas novas', 'boas-vindas, renovação e indicação', ['boasvindas_nova', 'boasvindas_retorno', 'boasvindas_renovacao', 'indicacao_30d']],
     ['confirmacao', '📅 Confirmação de aula', 'lembrete antes da aula', ['confirmacao_hoje', 'confirmacao_amanha', 'confirmacao_sem_resposta', 'confirmacao_sem_resposta_equipe', 'confirmacao_experimental', 'confirmacao_experimental_express']],
     ['contratos', '📄 Contratos e renovação', 'vencimento, renovação e saída', ['renovacao', 'vence_hoje', 'assinatura_contrato', 'saida_grupos']],
@@ -821,6 +821,7 @@ const HORARIOS_DA_MSG = {
   no_show:             [['noShowMorning', 'Manhã'], ['noShowAfternoon', 'Tarde']],
   followup_encerramento: [['encerramentoManha', 'para o follow-up da manhã (de ontem)'], ['encerramentoTarde', 'para o follow-up da tarde (de ontem)']],
   retomada_sofia:        [['retomadaSofia', '']],
+  retomada_encerramento: [['retomadaEncerra', 'no dia seguinte à retomada']],
   boasvindas_nova:       [['boasVindas', '']],
   boasvindas_retorno:    'compartilha:boasvindas',
   boasvindas_renovacao:  'compartilha:boasvindas',
@@ -892,7 +893,7 @@ function cardDeMsg(m, hmap, voltar) {
   }
   const sw = switchEnvio(jobsDoCard(m.chave));
   const opts = /^cobranca_/.test(m.chave) ? { cobranca: true } : undefined;
-  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : (m.chave === 'assinatura_contrato') ? blocoAssinaturas() : (m.chave === 'confirmacao_sem_resposta') ? blocoTesteSemResposta() : (m.chave === 'retomada_sofia') ? blocoRetomada() : (m.chave === 'boasvindas_nova') ? blocoBoasVindas() : (m.chave === 'indicacao_30d') ? blocoIndicacao() : (m.chave === 'followup_encerramento') ? blocoTesteEncerramento('followup') : (m.chave === 'noshow_encerramento') ? blocoTesteEncerramento('noshow') : (m.chave === 'sentimos_falta_1') ? blocoSentimos() : '';
+  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : (m.chave === 'assinatura_contrato') ? blocoAssinaturas() : (m.chave === 'confirmacao_sem_resposta') ? blocoTesteSemResposta() : (m.chave === 'retomada_sofia') ? blocoRetomada() : (m.chave === 'boasvindas_nova') ? blocoBoasVindas() : (m.chave === 'indicacao_30d') ? blocoIndicacao() : (m.chave === 'followup_encerramento') ? blocoTesteEncerramento('followup') : (m.chave === 'noshow_encerramento') ? blocoTesteEncerramento('noshow') : (m.chave === 'retomada_encerramento') ? blocoTesteEncerramento('retomada') : (m.chave === 'sentimos_falta_1') ? blocoSentimos() : '';
   return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar, opts)}${hbloco}${extra}</div>`;
 }
 
@@ -1021,11 +1022,11 @@ function blocoTesteSemResposta() {
 
 // 🧪 Teste do encerramento do follow-up com o Número para testes.
 function blocoTesteEncerramento(origem) {
-  const ns = origem === 'noshow', id = ns ? 'feMsgNs' : 'feMsg', oque = ns ? 'mensagem de falta' : 'follow-up';
+  const ns = origem === 'noshow', rt = origem === 'retomada', id = ns ? 'feMsgNs' : rt ? 'feMsgRt' : 'feMsg', oque = ns ? 'mensagem de falta' : rt ? 'retomada' : 'follow-up';
   return `<div class="hsec"><div class="hsec-t">🧪 Testar com o seu número</div>
     <p class="quando" style="margin:0 0 8px">Usa o <b>Número para testes</b> (lá em cima). Nada vai para leads. Funciona mesmo com o envio desligado.</p>
     <ol class="quando" style="margin:0 0 8px;padding-left:18px;line-height:1.6">
-      <li>Mande ${ns ? 'uma' : 'um'} ${oque} de teste para o seu celular.</li>
+      <li>Mande ${ns || rt ? 'uma' : 'um'} ${oque} de teste para o seu celular.</li>
       <li>No celular: <b>responda</b>, <b>reaja</b> (❤️ 👍), ou <b>não faça nada</b>. Depois clique em <b>Conferir agora</b> — se você não respondeu, chega o encerramento; se respondeu, nada é enviado.</li>
     </ol>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1247,7 +1248,7 @@ const JOBS_DO_LOG = [
   [/^Retomada SoFIA \(simulação/i, 'retomadaDry', true, 'Simulação da retomada (não envia)'],
   [/^Retomada SoFIA/i, 'retomada', true, 'Retomada: só manda para quem ainda não recebeu neste período'],
   [/^Follow-up encerramento \(simulação/i, 'encerramentoDry', true, 'Simulação do encerramento (não envia)'],
-  [/^Follow-up encerramento|^Faltou encerramento/i, 'encerramento', true, 'Encerramento: só manda para quem ainda não recebeu'],
+  [/^Follow-up encerramento|^Faltou encerramento|^Retomada encerramento/i, 'encerramento', true, 'Encerramento: só manda para quem ainda não recebeu'],
   [/^Confirmação sem resposta \(2ª mensagem\)|^Confirmação sem resposta \(simulação/i, 'semResposta', true, 'Confirmação sem resposta: só manda para quem ainda não recebeu a 2ª mensagem'],
   [/^Confirmação sem resposta \(lista da equipe\)/i, 'semRespostaEquipe', true, 'Confirmação sem resposta: cada pessoa entra na lista uma vez'],
   [/^Grade→formulário/i, 'slotsPush', true, 'Atualiza os horários do formulário'],

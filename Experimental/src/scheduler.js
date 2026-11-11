@@ -1166,18 +1166,20 @@ async function main() {
   // Follow-up — ENCERRAMENTO: no dia seguinte ao follow-up pós-aula, para quem não
   // respondeu (desligado até ligar). Cada horário cuida de um follow-up (manhã/tarde).
   // Faltou (no-show) — ENCERRAMENTO: idem, no dia seguinte à mensagem de falta.
+  // Retomada — ENCERRAMENTO: idem, no dia seguinte à retomada pelo Studio.
   for (const [chave, periodo, origem, rot] of [
     ['encerramentoManha', 'manha', 'followup', 'Follow-up encerramento'], ['encerramentoTarde', 'tarde', 'followup', 'Follow-up encerramento'],
     ['noShowEncerraManha', 'manha', 'noshow', 'Faltou encerramento'], ['noShowEncerraTarde', 'tarde', 'noshow', 'Faltou encerramento'],
+    ['retomadaEncerra', '', 'retomada', 'Retomada encerramento'],
   ]) {
     if (!config.schedule[chave]) continue;
     agendar(chave, config.schedule[chave], async () => {
-      if (!jobsAtivos.ativo(chave)) { log(`⏸️  ${rot} (${periodo}) desligado no painel — pulando`); return; }
-      log(`⏰ Cron disparado: ${rot} (${periodo})`);
-      runJob(`${rot} (${periodo})`, () => require('./followup-encerramento').runEncerramento({ log, periodo, origem }), 25 * 60 * 1000, { retry: false })
-        .catch(err => logError(`${rot} (${periodo})`, err));
+      if (!jobsAtivos.ativo(chave)) { log(`⏸️  ${rot}${periodo ? ` (${periodo})` : ''} desligado no painel — pulando`); return; }
+      log(`⏰ Cron disparado: ${rot}${periodo ? ` (${periodo})` : ''}`);
+      runJob(`${rot}${periodo ? ` (${periodo})` : ''}`, () => require('./followup-encerramento').runEncerramento({ log, periodo, origem }), 25 * 60 * 1000, { retry: false })
+        .catch(err => logError(`${rot}${periodo ? ` (${periodo})` : ''}`, err));
     }, { timezone: 'America/Sao_Paulo' });
-    log(`📅 Job ${rot.toUpperCase()} (${periodo}) agendado: ${config.schedule[chave]} — ${jobsAtivos.ativo(chave) ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
+    log(`📅 Job ${rot.toUpperCase()}${periodo ? ` (${periodo})` : ''} agendado: ${config.schedule[chave]} — ${jobsAtivos.ativo(chave) ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
   }
 
   // Boas-vindas (nova/voltou/renovou) e Indicação 30 dias (desligados até ligar).

@@ -2,7 +2,9 @@
  * ENCERRAMENTO da conversa (WhatsApp → Configuração → Follow-up e remarcação).
  * Serve para duas mensagens, cada uma com o seu texto e os seus horários:
  *   - origem 'followup': depois do follow-up pós-aula (ainda não fechou);
- *   - origem 'noshow':   depois do "Faltou (no-show) — convite para remarcar".
+ *   - origem 'noshow':   depois do "Faltou (no-show) — convite para remarcar";
+ *   - origem 'retomada': depois da retomada pelo Studio (parou de responder a SoFIA)
+ *     — aqui também conta resposta dada à SoFIA.
  *
  * 1) Todo envio dessas mensagens fica registrado aqui (telefone, nome,
  *    professora, manhã/tarde, quando saiu).
@@ -27,6 +29,7 @@ const CONTEXTO = 'Follow-up — encerramento';
 const ORIGENS = {
   followup: { msg: 'followup_encerramento', contexto: 'Follow-up — encerramento', origemMsg: 'followup' },
   noshow:   { msg: 'noshow_encerramento',   contexto: 'Faltou — encerramento',    origemMsg: 'no_show' },
+  retomada: { msg: 'retomada_encerramento', contexto: 'Retomada — encerramento', origemMsg: 'retomada_sofia', oque: 'retomada' },
 };
 const origemDe = (r) => (r && ORIGENS[r.origem]) ? r.origem : 'followup';
 const ESPERA_MIN_MS = 18 * 3600e3;   // "dia seguinte": pelo menos 18h depois do follow-up
@@ -78,15 +81,30 @@ function agendouDepois(tel, desde) {
   } catch (_) { return false; }
 }
 
+// Escreveu para a SoFIA depois do envio? (a retomada sai pelo Studio, mas ela pode responder à SoFIA)
+function falouComSofia(tel, desde) {
+  const l8 = String(tel || '').replace(/\D/g, '').slice(-8);
+  if (!l8) return false;
+  try {
+    const convs = require('./sofia-editor').conversas() || {};
+    for (const [chave, c] of Object.entries(convs)) {
+      if (String(chave).replace(/\D/g, '').slice(-8) !== l8) continue;
+      if ((c.msgs || []).some(m => m && m.autor === 'aluna' && m.tipo !== 'automatica' && (m.em || 0) >= desde)) return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
 async function situacao(wa, r) {
   const c = await wa.conferirResposta(r.tel, r.enviadoEm);
   if (c.respondeu) return c.reagiu ? 'reagiu' : 'respondeu';
+  if (origemDe(r) === 'retomada' && falouComSofia(r.tel, r.enviadoEm)) return 'sofia';
   if (c.humano) return 'recepcao';
   if (virouAluna(r.tel)) return 'aluna';
   if (agendouDepois(r.tel, r.enviadoEm)) return 'agendou';
   return 'silencio';
 }
-const MOTIVO = { respondeu: 'respondeu', reagiu: 'reagiu à mensagem', recepcao: 'a recepção já falou com ela', aluna: 'virou aluna', agendou: 'agendou de novo' };
+const MOTIVO = { sofia: 'respondeu à SoFIA', respondeu: 'respondeu', reagiu: 'reagiu à mensagem', recepcao: 'a recepção já falou com ela', aluna: 'virou aluna', agendou: 'agendou de novo' };
 const texto = (r) => mensagens.render(ORIGENS[origemDe(r)].msg, { nome: primeiro(r.nome), professora: primeiro(r.professora) || 'a professora' });
 
 // periodo (opcional): 'manha' | 'tarde' — cada horário cuida de um envio.
@@ -95,7 +113,7 @@ async function runEncerramento({ log = console.log, dry = false, periodo = '', o
   const o = ler(), agora = Date.now();
   const fila = Object.entries(o).filter(([, r]) => !r.teste && (!periodo || r.periodo === periodo) && (!origem || origemDe(r) === origem) && !r.encerrado && !r.resolvido
     && agora - (r.enviadoEm || 0) >= ESPERA_MIN_MS && agora - (r.enviadoEm || 0) <= ESPERA_MAX_MS);
-  log(`👋 Encerramento${origem ? ` (${origem === 'noshow' ? 'faltou' : 'follow-up'})` : ''}${periodo ? ` (${periodo})` : ''}: ${fila.length} para conferir.`);
+  log(`👋 Encerramento${origem ? ` (${origem === 'noshow' ? 'faltou' : origem === 'retomada' ? 'retomada' : 'follow-up'})` : ''}${periodo ? ` (${periodo})` : ''}: ${fila.length} para conferir.`);
   if (fila.length > MAX_POR_VEZ) throw new Error(`${fila.length} de uma vez (limite ${MAX_POR_VEZ}) — não enviei nada.`);
   const wa = require('./wa-client');
   const res = { enviadas: 0, puladas: 0, erros: 0 };
@@ -130,7 +148,7 @@ async function testar({ etapa, tel, origem = 'followup' } = {}) {
     await wa.sendTexto(t, msg, ORIGENS[org].contexto + ' (teste)', ORIGENS[org].origemMsg);
     o[k] = { tel: t, nome: 'Teste', professora: 'Professora', periodo: 'manha', origem: org, enviadoEm: Date.now(), teste: true };
     gravar(o);
-    return { msg: `${org === 'noshow' ? 'Mensagem de falta' : 'Follow-up'} de teste enviado. Agora responda, reaja ou ignore no celular e clique em "2) Conferir agora".` };
+    return { msg: `${org === 'noshow' ? 'Mensagem de falta' : org === 'retomada' ? 'Retomada' : 'Follow-up'} de teste enviada. Agora responda, reaja ou ignore no celular e clique em "2) Conferir agora".` };
   }
   const r = o[k];
   if (!r) throw new Error('mande primeiro a mensagem de teste (botão 1).');

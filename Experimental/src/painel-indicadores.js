@@ -1974,7 +1974,7 @@ function paginaSaude(list, extra = {}) {
         noShowMorning: ['noShowMorning', false], noShowAfternoon: ['noShowAfternoon', false], aniversariantes: ['aniversariantes', false], aniversarioEx: ['aniversarioEx', false],
         renewal: ['renovacao', false], resumoDia: ['resumoDia', false], venceHoje: ['venceHoje', true], assinaturas: ['assinaturas', true], saidaGrupos: ['saidaGrupos', true],
         sentimosFalta: ['sentimosFalta', true], inadimplentes: ['inadimplentes', true], inadimplentesHoje: ['inadimplentesHoje', true], freeAntecedencia: ['freeAntecedencia', true],
-        encerramentoManha: ['encerramento', true], encerramentoTarde: ['encerramento', true], noShowEncerraManha: ['encerramento', true], noShowEncerraTarde: ['encerramento', true],
+        encerramentoManha: ['encerramento', true], encerramentoTarde: ['encerramento', true], noShowEncerraManha: ['encerramento', true], noShowEncerraTarde: ['encerramento', true], retomadaEncerra: ['encerramento', true],
         semResposta1: ['semResposta', true], semResposta2: ['semResposta', true], semRespostaEquipe1: ['semRespostaEquipe', true], semRespostaEquipe2: ['semRespostaEquipe', true],
         slotsPushDia: ['slotsPush', true], slotsPushNoite: ['slotsPush', true], gradeFixas: ['gradeFixas', true], ativasFoto: ['ativasFoto', true],
         histExperimentais: ['historicoExperimentais', true], planilhaAniv: ['planilha', true], retomadaSofia: ['retomada', true], boasVindas: ['boasVindas', true], indicacao30: ['indicacao', true],

@@ -108,6 +108,7 @@ async function runRetomada({ log = console.log, dry = false } = {}) {
     try {
       await wa.sendTexto(x.tel, mensagens.render('retomada_sofia', { nome: primeiro(x.nome) }), CONTEXTO, 'retomada_sofia');
       reg[l8] = { ultimaContato: x.ultimaContato, enviadoEm: Date.now(), nome: x.nome };
+      try { require('./followup-encerramento').registrarFollowup({ telefone: x.tel, nome: x.nome, origem: 'retomada' }); } catch (_) {}
       res.enviadas++; log(`   💬 ${x.nome}: retomada enviada.`);
     } catch (e) { res.erros++; log(`   ⚠️  ${x.nome}: não enviei — ${e.message}`); }
     await sleep(8000 + Math.floor(Math.random() * 2000));
