@@ -158,6 +158,7 @@ function paginaMensagens(aviso, erro) {
   };
   const itensIndividuais = emBlocos(indivOrdenado, [
     ['leads', '💬 Leads da SoFIA', 'quem conversou com a SoFIA e parou de responder', ['retomada_sofia']],
+    ['alunas-novas', '🎉 Alunas novas', 'boas-vindas, renovação e indicação', ['boasvindas_nova', 'boasvindas_retorno', 'boasvindas_renovacao', 'boasvindas_equipe', 'indicacao_30d']],
     ['confirmacao', '📅 Confirmação de aula', 'lembrete antes da aula', ['confirmacao_hoje', 'confirmacao_amanha', 'confirmacao_sem_resposta', 'confirmacao_sem_resposta_equipe', 'confirmacao_experimental', 'confirmacao_experimental_express']],
     ['contratos', '📄 Contratos e renovação', 'vencimento, renovação e saída', ['renovacao', 'vence_hoje', 'assinatura_contrato', 'saida_grupos']],
     ['followup', '🔁 Follow-up e remarcação', 'depois da aula experimental', ['followup', 'followup_encerramento', 'followup_aluna', 'no_show', 'noshow_encerramento']],
@@ -820,6 +821,11 @@ const HORARIOS_DA_MSG = {
   no_show:             [['noShowMorning', 'Manhã'], ['noShowAfternoon', 'Tarde']],
   followup_encerramento: [['encerramentoManha', 'para o follow-up da manhã (de ontem)'], ['encerramentoTarde', 'para o follow-up da tarde (de ontem)']],
   retomada_sofia:        [['retomadaSofia', '']],
+  boasvindas_nova:       [['boasVindas', '']],
+  boasvindas_retorno:    'compartilha:boasvindas',
+  boasvindas_renovacao:  'compartilha:boasvindas',
+  boasvindas_equipe:     'compartilha:boasvindas',
+  indicacao_30d:         [['indicacao30', '']],
   noshow_encerramento:   [['noShowEncerraManha', 'para a falta da manhã (de ontem)'], ['noShowEncerraTarde', 'para a falta da tarde/noite (de ontem)']],
   renovacao:           [['renewal', '']],
   saida_grupos:        [['saidaGrupos', '']],
@@ -873,6 +879,9 @@ function cardDeMsg(m, hmap, voltar) {
   } else if (mapa === 'compartilha:cobranca') {
     hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
       <p class="quando" style="margin:0">Segue o <b>mesmo horário da Cobrança — recorrente</b>, logo acima — é o mesmo disparo, muda só o texto conforme o caso (recorrente = link de pagamento; boleto vencido = boleto; saldo devedor sem boleto = este texto, sem link). A <b>"boleto vence HOJE"</b> tem horário/dias próprios (no card dela).</p></div>`;
+  } else if (mapa === 'compartilha:boasvindas') {
+    hbloco = `<div class="hsec"><div class="hsec-t">Horário</div>
+      <p class="quando" style="margin:0">Sai no <b>mesmo disparo das Boas-vindas — aluna nova</b>, logo acima (o horário e o botão Ativado de lá valem para todas). Cada tipo pode ser ligado/desligado no quadro "Para quem" de lá.</p></div>`;
   } else if (mapa === 'compartilha:bloqueioapp') {
     hbloco = `<div class="hsec"><div class="hsec-t">Quando sai</div>
       <p class="quando" style="margin:0">Não tem horário próprio: sai <b>na hora em que o robô recria o acesso ao app</b> (na cobrança do dia seguinte ao pagamento), só com o <b>Bloqueio do app ligado</b>.</p></div>`;
@@ -884,7 +893,7 @@ function cardDeMsg(m, hmap, voltar) {
   }
   const sw = switchEnvio(jobsDoCard(m.chave));
   const opts = /^cobranca_/.test(m.chave) ? { cobranca: true } : undefined;
-  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : (m.chave === 'assinatura_contrato') ? blocoAssinaturas() : (m.chave === 'confirmacao_sem_resposta') ? blocoTesteSemResposta() : (m.chave === 'retomada_sofia') ? blocoRetomada() : (m.chave === 'followup_encerramento') ? blocoTesteEncerramento('followup') : (m.chave === 'noshow_encerramento') ? blocoTesteEncerramento('noshow') : (m.chave === 'sentimos_falta_1') ? blocoSentimos() : '';
+  const extra = (m.chave === 'renovacao') ? blocoRenovDias() : (m.chave === 'aniversario') ? blocoAnivExcluir() : (m.chave === 'saida_grupos') ? blocoSaidas() : (m.chave === 'vence_hoje') ? blocoVenceHoje() : (m.chave === 'assinatura_contrato') ? blocoAssinaturas() : (m.chave === 'confirmacao_sem_resposta') ? blocoTesteSemResposta() : (m.chave === 'retomada_sofia') ? blocoRetomada() : (m.chave === 'boasvindas_nova') ? blocoBoasVindas() : (m.chave === 'indicacao_30d') ? blocoIndicacao() : (m.chave === 'followup_encerramento') ? blocoTesteEncerramento('followup') : (m.chave === 'noshow_encerramento') ? blocoTesteEncerramento('noshow') : (m.chave === 'sentimos_falta_1') ? blocoSentimos() : '';
   return `<div class="card" style="position:relative">${sw}${cardMensagem(m, voltar, opts)}${hbloco}${extra}</div>`;
 }
 
@@ -1044,6 +1053,38 @@ function blocoTesteEncerramento(origem) {
   </div>`;
 }
 
+// Boas-vindas: tipos ligados + quem entrou nos últimos dias (prévia pela leitura do EVO).
+function blocoBoasVindas() {
+  let cfg = { nova: true, retorno: true, renovacao: true, equipe: true, desde: '' }, lista = [];
+  try { const bv = require('./boas-vindas'); cfg = bv.lerCfg(); lista = bv.entradas(); } catch (_) {}
+  const TIPO = { nova: '🎉 aluna nova', retorno: '💚 voltou', renovacao: '🔁 renovou' };
+  const br = (d) => d ? d.split('-').reverse().join('/') : '';
+  const chk = (k, rot) => `<label class="chk" style="margin:0;font-weight:500"><input type="checkbox" name="${k}" value="1"${cfg[k] ? ' checked' : ''}> ${rot}</label>`;
+  const linha = (x) => `<div class="sg-row${x.motivo ? ' fora' : ''}"><b>${esc(x.nome)}</b> <span class="quando" style="margin:0">${TIPO[x.tipo]} · ${esc(x.plano)} · começou ${br(x.inicio)}${x.motivo ? ' — ' + esc(x.motivo) : ''}</span></div>`;
+  const vai = lista.filter(x => !x.motivo), fora = lista.filter(x => x.motivo);
+  return `<div class="hsec" id="boasvindas"><div class="hsec-t">Para quem</div>
+    <form method="POST" action="/boasvindas/cfg" style="margin:0">
+      <div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 8px">${chk('nova', 'Aluna nova')}${chk('retorno', 'Ex-aluna voltando')}${chk('renovacao', 'Renovação')}${chk('equipe', 'Aviso no grupo da equipe')}</div>
+      <button type="submit" class="save">Salvar</button>
+    </form>
+    <p class="quando" style="margin:8px 0 0">O robô lê os contratos no EVO de manhã (05:25). Aluna <b>nova</b> = primeiro contrato no Studio; <b>voltou</b> = já foi aluna, ficou um tempo fora e voltou; <b>renovou</b> = contrato novo emendado no anterior. Se o contrato ainda não foi assinado, a mensagem leva o link de assinatura ({assinatura}). ${cfg.desde ? `Vale para contratos a partir de <b>${br(cfg.desde)}</b>.` : 'Só vale <b>daqui pra frente</b>: a partir do dia em que rodar pela primeira vez.'}</p>
+  </div>
+  <div class="hsec"><div class="hsec-t">Contratos novos (últimos 3 dias)</div>
+    <div class="sg-ult"><b>${vai.length}</b> receberia(m) se rodasse agora · ${fora.length} fora</div>
+    ${vai.length ? `<div class="sg-lista">${vai.map(linha).join('')}</div>` : ''}
+    ${fora.length ? `<details class="sg-fora"><summary>Ficaram de fora (${fora.length})</summary>${fora.map(linha).join('')}</details>` : ''}
+    <style>.sg-row{padding:7px 0;border-top:1px solid var(--linha-soft);font-size:.88rem}.sg-row:first-child{border-top:0}.sg-row.fora{opacity:.75}</style>
+  </div>`;
+}
+function blocoIndicacao() {
+  let lista = [];
+  try { lista = require('./boas-vindas').paraIndicacao(); } catch (_) {}
+  const br = (d) => d ? d.split('-').reverse().join('/') : '';
+  return `<div class="hsec"><div class="hsec-t">Completando 30 dias agora</div>
+    ${lista.length ? lista.map(x => `<div class="sg-row${x.motivo ? ' fora' : ''}"><b>${esc(x.nome)}</b> <span class="quando" style="margin:0">começou ${br(x.inicio)}${x.motivo ? ' — ' + esc(x.motivo) : ''}</span></div>`).join('') : '<p class="quando" style="margin:0">Ninguém completando 30 dias nos próximos envios.</p>'}
+  </div>`;
+}
+
 // Retomada (SoFIA → Studio): quem está no ponto AGORA (prévia — a conversa do Studio
 // é conferida na hora do envio: quem a recepção já chamou fica de fora).
 function blocoRetomada() {
@@ -1199,6 +1240,9 @@ const JOBS_DO_LOG = [
   [/^Cobrança — boleto vence hoje/i, 'inadimplentesHoje', true, 'Boleto vence hoje: manda só para quem ainda não recebeu hoje'],
   [/^Planos FREE/i, 'freeAntecedencia', true, 'Planos FREE'],
   [/^Leitura das alunas ativas|^Planilha/i, 'planilha', true, 'Leitura das alunas ativas (tags + planilha)'],
+  [/^Boas-vindas \(simulação/i, 'boasVindasDry', true, 'Simulação das boas-vindas (não envia)'],
+  [/^Boas-vindas/i, 'boasVindas', true, 'Boas-vindas: só manda para quem ainda não recebeu'],
+  [/^Indicação 30 dias/i, 'indicacao', true, 'Indicação: só manda para quem ainda não recebeu'],
   [/^Retomada SoFIA \(simulação/i, 'retomadaDry', true, 'Simulação da retomada (não envia)'],
   [/^Retomada SoFIA/i, 'retomada', true, 'Retomada: só manda para quem ainda não recebeu neste período'],
   [/^Follow-up encerramento \(simulação/i, 'encerramentoDry', true, 'Simulação do encerramento (não envia)'],

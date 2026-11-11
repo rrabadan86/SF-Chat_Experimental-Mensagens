@@ -768,6 +768,9 @@ function iniciarRodarJobWatcher() {
     // "↻ Rodar de novo" do Log do painel (falhas de job):
     semResposta:       { nome: 'Confirmação sem resposta (2ª mensagem) [manual]', fn: () => require('./confirmacao-sem-resposta').runSegundaMensagem({ log }), timeoutMs: 25 * 60 * 1000 },
     semRespostaDry:    { nome: 'Confirmação sem resposta (simulação) [manual]', fn: () => require('./confirmacao-sem-resposta').runSegundaMensagem({ log, dry: true }), timeoutMs: 25 * 60 * 1000 },
+    boasVindas:        { nome: 'Boas-vindas [manual]', fn: () => require('./boas-vindas').runBoasVindas({ log }), timeoutMs: 25 * 60 * 1000 },
+    boasVindasDry:     { nome: 'Boas-vindas (simulação) [manual]', fn: () => require('./boas-vindas').runBoasVindas({ log, dry: true }), timeoutMs: 25 * 60 * 1000 },
+    indicacao:         { nome: 'Indicação 30 dias [manual]', fn: () => require('./boas-vindas').runIndicacao({ log }), timeoutMs: 25 * 60 * 1000 },
     retomada:          { nome: 'Retomada SoFIA [manual]', fn: () => require('./retomada-sofia').runRetomada({ log }), timeoutMs: 25 * 60 * 1000 },
     retomadaDry:       { nome: 'Retomada SoFIA (simulação) [manual]', fn: () => require('./retomada-sofia').runRetomada({ log, dry: true }), timeoutMs: 25 * 60 * 1000 },
     encerramento:      { nome: 'Follow-up encerramento [manual]', fn: () => require('./followup-encerramento').runEncerramento({ log }), timeoutMs: 25 * 60 * 1000 },
@@ -1175,6 +1178,18 @@ async function main() {
         .catch(err => logError(`${rot} (${periodo})`, err));
     }, { timezone: 'America/Sao_Paulo' });
     log(`📅 Job ${rot.toUpperCase()} (${periodo}) agendado: ${config.schedule[chave]} — ${jobsAtivos.ativo(chave) ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
+  }
+
+  // Boas-vindas (nova/voltou/renovou) e Indicação 30 dias (desligados até ligar).
+  for (const [chave, rot, fn] of [['boasVindas', 'Boas-vindas', 'runBoasVindas'], ['indicacao30', 'Indicação 30 dias', 'runIndicacao']]) {
+    if (!config.schedule[chave]) continue;
+    agendar(chave, config.schedule[chave], async () => {
+      if (!jobsAtivos.ativo(chave)) { log(`⏸️  ${rot} desligado no painel — pulando`); return; }
+      log(`⏰ Cron disparado: ${rot}`);
+      runJob(rot, () => require('./boas-vindas')[fn]({ log }), 25 * 60 * 1000, { retry: false })
+        .catch(err => logError(rot, err));
+    }, { timezone: 'America/Sao_Paulo' });
+    log(`📅 Job ${rot.toUpperCase()} agendado: ${config.schedule[chave]} — ${jobsAtivos.ativo(chave) ? 'ligado' : 'DESLIGADO (ligue no painel)'}`);
   }
 
   // Retomada pelo Studio de quem parou de responder a SoFIA (desligado até ligar).

@@ -1054,6 +1054,8 @@ const server = http.createServer(protegido((req, res) => {
     else if (/(?:^|&)errdias=1/.test(q)) { aviso = '⚠️ Use um número de 1 a 60 dias.'; erro = true; }
     else if (/(?:^|&)oksim=1/.test(q)) aviso = '🧪 Simulação pedida ao robô — em 1 a 2 minutos, atualize a página: o resultado aparece no cartão "Saída — não renovou".';
     else if (/(?:^|&)oksfcfg=1/.test(q)) aviso = '✅ Sentimos sua falta: dias salvos — vale no próximo disparo, sem reiniciar.';
+    else if (/(?:^|&)okbvcfg=1/.test(q)) aviso = '✅ Boas-vindas: tipos salvos — vale no próximo disparo, sem reiniciar.';
+    else if (/(?:^|&)errbvcfg=1/.test(q)) { aviso = '⚠️ Não consegui salvar os tipos das boas-vindas.'; erro = true; }
     else if (/(?:^|&)okrtcfg=1/.test(q)) aviso = '✅ Retomada (SoFIA → Studio): tags salvas — vale no próximo disparo, sem reiniciar.';
     else if (/(?:^|&)errrtcfg=1/.test(q)) { aviso = '⚠️ Não consegui salvar as tags da retomada.'; erro = true; }
     else if (/(?:^|&)errsfcfg=1/.test(q)) { aviso = '⚠️ Sentimos sua falta: use de 7 a 120 dias sem treinar e de 3 a 60 dias entre as mensagens.'; erro = true; }
@@ -1516,6 +1518,16 @@ const server = http.createServer(protegido((req, res) => {
     });
   }
 
+  // Boas-vindas: quais tipos enviar (nova / voltou / renovou / aviso à equipe).
+  if (req.method === 'POST' && url === '/boasvindas/cfg') {
+    return lerCorpo(req, 1e4, corpo => {
+      const p = new URLSearchParams(corpo);
+      let r = null;
+      try { r = require('./boas-vindas').salvarCfg({ nova: p.get('nova') === '1', retorno: p.get('retorno') === '1', renovacao: p.get('renovacao') === '1', equipe: p.get('equipe') === '1' }); } catch (_) {}
+      try { if (r) auditoria.registrar(sess.usuario, 'boasvindas.cfg', ['nova', 'retorno', 'renovacao', 'equipe'].filter(k => r[k]).join(', ') || 'nenhum', ''); } catch (_) {}
+      res.writeHead(303, { Location: '/?view=config&' + (r ? 'okbvcfg=1' : 'errbvcfg=1') + '#boasvindas' }); res.end();
+    });
+  }
   // Retomada (SoFIA → Studio): só para quem tem as tags escolhidas.
   if (req.method === 'POST' && url === '/retomada/cfg') {
     return lerCorpo(req, 1e5, corpo => {

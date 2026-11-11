@@ -69,6 +69,45 @@ const CATALOGO = [
     exemplos: { lista: '• 16:15 (hoje) — Lilian Carneiro — (62) 98322-0000\n• 18:15 (hoje) — Carla Mendes — (62) 99111-2222' },
   },
   {
+    chave: 'boasvindas_nova',
+    titulo: 'Boas-vindas — aluna nova',
+    quando: 'Sai para quem acabou de fazer o PRIMEIRO contrato no Studio (lido no EVO de manhã; contratos dos últimos 3 dias). Uma vez. {assinatura} vira a frase com o link de assinatura quando o contrato ainda não foi assinado (ou fica vazio).',
+    vars: [['nome', 'primeiro nome da aluna'], ['plano', 'nome do plano'], ['assinatura', 'frase com o link de assinatura (vazia se já assinou)'], ['link', 'só o link de assinatura (vazio se já assinou)']],
+    padrao: 'Oiee, {nome}! Seja muito bem-vinda ao Studio SlimFit! 🎉💚\n\nQue alegria ter você com a gente! A partir de agora você vai ter todo o nosso cuidado para alcançar os seus objetivos.\n\nAlgumas dicas para começar bem:\n📲 Agende e remarque as suas aulas pelo app;\n⏰ Chegue uns minutinhos antes para se preparar com calma;\n💧 Traga sua garrafinha de água e uma toalha.{assinatura}\n\nQualquer dúvida, é só chamar por aqui. Bons treinos! 💪🏼',
+    exemplos: { plano: 'SLIM 3X MENSAL', assinatura: '\n\n✍️ Para finalizar, é só assinar o seu contrato por aqui: https://evo-totem.w12app.com.br/EXEMPLO', link: 'https://evo-totem.w12app.com.br/EXEMPLO' },
+  },
+  {
+    chave: 'boasvindas_retorno',
+    titulo: 'Boas-vindas — ex-aluna voltando',
+    quando: 'Sai para quem já foi aluna, ficou um tempo fora e acabou de voltar com um contrato novo. Mesmo disparo das boas-vindas. Uma vez.',
+    vars: [['nome', 'primeiro nome da aluna'], ['plano', 'nome do plano'], ['assinatura', 'frase com o link de assinatura (vazia se já assinou)'], ['link', 'só o link de assinatura (vazio se já assinou)']],
+    padrao: 'Oiee, {nome}! Que alegria ter você de volta ao Studio SlimFit! 💚\n\nEstávamos com saudade! Vamos juntas retomar o ritmo e buscar os seus objetivos. 💪🏼{assinatura}\n\nQualquer dúvida, é só chamar por aqui. Bons treinos!',
+    exemplos: { plano: 'SLIM 3X MENSAL', assinatura: '\n\n✍️ Para finalizar, é só assinar o seu contrato por aqui: https://evo-totem.w12app.com.br/EXEMPLO', link: 'https://evo-totem.w12app.com.br/EXEMPLO' },
+  },
+  {
+    chave: 'boasvindas_renovacao',
+    titulo: 'Boas-vindas — renovação',
+    quando: 'Sai para quem RENOVOU (contrato novo emendado no anterior). Mesmo disparo das boas-vindas. Uma vez por contrato.',
+    vars: [['nome', 'primeiro nome da aluna'], ['plano', 'nome do plano'], ['assinatura', 'frase com o link de assinatura (vazia se já assinou)'], ['link', 'só o link de assinatura (vazio se já assinou)']],
+    padrao: 'Oiee, {nome}! Obrigada por renovar com o Studio SlimFit! 💚\n\nÉ muito bom continuar fazendo parte da sua evolução. Seguimos juntas! 💪🏼{assinatura}',
+    exemplos: { plano: 'SLIM 3X SEMESTRAL', assinatura: '\n\n✍️ Para finalizar, é só assinar o seu contrato por aqui: https://evo-totem.w12app.com.br/EXEMPLO', link: 'https://evo-totem.w12app.com.br/EXEMPLO' },
+  },
+  {
+    chave: 'boasvindas_equipe',
+    titulo: 'Boas-vindas — aviso para o grupo da equipe',
+    quando: 'Vai para o GRUPO DA EQUIPE logo depois das boas-vindas, com as alunas novas e as que voltaram (renovação não entra), para colocá-las nos grupos das turmas.',
+    vars: [['lista', 'uma linha por aluna: nome — plano (aluna nova / voltou)']],
+    padrao: '🎉 *Novas alunas — colocar nos grupos*\n\n{lista}',
+    exemplos: { lista: '• Ana Souza — SLIM 3X MENSAL (aluna nova 🎉)\n• Carla Mendes — SLIM 2X MENSAL (voltou 💚)' },
+  },
+  {
+    chave: 'indicacao_30d',
+    titulo: 'Indicação — 30 dias de aluna',
+    quando: 'Sai 30 dias depois que a aluna começou (aluna nova ou que voltou), se ela continua ativa. Uma vez por entrada.',
+    vars: [['nome', 'primeiro nome da aluna']],
+    padrao: 'Oiee, {nome}! Tudo bem? 😊\n\nJá faz um mês que você começou no Studio SlimFit — parabéns pela dedicação! 💪🏼\n\nQue tal trazer uma amiga para treinar com você? Ela pode vir conhecer o Studio numa aula experimental. É só me mandar o nome e o telefone dela que eu entro em contato! 💚',
+  },
+  {
     chave: 'retomada_sofia',
     titulo: 'Retomada — parou de responder a SoFIA (pelo número do Studio)',
     quando: 'Sai pelo número do STUDIO para quem conversou com a SoFIA e parou de responder (mesma janela do filtro "😴 Sem resposta há…" das Conversas: SoFIA → Configuração). Não vai para quem a recepção já chamou pelo Studio, quem agendou, alunas, "sem interesse", bloqueadas e respostas automáticas. Uma vez por período de silêncio.',
@@ -399,7 +438,7 @@ function removerFoto(chave) {
 // Todas as mensagens de WhatsApp aceitam foto (flyer), MENOS as text-only:
 //  • 'instagram' — DM do Instagram (canal diferente, tratado na aba Instagram);
 //  • 'ausentes'  — listagem de texto no grupo da equipe (enviada sem mídia).
-const SEM_FOTO = new Set(['confirmacao_sem_resposta_equipe', 'instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje', 'cobranca_saldo', 'cobranca_app_reativado']);
+const SEM_FOTO = new Set(['boasvindas_equipe', 'confirmacao_sem_resposta_equipe', 'instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje', 'cobranca_saldo', 'cobranca_app_reativado']);
 function aceitaFoto(chave) { const m = CATALOGO.find(x => x.chave === chave); return !!(m && !SEM_FOTO.has(m.chave)); }
 // ── Pacote de imagens (exportar/importar entre unidades) ─────────────────────
 // Um .json { tipo, versao, unidade, em, fotos: { <chave>: "data:image/...;base64,..." } }.
