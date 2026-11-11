@@ -67,7 +67,13 @@ function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra, canal
   if (String(motivo || '') === 'novo') {
     try { if (contatos.acharPorTel(tel)) return; } catch (_) {}
   }
-  try { contatos.adicionarTag(tel, nome || '', tag); } catch (_) {}
+  // Gatilhos genéricos ("lead novo", "mandou mensagem") cedem às regras das tags que a
+  // pessoa já tem; os específicos (intenção da IA, palavra-chave, campanha, agendou,
+  // encerrou…) valem — ex.: "Sem interesse" fica mesmo em quem já "Fez Aula".
+  const ceder = ['novo', 'mensagem'].includes(String(motivo || ''));
+  let ficou = true;
+  try { ficou = contatos.adicionarTag(tel, nome || '', tag, { ceder }) !== false; } catch (_) {}
+  if (!ficou) return; // não entrou (já está mais à frente no funil): sem log de "aplicada" e sem aviso
   // Marca no timeline da conversa o momento exato em que a tag foi aplicada pela
   // automação (igual aos marcadores de assumir/encerrar) — ajuda a diagnosticar.
   // Grava TAMBÉM o canal do agendamento (sofia/formulario/express) no evento, para
