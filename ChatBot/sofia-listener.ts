@@ -268,8 +268,10 @@ function lerPareamentoBoot(): string {
   try {
     const o = JSON.parse(fs.readFileSync(PAREAR_FILE, "utf8")) || {};
     const num = String(o.numero || "").replace(/\D/g, "");
-    if (num.length >= 10 && Date.now() - (+o.em || 0) < 15 * 60_000) return num;
+    // Vale UMA subida: apaga já. Se o código não sair, o próximo reinício volta ao
+    // QR — sem isso o watchdog reiniciava e ficava pedindo código em laço.
     fs.rmSync(PAREAR_FILE, { force: true });
+    if (num.length >= 10 && Date.now() - (+o.em || 0) < 15 * 60_000) return num;
   } catch { /* sem pedido */ }
   return (process.env.SOFIA_PAIR_NUMBER || "").replace(/\D/g, "");
 }
@@ -3090,4 +3092,13 @@ armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia
 // Rede instável e páginas que somem geram rejeições soltas. Registrar em vez de
 // deixar o Node derrubar o processo evita que uma falha passageira vire um laço
 // de reinício — o watchdog continua cuidando do caso de travar de verdade.
-process.on("unhandledRejection", (e: any) => log("aviso: promessa rejeitada sem tratamento — " + (e?.message || e)));
+process.on("unhandledRejection", (e: any) => {
+  log("aviso: promessa rejeitada sem tratamento — " + (e?.message || e));
+  // No modo código, a biblioteca pede o código sem tratar o erro: se o WhatsApp
+  // recusa (erro interno "t"), cai aqui. Volta ao QR na hora, com aviso no painel.
+  if (PAIR_BOOT && !pronta && !codigoPareamento) {
+    log("o WhatsApp recusou o pedido do código de pareamento — voltando ao QR.");
+    setStatus("qr", "", "", "O WhatsApp recusou o pedido do código agora (isso costuma acontecer depois de muitas tentativas de conexão seguidas). Voltando ao QR — espere algumas horas antes de tentar o código de novo.");
+    setTimeout(() => process.exit(0), 1500);
+  }
+});
