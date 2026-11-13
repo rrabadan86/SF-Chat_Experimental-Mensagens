@@ -27,9 +27,10 @@ const MAX_MS = 20 * 60 * 1000; // passou disso sem terminar: considera travada
 function git(...a) { return execFileSync('git', ['-C', RAIZ, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000 }).trim(); }
 function lerJson(f) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { return null; } }
 const limpa = (t) => String(t || '').replace(/\s*\(#\d+\)\s*$/, '').trim();
+const prDe = (t) => { const m = /\(#(\d+)\)\s*$/.exec(String(t || '')); return m ? +m[1] : 0; }; // número do PR (merge squash)
 
 function versaoAtual() {
-  try { const [titulo, ct] = git('log', '-1', '--format=%s|%ct', 'HEAD').split('|'); return { titulo: limpa(titulo), em: (+ct || 0) * 1000 }; }
+  try { const [titulo, ct] = git('log', '-1', '--format=%s|%ct', 'HEAD').split('|'); return { titulo: limpa(titulo), pr: prDe(titulo), em: (+ct || 0) * 1000 }; }
   catch (_) { return null; }
 }
 
@@ -41,7 +42,7 @@ function verificar() {
   const r = {
     verificadoEm: Date.now(),
     atual: versaoAtual(),
-    novas: linhas.map(l => { const i = l.lastIndexOf('|'); return { titulo: limpa(l.slice(0, i)), em: (+l.slice(i + 1) || 0) * 1000 }; }),
+    novas: linhas.map(l => { const i = l.lastIndexOf('|'); return { titulo: limpa(l.slice(0, i)), pr: prDe(l.slice(0, i)), em: (+l.slice(i + 1) || 0) * 1000 }; }),
   };
   try { fs.mkdirSync(DATA, { recursive: true }); fs.writeFileSync(CACHE, JSON.stringify(r)); } catch (_) {}
   return r;

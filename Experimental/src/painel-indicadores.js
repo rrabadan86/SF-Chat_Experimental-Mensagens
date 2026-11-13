@@ -2016,10 +2016,10 @@ function paginaSaude(list, extra = {}) {
     const novas = Array.isArray(v.novas) ? v.novas : [];
     const corV = st.estado === 'erro' || st.estado === 'travada' ? 'warn' : novas.length ? 'warn' : 'ok';
     const pillV = st.estado === 'rodando' ? '⏳ Atualizando' : novas.length ? `🟡 ${novas.length} novidade(s)` : v.verificadoEm ? '🟢 Atualizado' : '⚪ Não verificado';
-    const listaNovas = novas.length ? `<div style="margin:4px 0 0"><b>O que vem na nova versão:</b><ul style="margin:4px 0 0;padding-left:18px">${novas.slice(0, 15).map(n => `<li>${esc(n.titulo)} <span class="sd-muted">(${dhv(n.em)})</span></li>`).join('')}${novas.length > 15 ? `<li class="sd-muted">… e mais ${novas.length - 15}</li>` : ''}</ul></div>` : '';
+    const listaNovas = novas.length ? `<div style="margin:4px 0 0"><b>O que vem na nova versão:</b><ul style="margin:4px 0 0;padding-left:18px">${novas.slice(0, 15).map(n => `<li>${n.pr ? `<b>PR #${n.pr}</b> — ` : ''}${esc(n.titulo)} <span class="sd-muted">(${dhv(n.em)})</span></li>`).join('')}${novas.length > 15 ? `<li class="sd-muted">… e mais ${novas.length - 15}</li>` : ''}</ul></div>` : '';
     const ultAtual = st.estado !== 'nunca' ? `<span class="sd-muted">Última atualização pelo painel: ${dhv(st.inicio)}${st.por ? ' por ' + esc(st.por) : ''} — ${st.estado === 'ok' ? '✅ concluída' : st.estado === 'erro' ? '❌ terminou com problema' : st.estado === 'travada' ? '⚠️ não terminou' : '⏳ em andamento'}</span>` : '';
     cardVersao = card('Versão do sistema', corV, pillV, [
-      v.atual ? `Versão instalada: <b>${dhv(v.atual.em)}</b> <span class="sd-muted">— ${esc(v.atual.titulo || '')}</span>` : '<span class="sd-muted">Não consegui ler a versão instalada.</span>',
+      v.atual ? `Versão instalada: <b>${v.atual.pr ? `PR #${v.atual.pr} · ` : ''}${dhv(v.atual.em)}</b> <span class="sd-muted">— ${esc(v.atual.titulo || '')}</span>` : '<span class="sd-muted">Não consegui ler a versão instalada.</span>',
       v.verificadoEm ? (novas.length ? `<b>Há ${novas.length} atualização(ões) nova(s)</b> <span class="sd-muted">(verificado ${dhv(v.verificadoEm)})</span>` + listaNovas : `✅ Está na versão mais nova <span class="sd-muted">(verificado ${dhv(v.verificadoEm)})</span>`) : '<span class="sd-muted">Ainda não verificado — clique em "Verificar atualizações".</span>',
       `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button type="button" class="ui-btn sec" onclick="svVerificar(this)">🔍 Verificar atualizações</button>
