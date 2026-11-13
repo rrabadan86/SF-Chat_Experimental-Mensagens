@@ -264,6 +264,7 @@ const WEB0 = resolverCacheInicial();
 // antes) falha com um erro interno do WhatsApp sem texto ("t"). Por isso o botão
 // "Gerar código" grava o número aqui e reinicia a SoFIA; o arquivo vale 15 min.
 const PAREAR_FILE = path.join(DIR, "sofia-parear.json");
+const PAREAR_RECUSADO = path.join(DIR, "sofia-parear-recusado.txt"); // quando o WhatsApp recusou o código pela última vez
 function lerPareamentoBoot(): string {
   try {
     const o = JSON.parse(fs.readFileSync(PAREAR_FILE, "utf8")) || {};
@@ -273,7 +274,14 @@ function lerPareamentoBoot(): string {
     fs.rmSync(PAREAR_FILE, { force: true });
     if (num.length >= 10 && Date.now() - (+o.em || 0) < 15 * 60_000) return num;
   } catch { /* sem pedido */ }
-  return (process.env.SOFIA_PAIR_NUMBER || "").replace(/\D/g, "");
+  // SOFIA_PAIR_NUMBER (.env) força o modo código em TODA subida — mas, se o WhatsApp
+  // recusou o código nas últimas 6 h, ignora (senão fica num laço recusa → reinicia).
+  const doEnv = (process.env.SOFIA_PAIR_NUMBER || "").replace(/\D/g, "");
+  if (doEnv) {
+    let recusadoEm = 0; try { recusadoEm = fs.statSync(PAREAR_RECUSADO).mtimeMs; } catch {}
+    if (Date.now() - recusadoEm < 6 * 3600_000) { log(`SOFIA_PAIR_NUMBER no .env ignorado: o WhatsApp recusou o código há menos de 6 h — subindo no QR.`); return ""; }
+  }
+  return doEnv;
 }
 const PAIR_BOOT = lerPareamentoBoot();
 if (PAIR_BOOT) log(`🔢 iniciando no modo CONECTAR POR CÓDIGO (número ${PAIR_BOOT}) — o código aparece no painel em instantes.`);
@@ -3098,6 +3106,7 @@ process.on("unhandledRejection", (e: any) => {
   // recusa (erro interno "t"), cai aqui. Volta ao QR na hora, com aviso no painel.
   if (PAIR_BOOT && !pronta && !codigoPareamento) {
     log("o WhatsApp recusou o pedido do código de pareamento — voltando ao QR.");
+    try { fs.writeFileSync(PAREAR_RECUSADO, new Date().toISOString()); } catch {}
     setStatus("qr", "", "", "O WhatsApp recusou o pedido do código agora (isso costuma acontecer depois de muitas tentativas de conexão seguidas). Voltando ao QR — espere algumas horas antes de tentar o código de novo.");
     setTimeout(() => process.exit(0), 1500);
   }
