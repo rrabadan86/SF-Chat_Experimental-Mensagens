@@ -394,7 +394,9 @@ const consultarVaga = tool(
     "passe qualquer hora do dia só para consultar. É PROIBIDO confirmar um horário ('está ok/certinho/dá certo') " +
     "ou pedir nome/e-mail sem ANTES chamar esta ferramenta para aquele dia/horário e receber vaga=true. Se a aluna " +
     "mudar de dia/horário durante a conversa, chame de novo para o NOVO dia/horário antes de confirmar. " +
-    "Se vaga=true, prossiga. Se vaga=false, ofereça SOMENTE os " +
+    "Se vaga=true, prossiga. Se vaga=false, veja o 'motivo': 'inexistente' = NÃO há turma nesse horário naquele dia " +
+    "(diga 'não temos turma às HH:MM nesse dia' — NUNCA diga que lotou); 'lotada' = a turma existe e está cheia. " +
+    "Nos dois casos ofereça SOMENTE os " +
     "horários de 'disponiveis_do_dia' (os que têm vaga NAQUELE dia); se esse estiver vazio, use 'alternativas' " +
     "(outros dias). NUNCA ofereça horário que não esteja em disponiveis_do_dia/alternativas — não use a grade "
     + "para dizer o que está disponível. Complementa a verificar_disponibilidade (que só checa grade/antecedência).",
@@ -421,8 +423,8 @@ const consultarVaga = tool(
     // Horários COM VAGA no MESMO dia pedido (para oferecer só o que dá pra marcar).
     const disponiveis_do_dia = doDia.filter((s) => s && s.disponivel).map((s) => String(s.time).slice(0, 5));
     if (alvo && alvo.disponivel) return json({ vaga: true, freeSpots: alvo.freeSpots, disponiveis_do_dia });
-    if (alvo && !alvo.disponivel) return json({ vaga: false, motivo: "lotada", disponiveis_do_dia, alternativas });
-    return json({ vaga: false, motivo: "inexistente", disponiveis_do_dia, alternativas });
+    if (alvo && !alvo.disponivel) return json({ vaga: false, motivo: "lotada", nota: `A turma das ${hh} existe nesse dia, mas está LOTADA. Diga que esse horário já lotou e ofereça só os horários de disponiveis_do_dia.`, disponiveis_do_dia, alternativas });
+    return json({ vaga: false, motivo: "inexistente", nota: `NÃO existe turma às ${hh} nesse dia (não é lotação). Diga com naturalidade que não temos turma às ${hh} nesse dia — NUNCA diga que lotou — e ofereça só os horários de disponiveis_do_dia.`, disponiveis_do_dia, alternativas });
   },
 );
 
@@ -656,15 +658,21 @@ export function deveResponder(telefone: string): boolean {
 // pausada (assumida por humano ou desligada): mesmo calada, ela "ouve e anota",
 // para não perder o contexto quando reassumir. O listener (VPS) chama isto para
 // as mensagens da aluna E para as SUAS respostas manuais (autor "humano").
-export function registrarNaMemoria(telefone: string, autor: "aluna" | "sofia" | "humano", texto: string) {
+// `origem` diz quem escreveu, para a SoFIA saber depois (ex.: "campanha",
+// "follow-up", "recepção"). Estas mensagens NÃO passaram pela sessão da IA: ficam
+// marcadas como pendentes e entram como contexto na próxima resposta dela (ver
+// contextoPendente). Sem isso, um "Quero" em resposta a uma campanha chegava sem
+// a campanha — e a SoFIA respondia como se fosse um "oi".
+export function registrarNaMemoria(telefone: string, autor: "aluna" | "sofia" | "humano", texto: string, origem?: string) {
   if (!texto) return;
   let conversa = conversas.get(telefone);
   if (!conversa) {
     conversa = { sessionId: undefined, ultimaMensagemEm: Date.now(), transcricao: [], resumoEnviado: false };
     conversas.set(telefone, conversa);
   }
+  const pend = origem || (autor === "humano" ? "recepção" : autor === "sofia" ? "Studio" : "ela");
   // guarda "humano" como se fosse a Sofia (é o Studio falando), preservando o texto
-  conversa.transcricao.push({ autor: autor === "aluna" ? "aluna" : "sofia", texto });
+  conversa.transcricao.push({ autor: autor === "aluna" ? "aluna" : "sofia", texto, pend });
   conversa.ultimaMensagemEm = Date.now();
   marcarConversas();
 }
@@ -800,7 +808,7 @@ export async function simularResposta(sessao: string, mensagem: string, promptRa
 interface Conversa {
   sessionId?: string;
   ultimaMensagemEm: number;
-  transcricao: { autor: "aluna" | "sofia"; texto: string }[];
+  transcricao: { autor: "aluna" | "sofia"; texto: string; pend?: string }[];
   resumoEnviado: boolean;
   solicitou?: boolean; // a ferramenta solicitar_agendamento já cuidou (êxito ou não)
   avisouHumano?: boolean; // já avisamos o Studio que esta conversa pode precisar de humano
@@ -932,6 +940,22 @@ export function pareceMensagemAutomatica(texto: string): boolean {
   return fortes.some((f) => t.includes(f));
 }
 
+// Mensagens da conversa que a IA ainda não viu (campanha, follow-up, recepção, o
+// que ela escreveu enquanto a SoFIA estava calada). Devolve o bloco de contexto
+// para ir junto da mensagem atual e marca tudo como visto.
+function contextoPendente(conversa: Conversa): string {
+  const pend = conversa.transcricao.filter((t) => t.pend);
+  if (!pend.length) return "";
+  for (const t of pend) delete t.pend;
+  const corte = (s: string) => { const x = String(s || "").replace(/\s+/g, " ").trim(); return x.length > 700 ? x.slice(0, 700) + "…" : x; };
+  const linhas = pend.slice(-6).map((t) => t.autor === "aluna"
+    ? (t.pend === "automatica" ? `• Chegou uma resposta automática do WhatsApp dela (não foi ela digitando): «${corte(t.texto)}»` : `• Ela escreveu: «${corte(t.texto)}»`)
+    : `• ${t.pend === "recepção" ? "A recepção (pessoa do Studio) enviou" : `O Studio enviou (${t.pend})`}: «${corte(t.texto)}»`);
+  return "[CONTEXTO — mensagens desta conversa que você ainda não viu. Elas foram enviadas fora do seu atendimento, mas ela recebeu todas:\n"
+    + linhas.join("\n")
+    + "\nResponda à mensagem dela LEVANDO EM CONTA essas mensagens. Se ela está aceitando ou respondendo algo oferecido nelas (ex.: \"Quero\" para receber os horários), faça exatamente isso agora. A conversa já está em andamento: NÃO faça a saudação inicial nem se apresente.]\n\nMensagem dela agora: ";
+}
+
 export async function responderComMemoria(telefone: string, mensagem: string, telefoneReal?: string): Promise<string> {
   _midiasDaVez = []; // zera as imagens desta resposta (o listener drena depois)
   // Interruptor geral: se estiver desligada, fica em silêncio (atendimento manual).
@@ -972,7 +996,7 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
   // MENSAGEM AUTOMÁTICA de OUTRO negócio (saudação/ausência do WhatsApp Business):
   // a SoFIA não fala com o robô do outro lado. Anota (aparece no painel) e cala.
   if (pareceMensagemAutomatica(mensagem)) {
-    registrarNaMemoria(telefone, "aluna", mensagem);
+    registrarNaMemoria(telefone, "aluna", mensagem, "automatica");
     console.log(`🤖 ${telefone}: mensagem parece uma saudação/ausência automática de outro negócio — SoFIA não responde.`);
     return "";
   }
@@ -1018,12 +1042,14 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
     ? { ...options, resume: conversa.sessionId, systemPrompt: promptDaVez }
     : { ...options, systemPrompt: promptDaVez };
 
+  // Campanha / follow-up / recepção que ela recebeu fora da sessão da IA → contexto.
+  const entradaDaVez = contextoPendente(conversa) + mensagem;
   let resposta = "";
   let sessionId: string | undefined;
   try {
     await comRetry(async () => {
       resposta = "";
-      for await (const msg of query({ prompt: mensagem, options: opcoesDaVez })) {
+      for await (const msg of query({ prompt: entradaDaVez, options: opcoesDaVez })) {
         if (msg.type === "system" && msg.subtype === "init") sessionId = msg.session_id;
         if (msg.type === "result") {
           sessionId = msg.session_id ?? sessionId;
@@ -1646,7 +1672,7 @@ function contextoHistorico(telefone: string): string {
 # CONTEXTO DESTA CONVERSA (vale ACIMA das seções SAUDAÇÃO INICIAL e VALORES)
 - Esta pessoa JÁ FEZ AULA EXPERIMENTAL aqui e ainda não fechou plano. Ela já conhece a nossa metodologia.
 - NÃO se apresente como num primeiro contato, NÃO explique a metodologia de novo e NÃO ofereça "conhecer a metodologia". Isso vale mesmo que a mensagem dela seja só "oi".
-- Pergunte com leveza o que ela achou da aula experimental e tire as dúvidas dela.
+- Pergunte com leveza o que ela achou da aula experimental e tire as dúvidas dela. EXCEÇÃO: se ela está respondendo a uma mensagem do Studio (campanha ou follow-up, mostrada no CONTEXTO junto da mensagem dela), faça primeiro o que foi oferecido nela (ex.: enviar os horários) — não pergunte da aula nesse momento.
 - Fale da promoção vigente quando fizer sentido (valores e promoção seguem a seção PREÇO E PROMOÇÃO — só se a promoção estiver ativa hoje). Se ela perguntar preço, dê o valor DIRETO — sem o "Studio de Personal exclusivo" e sem oferecer apresentar a metodologia (a regra da "1ª vez que o preço aparece" da seção VALORES não vale para ela).
 - Se ela quiser fazer uma nova aula, pode agendar normalmente (mesmas ferramentas e regras da aula experimental). O cadastro dela já existe: confirme nome completo e e-mail como de costume que o sistema reaproveita o cadastro.
 - A etiqueta pode estar errada: se ela disser que NUNCA fez aula experimental aqui, acredite nela sem discutir — peça desculpas de forma leve ("Ah, me desculpa, confundi aqui! 😊") e siga o atendimento normal de primeiro contato (apresentação, metodologia se ela quiser e convite para a aula experimental gratuita). Não volte a perguntar da aula anterior nesta conversa.`;

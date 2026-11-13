@@ -2374,7 +2374,7 @@ async function processarFollowups() {
           return;
         }
         const alvo = await resolverIdEnvio(tel);
-        registrarNaMemoria(tel, "sofia", msg);
+        registrarNaMemoria(tel, "sofia", msg, "follow-up");
         registrarInbox(tel, alvo, "", "sofia", msg, undefined, undefined, "followup");
         await enviar(alvo, msg);
         log(`follow-up enviado para ${tel}.`);
@@ -2756,6 +2756,7 @@ async function tickCampanha() {
     c.enviadosHoje++;
     c.falhasSeguidas = 0; // deu certo → zera o contador de falhas seguidas
     registrarInbox(chaveDoEnvio(alvo, alvoDest.tel), alvo, alvoDest.nome || "", "sofia", (c.fotoArquivo ? "📷 " : "") + variacao); // chave canônica → cai na MESMA conversa da resposta dela
+    registrarNaMemoria(chaveDoEnvio(alvo, alvoDest.tel), "sofia", (c.fotoArquivo ? "(com foto) " : "") + variacao, `campanha "${c.nome}"`); // a SoFIA sabe o que ela está respondendo
     log(`campanha "${c.nome}": enviada ${c.enviados.length}/${c.enviados.length + c.pendentes.length} (${alvoDest.tel}).`);
   } catch (e: any) {
     c.pendentes.shift();
