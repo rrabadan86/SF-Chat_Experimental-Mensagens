@@ -114,6 +114,7 @@ let comandoTimer = null;
 let qrAvisado = false;   // 1 alerta por episódio de QR (o WhatsApp emite 'qr' a cada ~20s → não floodar o ntfy)
 let pairingNumero = null;   // conexão por CÓDIGO (pairing code) em vez de QR: número a parear (só dígitos)
 let pairingPedido = false;  // já pedi o código para este número? (pede 1x por comando do painel)
+let pairingFalhas = 0;      // pedidos de código recusados seguidos (tenta até 3)
 
 function log(msg) { console.log(`[wa] ${msg}`); }
 
@@ -135,6 +136,7 @@ function iniciarWatcherComando() {
     if (cmd.cmd === 'parear') {
       pairingNumero = String(cmd.numero || '').replace(/\D/g, '') || null;
       pairingPedido = false;   // força pedir um código NOVO
+      pairingFalhas = 0;
       log('comando do painel: PAREAR por código — número=' + (pairingNumero || '(vazio)'));
       return;
     }
@@ -322,8 +324,16 @@ function initWhatsApp() {
             log('📲 código de pareamento para ' + pairingNumero + ': ' + code);
             waStatus.set('qr', null, { pairingCode: code, pairingNumero });
           } catch (e) {
-            log('pareamento por código falhou (' + ((e && e.message) || e) + ') — voltando ao QR.');
-            pairingNumero = null; pairingPedido = false;
+            // O WhatsApp Web às vezes recusa com um erro interno sem texto (ex.: "t"),
+            // quando o pedido cruza com a troca do QR: tenta de novo no próximo QR.
+            pairingFalhas = (pairingFalhas || 0) + 1;
+            if (pairingFalhas < 3) {
+              log('pareamento por código falhou (' + ((e && e.message) || e) + ') — tento de novo no próximo QR (' + pairingFalhas + '/3).');
+              pairingPedido = false;
+            } else {
+              log('pareamento por código falhou (' + ((e && e.message) || e) + ') — voltando ao QR.');
+              pairingNumero = null; pairingPedido = false; pairingFalhas = 0;
+            }
           }
         }
         if (pairingNumero) return;   // código já pedido: não mostra QR

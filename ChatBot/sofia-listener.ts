@@ -240,6 +240,14 @@ const CODIGO_TIMEOUT_MS = parseInt(process.env.SOFIA_PAIR_TIMEOUT_MS || "45000",
 // Reaproveita o MESMO código por alguns minutos: o evento "qr" dispara a cada
 // ~20s, mas trocar o código a cada refresh faz o que você digitou expirar.
 const CODIGO_VALIDADE_MS = parseInt(process.env.SOFIA_PAIR_TTL_MS || "180000", 10); // 3 min
+// O WhatsApp Web às vezes recusa o pedido com um erro interno sem texto (ex.: "t"),
+// em geral quando o pedido cruza com a troca do QR. Tentamos de novo nos próximos
+// QRs (~20s cada) antes de desistir e voltar ao QR.
+const CODIGO_TENTATIVAS = 3;
+let falhasCodigo = 0;
+const erroCodigoLegivel = (m: string) => (String(m || "").trim().length <= 3
+  ? "o WhatsApp recusou o pedido agora (erro interno dele)"
+  : String(m));
 
 // Decide o cache de versão do WhatsApp Web JÁ NA CONSTRUÇÃO do cliente. Trocar
 // client.options.webVersionCache DEPOIS não pega nesta lib — ela lê o cache uma
@@ -626,11 +634,19 @@ client.on("qr", async (qr) => {
       log(`🔑 CÓDIGO DE PAREAMENTO: ${fmt}  (número ${PAIR_NUMBER}) — vale ~${Math.round(CODIGO_VALIDADE_MS / 60000)} min, digite com calma. (ou escaneie o QR)`);
       log(`   No celular da SoFIA: WhatsApp → Aparelhos conectados → Conectar um aparelho → "Conectar com número de telefone" → digite o código.`);
       alertarQuedaQR();
+      falhasCodigo = 0;
       setStatus("codigo", dataUrl, fmt);
     } catch (e: any) {
-      log(`falha ao gerar código de pareamento (${e?.message || e}) — caindo para o QR.`);
-      modoPareamento = false; PAIR_NUMBER = ""; // volta ao QR de vez (não fica pedindo código a cada refresh)
-      setStatus("qr", dataUrl, "", `Não consegui gerar o código: ${e?.message || e}`);
+      const msg = erroCodigoLegivel(e?.message || String(e));
+      falhasCodigo++;
+      if (falhasCodigo < CODIGO_TENTATIVAS && !/não respondeu em/.test(msg)) {
+        log(`falha ao gerar código de pareamento (${e?.message || e}) — tento de novo no próximo QR (${falhasCodigo}/${CODIGO_TENTATIVAS}).`);
+        setStatus("qr", dataUrl, "", `Gerando o código… ${msg}; tentando de novo em ~20 segundos (${falhasCodigo + 1}ª tentativa). Se preferir, escaneie o QR.`);
+      } else {
+        log(`falha ao gerar código de pareamento (${e?.message || e}) — caindo para o QR.`);
+        modoPareamento = false; PAIR_NUMBER = ""; falhasCodigo = 0; // volta ao QR de vez (não fica pedindo código a cada refresh)
+        setStatus("qr", dataUrl, "", `Não consegui gerar o código: ${msg}. Escaneie o QR, ou clique em "Gerar código" de novo daqui a alguns minutos.`);
+      }
     } finally { pedindoCodigo = false; }
     return; // em modo código, não sobrescreve o status com o QR
   }
@@ -2425,7 +2441,7 @@ setInterval(async () => {
   if (cmd && cmd.cmd === "parear") {
     const num = String(cmd.numero || "").replace(/\D/g, "");
     if (!num) { log("comando 'parear' sem número — ignorado."); return; }
-    PAIR_NUMBER = num;
+    PAIR_NUMBER = num; falhasCodigo = 0;
     codigoPareamento = ""; codigoEm = 0;   // força gerar um código NOVO no próximo "qr"
     modoPareamento = true;
     log(`🔢 comando do painel: conectar por CÓDIGO (número ${num}). O código aparece no painel em ~20s.`);
