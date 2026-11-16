@@ -94,6 +94,7 @@ function candidatas({ hoje = hojeSP() } = {}) {
     const item = { id, nome: (p.nc && p.n) || (ct && ct.c.nome) || p.n || '', fim, contrato: ult[2] || '', rescindido: resc, telefone: ct ? ct.tel : '', motivo: '' };
     if (p.fq) item.motivo = `renovou (contrato na fila: ${p.fq[0] || 'novo contrato'}, começa ${p.fq[1] || ''})`;
     else if (p.cv) item.motivo = 'tem Circuito/VIP vigente (continua cliente)';
+    else if (reg.feitos[`${id}|${fim}`] && reg.feitos[`${id}|${fim}`].semWhatsApp) item.motivo = `o telefone ${reg.feitos[`${id}|${fim}`].semWhatsApp} não tem WhatsApp — confira o celular no EVO`;
     else if (reg.feitos[`${id}|${fim}`]) item.motivo = 'já tratada em ' + String(reg.feitos[`${id}|${fim}`].em || '').slice(0, 10).split('-').reverse().join('/');
     else if (!ct) item.motivo = 'sem telefone: não está nos Contatos com o código do EVO e o celular do cadastro do EVO ainda não foi lido (a leitura das 05:25 busca)';
     else if ((ct.c.tags || []).some(t => norm(t) === norm(tagAluna))) item.motivo = `ainda está com a tag "${tagAluna}" nos Contatos`;
@@ -119,7 +120,18 @@ async function runSaidasGrupos({ dry = false, log = console.log } = {}) {
     const nome1 = String(x.nome || '').trim().split(/\s+/)[0] || '';
     let grupos = [];
     try { grupos = await wa.getCommonGroups(x.telefone); }
-    catch (e) { log(`   ⚠️  ${x.nome}: não consegui ver os grupos (${e.message}) — tento no próximo dia.`); res.erros++; continue; }
+    catch (e) {
+      // Telefone sem WhatsApp (ex.: número estrangeiro que ganhou o 55 do Brasil):
+      // não é falha passageira — tentar todo dia só gerava erro no Log. Registra e
+      // segue; o cartão mostra para a recepção conferir o telefone no EVO.
+      if (e && e.code === 'INVALIDO') {
+        log(`   ➖ ${x.nome}: o telefone ${x.telefone} não tem WhatsApp — confira o celular no EVO (número de outro país?). Não conto como erro.`);
+        if (!dry) reg.feitos[`${x.id}|${x.fim}`] = { em: res.em, nome: x.nome, grupos: [], semWhatsApp: x.telefone };
+        res.tratadas.push({ nome: x.nome, grupos: [], enviou: false, motivo: 'telefone sem WhatsApp' });
+        continue;
+      }
+      log(`   ⚠️  ${x.nome}: não consegui ver os grupos (${e.message}) — tento no próximo dia.`); res.erros++; continue;
+    }
     if (!grupos.length) {
       log(`   ➖ ${x.nome}: não está em nenhum grupo — sem mensagem.`);
       if (!dry) reg.feitos[`${x.id}|${x.fim}`] = { em: res.em, nome: x.nome, grupos: [], semGrupo: true };
