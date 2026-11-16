@@ -19,3 +19,6 @@ edge-wa/
 *.jsonl
 sofia-estado.txt
 sofia-pausa-min.txt
+# Demonstração: conversas reais anonimizadas ficam só no servidor
+sofia-demo/
+demo-conversas-reais*.json
