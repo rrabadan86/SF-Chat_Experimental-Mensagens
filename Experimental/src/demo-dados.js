@@ -56,7 +56,7 @@ const ALUNAS = pessoas.slice(0, 34), EX = pessoas.slice(34, 42), LEADS = pessoas
 const T = { contato: 'FX - 1. Contato inicial', agendou: 'FX - 3. Agendou Aula Exp', fez: 'FX - 5. Fez Aula Experimental', faltou: 'FX - 2. Encerrado com Agendamento sem Presença', encerrado: 'FX - 2. Encerrado sem agendamento', semInteresse: 'FX - 0. Sem interesse', aluna: '0. Aluna', ex: '0. Ex Aluna', preco: '0. Preço', anuncio: '0. Patrocinado' };
 
 const conversas = {}, tagLog = [], encerradas = {}, custo = [], agendaramCanal = {};
-const tagsLead = {};
+const tagsLead = {}, contatosReais = {};
 
 // ── aulas experimentais (histórico lido do "EVO") ────────────────────────────
 const aulas = {};
@@ -161,17 +161,55 @@ function viverHistoria(p, chave, d0, inicio, extra = {}) {
   conversas[p.tel] = { jid: p.tel + '@c.us', nome: p.primeiro, ultimaEm: msgs[msgs.length - 1].em, msgs };
   return [funil, ...extras].filter(Boolean);
 }
-LEADS.forEach((p, k) => {
-  const [chave, d0, inicio] = ELENCO_LEADS[k % ELENCO_LEADS.length];
-  const tags = viverHistoria(p, chave, d0, inicio);
-  if (tags) tagsLead[p.tel] = tags;
+// Conversas REAIS anonimizadas (demo-exportar-reais.js, rodado na unidade): quando
+// existem, a demonstração mostra SÓ elas. Sem o arquivo, ficam as conversas de exemplo.
+const REAIS = (() => { try { return JSON.parse(fs.readFileSync(path.join(SOFIA, 'demo-conversas-reais.json'), 'utf8')).conversas || []; } catch (_) { return []; } })();
+const SEMANA_MS = 7 * 86400e3;
+// Datas escritas no texto ("quinta (12/11)") andam junto com a conversa.
+const moverDatas = (txt, emOrig, desloc) => String(txt || '').replace(/\b(\d{1,2})\/(\d{1,2})(\/(\d{2}|\d{4}))?\b/g, (m, dd, mm, _y, yy) => {
+  const d = +dd, mo = +mm; if (d < 1 || d > 31 || mo < 1 || mo > 12) return m;
+  const anoRef = new Date(emOrig).getUTCFullYear();
+  const ano = yy ? (yy.length === 2 ? 2000 + +yy : +yy) : anoRef;
+  const t = Date.UTC(ano, mo - 1, d, 15);
+  if (Math.abs(t - emOrig) > 60 * 86400e3) return m; // não parece data da conversa
+  const n = new Date(t + desloc);
+  return pad(n.getUTCDate()) + '/' + pad(n.getUTCMonth() + 1) + (yy ? '/' + (yy.length === 2 ? String(n.getUTCFullYear()).slice(2) : n.getUTCFullYear()) : '');
 });
-// Alunas ativas que falam com a SoFIA (trocar horário, 2ª via…): a SoFIA sabe que já são alunas.
-const ALUNAS_CONVERSA = ALUNAS.slice(28, 28 + ELENCO_ALUNAS.length);
-ALUNAS_CONVERSA.forEach((p, k) => {
-  const [chave, d0, inicio] = ELENCO_ALUNAS[k];
-  viverHistoria(p, chave, d0, inicio, { plano: PLANOS[(28 + k) % PLANOS.length], funil: T.aluna });
-});
+if (REAIS.length) {
+  REAIS.forEach((c, k) => {
+    const msgsOrig = (c.msgs || []).filter(m => m && m.em);
+    if (!msgsOrig.length) return;
+    const tel = '556290000' + pad(2000 + k, 4);
+    // desloca em SEMANAS inteiras (mantém dia da semana e horário) para terminar nos últimos 7 dias
+    const ultimo = Math.max(...msgsOrig.map(m => m.em));
+    const desloc = Math.max(0, Math.floor((AGORA - ultimo) / SEMANA_MS)) * SEMANA_MS;
+    const msgs = msgsOrig.map(m => {
+      const o = Object.assign({}, m, { em: m.em + desloc, texto: moverDatas(m.texto, m.em, desloc) });
+      if (o.citacao) o.citacao = moverDatas(o.citacao, m.em, desloc);
+      if (o.foto && o.foto !== 'grade-demo.png') delete o.foto;
+      return o;
+    }).filter(m => passou(m.em));
+    if (!msgs.length) return;
+    conversas[tel] = { jid: tel + '@c.us', nome: c.nome, ultimaEm: msgs[msgs.length - 1].em, msgs };
+    for (const m of msgs) if (m.autor === 'sofia' && !m.tipo) custo.push({ em: new Date(m.em).toISOString(), tipo: 'conversa', model: 'claude-sonnet', tel, inTok: entre(9000, 16000), outTok: entre(80, 260), usd: +(0.03 + rnd() * 0.035).toFixed(4) });
+    for (const e of (c.eventos || [])) if (e && e.em) tagLog.push(Object.assign({}, e, { chave: tel, por: '', em: e.em + desloc }));
+    if (c.encerrada && c.encerrada.em) encerradas[tel] = { em: c.encerrada.em + desloc, por: 'SoFIA' };
+    if ((c.tags || []).includes(T.agendou)) agendaramCanal[tel.slice(-8)] = 'sofia';
+    contatosReais[tel] = { tel, nome: c.nome, tags: c.tags || [], instrucoes: '', criadoEm: msgs[0].em, atualizadoEm: msgs[msgs.length - 1].em };
+  });
+} else {
+  LEADS.forEach((p, k) => {
+    const [chave, d0, inicio] = ELENCO_LEADS[k % ELENCO_LEADS.length];
+    const tags = viverHistoria(p, chave, d0, inicio);
+    if (tags) tagsLead[p.tel] = tags;
+  });
+  // Alunas ativas que falam com a SoFIA (trocar horário, 2ª via…): a SoFIA sabe que já são alunas.
+  const ALUNAS_CONVERSA = ALUNAS.slice(28, 28 + ELENCO_ALUNAS.length);
+  ALUNAS_CONVERSA.forEach((p, k) => {
+    const [chave, d0, inicio] = ELENCO_ALUNAS[k];
+    viverHistoria(p, chave, d0, inicio, { plano: PLANOS[(28 + k) % PLANOS.length], funil: T.aluna });
+  });
+}
 // Alunas que vieram da experimental neste mês (agendaram → fizeram → fecharam).
 const VIERAM = ALUNAS.slice(0, 9);
 VIERAM.forEach((p, k) => {
@@ -188,6 +226,7 @@ const contatos = {};
 const criado = em(dia(-120), '10:00');
 for (const p of ALUNAS) contatos[p.tel] = { tel: p.tel, nome: p.nome, tags: [T.aluna], instrucoes: '', criadoEm: criado, atualizadoEm: criado, idEvo: p.id };
 for (const p of EX) contatos[p.tel] = { tel: p.tel, nome: p.nome, tags: [T.ex], instrucoes: '', criadoEm: criado, atualizadoEm: criado, idEvo: p.id };
+Object.assign(contatos, contatosReais);
 for (const p of LEADS) if (conversas[p.tel]) contatos[p.tel] = { tel: p.tel, nome: p.primeiro, tags: tagsLead[p.tel] || [], instrucoes: '', criadoEm: conversas[p.tel].msgs[0].em, atualizadoEm: conversas[p.tel].ultimaEm };
 
 // ── alunas ativas (leitura diária do "EVO") ──────────────────────────────────
