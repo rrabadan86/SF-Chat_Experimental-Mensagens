@@ -467,6 +467,15 @@ const server = http.createServer(protegido((req, res) => {
   if (DEMO.ativo) {
     if (url === '/login' || url === '/logout') { res.writeHead(303, { Location: '/hoje' }); return res.end(); }
     if (req.method !== 'GET' && req.method !== 'HEAD') return demoBloqueado(req, res);
+    const contador = require('./demo-acessos');
+    // Contador de acessos (só quem tem o link com a chave vê; chave: node src/demo-acessos.js)
+    if (url === '/acessos') {
+      const k = new URLSearchParams(req.url.split('?')[1] || '').get('k');
+      if (k !== contador.chave()) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Não encontrado.'); }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
+      return res.end(contador.pagina());
+    }
+    contador.registrar(req, url);
   }
 
   // ── Login / logout (rotas públicas) ──────────────────────────────────────

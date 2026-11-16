@@ -346,8 +346,26 @@ const disparos = {}; for (const k of Object.keys(registrados)) disparos[k] = new
 // ── arquivos-base da SoFIA (prompt, extração, mídias, regras) — só se faltarem ──
 {
   const CHATBOT = path.resolve(__dirname, '..', '..', 'ChatBot');
-  for (const f of ['sofia-prompt.default.txt', 'sofia-extracao.default.txt', 'sofia-midias.default.txt', 'sofia-regras.default.json']) {
+  for (const f of ['sofia-midias.default.txt', 'sofia-regras.default.json']) {
     try { const dst = path.join(SOFIA, f); if (!fs.existsSync(dst) && fs.existsSync(path.join(CHATBOT, f))) fs.copyFileSync(path.join(CHATBOT, f), dst); } catch (_) {}
+  }
+  // Prompt e instruções de extração: na demonstração aparecem EMBARALHADOS (letras e
+  // números trocados, mesma estrutura). Ficam visíveis só os títulos das seções —
+  // quem visita vê como o prompt é organizado, mas não consegue copiar o texto.
+  let sem = 20240611;
+  const r = () => { sem = (sem * 1103515245 + 12345) >>> 0; return sem / 4294967296; };
+  const MIN = 'abcdefghijlmnoprstuvz', MAI = MIN.toUpperCase();
+  const embaralhar = (txt) => String(txt).split('\n').map(l => (/^#/.test(l) ? l : l.replace(/\p{L}|\d/gu, (c) => {
+    if (/\d/.test(c)) return String(Math.floor(r() * 10));
+    const maiuscula = c !== c.toLowerCase();
+    const ch = MIN[Math.floor(r() * MIN.length)];
+    return maiuscula ? ch.toUpperCase() : ch;
+  }))).join('\n');
+  for (const [orig, destinos] of [['sofia-prompt.default.txt', ['sofia-prompt.txt', 'sofia-prompt.default.txt']], ['sofia-extracao.default.txt', ['sofia-extracao.txt', 'sofia-extracao.default.txt']]]) {
+    try {
+      const txt = embaralhar(fs.readFileSync(path.join(CHATBOT, orig), 'utf8'));
+      for (const d of destinos) fs.writeFileSync(path.join(SOFIA, d), txt);
+    } catch (_) {}
   }
 }
 
