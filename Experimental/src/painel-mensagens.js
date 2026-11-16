@@ -1686,6 +1686,10 @@ const server = http.createServer(protegido((req, res) => {
   }
 
   // Página "Hoje" (o que o robô enviou)
+  if (req.method === 'GET' && url === '/visao-cliente') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(require('./painel-visao-cliente').paginaVisaoCliente(new URLSearchParams(req.url.split('?')[1] || '').get('j')));
+  }
   if (req.method === 'GET' && url === '/hoje') {
     const dia = new URLSearchParams(req.url.split('?')[1] || '').get('dia');
     const valido = /^\d{4}-\d{2}-\d{2}$/.test(dia || '') ? dia : null;
