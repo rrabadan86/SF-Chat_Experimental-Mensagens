@@ -125,8 +125,10 @@ function anonimizador(conv, contato, fict) {
 // ── escolhe as conversas ─────────────────────────────────────────────────────
 const candidatas = [];
 const diag = { total: 0, comContato: 0, tamanhoOk: 0, tags: new Map() };
+let fict = 0;
 for (const [chave, conv] of Object.entries(conversas)) {
   diag.total++;
+  if (/^556290000\d{4}$/.test(String(chave).replace(/\D/g, ''))) { fict++; continue; } // conversa da demonstração, não é real
   const msgs = (conv && conv.msgs) || [];
   const nS = msgs.filter(m => m.autor === 'sofia').length, nA = msgs.filter(m => m.autor === 'aluna').length;
   const { contato, tags } = tagsDe(chave, conv);
@@ -140,6 +142,7 @@ for (const [chave, conv] of Object.entries(conversas)) {
   candidatas.push({ chave, conv, contato, tags, alvo, nota: Math.min(nS, 25) + Math.min(nA, 25) + (msgs.filter(m => m.autor === 'humano').length > nS ? -20 : 0) });
 }
 console.log(`Conversas da SoFIA: ${diag.total} (${path.join(SOFIA, 'sofia-conversas.json')})`);
+if (fict) console.log(`⚠️  ${fict} conversa(s) desta pasta são da DEMONSTRAÇÃO (telefones 90000-xxxx) — foram gravadas aqui por engano. Veja demo-limpar-sofia-real.js.`);
 console.log(`Contatos no CRM: ${Object.keys(mapa || {}).length} (${contatos.ARQUIVO})`);
 console.log(`Conversas ligadas a um contato: ${diag.comContato} · com tamanho bom: ${diag.tamanhoOk} · com as tags pedidas: ${candidatas.length}`);
 if (!candidatas.length) {

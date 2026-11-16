@@ -31,7 +31,25 @@ function pm2Ficticio() {
 }
 const ehPm2Jlist = (cmd, args) => /\bpm2\b/.test(String(cmd)) && (/\bjlist\b/.test(String(cmd)) || (Array.isArray(args) && args.includes('jlist')));
 
+// Pasta da SoFIA da DEMONSTRAÇÃO: sempre dentro da própria instalação (ex.:
+// /root/slimfit-exemplo/sofia-demo). O .env da demonstração VENCE variáveis que já
+// estejam no ambiente do terminal/PM2 — um SOFIA_DIR da unidade real exportado no
+// shell (ex.: /root/sofia-data) faria a demonstração ler e GRAVAR na SoFIA real.
+const RAIZ = require('path').resolve(__dirname, '..', '..');
+function pastaSofiaDemo() {
+  const path = require('path');
+  let env = {};
+  try { env = require('dotenv').parse(require('fs').readFileSync(path.resolve(__dirname, '..', '.env'))); } catch (_) {}
+  const dir = path.resolve(env.SOFIA_DIR || path.join(RAIZ, 'sofia-demo'));
+  return dir.startsWith(RAIZ + path.sep) ? dir : path.join(RAIZ, 'sofia-demo');
+}
+
 if (ativo) {
+  try {
+    const env = require('dotenv').parse(require('fs').readFileSync(require('path').resolve(__dirname, '..', '.env')));
+    for (const [k, v] of Object.entries(env)) process.env[k] = v; // o .env da demonstração vence o ambiente
+  } catch (_) {}
+  process.env.SOFIA_DIR = pastaSofiaDemo();
   const cp = require('child_process');
   const erro = () => Object.assign(new Error(AVISO), { code: 'DEMO' });
   cp.exec = function (cmd, opts, cb) {
@@ -82,4 +100,4 @@ if (ativo) {
   console.log('[painel] 🎭 MODO DEMONSTRAÇÃO: dados fictícios; comandos, rede de saída e ações bloqueados.');
 }
 
-module.exports = { ativo, AVISO };
+module.exports = { ativo, AVISO, pastaSofiaDemo, RAIZ };

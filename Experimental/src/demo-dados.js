@@ -10,7 +10,7 @@
  *
  * Uso:  node src/demo-dados.js        (só roda com PAINEL_DEMO=1 no .env, por segurança)
  */
-require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
+require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env'), override: true }); // o .env da demonstração vence o ambiente do terminal
 const fs = require('fs');
 const path = require('path');
 
@@ -19,7 +19,14 @@ if (!/^(1|true|sim|yes)$/i.test(String(process.env.PAINEL_DEMO || ''))) {
   process.exit(1);
 }
 const DATA = path.resolve(__dirname, '..', 'data');
-const SOFIA = path.resolve(process.env.SOFIA_DIR || path.resolve(__dirname, '..', '..', 'ChatBot'));
+// A pasta da SoFIA TEM de ficar dentro desta instalação de demonstração — nunca a
+// SoFIA de uma unidade real (ex.: /root/sofia-data), mesmo que o terminal exporte SOFIA_DIR.
+const RAIZ_DEMO = path.resolve(__dirname, '..', '..');
+const SOFIA = path.resolve(process.env.SOFIA_DIR || path.join(RAIZ_DEMO, 'sofia-demo'));
+if (!SOFIA.startsWith(RAIZ_DEMO + path.sep) || SOFIA === path.join(RAIZ_DEMO, 'ChatBot')) {
+  console.error(`demo-dados: a pasta da SoFIA (${SOFIA}) está FORA da demonstração (${RAIZ_DEMO}). Nada foi alterado.\nAjuste SOFIA_DIR no .env da demonstração para ${path.join(RAIZ_DEMO, 'sofia-demo')}.`);
+  process.exit(1);
+}
 fs.mkdirSync(DATA, { recursive: true }); fs.mkdirSync(SOFIA, { recursive: true });
 
 // ── relógio e sorte determinística ───────────────────────────────────────────
