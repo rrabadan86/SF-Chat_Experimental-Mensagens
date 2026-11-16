@@ -55,117 +55,19 @@ const pessoas = NOMES.map((n, i) => ({
 const ALUNAS = pessoas.slice(0, 34), EX = pessoas.slice(34, 42), LEADS = pessoas.slice(42);
 const T = { contato: 'FX - 1. Contato inicial', agendou: 'FX - 3. Agendou Aula Exp', fez: 'FX - 5. Fez Aula Experimental', faltou: 'FX - 2. Encerrado com Agendamento sem Presença', encerrado: 'FX - 2. Encerrado sem agendamento', semInteresse: 'FX - 0. Sem interesse', aluna: '0. Aluna', ex: '0. Ex Aluna', preco: '0. Preço', anuncio: '0. Patrocinado' };
 
-// ── conversas da SoFIA (roteiros) ────────────────────────────────────────────
-// Cada passo: [autor, texto, minutos depois do passo anterior, tipo?]
-const ROTEIROS = {
-  agendou: [
-    ['aluna', 'Oi, boa tarde! Vi o anúncio de vocês no Instagram', 0],
-    ['sofia', 'Boa tarde! 😊 Tudo bem com você?\nSeja muito bem-vinda ao SlimFit! Sou a Sofia 💛', 1],
-    ['sofia', 'Vamos agendar uma aula experimental gratuita pra você conhecer a nossa metodologia?', 0],
-    ['aluna', 'Quero sim! Como funciona?', 3],
-    ['sofia', 'O SlimFit é um *Studio de Personal exclusivo para mulheres*: treino completo de força, funcional e cardio em *até 1 hora*, em turmas de no máximo 9 alunas.', 1],
-    ['sofia', 'Aqui está a nossa grade de horários 👇', 0, '', 'grade'],
-    ['sofia', 'Qual dia e horário ficam melhores pra você?', 0],
-    ['aluna', 'Quinta às {hora} tem?', 4],
-    ['sofia', 'Tenho vaga na quinta às {hora} 😊 Me passa seu nome completo e e-mail?', 1],
-    ['aluna', '{nome} — {email}', 2],
-    ['sofia', 'Prontinho, {primeiro}! ✅\nSua aula experimental está agendada para quinta às {hora}.\nEm instantes a recepção do Studio te manda mais informações. Super bem-vinda ao SlimFit 💪', 1],
-  ],
-  preco: [
-    ['aluna', 'Boa noite, quanto custa?', 0],
-    ['sofia', 'Boa noite! 😊 Tudo bem com você?\nSeja muito bem-vinda ao SlimFit! Sou a Sofia 💛', 1],
-    ['sofia', 'O SlimFit não é uma academia comum — é um *Studio de Personal exclusivo para mulheres*. Nossos planos começam em *R$ 587,00/mês*.', 0],
-    ['sofia', 'Posso te apresentar rapidinho a nossa metodologia? 💛', 0],
-    ['aluna', 'Vou pensar e te falo', 9],
-    ['sofia', 'Claro! A aula experimental é *gratuita e sem compromisso* — você sente tudo na prática antes de decidir. Quer que eu veja um horário pra você?', 1],
-  ],
-  semInteresse: [
-    ['aluna', 'Oi, recebi a mensagem de vocês', 0],
-    ['sofia', 'Oi! 😊 Que bom te ver por aqui. Posso te ajudar a agendar uma aula experimental?', 1],
-    ['aluna', 'Obrigada, mas já treino em outro lugar e estou satisfeita', 6],
-    ['sofia', 'Entendido, obrigada pelo retorno! 💛 Se mudar de ideia, é só me chamar. Até logo!', 1],
-  ],
-  remarcar: [
-    ['aluna', 'Oi Sofia, não vou conseguir ir na aula de amanhã 😕', 0],
-    ['sofia', 'Imagino! Sem problemas, vamos remarcar 💛 Tenho vaga no mesmo horário na sexta. Pode ser?', 1],
-    ['aluna', 'Pode sim', 4],
-    ['sofia', 'Prontinho! Remarquei sua aula para sexta às {hora} 💛 Qualquer coisa, é só me chamar!', 1],
-  ],
-  duvida: [
-    ['aluna', 'Vocês têm estacionamento?', 0],
-    ['sofia', 'Olá! 😊 Tudo bem com você? Seja muito bem-vinda ao SlimFit! Sou a Sofia 💛', 1],
-    ['sofia', 'Temos sim, com vagas exclusivas para as alunas. Que tal conhecer na prática com uma aula experimental gratuita?', 0],
-    ['aluna', 'E pra quem nunca treinou, dá?', 12],
-    ['sofia', 'Não só pode como deve começar! 😊 A aula é ajustada ao seu nível, e a professora te acompanha de perto. Quer que eu veja um horário pra você?', 1],
-  ],
-  humano: [
-    ['aluna', 'Oi, quero falar com uma atendente por favor', 0],
-    ['sofia', 'Claro! Já avisei a nossa recepção — ela fala com você em instantes 💛', 1],
-    ['humano', 'Oi {primeiro}! Aqui é a Júlia, da recepção. Como posso te ajudar?', 7],
-    ['aluna', 'Queria saber se posso levar minha filha de 13 anos', 3],
-    ['humano', 'Pode sim! A idade mínima é 12 anos 😊 Querem agendar juntas?', 2],
-  ],
-  campanha: [
-    ['sofia', 'Oi {primeiro}! 💛 Sentimos sua falta por aqui. Neste mês temos condição especial para quem já fez a aula experimental. Quer receber os horários disponíveis?', 0, 'campanha'],
-    ['aluna', 'Quero!', 40],
-    ['sofia', 'Que ótimo! 😊 Aqui está a nossa grade de horários 👇', 1, '', 'grade'],
-    ['sofia', 'Qual dia e horário ficam melhores pra você?', 0],
-    ['aluna', 'Segunda às {hora}', 8],
-    ['sofia', 'Tenho vaga na segunda às {hora} 😊 Pode confirmar seu e-mail?', 1],
-  ],
-  followup: [
-    ['aluna', 'Oi, quero saber mais sobre o studio', 0],
-    ['sofia', 'Oi! 😊 Tudo bem com você? Seja muito bem-vinda ao SlimFit! Sou a Sofia 💛', 1],
-    ['sofia', 'O SlimFit é um *Studio de Personal exclusivo para mulheres*. Quer que eu te mostre os horários para uma aula experimental gratuita?', 0],
-    ['sofia', 'Oi {primeiro}! Ficou alguma dúvida? Se quiser, já te passo os horários disponíveis para essa semana 😊', 180, 'followup'],
-  ],
-};
-// (a cada 6, a 1ª é de hoje: hoje aparecem um agendamento, um follow-up e uma resposta à campanha)
-const ESCOLHA = ['agendou', 'agendou', 'agendou', 'preco', 'preco', 'semInteresse', 'followup', 'duvida', 'duvida', 'humano', 'agendou', 'remarcar', 'campanha', 'preco', 'duvida', 'agendou', 'campanha', 'followup'];
-
 const conversas = {}, tagLog = [], encerradas = {}, custo = [], agendaramCanal = {};
 const tagsLead = {};
-LEADS.forEach((p, k) => {
-  const roteiro = ESCOLHA[k % ESCOLHA.length];
-  const d = dia(-(k % 6)); // espalhado nos últimos 6 dias (hoje incluso)
-  let t = em(d, pick(['08:12', '09:40', '11:05', '12:30', '13:47', '15:20', '17:55', '19:10', '20:35', '21:15']));
-  if (roteiro === 'followup' || roteiro === 'campanha') t = em(d, roteiro === 'followup' ? '08:05' : '09:02'); // cedo, para o dia mostrar a sequência inteira
-  const hora = pick(HORAS);
-  const email = p.primeiro.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '') + '.' + (k + 3) + '@exemplo.com';
-  const msgs = [];
-  for (const [autor, texto, mins, tipo, foto] of ROTEIROS[roteiro]) {
-    t += (mins || 0) * 60000 + entre(5, 50) * 1000;
-    if (!passou(t)) break;
-    const m = { autor, texto: texto.replace(/\{hora\}/g, hora).replace(/\{primeiro\}/g, p.primeiro).replace(/\{nome\}/g, p.nome.replace(/\b\w+/g, (w) => w[0] + w.slice(1).toLowerCase())).replace(/\{email\}/g, email), em: t };
-    if (tipo) m.tipo = tipo;
-    if (foto === 'grade') m.foto = 'grade-demo.png'; // imagem da grade (como a SoFIA envia)
-    if (autor === 'humano') m.por = 'julia';
-    msgs.push(m);
-    if (autor === 'sofia' && !tipo) custo.push({ em: new Date(t).toISOString(), tipo: 'conversa', model: 'claude-sonnet', tel: p.tel, inTok: entre(9000, 16000), outTok: entre(80, 260), usd: +(0.03 + rnd() * 0.035).toFixed(4) });
-  }
-  if (!msgs.length) return;
-  conversas[p.tel] = { jid: p.tel + '@c.us', nome: p.primeiro, ultimaEm: msgs[msgs.length - 1].em, msgs };
-  const primeiraEm = msgs[0].em, ultimaEm = msgs[msgs.length - 1].em;
-  const add = (tag, motivo, quando, canal) => { tagLog.push({ chave: p.tel, tag, motivo, por: '', acao: 'add', em: quando, ...(canal ? { canal } : {}) }); };
-  const tags = [];
-  if (roteiro === 'campanha') { tags.push(T.fez); add('BlackNovember', 'campanha', primeiraEm + 41 * 60000); }
-  else { tags.push(T.contato); add(T.contato, 'novo', primeiraEm); }
-  if (roteiro === 'agendou' && msgs.length >= 10) { tags.splice(0, tags.length, T.agendou); add(T.agendou, 'agendou', ultimaEm, pick(['sofia', 'sofia', 'formulario', 'express'])); agendaramCanal[p.tel.slice(-8)] = 'sofia'; }
-  if (roteiro === 'preco') { tags.push(T.preco); add(T.preco, 'ia', primeiraEm + 60000); }
-  if (roteiro === 'semInteresse' && msgs.length >= 3) { tags.splice(0, tags.length, T.semInteresse); add(T.semInteresse, 'ia', msgs[2].em); encerradas[p.tel] = { em: ultimaEm + 60000, por: 'SoFIA' }; }
-  if (roteiro === 'remarcar') { tags.splice(0, tags.length, T.agendou); }
-  if (roteiro === 'humano') tags.push('0. Atendimento Humano');
-  tagsLead[p.tel] = tags;
-});
 
 // ── aulas experimentais (histórico lido do "EVO") ────────────────────────────
 const aulas = {};
 let nAula = 0;
+// Experimentais "avulsas" (pessoas sem conversa na SoFIA: vieram pelo formulário, telefone, recepção…)
+const AVULSAS = Array.from({ length: 70 }, (_, j) => ({ nome: `${NOMES[(j * 11 + 5) % NOMES.length]} ${SOBRENOMES[(j * 7 + 3) % SOBRENOMES.length]} ${SOBRENOMES[(j * 5 + 9) % SOBRENOMES.length]}`.toUpperCase(), id: String(8000 + j * 3) }));
 for (let n = -30; n <= 6; n++) {
   const d = dia(n); if (wd(d) === 0) continue;
   const qtd = wd(d) === 6 ? entre(0, 2) : entre(1, 4);
   for (let j = 0; j < qtd; j++) {
-    const p = pessoas[(nAula * 7 + 11) % pessoas.length]; nAula++;
+    const p = AVULSAS[nAula % AVULSAS.length]; nAula++;
     const hora = pick(HORAS), prof = PROFS[(nAula + HORAS.indexOf(hora)) % PROFS.length];
     const aconteceu = em(d, hora) + 3600e3 < AGORA;
     let status = 'Agendado', contrato = '';
@@ -192,13 +94,84 @@ const resultadoAula = (p, quando, canal, d0) => {
   tagLog.push({ chave: p.tel, tag: T.agendou, motivo: 'agendou', por: '', acao: 'add', em: quando, canal });
   return tags;
 };
-for (const p of LEADS) {
-  const c = conversas[p.tel]; if (!c || !(tagsLead[p.tel] || []).includes(T.agendou)) continue;
-  const d0 = Math.round((em(diaDe(c.ultimaEm), '12:00') - em(hoje, '12:00')) / 86400e3);
-  // (o evento "agendou" desta lead já está no histórico de tags)
-  const tags = resultadoAula(p, c.ultimaEm, 'sofia', d0); tagLog.pop(); // o evento "agendou" desta lead já está no histórico
-  tagsLead[p.tel] = tags;
+// ── conversas da SoFIA (histórias completas: demo-conversas.js) ─────────────
+const { HISTORIAS, ELENCO_LEADS, ELENCO_ALUNAS } = require('./demo-conversas');
+const SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+const ddmm = (d) => d.slice(8, 10) + '/' + d.slice(5, 7);
+const semDomingo = (off) => { while ([0, 6].includes(wd(dia(off)))) off++; return off; }; // aula experimental: seg a sex
+const titulo = (t) => String(t).toLowerCase().replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase());
+const semAcento = (t) => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const FUNIL = { contato: T.contato, agendou: T.agendou, fez: T.fez, faltou: T.faltou, semInteresse: T.semInteresse, aluna: T.aluna };
+function viverHistoria(p, chave, d0, inicio, extra = {}) {
+  const h = HISTORIAS[chave];
+  const horas = h.horas || HORAS.filter(x => x !== '05:45');
+  const hora = pick(horas);
+  const alts = (h.horasAlt || HORAS.filter(x => x !== '05:45')).filter(x => x !== hora);
+  const horaAlt = pick(alts.length ? alts : HORAS);
+  const prof = pick(PROFS);
+  const offA = semDomingo(d0 + (h.offA || 2)), offB = semDomingo(offA + (h.offB || 2));
+  const sobrenome = titulo(p.nome.split(' ').slice(1).join(' ') || 'Silva');
+  const ctx = {
+    primeiro: p.primeiro, nomeCompleto: titulo(p.nome), sobrenome, sobrenomeMin: semAcento(sobrenome.split(' ')[0].toLowerCase()),
+    email: semAcento(p.primeiro.toLowerCase()) + '.' + semAcento(sobrenome.split(' ')[0].toLowerCase()) + '@exemplo.com',
+    hora, horaAlt, prof, plano: extra.plano || '',
+    quando: offA - d0 === 1 ? 'amanhã' : SEMANA[wd(dia(offA))], Quando: offA - d0 === 1 ? 'Amanhã' : titulo(SEMANA[wd(dia(offA))]),
+    diaAula: SEMANA[wd(dia(offA))], dataAula: ddmm(dia(offA)), diaAula2: SEMANA[wd(dia(offB))], dataAula2: ddmm(dia(offB)),
+  };
+  const fill = (s) => String(s).replace(/\{(\w+)\}/g, (m, k) => (ctx[k] != null ? ctx[k] : m));
+  const diaDoPasso = (x) => (typeof x === 'number' ? d0 + x : (x[0] === 'A' ? offA : offB) + (Number(x.slice(1)) || 0));
+  const horaDoPasso = (dd, s) => { const m = /^(\{hora\}|\d\d:\d\d)([+-]\d+)?$/.exec(s); return em(dia(dd), m[1] === '{hora}' ? hora : m[1]) + (Number(m[2]) || 0) * 60000; };
+  const aulaDe = (slot) => { const d = dia(slot === 'B' ? offB : offA); return aulas[`${d}|${hora}|${p.id}`] || (aulas[`${d}|${hora}|${p.id}`] = { dia: d, hora, prof, nome: p.nome, id: p.id, status: 'Agendado', contrato: '', visto: AGORA }); };
+  const msgs = [];
+  let funil = extra.funil || '', extras = [], t = 0, primeiroAt = true;
+  for (const passo of h.passos) {
+    const [op] = passo;
+    if (op === '@') {
+      let hm = passo[2];
+      if (primeiroAt && inicio) hm = inicio;
+      primeiroAt = false;
+      t = Math.max(t, horaDoPasso(diaDoPasso(passo[1]), hm));
+      continue;
+    }
+    if (!passou(t)) break;
+    if (op === 'tag') {
+      const [, k, motivo, canal] = passo;
+      const tag = k === 'anuncio' ? T.anuncio : FUNIL[k];
+      if (k === 'anuncio') extras.push(tag); else funil = tag;
+      tagLog.push({ chave: p.tel, tag, motivo, por: '', acao: 'add', em: t + 15000, ...(canal ? { canal } : {}) });
+      if (k === 'agendou') agendaramCanal[p.tel.slice(-8)] = canal || 'sofia';
+      continue;
+    }
+    if (op === 'agenda') { aulaDe(passo[1]); continue; }
+    if (op === 'aula') { aulaDe(passo[2]).status = passo[1]; continue; }
+    if (op === 'contrato') { aulaDe('A').contrato = passo[1]; continue; }
+    if (op === 'encerra') { encerradas[p.tel] = { em: t + 60000, por: 'SoFIA' }; continue; }
+    const [autor, texto, mins, opc = {}] = passo;
+    const tm = t + (mins || 0) * 60000 + entre(5, 50) * 1000;
+    if (!passou(tm)) break;
+    t = tm;
+    const m = { autor, texto: fill(texto), em: t };
+    if (opc.tipo) m.tipo = opc.tipo;
+    if (opc.foto === 'grade') m.foto = 'grade-demo.png'; // imagem da grade (como a SoFIA envia)
+    if (opc.por) m.por = opc.por;
+    msgs.push(m);
+    if (autor === 'sofia' && !opc.tipo) custo.push({ em: new Date(t).toISOString(), tipo: 'conversa', model: 'claude-sonnet', tel: p.tel, inTok: entre(9000, 16000), outTok: entre(80, 260), usd: +(0.03 + rnd() * 0.035).toFixed(4) });
+  }
+  if (!msgs.length) return null;
+  conversas[p.tel] = { jid: p.tel + '@c.us', nome: p.primeiro, ultimaEm: msgs[msgs.length - 1].em, msgs };
+  return [funil, ...extras].filter(Boolean);
 }
+LEADS.forEach((p, k) => {
+  const [chave, d0, inicio] = ELENCO_LEADS[k % ELENCO_LEADS.length];
+  const tags = viverHistoria(p, chave, d0, inicio);
+  if (tags) tagsLead[p.tel] = tags;
+});
+// Alunas ativas que falam com a SoFIA (trocar horário, 2ª via…): a SoFIA sabe que já são alunas.
+const ALUNAS_CONVERSA = ALUNAS.slice(28, 28 + ELENCO_ALUNAS.length);
+ALUNAS_CONVERSA.forEach((p, k) => {
+  const [chave, d0, inicio] = ELENCO_ALUNAS[k];
+  viverHistoria(p, chave, d0, inicio, { plano: PLANOS[(28 + k) % PLANOS.length], funil: T.aluna });
+});
 // Alunas que vieram da experimental neste mês (agendaram → fizeram → fecharam).
 const VIERAM = ALUNAS.slice(0, 9);
 VIERAM.forEach((p, k) => {
@@ -335,6 +308,131 @@ const disparos = {}; for (const k of Object.keys(registrados)) disparos[k] = new
 // imagem da grade fictícia (aparece nas conversas, como a foto que a SoFIA envia)
 try { fs.mkdirSync(path.join(SOFIA, 'humano-fotos'), { recursive: true }); fs.copyFileSync(path.join(__dirname, 'demo-assets', 'grade-demo.png'), path.join(SOFIA, 'humano-fotos', 'grade-demo.png')); } catch (_) {}
 
+// ── Slim Club (benefícios de alunas para alunas) ─────────────────────────────
+const slimclub = [], usosClub = [], recsClub = {}, reclClub = [];
+{
+  const sid = (n) => 'de' + pad(n, 14);
+  const cnpj = (n) => '4' + pad(n * 7919 % 1e7, 7) + '0001' + pad(n * 13 % 100, 2);
+  const iso = (d, h) => new Date(em(d, h)).toISOString();
+  const neg = [
+    // [n, aluna dona (índice em ALUNAS) | null = parceira, negócio, categoria, benefício, alcance, instagram, status, dias atrás]
+    [1, 1, 'Studio Bella Unhas', 'Beleza', '15% de desconto em manicure e pedicure, de terça a quinta', 'local', 'bellaunhas.exemplo', 'aprovado', 58],
+    [2, 3, 'Nutri Ana Lacerda', 'Saúde', 'Primeira consulta nutricional com 30% de desconto + plano alimentar para treino', 'local', 'nutri.exemplo', 'aprovado', 51],
+    [3, 5, 'Doce Fit Confeitaria', 'Alimentação', '10% em todos os bolos e doces fit (encomendas com 48h de antecedência)', 'local', 'docefit.exemplo', 'aprovado', 44],
+    [4, 7, 'Ateliê Flor de Lis', 'Moda', '12% em peças da nova coleção e ajustes de roupa grátis', 'local', 'flordelis.exemplo', 'aprovado', 37],
+    [5, 10, 'Clínica Derma Vida', 'Saúde', 'Limpeza de pele por R$ 120 (valor normal R$ 180)', 'local', 'dermavida.exemplo', 'aprovado', 30],
+    [6, 12, 'Prado Contabilidade', 'Consultoria', 'Abertura de MEI gratuita e 20% na mensalidade contábil no 1º ano', 'nacional', 'pradocontabil.exemplo', 'aprovado', 22],
+    [7, null, 'Empório Natural Verde', 'Alimentação', '8% em toda a loja (granel, suplementos e naturais)', 'local', 'emporioverde.exemplo', 'aprovado', 40],
+    [8, null, 'Farmácia Exemplo', 'Saúde', '10% em dermocosméticos e suplementos', 'local', 'farmaciaexemplo', 'aprovado', 15],
+    [9, 15, 'Glow Estética', 'Beleza', 'Drenagem linfática: pacote de 5 sessões pelo preço de 4', 'local', 'glowestetica.exemplo', 'pendente', 1],
+    [10, 17, 'Luz Fotografia', 'Serviços', '20% em ensaios femininos e de família', 'local', 'luzfoto.exemplo', 'pendente', 0],
+  ];
+  const AV = ['julia', 'demonstracao'];
+  for (const [n, ia, negocio, categoria, beneficio, alcance, instagram, status, atras] of neg) {
+    const dona = ia == null ? null : ALUNAS[ia];
+    const criadoEm = iso(dia(-atras), pick(['09:12', '11:40', '15:05', '19:22', '21:08']));
+    const r = { id: sid(n), status, criadoEm, nome: dona ? titulo(dona.nome) : pick(['Marcos Teixeira', 'Renata Moreira', 'Paulo Campos']), telefone: dona ? dona.tel : '556290000' + pad(9000 + n, 4),
+      negocio, categoria, documento: cnpj(n), beneficio, alcance, validacao: 'carteira', fimVigencia: n === 5 ? dia(45) : '', instagram, whatsapp: '' };
+    if (dona) r.nomeNoCadastro = dona.primeiro; else Object.assign(r, { tipo: 'parceira', origem: n === 8 ? 'recepcao' : 'externo' });
+    if (status === 'aprovado') Object.assign(r, { avaliadoPor: pick(AV), avaliadoEm: iso(dia(-atras + 1), '10:30'), codigo: String(310000 + n * 7351).slice(0, 6), codigoVer: 1 });
+    slimclub.push(r);
+    try { fs.mkdirSync(path.join(DATA, 'slimclub-fotos'), { recursive: true }); fs.copyFileSync(path.join(__dirname, 'demo-assets', 'slimclub', n + '.jpg'), path.join(DATA, 'slimclub-fotos', r.id + '.jpg')); } catch (_) {}
+  }
+  // um recusado (benefício vago) — mostra o motivo que volta para a aluna
+  slimclub.push({ id: sid(11), status: 'recusado', criadoEm: iso(dia(-9), '20:14'), nome: titulo(ALUNAS[19].nome), telefone: ALUNAS[19].tel, negocio: 'Loja da Bia Acessórios', categoria: 'Moda',
+    documento: cnpj(11), beneficio: 'Desconto especial para alunas', alcance: 'local', validacao: 'carteira', fimVigencia: '', instagram: 'lojadabia.exemplo', whatsapp: '', nomeNoCadastro: ALUNAS[19].primeiro,
+    avaliadoPor: 'julia', avaliadoEm: iso(dia(-8), '10:05'), motivo: 'Descreva o benefício de forma específica (ex.: "10% em qualquer peça") para as alunas saberem o que vão ganhar.' });
+  try { fs.copyFileSync(path.join(__dirname, 'demo-assets', 'slimclub', '4.jpg'), path.join(DATA, 'slimclub-fotos', sid(11) + '.jpg')); } catch (_) {}
+  // usos registrados pela leitura do QR da carteira (últimos 60 dias)
+  const aprovados = slimclub.filter(r => r.status === 'aprovado');
+  const peso = { 1: 9, 2: 5, 3: 8, 4: 4, 5: 6, 6: 2, 7: 7, 8: 5 };
+  for (const r of aprovados) {
+    const nUsos = peso[Number(r.id.slice(-2))] || 3;
+    const quem = new Set();
+    for (let j = 0; j < nUsos * 2; j++) {
+      const a = pick(ALUNAS), d = dia(-entre(0, 55));
+      if (a.tel === r.telefone || !passou(em(d, '12:00'))) continue;
+      usosClub.push({ empresaId: r.id, tel: a.tel, nome: titulo(a.nome), em: iso(d, pick(['10:15', '14:40', '17:05', '19:30'])), dia: d });
+      quem.add(a.tel);
+    }
+    recsClub[r.id] = [...quem].slice(0, Math.max(1, Math.round(quem.size * 0.6)));
+  }
+  reclClub.push({ id: 'dc0000000001', empresaId: sid(4), empresa: 'Ateliê Flor de Lis', tel: ALUNAS[22].tel, nome: titulo(ALUNAS[22].nome),
+    texto: 'Fui ontem e disseram que o desconto só vale para pagamento em dinheiro. No anúncio não fala isso.', em: iso(dia(-1), '18:42'), status: 'aberta' });
+  reclClub.push({ id: 'dc0000000002', empresaId: sid(3), empresa: 'Doce Fit Confeitaria', tel: ALUNAS[25].tel, nome: titulo(ALUNAS[25].nome),
+    texto: 'A atendente não sabia como ler o QR da carteira e não deu o desconto.', em: iso(dia(-12), '16:20'), status: 'resolvida',
+    nota: 'Conversamos com a dona: a equipe foi orientada e a aluna recebeu o desconto na compra seguinte.', tratadaPor: 'julia', tratadaEm: iso(dia(-11), '09:40') });
+}
+
+// ── Grade de matrículas fixas (Indicadores → Grade): semana passada, esta e a próxima ──
+const gradeSemanas = {};
+{
+  const ROSTER = [...ALUNAS.map(p => titulo(p.nome)), ...EXTRAS.map(p => titulo(p.nome))];
+  const TICKET = { 'SLIM 2X MENSAL': 587, 'SLIM 3X MENSAL': 689, 'SLIM 3X TRIMESTRAL': 649, 'SLIM 4X SEMESTRAL': 659, 'SLIM FREE 3X QUADRIMESTRAL': 619, 'SLIM 5X ANUAL': 699 };
+  const planoDe = {}; ROSTER.forEach((n, k) => { planoDe[n] = PLANOS[k % PLANOS.length]; });
+  const CHEIAS = ['07:00', '18:45', '17:30'];
+  const celulas = [];
+  for (let w = 0; w <= 5; w++) for (const h of HORAS) {
+    if (w === 5 && !['08:15', '09:30'].includes(h)) continue;      // sábado: só de manhã (escala)
+    if (h === '14:00' && ![0, 2, 4].includes(w)) continue;          // 14:00 só seg/qua/sex
+    const cap = 9;
+    const n = CHEIAS.includes(h) ? entre(8, 9) : (h === '14:00' || h === '05:45' ? entre(3, 5) : entre(5, 8));
+    const ini = (w * 17 + HORAS.indexOf(h) * 11) % ROSTER.length;
+    const fixas = Array.from({ length: n }, (_, j) => ROSTER[(ini + j * 5) % ROSTER.length]);
+    celulas.push({ w, h, cap, fixas: [...new Set(fixas)], prof: PROFS[(w + HORAS.indexOf(h)) % PROFS.length] });
+  }
+  const segDe = (off) => { const d = new Date(hoje + 'T12:00:00Z'); const dw = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - dw + off * 7); return d.toISOString().slice(0, 10); };
+  for (const off of [-1, 0, 1]) {
+    const seg = segDe(off);
+    const dataDe = (w) => { const d = new Date(seg + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + w); return d.toISOString().slice(0, 10); };
+    const turmas = celulas.map(c => {
+      const data = dataDe(c.w), aconteceu = em(data, c.h) + 3600e3 < AGORA;
+      const fixas = c.fixas.map(nome => {
+        const x = { nome, plano: planoDe[nome], ticket: TICKET[planoDe[nome]] };
+        if (aconteceu) { const r = rnd(); x.pres = r < 0.8 ? 'foi' : r < 0.9 ? 'faltou' : r < 0.97 ? 'justif' : 'trancada'; }
+        return x;
+      });
+      const livres = aconteceu ? fixas.filter(x => x.pres !== 'foi').length : 0;
+      const reposicao = aconteceu ? Array.from({ length: Math.min(livres, entre(0, 2)) }, () => pick(ROSTER)) : [];
+      const free = aconteceu && rnd() < 0.25 && livres > reposicao.length ? [pick(ROSTER)] : [];
+      const presentes = fixas.filter(x => x.pres === 'foi').length;
+      const t = { weekday: c.w, data, hora: c.h, capacity: c.cap, nFixas: fixas.length, vagas: Math.max(0, c.cap - fixas.length), professora: c.prof, fixas, reposicao, free,
+        nRepo: reposicao.length, nFree: free.length, aconteceu };
+      if (aconteceu) Object.assign(t, { presentes, faltas: fixas.filter(x => x.pres === 'faltou').length, nReal: presentes + reposicao.length + free.length });
+      return t;
+    }).sort((a, b) => (a.data + a.hora).localeCompare(b.data + b.hora));
+    const semSab = turmas.filter(t => t.weekday !== 5), feitas = semSab.filter(t => t.aconteceu);
+    const somaF = semSab.reduce((a, t) => a + t.nFixas, 0), somaV = semSab.reduce((a, t) => a + t.capacity, 0);
+    const somaR = feitas.reduce((a, t) => a + t.nReal, 0), somaRV = feitas.reduce((a, t) => a + t.capacity, 0);
+    const alunasFixas = new Set(turmas.flatMap(t => t.fixas.map(x => x.nome))).size;
+    const tks = ROSTER.map(n => TICKET[planoDe[n]]);
+    const mes = hoje.slice(0, 7);
+    const fatura_itens = ROSTER.slice(0, idsAtivos.length).map((n, k) => {
+      const venc = mes + '-' + pad([5, 10, 15, 20, 25][k % 5]), valor = TICKET[planoDe[n]];
+      const passouVenc = venc <= hoje, r = rnd();
+      const sit = !passouVenc ? 'a receber' : (r < 0.93 ? 'pago' : 'vencido');
+      return { aluna: n, contrato: planoDe[n], venc, valor, pago: sit === 'pago' ? valor : 0, sit };
+    });
+    const porProf = PROFS.map(pf => {
+      const ts = semSab.filter(t => t.professora === pf), fe = ts.filter(t => t.aconteceu);
+      const fx = ts.reduce((a, t) => a + t.nFixas, 0), vg = ts.reduce((a, t) => a + t.capacity, 0);
+      const rl = fe.reduce((a, t) => a + t.nReal, 0), rv = fe.reduce((a, t) => a + t.capacity, 0);
+      return { professora: pf, turmas: ts.length, fixas: fx, vagas: vg, pct: vg ? Math.round(fx / vg * 100) : null, pres_pct: rv ? Math.round(rl / rv * 100) : null, pres_turmas: fe.length };
+    });
+    const geradoEm = new Date(Math.min(AGORA, em(off <= 0 ? hoje : seg, '06:10'))).toLocaleString('pt-BR', { timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+    gradeSemanas[off] = {
+      inicio: seg, fim: dataDe(5), gerado_em: geradoEm, financeiro_em: geradoEm, turmas, por_professora: porProf,
+      resumo: {
+        turmas: turmas.length, alunas_fixas: alunasFixas, ativas: idsAtivos.length, trancadas: 5,
+        ocupacao_pct: somaV ? Math.round(somaF / somaV * 100) : null, ocupacao_fixas: somaF, ocupacao_vagas: somaV,
+        presenca_pct: somaRV ? Math.round(somaR / somaRV * 100) : null, presenca_real: somaR, presenca_vagas: somaRV,
+        tkm_medio: Math.round(tks.reduce((a, b) => a + b, 0) / tks.length), tkm_alunas: tks.length, sem_contrato: [],
+        fatura_mes: fatura_itens.reduce((a, it) => a + it.valor, 0), fatura_n: fatura_itens.length, fatura_itens,
+      },
+    };
+  }
+}
+
 // ── grava tudo ───────────────────────────────────────────────────────────────
 gravar(path.join(SOFIA, 'sofia-conversas.json'), conversas);
 gravar(path.join(SOFIA, 'sofia-tag-log.jsonl'), tagLog.filter(e => passou(e.em)).map(e => JSON.stringify(e)).join('\n') + '\n');
@@ -358,6 +456,10 @@ gravar(path.join(DATA, 'indicadores.json'), indicadores);
 gravar(path.join(DATA, 'wa-status.json'), statusOk);
 gravar(path.join(DATA, 'comparecimento.json'), { on: true, tagAgendou: T.agendou, tagsAgendou: [T.agendou], tagCompareceu: T.fez, tagFaltou: T.faltou, numeroRelatorio: '', criarNovos: false, diasJanela: 7, intervaloHoras: 0 });
 gravar(path.join(DATA, 'auto-tag-alunas.json'), { on: true, tagAluna: T.aluna, tagExAluna: T.ex });
+gravar(path.join(DATA, 'slimclub.json'), { cadastros: slimclub });
+gravar(path.join(DATA, 'slimclub-usos.json'), { usos: usosClub });
+gravar(path.join(DATA, 'slimclub-avaliacoes.json'), { recs: recsClub, reclamacoes: reclClub });
+for (const [off, g] of Object.entries(gradeSemanas)) gravar(path.join(DATA, Number(off) === 0 ? 'grade-fixas.json' : `grade-fixas.s${off}.json`), g);
 gravar(path.join(DATA, 'jobs-disparos.json'), { desde: new Date(AGORA - 30 * 86400e3).toISOString(), boot: new Date(AGORA - 3 * 86400e3).toISOString(), registrados, disparos, falhas: {} });
 
 console.log(`demo-dados: ${Object.keys(conversas).length} conversas · ${Object.keys(contatos).length} contatos · ${Object.keys(aulas).length} experimentais · ${idsAtivos.length} alunas ativas · ${atividade.length} envios no log · ${indicadores.length} eventos do formulário.`);
