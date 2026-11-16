@@ -93,6 +93,8 @@ function lerCookie(req, nome) {
 function ehHttps(req) { return (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https'; }
 // Devolve o usuário logado (objeto {usuario, admin, telas}) ou null.
 function usuarioDaReq(req) {
+  // Demonstração (PAINEL_DEMO=1): entra direto, sem senha, vendo todas as telas.
+  if (require('./demo-guard').ativo) return { usuario: 'demonstracao', admin: true, telas: TODAS_TELAS, sid: '' };
   const o = lerToken(lerCookie(req, 'sf_sess'));
   if (!o) return null;
   if (o.sid && !sessaoValida(o.sid)) return null; // sessão encerrada pelo admin → força novo login
@@ -752,6 +754,10 @@ function menuConta(ativo) {
   </details>`;
 }
 
+// Faixa fixa do modo demonstração + aviso quando uma ação foi bloqueada (?demo=1).
+const DEMO_FAIXA = `<div style="background:#1f6f5c;color:#fff;text-align:center;font:600 13px/1.4 Inter,system-ui,sans-serif;padding:7px 12px">🎭 Demonstração com dados fictícios — explore à vontade: nenhuma mensagem é enviada e nada é alterado de verdade.</div>
+<div id="demoToast" style="display:none;position:fixed;left:50%;top:56px;transform:translateX(-50%);z-index:9999;background:#222;color:#fff;font:500 14px/1.4 Inter,system-ui,sans-serif;padding:10px 16px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.25)">🎭 Modo demonstração — nada foi enviado nem alterado.</div>
+<script>(function(){try{var q=new URLSearchParams(location.search);if(q.get('demo')==='1'){var t=document.getElementById('demoToast');t.style.display='block';setTimeout(function(){t.style.display='none'},4500);q.delete('demo');history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:'')+location.hash);}}catch(e){}})();</script>`;
 function chrome(titSubtitulo, ativo, corpo) {
   return `<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -759,7 +765,7 @@ function chrome(titSubtitulo, ativo, corpo) {
 <link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<style>${ESTILO}</style></head><body>
+<style>${ESTILO}</style></head><body>${require('./demo-guard').ativo ? DEMO_FAIXA : ''}
 <nav class="topbar"><div class="in">
   <img class="tb-logo" alt="SlimFit Studio" src="https://drive.google.com/thumbnail?id=1pl1mh709FGcitG9uHo0J6nzMUKFYqg-w&sz=w400">
   <div class="tabs">${navTabs(ativo)}</div>

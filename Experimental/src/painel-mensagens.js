@@ -11,6 +11,7 @@
  *    painel SEMPRE atrás de HTTPS (ex.: Caddy + subdomínio). Ver o runbook.
  */
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
+const DEMO = require('./demo-guard'); // ANTES de tudo: no modo demonstração fecha comandos e rede de saída
 const http = require('http');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -442,9 +443,31 @@ function protegido(fn) {
 process.on('uncaughtException', (e) => console.error('[painel] erro não tratado (o painel continua no ar):', e && e.stack || e));
 process.on('unhandledRejection', (e) => console.error('[painel] promessa rejeitada sem tratamento:', e && e.stack || e));
 
+// Modo demonstração: nenhuma ação (POST) é executada. Pedido via fetch → JSON com
+// o aviso (a tela mostra como erro); formulário → volta à página com ?demo=1.
+function demoBloqueado(req, res) {
+  try { req.resume(); } catch (_) {}
+  const h = req.headers || {};
+  const viaFetch = /json/i.test(String(h['content-type'] || '')) || /json/i.test(String(h.accept || '')) || !!h['x-requested-with']
+    || !/x-www-form-urlencoded|multipart\/form-data/i.test(String(h['content-type'] || ''));
+  if (viaFetch) {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ ok: false, demo: true, erro: DEMO.AVISO, msg: DEMO.AVISO }));
+  }
+  let volta = '/hoje';
+  try { const r = new URL(String(h.referer || ''), 'http://x'); if (r.pathname && r.pathname !== '/login') volta = r.pathname + r.search; } catch (_) {}
+  volta = volta.replace(/([?&])demo=1(&|$)/, '$1').replace(/[?&]$/, '');
+  res.writeHead(303, { Location: volta + (volta.includes('?') ? '&' : '?') + 'demo=1' });
+  return res.end();
+}
+
 const server = http.createServer(protegido((req, res) => {
   const url = req.url.split('?')[0];
   E._navSess = null;
+  if (DEMO.ativo) {
+    if (url === '/login' || url === '/logout') { res.writeHead(303, { Location: '/hoje' }); return res.end(); }
+    if (req.method !== 'GET' && req.method !== 'HEAD') return demoBloqueado(req, res);
+  }
 
   // ── Login / logout (rotas públicas) ──────────────────────────────────────
   if (url === '/login') {
