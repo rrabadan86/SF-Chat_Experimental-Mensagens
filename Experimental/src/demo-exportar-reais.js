@@ -124,16 +124,29 @@ function anonimizador(conv, contato, fict) {
 
 // ── escolhe as conversas ─────────────────────────────────────────────────────
 const candidatas = [];
+const diag = { total: 0, comContato: 0, tamanhoOk: 0, tags: new Map() };
 for (const [chave, conv] of Object.entries(conversas)) {
+  diag.total++;
   const msgs = (conv && conv.msgs) || [];
   const nS = msgs.filter(m => m.autor === 'sofia').length, nA = msgs.filter(m => m.autor === 'aluna').length;
-  if (msgs.length < 8 || nS < 3 || nA < 3) continue;
   const { contato, tags } = tagsDe(chave, conv);
+  if (contato) diag.comContato++;
+  if (msgs.length < 6 || nS < 2 || nA < 2) continue;
+  diag.tamanhoOk++;
+  for (const t of tags) diag.tags.set(t, (diag.tags.get(t) || 0) + 1);
   const ks = tags.map(chaveTag);
   const alvo = TAGS.filter(t => ks.includes(chaveTag(t)));
   if (!alvo.length) continue;
   candidatas.push({ chave, conv, contato, tags, alvo, nota: Math.min(nS, 25) + Math.min(nA, 25) + (msgs.filter(m => m.autor === 'humano').length > nS ? -20 : 0) });
 }
+console.log(`Conversas da SoFIA: ${diag.total} (${path.join(SOFIA, 'sofia-conversas.json')})`);
+console.log(`Contatos no CRM: ${Object.keys(mapa || {}).length} (${contatos.ARQUIVO})`);
+console.log(`Conversas ligadas a um contato: ${diag.comContato} · com tamanho bom: ${diag.tamanhoOk} · com as tags pedidas: ${candidatas.length}`);
+if (!candidatas.length) {
+  console.log('\nTags que aparecem nas conversas com tamanho bom:');
+  [...diag.tags.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20).forEach(([t, n]) => console.log(`   ${String(n).padStart(4)}  ${t}`));
+}
+console.log('');
 candidatas.sort((a, b) => b.nota - a.nota);
 const escolhidas = [], usadas = new Set();
 for (const t of TAGS) {
