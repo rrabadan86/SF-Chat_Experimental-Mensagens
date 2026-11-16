@@ -31,6 +31,24 @@ function carimbo() {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
 }
 
+// Pasta da SoFIA (conversas do painel, campanhas, histórico de tags, custos…): vive
+// FORA de data/ (SOFIA_DIR, ex.: /root/sofia-data) e não tinha cópia nenhuma. Vai
+// num arquivo à parte, sofia-<data>.tar.gz, só com os DADOS (sem código, sessão do
+// WhatsApp, node_modules nem .env). Restaurar: tar -xzf backups/sofia-<data>.tar.gz -C <pasta acima da SoFIA>
+const SOFIA = path.resolve(process.env.SOFIA_DIR || path.join(RAIZ, '..', 'ChatBot'));
+function comprimirSofia(destino) {
+  return new Promise((resolve, reject) => {
+    const fora = ['node_modules', '.wwebjs_auth', '.wwebjs_cache', 'edge-wa', '.git', '*.ts', '.env', '*.env', 'backup-*', 'backups', '*.log', '*.tmp'];
+    const args = ['-czf', destino, ...fora.map(f => '--exclude=' + f), '-C', path.dirname(SOFIA), path.basename(SOFIA)];
+    execFile('tar', args, { timeout: 300000 }, (err) => err ? reject(err) : resolve());
+  });
+}
+function rotacionar(prefixo) {
+  const arquivos = fs.readdirSync(BKP).filter(f => f.startsWith(prefixo + '-') && f.endsWith('.tar.gz')).sort();
+  for (const f of arquivos.slice(0, Math.max(0, arquivos.length - MANTER))) { try { fs.unlinkSync(path.join(BKP, f)); } catch (_) {} }
+  return Math.min(arquivos.length, MANTER);
+}
+
 function comprimir(destino) {
   return new Promise((resolve, reject) => {
     // -C RAIZ + "data" → o tar guarda o caminho "data/..." (restaura no lugar certo)
@@ -46,9 +64,22 @@ async function main() {
   await comprimir(destino);
 
   // Rotaciona: mantém só as MANTER cópias mais recentes.
-  const arquivos = fs.readdirSync(BKP).filter(f => /^data-.*\.tar\.gz$/.test(f)).sort();
+  const arquivos = fs.readdirSync(BKP).filter(f => /^data-.*\.tar\.gz$/.test(f)).sort(); // (sofia-*.tar.gz roda à parte)
   const excedente = arquivos.slice(0, Math.max(0, arquivos.length - MANTER));
   for (const f of excedente) { try { fs.unlinkSync(path.join(BKP, f)); } catch (_) {} }
+
+  // SoFIA: falha aqui não derruba o backup de data/ — só avisa.
+  if (fs.existsSync(path.join(SOFIA, 'sofia-conversas.json')) || fs.existsSync(path.join(SOFIA, 'campanhas.json'))) {
+    const destS = path.join(BKP, `sofia-${carimbo()}.tar.gz`);
+    try {
+      await comprimirSofia(destS);
+      const n = rotacionar('sofia');
+      console.log(`[backup] SoFIA ok: ${destS} (${(fs.statSync(destS).size / 1024).toFixed(0)} KB, de ${SOFIA}). Guardando ${n} cópia(s).`);
+    } catch (e) {
+      console.error('[backup] SoFIA FALHOU:', e && e.message);
+      try { await notif.alertar('Backup da SoFIA FALHOU', (e && e.message) || 'erro no backup da pasta da SoFIA.', { prioridade: 'high', tags: 'warning', forcar: true }); } catch (_) {}
+    }
+  } else console.log(`[backup] pasta da SoFIA sem dados em ${SOFIA} — pulei.`);
 
   const tamKB = (fs.statSync(destino).size / 1024).toFixed(0);
   const guardadas = Math.min(arquivos.length, MANTER);
