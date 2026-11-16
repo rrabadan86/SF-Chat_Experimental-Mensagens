@@ -84,7 +84,7 @@ function blocoWaRobo() {
 // Sub-navegação da aba WhatsApp Mensagens: Configuração (mensagens/horários),
 // Agendamento (envios pontuais), Express (cadastro rápido → agenda no EVO) e Log.
 function subnavMensagens(view) {
-  const href = (v) => v === 'agendar' ? '/?view=agendar' : (v === 'express' ? '/?view=express' : (v === 'hoje' ? '/hoje' : '/?view=config'));
+  const href = (v) => v === 'agendar' ? '/?view=agendar' : (v === 'express' ? '/?view=express' : (v === 'hoje' ? '/hoje' : (v === 'cliente' ? '/visao-cliente' : '/?view=config')));
   const item = (v, rot) => `<a href="${href(v)}"${view === v ? ' class="on"' : ''}>${rot}</a>`;
   const sess = E._navSess || { admin: true, telas: [] };
   let its = '';
@@ -93,6 +93,7 @@ function subnavMensagens(view) {
   // quem tem QUALQUER uma das duas permissões (cada seção é gated lá dentro).
   if (podeMsgSub(sess, 'express') || podeMsgSub(sess, 'agendar')) its += item('express', '📅 Express');
   if (podeMsgSub(sess, 'hoje')) its += item('hoje', 'Log');
+  if (require('./demo-guard').ativo) its += item('cliente', '📱 Visão do cliente'); // demonstração: como a aluna recebe
   return `<div class="subtabs">${its}</div>`;
 }
 

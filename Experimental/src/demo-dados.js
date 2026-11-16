@@ -50,7 +50,7 @@ const HORAS = ['05:45', '07:00', '08:15', '09:30', '14:00', '16:15', '17:30', '1
 const PLANOS = ['SLIM 2X MENSAL', 'SLIM 3X MENSAL', 'SLIM 3X TRIMESTRAL', 'SLIM 4X SEMESTRAL', 'SLIM FREE 3X QUADRIMESTRAL', 'SLIM 5X ANUAL'];
 const pessoas = NOMES.map((n, i) => ({
   i, nome: `${n} ${SOBRENOMES[i % SOBRENOMES.length]}`.toUpperCase(), primeiro: n.split(' ')[0],
-  tel: '55629' + pad(1000 + i * 37, 4) + pad((i * 7919) % 10000, 4), id: String(3100 + i * 13),
+  tel: '556290000' + pad(i, 4), id: String(3100 + i * 13),
 }));
 const ALUNAS = pessoas.slice(0, 34), EX = pessoas.slice(34, 42), LEADS = pessoas.slice(42);
 const T = { contato: 'FX - 1. Contato inicial', agendou: 'FX - 3. Agendou Aula Exp', fez: 'FX - 5. Fez Aula Experimental', faltou: 'FX - 2. Encerrado com Agendamento sem Presença', encerrado: 'FX - 2. Encerrado sem agendamento', semInteresse: 'FX - 0. Sem interesse', aluna: '0. Aluna', ex: '0. Ex Aluna', preco: '0. Preço', anuncio: '0. Patrocinado' };
@@ -64,7 +64,8 @@ const ROTEIROS = {
     ['sofia', 'Vamos agendar uma aula experimental gratuita pra você conhecer a nossa metodologia?', 0],
     ['aluna', 'Quero sim! Como funciona?', 3],
     ['sofia', 'O SlimFit é um *Studio de Personal exclusivo para mulheres*: treino completo de força, funcional e cardio em *até 1 hora*, em turmas de no máximo 9 alunas.', 1],
-    ['sofia', 'Aqui está a nossa grade de horários 👇\nQual dia e horário ficam melhores pra você?', 0],
+    ['sofia', 'Aqui está a nossa grade de horários 👇', 0, '', 'grade'],
+    ['sofia', 'Qual dia e horário ficam melhores pra você?', 0],
     ['aluna', 'Quinta às {hora} tem?', 4],
     ['sofia', 'Tenho vaga na quinta às {hora} 😊 Me passa seu nome completo e e-mail?', 1],
     ['aluna', '{nome} — {email}', 2],
@@ -107,7 +108,8 @@ const ROTEIROS = {
   campanha: [
     ['sofia', 'Oi {primeiro}! 💛 Sentimos sua falta por aqui. Neste mês temos condição especial para quem já fez a aula experimental. Quer receber os horários disponíveis?', 0, 'campanha'],
     ['aluna', 'Quero!', 40],
-    ['sofia', 'Que ótimo! 😊 Aqui está a nossa grade de horários 👇\nQual dia e horário ficam melhores pra você?', 1],
+    ['sofia', 'Que ótimo! 😊 Aqui está a nossa grade de horários 👇', 1, '', 'grade'],
+    ['sofia', 'Qual dia e horário ficam melhores pra você?', 0],
     ['aluna', 'Segunda às {hora}', 8],
     ['sofia', 'Tenho vaga na segunda às {hora} 😊 Pode confirmar seu e-mail?', 1],
   ],
@@ -118,7 +120,8 @@ const ROTEIROS = {
     ['sofia', 'Oi {primeiro}! Ficou alguma dúvida? Se quiser, já te passo os horários disponíveis para essa semana 😊', 180, 'followup'],
   ],
 };
-const ESCOLHA = ['agendou', 'agendou', 'agendou', 'preco', 'preco', 'semInteresse', 'remarcar', 'duvida', 'duvida', 'humano', 'campanha', 'followup', 'agendou', 'preco', 'duvida', 'agendou', 'campanha', 'followup'];
+// (a cada 6, a 1ª é de hoje: hoje aparecem um agendamento, um follow-up e uma resposta à campanha)
+const ESCOLHA = ['agendou', 'agendou', 'agendou', 'preco', 'preco', 'semInteresse', 'followup', 'duvida', 'duvida', 'humano', 'agendou', 'remarcar', 'campanha', 'preco', 'duvida', 'agendou', 'campanha', 'followup'];
 
 const conversas = {}, tagLog = [], encerradas = {}, custo = [], agendaramCanal = {};
 const tagsLead = {};
@@ -126,14 +129,16 @@ LEADS.forEach((p, k) => {
   const roteiro = ESCOLHA[k % ESCOLHA.length];
   const d = dia(-(k % 6)); // espalhado nos últimos 6 dias (hoje incluso)
   let t = em(d, pick(['08:12', '09:40', '11:05', '12:30', '13:47', '15:20', '17:55', '19:10', '20:35', '21:15']));
+  if (roteiro === 'followup' || roteiro === 'campanha') t = em(d, roteiro === 'followup' ? '08:05' : '09:02'); // cedo, para o dia mostrar a sequência inteira
   const hora = pick(HORAS);
   const email = p.primeiro.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '') + '.' + (k + 3) + '@exemplo.com';
   const msgs = [];
-  for (const [autor, texto, mins, tipo] of ROTEIROS[roteiro]) {
+  for (const [autor, texto, mins, tipo, foto] of ROTEIROS[roteiro]) {
     t += (mins || 0) * 60000 + entre(5, 50) * 1000;
     if (!passou(t)) break;
     const m = { autor, texto: texto.replace(/\{hora\}/g, hora).replace(/\{primeiro\}/g, p.primeiro).replace(/\{nome\}/g, p.nome.replace(/\b\w+/g, (w) => w[0] + w.slice(1).toLowerCase())).replace(/\{email\}/g, email), em: t };
     if (tipo) m.tipo = tipo;
+    if (foto === 'grade') m.foto = 'grade-demo.png'; // imagem da grade (como a SoFIA envia)
     if (autor === 'humano') m.por = 'julia';
     msgs.push(m);
     if (autor === 'sofia' && !tipo) custo.push({ em: new Date(t).toISOString(), tipo: 'conversa', model: 'claude-sonnet', tel: p.tel, inTok: entre(9000, 16000), outTok: entre(80, 260), usd: +(0.03 + rnd() * 0.035).toFixed(4) });
@@ -218,7 +223,7 @@ const pesAtivas = {}, idsAtivos = [];
 const EXTRAS = [];
 for (let k = 0; EXTRAS.length < 96; k++) {
   const n = NOMES[(k * 7 + 3) % NOMES.length], sb = SOBRENOMES[(k * 5 + 11) % SOBRENOMES.length], sb2 = SOBRENOMES[(k * 3 + 1) % SOBRENOMES.length];
-  EXTRAS.push({ nome: `${n} ${sb} ${sb2}`.toUpperCase(), tel: '55629' + pad(5000 + k * 41, 4) + pad((k * 6151) % 10000, 4), id: String(5200 + k * 7) });
+  EXTRAS.push({ nome: `${n} ${sb} ${sb2}`.toUpperCase(), tel: '556290000' + pad(1000 + k, 4), id: String(5200 + k * 7) });
 }
 ALUNAS.forEach((p, k) => {
   const ini = dia(-entre(20, 540)), plano = PLANOS[k % PLANOS.length];
@@ -326,6 +331,9 @@ const disparos = {}; for (const k of Object.keys(registrados)) disparos[k] = new
     try { const dst = path.join(SOFIA, f); if (!fs.existsSync(dst) && fs.existsSync(path.join(CHATBOT, f))) fs.copyFileSync(path.join(CHATBOT, f), dst); } catch (_) {}
   }
 }
+
+// imagem da grade fictícia (aparece nas conversas, como a foto que a SoFIA envia)
+try { fs.mkdirSync(path.join(SOFIA, 'humano-fotos'), { recursive: true }); fs.copyFileSync(path.join(__dirname, 'demo-assets', 'grade-demo.png'), path.join(SOFIA, 'humano-fotos', 'grade-demo.png')); } catch (_) {}
 
 // ── grava tudo ───────────────────────────────────────────────────────────────
 gravar(path.join(SOFIA, 'sofia-conversas.json'), conversas);
