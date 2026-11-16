@@ -101,7 +101,14 @@ for (const [k8, e] of C.enviados) {
   if (nm && nm.length >= 2) t = t.replace(new RegExp('\\b' + nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g'), '{nome}');
   if (t) vars.set(t, (vars.get(t) || 0) + 1);
 }
-let variacoes = [...vars.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t).slice(0, 20);
+// Fica só com as variações que se repetem (uma que saiu UMA vez só pode ter ficado
+// com o nome de uma aluna no lugar do {nome}) e, se o log disser quantas eram, com essas.
+let ordenadas = [...vars.entries()].sort((a, b) => b[1] - a[1]);
+const repetidas = ordenadas.filter(([, n]) => n >= 2);
+if (repetidas.length >= 3) ordenadas = repetidas;
+if (C.vars > 0) ordenadas = ordenadas.slice(0, C.vars);
+let variacoes = ordenadas.map(([t]) => t).slice(0, 20);
+const descartadas = [...vars.keys()].filter(t => !variacoes.includes(t));
 if (!variacoes.length) {
   const r = lerJson(path.join(SOFIA, 'campanha-rascunhos.json'), {});
   const ult = Object.values(r).sort((a, b) => (b.em || 0) - (a.em || 0))[0];
@@ -110,8 +117,13 @@ if (!variacoes.length) {
 // ── 5. foto e id ─────────────────────────────────────────────────────────────
 const snap = lerJson(path.join(DATA, 'campanhas-snapshot.json'), {});
 const id = Object.keys(snap).sort((a, b) => Math.abs((snap[a].em || 0) - C.criadaEm) - Math.abs((snap[b].em || 0) - C.criadaEm))[0] || ('c' + (C.criadaEm || Date.now()));
-let fotoArquivo = '';
-try { const f = fs.readdirSync(path.join(SOFIA, 'campanha-fotos')).find(x => x.startsWith(id + '.')); if (f) fotoArquivo = path.join(SOFIA, 'campanha-fotos', f); } catch (_) {}
+let fotoArquivo = arg('--foto', '') ? path.resolve(arg('--foto')) : '';
+if (fotoArquivo && !fs.existsSync(fotoArquivo)) { console.error(`Foto não encontrada: ${fotoArquivo}`); process.exit(1); }
+const fotosDir = path.join(SOFIA, 'campanha-fotos');
+let fotos = []; try { fotos = fs.readdirSync(fotosDir).filter(x => /\.(jpe?g|png|webp)$/i.test(x)).map(x => ({ x, t: fs.statSync(path.join(fotosDir, x)).mtimeMs })); } catch (_) {}
+if (!fotoArquivo) { const f = fotos.find(f => f.x.startsWith(id + '.')); if (f) fotoArquivo = path.join(fotosDir, f.x); }
+// sem o id certo: a foto salva mais perto da criação da campanha (até 10 min)
+if (!fotoArquivo && C.criadaEm && fotos.length) { const f = fotos.slice().sort((a, b) => Math.abs(a.t - C.criadaEm) - Math.abs(b.t - C.criadaEm))[0]; if (Math.abs(f.t - C.criadaEm) < 10 * 60e3) fotoArquivo = path.join(fotosDir, f.x); }
 
 const R = C.ritmo || { delayMinSeg: 120, delayMaxSeg: 180, limiteDia: 40, janelaIni: '09:00', janelaFim: '20:00' };
 const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
@@ -129,7 +141,9 @@ console.log(`  fila que falta: ${pendentes.length}  (contatos com a tag hoje: ${
 console.log(`  ritmo: ${R.delayMinSeg}-${R.delayMaxSeg}s · ${R.limiteDia}/dia · janela ${R.janelaIni}-${R.janelaFim}${C.ritmo ? '' : ' (padrão — ajuste no painel se era outro)'}`);
 console.log(`  foto: ${fotoArquivo || (comFoto ? '⚠️ a campanha tinha foto, mas não achei o arquivo' : 'sem foto')}`);
 console.log(`  variações recuperadas: ${variacoes.length}`);
-variacoes.slice(0, 3).forEach((v, i) => console.log(`    ${i + 1}) ${v.replace(/\n/g, ' ⏎ ').slice(0, 160)}`));
+variacoes.forEach((v, i) => console.log(`\n  ── variação ${i + 1} (saiu ${vars.get(v) || '?'}x) ──\n${v}`));
+if (descartadas.length) console.log(`\n  (${descartadas.length} texto(s) que saíram só 1 vez ficaram de fora — podiam ter o nome de alguém no lugar do {nome})`);
+if (!fotoArquivo && (comFoto || fotos.length)) console.log(`\n  Fotos em ${fotosDir}:\n` + fotos.sort((a, b) => b.t - a.t).slice(0, 10).map(f => `    ${f.x}  (${new Date(f.t).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })})`).join('\n') + '\n  → passe a certa com --foto ' + fotosDir + '/<arquivo>');
 if (!variacoes.length) { console.error('\n⚠️  Não achei o texto da campanha. Faça "Reimportar histórico" no painel e rode de novo.'); process.exit(1); }
 
 if (SIMULAR) { console.log('\n(simulação — nada foi gravado)'); process.exit(0); }
