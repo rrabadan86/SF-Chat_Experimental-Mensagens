@@ -51,6 +51,16 @@ if (args.has('--instalar')) {
   process.exit(0);
 }
 
+// Atalho "slimfit-sofia" (destravar/reconectar a SoFIA): cria sozinho em todo
+// servidor que se atualiza, para estar à mão quando a SoFIA travar.
+if (!SIMULAR) {
+  try {
+    const atalho = '/usr/local/bin/slimfit-sofia', script = path.resolve(__dirname, 'sofia.js');
+    const corpo = `#!/bin/sh\n# Destrava/reconecta a SoFIA das unidades SlimFit deste servidor (scripts/sofia.js).\nexec node "${script}" "$@"\n`;
+    if (fs.existsSync(script) && (!fs.existsSync(atalho) || fs.readFileSync(atalho, 'utf8') !== corpo)) fs.writeFileSync(atalho, corpo, { mode: 0o755 });
+  } catch (_) {}
+}
+
 // ── 1. o que roda neste servidor ────────────────────────────────────────────
 let procs;
 try { procs = pm2Lista(); }
