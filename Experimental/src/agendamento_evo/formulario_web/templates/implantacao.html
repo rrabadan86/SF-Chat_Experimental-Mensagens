@@ -189,6 +189,7 @@
       <li><a href="#testar">Testar sem enviar<small>cada job em modo seguro</small></a></li>
       <li><a href="#duas-lojas">Duas lojas no mesmo servidor<small>mesmo franqueado, mesma VPS</small></a></li>
       <li><a href="#manter">Atualizar e manter<small>o que reiniciar, sem derrubar o WhatsApp</small></a></li>
+      <li><a href="#manutencao">Manutenção: comandos prontos<small>slimfit-atualizar, slimfit-sofia, backup, campanha</small></a></li>
       <li><a href="#problemas">Quando algo dá errado<small>WhatsApp, EVO, HTTPS, grade…</small></a></li>
       <li><a href="#opcionais">Recursos opcionais<small>Instagram, Google, transcrição, ajustes</small></a></li>
       <li><a href="#novidades">Histórico de novidades<small>o que mudou e o que reiniciar</small></a></li>
@@ -437,6 +438,7 @@ free -h                                                  <span class="c"># confe
 
     <div class="stepblock">
       <h3><span class="num">6.1</span> Atualizar uma loja</h3>
+      <div class="tip" style="margin-bottom:10px">Jeito fácil: <code>slimfit-atualizar</code> atualiza <b>todas</b> as lojas do servidor de uma vez e reinicia só o que mudou — veja <a href="#manutencao">Manutenção</a>. Os comandos abaixo são o jeito manual, loja por loja.</div>
       <div class="term">
         <div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">VPS · atualizar</span></div>
 <pre class="term-body"><span class="c"># código (sempre pela main — todas as lojas atualizam por ela)</span>
@@ -470,14 +472,81 @@ echo '{"job":"renovacoesMesGrupo","mes":11}' &gt; data/rodar-job.json</pre>
       <ul class="chk">
         <li><span class="box">✓</span><span><b>No painel</b>: <b>💬 WhatsApp → Log</b> mostra o que saiu no dia e as execuções que <b>falharam</b> (⚠️ “nada enviado”); a página <b>Saúde</b> mostra WhatsApp, EVO/2FA, disco e último backup.</span></li>
         <li><span class="box">✓</span><span><b>No servidor</b>: <code>pm2 status</code> (tudo <i>online</i>) e <code>pm2 logs SEU-SLUG-exp --lines 100</code>.</span></li>
-        <li><span class="box">✓</span><span><b>Backup</b>: diário às 03:10, em <code>Experimental/backups/</code> (últimas 14 cópias de <code>data/</code>). Teste manual: <code>node src/backup-dados.js</code>.</span></li>
+        <li><span class="box">✓</span><span><b>Backup</b>: diário às 03:10, em <code>Experimental/backups/</code> — últimas 14 cópias de <code>data/</code> (<code>data-*.tar.gz</code>) e da pasta da SoFIA (<code>sofia-*.tar.gz</code>). Detalhes em <a href="#manutencao">Manutenção</a>.</span></li>
       </ul>
     </div>
   </section>
 
-  <!-- 7. PROBLEMAS -->
+  <!-- 7. MANUTENÇÃO -->
+  <section id="manutencao">
+    <div class="phase"><span class="pn">7</span><h2>🛠️ Manutenção: comandos prontos</h2></div>
+    <p class="sec-head" style="color:var(--text-soft);max-width:70ch">Comandos que funcionam em <b>qualquer loja e qualquer servidor</b>: eles descobrem sozinhos o que roda ali pelo PM2 — inclusive duas lojas na mesma VPS (ex.: Lago Sul 1 e 2). Rode como <code>root</code>, de qualquer pasta. Onde aparecer <code>~/SF-Chat_Experimental-Mensagens</code>, a <b>loja 2</b> de um servidor usa a pasta dela (ex.: <code>~/slimfit-lagosul2</code>).</p>
+
+    <div class="stepblock">
+      <h3><span class="num">7.1</span> Atualizar tudo: <code>slimfit-atualizar</code></h3>
+      <p>Baixa a versão nova de todas as pastas do SlimFit do servidor (painel, robô, SoFIA e formulário de cada loja), roda o <code>npm install</code> se as dependências mudaram, reinicia <b>só o que mudou</b> e confere se tudo voltou <i>online</i>.</p>
+      <div class="term"><div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">VPS</span></div>
+<pre class="term-body">slimfit-atualizar              <span class="c"># o normal</span>
+slimfit-atualizar --painel     <span class="c"># reinicia só os painéis (mudança só de tela; WhatsApps não caem)</span>
+slimfit-atualizar --simular    <span class="c"># só mostra o que faria</span>
+slimfit-atualizar --forcar     <span class="c"># reinicia mesmo se já estava atualizado</span></pre></div>
+      <p style="color:var(--text-soft);font-size:.93rem">Também dá para atualizar pelo painel: <b>Saúde → Versão do sistema → ⬆️ Atualizar agora</b>. Servidor novo, sem o atalho? Rode uma vez <code>node ~/SF-Chat_Experimental-Mensagens/scripts/atualizar.js --instalar</code>.</p>
+    </div>
+
+    <div class="stepblock">
+      <h3><span class="num">7.2</span> Destravar a SoFIA: <code>slimfit-sofia</code></h3>
+      <p>Para quando a SoFIA não conecta, fica em “Iniciando…”, “Desconectado” ou não mostra o QR. Ele lista as SoFIAs do servidor (no Lago Sul aparecem as duas), com o estado do WhatsApp de cada uma e quantas falhas seguidas ela teve, e pergunta a loja e o que fazer:</p>
+      <ul class="chk">
+        <li><span class="box">1</span><span><b>Reconectar</b> — mantém o login do WhatsApp: zera o contador de falhas, tira a trava do navegador, limpa o cache e reinicia. <b>Tente primeiro.</b></span></li>
+        <li><span class="box">2</span><span><b>QR novo</b> — faz o mesmo e descarta o login salvo; é preciso escanear o QR de novo. Use quando o 1 não resolver. <b>Conversas, tags e configurações não são apagadas.</b></span></li>
+        <li><span class="box">3</span><span><b>Só ver o log</b>.</span></li>
+      </ul>
+      <p>Depois ele espera até 2 minutos e avisa <b>“✅ QR pronto”</b> (abra o painel da loja → SoFIA → Configuração e escaneie com o celular da SoFIA em <i>WhatsApp → Dispositivos conectados → Conectar dispositivo</i>; se houver um aparelho antigo do servidor, desconecte antes) ou <b>“✅ conectada”</b>. Se não der certo, mostra o log para mandar ao suporte.</p>
+      <div class="term"><div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">VPS</span></div>
+<pre class="term-body">slimfit-sofia                           <span class="c"># pergunta a loja e o que fazer</span>
+slimfit-sofia <b>lagosul2</b> --reconectar      <span class="c"># direto, sem perguntas</span>
+slimfit-sofia <b>lagosul2</b> --qr-novo
+slimfit-sofia <b>lagosul2</b> --status          <span class="c"># só o log</span></pre></div>
+      <div class="tip">Use o <b>QR</b>, não o “conectar por código”, depois de muitas tentativas: o WhatsApp costuma recusar o código por algumas horas. E não reinicie em sequência — cada reinício pode prolongar o bloqueio.</div>
+      <p style="color:var(--text-soft);font-size:.93rem"><b>Instalar o atalho:</b> o <code>slimfit-atualizar</code> cria o <code>slimfit-sofia</code> sozinho. Na primeira vez em cada servidor rode o <code>slimfit-atualizar</code> <b>duas vezes</b> (na primeira ainda roda a versão antiga do atualizador). Se aparecer “command not found”: <code>node ~/SF-Chat_Experimental-Mensagens/scripts/sofia.js --instalar</code>. Serve só para a SoFIA — o WhatsApp do robô reconecta pelo QR do painel (veja <a href="#problemas">Quando algo dá errado</a>).</p>
+    </div>
+
+    <div class="stepblock">
+      <h3><span class="num">7.3</span> Backup diário (dados do painel e da SoFIA)</h3>
+      <p>Todo dia às 03:10 o servidor guarda, em <code>Experimental/backups/</code>, as últimas 14 cópias de:</p>
+      <ul class="chk">
+        <li><span class="box">✓</span><span><code>data-AAAAMMDD-HHMM.tar.gz</code> — tudo o que foi editado no painel (mensagens, contatos e tags, Slim Club, configurações).</span></li>
+        <li><span class="box">✓</span><span><code>sofia-AAAAMMDD-HHMM.tar.gz</code> — a pasta da SoFIA: conversas, campanhas, histórico de tags, custos, fotos de campanha. Não leva o <code>.env</code>, o código nem a sessão do WhatsApp.</span></li>
+      </ul>
+      <div class="term"><div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">VPS</span></div>
+<pre class="term-body">crontab -l | grep backup-dados                     <span class="c"># tem que aparecer uma linha</span>
+cd ~/SF-Chat_Experimental-Mensagens/Experimental &amp;&amp; node src/backup-dados.js   <span class="c"># backup agora</span>
+ls -lh backups/                                    <span class="c"># as cópias</span>
+
+<span class="c"># restaurar a pasta da SoFIA de um dia (pare a SoFIA antes):</span>
+pm2 stop SEU-SLUG-sofia
+tar -xzf backups/sofia-<b>AAAAMMDD-HHMM</b>.tar.gz -C /root
+pm2 start SEU-SLUG-sofia</pre></div>
+      <p style="color:var(--text-soft);font-size:.93rem">A data do último backup também aparece no painel em <b>Saúde</b>. Na restauração, o arquivo volta para a mesma pasta de onde saiu (ex.: <code>/root/sofia-data</code>) — confira o nome antes com <code>tar -tzf backups/sofia-…tar.gz | head -1</code>.</p>
+    </div>
+
+    <div class="stepblock">
+      <h3><span class="num">7.4</span> Campanha sumiu da aba Campanhas</h3>
+      <p>Se a lista de campanhas da SoFIA se perder, dá para remontar uma campanha a partir do log da SoFIA, da auditoria do painel e das conversas: ela volta <b>pausada</b>, só com quem <b>ainda não recebeu</b>.</p>
+      <div class="term"><div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">VPS</span></div>
+<pre class="term-body">cd ~/SF-Chat_Experimental-Mensagens/Experimental
+node src/recuperar-campanha.js                                   <span class="c"># lista as campanhas encontradas</span>
+node src/recuperar-campanha.js --nome "<b>NOME</b>" --simular          <span class="c"># confira fila, ritmo, foto e variações</span>
+pm2 stop SEU-SLUG-sofia
+node src/recuperar-campanha.js --nome "<b>NOME</b>"
+pm2 start SEU-SLUG-sofia                                         <span class="c"># depois: painel → Campanhas → Iniciar</span></pre></div>
+      <p style="color:var(--text-soft);font-size:.93rem">Antes de gravar, leia as variações na simulação: nenhuma pode ter o nome de uma pessoa no lugar do <code>{nome}</code>. Se o log da SoFIA tiver sido limpo, o script não sabe quem já recebeu — nesse caso não grave.</p>
+    </div>
+  </section>
+
+  <!-- 8. PROBLEMAS -->
   <section id="problemas">
-    <div class="phase"><span class="pn">7</span><h2>Quando algo dá errado</h2></div>
+    <div class="phase"><span class="pn">8</span><h2>Quando algo dá errado</h2></div>
     <p class="sec-head" style="color:var(--text-soft);max-width:70ch">Os casos que já aconteceram em loja de verdade, com o diagnóstico e a solução. Toque para abrir.</p>
 
     <details class="fold">
@@ -506,11 +575,8 @@ pm2 save</pre></div>
     <details class="fold">
       <summary>🤖 A SoFIA pede QR ou travou em “Iniciando…”</summary>
       <div class="in">
-        <p>Quase sempre <code>pm2 restart SEU-SLUG-sofia</code> resolve. Se insistir, limpe <b>só o login</b> dela (conversas, tags e roteiro não são tocados) e escaneie de novo:</p>
-        <div class="term" style="margin:6px 0 0"><div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">VPS</span></div>
-<pre class="term-body">pm2 stop SEU-SLUG-sofia
-rm -rf ~/sofia-data-SEU-SLUG/.wwebjs_auth ~/sofia-data-SEU-SLUG/.wwebjs_cache
-pm2 start SEU-SLUG-sofia</pre></div>
+        <p>Rode <code>slimfit-sofia</code> no servidor e escolha a loja: primeiro <b>1) Reconectar</b>; se não resolver, <b>2) QR novo</b> (descarta só o login — conversas, tags e roteiro ficam). Ele avisa quando o QR está pronto. Passo a passo em <a href="#manutencao">Manutenção → Destravar a SoFIA</a>.</p>
+        <p style="color:var(--text-soft);font-size:.93rem">No log aparece <code>Waiting failed: 30000ms exceeded</code> ou <code>travou NNNx seguidas</code>? É a sessão salva travada — use o <b>2) QR novo</b>. A SoFIA também faz isso sozinha depois de 8 falhas seguidas.</p>
       </div>
     </details>
 
@@ -582,7 +648,7 @@ pm2 save &amp;&amp; pm2 update</pre></div>
 
   <!-- 8. OPCIONAIS -->
   <section id="opcionais">
-    <div class="phase"><span class="pn">8</span><h2>Recursos opcionais</h2></div>
+    <div class="phase"><span class="pn">9</span><h2>Recursos opcionais</h2></div>
     <p class="sec-head" style="color:var(--text-soft);max-width:70ch">Só ligue o que a loja for usar.</p>
 
     <details class="fold">
@@ -679,12 +745,13 @@ chmod +x ~/duckdns/duck.sh &amp;&amp; ~/duckdns/duck.sh &amp;&amp; cat ~/duckdns
 
   <!-- 9. NOVIDADES -->
   <section id="novidades">
-    <div class="phase"><span class="pn">9</span><h2>Histórico de novidades</h2></div>
+    <div class="phase"><span class="pn">10</span><h2>Histórico de novidades</h2></div>
     <p class="sec-head" style="color:var(--text-soft);max-width:70ch">O que mudou no sistema, da mais recente para a mais antiga, com o que reiniciar em cada uma. Para trazer uma loja para a versão atual, veja <a href="#manter">Atualizar uma loja</a>.</p>
     <details class="fold">
       <summary>Ver todas as novidades</summary>
       <div class="in">
 <ul style="margin:6px 0 0;padding-left:18px">
+          <li>🛠️ <b>Comandos de manutenção e backup da SoFIA</b> (<code>slimfit-atualizar</code> duas vezes em cada servidor): novo comando <code>slimfit-sofia</code> para destravar/reconectar a SoFIA de qualquer loja do servidor (reconectar mantendo o login ou QR novo); a SoFIA espera 60 s pelo WhatsApp Web e, depois de 8 falhas seguidas, descarta sozinha a sessão travada e mostra QR novo; o backup diário passou a guardar também a pasta da SoFIA (<code>backups/sofia-*.tar.gz</code>); <code>recuperar-campanha.js</code> remonta uma campanha perdida. Tudo em <a href="#manutencao">Manutenção</a>.</li>
           <li>🤝 <b>Slim Club — clube de benefícios de alunas para alunas</b> (só <code>git pull</code> + reiniciar <code>&lt;slug&gt;-painel</code>; o WhatsApp não cai): novo menu <b>Slim Club</b> no painel. Páginas públicas no mesmo domínio do painel:
             <code>/SlimClubCadastro</code> (a aluna empresária cadastra o negócio),
             <code>/SlimClubCadastroExterno</code> (empresa parceira que não é de aluna) e
