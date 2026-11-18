@@ -292,6 +292,9 @@ const client = new Client({
   ...(WEB0.webVersion ? { webVersion: WEB0.webVersion } : {}),
   ...(WA_DEVICE_NAME ? { deviceName: WA_DEVICE_NAME } : {}),
   ...(PAIR_BOOT ? { pairWithPhoneNumber: { phoneNumber: PAIR_BOOT, showNotification: true, intervalMs: 180000 } } : {}),
+  // Espera do WhatsApp Web abrir/conectar. O padrão da biblioteca (30 s) estoura em
+  // servidor com várias unidades (vários Chromium) e a SoFIA nunca chega no QR.
+  authTimeoutMs: parseInt(process.env.SOFIA_AUTH_TIMEOUT_MS || "60000", 10),
   userAgent: WA_UA,
   puppeteer: {
     headless: HEADLESS,
@@ -3091,6 +3094,19 @@ armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia
     // conecta ("ready" chama gravarFails(0)). Dá tempo de o bloqueio passar.
     const n = lerFails() + 1;
     gravarFails(n);
+    // Sessão salva que nunca conecta (o WhatsApp Web abre mas fica parado em
+    // "abrindo/pareando"): depois de muitas falhas SEGUIDAS, o login guardado está
+    // morto — apaga só ele no próximo boot para aparecer um QR novo. Conversas,
+    // tags e configurações não moram ali.
+    const LIMITE_SESSAO_MORTA = parseInt(process.env.SOFIA_LIMPAR_LOGIN_APOS || "8", 10);
+    if (LIMITE_SESSAO_MORTA > 0 && n >= LIMITE_SESSAO_MORTA && /Waiting failed|auth timeout|timeout/i.test(String(e?.message || e)) && fs.existsSync(AUTH_DIR)) {
+      pedirLimpezaDoLogin(`${n} falhas seguidas ao abrir o WhatsApp — sessão salva travada`);
+      gravarFails(0);
+      log(`sessão salva parece morta (${n} falhas seguidas) — na próxima subida apago o login e mostro um QR novo.`);
+      try { enviarNtfy("SoFIA precisa de QR novo", `Depois de ${n} falhas seguidas, a sessão do WhatsApp da SoFIA foi descartada. Abra o painel (SoFIA → Configuração) e escaneie o QR.`, "warning", "high"); } catch {}
+      setTimeout(() => process.exit(1), 5000);
+      return;
+    }
     const espera = Math.min(60 * Math.pow(2, n - 1), 900); // 60,120,240,480,900…s
     log(`falha de conexão nº ${n}. Esperando ${Math.round(espera / 60)} min antes de tentar de novo — reiniciar rápido faz o WhatsApp bloquear o número. (zera ao conectar)`);
     setTimeout(() => process.exit(1), espera * 1000);
