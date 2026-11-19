@@ -1,0 +1,93 @@
+# CI do SlimFit: roda em cada PR (e na main). O merge só deve acontecer com ✓.
+# Nada aqui usa dados de verdade nem envia mensagem: os testes rodam em cópias
+# temporárias e o teste de tela usa o painel de DEMONSTRAÇÃO (dados fictícios).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codigo:
+    name: Código e regras (Node)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Experimental/package-lock.json
+      - name: Sintaxe de todos os .js
+        run: |
+          falhou=0
+          while IFS= read -r f; do node --check "$f" || { echo "::error file=$f::erro de sintaxe"; falhou=1; }; done < <(git ls-files '*.js' | grep -v '/node_modules/')
+          exit $falhou
+      - name: Sintaxe da SoFIA (TypeScript)
+        run: |
+          for f in ChatBot/sofia-listener.ts ChatBot/sofia.ts ChatBot/sofia-engine.ts; do
+            npx -y esbuild@0.28.2 "$f" --format=esm --platform=node --log-level=error > /dev/null
+          done
+      - name: Dependências do painel/robô
+        working-directory: Experimental
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "1"
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
+        run: npm install --ignore-scripts --no-audit --no-fund   # igual aos servidores (o lockfile não acompanha o whatsapp-web.js da main)
+      - name: Testes de unidade (regras de envio, contatos, mensagens)
+        working-directory: Experimental
+        run: node --test testes/unidade/*.test.js
+
+  python:
+    name: Agendamento EVO (Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests python-dotenv
+      - name: Testes offline
+        working-directory: Experimental/src/agendamento_evo
+        run: python -m tests.test_offline
+
+  telas:
+    name: Telas (computador e celular, demonstração)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Experimental/package-lock.json
+      - name: Dependências
+        working-directory: Experimental
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "1"
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund   # igual aos servidores (o lockfile não acompanha o whatsapp-web.js da main)
+          npm install --no-save --no-audit --no-fund playwright@1.49.1
+          npx playwright install --with-deps chromium
+      - name: Abrir todas as telas
+        working-directory: Experimental
+        env:
+          SAIDA: ${{ runner.temp }}/prints
+        run: node testes/tela/telas.js
+      - name: Prints das telas com problema
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prints-telas
+          path: ${{ runner.temp }}/prints
+          if-no-files-found: ignore

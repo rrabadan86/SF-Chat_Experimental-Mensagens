@@ -15,9 +15,11 @@ Bueno (`/root/SF-Chat_Experimental-Mensagens`, pm2 `slimfit-*`, `sofia-listener`
 
 ## Antes de cada commit
 - `node --check` em todo `.js` alterado; SoFIA: `ChatBot/node_modules/.bin/esbuild ChatBot/sofia-listener.ts --format=esm --platform=node --log-level=error > /dev/null`.
+- Testes (rodam em cópia temporária, nunca nos dados de verdade): `cd Experimental && node --test testes/unidade/*.test.js`; telas: `node testes/tela/telas.js` (demonstração, computador + celular); EVO: `cd Experimental/src/agendamento_evo && python3 -m tests.test_offline`.
+- Regra nova de envio/tag → teste em `Experimental/testes/unidade/` (use `ambienteIsolado()` e `whatsappFalso()` de `testes/ajuda.js`). Tela nova → incluir em `TELAS` de `testes/tela/telas.js`.
 - Teste o que der numa cópia em scratch (nunca na pasta `Experimental/data` do repo). Telas: rode o painel com `PAINEL_DEMO=1` e tire print.
 - Mudança que o usuário vai ver/precisa saber → item em **Novidades** de `formulario_web/templates/implantacao.html` (e na seção de Manutenção se for comando).
-- Fluxo: commit na branch de trabalho → PR para `main` → squash merge → `git fetch origin main && git merge origin/main` → push.
+- Fluxo (skill `subir-versao`): commit na branch de trabalho → PR para `main` → **esperar o CI ✓** (`.github/workflows/ci.yml`) → squash merge → `git fetch origin main && git merge origin/main` → push. CI vermelho: corrigir antes; nunca mesclar por cima.
 
 ## Regras que não mudam
 - **Segredos**: nunca escrever, repetir ou commitar valores de `.env` (token do EVO, Basic auth, chaves de IA, chave do Fitily, `PAINEL_SENHA`). Não commitar `.env`, `Experimental/data/`, sessões do WhatsApp (`wwebjs_auth`, `.wwebjs_auth`), `sofia-demo/`, `demo-conversas-reais*.json`.
