@@ -542,6 +542,7 @@ const ESTILO = `
   /* Linha de pessoa (Funil e Professoras) */
   .ip-lista{display:flex;flex-direction:column}
   .ip-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 14px;padding:11px 6px;border-bottom:1px solid var(--linha-soft);align-items:center}
+  .ip-row{content-visibility:auto;contain-intrinsic-size:auto 64px} /* listas longas: o navegador só desenha as linhas que aparecem na tela */
   .ip-row:last-child{border-bottom:0}
   .ip-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
   .ip-nome{font-weight:700;color:var(--tinta);text-decoration:none;font-size:.9rem}
@@ -613,7 +614,9 @@ const ESTILO = `
   .info .info-pop{display:none;position:absolute;left:0;top:calc(100% + 8px);width:280px;max-width:72vw;background:#2d2a2f;color:#fff;font-size:.78rem;font-weight:400;font-style:normal;line-height:1.45;text-align:left;padding:9px 12px;border-radius:9px;box-shadow:0 6px 18px rgba(0,0,0,.28);z-index:40;white-space:normal}
   .info .info-pop b{color:#fff}
   .info:hover .info-pop,.info:focus .info-pop{display:block}
-  .info .info-pop::before{content:"";position:absolute;left:6px;top:-5px;border:5px solid transparent;border-top:0;border-bottom-color:#2d2a2f}
+  .info,.info .info-pop{text-transform:none;letter-spacing:normal}
+  .info .info-pop.acima::before{display:none}
+  .info .info-pop::before{content:"";position:absolute;left:var(--seta,6px);top:-5px;border:5px solid transparent;border-top:0;border-bottom-color:#2d2a2f}
   .info.aviso{background:#fbe6c2;color:#9a6512;border:1px solid #e6b357;width:17px;height:17px;border-radius:50%;font-size:.74rem;font-weight:800}
   .info.aviso:hover,.info.aviso:focus{background:#e0a53a;color:#fff;border-color:#e0a53a;outline:none}
   .info.aviso .info-pop{border-left:3px solid #e0a53a;width:300px}
@@ -780,6 +783,55 @@ return new Promise(function(ok){var feito=false;function ir(){if(feito)return;fe
 return vai();};
 window.addEventListener('online',function(){if(ruins){ruins=0;mostra(false);}});
 })();</script>`;
+// Comportamentos comuns de tela (valem em todas as páginas montadas pelo chrome):
+// 1) Botão VOLTAR do celular (e do navegador) e a tecla Esc fecham a janela aberta
+//    (.ct-ov / .gr-ov) ou a conversa aberta no celular, em vez de sair da página.
+// 2) A explicação do ⓘ abre na posição certa da tela, sem ser cortada por tabelas
+//    com rolagem lateral nem sair da borda do celular.
+const SCRIPT_TELA = `<script>(function(){
+if(window.__sfTela)return;window.__sfTela=1;
+function visivel(o){var c=getComputedStyle(o);return c.display!=='none'&&c.visibility!=='hidden';}
+function camada(){
+var ovs=[].slice.call(document.querySelectorAll('.ct-ov,.gr-ov')).filter(visivel);
+if(ovs.length){ovs.sort(function(a,b){return (parseInt(getComputedStyle(b).zIndex)||0)-(parseInt(getComputedStyle(a).zIndex)||0);});var o=ovs[0];return function(){o.click();if(visivel(o)){o.style.display='none';o.classList.remove('open');}};}
+if(document.body&&document.body.classList.contains('ver-conversa')&&typeof window.voltarLista==='function')return function(){window.voltarLista();};
+return null;}
+var marcado=false;
+function conferir(){var a=!!camada();
+if(a&&!marcado){marcado=true;try{history.pushState({sfCamada:1},'',location.href);}catch(e){}}
+else if(!a&&marcado){marcado=false;try{if(history.state&&history.state.sfCamada)history.back();}catch(e){}}}
+window.addEventListener('popstate',function(){if(!marcado)return;marcado=false;var f=camada();if(f){f();setTimeout(conferir,80);}});
+['click','keyup','change'].forEach(function(ev){document.addEventListener(ev,function(){setTimeout(conferir,80);},true);});
+setInterval(conferir,1500);
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){var f=camada();if(f){f();setTimeout(conferir,80);}}});
+function poe(e){var i=e.target&&e.target.closest&&e.target.closest('.info');if(!i)return;var p=i.querySelector('.info-pop');if(!p)return;
+var r=i.getBoundingClientRect(),w=Math.min(280,window.innerWidth*0.72);p.style.position='fixed';p.style.width=w+'px';
+var x=Math.max(8,Math.min(r.left,window.innerWidth-8-w));p.style.left=x+'px';p.style.top=(r.bottom+8)+'px';p.style.setProperty('--seta',Math.max(4,Math.round(r.left-x+3))+'px');p.classList.remove('acima');
+var h=p.offsetHeight;if(r.bottom+8+h>window.innerHeight-8&&r.top-8-h>8){p.style.top=(r.top-8-h)+'px';p.classList.add('acima');}}
+// Revisar → confirmar: janela que mostra QUEM/O QUE vai ser afetado antes de uma ação em massa.
+// sfRevisar({titulo, texto, itens:[nomes], total, digitar:true|false, botao, perigo}) → Promise<boolean>
+function escT(x){return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+window.sfRevisar=function(o){return new Promise(function(fim){
+o=o||{};var itens=o.itens||[],total=o.total!=null?o.total:itens.length,max=40;
+var ov=document.createElement('div');ov.className='ct-ov';ov.id='sfRevisar';ov.style.display='flex';ov.style.zIndex='200';
+var lista=itens.length?'<div style="max-height:240px;overflow:auto;border:1px solid var(--linha);border-radius:10px;padding:6px 10px;margin:10px 0;font-size:.86rem">'+itens.slice(0,max).map(function(n){return '<div style="padding:3px 0;border-bottom:1px solid var(--linha-soft)">'+escT(n)+'</div>';}).join('')+(total>Math.min(itens.length,max)?'<div class="quando" style="padding:5px 0 0">… e mais '+(total-Math.min(itens.length,max))+'</div>':'')+'</div>':'';
+var dig=o.digitar?'<label style="display:block;margin:10px 0 0;font-size:.86rem">Para confirmar, digite <b>'+total+'</b> (a quantidade):<input id="sfRevNum" inputmode="numeric" autocomplete="off" style="display:block;width:100%;margin-top:4px"></label>':'';
+ov.innerHTML='<div class="ct-dlg" role="dialog" aria-modal="true"><div class="ct-dh"><h2>'+escT(o.titulo||'Confirmar')+'</h2></div>'
++'<div style="font-size:.92rem;line-height:1.5">'+(o.texto||'')+'</div>'+lista+dig
++'<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px"><button type="button" class="reset" id="sfRevNao">Voltar</button><button type="button" class="'+(o.perigo?'save sf-perigo':'save')+'" id="sfRevSim"'+(o.digitar?' disabled':'')+'>'+escT(o.botao||'Confirmar')+'</button></div></div>';
+document.body.appendChild(ov);
+var sim=ov.querySelector('#sfRevSim'),nao=ov.querySelector('#sfRevNao'),num=ov.querySelector('#sfRevNum');
+if(o.perigo){sim.style.background='var(--erro)';sim.style.borderColor='var(--erro)';}
+function sai(v){if(!ov.parentNode)return;ov.parentNode.removeChild(ov);fim(v);}
+nao.onclick=function(){sai(false);};ov.onclick=function(e){if(e.target===ov)sai(false);};
+sim.onclick=function(){if(num&&String(num.value).trim()!==String(total))return;sai(true);};
+if(num){num.oninput=function(){sim.disabled=String(num.value).trim()!==String(total);};setTimeout(function(){num.focus();},30);}else setTimeout(function(){sim.focus();},30);
+});};
+// Para <form onsubmit="return sfConfirmarForm(this,{...})">: revisa e só então envia.
+window.sfConfirmarForm=function(f,o){if(f.__sfOk)return true;window.sfRevisar(o).then(function(ok){if(ok){f.__sfOk=1;f.submit();}});return false;};
+document.addEventListener('mouseover',poe,true);document.addEventListener('focusin',poe,true);
+window.addEventListener('scroll',function(){var a=document.activeElement;if(a&&a.classList&&a.classList.contains('info'))a.blur();},true);
+})();</script>`;
 function chrome(titSubtitulo, ativo, corpo) {
   return `<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -787,7 +839,7 @@ function chrome(titSubtitulo, ativo, corpo) {
 <link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<style>${ESTILO}</style>${SCRIPT_REDE}</head><body>${require('./demo-guard').ativo ? DEMO_FAIXA : ''}
+<style>${ESTILO}</style>${SCRIPT_REDE}${SCRIPT_TELA}</head><body>${require('./demo-guard').ativo ? DEMO_FAIXA : ''}
 <nav class="topbar"><div class="in">
   <img class="tb-logo" alt="SlimFit Studio" src="https://drive.google.com/thumbnail?id=1pl1mh709FGcitG9uHo0J6nzMUKFYqg-w&sz=w400">
   <div class="tabs">${navTabs(ativo)}</div>

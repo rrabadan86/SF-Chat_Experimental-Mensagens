@@ -83,7 +83,7 @@ jobs:
         working-directory: Experimental
         env:
           SAIDA: ${{ runner.temp }}/prints
-        run: node testes/tela/telas.js
+        run: node testes/tela/telas.js --estrito   # rolagem lateral no celular ou "undefined" na tela também reprovam
       - name: Prints das telas com problema
         if: failure()
         uses: actions/upload-artifact@v4

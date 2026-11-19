@@ -1165,8 +1165,11 @@ function paginaSofiaContatos(aviso, erro, params) {
     var sel=contatosMarcados();
     f.tels.value=sel.join(',');
     var alvo = sel.length>0 ? (sel.length+' contato(s) selecionado(s)') : ('TODOS os '+(f.getAttribute('data-total')||'0')+' contato(s) do filtro atual');
-    var acoes=[]; if(add)acoes.push('adicionar a tag "'+add+'"'); if(rm)acoes.push('remover a tag "'+rm+'"');
-    return confirm('Confirmar: '+acoes.join(' e ')+' em '+alvo+'?');
+    var acoes=[]; if(add)acoes.push('<b>adicionar</b> a tag <b>'+esc(add)+'</b>'); if(rm)acoes.push('<b>remover</b> a tag <b>'+esc(rm)+'</b>');
+    var n=sel.length||parseInt(f.getAttribute('data-total')||'0',10);
+    return sfConfirmarForm(f,{ titulo:'Alterar tags de '+n+' contato'+(n===1?'':'s'), botao:'🏷️ Aplicar em '+n, total:n, digitar:n>=20,
+      itens: sel.length ? nomesMarcados(sel) : [],
+      texto:'Vai '+acoes.join(' e ')+' em <b>'+esc(alvo)+'</b>.'+(sel.length?'':' (Nenhum contato marcado: vale para todos os que aparecem com o filtro atual, inclusive os das outras páginas.)')+(add?' As regras de transição de funil da tag também valem.':'') });
   }
   var ctSoBloq=false;
   function filtrarBloqueados(){
@@ -1297,11 +1300,15 @@ function paginaSofiaContatos(aviso, erro, params) {
   function fecharResumo(){ document.getElementById('ctResModal').style.display='none'; }
   // Exclusão em LOTE: só os marcados. Muitos de uma vez (20+) pede para digitar
   // a quantidade — evita apagar a base inteira num clique errado.
+  function nomesMarcados(sel){ return sel.map(function(t){ var tr=document.querySelector('tr.ct-row[data-tel="'+t+'"]'); var nm=tr&&tr.querySelector('.ct-nm'); return ((nm&&nm.firstChild&&nm.firstChild.textContent)||'(sem nome)').trim()+' · '+((tr&&tr.querySelector('.ct-tel')||{}).textContent||t); }); }
   function excluirSelecionados(){
     var sel=contatosMarcados(); if(!sel.length){ alert('Marque os contatos que quer excluir.'); return; }
     var n=sel.length;
-    if(!confirm('Excluir '+n+' contato(s) de vez?\\n\\nSaem da lista de Contatos (tags e instruções junto). As conversas da SoFIA não são apagadas. Não dá para desfazer — se quiser, use antes o "Exportar CSV" para guardar uma cópia.')) return;
-    if(n>=20){ var dig=prompt('Para confirmar, digite a quantidade de contatos que serão excluídos ('+n+'):'); if(dig===null) return; if(String(dig).trim()!==String(n)){ alert('Número diferente de '+n+' — nada foi excluído.'); return; } }
+    sfRevisar({ titulo:'Excluir '+n+' contato'+(n===1?'':'s')+' de vez?', perigo:true, botao:'🗑️ Excluir '+n, itens:nomesMarcados(sel), total:n, digitar:n>=20,
+      texto:'Saem da lista de Contatos (tags e instruções junto). As conversas da SoFIA <b>não</b> são apagadas. <b>Não dá para desfazer</b> — se quiser, use antes o "Exportar CSV" para guardar uma cópia.' })
+    .then(function(ok){ if(ok) excluirLoteJa(sel); });
+  }
+  function excluirLoteJa(sel){
     var b=document.getElementById('ctExcLote'); if(b){ b.disabled=true; b.textContent='Excluindo…'; }
     fetch('/sofia/contatos/excluir-lote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tels:sel})})
       .then(function(r){return r.json();}).then(function(j){
@@ -1439,7 +1446,13 @@ function campListHTML(filtro = {}) {
     const podeIniciar = (c.status === 'pronta' || c.status === 'pausada') && (c.pendentes || []).length;
     const podePausar = c.status === 'enviando';
     const variacoes = (c.variacoes || []).slice(0, 12).map((v, i) => `<div class="varItem" data-cid="${esc(c.id)}" data-idx="${i}" style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--linha);font-size:var(--fs-sm)"><b style="color:var(--teal-esc);flex:none">#${i + 1}</b><span class="varTxt" style="flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere">${esc(v)}</span><a href="javascript:void(0)" class="varEdit" onclick="editarVar(this)" title="Editar esta variação" style="flex:none;text-decoration:none;font-size:.95rem">✏️</a><a href="javascript:void(0)" class="varDel" onclick="excluirVar(this)" title="Excluir esta variação" style="flex:none;text-decoration:none;font-size:.95rem">🗑️</a></div>`).join('');
-    const btn = (acao, rot, cls) => `<form method="POST" action="/sofia/campanhas/${acao === 'excluir' ? 'excluir' : 'controle'}"${acao === 'cancelar' || acao === 'excluir' ? ` onsubmit="return confirm('${acao === 'excluir' ? 'Excluir esta campanha do painel?' : 'Cancelar o envio desta campanha?'}')"` : ''} style="display:inline"><input type="hidden" name="id" value="${esc(c.id)}">${acao !== 'excluir' ? `<input type="hidden" name="acao" value="${acao}">` : ''}<button type="submit" class="${cls}" style="padding:5px 12px;font-size:var(--fs-sm)">${rot}</button></form>`;
+    const pend = (c.pendentes || []).length;
+    const revisarCamp = (acao) => acao === 'excluir'
+      ? { titulo: 'Excluir a campanha do painel?', perigo: true, botao: '🗑️ Excluir', itens: [c.nome || '(sem nome)'],
+        texto: 'Some da aba Campanhas (os resultados dela também). Quem já recebeu não é afetado. <b>Não dá para desfazer.</b>' }
+      : { titulo: 'Cancelar o envio da campanha?', perigo: true, botao: '🚫 Cancelar envio', itens: [c.nome || '(sem nome)'],
+        texto: `Já foram <b>${enviados}</b> de <b>${total}</b>. ${pend ? `As <b>${pend}</b> pessoas que faltam <b>não vão receber</b>` : 'Não falta ninguém'} — e uma campanha cancelada não pode ser retomada (para parar só por um tempo, use <b>Pausar</b>).` };
+    const btn = (acao, rot, cls) => `<form method="POST" action="/sofia/campanhas/${acao === 'excluir' ? 'excluir' : 'controle'}"${acao === 'cancelar' || acao === 'excluir' ? ` onsubmit="return sfConfirmarForm(this, ${esc(JSON.stringify(revisarCamp(acao)))})"` : ''} style="display:inline"><input type="hidden" name="id" value="${esc(c.id)}">${acao !== 'excluir' ? `<input type="hidden" name="acao" value="${acao}">` : ''}<button type="submit" class="${cls}" style="padding:5px 12px;font-size:var(--fs-sm)">${rot}</button></form>`;
     return `<div class="card">
       <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
         <a href="javascript:void(0)" onclick="abrirCampDetalhe('${esc(c.id)}')" style="font-weight:700;font-size:var(--fs-h2);color:var(--teal-esc);text-decoration:none;cursor:pointer" title="Ver detalhes do envio">${esc(c.nome)}</a>
