@@ -158,7 +158,7 @@ def test_book_reuses_existing_prospect():
     schedule = [_session("2026-07-10", "19:00", 1, 9, 100)]
     evo, calls = _client_with({
         ("GET", "/api/v1/activities/schedule"): schedule,
-        ("GET", "/api/v1/prospects"): [{"idProspect": 555}],   # já existe
+        ("GET", "/api/v1/prospects"): [{"idProspect": 555, "email": "ana@ex.com"}],   # já existe (o e-mail precisa bater)
         ("POST", "/api/v1/sales"): {},
         ("POST", "/api/v1/activities/schedule/enroll"): {},
     })
@@ -176,7 +176,10 @@ def test_book_raises_when_full_with_alternatives():
         _session("2026-07-10", "19:00", 9, 9, 100),   # cheia (horário escolhido)
         _session("2026-07-10", "20:00", 3, 9, 101),   # tem vaga (alternativa)
     ]
-    evo, calls = _client_with({("GET", "/api/v1/activities/schedule"): schedule})
+    evo, calls = _client_with({("GET", "/api/v1/activities/schedule"): schedule,
+                                 # o cadastro da lead é registrado ANTES de checar a turma (fica no EVO mesmo lotada)
+                                 ("GET", "/api/v1/prospects"): [],
+                                 ("POST", "/api/v1/prospects"): {"idProspect": 777}})
     try:
         book_experimental(name="Maria", when="2026-07-10 19:00",
                           id_activity=122, id_service=128, evo=evo)
@@ -184,14 +187,17 @@ def test_book_raises_when_full_with_alternatives():
     except TurmaLotadaError as e:
         assert e.alternatives and e.alternatives[0]["when"] == "2026-07-10 20:00"
         assert e.alternatives[0]["freeSpots"] == 6
-    # não pode ter cadastrado/vendido/matriculado
-    assert all(c["method"] == "GET" for c in calls)
+    # cadastra a lead, mas NÃO vende nem matricula
+    assert not any(c["path"] in ("/api/v1/sales", "/api/v1/activities/schedule/enroll") for c in calls)
     print("test_book_raises_when_full_with_alternatives OK")
 
 
 def test_book_raises_when_no_session_at_time():
     schedule = [_session("2026-07-10", "20:00", 3, 9, 101)]   # só tem 20:00
-    evo, _ = _client_with({("GET", "/api/v1/activities/schedule"): schedule})
+    evo, _ = _client_with({("GET", "/api/v1/activities/schedule"): schedule,
+                                 # o cadastro da lead é registrado ANTES de checar a turma (fica no EVO mesmo lotada)
+                                 ("GET", "/api/v1/prospects"): [],
+                                 ("POST", "/api/v1/prospects"): {"idProspect": 777}})
     try:
         book_experimental(name="Maria", when="2026-07-10 19:00",
                           id_activity=122, id_service=128, evo=evo)
@@ -350,7 +356,7 @@ def test_confirm_outbox_writes_queue():
             row = _json.loads(f.readline())
         assert row["phone"] == "62981718205"          # só dígitos
         assert row["status"] == "pending"
-        assert "16:15" in row["message"] and "Setor Bueno" in row["message"]
+        assert "16:15" in row["message"] and cfg.ZEE_STUDIO_NAME in row["message"]   # nome do Studio vem do .env de cada unidade
     finally:
         cfg.STUDIO_CONFIRM_CHANNEL, cfg.STUDIO_OUTBOX_FILE = o_ch, o_file
         os.unlink(tmp.name)
