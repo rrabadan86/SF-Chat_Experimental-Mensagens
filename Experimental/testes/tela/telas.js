@@ -124,6 +124,22 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
       }
       await ctx.close();
     }
+    // Sem internet: a tela que se atualiza sozinha (Conversas) mostra o aviso e ele some quando a conexão volta.
+    {
+      const ctx = await navegador.newContext({ viewport: { width: 1280, height: 900 } });
+      const page = await ctx.newPage();
+      const errosJs = []; page.on('pageerror', (e) => errosJs.push(String(e && e.message || e)));
+      await page.goto(`http://127.0.0.1:${inst.porta}/sofia?view=conversas`, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1000);
+      await ctx.setOffline(true);
+      const apareceu = await page.waitForSelector('#sfRede', { state: 'visible', timeout: 20000 }).then(() => true, () => false);
+      await ctx.setOffline(false);
+      const sumiu = apareceu && await page.waitForSelector('#sfRede', { state: 'hidden', timeout: 20000 }).then(() => true, () => false);
+      if (!apareceu) reprovas.push('sem internet: o aviso "Sem conexão com o painel" não apareceu nas Conversas');
+      else if (!sumiu) reprovas.push('sem internet: o aviso não sumiu quando a conexão voltou');
+      for (const e of errosJs) reprovas.push('sem internet: erro de JavaScript — ' + e.slice(0, 160));
+      await ctx.close();
+    }
   } catch (e) {
     reprovas.push('o teste não conseguiu rodar: ' + e.message);
     console.log(logPainel.slice(-3000));

@@ -778,7 +778,10 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     // com borda e pulso, para o Studio perceber de longe que precisa de ação.
     if(e==='conectado'){ b.classList.remove('wa-off'); } else { b.classList.add('wa-off'); }
   }
-  function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){ j=j||{}; if(j.lockMin){ LOCK_MIN=j.lockMin; LOCK_MS=LOCK_MIN*60000; } atualizaWa(j.wa); renderInbox(j.conv||{}); }).catch(function(){}); }
+  // ETag: se nada mudou o servidor responde 304 e a tela redesenha com o que já tinha
+  // (os tempos "há X min" e as travas de atendimento continuam andando).
+  var etagInbox='', jsonInbox=null;
+  function atualizaInbox(){ fetch('/sofia/conversas',{cache:'no-store',headers:etagInbox?{'If-None-Match':etagInbox}:{}}).then(function(r){ if(r.status===304&&jsonInbox) return jsonInbox; etagInbox=r.headers.get('ETag')||''; return r.json(); }).then(function(j){ j=j||{}; jsonInbox=j; if(j.lockMin){ LOCK_MIN=j.lockMin; LOCK_MS=LOCK_MIN*60000; } atualizaWa(j.wa); renderInbox(j.conv||{}); }).catch(function(){}); }
   // Reimportar histórico: pede ao listener para reler o WhatsApp e repovoar o inbox
   // (recupera trechos perdidos, ex.: após um reinício da SoFIA). Pesado — por isso confirma.
   function reimportarHistorico(){

@@ -1950,8 +1950,14 @@ const server = http.createServer(protegido((req, res) => {
     try { const at = sofia.lerAtencao() || {}; const a8 = {}; for (const kk in at) a8[String(kk).replace(/\D/g, '').slice(-8)] = 1; for (const k in obj) obj[k].atencao = !!(at[k] || a8[String(k).replace(/\D/g, '').slice(-8)]); } catch (_) {} // pediu atendimento humano?
     try { const agSet = new Set((fuLerJson(FU_AGENDOU_FILE, []) || []).map(x => String(x).replace(/\D/g, '').slice(-8))); let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {} for (const k in obj) { const l8 = String(k).replace(/\D/g, '').slice(-8); obj[k].agendou = agSet.has(l8) || (obj[k].tagsContato || []).some(t => agTags.includes(t)); } } catch (_) {} // agendou aula experimental? (mesma lógica do follow-up)
     let wa = ''; try { wa = (sofia.waStatus() || {}).estado || ''; } catch (_) {} // online/off-line do WhatsApp da SoFIA
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    return res.end(JSON.stringify({ conv: obj, wa, lockMin }));
+    // ETag: a tela pergunta a cada poucos segundos; se nada mudou responde só 304
+    // (sem reenviar a lista inteira). Continua no-store: conversas não ficam no
+    // cache do navegador — quem compara é a própria tela (If-None-Match manual).
+    const corpoJson = JSON.stringify({ conv: obj, wa, lockMin });
+    const etag = '"' + crypto.createHash('sha1').update(corpoJson).digest('base64').slice(0, 22) + '"';
+    if (String(req.headers['if-none-match'] || '') === etag) { res.writeHead(304, { ETag: etag, 'Cache-Control': 'no-store' }); return res.end(); }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ETag: etag });
+    return res.end(corpoJson);
   }
   // Interações (histórico de sessões) de UM contato — aba Contatos → Interações.
   if (req.method === 'GET' && url === '/sofia/contatos/interacoes') {
