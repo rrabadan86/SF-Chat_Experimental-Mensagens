@@ -2021,6 +2021,7 @@ function paginaSaude(list, extra = {}) {
     cardVersao = card('Versão do sistema', corV, pillV, [
       v.atual ? `Versão instalada: <b>${v.atual.pr ? `PR #${v.atual.pr} · ` : ''}${dhv(v.atual.em)}</b> <span class="sd-muted">— ${esc(v.atual.titulo || '')}</span>` : '<span class="sd-muted">Não consegui ler a versão instalada.</span>',
       v.verificadoEm ? (novas.length ? `<b>Há ${novas.length} atualização(ões) nova(s)</b> <span class="sd-muted">(verificado ${dhv(v.verificadoEm)})</span>` + listaNovas : `✅ Está na versão mais nova <span class="sd-muted">(verificado ${dhv(v.verificadoEm)})</span>`) : '<span class="sd-muted">Ainda não verificado — clique em "Verificar atualizações".</span>',
+      v.emTeste ? `<span class="sd-muted">⏳ ${v.emTeste} atualização(ões) ainda no teste automático do GitHub — só entram aqui depois de aprovadas.</span>` : '',
       `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button type="button" class="ui-btn sec" onclick="svVerificar(this)">🔍 Verificar atualizações</button>
         <button type="button" class="ui-btn" id="svBtnAtu" onclick="svAtualizar(this)"${st.estado === 'rodando' ? ' disabled' : ''}>⬆️ Atualizar agora</button>

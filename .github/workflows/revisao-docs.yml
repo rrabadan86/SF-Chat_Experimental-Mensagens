@@ -1,0 +1,49 @@
+# Revisão mensal da documentação: todo dia 1º abre (ou atualiza) um aviso no GitHub
+# com o que mudou no mês e as três fontes que costumam ficar desatualizadas.
+# Não mexe em código nem nos servidores — só cria o lembrete.
+name: Revisão mensal da documentação
+
+on:
+  schedule:
+    - cron: '23 13 1 * *'   # dia 1º, 10:23 de Brasília
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  lembrete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Montar o lembrete
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          titulo="Revisão mensal da documentação — $(date -u +%m/%Y)"
+          {
+            echo "O que entrou na main nos últimos 31 dias:"
+            echo
+            git log --since='31 days ago' --format='- %s (%cs)' origin/main | grep -v '^- Merge ' | head -60
+            echo
+            echo "Confira se estas fontes contam o mesmo que o sistema faz hoje:"
+            echo
+            for f in docs/DOCUMENTACAO-SISTEMA.md \
+                     Experimental/src/agendamento_evo/formulario_web/templates/implantacao.html \
+                     Experimental/src/agendamento_evo/formulario_web/templates/manual.html \
+                     docs/REGRAS-DE-ENVIO.md; do
+              echo "- [ ] \`$f\` — última mudança em $(git log -1 --format=%cs -- "$f")"
+            done
+            echo
+            echo "_Aviso automático (.github/workflows/revisao-docs.yml)._"
+          } > corpo.md
+          num=$(gh issue list --state open --search "\"Revisão mensal da documentação\" in:title" --json number --jq '.[0].number')
+          if [ -n "$num" ]; then
+            gh issue edit "$num" --title "$titulo" --body-file corpo.md
+          else
+            gh issue create --title "$titulo" --body-file corpo.md
+          fi

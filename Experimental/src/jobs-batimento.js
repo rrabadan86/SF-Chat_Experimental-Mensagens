@@ -55,10 +55,110 @@ function agendar(cron, chave, expr, fn, opts) {
   const desdeChave = (ant && ant.expr === String(expr) && ant.desde) ? ant.desde : new Date().toISOString();
   est.registrados[chave] = { expr: String(expr), tz: (opts && opts.timezone) || '', desde: desdeChave };
   gravar();
+  handlers[chave] = fn;
   return cron.schedule(expr, function (...a) {
     try { est.disparos[chave] = new Date().toISOString(); gravar(); } catch (_) {}
     return als.run({ chave }, () => fn.apply(this, a));
   }, opts);
+}
+
+// ── Fila dos jobs que ficaram sem rodar ────────────────────────────────────
+// Um job agendado que encontra o robô ocupado ESPERA a vez (esperarVez). Se o robô
+// reinicia nesse meio tempo, ou se o job desiste depois de 40 min, ele se perdia.
+// Agora quem está esperando fica anotado em data/jobs-fila.json; com o robô livre,
+// a fila roda esses jobs (o mais antigo primeiro). Só entra na fila quem AINDA NÃO
+// COMEÇOU — um job interrompido no meio NÃO é repetido sozinho (poderia mandar em
+// dobro): vira um alerta para conferir.
+//   data/jobs-fila.json → { esperando: { chave: { nome, desde, boot, desistiu? } },
+//                           rodando: { chave, nome, desde, boot } | null }
+const ARQ_FILA = path.resolve(__dirname, '..', 'data', 'jobs-fila.json');
+const handlers = {};
+const BOOT = new Date().toISOString() + '#' + process.pid;
+const FILA_MAX_MS = (parseFloat(process.env.FILA_JOBS_MAX_HORAS || '3') || 3) * 3600e3; // mais velho que isso: descarta
+const HORA_INI = parseInt(process.env.FILA_JOBS_HORA_INI || '7', 10);  // só roda atrasado entre 7h
+const HORA_FIM = parseInt(process.env.FILA_JOBS_HORA_FIM || '21', 10); // e 21h (Brasília)
+let fila = null;
+function lerFila() {
+  if (fila) return fila;
+  try { fila = JSON.parse(fs.readFileSync(ARQ_FILA, 'utf8')); } catch (_) { fila = null; }
+  if (!fila || typeof fila !== 'object') fila = {};
+  if (!fila.esperando || typeof fila.esperando !== 'object') fila.esperando = {};
+  if (fila.rodando === undefined) fila.rodando = null;
+  return fila;
+}
+function gravarFila() {
+  try {
+    fs.mkdirSync(path.dirname(ARQ_FILA), { recursive: true });
+    fs.writeFileSync(ARQ_FILA + '.tmp', JSON.stringify(fila));
+    fs.renameSync(ARQ_FILA + '.tmp', ARQ_FILA);
+  } catch (_) { /* nunca derruba o robô */ }
+}
+const ctxFila = () => { const s = als.getStore(); return (s && s.chave && handlers[s.chave]) ? s : null; };
+
+// esperarVez: o robô estava ocupado e este job vai esperar.
+function esperando(nome) {
+  const s = ctxFila(); if (!s) return;
+  const f = lerFila();
+  f.esperando[s.chave] = { nome, desde: s.desde || new Date().toISOString(), boot: BOOT };
+  gravarFila();
+}
+// esperarVez: este job pegou o robô (vai começar agora).
+function pegouVez(nome) {
+  const s = ctxFila(); if (!s) return;
+  const f = lerFila();
+  delete f.esperando[s.chave];
+  f.rodando = { chave: s.chave, nome, desde: new Date().toISOString(), boot: BOOT };
+  gravarFila();
+}
+// esperarVez: esperou demais e desistiu — fica na fila para quando o robô liberar.
+function desistiu(nome) {
+  const s = ctxFila(); if (!s) return;
+  const f = lerFila();
+  const e = f.esperando[s.chave] || { nome, desde: s.desde || new Date().toISOString() };
+  f.esperando[s.chave] = Object.assign(e, { boot: BOOT, desistiu: new Date().toISOString() });
+  gravarFila();
+}
+// O robô está livre: o job que estava rodando terminou.
+function liberou() {
+  const f = lerFila();
+  if (f.rodando && f.rodando.boot === BOOT) { f.rodando = null; gravarFila(); }
+}
+// No boot do robô: job que estava RODANDO quando o robô caiu (não repete sozinho).
+function interrompido() {
+  const f = lerFila();
+  const r = f.rodando && f.rodando.boot !== BOOT ? f.rodando : null;
+  if (r) { f.rodando = null; gravarFila(); }
+  return r;
+}
+const horaSP = (ms) => new Date(ms - 3 * 3600e3).getUTCHours();
+/**
+ * Próximo job da fila que pode rodar agora (robô livre): o mais antigo entre os que
+ * ficaram de um boot anterior ou desistiram de esperar. Tira da fila e devolve
+ * { chave, nome, desde } — ou null. Os velhos demais saem em `descartados`.
+ */
+function proximo(agora = Date.now()) {
+  const f = lerFila();
+  const descartados = [];
+  let melhor = null;
+  for (const [chave, e] of Object.entries(f.esperando)) {
+    const desde = Date.parse(e.desde) || 0;
+    if (!handlers[chave] || agora - desde > FILA_MAX_MS) { descartados.push({ chave, ...e }); delete f.esperando[chave]; continue; }
+    if (e.boot === BOOT && !e.desistiu) continue; // está esperando agora, neste robô
+    if (!melhor || desde < (Date.parse(melhor.desde) || 0)) melhor = { chave, ...e };
+  }
+  const h = horaSP(agora);
+  if (melhor && (h < HORA_INI || h >= HORA_FIM)) melhor = null; // de noite não manda nada atrasado
+  if (melhor) delete f.esperando[melhor.chave];
+  if (melhor || descartados.length) gravarFila();
+  proximo.descartados = descartados;
+  return melhor;
+}
+// Roda de novo o job da fila (mesmo caminho do cron: liga/desliga, esperarVez…).
+function disparar(item) {
+  const fn = handlers[item.chave]; if (!fn) return false;
+  try { est.disparos[item.chave] = new Date().toISOString(); gravar(); } catch (_) {}
+  als.run({ chave: item.chave, desde: item.desde }, () => { Promise.resolve().then(() => fn()).catch(() => {}); });
+  return true;
 }
 
 // logError do scheduler → marca a falha no job em execução (se houver).
@@ -137,4 +237,4 @@ function situacao(agora = Date.now()) {
   return { desde, boot: Date.parse(o.boot || '') || 0, itens };
 }
 
-module.exports = { iniciar, agendar, falhou, anterior, situacao, ARQ };
+module.exports = { iniciar, agendar, falhou, anterior, situacao, ARQ, esperando, pegouVez, desistiu, liberou, interrompido, proximo, disparar, ARQ_FILA };

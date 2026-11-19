@@ -94,3 +94,20 @@ jobs:
           name: prints-telas
           path: ${{ runner.temp }}/prints
           if-no-files-found: ignore
+
+  # Servidores só recebem versão APROVADA: com tudo ✓ na main, a marca "estavel"
+  # passa para esta versão. O slimfit-atualizar baixa a "estavel" (scripts/ramo-estavel.js).
+  estavel:
+    name: Marcar versão estável (servidores)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [codigo, python, telas]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mover a marca "estavel" para esta versão
+        run: |
+          git push --force origin "${GITHUB_SHA}:refs/heads/estavel"
+          echo "✅ estavel → ${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
