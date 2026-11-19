@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const notif = require('./notificar');
 const waStatus = require('./wa-status');
+const cpuCarga = require('./cpu-carga');
 
 const ESTADO_FILE = path.resolve(__dirname, '..', 'data', 'watchdog-estado.json');
 // Nomes dos processos PM2 a vigiar — por unidade. Deriva de PM2_SLUG (<slug>-exp,
@@ -53,8 +54,17 @@ function pm2List() {
   });
 }
 
-async function detectar() {
+async function detectar(anterior = {}) {
   const problemas = {}; // chave → { titulo, msg }
+
+  // CPU alta por ~15 min seguidos (inclui o "steal" do limite de CPU da hospedagem).
+  const cpu = cpuCarga.avaliar(anterior.cpu, cpuCarga.ler(), {
+    limite: parseInt(process.env.WATCHDOG_CPU_PCT || '85', 10),
+    rodadas: parseInt(process.env.WATCHDOG_CPU_RODADAS || '3', 10),
+  });
+  detectar.cpu = cpu;
+  if (cpu.problema) problemas['cpu'] = cpu.problema;
+
   const list = await pm2List();
 
   if (list === null) {
@@ -95,7 +105,7 @@ async function detectar() {
 async function main() {
   const anterior = lerEstado();
   const ativosAnt = anterior.ativos || {};
-  const problemas = await detectar();
+  const problemas = await detectar(anterior);
 
   // Problemas NOVOS → alerta (urgente).
   for (const chave of Object.keys(problemas)) {
@@ -114,11 +124,12 @@ async function main() {
 
   const ativos = {};
   for (const chave of Object.keys(problemas)) ativos[chave] = { titulo: problemas[chave].titulo };
-  salvarEstado({ ativos, verificadoEm: new Date().toISOString() });
+  salvarEstado({ ativos, cpu: detectar.cpu && detectar.cpu.estado, verificadoEm: new Date().toISOString() });
 
   const n = Object.keys(problemas).length;
   const ts = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-  console.log(`[watchdog ${ts}] ` + (n ? `⚠️ ${n} problema(s): ${Object.values(problemas).map(p => p.titulo).join(' | ')}` : '✅ tudo ok'));
+  console.log(`[watchdog ${ts}] ` + (n ? `⚠️ ${n} problema(s): ${Object.values(problemas).map(p => p.titulo).join(' | ')}` : '✅ tudo ok')
+    + (detectar.cpu && detectar.cpu.uso ? ` · CPU ${detectar.cpu.uso.ocupada}% (+${detectar.cpu.uso.roubada}% hospedagem)` : ''));
 }
 
 main().catch(e => { console.error('[watchdog] erro:', e && e.message); process.exit(0); });

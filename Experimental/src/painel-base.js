@@ -758,6 +758,28 @@ function menuConta(ativo) {
 const DEMO_FAIXA = `<div style="background:#1f6f5c;color:#fff;text-align:center;font:600 13px/1.4 Inter,system-ui,sans-serif;padding:7px 12px">🎭 Demonstração com dados fictícios — explore à vontade: nenhuma mensagem é enviada e nada é alterado de verdade.</div>
 <div id="demoToast" style="display:none;position:fixed;left:50%;top:56px;transform:translateX(-50%);z-index:9999;background:#222;color:#fff;font:500 14px/1.4 Inter,system-ui,sans-serif;padding:10px 16px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.25)">🎭 Modo demonstração — nada foi enviado nem alterado.</div>
 <script>(function(){try{var q=new URLSearchParams(location.search);if(q.get('demo')==='1'){var t=document.getElementById('demoToast');t.style.display='block';setTimeout(function(){t.style.display='none'},4500);q.delete('demo');history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:'')+location.hash);}}catch(e){}})();</script>`;
+// Falha de rede ("Failed to fetch") em qualquer tela: carregado no <head>, antes
+// dos scripts da tela. LEITURA (GET) tenta de novo até 3x — também quando a
+// internet ou a aba voltam — com o aviso "Sem conexão… tentando de novo". AÇÃO
+// (POST etc.) NÃO repete sozinha (nunca fazer em dobro): troca o "Failed to fetch"
+// por uma mensagem clara. O aviso some quando a conexão volta.
+const SCRIPT_REDE = `<script>(function(){
+if(!window.fetch||window.__sfRede)return;window.__sfRede=1;
+var f0=window.fetch.bind(window),aviso=null,ruins=0;
+function mostra(on){try{if(!aviso){aviso=document.createElement('div');aviso.id='sfRede';aviso.setAttribute('role','status');aviso.style.cssText='position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;background:#2d2a2f;color:#fff;padding:10px 16px;border-radius:999px;font:600 .85rem/1.3 Inter,system-ui,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.25);display:none;max-width:92vw;text-align:center';aviso.textContent='📶 Sem conexão com o painel — tentando de novo…';(document.body||document.documentElement).appendChild(aviso);}aviso.style.display=on?'block':'none';}catch(e){}}
+function ehRede(e){return !!e&&(e.name==='TypeError'||/Failed to fetch|NetworkError|Load failed|network/i.test(String(e.message||e)));}
+window.fetch=function(u,o){
+var met=String((o&&o.method)||(u&&u.method)||'GET').toUpperCase(),tent=0;
+function vai(){return f0(u,o).then(function(r){if(ruins){ruins=0;mostra(false);}return r;},function(e){
+if(!ehRede(e)||(o&&o.signal&&o.signal.aborted))throw e;
+ruins++;mostra(true);
+if(met!=='GET'&&met!=='HEAD'){var er=new Error('Sem conexão com o painel — a ação pode não ter chegado. Confira a internet e tente de novo.');er.semRede=true;throw er;}
+if(tent>=3){var e2=new Error('Sem conexão com o painel — confira a internet.');e2.semRede=true;throw e2;}
+tent++;
+return new Promise(function(ok){var feito=false;function ir(){if(feito)return;feito=true;window.removeEventListener('online',ir);document.removeEventListener('visibilitychange',vis);ok();}function vis(){if(document.visibilityState==='visible')ir();}window.addEventListener('online',ir);document.addEventListener('visibilitychange',vis);setTimeout(ir,2000*Math.pow(2,tent-1));}).then(vai);});}
+return vai();};
+window.addEventListener('online',function(){if(ruins){ruins=0;mostra(false);}});
+})();</script>`;
 function chrome(titSubtitulo, ativo, corpo) {
   return `<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -765,7 +787,7 @@ function chrome(titSubtitulo, ativo, corpo) {
 <link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<style>${ESTILO}</style></head><body>${require('./demo-guard').ativo ? DEMO_FAIXA : ''}
+<style>${ESTILO}</style>${SCRIPT_REDE}</head><body>${require('./demo-guard').ativo ? DEMO_FAIXA : ''}
 <nav class="topbar"><div class="in">
   <img class="tb-logo" alt="SlimFit Studio" src="https://drive.google.com/thumbnail?id=1pl1mh709FGcitG9uHo0J6nzMUKFYqg-w&sz=w400">
   <div class="tabs">${navTabs(ativo)}</div>
