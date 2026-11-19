@@ -18,7 +18,7 @@ const config = require('./config');
 const ativasDados = require('./ativas-dados');
 const E = require('./painel-estado');
 const {
-  uiChips, uiTopo, esc, uiBarra, fmtData, chrome, fmtTel, podeFunil, PAGAMENTO_ATIVO, uiDatas, UI_SIT, fuLerJson, FU_AGENDOU_CANAL_FILE, lerCompCfg, FU_AGENDOU_AULA_FILE, uiPessoa, uiTrilho, PM2_EXP, PM2_SOFIA, lerJsonData, IG_NO_PAINEL,
+  uiChips, uiTopo, esc, uiBarra, fmtData, chrome, fmtTel, podeFunil, PAGAMENTO_ATIVO, uiDatas, UI_SIT, fuLerJson, FU_AGENDOU_CANAL_FILE, lerCompCfg, FU_AGENDOU_AULA_FILE, uiPessoa, uiTrilho, PM2_EXP, PM2_SOFIA, lerJsonData, IG_NO_PAINEL, infoI,
 } = require('./painel-base');
 
 // ── Página: Indicadores do formulário ───────────────────────────────────────
@@ -1485,7 +1485,7 @@ function paginaAtivas(params) {
     </div>
     <div class="sec-t">${vis === 'mes' ? 'Mês a mês' : 'Semana a semana'}</div>
     <div class="card" style="overflow-x:auto">
-      <table class="ui-tab"><thead><tr><th>${vis === 'mes' ? 'Mês' : 'Semana de'}</th><th>Início</th><th>Entraram</th><th>Saíram</th><th>Fim</th><th>Variação</th><th>Taxa de saída</th></tr></thead><tbody>${linhasTab}</tbody></table>
+      <table class="ui-tab"><thead><tr><th>${vis === 'mes' ? 'Mês' : 'Semana de'}</th><th>Início${infoI('Alunas ativas no <b>primeiro dia</b> do período.')}</th><th>Entraram${infoI('Contratos que <b>começaram</b> no período: alunas novas + as que <b>voltaram</b> depois de sair.')}</th><th>Saíram${infoI('Alunas que <b>perderam o contrato ativo</b> no período (venceu sem renovar ou cancelou).')}</th><th>Fim${infoI('Alunas ativas no <b>último dia</b> do período (no período atual, hoje).')}</th><th>Variação${infoI('<b>Fim − Início</b>: quanto a base cresceu ou encolheu.')}</th><th>Taxa de saída${infoI('<b>Saíram ÷ Início</b>: de cada 100 alunas que havia no começo, quantas saíram.')}</th></tr></thead><tbody>${linhasTab}</tbody></table>
     </div>
     </div>
     <p class="ui-rodape"><b>Ativa</b> = contrato vigente no EVO; <b>trancada conta</b>; contrato ${((h.ignorados && h.ignorados.regra) || ['circuito', 'vip']).map(r => esc(String(r).toUpperCase())).join(' ou ')} e renovação ainda na fila <b>não contam</b>. Calculado pelos contratos (início, fim e cancelamento) de todas as clientes, inclusive ex-alunas — por isso dá para comparar com o passado. Renovação com até ${(h.reconstruido && h.reconstruido.tolerancia) || 7} dias de atraso não conta como saída. <b>Nova</b> = primeiro contrato; <b>voltou</b> = ex-aluna que voltou. <b>Taxa de saída</b> = saíram ÷ ativas no início. Atualizado todo dia às 05:25${ultimo ? ` (última: ${esc(fmtData(ultimo))})` : ''}.</p>
@@ -1714,7 +1714,7 @@ function paginaProfessoras(params) {
     </details>`;
   };
   const horasLista = Object.values(horas).sort((a, b) => a.hora.localeCompare(b.hora));
-  const tabHoras = horasLista.length ? `<div class="card" style="overflow-x:auto"><table class="pf-tab"><thead><tr><th>Horário</th><th>Vieram</th><th>Fecharam</th><th>Conversão</th><th>Professoras</th></tr></thead><tbody>${horasLista.map(x => `<tr><td><b>${esc(x.hora)}</b></td><td>${x.veio}</td><td>${x.fechou}</td><td><b style="color:${x.veio < POUCAS ? 'var(--cinza)' : 'var(--ok)'}">${fmtPct(taxa(x.fechou, x.veio))}</b></td><td class="quando">${Object.entries(x.profs).sort((a, b) => b[1] - a[1]).map(([p, n]) => `${esc(p === SEM ? 'sem professora' : p.split(' ')[0])} (${n})`).join(', ')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="card"><div class="vazio">Sem aulas feitas no período.</div></div>';
+  const tabHoras = horasLista.length ? `<div class="card" style="overflow-x:auto"><table class="pf-tab"><thead><tr><th>Horário</th><th>Vieram${infoI('Experimentais <b>feitas</b> neste horário (a aluna compareceu).')}</th><th>Fecharam${infoI('Das que vieram, quantas <b>fecharam contrato</b> depois da aula.')}</th><th>Conversão${infoI('<b>Fecharam ÷ Vieram</b>. Com menos de 5 aulas o número fica cinza: ainda é pouco para concluir.')}</th><th>Professoras</th></tr></thead><tbody>${horasLista.map(x => `<tr><td><b>${esc(x.hora)}</b></td><td>${x.veio}</td><td>${x.fechou}</td><td><b style="color:${x.veio < POUCAS ? 'var(--cinza)' : 'var(--ok)'}">${fmtPct(taxa(x.fechou, x.veio))}</b></td><td class="quando">${Object.entries(x.profs).sort((a, b) => b[1] - a[1]).map(([p, n]) => `${esc(p === SEM ? 'sem professora' : p.split(' ')[0])} (${n})`).join(', ')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="card"><div class="vazio">Sem aulas feitas no período.</div></div>';
 
   // Situação da leitura no EVO.
   const st = h.status || {};

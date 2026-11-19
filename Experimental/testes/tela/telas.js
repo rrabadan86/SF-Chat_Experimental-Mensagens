@@ -140,6 +140,60 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
       for (const e of errosJs) reprovas.push('sem internet: erro de JavaScript — ' + e.slice(0, 160));
       await ctx.close();
     }
+    // Celular: o VOLTAR fecha a conversa/janela aberta (não sai da tela); ações em massa passam
+    // pela janela de revisão; a explicação do ⓘ fica dentro da tela.
+    {
+      const ctx = await navegador.newContext({ ...devices['iPhone 13'] });
+      const page = await ctx.newPage();
+      const errosJs = []; page.on('pageerror', (e) => errosJs.push(String(e && e.message || e)));
+      const url = `http://127.0.0.1:${inst.porta}`;
+      const falha = (t) => reprovas.push('celular: ' + t);
+      // Conversas: abre uma conversa e volta.
+      await page.goto(url + '/sofia?view=conversas', { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('.cv-item', { timeout: 20000 }).catch(() => {});
+      await page.click('.cv-item').catch(() => {});
+      await page.waitForTimeout(1800);
+      if (!(await page.evaluate(() => document.body.classList.contains('ver-conversa')))) falha('a conversa não abriu ao tocar na lista');
+      else {
+        await page.goBack().catch(() => {}); await page.waitForTimeout(600);
+        const r = await page.evaluate(() => ({ aberta: document.body.classList.contains('ver-conversa'), url: location.pathname + location.search }));
+        if (r.aberta) falha('o voltar não fechou a conversa aberta');
+        if (r.url !== '/sofia?view=conversas') falha('o voltar saiu da tela de Conversas (foi para ' + r.url + ')');
+      }
+      // Contatos: janela do contato fecha com o voltar; excluir em lote pede revisão.
+      await page.goto(url + '/sofia?view=contatos', { waitUntil: 'domcontentloaded' });
+      await page.click('tr.ct-row .ct-nm').catch(() => {});
+      await page.waitForTimeout(1800);
+      if (!(await page.evaluate(() => { const m = document.getElementById('ctModal'); return !!m && getComputedStyle(m).display !== 'none'; }))) falha('a janela do contato não abriu');
+      else {
+        await page.goBack().catch(() => {}); await page.waitForTimeout(600);
+        const r = await page.evaluate(() => { const m = document.getElementById('ctModal'); return { aberta: !!m && getComputedStyle(m).display !== 'none', url: location.pathname + location.search }; });
+        if (r.aberta) falha('o voltar não fechou a janela do contato');
+        if (r.url !== '/sofia?view=contatos') falha('o voltar saiu da tela de Contatos (foi para ' + r.url + ')');
+      }
+      await page.evaluate(() => { const c = document.querySelectorAll('.ct-chk'); for (let i = 0; i < 2 && i < c.length; i++) c[i].checked = true; excluirSelecionados(); });
+      const rev = await page.waitForSelector('#sfRevisar', { state: 'visible', timeout: 5000 }).then(() => true, () => false);
+      if (!rev) falha('excluir contatos em lote não mostrou a janela de revisão');
+      else {
+        const nomes = await page.$$eval('#sfRevisar .ct-dlg div[style*="max-height"] > div', d => d.length);
+        if (nomes !== 2) falha(`a revisão deveria listar os 2 contatos marcados (listou ${nomes})`);
+        await page.click('#sfRevNao'); await page.waitForTimeout(300);
+        if (await page.$('#sfRevisar')) falha('o "Voltar" da revisão não fechou a janela');
+      }
+      // ⓘ dentro da tela (tabela com rolagem lateral em Alunas ativas).
+      await page.goto(url + '/ativas', { waitUntil: 'domcontentloaded' });
+      const info = await page.$('table .info');
+      if (!info) falha('Alunas ativas: sem ⓘ nas colunas da tabela');
+      else {
+        await info.scrollIntoViewIfNeeded(); await info.tap().catch(() => info.click());
+        await page.waitForTimeout(300);
+        const b = await page.evaluate(() => { const p = document.querySelector('table .info:focus .info-pop, table .info:hover .info-pop'); if (!p) return null; const r = p.getBoundingClientRect(); return { l: r.left, r: r.right, w: innerWidth, vis: r.width > 0 }; });
+        if (!b || !b.vis) falha('Alunas ativas: a explicação do ⓘ não abriu ao tocar');
+        else if (b.l < 0 || b.r > b.w) falha(`Alunas ativas: a explicação do ⓘ sai da tela (${Math.round(b.l)}–${Math.round(b.r)} de ${b.w}px)`);
+      }
+      for (const e of errosJs) falha('erro de JavaScript — ' + e.slice(0, 160));
+      await ctx.close();
+    }
   } catch (e) {
     reprovas.push('o teste não conseguiu rodar: ' + e.message);
     console.log(logPainel.slice(-3000));
