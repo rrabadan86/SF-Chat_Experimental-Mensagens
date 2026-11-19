@@ -79,6 +79,9 @@ jobs:
           npm install --ignore-scripts --no-audit --no-fund   # igual aos servidores (o lockfile não acompanha o whatsapp-web.js da main)
           npm install --no-save --no-audit --no-fund playwright@1.49.1
           npx playwright install --with-deps chromium
+      - name: Leitura das tabelas do EVO (precisa de navegador)
+        working-directory: Experimental
+        run: node --test testes/unidade/aniversario-tabela.test.js
       - name: Abrir todas as telas
         working-directory: Experimental
         env:

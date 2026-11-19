@@ -214,45 +214,13 @@ async function buscarAniversariantesHoje() {
     const alvo = diaMesHoje();
     console.log(`🗓️  Procurando aniversariantes do dia ${String(alvo.dia).padStart(2,'0')}/${String(alvo.mes).padStart(2,'0')}\n`);
 
-    // 3. Lê a TABELA direto (nome + data de nascimento estão nas colunas)
-    const linhasTabela = await page.evaluate(() => {
-      const rows = document.querySelectorAll('table tbody tr, tr.mat-row, tr[role="row"], tr[class*="row"]');
-      const out = [];
-      rows.forEach(r => {
-        const txt = r.innerText || '';
-        const nasc = txt.match(/(\d{2}\/\d{2}\/\d{4})/);
-        if (!nasc) return;
-        // Nome: preferência para o link (nome da cliente é clicável)
-        let nome = '';
-        const a = r.querySelector('a');
-        if (a && a.textContent.trim()) nome = a.textContent.trim();
-        if (!nome) {
-          // fallback: célula com texto alfabético que não seja data/número
-          const tds = r.querySelectorAll('td');
-          for (const td of tds) {
-            const t = (td.innerText || '').trim();
-            if (/[A-Za-zÀ-ú]{3,}/.test(t) && !/\d{2}\/\d{2}/.test(t)) { nome = t.split('\n').pop().trim(); break; }
-          }
-        }
-        if (nome) out.push({ nome, nascimento: nasc[1] });
-      });
-      return out;
-    });
-    console.log(`   ${linhasTabela.length} linha(s) com data de nascimento lida(s) da tabela`);
-
-    // Filtra os que fazem aniversário hoje
-    const doHoje = linhasTabela.filter(l => {
-      const dm = extrairDiaMesNascimento(l.nascimento);
-      return dm && dm.dia === alvo.dia && dm.mes === alvo.mes;
-    });
-    console.log(`   🎂 ${doHoje.length} fazem aniversário hoje\n`);
-
-    // 4. Para cada aniversariante de hoje, abre o painel e pega o Celular
-    const aniversariantes = [];
-    for (const item of doHoje) {
-      console.log(`🔎 ${item.nome} (${item.nascimento})...`);
-
-      // 4a. Fecha qualquer painel aberto ANTES (senão lê o da pessoa anterior)
+    // 3. Lê a TABELA de TODAS as páginas (o EVO mostra 20 por página, em ordem de
+    //    nome). Antes só a 1ª página era lida e quem estava nas outras não ganhava o
+    //    parabéns. Cada aniversariante de hoje é tratada NA PÁGINA em que aparece —
+    //    o nome dela só é clicável enquanto a página dela está na tela.
+    const tabela = require('./evo-tabela-aniversario');
+    const lerLinhas = () => page.evaluate(tabela.lerLinhasAniversario);
+    const fecharPainel = async () => {
       await page.keyboard.press('Escape');
       await sleep(600);
       await page.evaluate(() => {
@@ -266,6 +234,14 @@ async function buscarAniversariantesHoje() {
           }
         }
       });
+    };
+
+    // 4. Abre o painel da aniversariante (na página atual) e pega o Celular.
+    const lerCelular = async (item) => {
+      console.log(`🔎 ${item.nome} (${item.nascimento})...`);
+
+      // 4a. Fecha qualquer painel aberto ANTES (senão lê o da pessoa anterior)
+      await fecharPainel();
       // espera o painel fechar (sumir "Celular" da tela)
       await page.waitForFunction(
         () => !/celular/i.test(document.body.innerText || ''),
@@ -314,13 +290,47 @@ async function buscarAniversariantesHoje() {
         if (cel && cel.length >= 10) telefone = cel;
       }
 
-      aniversariantes.push({
-        nome: item.nome,
-        primeiroNome: (item.nome || '').trim().split(/\s+/)[0],
-        telefone,
-      });
       console.log(`   🎉 ${item.nome} — ${telefone || 'sem telefone'}`);
+      return { nome: item.nome, primeiroNome: (item.nome || '').trim().split(/\s+/)[0], telefone };
+    };
+
+    const vistos = new Set(), todas = [];
+    const aniversariantes = [];
+    let lidas = 0;
+    for (let pagina = 1; pagina <= 80; pagina++) {
+      const linhas = await lerLinhas();
+      let novas = 0;
+      for (const l of linhas) {
+        const chave = l.nome + '|' + l.nascimento;
+        if (vistos.has(chave)) continue;
+        vistos.add(chave); novas++; lidas++;
+        todas.push(l);
+        const dm = tabela.diaMes(l.nascimento);
+        if (dm && dm.dia === alvo.dia && dm.mes === alvo.mes) {
+          // O celular já vem na linha (coluna "Celular" do EVO); a ficha só se a linha não tiver.
+          if (l.celular) { console.log(`   🎉 ${l.nome} (${l.nascimento}, página ${pagina}) — ${l.celular} (da lista)`); aniversariantes.push({ nome: l.nome, primeiroNome: (l.nome || '').trim().split(/\s+/)[0], telefone: l.celular }); }
+          else aniversariantes.push(await lerCelular(l));
+        }
+      }
+      console.log(`   📄 Página ${pagina}: ${linhas.length} linha(s) — acumulado ${lidas}`);
+      if (!novas && pagina > 1) break;
+      await fecharPainel();
+      const avancou = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+        for (const b of btns) {
+          const lbl = ((b.getAttribute('aria-label') || '') + ' ' + (b.textContent || '')).toLowerCase();
+          const dis = b.disabled || b.getAttribute('aria-disabled') === 'true' || /disabled/.test(b.className || '');
+          if (!dis && (lbl.includes('próxima') || lbl.includes('proxima') || lbl.includes('next') || lbl.includes('seguinte')) && b.offsetWidth > 0) { (b.closest('button') || b).click(); return true; }
+        }
+        return false;
+      });
+      if (!avancou) break;
+      await sleep(2500);
     }
+    console.log(`   ${lidas} linha(s) com data de nascimento lida(s) da tabela`);
+    console.log(`   🎂 ${aniversariantes.length} fazem aniversário hoje\n`);
+    if (!lidas) throw new Error('A lista de aniversariantes do EVO veio vazia (nenhuma linha com data de nascimento) — não dá para saber quem faz aniversário hoje.');
+    tabela.conferirMes(todas, alvo.mes); // datas de outro mês = coluna errada → para e avisa
 
     return aniversariantes;
   } finally {

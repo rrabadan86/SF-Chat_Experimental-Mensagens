@@ -376,59 +376,11 @@ async function buscarExAlunasHoje() {
     const alvo = diaMesHoje();
     console.log(`🗓️  Procurando ex-alunas do dia ${String(alvo.dia).padStart(2,'0')}/${String(alvo.mes).padStart(2,'0')}\n`);
 
-    // 4. Lê a TABELA (nome + nascimento) de todas as páginas.
-    const vistos = new Map(); // nome→nascimento (dedup)
-    for (let pagina = 1; pagina <= 80; pagina++) {
-      const linhas = await page.evaluate(() => {
-        const rows = document.querySelectorAll('table tbody tr, tr.mat-row, tr[role="row"], tr[class*="row"]');
-        const out = [];
-        rows.forEach(r => {
-          const txt = r.innerText || '';
-          const nasc = txt.match(/(\d{2}\/\d{2}\/\d{4})/);
-          if (!nasc) return;
-          let nome = '';
-          const a = r.querySelector('a');
-          if (a && a.textContent.trim()) nome = a.textContent.trim();
-          if (!nome) {
-            const tds = r.querySelectorAll('td');
-            for (const td of tds) {
-              const t = (td.innerText || '').trim();
-              if (/[A-Za-zÀ-ú]{3,}/.test(t) && !/\d{2}\/\d{2}/.test(t)) { nome = t.split('\n').pop().trim(); break; }
-            }
-          }
-          if (nome) out.push({ nome, nascimento: nasc[1] });
-        });
-        return out;
-      });
-      const antes = vistos.size;
-      for (const l of linhas) if (l.nome && !vistos.has(l.nome)) vistos.set(l.nome, l.nascimento);
-      console.log(`   📄 Página ${pagina}: ${linhas.length} linha(s) — acumulado ${vistos.size}`);
-      if (vistos.size === antes && pagina > 1) break;
-      const avancou = await page.evaluate(() => {
-        const btns = Array.from(document.querySelectorAll('button, a, [role="button"]'));
-        for (const b of btns) {
-          const lbl = ((b.getAttribute('aria-label') || '') + ' ' + (b.textContent || '')).toLowerCase();
-          const dis = b.disabled || b.getAttribute('aria-disabled') === 'true' || /disabled/.test(b.className || '');
-          if (!dis && (lbl.includes('próxima') || lbl.includes('proxima') || lbl.includes('next') || lbl.includes('seguinte')) && b.offsetWidth > 0) { (b.closest('button') || b).click(); return true; }
-        }
-        return false;
-      });
-      if (!avancou) break;
-      await sleep(2500);
-    }
-
-    const linhasTabela = Array.from(vistos, ([nome, nascimento]) => ({ nome, nascimento }));
-    console.log(`   ${linhasTabela.length} ex-aluna(s) com data de nascimento lida(s)`);
-
-    const doHoje = linhasTabela.filter(l => {
-      const dm = extrairDiaMesNascimento(l.nascimento);
-      return dm && dm.dia === alvo.dia && dm.mes === alvo.mes;
-    });
-    console.log(`   🎂 ${doHoje.length} fazem aniversário hoje\n`);
-
-    // 5. Para cada uma, abre o painel e pega o Celular.
-    const resultado = [];
-    for (const item of doHoje) {
+    // 4. Lê a TABELA de todas as páginas (leitor comum: data pela coluna "Data de
+    //    aniversário", que agora vem só com dia/mês). Cada ex-aluna de hoje é tratada
+    //    NA PÁGINA em que aparece — o nome só é clicável com a página dela na tela.
+    const tabela = require('./evo-tabela-aniversario');
+    const lerCelular = async (item) => {
       console.log(`🔎 ${item.nome} (${item.nascimento})...`);
       // Fecha o painel da pessoa anterior (Escape + botão X, se houver).
       await page.keyboard.press('Escape');
@@ -479,13 +431,43 @@ async function buscarExAlunasHoje() {
         }
       }
 
-      resultado.push({
-        nome: item.nome,
-        primeiroNome: (item.nome || '').trim().split(/\s+/)[0],
-        telefone,
-      });
       console.log(`   🎉 ${item.nome} — ${telefone || 'sem telefone'}`);
+      return { nome: item.nome, primeiroNome: (item.nome || '').trim().split(/\s+/)[0], telefone };
+    };
+
+    const vistos = new Set(), todas = [], resultado = [];
+    for (let pagina = 1; pagina <= 80; pagina++) {
+      const linhas = await page.evaluate(tabela.lerLinhasAniversario);
+      let novas = 0;
+      for (const l of linhas) {
+        const chave = l.nome + '|' + l.nascimento;
+        if (vistos.has(chave)) continue;
+        vistos.add(chave); todas.push(l); novas++;
+        const dm = tabela.diaMes(l.nascimento);
+        if (dm && dm.dia === alvo.dia && dm.mes === alvo.mes) {
+          // O celular já vem na linha (coluna "Celular" do EVO); a ficha só se a linha não tiver.
+          if (l.celular) { console.log(`   🎉 ${l.nome} (${l.nascimento}, página ${pagina}) — ${l.celular} (da lista)`); resultado.push({ nome: l.nome, primeiroNome: (l.nome || '').trim().split(/\s+/)[0], telefone: l.celular }); }
+          else resultado.push(await lerCelular(l));
+        }
+      }
+      console.log(`   📄 Página ${pagina}: ${linhas.length} linha(s) — acumulado ${todas.length}`);
+      if (!novas && pagina > 1) break;
+      await page.keyboard.press('Escape'); await sleep(500); // fecha a ficha aberta antes de mudar de página
+      const avancou = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+        for (const b of btns) {
+          const lbl = ((b.getAttribute('aria-label') || '') + ' ' + (b.textContent || '')).toLowerCase();
+          const dis = b.disabled || b.getAttribute('aria-disabled') === 'true' || /disabled/.test(b.className || '');
+          if (!dis && (lbl.includes('próxima') || lbl.includes('proxima') || lbl.includes('next') || lbl.includes('seguinte')) && b.offsetWidth > 0) { (b.closest('button') || b).click(); return true; }
+        }
+        return false;
+      });
+      if (!avancou) break;
+      await sleep(2500);
     }
+    console.log(`   ${todas.length} ex-aluna(s) com data de nascimento lida(s)`);
+    console.log(`   🎂 ${resultado.length} fazem aniversário hoje\n`);
+    tabela.conferirMes(todas, alvo.mes); // datas de outro mês = coluna errada → para e avisa
 
     return resultado;
   } finally {

@@ -429,72 +429,16 @@ async function avancarPagina(page) {
 }
 
 /**
- * Lê nome + nascimento (dd/mm) + ID (badge) das linhas da tabela do EVO.
- * A tabela é feita de <div class="...row..."> (não é <table>), então testamos
- * vários seletores e usamos o que produzir mais linhas COM data de nascimento.
+ * Lê nome + aniversário (dd/mm) + ID (badge) das linhas da tabela do EVO — pelo
+ * leitor comum (evo-tabela-aniversario.js): a data vem da coluna "Data de
+ * aniversário" (que agora vem só com dia/mês), nunca da "Última presença".
  */
 async function lerTabelaDom(page) {
-  return page.evaluate(() => {
-    const out = [], seen = new Set();
-
-    // Rejeita "lixo" de interface (barra de navegação, ícones, etc.) que não é
-    // uma aluna: nomes com dígitos ou palavras de UI não são pessoas.
-    const nomeValido = (nome) => {
-      if (!nome || nome.length < 3) return false;
-      if (/\d/.test(nome)) return false;                              // nome não tem números
-      if (/(search|traffic|keyboard|arrow|unidade\s*atual|person_add|pesquis|menu|toolbar|dashboard|pular|conte[úu]do|skip)/i.test(nome)) return false;
-      return /[A-Za-zÀ-ÿ]{3,}/.test(nome);
-    };
-
-    // Estratégia principal: cada NOME é um link (azul). Pegamos o texto do link
-    // (nome limpo), subimos até o contêiner da linha (que tem a data) e lemos o
-    // ID (badge) que aparece antes da data.
-    const anchors = document.querySelectorAll('a');
-    for (const a of anchors) {
-      const nome = (a.textContent || '').replace(/\s+/g, ' ').trim();
-      if (!nomeValido(nome)) continue;
-      if (/^(saiba|salvar|novo|todos|clientes|faltantes|aniversariantes|oportunidades|modelos)\b/i.test(nome)) continue;
-
-      let cont = a;
-      for (let i = 0; i < 6 && cont; i++) {
-        if (/\d{2}\/\d{2}\/\d{2,4}/.test(cont.innerText || '')) break;
-        cont = cont.parentElement;
-      }
-      if (!cont) continue;
-      const txt = cont.innerText || '';
-      const nasc = txt.match(/(\d{2}\/\d{2}\/\d{2,4})/);
-      if (!nasc) continue;
-      const antes = txt.slice(0, txt.indexOf(nasc[1]));
-      const idm = antes.match(/\b(\d{3,6})\b/);
-      if (!idm || seen.has(idm[1])) continue;
-      seen.add(idm[1]);
-      const d = nasc[1].split('/');
-      out.push({ id: idm[1], nome, aniversario: `${d[0]}/${d[1]}` });
-    }
-    if (out.length) return out;
-
-    // Fallback: lê por contêiner de linha e limpa prefixo de tag ("CL ").
-    const seletores = ['[class*="row"]', 'tr[role="row"]', 'mat-row', 'table tbody tr', '[role="row"]'];
-    let melhor = [];
-    for (const sel of seletores) {
-      const res = [];
-      document.querySelectorAll(sel).forEach(r => {
-        const txt = r.innerText || '';
-        const nasc = txt.match(/(\d{2}\/\d{2}\/\d{2,4})/);
-        if (!nasc) return;
-        const antes = txt.slice(0, txt.indexOf(nasc[1]));
-        const idm = antes.match(/\b(\d{3,6})\b/);
-        if (!idm) return;
-        let nome = antes.replace(/\b\d{3,6}\b/, '').replace(/\bCL\b/gi, '').replace(/\s+/g, ' ').trim();
-        if (!nomeValido(nome)) return;                                 // descarta lixo de UI
-        const d = nasc[1].split('/');
-        res.push({ id: idm[1], nome, aniversario: `${d[0]}/${d[1]}` });
-      });
-      if (res.length > melhor.length) melhor = res;
-    }
-    const uniq = [];
-    for (const r of melhor) if (!seen.has(r.id)) { seen.add(r.id); uniq.push(r); }
-    return uniq;
+  const { lerLinhasAniversario } = require('./evo-tabela-aniversario');
+  const linhas = await page.evaluate(lerLinhasAniversario);
+  return linhas.filter(l => l.id).map(l => {
+    const d = l.nascimento.split('/');
+    return { id: l.id, nome: l.nome, aniversario: `${d[0]}/${d[1]}` };
   });
 }
 
