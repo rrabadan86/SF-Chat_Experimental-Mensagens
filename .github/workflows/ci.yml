@@ -40,7 +40,7 @@ jobs:
         env:
           PUPPETEER_SKIP_DOWNLOAD: "1"
           PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: npm install --ignore-scripts --no-audit --no-fund   # igual aos servidores (o lockfile não acompanha o whatsapp-web.js da main)
       - name: Testes de unidade (regras de envio, contatos, mensagens)
         working-directory: Experimental
         run: node --test testes/unidade/*.test.js
@@ -76,7 +76,7 @@ jobs:
           PUPPETEER_SKIP_DOWNLOAD: "1"
           PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
         run: |
-          npm ci --ignore-scripts --no-audit --no-fund
+          npm install --ignore-scripts --no-audit --no-fund   # igual aos servidores (o lockfile não acompanha o whatsapp-web.js da main)
           npm install --no-save --no-audit --no-fund playwright@1.49.1
           npx playwright install --with-deps chromium
       - name: Abrir todas as telas
