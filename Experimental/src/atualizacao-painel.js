@@ -1,7 +1,8 @@
 /**
  * Atualizar o sistema pelo painel (Saúde do sistema → Versão do sistema).
  *
- *   verificar() → git fetch do main e lista o que vem na versão nova (só lê).
+ *   verificar() → busca a versão aprovada no CI (marca "estavel"; sem ela, a main)
+ *                 e lista o que vem na versão nova (só lê).
  *   iniciar()   → roda scripts/atualizar.js (o mesmo "slimfit-atualizar") como
  *                 processo INDEPENDENTE do painel: a atualização reinicia o
  *                 próprio painel no meio, e o processo precisa sobreviver a isso.
@@ -36,11 +37,13 @@ function versaoAtual() {
 
 // Baixa a informação do GitHub (não muda nada no código) e lista as novidades.
 function verificar() {
-  git('fetch', 'origin', 'main');
+  // Só conta como "nova" a versão aprovada no teste automático (marca "estavel").
+  const v = require(path.join(RAIZ, 'scripts', 'ramo-estavel.js')).buscar((dir, ...a) => git(...a), RAIZ);
   let linhas = [];
-  try { linhas = git('log', '--format=%s|%ct', 'HEAD..FETCH_HEAD').split('\n').filter(l => l && !/^Merge /.test(l)); } catch (_) {}
+  try { linhas = git('log', '--format=%s|%ct', `HEAD..${v.ref}`).split('\n').filter(l => l && !/^Merge /.test(l)); } catch (_) {}
   const r = {
     verificadoEm: Date.now(),
+    emTeste: v.emTeste,
     atual: versaoAtual(),
     novas: linhas.map(l => { const i = l.lastIndexOf('|'); return { titulo: limpa(l.slice(0, i)), pr: prDe(l.slice(0, i)), em: (+l.slice(i + 1) || 0) * 1000 }; }),
   };

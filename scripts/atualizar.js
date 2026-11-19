@@ -6,7 +6,7 @@
  * cada um vem e agrupa por repositório git (painel, robô, SoFIA e formulário de
  * cada unidade — inclusive 2 unidades no mesmo servidor, como o Lago Sul).
  * Para cada repositório nosso (github.com/rrabadan86/…):
- *   1. baixa a versão nova do main (git fetch + reset --hard, como sempre);
+ *   1. baixa a versão APROVADA no CI (marca "estavel"; sem ela, a main) — git fetch + reset --hard;
  *   2. se mudou package.json/package-lock.json, roda npm install na pasta;
  *   3. reinicia os processos daquele repositório (só se o código mudou);
  * e no fim mostra se todos voltaram "online".
@@ -16,6 +16,7 @@
  *     --painel   reinicia só os painéis (mudança só de tela; robô e SoFIA seguem)
  *     --forcar   reinicia mesmo se o código já estava atualizado
  *     --simular  só mostra o que faria, sem mudar nada
+ *     --main     emergência: baixa a main sem esperar o teste automático (CI)
  *     --instalar cria o atalho "slimfit-atualizar" (depois é só digitar isso)
  */
 const { execFileSync, spawnSync } = require('child_process');
@@ -26,6 +27,7 @@ const args = new Set(process.argv.slice(2));
 const SO_PAINEL = args.has('--painel');
 const FORCAR = args.has('--forcar');
 const SIMULAR = args.has('--simular');
+const FORCAR_MAIN = args.has('--main'); // emergência: baixa a main sem esperar o CI
 const NOSSO = /github\.com[:/]rrabadan86\//i;
 
 const cor = (c, t) => process.stdout.isTTY ? `\x1b[${c}m${t}\x1b[0m` : t;
@@ -94,13 +96,16 @@ for (const r of repos.values()) {
   let antes = '', depois = '';
   try {
     antes = git(r.raiz, 'rev-parse', 'HEAD');
+    // Só versão aprovada no teste automático (marca "estavel" do CI) — ver ramo-estavel.js.
+    const v = require('./ramo-estavel').buscar(git, r.raiz, { forcarMain: FORCAR_MAIN });
+    if (v.ramo === 'main' && !FORCAR_MAIN) console.log(aviso('   (este repositório ainda não tem a marca "estavel" do CI — usando a main)'));
+    if (FORCAR_MAIN) console.log(aviso('   ⚠️  --main: baixando a main SEM esperar o teste automático'));
+    if (v.emTeste) console.log(aviso(`   ⏳ ${v.emTeste} atualização(ões) ainda no teste automático do GitHub — entram quando passarem (rode de novo em alguns minutos).`));
     if (!SIMULAR) {
-      git(r.raiz, 'fetch', 'origin', 'main');
-      git(r.raiz, 'reset', '--hard', 'FETCH_HEAD');
+      git(r.raiz, 'reset', '--hard', v.ref);
       depois = git(r.raiz, 'rev-parse', 'HEAD');
     } else {
-      git(r.raiz, 'fetch', 'origin', 'main');
-      depois = git(r.raiz, 'rev-parse', 'FETCH_HEAD');
+      depois = git(r.raiz, 'rev-parse', v.ref);
     }
   } catch (e) {
     falhou = true;

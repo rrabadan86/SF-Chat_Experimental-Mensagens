@@ -322,19 +322,47 @@ let donoDaVez = 0; // muda a cada job que pega o robô (para um job abandonado n
 // seguida. Se ainda assim não liberar, desiste com alerta e registro no Log.
 const ESPERA_VEZ_MAX_MS = 40 * 60 * 1000;
 async function esperarVez(nome) {
-  if (!jobRunning) { jobRunning = true; donoDaVez++; return true; }
+  if (!jobRunning) { jobRunning = true; donoDaVez++; batimento.pegouVez(nome); return true; }
   const ini = Date.now();
+  batimento.esperando(nome); // anotado na fila: se o robô reiniciar, ele roda depois
   log(`⏳ ${nome}: outro job em execução — espero a vez (até ${ESPERA_VEZ_MAX_MS / 60000} min) em vez de pular.`);
   while (jobRunning) {
     if (Date.now() - ini > ESPERA_VEZ_MAX_MS) {
-      logError(nome, new Error(`robô ocupado — esperei ${ESPERA_VEZ_MAX_MS / 60000} min e não liberou`));
+      batimento.desistiu(nome); // continua na fila: roda quando o robô liberar
+      logError(nome, new Error(`robô ocupado — esperei ${ESPERA_VEZ_MAX_MS / 60000} min e não liberou; fica na fila e roda quando o robô liberar`));
       return false;
     }
     await new Promise(r => setTimeout(r, 30000));
   }
   jobRunning = true; donoDaVez++;
+  batimento.pegouVez(nome);
   log(`▶️  ${nome}: robô livre depois de ${Math.round((Date.now() - ini) / 60000)} min — rodando agora.`);
   return true;
+}
+
+// Fila dos jobs que ficaram sem rodar (jobs-batimento.js): a cada 30 s, com o robô
+// livre, roda o mais antigo que ficou esperando de antes de um reinício ou que
+// desistiu de esperar. Só entre 7h e 21h e até 3h de atraso.
+function iniciarFilaJobs() {
+  const r = batimento.interrompido();
+  if (r) {
+    const quando = new Date(r.desde).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+    log(`⚠️  ${r.nome} estava rodando quando o robô reiniciou (começou ${quando}) — NÃO rodo de novo sozinho (poderia mandar em dobro).`);
+    try { notif.alertar(`${r.nome} interrompido`, `O robô reiniciou no meio do job "${r.nome}" (começou às ${quando}). Não rodei de novo sozinho para não mandar em dobro — veja no Log do painel o que já saiu e, se precisar, rode de novo pelo painel.`, { prioridade: 'high', tags: 'warning' }); } catch (_) {}
+  }
+  setInterval(() => {
+    if (jobRunning) return;
+    batimento.liberou();
+    const item = batimento.proximo();
+    for (const d of batimento.proximo.descartados || []) {
+      log(`🗑️  ${d.nome}: estava na fila desde ${new Date(d.desde).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} — atrasado demais, não rodo mais.`);
+      try { notif.alertar(`${d.nome} não rodou`, `"${d.nome}" ficou na fila (robô ocupado/reiniciado) e passou do prazo para rodar atrasado. Se precisar, rode pelo painel.`, { prioridade: 'default', tags: 'hourglass' }); } catch (_) {}
+    }
+    if (!item) return;
+    const quando = new Date(item.desde).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+    log(`🔁 ${item.nome}: ficou na fila desde ${quando} (${item.desistiu ? 'desistiu de esperar' : 'robô reiniciou'}) — rodando agora.`);
+    batimento.disparar(item);
+  }, 30000);
 }
 
 // ─── Nova tentativa quando o job falha por instabilidade ───────────────────
@@ -1727,6 +1755,7 @@ async function main() {
     marcarVivo();   // registra que estamos no ar (base do detector de jobs perdidos)
   }, HEARTBEAT_INTERVAL);
 
+  iniciarFilaJobs(); // jobs que ficaram sem rodar (reinício / esperaram demais) — depois de agendar todos
   log('✅ Agendador rodando. Pressione Ctrl+C para parar.\n');
 
   // ─── Keepalive: impede que o event loop fique vazio ──────

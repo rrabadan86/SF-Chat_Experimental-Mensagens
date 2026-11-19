@@ -14,16 +14,18 @@ Siga na ordem. Pare e avise o usuário se algum passo falhar — nunca mescle co
    - Se mexeu no `agendamento_evo`: `cd Experimental/src/agendamento_evo && python3 -m tests.test_offline`.
    - `git status`: nada de `Experimental/data/`, `.env`, sessões do WhatsApp ou prints soltos no commit.
 
-2. **Novidades**: se o usuário vai notar a mudança, acrescente um item em *Novidades* de `Experimental/src/agendamento_evo/formulario_web/templates/implantacao.html` (e em *Manutenção* se for comando novo).
+2. **Regras de envio**: regra nova/alterada que manda mensagem para cliente → linha em `docs/REGRAS-DE-ENVIO.md` com o teste que a garante.
+3. **Novidades**: se o usuário vai notar a mudança, acrescente um item em *Novidades* de `Experimental/src/agendamento_evo/formulario_web/templates/implantacao.html` (e em *Manutenção* se for comando novo).
 
-3. **Commit e push** na branch de trabalho da sessão (mensagem em português, com as linhas de atribuição pedidas pela sessão). `git push -u origin <branch>`.
+4. **Commit e push** na branch de trabalho da sessão (mensagem em português, com as linhas de atribuição pedidas pela sessão). `git push -u origin <branch>`.
 
-4. **PR** para `main` (título e descrição em português; diga o que muda e como foi testado).
+5. **PR** para `main` (título e descrição em português; diga o que muda e como foi testado).
 
-5. **Esperar o CI** (`.github/workflows/ci.yml`: "Código e regras (Node)", "Agendamento EVO (Python)", "Telas"). Consulte o estado do PR pelas ferramentas do GitHub até todos os checks terminarem.
+6. **Esperar o CI** (`.github/workflows/ci.yml`: "Código e regras (Node)", "Agendamento EVO (Python)", "Telas"). Consulte o estado do PR pelas ferramentas do GitHub até todos os checks terminarem.
    - ✓ em tudo → siga.
    - ✗ → leia o log do job que falhou, corrija na mesma branch, faça push e espere de novo. Não mescle.
 
-6. **Merge**: squash. Depois sincronize a branch: `git fetch origin main && git merge --no-edit origin/main && git push origin <branch>`.
+7. **Merge**: squash. Depois sincronize a branch: `git fetch origin main && git merge --no-edit origin/main && git push origin <branch>`.
+   - O CI da main roda de novo e, com tudo ✓, move a marca `estavel` (job "Marcar versão estável"). Os servidores só baixam a `estavel`: espere esse job terminar antes de dizer ao usuário para rodar `slimfit-atualizar`.
 
-7. **Avisar o usuário** em português simples: o que mudou, o que ele precisa rodar no servidor (normalmente `slimfit-atualizar`, fora dos horários de envio se reiniciar robô/SoFIA) e o resultado dos testes.
+8. **Avisar o usuário** em português simples: o que mudou, o que ele precisa rodar no servidor (normalmente `slimfit-atualizar`, fora dos horários de envio se reiniciar robô/SoFIA) e o resultado dos testes.
