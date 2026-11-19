@@ -590,7 +590,17 @@ function lembrarIdRobo(r) {
 //               ou REAÇÃO (❤️ 👍…) em qualquer mensagem do studio;
 //   humano    = alguém do studio escreveu À MÃO (mensagem nossa que não foi o robô).
 // Só ter LIDO não conta. Se não conseguir ler a conversa, lança erro (o job não envia).
+// Lê a conversa com tempo MÁXIMO: se o WhatsApp Web travar no meio da leitura
+// (getChatById/fetchMessages às vezes nunca respondem), desiste em 60 s em vez de
+// prender o job — e, com ele, o robô inteiro — até o fim do dia.
+const LER_TIMEOUT_MS = parseInt(process.env.WA_LER_TIMEOUT_MS || '60000', 10);
 async function conferirResposta(telefone, desdeMs) {
+  let t;
+  const limite = new Promise((_, rej) => { t = setTimeout(() => rej(new Error(`a leitura da conversa passou de ${Math.round(LER_TIMEOUT_MS / 1000)} s`)), LER_TIMEOUT_MS); });
+  try { return await Promise.race([conferirRespostaSemLimite(telefone, desdeMs), limite]); }
+  finally { clearTimeout(t); }
+}
+async function conferirRespostaSemLimite(telefone, desdeMs) {
   if (!pronto) throw new Error('WhatsApp ainda não está pronto (ready).');
   const id = await resolverId(telefone);
   try { await garantirChat(id); } catch (_) {}

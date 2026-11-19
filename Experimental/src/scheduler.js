@@ -134,7 +134,7 @@ function agendarCircuitoConvocacao(tentativa = 1) {
     setTimeout(() => agendarCircuitoConvocacao(tentativa + 1), 90000);
     return;
   }
-  jobRunning = true;
+  jobRunning = true; donoDaVez++;
   atividade.setContexto('Circuito — convocatória');
   const start = new Date();
   comRetry('Circuito convocatória', () => require('./enviar-circuito').runCircuitoConvocacao())
@@ -158,7 +158,7 @@ function agendarCircuitoLembrete(tentativa = 1) {
     setTimeout(() => agendarCircuitoLembrete(tentativa + 1), 90000);
     return;
   }
-  jobRunning = true;
+  jobRunning = true; donoDaVez++;
   atividade.setContexto('Circuito — lembrete');
   const start = new Date();
   comRetry('Circuito lembrete', () => require('./enviar-circuito').runCircuitoLembrete())
@@ -180,7 +180,7 @@ function agendarInadimplentes(tentativa = 1, modo = 'regular') {
     setTimeout(() => agendarInadimplentes(tentativa + 1, modo), 90000);
     return;
   }
-  jobRunning = true;
+  jobRunning = true; donoDaVez++;
   atividade.setContexto(modo === 'hoje' ? 'Cobrança — boleto vence hoje' : 'Cobrança de inadimplentes');
   const start = new Date();
   comRetry('Inadimplentes', () => require('./inadimplentes').runInadimplentes({ dry: false, modo })) // a fila não duplica quem já está nela
@@ -202,7 +202,7 @@ function agendarFreeAntecedencia(tentativa = 1) {
     setTimeout(() => agendarFreeAntecedencia(tentativa + 1), 90000);
     return;
   }
-  jobRunning = true;
+  jobRunning = true; donoDaVez++;
   atividade.setContexto('Planos FREE — antecedência');
   const start = new Date();
   comRetry('Planos FREE (antecedência)', () => require('./free-antecedencia').runFreeAntecedencia({ dry: false }))
@@ -313,6 +313,7 @@ process.on('unhandledRejection', (reason) => {
 
 // ─── Job lock to prevent overlapping runs ──────────────────
 let jobRunning = false;
+let donoDaVez = 0; // muda a cada job que pega o robô (para um job abandonado não soltar a vez de outro)
 
 // ─── Fila: job que encontra o robô ocupado ESPERA a vez ───────────────────
 // Antes, se outro job estava rodando, o novo era "ignorado" e só voltava no dia
@@ -321,7 +322,7 @@ let jobRunning = false;
 // seguida. Se ainda assim não liberar, desiste com alerta e registro no Log.
 const ESPERA_VEZ_MAX_MS = 40 * 60 * 1000;
 async function esperarVez(nome) {
-  if (!jobRunning) { jobRunning = true; return true; }
+  if (!jobRunning) { jobRunning = true; donoDaVez++; return true; }
   const ini = Date.now();
   log(`⏳ ${nome}: outro job em execução — espero a vez (até ${ESPERA_VEZ_MAX_MS / 60000} min) em vez de pular.`);
   while (jobRunning) {
@@ -331,7 +332,7 @@ async function esperarVez(nome) {
     }
     await new Promise(r => setTimeout(r, 30000));
   }
-  jobRunning = true;
+  jobRunning = true; donoDaVez++;
   log(`▶️  ${nome}: robô livre depois de ${Math.round((Date.now() - ini) / 60000)} min — rodando agora.`);
   return true;
 }
@@ -369,7 +370,7 @@ async function comRetry(nome, fn, { antesDeEsperar, depoisDeEsperar } = {}) {
       jobRunning = false;                         // libera o robô durante a espera
       await dormir(espera);
       while (jobRunning) await dormir(15000);     // outro job pegou o robô: espera ele terminar
-      jobRunning = true;
+      jobRunning = true; donoDaVez++;             // pega a vez de novo (depoisDeEsperar anota o novo dono)
       if (ctx) atividade.setContexto(ctx);        // os envios da nova tentativa contam para este job
       if (depoisDeEsperar) try { depoisDeEsperar(); } catch (_) {}
     }
@@ -392,25 +393,35 @@ async function runJob(jobName, jobFn, timeoutMs, { retry = true, esperar = true 
 
   atividade.setContexto(jobName); // marca de quem são os envios deste job
   const startTime = new Date();
+  let minhaVez = donoDaVez;
 
   // Timeout de segurança: 5 minutos por padrão (o job pode pedir mais)
   const JOB_TIMEOUT = timeoutMs || 5 * 60 * 1000;
-  let timedOut = false;
+  let timedOut = false, liberarHandle = null;
+  // Passou do tempo: avisa. Se 10 min depois ele ainda não terminou, está travado
+  // (ex.: o WhatsApp Web parou de responder) — solta o robô para os outros jobs
+  // (confirmações, boas-vindas…) não ficarem esperando até desistir.
   const armarTimeout = () => setTimeout(() => {
     timedOut = true;
     logError(`TIMEOUT: Job ${jobName} excedeu ${JOB_TIMEOUT / 1000}s`, new Error('Job timeout'));
+    liberarHandle = setTimeout(() => {
+      if (jobRunning && donoDaVez === minhaVez) {
+        jobRunning = false;
+        logError(`Job ${jobName} travado`, new Error('não terminou 10 min depois do limite — liberei o robô para os outros jobs. Se repetir, reinicie o robô fora do horário de envios.'));
+      }
+    }, 10 * 60 * 1000);
   }, JOB_TIMEOUT);
   let timeoutHandle = armarTimeout();
 
   try {
-    if (retry) await comRetry(jobName, jobFn, { antesDeEsperar: () => clearTimeout(timeoutHandle), depoisDeEsperar: () => { timeoutHandle = armarTimeout(); } });
+    if (retry) await comRetry(jobName, jobFn, { antesDeEsperar: () => { clearTimeout(timeoutHandle); clearTimeout(liberarHandle); }, depoisDeEsperar: () => { minhaVez = donoDaVez; timeoutHandle = armarTimeout(); } });
     else await jobFn();
     log(`✅ Job ${jobName} concluído com sucesso`);
   } catch (error) {
     logError(`Erro no job ${jobName}`, error);
   } finally {
-    clearTimeout(timeoutHandle);
-    jobRunning = false;
+    clearTimeout(timeoutHandle); clearTimeout(liberarHandle);
+    if (donoDaVez === minhaVez) jobRunning = false; // se foi abandonado e outro job já pegou a vez, não solta a dele
     const elapsed = ((new Date() - startTime) / 1000).toFixed(1);
     log(`⏱️  Job ${jobName} finalizado em ${elapsed}s${timedOut ? ' (TIMEOUT)' : ''}\n`);
   }
@@ -904,7 +915,7 @@ function iniciarTesteInstagramWatcher() {
     const p = ti.proximoPendente();
     if (!p) return;
     ocupado = true;
-    jobRunning = true;
+    jobRunning = true; donoDaVez++;
     ti.marcar(p.id, 'enviando');
     const limite = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo esgotado (o navegador do Instagram demorou demais)')), 150000));
     try {
@@ -929,7 +940,7 @@ function iniciarForcarIgWatcher() {
     if (ocupado || jobRunning) return;
     const st = igf.estado();
     if (!st || st.status !== 'pendente') return;
-    ocupado = true; jobRunning = true;
+    ocupado = true; jobRunning = true; donoDaVez++;
     igf.marcar('executando');
     log('▶️  Boas-vindas do IG FORÇADAS pelo painel — iniciando…');
     const limite = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo esgotado (o navegador do Instagram demorou demais)')), 900000));

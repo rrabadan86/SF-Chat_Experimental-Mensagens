@@ -28,6 +28,9 @@ const ANTECEDENCIA_MS = 45 * 60 * 1000;   // não manda a 2ª se a aula é em me
 const MAX_POR_VEZ = 60;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// Proteções do job: prazo (o resto fica para a próxima rodada) e parada quando o
+// WhatsApp do Studio não responde — senão o job prende o robô e os outros esperam.
+const PRAZO_JOB_MS = 18 * 60 * 1000;
 function ler() { try { const o = JSON.parse(fs.readFileSync(ARQ, 'utf8')); return (o && typeof o === 'object') ? o : {}; } catch (_) { return {}; } }
 function gravar(o) {
   try { fs.mkdirSync(path.dirname(ARQ), { recursive: true }); fs.writeFileSync(ARQ + '.tmp', JSON.stringify(o)); fs.renameSync(ARQ + '.tmp', ARQ); } catch (_) {}
@@ -81,15 +84,20 @@ async function runSegundaMensagem({ log = console.log, dry = false, chave = '' }
   if (fila.length > MAX_POR_VEZ) throw new Error(`${fila.length} de uma vez (limite ${MAX_POR_VEZ}) — não enviei nada.`);
   const wa = require('./wa-client');
   const res = { enviadas: 0, puladas: 0, erros: 0 };
+  const inicioJob = Date.now(); let falhasLeitura = 0;
   for (const [k, r] of fila) {
+    if (Date.now() - inicioJob > PRAZO_JOB_MS) { log(`   ⏱️  passou de ${PRAZO_JOB_MS / 60000} min — paro aqui; o resto fica para a próxima rodada.`); break; }
+    if (falhasLeitura >= 3) { log('   🛑 3 leituras seguidas falharam — o WhatsApp do Studio não está respondendo; paro para não prender o robô.'); break; }
     let st;
-    try { st = await situacao(wa, r); } catch (e) { res.erros++; log(`   ⚠️  ${r.nome}: não consegui ler a conversa (${e.message}) — não enviei.`); continue; }
+    try { st = await situacao(wa, r); } catch (e) { res.erros++; falhasLeitura++; log(`   ⚠️  ${r.nome}: não consegui ler a conversa (${e.message}) — não enviei.`); continue; }
+    falhasLeitura = 0;
     if (st !== 'silencio') { o[k].resolvido = { motivo: st, em: Date.now() }; res.puladas++; log(`   ✅ ${r.nome}: ${MOTIVO[st]} — não precisa.`); continue; }
     const texto = mensagens.render('confirmacao_sem_resposta', { nome: primeiroNome(r.nome), horario: r.horario, quando: quandoDe(r) });
     if (dry) { log(`   🧪 ${r.nome}: receberia a 2ª mensagem.`); res.enviadas++; continue; }
     try {
       await wa.sendTexto(r.tel, texto, CONTEXTO_2A, 'confirmacao_sem_resposta');
       o[k].segunda = { em: Date.now() }; res.enviadas++;
+      gravar(o); // anota NA HORA: se o job parar no meio, ela não recebe de novo
       log(`   📨 ${r.nome}: 2ª mensagem enviada (aula ${quandoDe(r)} às ${r.horario}).`);
     } catch (e) { res.erros++; log(`   ⚠️  ${r.nome}: não enviei — ${e.message}`); }
     await sleep(8000 + Math.floor(Math.random() * 2000));
