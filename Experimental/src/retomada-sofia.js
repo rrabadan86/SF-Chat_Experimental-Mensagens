@@ -29,6 +29,9 @@ const CONTEXTO = 'Retomada — parou de responder a SoFIA';
 const MAX_POR_VEZ = 60;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// Proteções do job: prazo (o resto fica para a próxima rodada) e parada quando o
+// WhatsApp do Studio não responde — senão o job prende o robô e os outros esperam.
+const PRAZO_JOB_MS = 18 * 60 * 1000;
 function ler() { try { const o = JSON.parse(fs.readFileSync(ARQ, 'utf8')); return (o && typeof o === 'object') ? o : {}; } catch (_) { return {}; } }
 function gravar(o) { try { fs.mkdirSync(path.dirname(ARQ), { recursive: true }); fs.writeFileSync(ARQ + '.tmp', JSON.stringify(o)); fs.renameSync(ARQ + '.tmp', ARQ); } catch (_) {} }
 // Só para quem tem ALGUMA destas tags (vazio = qualquer tag). Ex.: "FX - 2. Encerrado sem agendamento".
@@ -94,10 +97,14 @@ async function runRetomada({ log = console.log, dry = false } = {}) {
   const wa = require('./wa-client');
   const reg = ler();
   const res = { enviadas: 0, puladas: 0, erros: 0 };
+  const inicioJob = Date.now(); let falhasLeitura = 0;
   for (const x of fila) {
+    if (Date.now() - inicioJob > PRAZO_JOB_MS) { log(`   ⏱️  passou de ${PRAZO_JOB_MS / 60000} min — paro aqui; o resto fica para a próxima rodada.`); break; }
+    if (falhasLeitura >= 3) { log('   🛑 3 leituras seguidas falharam — o WhatsApp do Studio não está respondendo; paro para não prender o robô.'); break; }
     let c;
     try { c = await wa.conferirResposta(x.tel, x.ultimaContato); }
-    catch (e) { res.erros++; log(`   ⚠️  ${x.nome}: não consegui ler a conversa do Studio (${e.message}) — não enviei.`); continue; }
+    catch (e) { res.erros++; falhasLeitura++; log(`   ⚠️  ${x.nome}: não consegui ler a conversa do Studio (${e.message}) — não enviei.`); continue; }
+    falhasLeitura = 0;
     const l8 = x.tel.slice(-8);
     if (c.humano || c.respondeu) {
       reg[l8] = { ultimaContato: x.ultimaContato, pulado: c.humano ? 'recepcao' : 'falou-com-studio', em: Date.now(), nome: x.nome };
@@ -108,6 +115,7 @@ async function runRetomada({ log = console.log, dry = false } = {}) {
     try {
       await wa.sendTexto(x.tel, mensagens.render('retomada_sofia', { nome: primeiro(x.nome) }), CONTEXTO, 'retomada_sofia');
       reg[l8] = { ultimaContato: x.ultimaContato, enviadoEm: Date.now(), nome: x.nome };
+      gravar(reg); // anota NA HORA: se o job parar no meio, ela não recebe de novo
       try { require('./followup-encerramento').registrarFollowup({ telefone: x.tel, nome: x.nome, origem: 'retomada' }); } catch (_) {}
       res.enviadas++; log(`   💬 ${x.nome}: retomada enviada.`);
     } catch (e) { res.erros++; log(`   ⚠️  ${x.nome}: não enviei — ${e.message}`); }
