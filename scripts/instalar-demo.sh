@@ -74,7 +74,7 @@ if [ -f /etc/caddy/Caddyfile ]; then
   if grep -qF "$DOM" /etc/caddy/Caddyfile; then
     echo "   ✔ $DOM já está no Caddy"
   else
-    printf '\n# --- demonstração (SlimFit, dados fictícios) ---\n%s {\n    encode gzip\n    reverse_proxy 127.0.0.1:%s\n}\n' "$DOM" "$PORTA" >> /etc/caddy/Caddyfile
+    printf '\n# --- demonstração (SlimFit, dados fictícios) ---\n%s {\n    encode zstd gzip\n    reverse_proxy 127.0.0.1:%s\n}\n' "$DOM" "$PORTA" >> /etc/caddy/Caddyfile
     echo "   ✔ $DOM acrescentado ao Caddy"
   fi
   systemctl reload caddy 2>/dev/null || systemctl restart caddy

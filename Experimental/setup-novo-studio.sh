@@ -296,6 +296,7 @@ wire_caddy() {
   # mesmo domínio: <dom>/agendamentoexperimental → form ; resto → painel.
   {
     printf '%s {\n' "$dom"
+    printf '    encode zstd gzip\n'
     printf '    handle_path %s* {\n' "$FORM_PREFIX"
     printf '        reverse_proxy 127.0.0.1:%s {\n' "$FORM_PORT"
     printf '            header_up X-Forwarded-Prefix %s\n' "$FORM_PREFIX"
@@ -569,6 +570,16 @@ if [ "$START" = "1" ]; then
   fi
 
   pm2 save
+
+  # ── Logs do PM2 com tamanho limitado (pm2-logrotate) ──────────────────────
+  # Sem isso os logs crescem para sempre (meses de histórico). Um por servidor:
+  # se já estiver instalado (ex.: 2ª loja no mesmo VPS), só reaplica os limites.
+  if ! pm2 describe pm2-logrotate >/dev/null 2>&1; then
+    pm2 install pm2-logrotate >/dev/null 2>&1 && echo "   ✔ pm2-logrotate instalado" || echo "   ⚠️  não consegui instalar o pm2-logrotate (rode: pm2 install pm2-logrotate)"
+  fi
+  pm2 set pm2-logrotate:max_size 20M >/dev/null 2>&1 || true
+  pm2 set pm2-logrotate:retain 10 >/dev/null 2>&1 || true
+  pm2 set pm2-logrotate:compress true >/dev/null 2>&1 || true
 
   # ── Backup diário dos dados (cron) ─────────────────────────────────────────
   # A pasta data/ (edições do painel: mensagens, horários, fotos, config) só existe

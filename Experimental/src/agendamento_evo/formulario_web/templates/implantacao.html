@@ -542,6 +542,21 @@ node src/recuperar-campanha.js --nome "<b>NOME</b>"
 pm2 start SEU-SLUG-sofia                                         <span class="c"># depois: painel → Campanhas → Iniciar</span></pre></div>
       <p style="color:var(--text-soft);font-size:.93rem">Antes de gravar, leia as variações na simulação: nenhuma pode ter o nome de uma pessoa no lugar do <code>{nome}</code>. Se o log da SoFIA tiver sido limpo, o script não sabe quem já recebeu — nesse caso não grave.</p>
     </div>
+    <div class="stepblock">
+      <h3><span class="num">7.5</span> Páginas mais leves e logs com tamanho limitado (uma vez por servidor)</h3>
+      <p><b>Compressão</b>: as páginas do painel chegam bem menores no celular. O comando liga a compressão só nos sites do SlimFit do Caddy (outros sites do servidor ficam como estão), guarda uma cópia, valida e desfaz sozinho se der erro. <b>Logs</b>: sem limite, os logs do PM2 crescem por meses; o <code>pm2-logrotate</code> guarda só os últimos, compactados. Lojas novas já vêm com os dois.</p>
+      <div class="term"><div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">VPS</span></div>
+<pre class="term-body"><span class="c"># compressão (veja antes o que muda com --simular)</span>
+node ~/SF-Chat_Experimental-Mensagens/scripts/caddy-compressao.js --simular
+node ~/SF-Chat_Experimental-Mensagens/scripts/caddy-compressao.js
+
+<span class="c"># logs do PM2 com tamanho limitado (20 MB por arquivo, 10 cópias compactadas)</span>
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 20M
+pm2 set pm2-logrotate:retain 10
+pm2 set pm2-logrotate:compress true</pre></div>
+      <p style="color:var(--text-soft);font-size:.93rem">Nenhum dos dois reinicia o robô ou a SoFIA. Se já rodou nesse servidor, rodar de novo não muda nada.</p>
+    </div>
   </section>
 
   <!-- 8. PROBLEMAS -->
@@ -751,6 +766,7 @@ chmod +x ~/duckdns/duck.sh &amp;&amp; ~/duckdns/duck.sh &amp;&amp; cat ~/duckdns
       <summary>Ver todas as novidades</summary>
       <div class="in">
 <ul style="margin:6px 0 0;padding-left:18px">
+          <li>🗜️ <b>Páginas comprimidas e logs limitados</b> (uma vez por servidor, sem reiniciar nada): <code>scripts/caddy-compressao.js</code> liga a compressão do Caddy nos sites do SlimFit e o <code>pm2-logrotate</code> limita o tamanho dos logs. Lojas novas já vêm com os dois. Veja <a href="#manutencao">Manutenção → 7.5</a>.</li>
           <li>🛠️ <b>Comandos de manutenção e backup da SoFIA</b> (<code>slimfit-atualizar</code> duas vezes em cada servidor): novo comando <code>slimfit-sofia</code> para destravar/reconectar a SoFIA de qualquer loja do servidor (reconectar mantendo o login ou QR novo); a SoFIA espera 60 s pelo WhatsApp Web e, depois de 8 falhas seguidas, descarta sozinha a sessão travada e mostra QR novo; o backup diário passou a guardar também a pasta da SoFIA (<code>backups/sofia-*.tar.gz</code>); <code>recuperar-campanha.js</code> remonta uma campanha perdida. Tudo em <a href="#manutencao">Manutenção</a>.</li>
           <li>🤝 <b>Slim Club — clube de benefícios de alunas para alunas</b> (só <code>git pull</code> + reiniciar <code>&lt;slug&gt;-painel</code>; o WhatsApp não cai): novo menu <b>Slim Club</b> no painel. Páginas públicas no mesmo domínio do painel:
             <code>/SlimClubCadastro</code> (a aluna empresária cadastra o negócio),
