@@ -6,6 +6,7 @@
 const {
   ESTILO, esc, ADMIN_EMAIL, IG_NO_PAINEL,
 } = require('./painel-base');
+const unidadesRede = require('./unidades-rede');
 
 // ── Login com Google (OAuth 2.0 / OpenID) — opcional, ligado pelo .env ───────
 // Só entra quem tem o e-mail cadastrado num Perfil (ou o e-mail do admin em
@@ -52,9 +53,72 @@ function paginaLogin(erro) {
       <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
       Entrar com Google
     </a>` : ''}
+    ${unidadesRede.ler().length >= 2 ? '<p style="text-align:center;margin:16px 0 0;font-size:.86rem"><a href="/unidades" style="color:var(--teal-esc);font-weight:600;text-decoration:none">Entrar em outra unidade →</a></p>' : ''}
   </div>
   <footer>SlimFit · painel do Studio</footer>
 </div></body></html>`;
+}
+
+// Acesso único (/unidades): escolhe a unidade, entra, e cai no painel dela. Esta
+// tela não confere senha: o formulário vai para o /login da unidade escolhida.
+// `aqui` = endereço deste painel (marca "esta unidade" e deixa o formulário local).
+function paginaUnidades(lista, aqui) {
+  const ops = lista.map(u => `<option value="${esc(u.url)}"${u.url === aqui ? ' selected' : ''}>${esc(u.nome)}</option>`).join('');
+  const corpo = !lista.length
+    ? `<h1>Acesso às unidades</h1>
+       <p class="sub">Nenhuma unidade cadastrada ainda. O administrador cadastra em <b>Perfis → Unidades</b>.</p>
+       <a href="/login" class="save" style="display:block;text-align:center;text-decoration:none">Entrar nesta unidade</a>`
+    : `<h1>Acesso às unidades</h1>
+    <p class="sub">Escolha a unidade e entre com o seu usuário e senha.</p>
+    <form method="POST" action="/login" id="unForm">
+      <label for="unSel">Unidade</label>
+      <select id="unSel" style="width:100%">${ops}</select>
+      <label>Usuário</label>
+      <input type="text" name="usuario" autocapitalize="none" autocomplete="username" spellcheck="false">
+      <label>Senha</label>
+      <input type="password" name="senha" autocomplete="current-password" style="width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:11px 12px;font-size:1rem;font-family:inherit;background:#fff">
+      <button type="submit" class="save" id="unBtn">Entrar</button>
+    </form>
+    <div style="display:flex;align-items:center;gap:10px;margin:18px 0 14px;color:var(--faint);font-size:.8rem"><span style="flex:1;height:1px;background:var(--linha)"></span>ou<span style="flex:1;height:1px;background:var(--linha)"></span></div>
+    <a id="unGoogle" href="/auth/google" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:11px 12px;font-weight:600;font-size:.95rem;color:#3c4043;background:#fff;text-decoration:none">Entrar com Google</a>
+    <p style="text-align:center;margin:16px 0 0;font-size:.86rem"><a id="unAbrir" href="/" style="color:var(--teal-esc);font-weight:600;text-decoration:none">Já entrei nesta unidade neste aparelho — só abrir →</a></p>
+    <p class="sub" id="unOnde" style="margin:14px 0 0;font-size:.78rem"></p>`;
+  return `<!doctype html><html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>Unidades · SlimFit</title>
+<link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<style>${ESTILO}
+  .loginwrap{max-width:380px;margin:8vh auto;padding:16px}
+  .loginwrap .logo-box{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:10px 16px;text-align:center;margin-bottom:18px}
+  .loginwrap .logo-box img{height:82px;width:auto;max-width:100%;display:block;margin:0 auto}
+  .loginwrap .card{padding:22px}
+  .loginwrap h1{font-family:"Inter";font-weight:600;font-size:1.2rem;margin:0 0 4px;text-align:center;letter-spacing:-.02em}
+  .loginwrap p.sub{color:var(--cinza);font-size:.86rem;text-align:center;margin:0 0 12px}
+  .loginwrap button{width:100%;margin-top:16px}
+</style></head><body>
+<div class="loginwrap">
+  <div class="logo-box"><img alt="SlimFit Studio" src="https://drive.google.com/thumbnail?id=1pl1mh709FGcitG9uHo0J6nzMUKFYqg-w&sz=w400"></div>
+  <div class="card">${corpo}</div>
+  <footer>SlimFit · painel do Studio</footer>
+</div>
+<script>
+(function(){
+  var sel=document.getElementById('unSel'); if(!sel) return;
+  var form=document.getElementById('unForm'), g=document.getElementById('unGoogle'), ab=document.getElementById('unAbrir'), onde=document.getElementById('unOnde'), btn=document.getElementById('unBtn');
+  var aqui=${JSON.stringify(aqui || '').replace(/</g, '\\u003c')};
+  try{ var ult=localStorage.getItem('sf_unidade'); if(ult){ for(var i=0;i<sel.options.length;i++) if(sel.options[i].value===ult) sel.selectedIndex=i; } }catch(e){}
+  function aplica(){
+    var u=sel.value, local=(u===aqui), nome=sel.options[sel.selectedIndex].text;
+    form.action=(local?'':u)+'/login'; g.href=(local?'':u)+'/auth/google'; ab.href=(local?'':u)+'/';
+    btn.textContent='Entrar em '+nome;
+    onde.textContent='O login é conferido pelo painel da unidade: '+u.replace('https://','').replace('http://','');
+    try{ localStorage.setItem('sf_unidade',u); }catch(e){}
+  }
+  sel.addEventListener('change',aplica); aplica();
+})();
+</script></body></html>`;
 }
 
 // ── Páginas legais (públicas): Política de Privacidade e Termos de Serviço ───
@@ -194,5 +258,5 @@ function paginaTermos() {
 }
 
 module.exports = {
-  GOOGLE_ID, GOOGLE_SECRET, googleAtivo, paginaLogin, docLegal, paginaPrivacidade, paginaTermos,
+  GOOGLE_ID, GOOGLE_SECRET, googleAtivo, paginaLogin, paginaUnidades, docLegal, paginaPrivacidade, paginaTermos,
 };

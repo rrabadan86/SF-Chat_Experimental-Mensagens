@@ -118,8 +118,9 @@ const {
   SESSAO_DIAS_FILE, SESSAO_DIAS_DEFAULT, lerSessaoDias, PERFIS_SUBS, subnavPerfis, paginaPerfis,
 } = require('./painel-perfis');
 const {
-  GOOGLE_ID, GOOGLE_SECRET, googleAtivo, paginaLogin, docLegal, paginaPrivacidade, paginaTermos,
+  GOOGLE_ID, GOOGLE_SECRET, googleAtivo, paginaLogin, paginaUnidades, docLegal, paginaPrivacidade, paginaTermos,
 } = require('./painel-publicas');
+const unidadesRede = require('./unidades-rede');
 const {
   scSetCookie, scFmtQuando, rotaSlimClubCadastro, rotaSlimClubPublico, scAvisarAprovado, scStatusAviso, paginaSlimClub,
 } = require('./painel-slimclub');
@@ -470,7 +471,7 @@ const server = http.createServer(protegido((req, res) => {
   const url = req.url.split('?')[0];
   E._navSess = null;
   if (DEMO.ativo) {
-    if (url === '/login' || url === '/logout') { res.writeHead(303, { Location: '/hoje' }); return res.end(); }
+    if (url === '/login' || url === '/logout' || url === '/unidades') { res.writeHead(303, { Location: '/hoje' }); return res.end(); } // (a demonstração não lista nem leva às unidades de verdade)
     if (req.method !== 'GET' && req.method !== 'HEAD') return demoBloqueado(req, res);
     const contador = require('./demo-acessos');
     // Contador de acessos (só quem tem o link com a chave vê; chave: node src/demo-acessos.js)
@@ -512,6 +513,12 @@ const server = http.createServer(protegido((req, res) => {
         res.writeHead(303, { Location: primeiraTela(sess) || '/hoje' }); res.end();
       });
     }
+  }
+  // Acesso único às unidades (pública, como o login): escolhe a unidade e o
+  // formulário vai para o /login DELA. Aqui não se confere senha nem se cria sessão.
+  if (url === '/unidades') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
+    return res.end(paginaUnidades(unidadesRede.ler(), baseUrl(req)));
   }
   if (url === '/logout') {
     try { const o = lerToken(lerCookie(req, 'sf_sess')); if (o && o.sid) revogarSessao(o.sid); } catch (_) {} // encerra a própria sessão
@@ -1030,6 +1037,7 @@ const server = http.createServer(protegido((req, res) => {
       else if (/(?:^|&)ok=excluido/.test(q)) aviso = 'Usuário excluído.';
       else if (/(?:^|&)ok=sessao/.test(q)) aviso = 'Duração da sessão salva. Vale para os próximos logins.';
       else if (/(?:^|&)ok=sess-enc/.test(q)) aviso = 'Sessão encerrada. A pessoa precisará entrar de novo.';
+      else if (/(?:^|&)ok=unidades/.test(q)) aviso = 'Lista de unidades salva.';
       else if (/(?:^|&)err=/.test(q)) { aviso = (() => { try { return decodeURIComponent((q.match(/err=([^&]*)/) || [])[1] || 'Erro.'); } catch (_) { return 'Erro.'; } })(); erro = true; }
       const spP = new URLSearchParams(q);
       const viewPerfis = spP.get('view') || 'usuarios';
@@ -1048,6 +1056,13 @@ const server = http.createServer(protegido((req, res) => {
         const p = new URLSearchParams(corpo);
         try { const ehAdmin = p.get('admin') === '1'; usuarios.criar({ usuario: p.get('usuario'), senha: p.get('senha') || '', telas: p.getAll('telas'), email: p.get('email') || '', admin: ehAdmin }); try { auditoria.registrar(sess.usuario, 'perfil.criar', p.get('usuario') || '', ehAdmin ? '👑 como administrador' : ''); } catch (_) {} res.writeHead(303, { Location: '/perfis?ok=criado' }); res.end(); }
         catch (e) { res.writeHead(303, { Location: '/perfis?err=' + encodeURIComponent(e.message) }); res.end(); }
+      });
+    }
+    if (req.method === 'POST' && url === '/perfis/unidades') {
+      return lerCorpo(req, 2e4, corpo => {
+        const p = new URLSearchParams(corpo);
+        try { const l = unidadesRede.salvarTexto(p.get('unidades') || ''); try { auditoria.registrar(sess.usuario, 'perfil.unidades', '', l.map(u => u.nome).join(', ') || 'lista vazia'); } catch (_) {} res.writeHead(303, { Location: '/perfis?view=unidades&ok=unidades' }); res.end(); }
+        catch (e) { res.writeHead(303, { Location: '/perfis?view=unidades&err=' + encodeURIComponent(e.message) }); res.end(); }
       });
     }
     if (req.method === 'POST' && url === '/perfis/sessao') {
