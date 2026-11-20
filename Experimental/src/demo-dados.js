@@ -276,9 +276,11 @@ const serAtivas = [], serEntr = [], serNovas = [], serSai = [];
     serAtivas.push(atual); serEntr.push(e); serNovas.push(e ? entre(0, e) : 0); serSai.push(sa);
   }
 }
-EX.forEach((p) => {
-  const ini = dia(-entre(300, 700)), fim = dia(-entre(20, 200));
+EX.forEach((p, k) => {
+  // as três primeiras venceram há poucos dias: aparecem como "ainda podem renovar"
+  const ini = dia(-entre(300, 700)), fim = k < 3 ? dia(-(k * 2 + 1)) : dia(-entre(20, 200));
   pesAtivas[p.id] = { n: p.nome, nc: 1, tel: p.tel, iv: [[ini, fim]], cs: [[ini, fim, pick(PLANOS), fim, 0]] };
+  if (k === 1) pesAtivas[p.id].fq = [PLANOS[0], dia(2)];
 });
 
 // ── log de envios do robô (aba Log) + SoFIA ──────────────────────────────────
