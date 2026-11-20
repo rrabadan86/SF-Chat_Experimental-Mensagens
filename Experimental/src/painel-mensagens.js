@@ -109,6 +109,8 @@ const {
 const {
   paginaIndicadores, subnavIndicadores, IND_CSS, _gradeSnapshot, paginaGrade, paginaSofiaFunil, MESES_CURTO, MESES_LONGO, rotuloPeriodo, contratoIgnorado, lerAtivasHist, ativasSerie, ativasPeriodos, ATIVAS_POR_PAG, paginaAtivasLista, paginaResumoMensal, paginaResumoSemanal, paginaAtivas, paginaProfessoras, fmtIdadeSaude, paginaSaude,
 } = require('./painel-indicadores');
+const painelMetas = require('./painel-metas');
+const metasDados = require('./metas');
 const {
   paginaInstagram,
 } = require('./painel-instagram');
@@ -307,6 +309,8 @@ function telaDaUrl(u) {
   if (u === '/funil') return 'funil'; // Indicadores → Funil (checkbox em Perfis; quem via pela SoFIA Conversas continua vendo)
   if (u === '/professoras' || u.startsWith('/professoras/')) return 'professoras'; // Indicadores → Professoras (checkbox em Perfis)
   if (u === '/ativas' || u.startsWith('/ativas/')) return 'ativas'; // Indicadores → Alunas ativas (checkbox em Perfis)
+  if (u === '/metas' || u.startsWith('/metas/')) return 'metas'; // Indicadores → Metas e fechamento do mês (checkbox em Perfis)
+  if (u === '/dicionario') return 'dicionario'; // Indicadores → Dicionário: quem vê alguma tela de Indicadores
   if (u === '/pagamento' || u.startsWith('/pagamento/')) return 'pagamento'; // Indicadores → Pagamento professores (checkbox em Perfis)
   if (u === '/clube' || u.startsWith('/clube/')) return 'slimclub'; // validação do Slim Club (checkbox em Perfis)
   if (u === '/formularios' || u.startsWith('/formularios/')) return 'formularios'; // formulários de campanha (checkbox em Perfis)
@@ -355,6 +359,7 @@ function primeiraTela(sess) {
   if (sess.telas.includes('professoras')) return '/professoras';
   if (sess.telas.includes('ativas')) return '/ativas';
   if (sess.telas.includes('grade')) return '/grade';
+  if (sess.telas.includes('metas')) return '/metas';
   if (PAGAMENTO_ATIVO && sess.telas.includes('pagamento')) return '/pagamento';
   return '';
 }
@@ -672,6 +677,7 @@ const server = http.createServer(protegido((req, res) => {
     }
   }
   else if (tela === 'funil') { if (!podeFunil(sess)) return negarAcesso(res, sess); }
+  else if (tela === 'dicionario') { if (!sess.admin && !podeFunil(sess) && !['ind', 'professoras', 'ativas', 'grade', 'metas', 'pagamento'].some(t => (sess.telas || []).includes(t))) return negarAcesso(res, sess); }
   else if (tela && !sess.admin && !(sess.telas || []).includes(tela)) return negarAcesso(res, sess);
 
   // ── Indicadores → 💰 Pagamento dos professores (permissão "pagamento" — barrada acima) ──
@@ -768,6 +774,30 @@ const server = http.createServer(protegido((req, res) => {
     const sp = new URLSearchParams(req.url.split('?')[1] || '');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(paginaSofiaFunil({ per: sp.get('per') || '7', de: sp.get('de') || '', ate: sp.get('ate') || '', canal: sp.get('canal') || '' }));
+  }
+
+  // ── Indicadores → Metas e fechamento do mês (permissão "metas") e Dicionário ──
+  if (req.method === 'GET' && url === '/metas') {
+    const sp = new URLSearchParams(req.url.split('?')[1] || '');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(painelMetas.paginaMetas({ ok: sp.get('ok') || '', msg: sp.get('msg') || '' }));
+  }
+  if (req.method === 'POST' && url === '/metas/salvar') {
+    return lerCorpo(req, 2e4, corpo => {
+      const q = new URLSearchParams(corpo);
+      let erro = '';
+      try {
+        const ent = {}; for (const c of metasDados.CAMPOS) ent[c.k] = q.get(c.k) || '';
+        const mes = String(q.get('mes') || '');
+        const salvo = metasDados.salvarMetas(mes, ent);
+        auditoria.registrar(sess.usuario, 'metas.salvar', mes, JSON.stringify(salvo));
+      } catch (e) { erro = e.message; }
+      res.writeHead(303, { Location: '/metas?ok=' + (erro ? 'erro&msg=' + encodeURIComponent(erro) : 'salvo') }); res.end();
+    });
+  }
+  if (req.method === 'GET' && url === '/dicionario') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(painelMetas.paginaDicionario());
   }
 
   // ── Indicadores → Alunas ativas (permissão "ativas" — barrada acima) ──
@@ -2992,5 +3022,10 @@ server.listen(PORT, HOST, () => {
     E._navSess = navAntes;
   });
   setTimeout(atualizarSaudeCor, 5000);
+  // Metas: guarda a leitura do dia (recebimentos/ocupação) e tira a foto dos meses
+  // que já fecharam — mesmo que ninguém abra a tela. Só lê e grava em data/.
+  const rotinaMetas = () => { const nav = E._navSess; try { painelMetas.rotina(true); } catch (_) {} E._navSess = nav; };
+  setTimeout(rotinaMetas, 90 * 1000);
+  const tMetas = setInterval(rotinaMetas, 3 * 60 * 60 * 1000); if (tMetas.unref) tMetas.unref();
   const tSaude = setInterval(atualizarSaudeCor, 3 * 60 * 1000); if (tSaude.unref) tSaude.unref();
 });

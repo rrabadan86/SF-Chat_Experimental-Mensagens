@@ -788,8 +788,8 @@ function navTabs(ativo) {
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp', 'msg');
   if (IG_NO_PAINEL) html += item('ig', '/instagram', '📸', 'Instagram');
   // Indicadores = Funil + Formulário + Professoras + Grade, cada um com a sua permissão. Abre no primeiro permitido.
-  const indHref = podeFunil(sess) ? '/funil' : pode('ind') ? '/indicadores' : pode('professoras') ? '/professoras' : pode('ativas') ? '/ativas' : pode('grade') ? '/grade' : (PAGAMENTO_ATIVO && pode('pagamento')) ? '/pagamento' : '';
-  if (indHref) html += cel(indHref, ativo === 'grade' || ativo === 'funil' || ativo === 'ind' || ativo === 'professoras' || ativo === 'ativas' || ativo === 'pagamento', '📊', 'Indicadores', 'grade');
+  const indHref = podeFunil(sess) ? '/funil' : pode('ind') ? '/indicadores' : pode('professoras') ? '/professoras' : pode('ativas') ? '/ativas' : pode('grade') ? '/grade' : pode('metas') ? '/metas' : (PAGAMENTO_ATIVO && pode('pagamento')) ? '/pagamento' : '';
+  if (indHref) html += cel(indHref, ativo === 'grade' || ativo === 'funil' || ativo === 'ind' || ativo === 'professoras' || ativo === 'ativas' || ativo === 'pagamento' || ativo === 'metas' || ativo === 'dicionario', '📊', 'Indicadores', 'grade');
   if (pode('slimclub')) { // número = o que espera a recepção (cadastros, alterações, reclamações)
     const n = slimclub.pendenciasRecepcao();
     html += item('slimclub', '/clube', '🤝', 'Slim Club' + (n ? ` <span class="nav-badge" title="${n} para a recepção ver">${n}</span>` : ''));

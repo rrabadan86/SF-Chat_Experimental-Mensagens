@@ -526,6 +526,8 @@ gravar(path.join(DATA, 'slimclub.json'), { cadastros: slimclub });
 gravar(path.join(DATA, 'slimclub-usos.json'), { usos: usosClub });
 gravar(path.join(DATA, 'slimclub-avaliacoes.json'), { recs: recsClub, reclamacoes: reclClub });
 for (const [off, g] of Object.entries(gradeSemanas)) gravar(path.join(DATA, Number(off) === 0 ? 'grade-fixas.json' : `grade-fixas.s${off}.json`), g);
+// Metas do mês (Indicadores → Metas): uma batida, duas no ritmo e duas abaixo, para a tela ter o que mostrar.
+gravar(path.join(DATA, 'metas.json'), { meses: { [hoje.slice(0, 7)]: { ativas: 140, entradas: 26, agendamentos: 45, recebido: 80000, ocupacao: 70 } } });
 gravar(path.join(DATA, 'jobs-disparos.json'), { desde: new Date(AGORA - 30 * 86400e3).toISOString(), boot: new Date(AGORA - 3 * 86400e3).toISOString(), registrados, disparos, falhas: {} });
 
 console.log(`demo-dados: ${Object.keys(conversas).length} conversas · ${Object.keys(contatos).length} contatos · ${Object.keys(aulas).length} experimentais · ${idsAtivos.length} alunas ativas · ${atividade.length} envios no log · ${indicadores.length} eventos do formulário.`);
