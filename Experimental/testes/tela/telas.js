@@ -182,7 +182,7 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
       }
       // ⓘ dentro da tela (tabela com rolagem lateral em Alunas ativas).
       await page.goto(url + '/ativas', { waitUntil: 'domcontentloaded' });
-      const info = await page.$('table .info');
+      const info = await page.locator('table .info:visible').first().elementHandle({ timeout: 5000 }).catch(() => null); // o 1º ⓘ VISÍVEL (no celular algumas colunas somem)
       if (!info) falha('Alunas ativas: sem ⓘ nas colunas da tabela');
       else {
         await info.scrollIntoViewIfNeeded(); await info.tap().catch(() => info.click());

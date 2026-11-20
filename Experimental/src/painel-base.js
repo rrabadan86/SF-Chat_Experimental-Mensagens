@@ -720,6 +720,18 @@ const ESTILO = `
   .acc-sec[open]>.card+.card{border-top:1px solid var(--linha-soft);padding-top:14px}
   .msg-bloco[open]{border-color:var(--linha)}
   .msg-bloco[open]>summary{background:transparent;border-bottom:1px solid var(--linha-soft)}
+  /* Pessoa numa linha só (no computador): nome + situação | detalhes | ações. */
+  @media(min-width:761px){.ip-row{grid-template-columns:minmax(200px,280px) minmax(0,1fr) auto}.ip-meta{grid-column:2;grid-row:1}.ip-acao{grid-column:3;grid-row:1}}
+  .stat.alerta{background:var(--erro-bg)}.stat.alerta .l{color:var(--erro)}
+  .wrap .ui-tab :is(th,td).num{text-align:right}
+  .al-lnk{color:inherit;text-decoration:none}.al-lnk:hover{color:var(--teal-esc);text-decoration:underline}
+  .al-tx{display:flex;align-items:center;gap:10px;min-width:150px}.al-tx-b{flex:1;height:7px;border-radius:99px;background:#ececef;overflow:hidden}.al-tx-b i{display:block;height:100%;border-radius:99px;background:#b9b9c0}
+  .al-tx>span:last-child{width:46px;text-align:right}.al-tx.alta .al-tx-b i{background:var(--erro)}.al-tx.alta>span:last-child{color:var(--erro);font-weight:600}
+  @media(max-width:600px){.so-pc{display:none}.wrap .ui-tab :is(th,td){padding:9px 7px}}
+  details.ui-rodape{text-align:left;max-width:none;margin:14px 2px 6px}
+  details.ui-rodape>summary{cursor:pointer;list-style:none;display:inline-block;font-size:var(--fs-sm);font-weight:600;color:var(--teal-esc)}
+  details.ui-rodape>summary::-webkit-details-marker{display:none}
+  details.ui-rodape>p{margin:8px 0 0;max-width:90ch}
   @media(max-width:600px){.stat{flex:1 1 30%;padding:12px 12px}.stats:has(.stat:nth-child(4)) .stat{flex-basis:40%}.stat .n{font-size:1.5rem}.ui-topo{padding:0}.ui-chip{padding:5px 9px}}
 `;
 
@@ -940,9 +952,9 @@ ${corpo}
       var key='sec:'+location.pathname+':'+(sum.textContent||'').replace(/\\s+/g,' ').trim().slice(0,60);
       // Tela marcada com data-sempre-fechado (ex.: WhatsApp → Configuração): abre
       // SEMPRE recolhida e não memoriza o que foi aberto. Nas outras, lembra.
-      var aberto=true;
+      var aberto=!h.hasAttribute('data-fechado');   // data-fechado: seção secundária, começa recolhida
       if(sempreFechado) aberto=false;
-      else { try{ if(localStorage.getItem(key)==='0') aberto=false; }catch(e){} }
+      else { try{ var g=localStorage.getItem(key); if(g==='0') aberto=false; else if(g==='1') aberto=true; }catch(e){} }
       if(alvo && det.contains(alvo)) aberto=true;   // link/volta para um item desta seção (#…): abre
       det.open=aberto;
       if(!sempreFechado) det.addEventListener('toggle',function(){ try{ localStorage.setItem(key, det.open?'1':'0'); }catch(e){} });

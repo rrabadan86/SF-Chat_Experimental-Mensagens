@@ -3002,7 +3002,7 @@ function paginaSofiaCusto(aviso, erro, params) {
       <p class="quando" style="margin:10px 0 0">Mostra um aviso nesta tela quando o gasto do dia atingir o valor. Deixe <b>0</b> para não alertar.</p>
     </div>
     </div>
-    <p class="ui-rodape">Inclui <b>tudo que consome token</b>: conversas, gerador de frases, resumos, tags por intenção e follow-up. As conversas usam o custo real da IA; o restante é estimado por tokens × preço do modelo.</p>
+    <details class="ui-rodape"><summary>ⓘ Como estes números são calculados</summary><p>Inclui <b>tudo que consome token</b>: conversas, gerador de frases, resumos, tags por intenção e follow-up. As conversas usam o custo real da IA; o restante é estimado por tokens × preço do modelo.</p></details>
   </div>`;
   return chrome({ tab: 'Custo IA', h1: 'SoFIA', p: 'Custo da IA — gasto das conversas por período.' }, 'sofia', corpo);
 }
