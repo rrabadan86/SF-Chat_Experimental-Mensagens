@@ -156,6 +156,11 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       .cv-chips{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:5px}
       .cv-chips>span{margin-left:0!important}
       .cv-tag{display:inline-block;background:var(--teal-soft);color:var(--teal-esc);border-radius:999px;padding:1px 9px;font-size:.68rem;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .cv-sit{display:flex;flex:none;justify-content:space-between;gap:10px;margin:0 2px 8px;font-size:.8rem;white-space:nowrap;overflow-x:auto;scrollbar-width:none}
+      .cv-sit::-webkit-scrollbar{display:none}
+      .cv-sit a{color:var(--cinza);font-weight:500;text-decoration:none;padding:3px 0;border-bottom:2px solid transparent}
+      .cv-sit a b{font-weight:600;color:var(--faint);margin-left:2px}
+      .cv-sit a.on{color:var(--tinta);font-weight:600;border-bottom-color:var(--teal)}.cv-sit a.on b{color:var(--teal)}
       .cv-mais{font-size:.68rem;color:var(--faint);font-weight:600;cursor:default}
       .cv-ph{font-size:.78rem}
       .cv-dot{position:absolute;right:9px;top:11px;width:9px;height:9px;border-radius:50%;background:#0e6e6b;box-shadow:0 0 0 2px var(--card,#fff)}
@@ -188,6 +193,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
           <input type="search" id="convBusca" oninput="filtrarBusca(this.value)" placeholder="🔎 Buscar nome, telefone ou palavra" style="flex:1 1 auto;min-width:0;font-size:.82rem;padding:8px 10px;border:1px solid var(--linha);border-radius:9px">
           <select id="convFiltroTag" onchange="filtrarTag(this.value)" title="Filtrar por tag" style="flex:0 0 42px;width:42px;font-size:.82rem;padding:8px 2px"><option value="">🏷️</option><option value="__sem__">🏷️ Sem tag</option>${tagsLista.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select>
         </div>
+        <div id="convSit" class="cv-sit"><a href="javascript:void(0)" data-s="aguardando" onclick="filtrarSit('aguardando')" title="A última mensagem é da aluna (clique de novo para ver todas)">Aguardando <b>0</b></a><a href="javascript:void(0)" data-s="agendaram" onclick="filtrarSit('agendaram')" title="Com aula experimental agendada (clique de novo para ver todas)">Agendaram <b>0</b></a><a href="javascript:void(0)" data-s="encerradas" onclick="filtrarSit('encerradas')" title="Conversas encerradas (clique de novo para ver todas)">Encerradas <b>0</b></a></div>
         <details id="convFiltrosDet" class="filtros-det" ontoggle="try{localStorage.setItem('convFiltrosOpen', this.open?'1':'0')}catch(e){}">
           <summary class="filtros-sum"><span class="s-mais">⚙️ Mais filtros</span><span class="s-menos">⚙️ Menos filtros</span></summary>
           <div class="filtros-corpo">
@@ -226,6 +232,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     </div>
   </div>
 <script>
+  var sitFiltro=''; // filtro rápido da lista: '' (todas) | aguardando | agendaram | encerradas — clicar de novo desliga
   var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ultimoInboxHtml='', ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', buscaTexto='', quietoFiltro=false, atencaoFiltro=false, respondeuFiltro=false, tagEdAberto=false, agAberto=false, ncNome='', ncDirty=false, ncTodas=[];
   // Atalho vindo de Contatos: ?chat=<telefone> abre a conversa correspondente.
   var alvoChat=(new URLSearchParams(location.search).get('chat')||'').replace(/\\D/g,''), alvoAplicado=false;
@@ -638,6 +645,10 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   }
   function filtrarTag(t){ tagFiltro=t||''; pagina=0; renderInbox(ultimoData); }
   function filtrarBusca(v){ buscaTexto=String(v||'').trim().toLowerCase(); pagina=0; renderInbox(ultimoData); }
+  // Situação da conversa: aguardando = a última mensagem é da aluna (e a conversa não encerrou).
+  function sitDe(c){ c=c||{}; var u=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null; return { aguardando: !!(u&&u.autor==='aluna') && !encerrada(c), agendaram: !!c.agendou, encerradas: encerrada(c) }; }
+  // clicar de novo no mesmo filtro volta para todas
+  function filtrarSit(v){ sitFiltro=(sitFiltro===v)?'':(v||''); pagina=0; ultimoInboxHtml=''; renderInbox(ultimoData); }
   function filtrarQuieto(cb){ quietoFiltro=!!cb.checked; pagina=0; renderInbox(ultimoData); }
   function filtrarAtencao(cb){ atencaoFiltro=!!cb.checked; pagina=0; renderInbox(ultimoData); }
   function filtrarRespondeu(cb){ respondeuFiltro=!!cb.checked; pagina=0; renderInbox(ultimoData); }
@@ -702,7 +713,12 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     if(quietoFiltro) chaves = chaves.filter(function(k){ return quieto(ultimoData[k]||{}); });
     if(respondeuFiltro) chaves = chaves.filter(function(k){ return clienteRespondeu(ultimoData[k]||{}); });
     if(dataIniMs || dataFimMs) chaves = chaves.filter(function(k){ return naData(ultimoData[k]||{}); });
+    var nSit={aguardando:0,agendaram:0,encerradas:0};
+    chaves.forEach(function(k){ var x=sitDe(ultimoData[k]); if(x.aguardando)nSit.aguardando++; if(x.agendaram)nSit.agendaram++; if(x.encerradas)nSit.encerradas++; });
+    [].forEach.call(document.querySelectorAll('#convSit a'),function(a){ var v=a.getAttribute('data-s'); a.classList.toggle('on', v===sitFiltro); var b=a.querySelector('b'); if(b) b.textContent=nSit[v]||0; });
+    if(sitFiltro) chaves = chaves.filter(function(k){ return sitDe(ultimoData[k])[sitFiltro]; });
     var total=chaves.length;
+    if(!total && sitFiltro){ var lv=document.getElementById('convLista'); if(lv)lv.innerHTML='<p class="quando" style="padding:12px">Nenhuma conversa '+({aguardando:'aguardando resposta',agendaram:'com aula agendada',encerradas:'encerrada'})[sitFiltro]+' aqui.</p>'; ultimoInboxHtml=''; var pv=document.getElementById('convPag'); if(pv)pv.innerHTML=''; return; }
     var lista=document.getElementById('convLista'), pag=document.getElementById('convPag');
     if(!total){ if(lista)lista.innerHTML='<p class="quando" style="padding:12px">'+(atencaoFiltro?'Nenhuma conversa pedindo atendimento humano agora. 🎉':(respondeuFiltro?('Nenhum cliente respondeu'+((dataIniMs||dataFimMs)?' no período escolhido.':' ainda.')):((dataIniMs||dataFimMs)?'Nenhuma conversa no período escolhido.':(quietoFiltro?'Nenhum contato quieto há 24h+ (dentro dos últimos 4 dias). 🎉':(buscaTexto?'Nada encontrado para “'+escH(buscaTexto)+'” (nome, telefone ou palavra na conversa).':(tagFiltro==='__sem__'?'Nenhuma conversa sem tag.':(tagFiltro?'Nenhuma conversa com a tag “'+escH(tagFiltro)+'”.':'Nenhuma conversa ainda. Assim que a SoFIA receber mensagens, elas aparecem aqui.')))))))+'</p>'; ultimoInboxHtml=''; if(pag)pag.innerHTML=''; return; }
     // Lista COMPLETA (sem paginação) — só o #convLista rola; a janela da conversa fica fixa.

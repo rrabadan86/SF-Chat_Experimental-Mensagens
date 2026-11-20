@@ -845,6 +845,37 @@ function paginaSofiaFunil(params) {
   const detAg = canalSel === 'todos' ? todosAg : todosAg.filter(d => d.canal === canalSel);
   const agend = detAg.length;
   const agSofia = porCanal.sofia;
+  // Comparação com o período ANTERIOR de mesmo tamanho (7 dias × os 7 anteriores…):
+  // conta o que o funil mostraria no fim daquele período — o último agendamento de cada
+  // pessoa até aquela data. Só aparece quando o histórico de tags cobre o período todo
+  // (senão "0 antes" seria falta de registro, não queda de verdade).
+  let agAntes = null;
+  if (iniD && fimD) {
+    try {
+      const nDias = Math.round((new Date(fimD + 'T12:00:00') - new Date(iniD + 'T12:00:00')) / 86400e3) + 1;
+      const pFim = menosDias(iniD, 1), pIni = menosDias(iniD, nDias);
+      let primeiro = Infinity, n = 0;
+      for (const l8 in tagLogMap) for (const e of (tagLogMap[l8] || [])) if (e && e.em && e.em < primeiro) primeiro = e.em;
+      if (nDias >= 1 && nDias <= 366 && primeiro !== Infinity && diaDe(primeiro) <= pIni) {
+        for (const l8 in tagLogMap) {
+          if (temCrm && !cont8[l8]) continue;
+          let ult = 0, canal = '';
+          for (const e of (tagLogMap[l8] || [])) {
+            const ehAg = e.acao === 'add' && (e.motivo === 'agendou' || agTagsLc.includes(String(e.tag || '').trim()));
+            if (!ehAg || !e.em || e.em <= ult || diaDe(e.em) > pFim) continue;
+            ult = e.em; canal = String(e.canal || '').trim(); if (!canal && e.motivo === 'manual') canal = 'manual';
+          }
+          if (!ult || diaDe(ult) < pIni) continue;
+          const ib = inbox8[l8];
+          const c = canal || canalDe(l8) || (ib && conversou(ib.c) ? 'sofia' : '');
+          if (canalSel === 'todos' || c === canalSel) n++;
+        }
+        agAntes = { n, nDias };
+      }
+    } catch (_) { agAntes = null; }
+  }
+  const fuAntesRot = agAntes ? (agAntes.nDias === 1 ? (per === 'hoje' ? 'ontem' : 'no dia anterior') : `nos ${agAntes.nDias} dias anteriores`) : '';
+  const fuDelta = !agAntes ? '' : `<br><span class="fu-delta">${agend > agAntes.n ? `<b style="color:var(--ok)">▲ ${agend - agAntes.n}</b> a mais que ${fuAntesRot}` : agend < agAntes.n ? `<b style="color:var(--erro)">▼ ${agAntes.n - agend}</b> a menos que ${fuAntesRot}` : `igual a${agAntes.nDias === 1 && per === 'hoje' ? ' ontem' : 'o período anterior'}`} <span style="color:var(--faint)">(${agAntes.n})</span></span>`;
   // Filtro Formulário: a etapa de cima é quem VISITOU o link de agendamento no
   // período (pessoas únicas, os mesmos números da subaba Formulário).
   let visitas = 0;
@@ -1047,8 +1078,8 @@ function paginaSofiaFunil(params) {
     })}
     <div class="stats">
       ${topo ? `<div class="stat tot"><div class="n">${topo.n}</div><div class="l">${topo.stat} · ${esc(rotulo)}</div></div>
-      <div class="stat"><div class="n">${agend}</div><div class="l">agendaram · <b style="color:var(--coral-esc)">${String(conv).replace('.', ',')}%</b> ${topo.de}</div></div>`
-      : `<div class="stat"><div class="n">${agend}</div><div class="l">agendaram · ${esc(rotulo)}${canalSel === 'todos' ? `<br><span style="font-size:.72rem">🤖 ${porCanal.sofia} · 📲 ${porCanal.formulario} · 🏪 ${porCanal.express}${porCanal.manual ? ` · ✍️ ${porCanal.manual} à mão` : ''}${porCanal.outro ? ` · ${porCanal.outro} sem canal` : ''}</span>` : ''}</div></div>`}
+      <div class="stat"><div class="n">${agend}</div><div class="l">agendaram · <b style="color:var(--coral-esc)">${String(conv).replace('.', ',')}%</b> ${topo.de}${fuDelta}</div></div>`
+      : `<div class="stat"><div class="n">${agend}</div><div class="l">agendaram · ${esc(rotulo)}${canalSel === 'todos' ? `<br><span style="font-size:.72rem">🤖 ${porCanal.sofia} · 📲 ${porCanal.formulario} · 🏪 ${porCanal.express}${porCanal.manual ? ` · ✍️ ${porCanal.manual} à mão` : ''}${porCanal.outro ? ` · ${porCanal.outro} sem canal` : ''}</span>` : ''}${fuDelta}</div></div>`}
       <div class="stat"><div class="n">${fez}</div><div class="l">fizeram a aula · ${pct(fez, agend)} das agendadas</div></div>
       <div class="stat ok"><div class="n">${fechou}</div><div class="l">fecharam contrato · ${pct(fechou, fez)} de quem fez</div></div>
     </div>

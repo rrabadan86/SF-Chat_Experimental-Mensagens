@@ -759,6 +759,10 @@ const ESTILO = `
   }
   /* Contatos: os 4 botões de ação numa linha só (a linha fica mais baixa) */
   .ct-acts{white-space:nowrap}
+  .ui-datas-det>summary{list-style:none;cursor:pointer;display:inline-flex}.ui-datas-det>summary::-webkit-details-marker{display:none}
+  .ui-datas-det>summary.on{border-color:var(--teal);color:var(--teal-esc)}
+  .ui-datas-det>form{margin-top:8px}
+  .ui-topo>.ui-datas-det[open]{flex:1 1 100%}
   details.ui-rodape{text-align:left;max-width:none;margin:14px 2px 6px}
   details.ui-rodape>summary{cursor:pointer;list-style:none;display:inline-block;font-size:var(--fs-sm);font-weight:600;color:var(--teal-esc)}
   details.ui-rodape>summary::-webkit-details-marker{display:none}
@@ -1371,9 +1375,14 @@ function uiChips(rotulo, itens) {
 }
 // Período personalizado (de/até). extra: inputs hidden; limpar: href para tirar o filtro.
 function uiDatas({ action, de, ate, extra, limpar }) {
-  return `<form method="GET" action="${action}" class="ui-linha ui-datas"><span class="ui-lbl">Datas</span>${extra || ''}
+  // As datas ficam atrás de um botão: o período mais usado é o dos atalhos (7 dias, 30 dias…).
+  // Com um intervalo escolhido, o botão mostra o intervalo e as datas já vêm abertas.
+  const br = (d) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || '')); return m ? `${m[3]}/${m[2]}` : ''; };
+  const ativo = !!(de || ate);
+  return `<details class="ui-linha ui-datas-det"${ativo ? ' open' : ''}><summary class="ui-btn sec${ativo ? ' on' : ''}">📅 ${ativo ? `${br(de) || 'início'} a ${br(ate) || 'hoje'}` : 'Escolher datas'}</summary>
+    <form method="GET" action="${action}" class="ui-linha ui-datas">${extra || ''}
       <input type="date" name="de" value="${esc(de || '')}" aria-label="De"><span class="ate">até</span><input type="date" name="ate" value="${esc(ate || '')}" aria-label="Até">
-      <button class="ui-btn" type="submit">Aplicar</button>${limpar ? `<a href="${limpar}" class="ui-btn sec">Limpar</a>` : ''}</form>`;
+      <button class="ui-btn" type="submit">Aplicar</button>${limpar ? `<a href="${limpar}" class="ui-btn sec">Limpar</a>` : ''}</form></details>`;
 }
 // Uma pessoa numa lista: nome (link p/ Contatos), situação, detalhes e o link do EVO.
 const UI_SIT = { jaaluna: '🎓 Já era aluna', fechou: '💰 Fechou contrato', fez: '✅ Fez a aula', veio: '✅ Veio', faltou: '❌ Faltou', aguardando: '⏳ Aguardando', agendada: '⏳ Agendada', semreg: '❔ Sem registro' };
