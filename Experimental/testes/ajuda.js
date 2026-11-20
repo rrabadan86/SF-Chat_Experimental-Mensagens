@@ -63,4 +63,27 @@ function semEsperas() {
 }
 
 const HORA = 3600e3, DIA = 24 * HORA;
-module.exports = { ambienteIsolado, semEsperas, HORA, DIA };
+// Um "aparelho" de mentira para as notificações do painel: par de chaves + segredo
+// (o que o navegador entrega ao se inscrever) e a decifragem do RFC 8291 — o lado
+// do navegador. Se o painel cifrar errado, abrir() falha.
+function aparelhoPush(n) {
+  const crypto = require('crypto'), assert = require('node:assert');
+  const b64u = (b) => Buffer.from(b).toString('base64url');
+  const ec = crypto.createECDH('prime256v1'); ec.generateKeys();
+  const auth = crypto.randomBytes(16);
+  return {
+    sub: { endpoint: 'https://fcm.googleapis.com/fcm/send/aparelho-' + n, keys: { p256dh: b64u(ec.getPublicKey()), auth: b64u(auth) } },
+    abrir(corpo) {
+      const salt = corpo.subarray(0, 16), idlen = corpo[20], as = corpo.subarray(21, 21 + idlen), ct = corpo.subarray(21 + idlen);
+      const ikm = Buffer.from(crypto.hkdfSync('sha256', ec.computeSecret(as), auth, Buffer.concat([Buffer.from('WebPush: info\0'), ec.getPublicKey(), as]), 32));
+      const cek = Buffer.from(crypto.hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: aes128gcm\0'), 16));
+      const nonce = Buffer.from(crypto.hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: nonce\0'), 12));
+      const d = crypto.createDecipheriv('aes-128-gcm', cek, nonce); d.setAuthTag(ct.subarray(ct.length - 16));
+      const claro = Buffer.concat([d.update(ct.subarray(0, ct.length - 16)), d.final()]);
+      assert.strictEqual(claro[claro.length - 1], 2, 'marcador de último registro');
+      return JSON.parse(claro.subarray(0, claro.length - 1).toString('utf8'));
+    },
+  };
+}
+
+module.exports = { ambienteIsolado, semEsperas, HORA, DIA, aparelhoPush };

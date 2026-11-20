@@ -830,13 +830,15 @@ function menuConta(ativo) {
   const PILL = { ok: '<span class="sd-pill sd-ok">🟢 OK</span>', warn: '<span class="sd-pill sd-warn">🟡 Atenção</span>', erro: '<span class="sd-pill sd-erro">🔴 Problema</span>' };
   const studio = esc(config.STUDIO_NOME || '');
   const papel = sess.admin ? 'Administrador' : 'Equipe';
-  return `<details class="conta${ativo === 'saude' || ativo === 'perfis' ? ' on' : ''}">
+  let temNotif = false; try { temNotif = require('./push').tiposDe(sess).length > 0; } catch (_) {}
+  return `<details class="conta${ativo === 'saude' || ativo === 'perfis' || ativo === 'notificacoes' ? ' on' : ''}">
     <summary aria-label="Menu da conta"><span class="conta-txt"><b>${esc(sess.usuario)}</b><small>${studio}</small></span>${avatar(sess.usuario, dot)}</summary>
     <div class="conta-menu">
       <div class="conta-cab">${avatar(sess.usuario)}<div><b>${esc(sess.usuario)}</b><span>${papel}${studio ? ' · ' + studio : ''}</span></div></div>
       ${podeSaude ? `<a href="/saude"${ativo === 'saude' ? ' class="on"' : ''}>🩺 Saúde do sistema ${sc ? PILL[sc] : ''}</a>` : ''}
       ${sess.admin ? `<a href="/perfis"${ativo === 'perfis' ? ' class="on"' : ''}>👤 Perfis e acessos</a>` : ''}
       ${sess.admin && (() => { try { return require('./unidades-rede').ler().length >= 2; } catch (_) { return false; } })() ? '<a href="/unidades">🔀 Trocar de unidade</a>' : ''}
+      ${temNotif ? `<a href="/notificacoes"${ativo === 'notificacoes' ? ' class="on"' : ''}>🔔 Notificações</a>` : ''}
       <a href="/politicadeprivacidade" target="_blank" rel="noopener">📄 Política de privacidade <span style="margin-left:auto;color:var(--faint);font-weight:500">↗</span></a>
       <div class="conta-sep"></div>
       <a href="/logout" class="sair">↪ Sair</a>
@@ -920,9 +922,12 @@ window.sfConfirmarForm=function(f,o){if(f.__sfOk)return true;window.sfRevisar(o)
 document.addEventListener('mouseover',poe,true);document.addEventListener('focusin',poe,true);
 window.addEventListener('scroll',function(){var a=document.activeElement;if(a&&a.classList&&a.classList.contains('info'))a.blur();},true);
 })();</script>`;
+// Painel como app instalável: manifesto, cor da barra do celular e ícone do iPhone
+// (em todas as telas, inclusive a de login — é o que deixa "Instalar app" aparecer).
+const HEAD_APP = '<link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#0e6e6b"><link rel="apple-touch-icon" href="/app-icone-180.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="SlimFit">';
 function chrome(titSubtitulo, ativo, corpo) {
   return `<!doctype html><html lang="pt-BR"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${HEAD_APP}
 <title>${esc(titSubtitulo.tab)} · SlimFit</title>
 <link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1443,5 +1448,6 @@ function fuLerJson(f, def) { try { return JSON.parse(fs.readFileSync(f, 'utf8'))
 const FU_AGENDOU_AULA_FILE = path.join(sofia.DIR, 'sofia-agendaram-aula.json');
 
 module.exports = {
+  HEAD_APP,
   _pm2Slug, PM2_EXP, PM2_SOFIA, COMP_CFG_FILE, COMP_PADRAO, compTagsAgendou, compDias, compIntervalo, lerCompCfg, USER, SENHA, TODAS_TELAS, SEGREDO, assinar, SESSOES_FILE, _salvarSessoesJa, salvarSessoesSoon, tocarSessao, sessaoValida, lerToken, lerCookie, ehHttps, usuarioDaReq, ADMIN_EMAIL, SOFIA_SUBS, podeSofiaSub, temSofia, sofiaHref, podeMsgSub, temMsg, msgHref, esc, infoI, hojeSP, fmtData, fmtTel, ESTILO, IG_NO_PAINEL, PAGAMENTO_ATIVO, navTabs, FOTOS_FILE, fotoDe, iniciais, AV_CORES, avatar, menuConta, chrome, scriptPreviewTeste, cardMensagem, professorasRecentes, cardAudio, cardFoto, DIAS, blocoHorario, lerJsonData, podeFunil, uiTrilho, uiBarra, uiTopo, uiChips, uiDatas, UI_SIT, uiPessoa, subnavSofia, scIp, scBaseUrl, scStudio, scHtml, scJson, scSoJson, lerCorpo, FU_AGENDOU_CANAL_FILE, fuLerJson, FU_AGENDOU_AULA_FILE,
 };

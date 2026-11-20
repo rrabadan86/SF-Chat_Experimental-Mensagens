@@ -4,7 +4,7 @@
  * mudança de lógica.
  */
 const {
-  ESTILO, esc, ADMIN_EMAIL, IG_NO_PAINEL,
+  ESTILO, esc, ADMIN_EMAIL, IG_NO_PAINEL, HEAD_APP,
 } = require('./painel-base');
 const unidadesRede = require('./unidades-rede');
 
@@ -20,7 +20,7 @@ function googleAtivo() { return !!(GOOGLE_ID && GOOGLE_SECRET); }
 // Página de login (sem menu). Simples: usuário + senha.
 function paginaLogin(erro) {
   return `<!doctype html><html lang="pt-BR"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${HEAD_APP}
 <title>Entrar · SlimFit</title>
 <link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -84,7 +84,7 @@ function paginaUnidades(lista, aqui) {
     <p style="text-align:center;margin:16px 0 0;font-size:.86rem"><a id="unAbrir" href="/" style="color:var(--teal-esc);font-weight:600;text-decoration:none">Já entrei nesta unidade neste aparelho — só abrir →</a></p>
     <p class="sub" id="unOnde" style="margin:14px 0 0;font-size:.78rem"></p>`;
   return `<!doctype html><html lang="pt-BR"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">${HEAD_APP}
 <title>Unidades · SlimFit</title>
 <link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

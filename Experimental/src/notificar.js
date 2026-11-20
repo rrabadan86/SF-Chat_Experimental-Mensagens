@@ -11,8 +11,11 @@
 //   NTFY_TOPIC = slimfit-alertas-7h3k9      (o nome do tópico que você assinou)
 //   NTFY_URL   = https://ntfy.sh            (opcional; troque se usar servidor próprio)
 //
-// Sem NTFY_TOPIC definido, este módulo NÃO faz nada (falha em silêncio) — o
-// sistema continua funcionando normalmente, só sem enviar os alertas.
+// Sem NTFY_TOPIC definido, o ntfy fica desligado (falha em silêncio) — o sistema
+// continua funcionando normalmente.
+//
+// SEGUNDO CANAL (independe do ntfy): a notificação do próprio painel, para quem
+// ativou "Alertas da Saúde" em Notificações (menu da conta). Ver push.js.
 //
 // Uso:
 //   const notif = require('./notificar');
@@ -37,8 +40,6 @@ function log(msg) { console.log(`[notif] ${msg}`); }
  *   forcar     — ignora o anti-spam (para alertas críticos que devem sempre sair)
  */
 async function alertar(titulo, mensagem, { prioridade = 'high', tags = 'warning', forcar = false } = {}) {
-  if (!TOPIC) return false; // não configurado → não faz nada
-
   const chave = titulo || mensagem || 'alerta';
   const agora = Date.now();
   if (!forcar) {
@@ -46,6 +47,17 @@ async function alertar(titulo, mensagem, { prioridade = 'high', tags = 'warning'
     if (agora - ultimo < JANELA_MS) return false; // já avisei isso há pouco
   }
   _ultimoEnvio.set(chave, agora);
+
+  // Segundo canal: notificação do painel para quem ativou "Alertas da Saúde"
+  // (Notificações, no menu da conta). Independe do ntfy e nunca lança erro.
+  let viaPainel = false;
+  // Espera no máximo 8 s: um serviço de notificação lento não pode segurar o job que chamou.
+  try {
+    const r = await Promise.race([require('./push-eventos').saude(titulo, mensagem, prioridade === 'urgent' || prioridade === 'high'), new Promise(ok => { const t = setTimeout(() => ok(null), 8000); if (t.unref) t.unref(); })]);
+    viaPainel = !!(r && r.enviados);
+  } catch (_) {}
+
+  if (!TOPIC) return viaPainel; // ntfy não configurado → só o painel (se alguém ativou)
 
   try {
     const r = await fetch(`${BASE}/${encodeURIComponent(TOPIC)}`, {
@@ -58,12 +70,12 @@ async function alertar(titulo, mensagem, { prioridade = 'high', tags = 'warning'
       body: mensagem || '',
       signal: AbortSignal.timeout(15000),
     });
-    if (!r.ok) { log(`ntfy respondeu HTTP ${r.status}`); return false; }
+    if (!r.ok) { log(`ntfy respondeu HTTP ${r.status}`); return viaPainel; }
     return true;
   } catch (e) {
     // Nunca propaga: o alerta é "best-effort". Só registra no log.
     log(`falha ao enviar alerta (${e.message}) — seguindo sem alerta.`);
-    return false;
+    return viaPainel;
   }
 }
 
