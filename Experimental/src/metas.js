@@ -40,7 +40,27 @@ const mesAnterior = (m) => { const [y, mo] = m.split('-').map(Number); return mo
 const diasNoMes = (m) => { const [y, mo] = m.split('-').map(Number); return new Date(Date.UTC(y, mo, 0)).getUTCDate(); };
 
 // ── Metas ───────────────────────────────────────────────────────────────────
-function lerMetas() { const o = lerJson(ARQ_METAS, {}); return { meses: (o.meses && typeof o.meses === 'object') ? o.meses : {} }; }
+function lerMetas() { const o = lerJson(ARQ_METAS, {}); return { meses: (o.meses && typeof o.meses === 'object') ? o.meses : {}, investimento: (o.investimento && typeof o.investimento === 'object') ? o.investimento : {} }; }
+// Investimento em anúncios DAQUELE mês (R$). Diferente das metas, não passa para o
+// mês seguinte: é gasto, não objetivo. null = não informado.
+function investimentoDoMes(mes) { const v = lerMetas().investimento[mes]; return v == null || !isFinite(v) ? null : Number(v); }
+function salvarInvestimento(mes, entrada) {
+  if (!ehMes(mes)) throw new Error('mês inválido');
+  const n = numero(entrada);
+  const o = lerMetas();
+  if (n == null) delete o.investimento[mes]; else o.investimento[mes] = Math.round(n * 100) / 100;
+  gravarJson(ARQ_METAS, o);
+  return n;
+}
+// Custo para trazer uma lead, um agendamento e uma aluna nova no mês.
+//   custo = anúncios (digitado) + IA (medido). Sem anúncio informado, só a IA.
+// → { anuncios, ia, total, porLead, porAgendamento, porMatricula }
+function custoAquisicao({ anuncios, ia, leads, agendaram, novas }) {
+  const a = anuncios == null ? null : Number(anuncios), i = Number(ia) || 0;
+  const total = (a || 0) + i;
+  const div = (n) => n > 0 && total > 0 ? Math.round(total * 100 / n) / 100 : null;
+  return { anuncios: a, ia: Math.round(i * 100) / 100, total: Math.round(total * 100) / 100, leads: leads == null ? null : leads, agendaram: agendaram == null ? null : agendaram, novas: novas == null ? null : novas, porLead: div(leads), porAgendamento: div(agendaram), porMatricula: div(novas) };
+}
 // Metas que valem para um mês: as dele; se não tiver, as do mês mais recente antes dele.
 // → { valores: {campo: número}, de: 'AAAA-MM' | '', herdada: bool }
 function metasDoMes(mes) {
@@ -141,5 +161,5 @@ function fechar(mes, dados, agora) {
 
 module.exports = {
   ARQ_METAS, ARQ_POS, ARQ_FECH, CAMPOS, ehMes, mesSeguinte, mesAnterior, diasNoMes,
-  lerMetas, metasDoMes, salvarMetas, numero, ritmo, posicoes, registrarPosicao, fechamentos, diaDeFechar, podeFechar, fechar,
+  lerMetas, metasDoMes, salvarMetas, investimentoDoMes, salvarInvestimento, custoAquisicao, numero, ritmo, posicoes, registrarPosicao, fechamentos, diaDeFechar, podeFechar, fechar,
 };

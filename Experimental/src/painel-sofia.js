@@ -233,6 +233,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   </div>
 <script>
   var sitFiltro=''; // filtro rápido da lista: '' (todas) | aguardando | agendaram | encerradas — clicar de novo desliga
+  try{ var sitUrl=new URLSearchParams(location.search).get('sit'); if(['aguardando','agendaram','encerradas'].indexOf(sitUrl)>=0) sitFiltro=sitUrl; }catch(e){} // link de Indicadores → Metas → Atendimento
   var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ultimoInboxHtml='', ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', buscaTexto='', quietoFiltro=false, atencaoFiltro=false, respondeuFiltro=false, tagEdAberto=false, agAberto=false, ncNome='', ncDirty=false, ncTodas=[];
   // Atalho vindo de Contatos: ?chat=<telefone> abre a conversa correspondente.
   var alvoChat=(new URLSearchParams(location.search).get('chat')||'').replace(/\\D/g,''), alvoAplicado=false;
