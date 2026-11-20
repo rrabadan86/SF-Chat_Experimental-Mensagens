@@ -95,6 +95,9 @@ function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra, canal
     const canalRot = { formulario: '📲 via Formulário', sofia: '🤖 via SoFIA' }[String(canal || '').toLowerCase()] || '';
     const texto = `${cab}\n👤 ${nome || '(sem nome)'}\n📱 ${fmtTelAviso(tel)}${extra ? `\n${extra}` : ''}\n🏷️ ${tag}${canalRot ? `\n${canalRot}` : ''}`;
     try { sofia.enfileirarAviso(avisarWpp, texto, { sobre: tel, tag, motivo, canal }); } catch (_) {}
+    // O mesmo aviso como notificação do painel, para quem ativou "outros avisos".
+    // (O 'agendou' tem notificação própria, uma por agendamento — em processarAgendamentos.)
+    if (motivo !== 'agendou') { try { require('./push-eventos').avisoRecepcao({ rotulo: cab, nome, tel, tag }); } catch (_) {} }
   }
 }
 // Publica as regras que o LISTENER precisa (só os gatilhos dele).
@@ -191,6 +194,8 @@ function processarAgendamentos() {
     if (String(ev.canal || '').toLowerCase() === 'express') continue;
     try { sofia.enfileirarPedidoFicha({ telefone: ev.telefone, nome: ev.nome || '', quando: ev.when || '' }); } catch (_) {}
   }
+  // Notificação do painel: uma por agendamento (não depende das tags nem do aviso por WhatsApp).
+  for (const ev of evs) { try { require('./push-eventos').agendou(ev); } catch (_) {} }
   let autos = [];
   try { autos = contatos.tagsPorGatilho('agendou'); } catch (_) {}
   if (!autos.length) return;

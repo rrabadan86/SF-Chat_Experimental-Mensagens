@@ -121,6 +121,8 @@ const {
   GOOGLE_ID, GOOGLE_SECRET, googleAtivo, paginaLogin, paginaUnidades, docLegal, paginaPrivacidade, paginaTermos,
 } = require('./painel-publicas');
 const unidadesRede = require('./unidades-rede');
+const push = require('./push');
+const painelNotif = require('./painel-notificacoes');
 const {
   scSetCookie, scFmtQuando, rotaSlimClubCadastro, rotaSlimClubPublico, scAvisarAprovado, scStatusAviso, paginaSlimClub,
 } = require('./painel-slimclub');
@@ -312,6 +314,7 @@ function telaDaUrl(u) {
   if (u === '/ativas' || u.startsWith('/ativas/')) return 'ativas'; // Indicadores → Alunas ativas (checkbox em Perfis)
   if (u === '/metas' || u.startsWith('/metas/')) return 'metas'; // Indicadores → Metas e fechamento do mês (checkbox em Perfis)
   if (u === '/dicionario') return 'dicionario'; // Indicadores → Dicionário: quem vê alguma tela de Indicadores
+  if (u === '/notificacoes' || u.startsWith('/notificacoes/')) return 'notificacoes'; // Notificações: quem pode receber algum tipo de aviso (push.tiposDe)
   if (u === '/pagamento' || u.startsWith('/pagamento/')) return 'pagamento'; // Indicadores → Pagamento professores (checkbox em Perfis)
   if (u === '/clube' || u.startsWith('/clube/')) return 'slimclub'; // validação do Slim Club (checkbox em Perfis)
   if (u === '/formularios' || u.startsWith('/formularios/')) return 'formularios'; // formulários de campanha (checkbox em Perfis)
@@ -470,6 +473,14 @@ function demoBloqueado(req, res) {
 const server = http.createServer(protegido((req, res) => {
   const url = req.url.split('?')[0];
   E._navSess = null;
+  // Painel como app instalável: manifesto, service worker e ícones. Públicos (o
+  // navegador busca sem login) e sem dado da unidade além do nome.
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    if (url === '/manifest.webmanifest') { res.writeHead(200, { 'Content-Type': 'application/manifest+json; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }); return res.end(painelNotif.manifesto()); }
+    if (url === '/sw.js') { res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' }); return res.end(painelNotif.SW_JS); }
+    const mIco = /^\/app-(icone-[a-z0-9-]+\.png)$/.exec(url);
+    if (mIco) { const img = painelNotif.icone(mIco[1]); if (img) { res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' }); return res.end(img); } }
+  }
   if (DEMO.ativo) {
     if (url === '/login' || url === '/logout' || url === '/unidades') { res.writeHead(303, { Location: '/hoje' }); return res.end(); } // (a demonstração não lista nem leva às unidades de verdade)
     if (req.method !== 'GET' && req.method !== 'HEAD') return demoBloqueado(req, res);
@@ -684,6 +695,7 @@ const server = http.createServer(protegido((req, res) => {
     }
   }
   else if (tela === 'funil') { if (!podeFunil(sess)) return negarAcesso(res, sess); }
+  else if (tela === 'notificacoes') { if (!push.tiposDe(sess).length) return negarAcesso(res, sess); }
   else if (tela === 'dicionario') { if (!sess.admin && !podeFunil(sess) && !['ind', 'professoras', 'ativas', 'grade', 'metas', 'pagamento'].some(t => (sess.telas || []).includes(t))) return negarAcesso(res, sess); }
   else if (tela && !sess.admin && !(sess.telas || []).includes(tela)) return negarAcesso(res, sess);
 
@@ -781,6 +793,34 @@ const server = http.createServer(protegido((req, res) => {
     const sp = new URLSearchParams(req.url.split('?')[1] || '');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(paginaSofiaFunil({ per: sp.get('per') || '7', de: sp.get('de') || '', ate: sp.get('ate') || '', canal: sp.get('canal') || '' }));
+  }
+
+  // ── Notificações (quem pode receber algum aviso — barrado acima) ──
+  if (tela === 'notificacoes') {
+    const json = (o) => { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(o)); };
+    if (req.method === 'GET' && url === '/notificacoes') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(painelNotif.paginaNotificacoes(sess)); }
+    if (req.method === 'POST' && url === '/notificacoes/inscrever') {
+      return lerCorpo(req, 1e4, corpo => {
+        try {
+          const j = JSON.parse(corpo || '{}');
+          const n = push.inscrever(sess, j.sub, j.tipos, req.headers['user-agent'], baseUrl(req));
+          try { auditoria.registrar(sess.usuario, 'notificacoes.ativar', n.aparelho, n.tipos.join(', ')); } catch (_) {}
+          json({ ok: true, id: n.id });
+        } catch (e) { json({ ok: false, erro: e.message }); }
+      });
+    }
+    if (req.method === 'POST' && url === '/notificacoes/remover') {
+      return lerCorpo(req, 1e3, corpo => {
+        try { const j = JSON.parse(corpo || '{}'); const ok = push.remover(sess.usuario, String(j.id || '')); if (ok) { try { auditoria.registrar(sess.usuario, 'notificacoes.remover', '', ''); } catch (_) {} } json({ ok: true }); }
+        catch (e) { json({ ok: false, erro: e.message }); }
+      });
+    }
+    if (req.method === 'POST' && url === '/notificacoes/teste') {
+      return lerCorpo(req, 1e3, corpo => {
+        let id = ''; try { id = String(JSON.parse(corpo || '{}').id || ''); } catch (_) {}
+        push.enviarTeste(sess.usuario, id).then(() => json({ ok: true })).catch(e => json({ ok: false, erro: e.message }));
+      });
+    }
   }
 
   // ── Indicadores → Metas e fechamento do mês (permissão "metas") e Dicionário ──
@@ -3018,7 +3058,7 @@ const server = http.createServer(protegido((req, res) => {
 publicarRegras();
 try {
   setInterval(() => { processarExpressInbox().catch(() => {}); }, 1500);
-  setInterval(() => { try { processarAgendamentos(); } catch (_) {} try { processarEventos(); } catch (_) {} try { reconciliarTagHumano(); } catch (_) {} try { publicarRegras(); } catch (_) {} }, 4000);
+  setInterval(() => { try { processarAgendamentos(); } catch (_) {} try { processarEventos(); } catch (_) {} try { reconciliarTagHumano(); } catch (_) {} try { publicarRegras(); } catch (_) {} try { require('./push-eventos').vigiarAtencao(); } catch (_) {} }, 4000);
   // Follow-up: cadência mais lenta (as leads esfriam em horas, não em segundos).
   setInterval(() => { try { processarFollowups(); } catch (_) {} }, 120000);
   setTimeout(() => { try { processarFollowups(); } catch (_) {} }, 30000);

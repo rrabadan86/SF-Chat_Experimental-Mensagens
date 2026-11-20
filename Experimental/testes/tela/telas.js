@@ -32,7 +32,7 @@ const TELAS = [
   '/sofia?view=campanhas', '/sofia?view=cobranca', '/sofia?view=custo',
   '/indicadores', '/funil', '/professoras', '/ativas', '/grade', '/metas', '/dicionario', // (/pagamento só existe com PAGAMENTO_ATIVO)
   '/clube?view=pendentes', '/clube?view=aprovados', '/clube?view=reclamacoes', '/clube?view=config',
-  '/formularios', '/saude', '/perfis', '/perfis?view=auditoria', '/perfis?view=unidades',
+  '/formularios', '/saude', '/perfis', '/perfis?view=auditoria', '/perfis?view=unidades', '/notificacoes',
 ];
 
 // ── 1. instalação de demonstração numa pasta temporária ─────────────────────
