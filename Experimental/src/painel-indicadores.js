@@ -253,7 +253,7 @@ function paginaIndicadores(dias, aviso) {
     ${origemBloco}
     ${logBloco}
     </div>
-    <p class="ui-rodape">Coletado do formulário a cada ~2 min. ${r.primeiroDia ? `Desde ${esc(fmtData(r.primeiroDia))}.` : 'Ainda começando a coletar.'}</p>
+    <details class="ui-rodape"><summary>ⓘ Como estes números são calculados</summary><p>Coletado do formulário a cada ~2 min. ${r.primeiroDia ? `Desde ${esc(fmtData(r.primeiroDia))}.` : 'Ainda começando a coletar.'}</p></details>
   </div>
   <style>
   .logtab{width:100%;border-collapse:collapse;font-size:var(--fs-sm,.85rem)}
@@ -357,7 +357,7 @@ function paginaGrade(off) {
     const grpFix = `<div class="gr-grp"><div class="gr-grp-t">Fixas (${nf})${cab}</div><ul>${liFix || '<li class="gr-vazio2">sem fixas</li>'}</ul></div>`;
     const grpRepo = (t.reposicao || []).length ? `<div class="gr-grp"><div class="gr-grp-t gr-grp-repo">↻ Reposição (${t.reposicao.length})</div><ul>${t.reposicao.map(n => `<li>${escH(n)}</li>`).join('')}</ul></div>` : '';
     const grpFree = (t.free || []).length ? `<div class="gr-grp"><div class="gr-grp-t gr-grp-free">◇ FREE (${t.free.length})</div><ul>${t.free.map(n => `<li>${escH(n)}</li>`).join('')}</ul></div>` : '';
-    const det = `<details class="gr-det"><summary title="${escH(titDet)}">👥 ${nf} fixas${extraNum}</summary>${grpFix}${grpRepo}${grpFree}</details>`;
+    const det = `<details class="gr-det"><summary title="${escH(titDet)}"><span class="gr-so-cel">👥 ${nf} fixas · </span><span class="gr-real">${nReal} presença</span><span class="gr-ver"> · ver</span></summary>${grpFix}${grpRepo}${grpFree}</details>`;
     return { bar, prof, det };
   };
 
@@ -407,7 +407,7 @@ function paginaGrade(off) {
         const t = cel[h + '|' + w];
         if (!t) return '<td class="gr-empty"></td>';
         const ti = tierOf(t), c = conteudo(t);
-        return `<td class="gr-cel t-${ti.k}" data-fx="${fxData(t)}" data-prof="${nrmFx(t.professora || '')}"><span class="gr-vg" title="${escH(ti.tip || '')}">${ti.txt}</span>${c.bar}${c.prof}${c.det}</td>`;
+        return `<td class="gr-cel t-${ti.k}" data-fx="${fxData(t)}" data-prof="${nrmFx(t.professora || '')}"><div class="gr-topo" title="${escH(ti.tip || '')}">${t.capacity != null ? `<b class="gr-n">${t.nFixas}<span>/${t.capacity}</span></b>` : ''}<span class="gr-vg">${ti.txt}</span></div>${c.bar}${c.prof}${c.det}</td>`;
       }).join('');
       return `<tr><th class="h">${escH(h)}</th>${tds}</tr>`;
     }).join('');
@@ -460,17 +460,18 @@ function paginaGrade(off) {
       <div class="gr-md-b"><table class="gr-md-t"><thead><tr><th>Aluna</th><th>Plano</th></tr></thead><tbody>${scRows || '<tr><td colspan="2" class="gr-md-vz">Todas as ativas têm valor de contrato 🎉</td></tr>'}</tbody></table></div>
       <p class="gr-md-nota">Ficam fora da média do TKM — <b>trancada</b> (plano congelado) ou contrato sem venda casável no EVO. <b>VIP/cortesia</b> (R$ 0) já são excluídas da base de alunas.</p></div></div>`;
 
-    corpo = `<div class="stats">
-      <div class="stat tot" title="Total de turmas na semana (Seg a Sáb)."><div class="n">${r.turmas != null ? r.turmas : turmas.length}</div><div class="l">turmas</div></div>
-      <div class="stat" title="Alunas com matrícula FIXA (recorrente) em alguma turma da semana, e o quanto representam das alunas ativas do EVO."><div class="n">${alunasFixas != null ? alunasFixas : '—'}</div><div class="l">alunas fixas</div><div class="gr-sub">${alunasFixas == null ? 'atualize a grade' : (pctAlunasFixas != null ? `${pctAlunasFixas}% de ${totalAlunas} alunas` : (r.fixas != null ? `${r.fixas} matrículas fixas` : ''))}</div></div>
-      <div class="stat ok" title="Ocupação por matrículas fixas = fixas ÷ vagas (sem sábado/escala). Mede quanto da agenda já está vendida."><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação FIXAS</div><div class="gr-sub">${ocupPct == null ? 'atualize a grade' : (r.ocupacao_vagas ? `${r.ocupacao_fixas}/${r.ocupacao_vagas} vagas · sem sáb` : '')}</div></div>
+    corpo = `<div class="gr-kpis"><div class="stats">
+      <div class="stat" title="Ocupação por matrículas fixas = fixas ÷ vagas (sem sábado/escala). Mede quanto da agenda já está vendida."><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação FIXAS</div><div class="gr-sub">${ocupPct == null ? 'atualize a grade' : (r.ocupacao_vagas ? `${r.ocupacao_fixas}/${r.ocupacao_vagas} vagas · sem sáb` : '')}</div></div>
       <div class="stat prez" title="Presença real média = quem de fato ocupou a aula (fixas presentes + reposição + FREE) ÷ vagas, só nas aulas já realizadas da semana. Sem sábado (escala)."><div class="n">${presPct != null ? presPct + '%' : '—'}</div><div class="l">presença na turma</div><div class="gr-sub">${presPct == null ? 'aulas já realizadas' : (r.presenca_vagas ? `${r.presenca_real}/${r.presenca_vagas} vagas · realizadas` : '')}</div></div>
-      ${tkmMed != null ? `<div class="stat tkm gr-click" onclick="abrirM('tkm')" title="Ticket médio mensal = média do valor mensalizado do contrato vigente de cada aluna ativa (valor do contrato ÷ meses de duração). Inclui trancadas; exclui VIP/cortesia. Clique para ver quem está sem valor de contrato."><div class="n">${fmtBRL(tkmMed)}</div><div class="l">TKM médio</div><div class="gr-sub">contrato mensalizado · ${r.tkm_alunas || 0}${r.ativas ? ` de ${r.ativas}` : ''} ativas${r.trancadas ? ` · ${r.trancadas} trancada${r.trancadas === 1 ? '' : 's'}` : ''}${semCont.length ? ` <span class="gr-md-hint">▸ ${semCont.length} sem contrato</span>` : ''}</div></div>` : ''}
+      <div class="stat" title="Alunas com matrícula FIXA (recorrente) em alguma turma da semana, e o quanto representam das alunas ativas do EVO."><div class="n">${alunasFixas != null ? alunasFixas : '—'}</div><div class="l">alunas fixas</div><div class="gr-sub">${alunasFixas == null ? 'atualize a grade' : (pctAlunasFixas != null ? `${pctAlunasFixas}% de ${totalAlunas} alunas` : (r.fixas != null ? `${r.fixas} matrículas fixas` : ''))}</div></div>
+      <div class="stat tot" title="Total de turmas na semana (Seg a Sáb)."><div class="n">${r.turmas != null ? r.turmas : turmas.length}</div><div class="l">turmas</div></div>
+    </div>${(tkmMed != null || fatMes != null) ? `<div class="stats">
       ${fatMes != null ? `<div class="stat fat gr-click" onclick="abrirM('fat')" title="Soma dos recebíveis a vencer no mês (todas as alunas). Clique para ver linha a linha: aluna, contrato, cobrado, pago (só o que já caiu) e situação."><div class="n">${fmtBRL(fatMes)}</div><div class="l">faturamento do mês</div><div class="gr-sub">a vencer no mês${r.fatura_n ? ` · ${r.fatura_n} lançamentos` : ''} <span class="gr-md-hint">▸ ver lista</span></div></div>` : ''}
+      ${tkmMed != null ? `<div class="stat tkm gr-click" onclick="abrirM('tkm')" title="Ticket médio mensal = média do valor mensalizado do contrato vigente de cada aluna ativa (valor do contrato ÷ meses de duração). Inclui trancadas; exclui VIP/cortesia. Clique para ver quem está sem valor de contrato."><div class="n">${fmtBRL(tkmMed)}</div><div class="l">TKM médio</div><div class="gr-sub">contrato mensalizado · ${r.tkm_alunas || 0}${r.ativas ? ` de ${r.ativas}` : ''} ativas${r.trancadas ? ` · ${r.trancadas} trancada${r.trancadas === 1 ? '' : 's'}` : ''}${semCont.length ? ` <span class="gr-md-hint">▸ ${semCont.length} sem contrato</span>` : ''}</div></div>` : ''}
+    </div>` : ''}
     </div>
     <div class="sec-t" data-nosec>Ocupação &amp; presença por professora</div>
-    <p class="quando" style="margin:0 0 6px">
-      <b>Fixas</b> = matrículas fixas ÷ vagas (quanto da agenda dela está vendida). <b>Presença</b> = quem de fato ocupou a aula (fixas presentes + reposição + FREE) ÷ vagas, só nas aulas já realizadas. Sem sábado (escala).</p>
+    <p class="quando gr-leg-prof"><span><i style="background:var(--teal)"></i>vagas fixas vendidas</span><span><i style="background:#9db8b6"></i>presença real</span>${infoI('<b>Fixas</b> = matrículas fixas ÷ vagas (quanto da agenda dela está vendida). <b>Presença</b> = quem de fato ocupou a aula (fixas presentes + reposição + FREE) ÷ vagas, só nas aulas já realizadas. Sem sábado (escala).')}</p>
     <div class="card" style="padding:10px 15px">${profRows}</div>
     <p class="quando" style="display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:4px 0 8px">
       <span>Período <b>${fmtDia(snap.inicio)}–${fmtDia(snap.fim)}</b></span>
@@ -597,6 +598,28 @@ function paginaGrade(off) {
     .stat.prez .n{color:#3f5e9e}
     .stat.tkm .n{color:var(--teal)}
     .stat.fat .n{color:#9a6b00}
+    /* Leiaute 11/2026: indicadores em dois grupos, cor só onde pede ação (quase cheia / lotada) */
+    .stat.prez .n,.stat.tkm .n,.stat.fat .n{color:var(--tinta)}
+    .gr-kpis{display:flex;flex-wrap:wrap;gap:14px;margin:14px 0}
+    .gr-kpis>.stats{flex:1.8 1 440px;margin:0}.gr-kpis>.stats+.stats{flex:1 1 280px}
+    .gr-leg-prof{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center;margin:0 0 6px}
+    .gr-leg-prof i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px}
+    .gr-prof-bar span.t-livre,.gr-prof-bar span.t-quase,.gr-prof-bar span.t-cheia{background:var(--teal)}
+    .gr-prof-bar span.prez{background:#9db8b6}
+    .gr-prof-pc.t-livre,.gr-prof-pc.t-quase,.gr-prof-pc.t-cheia{color:var(--tinta)}.gr-prof-pc.prez{color:var(--cinza);font-weight:600}
+    @media(min-width:761px){.gr-prof-bars{flex-direction:row;gap:22px}.gr-prof-ln{flex:1}.gr-prof-cap{display:none}}
+    table.gr thead th{background:var(--card);color:var(--cinza);border-bottom:1px solid var(--linha)}
+    table.gr th.h{background:var(--card)}
+    .gr-topo{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+    .gr-n{font-size:.98rem;font-weight:700;font-variant-numeric:tabular-nums}.gr-n span{font-weight:500;font-size:.74rem;color:var(--faint)}
+    .t-cheia .gr-n{color:var(--erro)}
+    .t-livre .gr-vg,.t-nd .gr-vg{background:transparent;border-color:transparent;color:var(--faint);padding:0;font-weight:600}
+    .t-quase .gr-vg,.t-cheia .gr-vg{padding:1px 8px}
+    .t-livre .gr-bar .fx{background:var(--teal)}
+    .gr-cel.t-quase{background:var(--card)}
+    td.gr-cel .gr-so-cel{display:none}
+    .gr-det>summary .gr-ver{color:var(--faint)}
+    td.gr-cel .gr-det summary{font-weight:500;color:var(--cinza)}td.gr-cel .gr-real{color:var(--cinza);font-weight:600}
     .stat[title]:not(.gr-click){cursor:help}
     /* valor mensal por aluna no expandir */
     .gr-tk{margin-left:7px;font-size:.66rem;font-weight:700;color:var(--teal);font-variant-numeric:tabular-nums}
@@ -633,12 +656,13 @@ function paginaGrade(off) {
     </style>
     ${uiTopo({
       titulo: 'Grade de matrículas fixas',
-      sub: 'Visão da <b>semana</b>. O selo é a <b>vaga de matrícula</b> (fixas, contadas mesmo faltando); a <b>presença</b> é a ocupação real da aula (fixas presentes + reposição/FREE — falta, falta justificada e trancado liberam a vaga). Clique numa turma para ver os nomes: <b>✓ foi</b> · <b>✗ faltou</b> · <b>⚠ falta justificada</b> · <b>🔒 trancada</b>. O <b>sábado</b> não entra na taxa de ocupação (escala).',
+      sub: 'Vagas de matrícula fixa e presença real de cada turma, na semana.',
       acoes: `<button id="btnAt" class="ui-btn" onclick="atualizar('/grade/atualizar')"${g ? ' disabled' : ''} title="Atualiza a grade da semana vista (presença/ocupação) reaproveitando o TKM/faturamento da última geração completa. Rápido — poucas chamadas ao EVO.">${g ? '⏳ gerando…' : '🔄 Atualizar grade'}</button>
         <button id="btnAtTudo" class="ui-btn sec" onclick="atualizar('/grade/atualizar-tudo')"${g ? ' disabled' : ''} title="Recalcula também o TKM e o faturamento lendo o contrato de cada aluna no EVO. Mais demorado (vários minutos).">💰 Atualizar tudo</button>`,
     })}
     <div id="aviso" class="aviso" style="display:${g ? 'block' : 'none'}">⏳ Gerando a grade a partir do EVO… pode levar alguns minutos. A página recarrega sozinha ao terminar.</div>
     ${corpo}
+    <details class="ui-rodape"><summary>ⓘ Como ler a grade</summary><p>Visão da <b>semana</b>. O selo é a <b>vaga de matrícula</b> (fixas, contadas mesmo faltando); a <b>presença</b> é a ocupação real da aula (fixas presentes + reposição/FREE — falta, falta justificada e trancado liberam a vaga). Clique numa turma para ver os nomes: <b>✓ foi</b> · <b>✗ faltou</b> · <b>⚠ falta justificada</b> · <b>🔒 trancada</b>. O <b>sábado</b> não entra na taxa de ocupação (escala).</p></details>
     <script>
       var gerando = ${g ? 'true' : 'false'};
       var grSemana = ${off};
@@ -966,6 +990,12 @@ function paginaSofiaFunil(params) {
       ],
     });
   };
+  // Situação de quem agendou (ao lado do funil): fez (inclui quem fechou) + faltou + aguardando + sem registro = agendaram.
+  const fuSitItens = [['fez', 'Fizeram a aula', fez, 'var(--teal)'], ['faltou', 'Faltaram', faltou, 'var(--erro)'], ['aguardando', 'Aguardando a aula', aguardando, '#c9c9cf'], ['semreg', 'Sem registro no EVO', semreg, 'var(--warn)']].filter(x => x[2] || x[0] !== 'semreg');
+  const fuSitBox = agend ? `<div class="fu-sit"><div class="fu-sit-t">Situação de quem agendou</div>
+      <div class="fu-sit-bar">${fuSitItens.filter(x => x[2]).map(([, , n, c]) => `<i style="flex:${n};background:${c}"></i>`).join('')}</div>
+      ${fuSitItens.map(([f, r, n, c]) => `<div class="fu-sit-l"><span><i style="background:${c}"></i>${r}</span>${fuNum(n, f)}</div>`).join('')}
+      ${semreg ? '<p class="quando" style="margin:8px 0 0">Sem registro: a aula já passou sem presença lançada, ou a experimental não está no EVO.</p>' : ''}</div>` : '';
   const detalheHtml = detAg.length ? `<div class="sec-t">Quem agendou no período <small style="font-weight:600;color:var(--cinza)">(${detAg.length}${canalSel === 'todos' ? '' : ' · ' + rotSel})</small></div>
     <div class="card" id="fuDet"><div id="fuFiltroInfo" class="ui-nota" style="margin:0 0 6px;display:none"></div><div class="ip-lista">${detAg.sort((a, b) => b.em - a.em).map(linhaDet).join('')}</div></div>` : '';
   // ── Por que não agendaram (SoFIA): motivo que a IA dá quando a conversa encerra ──
@@ -1000,7 +1030,8 @@ function paginaSofiaFunil(params) {
     const listas = ord.map(([c, rot]) => `<details id="mot-${c}" class="mot-det"><summary>${esc(rot)} <span class="quando" style="margin:0">(${porMot[c].length})</span></summary>`
       + porMot[c].sort((a, b) => b.em - a.em).slice(0, 60).map(p => `<div class="mot-p"><a href="${linkContato(p.tel)}"><b>${esc(p.nome)}</b></a> <span class="quando" style="margin:0">${dm(p.em)}</span>${p.resumo ? `<div class="quando" style="margin:2px 0 0">${esc(p.resumo.slice(0, 260))}${p.resumo.length > 260 ? '…' : ''}</div>` : ''}</div>`).join('')
       + (porMot[c].length > 60 ? `<div class="quando">…e mais ${porMot[c].length - 60}.</div>` : '') + '</details>').join('');
-    motivosHtml = `<div class="sec-t">Por que não agendaram <small style="font-weight:600;color:var(--cinza)">(conversas com a SoFIA · ${esc(rotulo)})</small></div>
+    if (!nMot) motivosHtml = `<div class="card fu-mot0"><b>Por que não agendaram</b><span class="quando" style="margin:0">${semMot ? `Nenhuma conversa classificada neste período ainda (${semMot} encerraram antes desta função existir).` : 'Nenhuma conversa encerrada sem agendamento neste período.'}</span></div>`;
+    else motivosHtml = `<div class="sec-t">Por que não agendaram <small style="font-weight:600;color:var(--cinza)">(conversas com a SoFIA · ${esc(rotulo)})</small></div>
     <div class="card">
       ${nMot ? barrasMot + `<div style="margin-top:10px">${listas}</div>` : `<div class="vazio">${semMot ? 'Nenhuma conversa classificada neste período ainda.' : 'Sem conversas encerradas sem agendamento neste período.'}</div>`}
       <p class="quando" style="margin:10px 0 0">A SoFIA classifica o motivo quando a conversa encerra (junto do resumo). Conta a última conversa de cada pessoa no período; quem agendou depois, alunas e quem não é cliente (fornecedor, engano) ficam de fora. Clique numa barra para ver as pessoas e o resumo.${semMot ? ` <b>${semMot}</b> conversa(s) do período encerraram antes desta função existir e não têm motivo.` : ''}</p>
@@ -1024,12 +1055,14 @@ function paginaSofiaFunil(params) {
     <div class="ui-secoes">
     <div class="sec-t">Funil</div>
     <div class="card">
+      <div class="fu-2col"><div class="fu-etapas">
       ${topo
-        ? (topo.n ? barra(topo.rot, topo.n, topo.n, 'var(--teal)') + barra('Agendaram', agend, topo.n, 'var(--ok)', agend ? 'agendou' : '') + barra('Fizeram a aula', fez, topo.n, 'var(--teal-esc)', fez ? 'fez' : '', agend ? `${pct(fez, agend).replace(/,0%$/, '%')} das agendadas` : '') + barra('Fecharam contrato', fechou, topo.n, '#0b5e33', fechou ? 'fechou' : '', fez ? `${pct(fechou, fez).replace(/,0%$/, '%')} de quem fez<span class="fu-l">&nbsp;a aula</span>` : '') + barra('Não agendaram', naoAg, topo.n, 'var(--cinza)')
+        ? (topo.n ? barra(topo.rot, topo.n, topo.n, 'var(--teal-esc)') + barra('Agendaram', agend, topo.n, 'var(--teal)', agend ? 'agendou' : '') + barra('Fizeram a aula', fez, topo.n, '#3f8f8a', fez ? 'fez' : '', agend ? `${pct(fez, agend).replace(/,0%$/, '%')} das agendadas` : '') + barra('Fecharam contrato', fechou, topo.n, 'var(--ok)', fechou ? 'fechou' : '', fez ? `${pct(fechou, fez).replace(/,0%$/, '%')} de quem fez<span class="fu-l">&nbsp;a aula</span>` : '') + barra('Não agendaram', naoAg, topo.n, 'var(--cinza)')
           : `<div class="vazio">${topo.vazio}</div>`)
-        : (agend ? barra('Agendaram', agend, agend, 'var(--ok)', 'agendou') + barra('Fizeram a aula', fez, agend, 'var(--teal-esc)', fez ? 'fez' : '') + barra('Fecharam contrato', fechou, agend, '#0b5e33', fechou ? 'fechou' : '', fez ? `${pct(fechou, fez).replace(/,0%$/, '%')} de quem fez<span class="fu-l">&nbsp;a aula</span>` : '') + barra('Faltaram', faltou, agend, 'var(--erro)', faltou ? 'faltou' : '') + barra('Aguardando', aguardando, agend, 'var(--cinza)', aguardando ? 'aguardando' : '') + (semreg ? barra('Sem registro', semreg, agend, 'var(--warn)', 'semreg') : '')
+        : (agend ? barra('Agendaram', agend, agend, 'var(--teal)', 'agendou') + barra('Fizeram a aula', fez, agend, '#3f8f8a', fez ? 'fez' : '') + barra('Fecharam contrato', fechou, agend, 'var(--ok)', fechou ? 'fechou' : '', fez ? `${pct(fechou, fez).replace(/,0%$/, '%')} de quem fez<span class="fu-l">&nbsp;a aula</span>` : '')
           : `<div class="vazio">Ninguém agendou ${canalSel === 'todos' ? '' : 'pelo ' + rotSel + ' '}neste período.</div>`)}
-      ${agend ? `<p class="quando" style="margin:10px 0 0">Das <b>${agend}</b> que agendaram: ${fuNum(fez, 'fez')} fizeram a aula (${fuNum(fechou, 'fechou')} já ${fechou === 1 ? 'fechou' : 'fecharam'} contrato), ${fuNum(faltou, 'faltou')} ${faltou === 1 ? 'faltou' : 'faltaram'}${semreg ? ',' : ' e'} ${fuNum(aguardando, 'aguardando')} ainda ${aguardando === 1 ? 'aguarda' : 'aguardam'} a aula${semreg ? ` e ${fuNum(semreg, 'semreg')} ${semreg === 1 ? 'está' : 'estão'} sem registro no EVO (a aula já passou sem presença lançada, ou a experimental não está no EVO)` : ''}. <span style="color:var(--faint)">Passe o mouse nas barras para ver os nomes; clique para filtrar a lista.</span></p>` : ''}
+      ${agend ? '<p class="quando fu-dica" style="margin:10px 0 0;color:var(--faint)">Passe o mouse numa barra para ver os nomes; clique para filtrar a lista.</p>' : ''}
+      </div>${fuSitBox}</div>
       ${(!compCfg.on || !atCfg.on) ? `<p class="quando" style="margin:8px 0 0;color:var(--warn)">⚠️ ${!compCfg.on ? '“Presença da experimental” está desligada (SoFIA → Tags) — sem ela, ninguém sai de “aguardando”. ' : ''}${!atCfg.on ? '“Alunas / Ex-alunas automáticas” está desligado (SoFIA → Tags) — sem ele, o fechamento de contrato não aparece.' : ''}</p>` : ''}
       ${canalSel === 'formulario' && podeVerInd ? `<p style="margin:12px 0 0;text-align:right"><a href="/indicadores?dias=${diasInd}" class="ui-btn sec" style="display:inline-block;white-space:normal;text-align:center">Ver detalhes do formulário (por dia, horários de pico, origens e links) →</a></p>` : ''}
     </div>
@@ -1053,6 +1086,15 @@ function paginaSofiaFunil(params) {
       #fuPop .fp-d{padding:8px 14px 10px;border-top:1px solid var(--linha);color:var(--faint);font-size:.74rem}
       /* celular: o nome da etapa vai para cima da barra — a barra usa a largura toda */
       @media(max-width:600px){.fu-l{display:none}}
+      @media(hover:none){.fu-dica{display:none}}
+      .fu-mot0{display:flex;justify-content:space-between;align-items:baseline;gap:6px 18px;flex-wrap:wrap}
+      .fu-2col{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:0 28px;align-items:start}
+      .fu-sit{border-left:1px solid var(--linha-soft);padding-left:28px}
+      .fu-sit-t{font-weight:700;font-size:.9rem;margin-bottom:10px}
+      .fu-sit-bar{display:flex;gap:2px;height:10px;border-radius:99px;overflow:hidden;margin-bottom:10px}
+      .fu-sit-l{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:.86rem}
+      .fu-sit-l i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:8px}
+      @media(max-width:760px){.fu-2col{grid-template-columns:1fr}.fu-sit{border-left:0;padding-left:0;border-top:1px solid var(--linha-soft);margin-top:14px;padding-top:14px}}
     </style>
     <script>
     var FU_ROT=${JSON.stringify(FU_ROT)};
@@ -1104,7 +1146,7 @@ function paginaSofiaFunil(params) {
       (acc||det).scrollIntoView({behavior:'smooth',block:'start'});
     }
     </script>
-    <p class="ui-rodape">Conta quem agendou <b>dentro do período</b> (pela data do agendamento), por canal: <b>SoFIA</b> (conversa no WhatsApp), <b>Formulário</b> (link de agendamento) e <b>Cadastro Express</b> (feito pela recepção). No filtro SoFIA, a base são as <b>conversas reais</b> (a pessoa escreveu); no Formulário, as <b>pessoas que abriram o link</b> de agendamento. <b>Fez a aula</b> vem da “Presença da experimental” (lê o EVO e troca a tag) e <b>fechou contrato</b> = ganhou a tag <b>${esc(tAluna)}</b> (aluna com contrato ativo no EVO).</p>
+    <details class="ui-rodape"><summary>ⓘ Como estes números são calculados</summary><p>Conta quem agendou <b>dentro do período</b> (pela data do agendamento), por canal: <b>SoFIA</b> (conversa no WhatsApp), <b>Formulário</b> (link de agendamento) e <b>Cadastro Express</b> (feito pela recepção). No filtro SoFIA, a base são as <b>conversas reais</b> (a pessoa escreveu); no Formulário, as <b>pessoas que abriram o link</b> de agendamento. <b>Fez a aula</b> vem da “Presença da experimental” (lê o EVO e troca a tag) e <b>fechou contrato</b> = ganhou a tag <b>${esc(tAluna)}</b> (aluna com contrato ativo no EVO).</p></details>
   </div>`;
   return chrome({ tab: 'Funil' }, 'funil', corpo);
 }
@@ -1431,18 +1473,20 @@ function paginaAtivas(params) {
   };
   const mesAtual = mA === meses[meses.length - 1].k;
   const voltarQ = encodeURIComponent(`/ativas?vis=${vis}&r=${range}`);
-  const lnk = (q, html, titulo) => `<a href="/ativas/lista?${q}&voltar=${voltarQ}" title="${esc(titulo || 'Ver as alunas')}" style="color:inherit;text-decoration:none;border-bottom:1px dashed currentColor">${html}</a>`;
+  const lnk = (q, html, titulo) => `<a href="/ativas/lista?${q}&voltar=${voltarQ}" title="${esc(titulo || 'Ver as alunas')}" class="al-lnk">${html}</a>`;
   const qPer = (tipo, p) => `tipo=${tipo}&de=${p.de}&ate=${p.ate}`;
 
-  const linhasTab = vistos.slice().reverse().map(p => `<tr>
+  const TAXA_ALTA = 15; // % de saída a partir do qual a linha ganha destaque
+  const linhasTab = vistos.slice().reverse().map(p => { const tx = taxa(p); return `<tr>
       <td>${lnk(vis === 'mes' ? `tipo=ativas&m=${p.k}` : `tipo=ativas&dia=${p.ate}`, `<b>${esc(rotuloPeriodo(p, vis, true))}</b>`, 'Ver as alunas ativas')}${p === atual ? ' <span class="quando" style="margin:0">(até hoje)</span>' : ''}</td>
-      <td>${p.ini}</td>
-      <td>${p.e ? lnk(qPer('entraram', p), `<b style="color:var(--ok)">+${p.e}</b>`, 'Ver quem entrou') : '<b style="color:var(--ok)">+0</b>'} <span class="quando" style="margin:0">(${p.n} nova${p.n === 1 ? '' : 's'} · ${p.e - p.n} ${p.e - p.n === 1 ? 'voltou' : 'voltaram'})</span></td>
-      <td>${p.s ? lnk(qPer('sairam', p), `<b style="color:var(--erro)">−${p.s}</b>`, 'Ver quem saiu') : '<b style="color:var(--erro)">−0</b>'}</td>
-      <td>${lnk(`tipo=ativas&dia=${p.ate}`, `<b>${p.fim}</b>`, 'Ver as alunas ativas neste dia')}</td>
-      <td><b style="color:${p.fim > p.ini ? 'var(--ok)' : p.fim < p.ini ? 'var(--erro)' : 'var(--cinza)'}">${sinal(p.fim - p.ini)}</b></td>
-      <td>${fmtPct(taxa(p))}</td>
-    </tr>`).join('');
+      <td class="num so-pc" style="color:var(--cinza)">${p.ini}</td>
+      <td class="num">${p.e ? lnk(qPer('entraram', p), `+${p.e}`, 'Ver quem entrou') : '+0'}</td>
+      <td class="quando so-pc" style="margin:0;white-space:nowrap">${p.n} nova${p.n === 1 ? '' : 's'} · ${p.e - p.n} ${p.e - p.n === 1 ? 'voltou' : 'voltaram'}</td>
+      <td class="num">${p.s ? lnk(qPer('sairam', p), `−${p.s}`, 'Ver quem saiu') : '−0'}</td>
+      <td class="num">${lnk(`tipo=ativas&dia=${p.ate}`, `<b>${p.fim}</b>`, 'Ver as alunas ativas neste dia')}</td>
+      <td class="num"><b style="color:${p.fim > p.ini ? 'var(--ok)' : p.fim < p.ini ? 'var(--erro)' : 'var(--cinza)'}">${sinal(p.fim - p.ini)}</b></td>
+      <td class="so-pc"><div class="al-tx${tx != null && tx >= TAXA_ALTA ? ' alta' : ''}"><span class="al-tx-b"><i style="width:${Math.min(100, (tx || 0) * 4)}%"></i></span><span>${fmtPct(tx)}</span></div></td>
+    </tr>`; }).join('');
 
   const dadosEvol = { rotulos: vistos.map(p => rotuloPeriodo(p, vis, false)), longos: vistos.map(p => rotuloPeriodo(p, vis, true) + (p === atual ? ' (até hoje)' : '')),
     series: [{ nome: 'Ativas', cor: '#00918a', valores: vistos.map(p => p.fim) }],
@@ -1459,14 +1503,18 @@ function paginaAtivas(params) {
     ])}
     <div class="stats">
       <a class="stat tot stat-link" href="/ativas/lista?voltar=${voltarQ}"><div class="n">${hoje.a}</div><div class="l">alunas ativas hoje${fotoHoje && fotoHoje.trancadas ? ` · ${fotoHoje.trancadas} trancada${fotoHoje.trancadas === 1 ? '' : 's'}` : ''} · <u>ver lista</u></div></a>
-      <a class="stat ok stat-link" href="/ativas/lista?${qPer('entraram', atual)}&voltar=${voltarQ}"><div class="n">+${atual.e}</div><div class="l">entraram ${vis === 'mes' ? 'neste mês' : 'nesta semana'} · <u>ver</u></div></a>
-      <a class="stat err stat-link" href="/ativas/lista?${qPer('sairam', atual)}&voltar=${voltarQ}"><div class="n">−${atual.s}</div><div class="l">saíram ${vis === 'mes' ? 'neste mês' : 'nesta semana'} · <u>ver</u></div></a>
-      <div class="stat"><div class="n" style="color:${hoje.a - atual.ini >= 0 ? 'var(--ok)' : 'var(--erro)'}">${sinal(hoje.a - atual.ini)}</div><div class="l">saldo ${vis === 'mes' ? 'do mês' : 'da semana'}</div></div>
+      <a class="stat stat-link" href="/ativas/lista?${qPer('entraram', atual)}&voltar=${voltarQ}"><div class="n">+${atual.e}</div><div class="l">entraram ${vis === 'mes' ? 'neste mês' : 'nesta semana'} · <u>ver</u></div></a>
+      <a class="stat stat-link" href="/ativas/lista?${qPer('sairam', atual)}&voltar=${voltarQ}"><div class="n">−${atual.s}</div><div class="l">saíram ${vis === 'mes' ? 'neste mês' : 'nesta semana'} · <u>ver</u></div></a>
+      <div class="stat ${hoje.a - atual.ini >= 0 ? 'ok' : 'err alerta'}"><div class="n">${sinal(hoje.a - atual.ini)}</div><div class="l">saldo ${vis === 'mes' ? 'do mês' : 'da semana'}</div></div>
     </div>
     <div class="ui-secoes">
     <div class="sec-t">Evolução <small style="font-weight:600;color:var(--cinza)">(alunas ativas no fim de cada ${vis === 'mes' ? 'mês' : 'semana'})</small></div>
     <div class="card"><div class="ui-graf" data-graf="evol"></div></div>
-    <div class="sec-t">Comparar dois meses</div>
+    <div class="sec-t">${vis === 'mes' ? 'Mês a mês' : 'Semana a semana'}</div>
+    <div class="card" style="overflow-x:auto">
+      <table class="ui-tab"><thead><tr><th>${vis === 'mes' ? 'Mês' : 'Semana de'}</th><th class="num so-pc">Início${infoI('Alunas ativas no <b>primeiro dia</b> do período.')}</th><th class="num">Entraram${infoI('Contratos que <b>começaram</b> no período: alunas novas + as que <b>voltaram</b> depois de sair.')}</th><th class="so-pc"></th><th class="num">Saíram${infoI('Alunas que <b>perderam o contrato ativo</b> no período (venceu sem renovar ou cancelou).')}</th><th class="num">Fim${infoI('Alunas ativas no <b>último dia</b> do período (no período atual, hoje).')}</th><th class="num">Variação${infoI('<b>Fim − Início</b>: quanto a base cresceu ou encolheu.')}</th><th class="so-pc">Taxa de saída${infoI('<b>Saíram ÷ Início</b>: de cada 100 alunas que havia no começo, quantas saíram.')}</th></tr></thead><tbody>${linhasTab}</tbody></table>
+    </div>
+    <div class="sec-t" data-fechado>Comparar dois meses</div>
     <div class="card">
       <form method="GET" action="/ativas" class="ui-linha" style="margin:0 0 6px">
         <input type="hidden" name="vis" value="${vis}"><input type="hidden" name="r" value="${range}">
@@ -1483,12 +1531,8 @@ function paginaAtivas(params) {
       <div class="ui-graf" data-graf="comp"></div>
       <p class="quando" style="margin:8px 0 0">Alunas ativas em cada dia do mês.${mesAtual ? ' O mês atual vai até hoje.' : ''}</p>
     </div>
-    <div class="sec-t">${vis === 'mes' ? 'Mês a mês' : 'Semana a semana'}</div>
-    <div class="card" style="overflow-x:auto">
-      <table class="ui-tab"><thead><tr><th>${vis === 'mes' ? 'Mês' : 'Semana de'}</th><th>Início${infoI('Alunas ativas no <b>primeiro dia</b> do período.')}</th><th>Entraram${infoI('Contratos que <b>começaram</b> no período: alunas novas + as que <b>voltaram</b> depois de sair.')}</th><th>Saíram${infoI('Alunas que <b>perderam o contrato ativo</b> no período (venceu sem renovar ou cancelou).')}</th><th>Fim${infoI('Alunas ativas no <b>último dia</b> do período (no período atual, hoje).')}</th><th>Variação${infoI('<b>Fim − Início</b>: quanto a base cresceu ou encolheu.')}</th><th>Taxa de saída${infoI('<b>Saíram ÷ Início</b>: de cada 100 alunas que havia no começo, quantas saíram.')}</th></tr></thead><tbody>${linhasTab}</tbody></table>
     </div>
-    </div>
-    <p class="ui-rodape"><b>Ativa</b> = contrato vigente no EVO; <b>trancada conta</b>; contrato ${((h.ignorados && h.ignorados.regra) || ['circuito', 'vip']).map(r => esc(String(r).toUpperCase())).join(' ou ')} e renovação ainda na fila <b>não contam</b>. Calculado pelos contratos (início, fim e cancelamento) de todas as clientes, inclusive ex-alunas — por isso dá para comparar com o passado. Renovação com até ${(h.reconstruido && h.reconstruido.tolerancia) || 7} dias de atraso não conta como saída. <b>Nova</b> = primeiro contrato; <b>voltou</b> = ex-aluna que voltou. <b>Taxa de saída</b> = saíram ÷ ativas no início. Atualizado todo dia às 05:25${ultimo ? ` (última: ${esc(fmtData(ultimo))})` : ''}.</p>
+    <details class="ui-rodape"><summary>ⓘ Como estes números são calculados</summary><p><b>Ativa</b> = contrato vigente no EVO; <b>trancada conta</b>; contrato ${((h.ignorados && h.ignorados.regra) || ['circuito', 'vip']).map(r => esc(String(r).toUpperCase())).join(' ou ')} e renovação ainda na fila <b>não contam</b>. Calculado pelos contratos (início, fim e cancelamento) de todas as clientes, inclusive ex-alunas — por isso dá para comparar com o passado. Renovação com até ${(h.reconstruido && h.reconstruido.tolerancia) || 7} dias de atraso não conta como saída. <b>Nova</b> = primeiro contrato; <b>voltou</b> = ex-aluna que voltou. <b>Taxa de saída</b> = saíram ÷ ativas no início. Atualizado todo dia às 05:25${ultimo ? ` (última: ${esc(fmtData(ultimo))})` : ''}.</p></details>
   </div>
   <style>
     .ui-graf{position:relative;width:100%}
@@ -1746,8 +1790,8 @@ function paginaProfessoras(params) {
       linhas: [
         uiChips('Período', [['30', '30 dias'], ['90', '90 dias'], ['ano', hojeStr.slice(0, 4)], ['0', 'Tudo']].map(([v, l]) => [`/professoras?per=${v}`, l, !custom && per === v])),
         uiDatas({ action: '/professoras', de: params.de, ate: params.ate, limpar: custom ? '/professoras' : '' }),
-        blocoDesde,
-        `<div class="ui-nota${st.estado === 'erro' && !rodando ? ' erro' : ''}"><span>${situacaoLeitura}</span></div>`,
+        // A leitura só aparece no topo quando pede atenção (erro ou lendo agora); o resto fica em "Leitura do EVO", no fim.
+        (st.estado === 'erro' || rodando) ? `<div class="ui-nota${st.estado === 'erro' && !rodando ? ' erro' : ''}"><span>${situacaoLeitura}</span></div>` : '',
       ],
     })}
     ${tot.exp ? `<div class="stats">
@@ -1765,7 +1809,8 @@ function paginaProfessoras(params) {
     <div class="sec-t">Por horário da aula</div>
     ${tabHoras}
     </div>
-    <p class="ui-rodape">A conversão não depende só da professora: horário, quem atendeu na recepção e preço também pesam. Use o número para conversar, não para julgar. <b>Fechou</b> = começou um contrato no EVO depois da aula (até 120 dias; pelos contratos lidos em Alunas ativas) ou “Nome do contrato” preenchido na agenda de experimentais${pessoasEvo ? '' : `, ou a aluna já tem a tag <b>${esc(tAluna)}</b>`}. Contratos ${esc(String(process.env.ATIVAS_IGNORAR_CONTRATOS || 'circuito,vip').toUpperCase().split(',').join(' e '))} não contam. Quem <b>já era aluna</b> no dia da aula (contrato vigente — ex.: aula de evento) não aparece nem entra na conta. Aulas canceladas não entram, nem professora lançada como aluna${profComoAluna ? ` (${profComoAluna} no período)` : ''}.</p>`
+    <details class="ui-rodape"><summary>⚙️ Leitura do EVO e histórico</summary><div style="margin-top:10px;display:flex;flex-direction:column;gap:10px">${blocoDesde}<div class="ui-nota"><span>${situacaoLeitura}</span></div></div></details>
+    <details class="ui-rodape"><summary>ⓘ Como estes números são calculados</summary><p>A conversão não depende só da professora: horário, quem atendeu na recepção e preço também pesam. Use o número para conversar, não para julgar. <b>Fechou</b> = começou um contrato no EVO depois da aula (até 120 dias; pelos contratos lidos em Alunas ativas) ou “Nome do contrato” preenchido na agenda de experimentais${pessoasEvo ? '' : `, ou a aluna já tem a tag <b>${esc(tAluna)}</b>`}. Contratos ${esc(String(process.env.ATIVAS_IGNORAR_CONTRATOS || 'circuito,vip').toUpperCase().split(',').join(' e '))} não contam. Quem <b>já era aluna</b> no dia da aula (contrato vigente — ex.: aula de evento) não aparece nem entra na conta. Aulas canceladas não entram, nem professora lançada como aluna${profComoAluna ? ` (${profComoAluna} no período)` : ''}.</p></details>`
     : `<div class="card"><div class="vazio">${lidos.length ? 'Nenhuma aula experimental registrada neste período.' : 'Ainda sem histórico. Clique em “Ler agora no EVO” ou espere a leitura desta madrugada.'}</div></div>`}
     <style>
       .pf-item{border-bottom:1px solid var(--linha-soft)}
