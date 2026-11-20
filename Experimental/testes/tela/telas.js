@@ -197,6 +197,15 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
       // Conversas: abre uma conversa e volta.
       await page.goto(url + '/sofia?view=conversas', { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('.cv-item', { timeout: 20000 }).catch(() => {});
+      // A lista de conversas ocupa a largura toda em qualquer celular (já ficou com metade:
+      // o botão "Reimportar" flutuava e empurrava a lista quando não cabia na linha do título).
+      const tamanhoAntes = page.viewportSize();
+      for (const larg of [320, 360, 412]) {
+        await page.setViewportSize({ width: larg, height: 800 }); await page.waitForTimeout(150);
+        const m = await page.evaluate(() => { const w = document.querySelector('.wrap'), c = document.getElementById('convLista-col'); const cs = getComputedStyle(w); return { util: w.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), col: c.getBoundingClientRect().width }; });
+        if (m.col < m.util * 0.95) falha(`Conversas: a lista ocupa ${Math.round(m.col)}px de ${Math.round(m.util)}px numa tela de ${larg}px`);
+      }
+      await page.setViewportSize(tamanhoAntes);
       await page.click('.cv-item').catch(() => {});
       await page.waitForTimeout(1800);
       if (!(await page.evaluate(() => document.body.classList.contains('ver-conversa')))) falha('a conversa não abriu ao tocar na lista');
