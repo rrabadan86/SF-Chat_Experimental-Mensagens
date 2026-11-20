@@ -140,6 +140,29 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
       for (const e of errosJs) reprovas.push('sem internet: erro de JavaScript — ' + e.slice(0, 160));
       await ctx.close();
     }
+    // Telas longas: índice lateral no computador (clicar abre a seção); no celular, abrir uma seção fecha as outras.
+    {
+      const url = `http://127.0.0.1:${inst.porta}/sofia?view=config`;
+      const pc = await navegador.newContext({ viewport: { width: 1366, height: 860 } });
+      const p1 = await pc.newPage();
+      await p1.goto(url, { waitUntil: 'domcontentloaded' }); await p1.waitForTimeout(700);
+      const itens = await p1.locator('.ui-indice a:visible').count();
+      if (itens < 5) reprovas.push(`índice lateral: esperava as seções da Configuração da SoFIA (achei ${itens} itens)`);
+      else {
+        await p1.locator('.ui-indice a').nth(1).click(); await p1.waitForTimeout(900);
+        const r = await p1.evaluate(() => { const d = [...document.querySelectorAll('.wrap details.acc-sec')].filter(x => !x.parentElement.closest('details.acc-sec'))[1]; return { aberta: d.open, topo: Math.round(d.getBoundingClientRect().top) }; });
+        if (!r.aberta) reprovas.push('índice lateral: clicar no item não abriu a seção');
+        if (r.topo < 0 || r.topo > 400) reprovas.push(`índice lateral: clicar no item não levou até a seção (ficou a ${r.topo}px do topo)`);
+      }
+      await pc.close();
+      const cel = await navegador.newContext({ ...devices['iPhone 13'] });
+      const p2 = await cel.newPage();
+      await p2.goto(url, { waitUntil: 'domcontentloaded' }); await p2.waitForTimeout(700);
+      const abertas = await p2.evaluate(async () => { const s = [...document.querySelectorAll('.wrap details.acc-sec')].filter(x => !x.parentElement.closest('details.acc-sec')); s[0].open = true; await new Promise(r => setTimeout(r, 200)); s[1].open = true; await new Promise(r => setTimeout(r, 300)); return s.filter(x => x.open).length; });
+      if (abertas !== 1) reprovas.push(`celular: abrir uma seção deveria fechar as outras (ficaram ${abertas} abertas)`);
+      if (await p2.locator('.ui-indice:visible').count()) reprovas.push('celular: o índice lateral não deveria aparecer');
+      await cel.close();
+    }
     // Celular: o VOLTAR fecha a conversa/janela aberta (não sai da tela); ações em massa passam
     // pela janela de revisão; a explicação do ⓘ fica dentro da tela.
     {

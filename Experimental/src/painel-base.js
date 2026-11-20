@@ -718,6 +718,7 @@ const ESTILO = `
   .acc-sec[open]>*:not(summary){margin:8px 16px 14px}
   .acc-sec[open]>.card{background:transparent;border:0;border-radius:0;box-shadow:none;padding:0}
   .acc-sec[open]>.card+.card{border-top:1px solid var(--linha-soft);padding-top:14px}
+  .acc-sec[open]>.card>.envsw{top:0;right:0}.acc-sec[open]>.card+.card>.envsw{top:14px} /* o cartão perdeu o padding: o liga/desliga volta a alinhar com o título */
   .msg-bloco[open]{border-color:var(--linha)}
   .msg-bloco[open]>summary{background:transparent;border-bottom:1px solid var(--linha-soft)}
   /* Pessoa numa linha só (no computador): nome + situação | detalhes | ações. */
@@ -744,6 +745,20 @@ const ESTILO = `
   .sd-row-v{font-size:.78rem;color:var(--faint)}.sd-row[open] .sd-row-v{color:var(--teal-esc)}
   .sd-det{padding:0 0 12px 22px}
   @media(max-width:640px){.sd-row>summary,.sd-row-s{grid-template-columns:10px minmax(0,1fr) auto}.sd-row-r{grid-column:2 / -1;grid-row:2}.sd-row-v{grid-column:3;grid-row:1}}
+  /* Índice lateral das telas longas (só no computador) */
+  .ui-indice{display:none}
+  @media(min-width:1100px){
+    .wrap.tem-indice{position:relative}
+    .tem-indice>.ind-desl{margin-left:206px}
+    .ui-indice{display:block;position:absolute;left:24px;bottom:0;width:186px}
+    .ui-indice-in{position:sticky;display:flex;flex-direction:column;gap:1px;overflow-y:auto;padding-right:6px}
+    .ui-indice a{display:block;padding:6px 10px;border-left:2px solid var(--linha);color:var(--cinza);font-size:.82rem;line-height:1.3;text-decoration:none}
+    .ui-indice a:hover{color:var(--tinta);border-left-color:var(--faint)}
+    .ui-indice a.on{color:var(--teal-esc);border-left-color:var(--teal);font-weight:600}
+    .tem-indice .ui-topo>.ui-linha:has(a[href^="#sec-"]){display:none} /* o "Ir para" vira o índice */
+  }
+  /* Contatos: os 4 botões de ação numa linha só (a linha fica mais baixa) */
+  .ct-acts{white-space:nowrap}
   details.ui-rodape{text-align:left;max-width:none;margin:14px 2px 6px}
   details.ui-rodape>summary{cursor:pointer;list-style:none;display:inline-block;font-size:var(--fs-sm);font-weight:600;color:var(--teal-esc)}
   details.ui-rodape>summary::-webkit-details-marker{display:none}
@@ -976,6 +991,38 @@ ${corpo}
       if(!sempreFechado) det.addEventListener('toggle',function(){ try{ localStorage.setItem(key, det.open?'1':'0'); }catch(e){} });
       h.parentNode.replaceChild(det,h);
     });
+    // Telas longas com várias seções: índice fixo na lateral (computador) e, no celular,
+    // abrir uma seção fecha as outras — a página não vira uma rolagem sem fim.
+    try{
+      var wrapI=document.querySelector('.wrap');
+      var secsI=[].slice.call(document.querySelectorAll('.wrap details.acc-sec')).filter(function(d){ return !d.parentElement.closest('details.acc-sec'); });
+      if(wrapI && (secsI.length>=5 || (secsI.length>=3 && document.documentElement.scrollHeight>2500))){
+        var rotI=function(d){ var t=(d.querySelector('summary').textContent||'').trim();
+          var c1=t.indexOf(' — '), c2=t.indexOf(' ('); var c=Math.min(c1<0?999:c1, c2<0?999:c2); if(c<999) t=t.slice(0,c);
+          while(t && t.charAt(0).toLowerCase()===t.charAt(0).toUpperCase() && !(t.charAt(0)>='0'&&t.charAt(0)<='9')) t=t.slice(1);
+          return t.trim(); };
+        // desloca para a direita tudo do 1º bloco com seção em diante (o topo e as subabas ficam na largura toda)
+        var filhosI=[].slice.call(wrapI.children), iniI=-1;
+        filhosI.forEach(function(f,i){ if(iniI<0 && (secsI.indexOf(f)>=0 || secsI.some(function(d){ return f.contains(d); }))) iniI=i; });
+        if(iniI>=0){
+          filhosI.slice(iniI).forEach(function(f){ if(f.tagName!=='SCRIPT' && f.tagName!=='STYLE') f.classList.add('ind-desl'); });
+          var navI=document.createElement('nav'); navI.className='ui-indice'; navI.setAttribute('aria-label','Seções desta tela');
+          var caixaI=document.createElement('div'); caixaI.className='ui-indice-in';
+          secsI.forEach(function(d){ var a=document.createElement('a'); a.href='javascript:void(0)'; a.textContent=rotI(d);
+            a.addEventListener('click',function(){ d.open=true; d.style.scrollMarginTop='120px'; d.scrollIntoView({block:'start',behavior:'smooth'}); });
+            d.__ind=a; caixaI.appendChild(a); });
+          navI.appendChild(caixaI); wrapI.appendChild(navI); wrapI.classList.add('tem-indice');
+          var posI=function(){ var st=document.querySelector('.subtabs'); var tb=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h'))||60;
+            navI.style.top=filhosI[iniI].offsetTop+'px'; caixaI.style.top=(tb+(st?st.offsetHeight:0)+14)+'px'; caixaI.style.maxHeight='calc(100vh - '+(tb+(st?st.offsetHeight:0)+34)+'px)'; };
+          posI(); window.addEventListener('resize',posI); window.addEventListener('load',posI);
+          var marcaI=function(){ var lim=160, atual=secsI[0]; secsI.forEach(function(d){ if(d.getBoundingClientRect().top<=lim) atual=d; });
+            secsI.forEach(function(d){ d.__ind.classList.toggle('on', d===atual); }); };
+          marcaI(); window.addEventListener('scroll',marcaI,{passive:true});
+          secsI.forEach(function(d){ d.addEventListener('toggle',function(){ posI();
+            if(d.open && window.matchMedia('(max-width:760px)').matches) secsI.forEach(function(o){ if(o!==d && o.open) o.open=false; }); }); });
+        }
+      }
+    }catch(e){}
     if(alvo){ try{ var d0=alvo.closest('details'); while(d0){ d0.open=true; d0=d0.parentElement&&d0.parentElement.closest('details'); } alvo.scrollIntoView({block:'start'}); }catch(e){} }
     // Índice "Ir para": abre a seção antes de rolar até ela.
     document.addEventListener('click',function(ev){
