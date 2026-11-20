@@ -10,6 +10,8 @@ const metas = require('./metas');
 const ativasDados = require('./ativas-dados');
 const finResumo = require('./financeiro-resumo');
 const dicionario = require('./dicionario-indicadores');
+const atendimento = require('./atendimento');
+const sofia = require('./sofia-editor');
 const E = require('./painel-estado');
 const { uiTopo, esc, chrome, infoI } = require('./painel-base');
 const ind = require('./painel-indicadores');
@@ -33,7 +35,16 @@ function funilDe(de, ate) {
   if (!n) return null;
   const ini = Date.parse(de + 'T23:59:59-03:00');
   if (!n.primeiroEvento || n.primeiroEvento > ini) return null;
-  return { agendaram: n.agendaram, fez: n.fez, faltou: n.faltou, fechou: n.fechou, comparecimentoPct: n.comparecimentoPct, porCanal: n.porCanal };
+  return { agendaram: n.agendaram, fez: n.fez, faltou: n.faltou, fechou: n.fechou, comparecimentoPct: n.comparecimentoPct, porCanal: n.porCanal, leads: n.leads };
+}
+
+// Custo de aquisição de um mês: anúncios (digitado em Metas) + IA (medido, em R$
+// pela cotação guardada). `novas` = alunas com primeiro contrato no mês.
+function custoDoMes(mes, funil, novas) {
+  let usd = 0;
+  try { for (const d of (sofia.lerCusto(100000).porDia || [])) if (String(d.dia).slice(0, 7) === mes) usd += d.usd || 0; } catch (_) {}
+  const cot = (E._cotacao && E._cotacao.valor) || 5.4;
+  return metas.custoAquisicao({ anuncios: metas.investimentoDoMes(mes), ia: usd * cot, leads: funil ? funil.leads : null, agendaram: funil ? funil.agendaram : null, novas });
 }
 
 // Guarda a leitura mais recente dos recebimentos e da grade no mês em que foi feita.
@@ -71,9 +82,11 @@ function rotina(forcar) {
     for (const p of meses.slice(1, -1).slice(-12)) {
       if (fech[p.k] || !metas.podeFechar(p.k, hojeIso, tol)) continue;
       const fim = `${p.k}-${String(metas.diasNoMes(p.k)).padStart(2, '0')}`;
+      const fu = funilDe(`${p.k}-01`, fim);
       metas.fechar(p.k, {
         ativas: { ini: p.ini, fim: p.fim, entraram: p.e, novas: p.n, sairam: p.s, taxaSaida: taxaSaida(p) },
-        funil: funilDe(`${p.k}-01`, fim),
+        funil: fu,
+        custo: custoDoMes(p.k, fu, p.n),
         fin: (pos[p.k] && pos[p.k].fin) || null,
         grade: (pos[p.k] && pos[p.k].grade) || null,
         metas: metas.metasDoMes(p.k).valores,
@@ -142,6 +155,36 @@ function paginaMetas(params) {
       <a class="stat stat-link${fin && fin.atraso ? ' alerta' : ''}" href="/grade"><div class="n">${fin ? fmtPct(fin.inadPct) : '—'}</div><div class="l">inadimplência do mês${fin ? `<br><span style="font-size:.72rem">${fmtBRL(fin.atraso)} em atraso</span>` : ''}</div></a>
     </div>`;
 
+  // atendimento: quanto a lead espera e quem está esperando agora
+  const sess = E._navSess || { admin: true, telas: [] };
+  const veConversas = !!(sess.admin || (sess.telas || []).includes('sofia_conversas'));
+  let conv = {}; try { conv = sofia.conversas() || {}; } catch (_) {}
+  const agora = Date.now();
+  const t7 = atendimento.tempos(conv, agora - 7 * 86400e3, agora);
+  let sessaoH = 12; try { sessaoH = sofia.lerSessaoHoras() || 12; } catch (_) {}
+  const esp = atendimento.esperando(conv, { agora, sessaoMs: sessaoH * 3600e3, encerrada: (k, c) => sofia.estaEncerrada(k, sofia.ultimaAlunaEm(c)) });
+  const hrefEsp = veConversas ? '/sofia?view=conversas&sit=aguardando' : '';
+  const tagEsp = (html, cls) => hrefEsp ? `<a class="stat stat-link${cls}" href="${hrefEsp}">${html}</a>` : `<div class="stat${cls}">${html}</div>`;
+  const atendimentoHtml = `<div class="stats" style="margin:0">
+      ${tagEsp(`<div class="n">${esp.length}</div><div class="l">esperando resposta agora${esp.length ? `<br><span style="font-size:.72rem">a mais antiga há ${atendimento.fmtEspera(esp[0].min * 60)}${hrefEsp ? ' · <u>ver</u>' : ''}</span>` : ''}</div>`, esp.length && esp[0].min >= 60 ? ' alerta' : '')}
+      <div class="stat"><div class="n">${atendimento.fmtEspera(t7.medianaSeg)}</div><div class="l">espera típica por uma resposta${infoI('<b>Mediana</b> das ' + t7.n + ' respostas dos últimos 7 dias: metade das pessoas esperou menos que isso, metade esperou mais. Conta da primeira mensagem dela até a resposta da SoFIA ou da equipe.')}</div></div>
+      <div class="stat"><div class="n">${fmtPct(t7.ate5minPct)}</div><div class="l">respondidas em até 5 minutos</div></div>
+      <div class="stat"><div class="n">${atendimento.fmtEspera(t7.equipe.medianaSeg)}</div><div class="l">espera quando a equipe responde<br><span style="font-size:.72rem">${t7.equipe.n} da equipe · ${t7.sofia.n} da SoFIA (${atendimento.fmtEspera(t7.sofia.medianaSeg)})</span></div></div>
+    </div>
+    ${esp.length && veConversas ? `<div class="mt-esp">${esp.slice(0, 5).map(x => `<span><b>${esc(x.nome || 'sem nome')}</b> há ${atendimento.fmtEspera(x.min * 60)}</span>`).join('')}${esp.length > 5 ? `<span>e mais ${esp.length - 5}</span>` : ''}</div>` : ''}
+    <p class="quando" style="margin:10px 0 0">“Esperando” = a última mensagem é da pessoa, há mais de 15 minutos, e a conversa não foi encerrada. Nem toda mensagem pede resposta (um “obrigada” também aparece aqui).</p>`;
+
+  // custo para trazer uma lead, um agendamento e uma aluna nova
+  const custo = custoDoMes(mes, funil, atual ? atual.n : null);
+  const fmtBRL2 = (n) => n == null ? '—' : 'R$ ' + (n >= 100 ? fmtInt(n) : String(Math.round(n * 100) / 100).replace('.', ','));
+  const custoHtml = `<div class="stats" style="margin:0">
+      <div class="stat"><div class="n">${fmtBRL(custo.total)}</div><div class="l">gasto no mês até hoje<br><span style="font-size:.72rem">anúncios ${custo.anuncios == null ? 'não informado' : fmtBRL(custo.anuncios)} · IA ${fmtBRL2(custo.ia)}</span></div></div>
+      <div class="stat"><div class="n">${fmtBRL2(custo.porLead)}</div><div class="l">por lead atendida${infoI('Gasto ÷ <b>leads atendidas</b> no mês: quem agendou (por qualquer canal) + quem escreveu para a SoFIA e não é aluna.')}<br><span style="font-size:.72rem">${custo.leads == null ? 'sem histórico do mês' : custo.leads + ' leads'}</span></div></div>
+      <div class="stat"><div class="n">${fmtBRL2(custo.porAgendamento)}</div><div class="l">por experimental agendada<br><span style="font-size:.72rem">${custo.agendaram == null ? 'sem histórico do mês' : custo.agendaram + ' agendadas'}</span></div></div>
+      <div class="stat"><div class="n">${fmtBRL2(custo.porMatricula)}</div><div class="l">por aluna nova${infoI('Gasto ÷ <b>alunas com primeiro contrato</b> no mês, venham de onde vierem (inclusive indicação e quem passou na porta). Por isso tende a ficar menor que o custo real do anúncio.')}<br><span style="font-size:.72rem">${custo.novas == null ? 'sem histórico' : custo.novas + ' novas'}</span></div></div>
+    </div>
+    ${custo.anuncios == null ? '<p class="quando" style="margin:10px 0 0">⚠️ Só o custo da IA está na conta. Informe o <b>investimento em anúncios</b> do mês em “Definir as metas” para ver o custo completo.</p>' : ''}`;
+
   // formulário das metas
   const campos = metas.CAMPOS.map(c => `<label class="mt-campo"><span>${esc(c.rot)}</span>
       <input type="text" inputmode="decimal" name="${c.k}" value="${m.valores[c.k] != null ? String(m.valores[c.k]).replace('.', ',') : ''}" placeholder="sem meta" autocomplete="off"></label>`).join('');
@@ -150,6 +193,8 @@ function paginaMetas(params) {
   const form = `<form method="POST" action="/metas/salvar" class="mt-form">
       <input type="hidden" name="mes" value="${mes}">
       <div class="mt-campos">${campos}</div>
+      <div class="mt-campos" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--linha-soft)"><label class="mt-campo"><span>Investimento em anúncios em ${esc(nomeMes(mes))} (R$)${infoI('Quanto foi (ou vai ser) gasto em anúncios <b>neste mês</b>. Entra no custo por lead e por aluna nova. Não passa para o mês seguinte.')}</span>
+        <input type="text" inputmode="decimal" name="anuncios" value="${metas.investimentoDoMes(mes) != null ? String(metas.investimentoDoMes(mes)).replace('.', ',') : ''}" placeholder="não informado" autocomplete="off"></label></div>
       <div class="ui-linha" style="margin-top:12px"><button class="ui-btn" type="submit">Salvar metas de ${esc(nomeMes(mes))}</button>
       <span class="quando" style="margin:0">${m.herdada ? `Hoje valem as metas de <b>${esc(nomeMes(m.de))}</b>. ` : ''}Campo vazio = sem meta. As metas valem para os meses seguintes até você mudar.</span></div>
     </form>`;
@@ -169,20 +214,22 @@ function paginaMetas(params) {
       <td class="num">${d.fin ? fmtBRL(d.fin.recebido) : '—'}${marcaMeta(d.fin && d.fin.recebido, mt.recebido)}</td>
       <td class="num so-pc">${d.fin ? fmtPct(d.fin.inadPct) : '—'}</td>
       <td class="num so-pc">${d.grade ? fmtPct(d.grade.ocupacaoPct) : '—'}${marcaMeta(d.grade && d.grade.ocupacaoPct, mt.ocupacao)}</td>
+      <td class="num so-pc">${d.custo && d.custo.porMatricula != null ? fmtBRL(d.custo.porMatricula) + (d.custo.anuncios == null ? '<span title="só o custo da IA: o investimento em anúncios do mês não foi informado" style="color:var(--warn)"> *</span>' : '') : '—'}</td>
     </tr>`;
   const linhas = [];
-  if (atual) linhas.push(linhaMes(mes, { ativas: { fim: atual.fim, entraram: atual.e, sairam: atual.s, taxaSaida: taxaSaida(atual) }, funil, fin, grade }, `⏳ em andamento · dia ${dia} de ${dias}`, {}));
+  if (atual) linhas.push(linhaMes(mes, { ativas: { fim: atual.fim, entraram: atual.e, sairam: atual.s, taxaSaida: taxaSaida(atual) }, funil, fin, grade, custo }, `⏳ em andamento · dia ${dia} de ${dias}`, {}));
   const ant = metas.mesAnterior(mes), pAnt = meses.find(x => x.k === ant);
   if (pAnt && !fech[ant]) {
     const posAnt = metas.posicoes()[ant] || {};
-    linhas.push(linhaMes(ant, { ativas: { fim: pAnt.fim, entraram: pAnt.e, sairam: pAnt.s, taxaSaida: taxaSaida(pAnt) }, funil: funilDe(`${ant}-01`, `${ant}-${String(metas.diasNoMes(ant)).padStart(2, '0')}`), fin: posAnt.fin || null, grade: posAnt.grade || null },
+    const fuAnt = funilDe(`${ant}-01`, `${ant}-${String(metas.diasNoMes(ant)).padStart(2, '0')}`);
+    linhas.push(linhaMes(ant, { ativas: { fim: pAnt.fim, entraram: pAnt.e, sairam: pAnt.s, taxaSaida: taxaSaida(pAnt) }, funil: fuAnt, fin: posAnt.fin || null, grade: posAnt.grade || null, custo: custoDoMes(ant, fuAnt, pAnt.n) },
       `prévia · fecha em ${fmtDia(metas.diaDeFechar(ant, tol))}`, metas.metasDoMes(ant).valores));
   }
   for (const k of Object.keys(fech).filter(metas.ehMes).sort().reverse().slice(0, 12)) linhas.push(linhaMes(k, fech[k], `🔒 fechado em ${fmtDia(fech[k].fechadoEm)}`, fech[k].metas || {}));
   const tabela = linhas.length ? `<div class="card" style="overflow-x:auto"><table class="ui-tab mt-tab"><thead><tr>
       <th>Mês</th><th class="num">Ativas${infoI('Alunas ativas no <b>último dia</b> do mês.')}</th><th class="num">Entraram</th><th class="num">Saíram</th><th class="num so-pc">Saída %${infoI('<b>Taxa de saída</b> = saíram ÷ ativas no começo do mês.')}</th>
       <th class="num">Agendaram${infoI('Experimentais agendadas no mês, todos os canais. “—” = o histórico de agendamentos não cobre o mês inteiro.')}</th><th class="num so-pc">Comparec.${infoI('<b>Comparecimento</b> às experimentais = fez ÷ (fez + faltou).')}</th><th class="num so-pc">Fecharam</th>
-      <th class="num">Recebido${infoI('O que já tinha caído na <b>última leitura do EVO dentro do mês</b>. “—” = o mês não teve leitura guardada.')}</th><th class="num so-pc">Inadimp.</th><th class="num so-pc">Ocup.</th>
+      <th class="num">Recebido${infoI('O que já tinha caído na <b>última leitura do EVO dentro do mês</b>. “—” = o mês não teve leitura guardada.')}</th><th class="num so-pc">Inadimp.</th><th class="num so-pc">Ocup.</th><th class="num so-pc">Custo/aluna${infoI('<b>Gasto do mês ÷ alunas novas</b> (anúncios informados + IA). Com * = só a IA, sem os anúncios.')}</th>
     </tr></thead><tbody>${linhas.join('')}</tbody></table></div>`
     : '<div class="card"><div class="vazio">Ainda sem histórico. Abra <b>Alunas ativas</b> e clique em <b>Atualizar agora</b>.</div></div>';
 
@@ -197,6 +244,10 @@ function paginaMetas(params) {
     <div class="mt-grade">${metas.CAMPOS.map(cartao).join('')}</div>
     ${outros}
     <div class="ui-secoes">
+    <div class="sec-t" data-nosec>Atendimento no WhatsApp <small style="font-weight:600;color:var(--cinza)">(últimos 7 dias)</small></div>
+    <div class="card">${atendimentoHtml}</div>
+    <div class="sec-t" data-nosec>Custo para trazer uma aluna <small style="font-weight:600;color:var(--cinza)">(${esc(nomeMes(mes))})</small></div>
+    <div class="card">${custoHtml}</div>
     <div class="sec-t"${Object.keys(m.valores).length ? ' data-fechado' : ''}>Definir as metas</div>
     <div class="card">${form}</div>
     <div class="sec-t">Mês a mês</div>
@@ -228,6 +279,8 @@ function paginaMetas(params) {
     .mt-txt{font-size:var(--fs-xs);color:var(--cinza);margin-top:10px;line-height:1.45}
     .mt-txt b{color:var(--tinta)}
     .mt-lido{white-space:nowrap}
+    .mt-esp{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:12px}
+    .mt-esp span{font-size:var(--fs-xs);color:var(--cinza);background:var(--linha-soft);border-radius:99px;padding:3px 10px}.mt-esp b{color:var(--tinta)}
     .mt-campos{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
     .mt-campo{display:flex;flex-direction:column;gap:5px;font-size:var(--fs-sm);font-weight:600;color:var(--tinta)}
     .mt-campo input{width:100%}
@@ -290,4 +343,4 @@ function paginaDicionario() {
   return chrome({ tab: 'Dicionário' }, 'dicionario', corpo);
 }
 
-module.exports = { paginaMetas, paginaDicionario, rotina, funilDe, guardarPosicao };
+module.exports = { paginaMetas, paginaDicionario, rotina, funilDe, guardarPosicao, custoDoMes };

@@ -789,8 +789,10 @@ const server = http.createServer(protegido((req, res) => {
       try {
         const ent = {}; for (const c of metasDados.CAMPOS) ent[c.k] = q.get(c.k) || '';
         const mes = String(q.get('mes') || '');
+        const invest = metasDados.numero(q.get('anuncios')); // valida antes de gravar qualquer coisa
         const salvo = metasDados.salvarMetas(mes, ent);
-        auditoria.registrar(sess.usuario, 'metas.salvar', mes, JSON.stringify(salvo));
+        metasDados.salvarInvestimento(mes, q.get('anuncios'));
+        auditoria.registrar(sess.usuario, 'metas.salvar', mes, JSON.stringify({ ...salvo, anuncios: invest }));
       } catch (e) { erro = e.message; }
       res.writeHead(303, { Location: '/metas?ok=' + (erro ? 'erro&msg=' + encodeURIComponent(erro) : 'salvo') }); res.end();
     });
@@ -3024,7 +3026,7 @@ server.listen(PORT, HOST, () => {
   setTimeout(atualizarSaudeCor, 5000);
   // Metas: guarda a leitura do dia (recebimentos/ocupação) e tira a foto dos meses
   // que já fecharam — mesmo que ninguém abra a tela. Só lê e grava em data/.
-  const rotinaMetas = () => { const nav = E._navSess; try { painelMetas.rotina(true); } catch (_) {} E._navSess = nav; };
+  const rotinaMetas = () => { const nav = E._navSess; try { cotacaoUSD(); } catch (_) {} try { painelMetas.rotina(true); } catch (_) {} E._navSess = nav; };
   setTimeout(rotinaMetas, 90 * 1000);
   const tMetas = setInterval(rotinaMetas, 3 * 60 * 60 * 1000); if (tMetas.unref) tMetas.unref();
   const tSaude = setInterval(atualizarSaudeCor, 3 * 60 * 1000); if (tSaude.unref) tSaude.unref();

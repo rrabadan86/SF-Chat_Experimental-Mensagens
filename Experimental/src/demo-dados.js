@@ -279,7 +279,7 @@ const serAtivas = [], serEntr = [], serNovas = [], serSai = [];
 EX.forEach((p, k) => {
   // as três primeiras venceram há poucos dias: aparecem como "ainda podem renovar"
   const ini = dia(-entre(300, 700)), fim = k < 3 ? dia(-(k * 2 + 1)) : dia(-entre(20, 200));
-  pesAtivas[p.id] = { n: p.nome, nc: 1, tel: p.tel, iv: [[ini, fim]], cs: [[ini, fim, pick(PLANOS), fim, 0]] };
+  pesAtivas[p.id] = { n: p.nome, nc: 1, tel: p.tel, iv: [[ini, fim]], cs: [[ini, fim, pick(PLANOS), fim, k % 4 === 0 ? 1 : 0]] }; // 1 em 4 cancelou antes do fim
   if (k === 1) pesAtivas[p.id].fq = [PLANOS[0], dia(2)];
 });
 
@@ -527,7 +527,7 @@ gravar(path.join(DATA, 'slimclub-usos.json'), { usos: usosClub });
 gravar(path.join(DATA, 'slimclub-avaliacoes.json'), { recs: recsClub, reclamacoes: reclClub });
 for (const [off, g] of Object.entries(gradeSemanas)) gravar(path.join(DATA, Number(off) === 0 ? 'grade-fixas.json' : `grade-fixas.s${off}.json`), g);
 // Metas do mês (Indicadores → Metas): uma batida, duas no ritmo e duas abaixo, para a tela ter o que mostrar.
-gravar(path.join(DATA, 'metas.json'), { meses: { [hoje.slice(0, 7)]: { ativas: 140, entradas: 26, agendamentos: 45, recebido: 80000, ocupacao: 70 } } });
+gravar(path.join(DATA, 'metas.json'), { meses: { [hoje.slice(0, 7)]: { ativas: 140, entradas: 26, agendamentos: 45, recebido: 80000, ocupacao: 70 } }, investimento: { [hoje.slice(0, 7)]: 1800 } });
 gravar(path.join(DATA, 'jobs-disparos.json'), { desde: new Date(AGORA - 30 * 86400e3).toISOString(), boot: new Date(AGORA - 3 * 86400e3).toISOString(), registrados, disparos, falhas: {} });
 
 console.log(`demo-dados: ${Object.keys(conversas).length} conversas · ${Object.keys(contatos).length} contatos · ${Object.keys(aulas).length} experimentais · ${idsAtivos.length} alunas ativas · ${atividade.length} envios no log · ${indicadores.length} eventos do formulário.`);

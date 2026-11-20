@@ -999,7 +999,18 @@ function paginaSofiaFunil(params) {
   // Só os números (sem montar a página): usado pelas Metas, pelo fechamento do mês e pelos testes.
   // (primeiroEvento = começo do histórico de tags: antes dele, "0 agendaram" é falta de registro)
   if (params._numeros) { let p0 = Infinity; for (const l8 in tagLogMap) for (const e of (tagLogMap[l8] || [])) if (e && e.em && e.em < p0) p0 = e.em; params._primeiroEvento = p0 === Infinity ? 0 : p0; }
-  if (params._numeros) return { primeiroEvento: params._primeiroEvento, conversaram: convs, agendaram: agend, porCanal, fez, faltou, fechou, aguardando, semRegistro: semreg, jaTeveAula: fez + faltou, comparecimentoPct: fez + faltou ? Math.round(fez * 1000 / (fez + faltou)) / 10 : null, pessoas: detAg.map(d => ({ tel: d.tel, canal: d.canal, sit: d.sit, em: d.em })) };
+  // Leads atendidas no período (para o custo por lead): quem agendou, por qualquer
+  // canal, + quem escreveu para a SoFIA e NÃO é aluna hoje (aluna tirando dúvida não é lead).
+  if (params._numeros) {
+    const ls = new Set(todosAg.map(d => last8(d.tel)));
+    for (const l8 of escreveu) {
+      if (ls.has(l8)) continue;
+      let tags = []; try { const r = contatos.acharPorTel(cont8[l8] || l8, contatosMap); tags = (r && r.contato && r.contato.tags) || []; } catch (_) {}
+      if (!(tAluna && tags.includes(tAluna))) ls.add(l8);
+    }
+    params._leads = ls.size;
+  }
+  if (params._numeros) return { primeiroEvento: params._primeiroEvento, leads: params._leads, conversaram: convs, agendaram: agend, porCanal, fez, faltou, fechou, aguardando, semRegistro: semreg, jaTeveAula: fez + faltou, comparecimentoPct: fez + faltou ? Math.round(fez * 1000 / (fez + faltou)) / 10 : null, pessoas: detAg.map(d => ({ tel: d.tel, canal: d.canal, sit: d.sit, em: d.em })) };
   const pct = (n, d) => d ? String(Math.round(n * 1000 / d) / 10).replace('.', ',') + '%' : '—';
   // Comparecimento: só entra na conta quem JÁ TEVE a aula (fez ou faltou). Quem
   // ainda vai fazer e quem está sem registro no EVO não puxam o % para baixo.
@@ -1555,6 +1566,41 @@ function paginaAtivas(params) {
   const emRen = ativasEmRenovacao(h.pessoas, hoje.dia, tolRen);
   const emRenDe = (p) => emRen.filter(x => x.saiu >= p.de && x.saiu <= p.ate).length;
   const renAtual = emRenDe(atual);
+  // ── Retenção: por que saíram e quanto tempo ficam (pelos contratos de cada uma) ──
+  const motivos = ativasDados.motivosSaida(h.pessoas, hoje.dia, tolRen);
+  const perm = ativasDados.permanencia(h.pessoas, hoje.dia, 12, tolRen);
+  const safras = ativasDados.safras(h.pessoas, hoje.dia, 15);
+  const mesesMot = meses.slice(-12).reverse().filter(m => motivos[m.k]);
+  const totMot = mesesMot.reduce((a, m) => ({ n: a.n + motivos[m.k].naoRenovou, r: a.r + motivos[m.k].rescindiu }), { n: 0, r: 0 });
+  const linhasMot = mesesMot.map(m => { const x = motivos[m.k], t = x.naoRenovou + x.rescindiu; return `<tr>
+      <td><b>${esc(rotuloPeriodo(m, 'mes', true))}</b></td>
+      <td class="num">${t}</td>
+      <td class="num">${x.naoRenovou}</td>
+      <td class="num">${x.rescindiu}</td>
+      <td><div class="al-tx"><span class="al-tx-b"><i style="width:${t ? Math.round(x.rescindiu * 100 / t) : 0}%"></i></span><span>${t ? fmtPct(x.rescindiu * 100 / t) : '—'}</span></div></td>
+    </tr>`; }).join('');
+  const celSafra = (v, n) => v == null ? '<td class="num" style="color:var(--faint)">—</td>'
+    : `<td class="num"><span class="al-saf" style="background:rgba(0,145,138,${(0.08 + 0.5 * (n ? v / n : 0)).toFixed(2)})"><b>${n ? Math.round(v * 100 / n) : 0}%</b> <small>${v}</small></span></td>`;
+  const linhasSaf = safras.map(x => `<tr><td><b>${esc(rotuloPeriodo(x, 'mes', true))}</b></td><td class="num">${x.n}</td>${celSafra(x.r3, x.n)}${celSafra(x.r6, x.n)}${celSafra(x.r12, x.n)}</tr>`).join('');
+  const fmtMeses = (v) => v == null ? '—' : (v >= 24 ? String(Math.round(v / 1.2) / 10).replace('.', ',') + ' anos' : String(v).replace('.', ',') + (v === 1 ? ' mês' : ' meses'));
+  const retencaoHtml = (h.pessoas && Object.keys(h.pessoas).length) ? `
+    <div class="sec-t" data-fechado>Retenção <small style="font-weight:600;color:var(--cinza)">(por que saíram e quanto tempo ficam)</small></div>
+    <div class="card" style="overflow-x:auto">
+      <h4 class="al-sub">Por que saíram <small>não renovou × cancelou antes do fim</small></h4>
+      ${linhasMot ? `<div class="stats" style="margin:0 0 12px">
+        <div class="stat"><div class="n">${totMot.n}</div><div class="l">não renovaram em 12 meses${infoI('O contrato <b>chegou ao fim</b> e ela não fez outro em até ' + tolRen + ' dias.')}</div></div>
+        <div class="stat"><div class="n">${totMot.r}</div><div class="l">cancelaram antes do fim em 12 meses${infoI('<b>Rescisão</b>: o contrato foi cancelado no EVO antes da data de término.')}</div></div>
+        <div class="stat"><div class="n">${fmtMeses(perm.medianaSaidas)}</div><div class="l">ficou quem saiu${infoI('Tempo <b>mediano</b> como aluna de quem saiu nos últimos 12 meses (' + perm.saidas + ' saídas): metade ficou mais, metade ficou menos.')}</div></div>
+        <div class="stat"><div class="n">${fmtMeses(perm.medianaAtivas)}</div><div class="l">de casa têm as ativas${infoI('Tempo <b>mediano</b> desde que as ' + perm.ativas + ' ativas de hoje começaram (ou voltaram).')}</div></div>
+      </div>
+      <table class="ui-tab"><thead><tr><th>Mês</th><th class="num">Saíram</th><th class="num">Não renovou</th><th class="num">Cancelou</th><th>% cancelou</th></tr></thead><tbody>${linhasMot}</tbody></table>
+      <p class="quando" style="margin:10px 0 0">Conta só as saídas já definitivas (fora dos ${tolRen} dias de tolerância) — por isso o mês em andamento pode mostrar menos que o “saíram” do topo.</p>`
+      : '<div class="vazio">Sem saídas registradas nos últimos meses.</div>'}
+      <h4 class="al-sub" style="margin-top:22px">Permanência por safra <small>de quem começou em cada mês, quantas continuavam</small></h4>
+      ${linhasSaf ? `<table class="ui-tab"><thead><tr><th>Começaram em</th><th class="num">Alunas novas${infoI('Quem fez o <b>primeiro contrato</b> naquele mês.')}</th><th class="num">Ativas após 3 meses</th><th class="num">Após 6 meses</th><th class="num">Após 12 meses</th></tr></thead><tbody>${linhasSaf}</tbody></table>
+      <p class="quando" style="margin:10px 0 0">“—” = a safra ainda não completou esse tempo. Quem saiu e voltou conta como ativa no dia medido. Safra pequena oscila muito: olhe o número ao lado do %.</p>`
+      : '<div class="vazio">Ainda sem alunas novas no histórico para montar as safras.</div>'}
+    </div>` : '';
   const voltarQ = encodeURIComponent(`/ativas?vis=${vis}&r=${range}`);
   const lnk = (q, html, titulo) => `<a href="/ativas/lista?${q}&voltar=${voltarQ}" title="${esc(titulo || 'Ver as alunas')}" class="al-lnk">${html}</a>`;
   const qPer = (tipo, p) => `tipo=${tipo}&de=${p.de}&ate=${p.ate}`;
@@ -1597,6 +1643,7 @@ function paginaAtivas(params) {
     <div class="card" style="overflow-x:auto">
       <table class="ui-tab"><thead><tr><th>${vis === 'mes' ? 'Mês' : 'Semana de'}</th><th class="num so-pc">Início${infoI('Alunas ativas quando o período <b>começou</b> (o fechamento do período anterior).')}</th><th class="num">Entraram${infoI('Contratos que <b>começaram</b> no período: alunas novas + as que <b>voltaram</b> depois de sair.')}</th><th class="so-pc"></th><th class="num">Saíram${infoI('Alunas que <b>perderam o contrato ativo</b> no período (venceu sem renovar ou cancelou).')}</th><th class="num">Fim${infoI('Alunas ativas no <b>último dia</b> do período (no período atual, hoje).')}</th><th class="num">Variação${infoI('<b>Fim − Início</b>: quanto a base cresceu ou encolheu.')}</th><th class="so-pc">Taxa de saída${infoI('<b>Saíram ÷ Início</b>: de cada 100 alunas que havia no começo, quantas saíram.')}</th></tr></thead><tbody>${linhasTab}</tbody></table>
     </div>
+    ${retencaoHtml}
     <div class="sec-t" data-fechado>Comparar dois meses</div>
     <div class="card">
       <form method="GET" action="/ativas" class="ui-linha" style="margin:0 0 6px">

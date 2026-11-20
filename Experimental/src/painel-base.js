@@ -727,6 +727,8 @@ const ESTILO = `
   .wrap .ui-tab :is(th,td).num{text-align:right}
   .al-lnk{color:inherit;text-decoration:none}.al-lnk:hover{color:var(--teal-esc);text-decoration:underline}
   .al-tx{display:flex;align-items:center;gap:10px;min-width:150px}.al-tx-b{flex:1;height:7px;border-radius:99px;background:#ececef;overflow:hidden}.al-tx-b i{display:block;height:100%;border-radius:99px;background:#b9b9c0}
+  .al-sub{margin:0 0 10px;font-size:var(--fs-md,1rem);color:var(--tinta)}.al-sub small{font-weight:500;color:var(--cinza);font-size:var(--fs-xs);margin-left:6px}
+  .al-saf{display:inline-block;min-width:92px;padding:3px 9px;border-radius:7px;text-align:right;white-space:nowrap}.al-saf small{color:var(--cinza);font-size:.72rem;margin-left:4px}
   .al-tx>span:last-child{width:46px;text-align:right}.al-tx.alta .al-tx-b i{background:var(--erro)}.al-tx.alta>span:last-child{color:var(--erro);font-weight:600}
   @media(max-width:600px){.so-pc{display:none}.wrap .ui-tab :is(th,td){padding:9px 7px}}
   /* Saúde: resumo no topo, atenção primeiro, o que funciona em lista compacta */

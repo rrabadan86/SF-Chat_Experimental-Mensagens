@@ -242,6 +242,12 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
       const mt = await page.evaluate(() => ({ cartoes: document.querySelectorAll('.mt-card').length, sit: [...document.querySelectorAll('.mt-card .mt-st')].filter(x => x.textContent.trim()).length, fechados: [...document.querySelectorAll('.mt-tab tbody tr')].filter(t => /fechado em/.test(t.textContent)).length }));
       if (mt.cartoes !== 5 || mt.sit !== 5) falha(`Metas: esperava 5 cartões com situação (achei ${mt.cartoes}/${mt.sit})`);
       if (!mt.fechados) falha('Metas: nenhum mês fechado na tabela');
+      const secs = await page.evaluate(() => [...document.querySelectorAll('.sec-t, summary')].map(x => x.textContent));
+      for (const t of ['Atendimento no WhatsApp', 'Custo para trazer uma aluna']) if (!secs.some(x => x.includes(t))) falha('Metas: faltou a seção "' + t + '"');
+      // Alunas ativas: retenção (por que saíram e safras).
+      await page.goto(url + '/ativas', { waitUntil: 'domcontentloaded' });
+      const ret = await page.evaluate(() => ({ saf: document.querySelectorAll('.al-saf').length, secs: [...document.querySelectorAll('.sec-t, summary')].map(x => x.textContent).filter(x => /Retenção/.test(x)).length }));
+      if (ret.secs < 1 || !ret.saf) falha(`Alunas ativas: faltou a retenção (${ret.secs} seção, ${ret.saf} casas de safra)`);
       // Dicionário: a busca deixa só os números que combinam.
       await page.goto(url + '/dicionario', { waitUntil: 'domcontentloaded' });
       const dcTot = await page.$$eval('.dc-item', d => d.length);
