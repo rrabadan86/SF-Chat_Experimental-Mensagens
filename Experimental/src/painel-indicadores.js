@@ -222,9 +222,9 @@ function paginaIndicadores(dias, aviso) {
     })}
     <div class="stats">
       <div class="stat tot"><div class="n">${r.pessoas}</div><div class="l">👥 pessoas</div></div>
-      <div class="stat"><div class="n" style="color:var(--cinza)">${r.acessos}</div><div class="l">aberturas (acessos)</div></div>
+      <div class="stat"><div class="n">${r.acessos}</div><div class="l">aberturas (acessos)</div></div>
       <div class="stat ok"><div class="n">${r.agendamentos}</div><div class="l">agendaram</div></div>
-      <div class="stat"><div class="n" style="color:var(--coral-esc)">${String(r.conversao).replace('.', ',')}%</div><div class="l">conversão (por pessoa)</div></div>
+      <div class="stat"><div class="n">${String(r.conversao).replace('.', ',')}%</div><div class="l">conversão (por pessoa)</div></div>
     </div>
     <div class="ui-secoes">
     <div class="sec-t">Funil</div>
@@ -1016,9 +1016,9 @@ function paginaSofiaFunil(params) {
     })}
     <div class="stats">
       ${topo ? `<div class="stat tot"><div class="n">${topo.n}</div><div class="l">${topo.stat} · ${esc(rotulo)}</div></div>
-      <div class="stat ok"><div class="n">${agend}</div><div class="l">agendaram · <b style="color:var(--coral-esc)">${String(conv).replace('.', ',')}%</b> ${topo.de}</div></div>`
-      : `<div class="stat ok"><div class="n">${agend}</div><div class="l">agendaram · ${esc(rotulo)}${canalSel === 'todos' ? `<br><span style="font-size:.72rem">🤖 ${porCanal.sofia} · 📲 ${porCanal.formulario} · 🏪 ${porCanal.express}${porCanal.manual ? ` · ✍️ ${porCanal.manual} à mão` : ''}${porCanal.outro ? ` · ${porCanal.outro} sem canal` : ''}</span>` : ''}</div></div>`}
-      <div class="stat"><div class="n" style="color:var(--teal-esc)">${fez}</div><div class="l">fizeram a aula · ${pct(fez, agend)} das agendadas</div></div>
+      <div class="stat"><div class="n">${agend}</div><div class="l">agendaram · <b style="color:var(--coral-esc)">${String(conv).replace('.', ',')}%</b> ${topo.de}</div></div>`
+      : `<div class="stat"><div class="n">${agend}</div><div class="l">agendaram · ${esc(rotulo)}${canalSel === 'todos' ? `<br><span style="font-size:.72rem">🤖 ${porCanal.sofia} · 📲 ${porCanal.formulario} · 🏪 ${porCanal.express}${porCanal.manual ? ` · ✍️ ${porCanal.manual} à mão` : ''}${porCanal.outro ? ` · ${porCanal.outro} sem canal` : ''}</span>` : ''}</div></div>`}
+      <div class="stat"><div class="n">${fez}</div><div class="l">fizeram a aula · ${pct(fez, agend)} das agendadas</div></div>
       <div class="stat ok"><div class="n">${fechou}</div><div class="l">fecharam contrato · ${pct(fechou, fez)} de quem fez</div></div>
     </div>
     <div class="ui-secoes">
@@ -1752,9 +1752,9 @@ function paginaProfessoras(params) {
     })}
     ${tot.exp ? `<div class="stats">
       <div class="stat tot"><div class="n">${tot.exp}</div><div class="l">experimentais · ${esc(rotulo)}</div></div>
-      <div class="stat"><div class="n" style="color:var(--teal-esc)">${tot.veio}</div><div class="l">vieram · presença ${fmtPct(taxa(tot.veio, tot.veio + tot.faltou))}</div></div>
+      <div class="stat"><div class="n">${tot.veio}</div><div class="l">vieram · presença ${fmtPct(taxa(tot.veio, tot.veio + tot.faltou))}</div></div>
       <div class="stat ok"><div class="n">${tot.fechou}</div><div class="l">fecharam contrato</div></div>
-      <div class="stat"><div class="n" style="color:var(--coral-esc)">${fmtPct(taxa(tot.fechou, tot.veio))}</div><div class="l">conversão do Studio (de quem veio)</div></div>
+      <div class="stat"><div class="n">${fmtPct(taxa(tot.fechou, tot.veio))}</div><div class="l">conversão do Studio (de quem veio)</div></div>
     </div>
     <div class="ui-secoes">
     <div class="sec-t">Por professora</div>

@@ -684,6 +684,43 @@ const ESTILO = `
   .ct-nova{display:flex;gap:8px;margin-top:10px}
   .ct-nova input{flex:1}
   .ct-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--linha)}
+  /* ══ Leiaute 11/2026 — kit comum (vale para todas as telas) ══════════════════
+     Três níveis com caras diferentes: menu = pílula; subabas = texto sublinhado;
+     filtros = controle segmentado cinza. Uma moldura só por seção. Número dos
+     indicadores em preto — cor só quando é sinal (.ok / .err). */
+  .subtabs{flex-wrap:nowrap;gap:0 22px;margin:0 0 18px;padding:0;box-shadow:inset 0 -1px 0 var(--linha);overflow-x:auto;scrollbar-width:none}
+  .subtabs::-webkit-scrollbar{display:none}
+  .subtabs a{flex:none;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:13px 0 11px;font-size:.9rem;white-space:nowrap}
+  .subtabs a:hover{background:transparent;color:var(--tinta);border-color:transparent;border-bottom-color:var(--faint)}
+  .subtabs a.on{background:transparent;color:var(--teal-esc);border-color:transparent;border-bottom-color:var(--teal);font-weight:600}
+  .ui-topo{background:transparent;border:0;box-shadow:none;padding:0;margin:2px 0 16px;flex-direction:row;flex-wrap:wrap;gap:10px 22px;align-items:center}
+  .ui-topo>*{flex:1 1 100%;min-width:0}
+  .ui-topo>.ui-linha{flex:0 1 auto}
+  .ui-tt h2{font-size:1.3rem;font-weight:700;letter-spacing:-.025em;line-height:1.2}
+  .ui-tt p{font-size:.86rem}
+  .ui-lbl{min-width:0}
+  .ui-chips{gap:2px;background:#e9e9ed;border-radius:10px;padding:3px}
+  .ui-chip{border:0;background:transparent;border-radius:8px;padding:5px 12px;color:#55555a;font-weight:500}
+  .ui-chip:hover{color:var(--tinta);background:rgba(255,255,255,.6)}
+  .ui-chip.on{background:var(--card);color:var(--tinta);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.14)}
+  .ui-chip.on .ct{opacity:1;color:var(--teal)}
+  .stats{display:flex;flex-wrap:wrap;gap:1px;background:var(--linha-soft);border:1px solid var(--linha);border-radius:14px;overflow:hidden}
+  .stat{flex:1 1 150px;min-width:0;border:0;border-radius:0;text-align:left;padding:15px 18px}
+  .stat .n{font-weight:700;font-size:1.75rem;letter-spacing:-.03em;color:var(--tinta);font-variant-numeric:tabular-nums}
+  .stat.tot .n{color:var(--tinta)}
+  .stat .l{font-weight:500;font-size:.78rem;margin-top:5px;line-height:1.4}
+  a.stat-link:hover,a.stat-link:focus-visible{background:#fafbfb}
+  .acc-sec>summary{border-radius:14px;box-shadow:none}
+  .acc-sec>summary::after{color:var(--faint);font-weight:400}
+  .acc-sec>summary:hover{border-color:var(--faint)}
+  .acc-sec[open]{border:1px solid var(--linha);border-radius:14px;box-shadow:none}
+  .acc-sec[open]>summary{background:transparent;border-bottom:0!important;border-radius:13px 13px 0 0;padding-bottom:4px!important}
+  .acc-sec[open]>*:not(summary){margin:8px 16px 14px}
+  .acc-sec[open]>.card{background:transparent;border:0;border-radius:0;box-shadow:none;padding:0}
+  .acc-sec[open]>.card+.card{border-top:1px solid var(--linha-soft);padding-top:14px}
+  .msg-bloco[open]{border-color:var(--linha)}
+  .msg-bloco[open]>summary{background:transparent;border-bottom:1px solid var(--linha-soft)}
+  @media(max-width:600px){.stat{flex:1 1 30%;padding:12px 12px}.stats:has(.stat:nth-child(4)) .stat{flex-basis:40%}.stat .n{font-size:1.5rem}.ui-topo{padding:0}.ui-chip{padding:5px 9px}}
 `;
 
 // Menu de abas, mostrando só as telas que o usuário logado pode ver (+ Perfis p/ admin).
@@ -804,6 +841,7 @@ window.addEventListener('popstate',function(){if(!marcado)return;marcado=false;v
 ['click','keyup','change'].forEach(function(ev){document.addEventListener(ev,function(){setTimeout(conferir,80);},true);});
 setInterval(conferir,1500);
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){var f=camada();if(f){f();setTimeout(conferir,80);}}});
+document.addEventListener('DOMContentLoaded',function(){var st=document.querySelector('.subtabs'),on=st&&st.querySelector('a.on');if(on&&st.scrollWidth>st.clientWidth)st.scrollLeft=Math.max(0,on.offsetLeft-(st.clientWidth-on.offsetWidth)/2);});
 function poe(e){var i=e.target&&e.target.closest&&e.target.closest('.info');if(!i)return;var p=i.querySelector('.info-pop');if(!p)return;
 var r=i.getBoundingClientRect(),w=Math.min(280,window.innerWidth*0.72);p.style.position='fixed';p.style.width=w+'px';
 var x=Math.max(8,Math.min(r.left,window.innerWidth-8-w));p.style.left=x+'px';p.style.top=(r.bottom+8)+'px';p.style.setProperty('--seta',Math.max(4,Math.round(r.left-x+3))+'px');p.classList.remove('acima');
