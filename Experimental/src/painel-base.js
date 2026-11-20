@@ -836,6 +836,7 @@ function menuConta(ativo) {
       <div class="conta-cab">${avatar(sess.usuario)}<div><b>${esc(sess.usuario)}</b><span>${papel}${studio ? ' · ' + studio : ''}</span></div></div>
       ${podeSaude ? `<a href="/saude"${ativo === 'saude' ? ' class="on"' : ''}>🩺 Saúde do sistema ${sc ? PILL[sc] : ''}</a>` : ''}
       ${sess.admin ? `<a href="/perfis"${ativo === 'perfis' ? ' class="on"' : ''}>👤 Perfis e acessos</a>` : ''}
+      ${sess.admin && (() => { try { return require('./unidades-rede').ler().length >= 2; } catch (_) { return false; } })() ? '<a href="/unidades">🔀 Trocar de unidade</a>' : ''}
       <a href="/politicadeprivacidade" target="_blank" rel="noopener">📄 Política de privacidade <span style="margin-left:auto;color:var(--faint);font-weight:500">↗</span></a>
       <div class="conta-sep"></div>
       <a href="/logout" class="sair">↪ Sair</a>

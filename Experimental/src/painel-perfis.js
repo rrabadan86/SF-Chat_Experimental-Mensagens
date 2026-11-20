@@ -8,6 +8,7 @@ const usuarios = require('./usuarios');
 const acessos = require('./acessos');
 const auditoria = require('./auditoria');
 const E = require('./painel-estado');
+const unidadesRede = require('./unidades-rede');
 const {
   esc, USER, ADMIN_EMAIL, uiTopo, chrome, IG_NO_PAINEL, fmtTel,
 } = require('./painel-base');
@@ -24,10 +25,10 @@ function lerSessaoDias() {
 
 // Aba "Perfis" (só admin): cria usuários, define telas, senha e exclui.
 // Sub-abas de Perfis (igual à subnav da SoFIA): Usuários · Acessos · Auditoria.
-const PERFIS_SUBS = ['usuarios', 'acessos', 'auditoria'];
+const PERFIS_SUBS = ['usuarios', 'acessos', 'auditoria', 'unidades'];
 function subnavPerfis(view) {
   const item = (v, rot) => `<a href="/perfis${v === 'usuarios' ? '' : '?view=' + v}"${view === v ? ' class="on"' : ''}>${rot}</a>`;
-  return `<div class="subtabs">${item('usuarios', 'Usuários')}${item('acessos', 'Acessos')}${item('auditoria', 'Auditoria')}</div>`;
+  return `<div class="subtabs">${item('usuarios', 'Usuários')}${item('acessos', 'Acessos')}${item('auditoria', 'Auditoria')}${item('unidades', 'Unidades')}</div>`;
 }
 // ── Auditoria: filtros, rótulos e exportação ────────────────────────────────
 // Área = o começo do código da ação ("campanha.criar" → "campanha").
@@ -260,11 +261,22 @@ function paginaPerfis(aviso, erro, view, filtroAud = {}) {
       </table></div>` : '<p class="vazio" style="margin:0">Nenhuma atividade registrada ainda. Assim que alguém criar/iniciar/pausar uma campanha, mudar o prompt, etc., aparece aqui.</p>'}
     </div>`;
 
+  // Unidades da rede: a lista que aparece na tela de acesso único (/unidades).
+  const unLista = unidadesRede.ler();
+  const secUnidades = view !== 'unidades' ? '' : `<div class="card">
+      <form method="POST" action="/perfis/unidades">
+        <label for="unTxt">Unidades <span class="sub" style="font-weight:400;color:var(--cinza)">— uma por linha, no formato <b>Nome | endereço do painel</b></span></label>
+        <textarea id="unTxt" name="unidades" rows="8" spellcheck="false" placeholder="Bueno | https://painel-da-unidade.com.br" style="width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.86rem">${esc(unidadesRede.paraTexto(unLista))}</textarea>
+        <div class="ui-linha" style="margin-top:12px"><button class="ui-btn" type="submit">Salvar lista</button>
+          <a class="ui-btn sec" href="/unidades" target="_blank" rel="noopener">Abrir a tela de acesso ↗</a></div>
+      </form>
+      <p class="quando" style="margin:14px 0 0">A tela <b>/unidades</b> deste painel mostra essas unidades: você escolhe uma, digita usuário e senha, e entra no painel dela. <b>Quem confere a senha é a própria unidade</b> — esta lista só diz para onde enviar o login, por isso o endereço precisa ser <b>https</b>. Para a troca funcionar a partir das outras unidades, cole a mesma lista em <b>Perfis → Unidades</b> de cada uma. A tela de acesso é pública (como a de login): mostra os nomes e os endereços, nada mais.</p>
+    </div>`;
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavPerfis(view)}
-    ${uiTopo({ titulo: 'Perfis e acessos', sub: view === 'acessos' ? 'Quem está logado agora e o histórico de entradas no painel. Encerre qualquer sessão por aqui.' : view === 'auditoria' ? 'Quem fez o quê no painel (salvou, excluiu, exportou…).' : 'Crie usuários, defina a senha ou o login pelo Google e escolha quais telas cada um pode ver.' })}
-    ${view === 'acessos' ? secAcessos : view === 'auditoria' ? secAuditoria : secUsuarios}
+    ${uiTopo({ titulo: 'Perfis e acessos', sub: view === 'unidades' ? 'As unidades da rede que aparecem na tela de acesso único: escolher a unidade, entrar e cair no painel dela.' : view === 'acessos' ? 'Quem está logado agora e o histórico de entradas no painel. Encerre qualquer sessão por aqui.' : view === 'auditoria' ? 'Quem fez o quê no painel (salvou, excluiu, exportou…).' : 'Crie usuários, defina a senha ou o login pelo Google e escolha quais telas cada um pode ver.' })}
+    ${view === 'unidades' ? secUnidades : view === 'acessos' ? secAcessos : view === 'auditoria' ? secAuditoria : secUsuarios}
   </div>`;
   return chrome({ tab: 'Perfis', h1: 'Perfis', p: 'Crie usuários e escolha quais telas cada um pode acessar.' }, 'perfis', corpo);
 }
