@@ -285,7 +285,10 @@ function subnavIndicadores(view) {
   if (pode('professoras')) its += `<a href="/professoras"${view === 'professoras' ? ' class="on"' : ''}>Professoras</a>`;
   if (pode('ativas')) its += `<a href="/ativas"${view === 'ativas' ? ' class="on"' : ''}>Alunas ativas</a>`;
   if (pode('grade')) its += `<a href="/grade"${view === 'grade' ? ' class="on"' : ''}>Grade</a>`;
+  if (pode('metas')) its += `<a href="/metas"${view === 'metas' ? ' class="on"' : ''}>Metas</a>`;
   if (PAGAMENTO_ATIVO && pode('pagamento')) its += `<a href="/pagamento"${view === 'pagamento' ? ' class="on"' : ''}>💰 Pagamento</a>`;
+  // O Dicionário aparece para quem vê qualquer tela de Indicadores.
+  if (its) its += `<a href="/dicionario"${view === 'dicionario' ? ' class="on"' : ''}>Dicionário</a>`;
   return IND_CSS + (its ? `<div class="subtabs">${its}</div>` : '');
 }
 
@@ -994,7 +997,9 @@ function paginaSofiaFunil(params) {
     else aguardando++;
   }
   // Só os números (sem montar a página): usado pelas Metas, pelo fechamento do mês e pelos testes.
-  if (params._numeros) return { conversaram: convs, agendaram: agend, porCanal, fez, faltou, fechou, aguardando, semRegistro: semreg, jaTeveAula: fez + faltou, comparecimentoPct: fez + faltou ? Math.round(fez * 1000 / (fez + faltou)) / 10 : null, pessoas: detAg.map(d => ({ tel: d.tel, canal: d.canal, sit: d.sit, em: d.em })) };
+  // (primeiroEvento = começo do histórico de tags: antes dele, "0 agendaram" é falta de registro)
+  if (params._numeros) { let p0 = Infinity; for (const l8 in tagLogMap) for (const e of (tagLogMap[l8] || [])) if (e && e.em && e.em < p0) p0 = e.em; params._primeiroEvento = p0 === Infinity ? 0 : p0; }
+  if (params._numeros) return { primeiroEvento: params._primeiroEvento, conversaram: convs, agendaram: agend, porCanal, fez, faltou, fechou, aguardando, semRegistro: semreg, jaTeveAula: fez + faltou, comparecimentoPct: fez + faltou ? Math.round(fez * 1000 / (fez + faltou)) / 10 : null, pessoas: detAg.map(d => ({ tel: d.tel, canal: d.canal, sit: d.sit, em: d.em })) };
   const pct = (n, d) => d ? String(Math.round(n * 1000 / d) / 10).replace('.', ',') + '%' : '—';
   // Comparecimento: só entra na conta quem JÁ TEVE a aula (fez ou faltou). Quem
   // ainda vai fazer e quem está sem registro no EVO não puxam o % para baixo.

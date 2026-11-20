@@ -30,7 +30,7 @@ const TELAS = [
   '/hoje', '/?view=config', '/?view=express', '/visao-cliente',
   '/sofia?view=conversas', '/sofia?view=config', '/sofia?view=contatos', '/sofia?view=tags',
   '/sofia?view=campanhas', '/sofia?view=cobranca', '/sofia?view=custo',
-  '/indicadores', '/funil', '/professoras', '/ativas', '/grade', // (/pagamento só existe com PAGAMENTO_ATIVO)
+  '/indicadores', '/funil', '/professoras', '/ativas', '/grade', '/metas', '/dicionario', // (/pagamento só existe com PAGAMENTO_ATIVO)
   '/clube?view=pendentes', '/clube?view=aprovados', '/clube?view=reclamacoes', '/clube?view=config',
   '/formularios', '/saude', '/perfis', '/perfis?view=auditoria',
 ];
@@ -237,6 +237,17 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
         if (!b || !b.vis) falha('Alunas ativas: a explicação do ⓘ não abriu ao tocar');
         else if (b.l < 0 || b.r > b.w) falha(`Alunas ativas: a explicação do ⓘ sai da tela (${Math.round(b.l)}–${Math.round(b.r)} de ${b.w}px)`);
       }
+      // Metas: um cartão por meta, cada um com situação; e os meses fechados na tabela.
+      await page.goto(url + '/metas', { waitUntil: 'domcontentloaded' });
+      const mt = await page.evaluate(() => ({ cartoes: document.querySelectorAll('.mt-card').length, sit: [...document.querySelectorAll('.mt-card .mt-st')].filter(x => x.textContent.trim()).length, fechados: [...document.querySelectorAll('.mt-tab tbody tr')].filter(t => /fechado em/.test(t.textContent)).length }));
+      if (mt.cartoes !== 5 || mt.sit !== 5) falha(`Metas: esperava 5 cartões com situação (achei ${mt.cartoes}/${mt.sit})`);
+      if (!mt.fechados) falha('Metas: nenhum mês fechado na tabela');
+      // Dicionário: a busca deixa só os números que combinam.
+      await page.goto(url + '/dicionario', { waitUntil: 'domcontentloaded' });
+      const dcTot = await page.$$eval('.dc-item', d => d.length);
+      await page.fill('#dcBusca', 'tkm'); await page.waitForTimeout(200);
+      const dcVis = await page.$$eval('.dc-item', d => d.filter(x => x.style.display !== 'none').length);
+      if (dcTot < 20 || !dcVis || dcVis >= dcTot) falha(`Dicionário: a busca por "tkm" deveria filtrar (${dcVis} de ${dcTot})`);
       for (const e of errosJs) falha('erro de JavaScript — ' + e.slice(0, 160));
       await ctx.close();
     }
