@@ -2980,8 +2980,8 @@ function paginaSofiaCusto(aviso, erro, params) {
     ${alerta}
     <div class="stats">
       <div class="stat tot"><div class="n">${brl(tot.usd)}</div><div class="l">gasto · ${esc(rotulo)}</div><div class="l" style="opacity:.6;margin-top:2px">${usd(tot.usd)}</div></div>
-      <div class="stat"><div class="n" style="color:var(--cinza)">${tot.convs}</div><div class="l">conversas</div></div>
-      <div class="stat"><div class="n" style="color:var(--cinza)">${ktok(tot.inTok + tot.outTok)}</div><div class="l">tokens</div></div>
+      <div class="stat"><div class="n">${tot.convs}</div><div class="l">conversas</div></div>
+      <div class="stat"><div class="n">${ktok(tot.inTok + tot.outTok)}</div><div class="l">tokens</div></div>
       <div class="stat ok"><div class="n">${tot.convs ? brl(tot.usd / tot.convs) : brl(0)}</div><div class="l">média/conversa</div><div class="l" style="opacity:.6;margin-top:2px">${tot.convs ? usd(tot.usd / tot.convs) : usd(0)}</div></div>
     </div>
     ${cotLinha}
