@@ -42,6 +42,41 @@ function periodos(ser, vis) {
   if (cur) out.push(cur);
   return out;
 }
+// Um mês só até o dia `ate` (1..31), com os mesmos campos de periodos(). Serve para
+// comparar o mês que ainda não fechou com outro mês nos MESMOS dias (1 a 20 × 1 a 20)
+// — mês parcial contra mês cheio faz o atual parecer sempre melhor em saídas.
+function mesAteDia(ser, k, ate) {
+  let cur = null, ant = null;
+  for (const p of ser) {
+    const m = p.dia.slice(0, 7);
+    if (m === k && +p.dia.slice(8) <= ate) {
+      if (!cur) cur = { k, ini: ant ? ant.a : p.a - p.e + p.s, fim: p.a, e: 0, n: 0, s: 0, de: p.dia, ate: p.dia };
+      cur.fim = p.a; cur.e += p.e; cur.n += p.n; cur.s += p.s; cur.ate = p.dia;
+    }
+    if (m < k) ant = p;
+  }
+  return cur;
+}
+// Quem saiu há poucos dias e AINDA PODE RENOVAR sem contar como saída: o contrato
+// venceu dentro da tolerância (padrão 7 dias). Se ela renovar nesse prazo, o
+// histórico junta os dois contratos e a saída some — por isso o mês em andamento
+// sempre parece pior do que vai fechar. → [{ id, nome, fim, saiu, fila }]
+// (saiu = dia em que a saída foi contada; fila = [contrato, início] se já renovou).
+function emRenovacao(pessoas, hojeIso, tolerancia) {
+  if (!pessoas || !hojeIso) return [];
+  const tol = Number.isFinite(tolerancia) ? tolerancia : 7;
+  const soma = (d, n) => new Date(new Date(d + 'T12:00:00Z').getTime() + n * 86400000).toISOString().slice(0, 10);
+  const limite = soma(hojeIso, -(tol + 1));
+  const out = [];
+  for (const id in pessoas) {
+    const p = pessoas[id], iv = p && p.iv;
+    if (!Array.isArray(iv) || !iv.length) continue;
+    const fim = iv[iv.length - 1][1];
+    if (!fim || fim >= hojeIso || fim < limite) continue;
+    out.push({ id, nome: p.n || '', fim, saiu: soma(fim, 1), fila: Array.isArray(p.fq) ? p.fq : null });
+  }
+  return out;
+}
 function rotuloPeriodo(p, vis, longo) {
   if (vis === 'mes') { const [y, m] = p.k.split('-'); return longo ? `${MESES_LONGO[+m - 1]}/${y}` : `${MESES_CURTO[+m - 1]}/${y.slice(2)}`; }
   const [, m, d] = p.k.split('-'); return `${d}/${m}`;
@@ -57,4 +92,4 @@ function contratoIgnorado(nome) {
     .some(t => new RegExp('(^|[^a-z0-9])' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(n));
 }
 
-module.exports = { contratoIgnorado, ARQ, MESES_CURTO, MESES_LONGO, ler, serie, periodos, rotuloPeriodo };
+module.exports = { contratoIgnorado, ARQ, MESES_CURTO, MESES_LONGO, ler, serie, periodos, rotuloPeriodo, mesAteDia, emRenovacao };

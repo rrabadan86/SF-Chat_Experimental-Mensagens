@@ -16,6 +16,7 @@ const sofia = require('./sofia-editor');
 const contatos = require('./contatos');
 const config = require('./config');
 const ativasDados = require('./ativas-dados');
+const finResumo = require('./financeiro-resumo');
 const E = require('./painel-estado');
 const {
   uiChips, uiTopo, esc, uiBarra, fmtData, chrome, fmtTel, podeFunil, PAGAMENTO_ATIVO, uiDatas, UI_SIT, fuLerJson, FU_AGENDOU_CANAL_FILE, lerCompCfg, FU_AGENDOU_AULA_FILE, uiPessoa, uiTrilho, PM2_EXP, PM2_SOFIA, lerJsonData, IG_NO_PAINEL, infoI,
@@ -367,8 +368,8 @@ function paginaGrade(off) {
       <div style="font-size:1.6rem;margin-bottom:6px">📋</div>
       <p style="margin:0 0 4px;font-weight:600">${off === 0 ? 'Nenhuma grade gerada ainda.' : 'Esta semana ainda não foi gerada.'}</p>
       <p class="quando" style="margin:0">${off === 0
-        ? 'Clique em <b>💰 Atualizar tudo</b> para montar a grade e calcular o TKM/faturamento a partir do EVO.<br>Na primeira vez demora alguns minutos (lê a matrícula e o contrato de cada aluna).'
-        : 'Clique em <b>🔄 Atualizar grade</b> para gerar esta semana (reaproveita o TKM/faturamento — rápido).'}</p>
+        ? 'Clique em <b>💰 Atualizar tudo</b> para montar a grade e calcular o TKM e os recebimentos a partir do EVO.<br>Na primeira vez demora alguns minutos (lê a matrícula e o contrato de cada aluna).'
+        : 'Clique em <b>🔄 Atualizar grade</b> para gerar esta semana (reaproveita o TKM e os recebimentos — rápido).'}</p>
     </div>`;
   } else {
     const turmas = snap.turmas, r = snap.resumo || {};
@@ -448,12 +449,16 @@ function paginaGrade(off) {
       if (s === 'vencido' || s.indexOf('expir') >= 0 || s.indexOf('over') >= 0) return 'vencido';
       if (s === 'a receber' || s.indexOf('open') >= 0 || s.indexOf('pend') >= 0 || s.indexOf('provision') >= 0) return 'a receber';
       return s || '—'; };
-    const fatRows = fatIt.map(it => `<tr><td data-s="${nrmFx(it.aluna)}">${escH(it.aluna)}</td><td data-s="${nrmFx(it.contrato || '')}">${escH(it.contrato || '—')}</td><td data-s="${escH(it.venc || '')}">${fmtDia(it.venc)}</td><td class="v" data-s="${Number(it.valor) || 0}">${fmtBRL(it.valor)}</td><td class="v" data-s="${it.pago != null ? Number(it.pago) : -1}">${it.pago != null ? fmtBRL(it.pago) : '—'}</td><td data-s="${escH(sitLbl(it.sit))}"><span class="gr-sit">${escH(sitLbl(it.sit))}</span></td></tr>`).join('');
+    const sitFin = (it) => { const l = sitLbl(it.sit); return it.prov && l !== 'pago' ? 'cartão a cair' : l; };
+    const fatRows = fatIt.map(it => `<tr><td data-s="${nrmFx(it.aluna)}">${escH(it.aluna)}</td><td data-s="${nrmFx(it.contrato || '')}">${escH(it.contrato || '—')}</td><td data-s="${escH(it.venc || '')}">${fmtDia(it.venc)}</td><td class="v" data-s="${Number(it.valor) || 0}">${fmtBRL(it.valor)}</td><td class="v" data-s="${it.pago != null ? Number(it.pago) : -1}">${it.pago != null ? fmtBRL(it.pago) : '—'}</td><td data-s="${escH(sitFin(it))}"><span class="gr-sit">${escH(sitFin(it))}</span></td></tr>`).join('');
     const fatTotPago = fatIt.reduce((a, it) => a + (Number(it.pago) || 0), 0);
+    // Previsto × recebido × em atraso (os mesmos números das Metas e do fechamento do mês).
+    const fin = finResumo.resumir(fatIt, String(snap.financeiro_em || '').slice(0, 10));
+    const fmtPctFin = (v) => v == null ? '—' : String(v).replace('.', ',') + '%';
     const mFat = (fatMes == null) ? '' : `<div class="gr-ov" id="ov-fat" onclick="if(event.target===this)fecharM('fat')"><div class="gr-md">
-      <div class="gr-md-h"><b>Faturamento do mês</b><span>${r.fatura_n || 0} lançamentos</span><button type="button" onclick="fecharM('fat')" aria-label="Fechar">✕</button></div>
+      <div class="gr-md-h"><b>Recebimentos do mês</b><span>${r.fatura_n || 0} lançamentos</span><button type="button" onclick="fecharM('fat')" aria-label="Fechar">✕</button></div>
       <div class="gr-md-b"><table class="gr-md-t gr-md-sort"><thead><tr><th data-type="t">Aluna</th><th data-type="t">Contrato</th><th data-type="d">Vence</th><th class="v" data-type="n">Cobrado</th><th class="v" data-type="n">Pago</th><th data-type="t">Situação</th></tr></thead><tbody>${fatRows || '<tr><td colspan="6" class="gr-md-vz">sem lançamentos no mês</td></tr>'}<tr class="gr-md-tot"><td colspan="3">Total do mês</td><td class="v">${fmtBRL(fatMes)}</td><td class="v">${fmtBRL(fatTotPago)}</td><td></td></tr></tbody></table></div>
-      <div class="gr-md-foot"><span>Cobrado no mês</span><span>${fmtBRL(fatMes)} · pago ${fmtBRL(fatTotPago)}</span></div></div></div>`;
+      <div class="gr-md-foot"><span>Previsto ${fmtBRL(fin.previsto)}</span><span>recebido ${fmtBRL(fin.recebido)} · em atraso ${fmtBRL(fin.atraso)}${fin.aCair ? ` · cartão a cair ${fmtBRL(fin.aCair)}` : ''} · a vencer ${fmtBRL(fin.aVencer)}</span></div></div></div>`;
     const scRows = semCont.map(x => `<tr><td>${escH(x.nome)}${x.trancada ? ' <span class="gr-trc">🔒 trancada</span>' : ''}</td><td>${escH(x.plano || '—')}</td></tr>`).join('');
     const mTkm = (tkmMed == null) ? '' : `<div class="gr-ov" id="ov-tkm" onclick="if(event.target===this)fecharM('tkm')"><div class="gr-md" style="max-width:520px">
       <div class="gr-md-h"><b>Ativas sem valor de contrato</b><span>${semCont.length} de ${r.ativas || 0}</span><button type="button" onclick="fecharM('tkm')" aria-label="Fechar">✕</button></div>
@@ -466,7 +471,9 @@ function paginaGrade(off) {
       <div class="stat" title="Alunas com matrícula FIXA (recorrente) em alguma turma da semana, e o quanto representam das alunas ativas do EVO."><div class="n">${alunasFixas != null ? alunasFixas : '—'}</div><div class="l">alunas fixas</div><div class="gr-sub">${alunasFixas == null ? 'atualize a grade' : (pctAlunasFixas != null ? `${pctAlunasFixas}% de ${totalAlunas} alunas` : (r.fixas != null ? `${r.fixas} matrículas fixas` : ''))}</div></div>
       <div class="stat tot" title="Total de turmas na semana (Seg a Sáb)."><div class="n">${r.turmas != null ? r.turmas : turmas.length}</div><div class="l">turmas</div></div>
     </div>${(tkmMed != null || fatMes != null) ? `<div class="stats">
-      ${fatMes != null ? `<div class="stat fat gr-click" onclick="abrirM('fat')" title="Soma dos recebíveis a vencer no mês (todas as alunas). Clique para ver linha a linha: aluna, contrato, cobrado, pago (só o que já caiu) e situação."><div class="n">${fmtBRL(fatMes)}</div><div class="l">faturamento do mês</div><div class="gr-sub">a vencer no mês${r.fatura_n ? ` · ${r.fatura_n} lançamentos` : ''} <span class="gr-md-hint">▸ ver lista</span></div></div>` : ''}
+      ${fatMes != null ? `<div class="stat fat gr-click" onclick="abrirM('fat')" title="Tudo o que VENCE neste mês (todas as alunas), pago ou não — é a previsão, não o que entrou. Clique para ver linha a linha."><div class="n">${fmtBRL(fin.previsto)}</div><div class="l">previsto para receber no mês</div><div class="gr-sub">${r.fatura_n ? `${r.fatura_n} lançamentos · ` : ''}a vencer ${fmtBRL(fin.aVencer)}${fin.aCair ? ` · cartão a cair ${fmtBRL(fin.aCair)}` : ''} <span class="gr-md-hint">▸ ver lista</span></div></div>
+      <div class="stat fat gr-click" onclick="abrirM('fat')" title="O que já CAIU de fato até a última leitura do EVO (cartão que a operadora ainda vai repassar não conta)."><div class="n">${fmtBRL(fin.recebido)}</div><div class="l">recebido no mês</div><div class="gr-sub">${fin.previsto ? Math.round(fin.recebido * 100 / fin.previsto) + '% do previsto' : ''}</div></div>
+      <div class="stat fat gr-click${fin.atraso ? ' alerta' : ''}" onclick="abrirM('fat')" title="Venceu e não foi pago. Inadimplência = em atraso ÷ tudo o que já venceu no mês (pago + em atraso). O que ainda vai vencer e o cartão a cair ficam fora da conta."><div class="n">${fmtBRL(fin.atraso)}</div><div class="l">em atraso</div><div class="gr-sub">${fin.nAtraso ? `${fin.nAtraso} lançamento${fin.nAtraso === 1 ? '' : 's'} · ` : ''}inadimplência <b>${fmtPctFin(fin.inadPct)}</b></div></div>` : ''}
       ${tkmMed != null ? `<div class="stat tkm gr-click" onclick="abrirM('tkm')" title="Ticket médio mensal = média do valor mensalizado do contrato vigente de cada aluna ativa (valor do contrato ÷ meses de duração). Inclui trancadas; exclui VIP/cortesia. Clique para ver quem está sem valor de contrato."><div class="n">${fmtBRL(tkmMed)}</div><div class="l">TKM médio</div><div class="gr-sub">contrato mensalizado · ${r.tkm_alunas || 0}${r.ativas ? ` de ${r.ativas}` : ''} ativas${r.trancadas ? ` · ${r.trancadas} trancada${r.trancadas === 1 ? '' : 's'}` : ''}${semCont.length ? ` <span class="gr-md-hint">▸ ${semCont.length} sem contrato</span>` : ''}</div></div>` : ''}
     </div>` : ''}
     </div>
@@ -476,7 +483,7 @@ function paginaGrade(off) {
     <p class="quando" style="display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:4px 0 8px">
       <span>Período <b>${fmtDia(snap.inicio)}–${fmtDia(snap.fim)}</b></span>
       <span class="gr-fresh">🕒 grade gerada <b>${escH(snap.gerado_em || '')}</b></span>
-      <span class="gr-fresh gr-fresh-fin">${snap.financeiro_em ? `💰 TKM/faturamento de <b>${escH(snap.financeiro_em)}</b>` : '💰 TKM/faturamento: clique “Atualizar tudo”'}</span>
+      <span class="gr-fresh gr-fresh-fin">${snap.financeiro_em ? `💰 TKM/recebimentos de <b>${escH(snap.financeiro_em)}</b>` : '💰 TKM/recebimentos: clique “Atualizar tudo”'}</span>
       <span class="gr-leg"><i><b class="lg-livre"></b>vaga matríc.</i><i><b class="lg-quase"></b>quase (1-2)</i><i><b class="lg-cheia"></b>lotada</i><i><b class="lg-repo"></b>repô/FREE</i></span>
     </p>
     <div class="gr-search">
@@ -601,7 +608,7 @@ function paginaGrade(off) {
     /* Leiaute 11/2026: indicadores em dois grupos, cor só onde pede ação (quase cheia / lotada) */
     .stat.prez .n,.stat.tkm .n,.stat.fat .n{color:var(--tinta)}
     .gr-kpis{display:flex;flex-wrap:wrap;gap:14px;margin:14px 0}
-    .gr-kpis>.stats{flex:1.8 1 440px;margin:0}.gr-kpis>.stats+.stats{flex:1 1 280px}
+    .gr-kpis>.stats{flex:1 1 100%;margin:0}
     .gr-leg-prof{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center;margin:0 0 6px}
     .gr-leg-prof i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px}
     .gr-prof-bar span.t-livre,.gr-prof-bar span.t-quase,.gr-prof-bar span.t-cheia{background:var(--teal)}
@@ -657,8 +664,8 @@ function paginaGrade(off) {
     ${uiTopo({
       titulo: 'Grade de matrículas fixas',
       sub: 'Vagas de matrícula fixa e presença real de cada turma, na semana.',
-      acoes: `<button id="btnAt" class="ui-btn" onclick="atualizar('/grade/atualizar')"${g ? ' disabled' : ''} title="Atualiza a grade da semana vista (presença/ocupação) reaproveitando o TKM/faturamento da última geração completa. Rápido — poucas chamadas ao EVO.">${g ? '⏳ gerando…' : '🔄 Atualizar grade'}</button>
-        <button id="btnAtTudo" class="ui-btn sec" onclick="atualizar('/grade/atualizar-tudo')"${g ? ' disabled' : ''} title="Recalcula também o TKM e o faturamento lendo o contrato de cada aluna no EVO. Mais demorado (vários minutos).">💰 Atualizar tudo</button>`,
+      acoes: `<button id="btnAt" class="ui-btn" onclick="atualizar('/grade/atualizar')"${g ? ' disabled' : ''} title="Atualiza a grade da semana vista (presença/ocupação) reaproveitando o TKM/recebimentos da última geração completa. Rápido — poucas chamadas ao EVO.">${g ? '⏳ gerando…' : '🔄 Atualizar grade'}</button>
+        <button id="btnAtTudo" class="ui-btn sec" onclick="atualizar('/grade/atualizar-tudo')"${g ? ' disabled' : ''} title="Recalcula também o TKM e os recebimentos lendo o contrato de cada aluna no EVO. Mais demorado (vários minutos).">💰 Atualizar tudo</button>`,
     })}
     <div id="aviso" class="aviso" style="display:${g ? 'block' : 'none'}">⏳ Gerando a grade a partir do EVO… pode levar alguns minutos. A página recarrega sozinha ao terminar.</div>
     ${corpo}
@@ -770,6 +777,10 @@ function paginaSofiaFunil(params) {
   else { iniD = ''; rotulo = 'todo o período'; }
   const diaDe = (ms) => { try { return new Date(Number(ms)).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); } catch (_) { return ''; } };
   const dentro = (dia) => dia && (!iniD || dia >= iniD) && (!fimD || dia <= fimD);
+  // O mesmo recorte em milissegundos (Brasília), para testar cada evento sem formatar a data.
+  const msDia = (dia, fim) => { const t = Date.parse(dia + (fim ? 'T23:59:59.999-03:00' : 'T00:00:00-03:00')); return isNaN(t) ? null : t; };
+  const iniMs = iniD ? msDia(iniD, false) : null, fimMs = fimD ? msDia(fimD, true) : null;
+  const dentroMs = (ms) => { ms = Number(ms) || 0; return ms > 0 && (iniMs == null || ms >= iniMs) && (fimMs == null || ms <= fimMs); };
   let inbox = {}; try { inbox = sofia.conversas() || {}; } catch (_) {}
   // Canal por telefone (últimos 8) — FALLBACK. O canal confiável vem do evento de
   // agendamento no tagLog (abaixo); este mapa por telefone só é usado quando o
@@ -789,25 +800,29 @@ function paginaSofiaFunil(params) {
     const n = (c && c.nome || '').trim(); if (n) return n;
     return last8(k);
   };
-  // Instante + CANAL do agendamento DENTRO do período. Lê o tagLog e pega a ÚLTIMA
-  // aplicação (acao add) de uma tag de agendamento. Conta por DATA DO AGENDAMENTO
-  // (quem agendou em outra data não entra hoje) e usa o canal DAQUELE evento — não
-  // um valor fixo por telefone (que misturava um Express com um SoFIA anterior).
-  const agendouEmNoPeriodo = (k) => {
+  // Instante + CANAL do agendamento DENTRO do período. Lê o tagLog e pega a última
+  // aplicação (acao add) de uma tag de agendamento QUE CAIU NO PERÍODO. Conta por
+  // DATA DO AGENDAMENTO e usa o canal DAQUELE evento. Quem agendou no período e
+  // remarcou DEPOIS continua contando aqui (antes sumia: só valia o último de todos,
+  // e o número de um período antigo encolhia com o tempo). `ultimo` = este é também
+  // o agendamento mais recente da pessoa.
+  const ehAgEv = (e) => e && e.acao === 'add' && e.em && (e.motivo === 'agendou' || agTagsLc.includes(String(e.tag || '').trim()));
+  const agNoIntervalo = (k, cabe) => {
     const evs = tagLogMap[last8(k)] || [];
-    let ult = 0, canal = '', por = '';
+    let ult = 0, canal = '', por = '', maior = 0;
     for (const e of evs) {
-      const ehAg = e.acao === 'add' && (e.motivo === 'agendou' || agTagsLc.includes(String(e.tag || '').trim()));
-      if (ehAg && e.em && e.em > ult) {
-        ult = e.em; canal = String(e.canal || '').trim(); por = '';
-        // Tag de "agendou" posta À MÃO em Contatos (na ficha ou em lote): não
-        // veio de um agendamento do sistema — mostra como "Manual" e por quem.
-        if (!canal && e.motivo === 'manual') { canal = 'manual'; por = String(e.por || '').trim(); }
-      }
+      if (!ehAgEv(e)) continue;
+      if (e.em > maior) maior = e.em;
+      if (e.em <= ult || !cabe(e.em)) continue;
+      ult = e.em; canal = String(e.canal || '').trim(); por = '';
+      // Tag de "agendou" posta À MÃO em Contatos (na ficha ou em lote): não
+      // veio de um agendamento do sistema — mostra como "Manual" e por quem.
+      if (!canal && e.motivo === 'manual') { canal = 'manual'; por = String(e.por || '').trim(); }
     }
-    if (!ult || !dentro(diaDe(ult))) return null;
-    return { em: ult, canal, por };
+    if (!ult) return null;
+    return { em: ult, canal, por, ultimo: ult === maior };
   };
+  const agendouEmNoPeriodo = (k) => agNoIntervalo(k, dentroMs);
   const rotCanal = (c, por) => c === 'manual' ? `✍️ Tag posta à mão${por ? ' por ' + esc(por) : ''}` : ({ sofia: '🤖 SoFIA', formulario: '📲 Formulário', express: '🏪 Express' }[c] || '— sem canal');
   // Canal escolhido no filtro: todos | sofia | formulario | express.
   const canalSel = ['sofia', 'formulario', 'express'].includes(params.canal) ? params.canal : 'todos';
@@ -815,14 +830,18 @@ function paginaSofiaFunil(params) {
   // Resposta automática do WhatsApp da pessoa (tipo 'automatica') não conta como conversa.
   const conversou = (c) => Array.isArray(c && c.msgs) && c.msgs.some(m => m && m.autor === 'aluna' && m.tipo !== 'automatica');
   const inbox8 = {};
-  let convs = 0;
+  // "Conversaram" = pessoas que ESCREVERAM para a SoFIA no período: mensagem dela
+  // na conversa, ou interação aberta por ela no histórico (o histórico guarda mais
+  // tempo que a conversa). Antes valia a data da ÚLTIMA mensagem da conversa — de
+  // qualquer autor —, então um follow-up da SoFIA mudava a pessoa de período e a
+  // "% das conversas" comparava grupos diferentes.
+  const escreveu = new Set();
   for (const k in inbox) {
     const c = inbox[k] || {};
     inbox8[last8(k)] = { k, c };
-    if (!conversou(c)) continue; // card sem conversa (ex.: criado pelo Express) não é conversa
-    const ult = c.ultimaEm || (c.msgs && c.msgs.length ? c.msgs[c.msgs.length - 1].em : 0);
-    if (dentro(diaDe(ult))) convs++;
+    if (Array.isArray(c.msgs) && c.msgs.some(m => m && m.autor === 'aluna' && m.tipo !== 'automatica' && dentroMs(m.em))) escreveu.add(last8(k));
   }
+  try { const hi = sofia.historico() || {}; for (const k in hi) if (((hi[k] && hi[k].sessoes) || []).some(x => x && dentroMs(x.inicioEm))) escreveu.add(last8(k)); } catch (_) {}
   const cont8 = {};
   for (const t in contatosMap) { const l = last8(t); if (l && !cont8[l]) cont8[l] = t; }
   // Agendamentos do período, de QUALQUER canal: cada agendamento (SoFIA, Formulário
@@ -838,8 +857,14 @@ function paginaSofiaFunil(params) {
     const ib = inbox8[l8];
     const canal = ag.canal || canalDe(l8) || (ib && conversou(ib.c) ? 'sofia' : '');
     const tel = (ib && ib.k) || cont8[l8] || l8;
-    todosAg.push({ nome: nomeDe(tel, ib && ib.c), canal, por: canal === 'manual' ? ag.por : '', em: ag.em, tel });
+    todosAg.push({ nome: nomeDe(tel, ib && ib.c), canal, por: canal === 'manual' ? ag.por : '', em: ag.em, tel, ultimo: ag.ultimo });
+    // quem agendou pela SoFIA no período conversou no período (garante que a etapa
+    // de baixo do funil esteja sempre contida na de cima)
+    if (canal === 'sofia') escreveu.add(l8);
   }
+  // Quem foi excluído de Contatos (testes) também sai das conversas.
+  if (temCrm) for (const l8 of [...escreveu]) if (!cont8[l8]) escreveu.delete(l8);
+  const convs = escreveu.size;
   const porCanal = { sofia: 0, formulario: 0, express: 0, manual: 0, outro: 0 };
   for (const d of todosAg) porCanal[porCanal[d.canal] != null ? d.canal : 'outro']++;
   const detAg = canalSel === 'todos' ? todosAg : todosAg.filter(d => d.canal === canalSel);
@@ -857,17 +882,13 @@ function paginaSofiaFunil(params) {
       let primeiro = Infinity, n = 0;
       for (const l8 in tagLogMap) for (const e of (tagLogMap[l8] || [])) if (e && e.em && e.em < primeiro) primeiro = e.em;
       if (nDias >= 1 && nDias <= 366 && primeiro !== Infinity && diaDe(primeiro) <= pIni) {
+        const pIniMs = msDia(pIni, false), pFimMs = msDia(pFim, true);
         for (const l8 in tagLogMap) {
           if (temCrm && !cont8[l8]) continue;
-          let ult = 0, canal = '';
-          for (const e of (tagLogMap[l8] || [])) {
-            const ehAg = e.acao === 'add' && (e.motivo === 'agendou' || agTagsLc.includes(String(e.tag || '').trim()));
-            if (!ehAg || !e.em || e.em <= ult || diaDe(e.em) > pFim) continue;
-            ult = e.em; canal = String(e.canal || '').trim(); if (!canal && e.motivo === 'manual') canal = 'manual';
-          }
-          if (!ult || diaDe(ult) < pIni) continue;
+          const ag = agNoIntervalo(l8, (ms) => ms >= pIniMs && ms <= pFimMs);
+          if (!ag) continue;
           const ib = inbox8[l8];
-          const c = canal || canalDe(l8) || (ib && conversou(ib.c) ? 'sofia' : '');
+          const c = ag.canal || canalDe(l8) || (ib && conversou(ib.c) ? 'sofia' : '');
           if (canalSel === 'todos' || c === canalSel) n++;
         }
         agAntes = { n, nDias };
@@ -887,7 +908,7 @@ function paginaSofiaFunil(params) {
     } catch (_) {}
   }
   // Etapa de cima do funil: conversas (SoFIA) ou visitas (Formulário). Nos outros filtros, não há.
-  const topo = canalSel === 'sofia' ? { n: convs, rot: 'Conversaram', stat: 'conversas', de: 'das conversas', vazio: 'Sem conversas no período.' }
+  const topo = canalSel === 'sofia' ? { n: convs, rot: 'Conversaram', stat: 'conversaram', de: 'de quem conversou', vazio: 'Ninguém escreveu para a SoFIA no período.' }
     : (canalSel === 'formulario' && visitas) ? { n: Math.max(visitas, porCanal.formulario), rot: 'Visitaram o formulário', stat: 'visitaram o formulário', de: 'de quem visitou' } : null;
   const naoAg = topo ? Math.max(0, topo.n - (canalSel === 'sofia' ? agSofia : porCanal.formulario)) : 0;
   const conv = topo && topo.n ? Math.round(((canalSel === 'sofia' ? agSofia : porCanal.formulario) / topo.n) * 1000) / 10 : 0;
@@ -935,6 +956,13 @@ function paginaSofiaFunil(params) {
   const somaDiasFu = (dia, n) => { const x = new Date(dia + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
   for (const d of detAg) {
     d.sit = situacaoDe(d);
+    // Agendamento ANTIGO de quem remarcou depois: as tags de hoje (presença e
+    // contrato) falam da aula nova e contam no agendamento novo. Aqui vale só a
+    // presença da aula DESTE agendamento, quando o EVO tem.
+    if (d.ultimo === false) {
+      const sv = d.exp && d.exp.dia && d.exp.dia < hojeFu ? histExp.situacao(d.exp.status) : '';
+      d.sit = sv === 'veio' ? 'fez' : sv === 'faltou' ? 'faltou' : 'aguardando';
+    }
     // A tag não mudou (o job de presença só pareia pelo TELEFONE e só olha os
     // últimos dias), mas a aula já passou: usa a presença do histórico do EVO.
     // Sem presença lançada no EVO → continua aguardando, com um aviso na linha.
@@ -965,7 +993,13 @@ function paginaSofiaFunil(params) {
     else if (d.sit === 'semreg') semreg++;
     else aguardando++;
   }
+  // Só os números (sem montar a página): usado pelas Metas, pelo fechamento do mês e pelos testes.
+  if (params._numeros) return { conversaram: convs, agendaram: agend, porCanal, fez, faltou, fechou, aguardando, semRegistro: semreg, jaTeveAula: fez + faltou, comparecimentoPct: fez + faltou ? Math.round(fez * 1000 / (fez + faltou)) / 10 : null, pessoas: detAg.map(d => ({ tel: d.tel, canal: d.canal, sit: d.sit, em: d.em })) };
   const pct = (n, d) => d ? String(Math.round(n * 1000 / d) / 10).replace('.', ',') + '%' : '—';
+  // Comparecimento: só entra na conta quem JÁ TEVE a aula (fez ou faltou). Quem
+  // ainda vai fazer e quem está sem registro no EVO não puxam o % para baixo.
+  const jaTeve = fez + faltou;
+  const compTxt = jaTeve ? `${pct(fez, jaTeve).replace(/,0%$/, '%')} de quem já teve a aula` : '';
   const FU_FILTROS = { agendou: () => true, fez: (s) => s === 'fez' || s === 'fechou', fechou: (s) => s === 'fechou', faltou: (s) => s === 'faltou', aguardando: (s) => s === 'aguardando', semreg: (s) => s === 'semreg' };
   const FU_ROT = { agendou: 'agendaram', fez: 'fizeram a aula', fechou: 'fecharam contrato', faltou: 'faltaram', aguardando: 'ainda aguardando', semreg: 'sem registro no EVO' };
   const SIT = { fechou: ['💰 fechou contrato', 'var(--ok)'], fez: ['✅ fez a aula', 'var(--teal-esc)'], faltou: ['❌ faltou', 'var(--erro)'], aguardando: ['⏳ aguardando', 'var(--cinza)'], semreg: ['❔ sem registro', 'var(--warn)'] };
@@ -1080,7 +1114,7 @@ function paginaSofiaFunil(params) {
       ${topo ? `<div class="stat tot"><div class="n">${topo.n}</div><div class="l">${topo.stat} · ${esc(rotulo)}</div></div>
       <div class="stat"><div class="n">${agend}</div><div class="l">agendaram · <b style="color:var(--coral-esc)">${String(conv).replace('.', ',')}%</b> ${topo.de}${fuDelta}</div></div>`
       : `<div class="stat"><div class="n">${agend}</div><div class="l">agendaram · ${esc(rotulo)}${canalSel === 'todos' ? `<br><span style="font-size:.72rem">🤖 ${porCanal.sofia} · 📲 ${porCanal.formulario} · 🏪 ${porCanal.express}${porCanal.manual ? ` · ✍️ ${porCanal.manual} à mão` : ''}${porCanal.outro ? ` · ${porCanal.outro} sem canal` : ''}</span>` : ''}${fuDelta}</div></div>`}
-      <div class="stat"><div class="n">${fez}</div><div class="l">fizeram a aula · ${pct(fez, agend)} das agendadas</div></div>
+      <div class="stat"><div class="n">${fez}</div><div class="l">fizeram a aula${compTxt ? ' · ' + compTxt : ''}${aguardando ? `<br><span style="font-size:.72rem">${aguardando} ainda ${aguardando === 1 ? 'vai' : 'vão'} fazer</span>` : ''}</div></div>
       <div class="stat ok"><div class="n">${fechou}</div><div class="l">fecharam contrato · ${pct(fechou, fez)} de quem fez</div></div>
     </div>
     <div class="ui-secoes">
@@ -1088,9 +1122,9 @@ function paginaSofiaFunil(params) {
     <div class="card">
       <div class="fu-2col"><div class="fu-etapas">
       ${topo
-        ? (topo.n ? barra(topo.rot, topo.n, topo.n, 'var(--teal-esc)') + barra('Agendaram', agend, topo.n, 'var(--teal)', agend ? 'agendou' : '') + barra('Fizeram a aula', fez, topo.n, '#3f8f8a', fez ? 'fez' : '', agend ? `${pct(fez, agend).replace(/,0%$/, '%')} das agendadas` : '') + barra('Fecharam contrato', fechou, topo.n, 'var(--ok)', fechou ? 'fechou' : '', fez ? `${pct(fechou, fez).replace(/,0%$/, '%')} de quem fez<span class="fu-l">&nbsp;a aula</span>` : '') + barra('Não agendaram', naoAg, topo.n, 'var(--cinza)')
+        ? (topo.n ? barra(topo.rot, topo.n, topo.n, 'var(--teal-esc)') + barra('Agendaram', agend, topo.n, 'var(--teal)', agend ? 'agendou' : '') + barra('Fizeram a aula', fez, topo.n, '#3f8f8a', fez ? 'fez' : '', compTxt) + barra('Fecharam contrato', fechou, topo.n, 'var(--ok)', fechou ? 'fechou' : '', fez ? `${pct(fechou, fez).replace(/,0%$/, '%')} de quem fez<span class="fu-l">&nbsp;a aula</span>` : '') + barra('Não agendaram', naoAg, topo.n, 'var(--cinza)')
           : `<div class="vazio">${topo.vazio}</div>`)
-        : (agend ? barra('Agendaram', agend, agend, 'var(--teal)', 'agendou') + barra('Fizeram a aula', fez, agend, '#3f8f8a', fez ? 'fez' : '') + barra('Fecharam contrato', fechou, agend, 'var(--ok)', fechou ? 'fechou' : '', fez ? `${pct(fechou, fez).replace(/,0%$/, '%')} de quem fez<span class="fu-l">&nbsp;a aula</span>` : '')
+        : (agend ? barra('Agendaram', agend, agend, 'var(--teal)', 'agendou') + barra('Fizeram a aula', fez, agend, '#3f8f8a', fez ? 'fez' : '', compTxt) + barra('Fecharam contrato', fechou, agend, 'var(--ok)', fechou ? 'fechou' : '', fez ? `${pct(fechou, fez).replace(/,0%$/, '%')} de quem fez<span class="fu-l">&nbsp;a aula</span>` : '')
           : `<div class="vazio">Ninguém agendou ${canalSel === 'todos' ? '' : 'pelo ' + rotSel + ' '}neste período.</div>`)}
       ${agend ? '<p class="quando fu-dica" style="margin:10px 0 0;color:var(--faint)">Passe o mouse numa barra para ver os nomes; clique para filtrar a lista.</p>' : ''}
       </div>${fuSitBox}</div>
@@ -1177,12 +1211,12 @@ function paginaSofiaFunil(params) {
       (acc||det).scrollIntoView({behavior:'smooth',block:'start'});
     }
     </script>
-    <details class="ui-rodape"><summary>ⓘ Como estes números são calculados</summary><p>Conta quem agendou <b>dentro do período</b> (pela data do agendamento), por canal: <b>SoFIA</b> (conversa no WhatsApp), <b>Formulário</b> (link de agendamento) e <b>Cadastro Express</b> (feito pela recepção). No filtro SoFIA, a base são as <b>conversas reais</b> (a pessoa escreveu); no Formulário, as <b>pessoas que abriram o link</b> de agendamento. <b>Fez a aula</b> vem da “Presença da experimental” (lê o EVO e troca a tag) e <b>fechou contrato</b> = ganhou a tag <b>${esc(tAluna)}</b> (aluna com contrato ativo no EVO).</p></details>
+    <details class="ui-rodape"><summary>ⓘ Como estes números são calculados</summary><p>Conta quem agendou <b>dentro do período</b> (pela data do agendamento), por canal: <b>SoFIA</b> (conversa no WhatsApp), <b>Formulário</b> (link de agendamento) e <b>Cadastro Express</b> (feito pela recepção). Quem agendou e <b>remarcou depois</b> conta nos dois períodos, uma vez em cada. No filtro SoFIA, a base é <b>quem escreveu para a SoFIA no período</b> (não vale mensagem só da SoFIA); no Formulário, as <b>pessoas que abriram o link</b> de agendamento. <b>Fez a aula</b> vem da “Presença da experimental” (lê o EVO e troca a tag); o <b>% de comparecimento</b> é fez ÷ (fez + faltou) — quem ainda vai fazer a aula não entra na conta e <b>fechou contrato</b> = ganhou a tag <b>${esc(tAluna)}</b> (aluna com contrato ativo no EVO).</p></details>
   </div>`;
   return chrome({ tab: 'Funil' }, 'funil', corpo);
 }
 const { MESES_CURTO, MESES_LONGO, rotuloPeriodo, contratoIgnorado } = ativasDados;
-const lerAtivasHist = ativasDados.ler, ativasSerie = ativasDados.serie, ativasPeriodos = ativasDados.periodos;
+const lerAtivasHist = ativasDados.ler, ativasSerie = ativasDados.serie, ativasPeriodos = ativasDados.periodos, ativasMesAteDia = ativasDados.mesAteDia, ativasEmRenovacao = ativasDados.emRenovacao;
 
 // Lista de alunas de um recorte: ativas num dia (fim de cada mês, ou hoje), ou quem
 // entrou / saiu num mês ou período. Filtros no servidor (tipo, mês, contrato, nome)
@@ -1500,9 +1534,22 @@ function paginaAtivas(params) {
     const d = (va == null || vb == null) ? null : va - vb;
     const bom = d == null || d === 0 ? null : (menorMelhor ? d < 0 : d > 0);
     return `<div class="stat"><div class="l" style="margin:0 0 6px">${rot}</div><div class="n" style="color:var(--tinta)">${fmt(va)}</div>
-      <div class="l">${esc(rotuloPeriodo(PB, 'mes', true))}: <b>${fmt(vb)}</b>${d == null ? '' : ` · <b style="color:${bom == null ? 'var(--cinza)' : bom ? 'var(--ok)' : 'var(--erro)'}">${fmt === fmtPct ? (d > 0 ? '+' : '') + String(Math.round(d * 10) / 10).replace('.', ',') + ' p.p.' : sinal(d)}</b>`}</div></div>`;
+      <div class="l">${rotB}: <b>${fmt(vb)}</b>${d == null ? '' : ` · <b style="color:${bom == null ? 'var(--cinza)' : bom ? 'var(--ok)' : 'var(--erro)'}">${fmt === fmtPct ? (d > 0 ? '+' : '') + String(Math.round(d * 10) / 10).replace('.', ',') + ' p.p.' : sinal(d)}</b>`}</div></div>`;
   };
   const mesAtual = mA === meses[meses.length - 1].k;
+  // Comparação justa: se um dos dois é o mês em andamento, os dois contam só do
+  // dia 1 até o dia de hoje (mês pela metade × mês cheio fazia o atual parecer
+  // melhor em saídas e pior em entradas do que realmente está).
+  const ultK = meses[meses.length - 1].k;
+  const diaCorte = (mA !== mB && (mA === ultK || mB === ultK)) ? +hoje.dia.slice(8) : 0;
+  const CA = diaCorte ? (ativasMesAteDia(serie, mA, diaCorte) || PA) : PA;
+  const CB = diaCorte ? (ativasMesAteDia(serie, mB, diaCorte) || PB) : PB;
+  const rotB = esc(rotuloPeriodo(PB, 'mes', true)) + (diaCorte ? ` até dia ${+CB.ate.slice(8)}` : '');
+  // Saídas ainda dentro da tolerância de renovação (podem deixar de ser saída).
+  const tolRen = (h.reconstruido && h.reconstruido.tolerancia) || 7;
+  const emRen = ativasEmRenovacao(h.pessoas, hoje.dia, tolRen);
+  const emRenDe = (p) => emRen.filter(x => x.saiu >= p.de && x.saiu <= p.ate).length;
+  const renAtual = emRenDe(atual);
   const voltarQ = encodeURIComponent(`/ativas?vis=${vis}&r=${range}`);
   const lnk = (q, html, titulo) => `<a href="/ativas/lista?${q}&voltar=${voltarQ}" title="${esc(titulo || 'Ver as alunas')}" class="al-lnk">${html}</a>`;
   const qPer = (tipo, p) => `tipo=${tipo}&de=${p.de}&ate=${p.ate}`;
@@ -1513,7 +1560,7 @@ function paginaAtivas(params) {
       <td class="num so-pc" style="color:var(--cinza)">${p.ini}</td>
       <td class="num">${p.e ? lnk(qPer('entraram', p), `+${p.e}`, 'Ver quem entrou') : '+0'}</td>
       <td class="quando so-pc" style="margin:0;white-space:nowrap">${p.n} nova${p.n === 1 ? '' : 's'} · ${p.e - p.n} ${p.e - p.n === 1 ? 'voltou' : 'voltaram'}</td>
-      <td class="num">${p.s ? lnk(qPer('sairam', p), `−${p.s}`, 'Ver quem saiu') : '−0'}</td>
+      <td class="num">${p.s ? lnk(qPer('sairam', p), `−${p.s}`, 'Ver quem saiu') : '−0'}${p === atual && renAtual ? `<div class="quando" style="margin:0;font-size:.7rem;white-space:nowrap">${renAtual} em renovação</div>` : ''}</td>
       <td class="num">${lnk(`tipo=ativas&dia=${p.ate}`, `<b>${p.fim}</b>`, 'Ver as alunas ativas neste dia')}</td>
       <td class="num"><b style="color:${p.fim > p.ini ? 'var(--ok)' : p.fim < p.ini ? 'var(--erro)' : 'var(--cinza)'}">${sinal(p.fim - p.ini)}</b></td>
       <td class="so-pc"><div class="al-tx${tx != null && tx >= TAXA_ALTA ? ' alta' : ''}"><span class="al-tx-b"><i style="width:${Math.min(100, (tx || 0) * 4)}%"></i></span><span>${fmtPct(tx)}</span></div></td>
@@ -1535,7 +1582,7 @@ function paginaAtivas(params) {
     <div class="stats">
       <a class="stat tot stat-link" href="/ativas/lista?voltar=${voltarQ}"><div class="n">${hoje.a}</div><div class="l">alunas ativas hoje${fotoHoje && fotoHoje.trancadas ? ` · ${fotoHoje.trancadas} trancada${fotoHoje.trancadas === 1 ? '' : 's'}` : ''} · <u>ver lista</u></div></a>
       <a class="stat stat-link" href="/ativas/lista?${qPer('entraram', atual)}&voltar=${voltarQ}"><div class="n">+${atual.e}</div><div class="l">entraram ${vis === 'mes' ? 'neste mês' : 'nesta semana'} · <u>ver</u></div></a>
-      <a class="stat stat-link" href="/ativas/lista?${qPer('sairam', atual)}&voltar=${voltarQ}"><div class="n">−${atual.s}</div><div class="l">saíram ${vis === 'mes' ? 'neste mês' : 'nesta semana'} · <u>ver</u></div></a>
+      <a class="stat stat-link" href="/ativas/lista?${qPer('sairam', atual)}&voltar=${voltarQ}"><div class="n">−${atual.s}</div><div class="l">saíram ${vis === 'mes' ? 'neste mês' : 'nesta semana'} · <u>ver</u>${renAtual ? `<br><span style="font-size:.72rem" title="O contrato venceu há até ${tolRen} dias. Se renovarem nesse prazo, deixam de contar como saída.">${renAtual} ainda ${renAtual === 1 ? 'pode' : 'podem'} renovar</span>` : ''}</div></a>
       <div class="stat ${hoje.a - atual.ini >= 0 ? 'ok' : 'err alerta'}"><div class="n">${sinal(hoje.a - atual.ini)}</div><div class="l">saldo ${vis === 'mes' ? 'do mês' : 'da semana'}</div></div>
     </div>
     <div class="ui-secoes">
@@ -1543,7 +1590,7 @@ function paginaAtivas(params) {
     <div class="card"><div class="ui-graf" data-graf="evol"></div></div>
     <div class="sec-t">${vis === 'mes' ? 'Mês a mês' : 'Semana a semana'}</div>
     <div class="card" style="overflow-x:auto">
-      <table class="ui-tab"><thead><tr><th>${vis === 'mes' ? 'Mês' : 'Semana de'}</th><th class="num so-pc">Início${infoI('Alunas ativas no <b>primeiro dia</b> do período.')}</th><th class="num">Entraram${infoI('Contratos que <b>começaram</b> no período: alunas novas + as que <b>voltaram</b> depois de sair.')}</th><th class="so-pc"></th><th class="num">Saíram${infoI('Alunas que <b>perderam o contrato ativo</b> no período (venceu sem renovar ou cancelou).')}</th><th class="num">Fim${infoI('Alunas ativas no <b>último dia</b> do período (no período atual, hoje).')}</th><th class="num">Variação${infoI('<b>Fim − Início</b>: quanto a base cresceu ou encolheu.')}</th><th class="so-pc">Taxa de saída${infoI('<b>Saíram ÷ Início</b>: de cada 100 alunas que havia no começo, quantas saíram.')}</th></tr></thead><tbody>${linhasTab}</tbody></table>
+      <table class="ui-tab"><thead><tr><th>${vis === 'mes' ? 'Mês' : 'Semana de'}</th><th class="num so-pc">Início${infoI('Alunas ativas quando o período <b>começou</b> (o fechamento do período anterior).')}</th><th class="num">Entraram${infoI('Contratos que <b>começaram</b> no período: alunas novas + as que <b>voltaram</b> depois de sair.')}</th><th class="so-pc"></th><th class="num">Saíram${infoI('Alunas que <b>perderam o contrato ativo</b> no período (venceu sem renovar ou cancelou).')}</th><th class="num">Fim${infoI('Alunas ativas no <b>último dia</b> do período (no período atual, hoje).')}</th><th class="num">Variação${infoI('<b>Fim − Início</b>: quanto a base cresceu ou encolheu.')}</th><th class="so-pc">Taxa de saída${infoI('<b>Saíram ÷ Início</b>: de cada 100 alunas que havia no começo, quantas saíram.')}</th></tr></thead><tbody>${linhasTab}</tbody></table>
     </div>
     <div class="sec-t" data-fechado>Comparar dois meses</div>
     <div class="card">
@@ -1553,17 +1600,18 @@ function paginaAtivas(params) {
         <span class="quando" style="margin:0">comparado com</span>
         <select name="b" onchange="this.form.submit()" aria-label="Mês de comparação" style="width:auto">${optsMes(mB)}</select>
       </form>
+      ${diaCorte ? `<div class="ui-nota" style="margin:8px 0 0"><span>⚖️ <b>${esc(rotuloPeriodo(meses[meses.length - 1], 'mes', true))} ainda não fechou</b>: os dois meses contam só do <b>dia 1 ao dia ${diaCorte}</b>, para a comparação ser justa.</span></div>` : ''}
       <div class="stats" style="margin:10px 0">
-        ${tile(`Ativas no fim de ${esc(rotuloPeriodo(PA, 'mes', true))}${mesAtual ? ' (até hoje)' : ''}`, PA.fim, PB.fim, fmtN, false)}
-        ${tile('Entraram', PA.e, PB.e, fmtN, false)}
-        ${tile('Saíram', PA.s, PB.s, fmtN, true)}
-        ${tile('Taxa de saída', taxa(PA), taxa(PB), fmtPct, true)}
+        ${tile(diaCorte ? `Ativas no dia ${+CA.ate.slice(8)} de ${esc(rotuloPeriodo(PA, 'mes', true))}` : `Ativas no fim de ${esc(rotuloPeriodo(PA, 'mes', true))}`, CA.fim, CB.fim, fmtN, false)}
+        ${tile('Entraram', CA.e, CB.e, fmtN, false)}
+        ${tile('Saíram', CA.s, CB.s, fmtN, true)}
+        ${tile('Taxa de saída', taxa(CA), taxa(CB), fmtPct, true)}
       </div>
       <div class="ui-graf" data-graf="comp"></div>
       <p class="quando" style="margin:8px 0 0">Alunas ativas em cada dia do mês.${mesAtual ? ' O mês atual vai até hoje.' : ''}</p>
     </div>
     </div>
-    <details class="ui-rodape"><summary>ⓘ Como estes números são calculados</summary><p><b>Ativa</b> = contrato vigente no EVO; <b>trancada conta</b>; contrato ${((h.ignorados && h.ignorados.regra) || ['circuito', 'vip']).map(r => esc(String(r).toUpperCase())).join(' ou ')} e renovação ainda na fila <b>não contam</b>. Calculado pelos contratos (início, fim e cancelamento) de todas as clientes, inclusive ex-alunas — por isso dá para comparar com o passado. Renovação com até ${(h.reconstruido && h.reconstruido.tolerancia) || 7} dias de atraso não conta como saída. <b>Nova</b> = primeiro contrato; <b>voltou</b> = ex-aluna que voltou. <b>Taxa de saída</b> = saíram ÷ ativas no início. Atualizado todo dia às 05:25${ultimo ? ` (última: ${esc(fmtData(ultimo))})` : ''}.</p></details>
+    <details class="ui-rodape"><summary>ⓘ Como estes números são calculados</summary><p><b>Ativa</b> = contrato vigente no EVO; <b>trancada conta</b>; contrato ${((h.ignorados && h.ignorados.regra) || ['circuito', 'vip']).map(r => esc(String(r).toUpperCase())).join(' ou ')} e renovação ainda na fila <b>não contam</b>. Calculado pelos contratos (início, fim e cancelamento) de todas as clientes, inclusive ex-alunas — por isso dá para comparar com o passado. Renovação com até ${(h.reconstruido && h.reconstruido.tolerancia) || 7} dias de atraso não conta como saída — por isso quem venceu nos últimos dias aparece como <b>“ainda pode renovar”</b>: já conta como saída, mas sai da conta se renovar no prazo. <b>Nova</b> = primeiro contrato; <b>voltou</b> = ex-aluna que voltou. <b>Taxa de saída</b> = saíram ÷ ativas no início. Atualizado todo dia às 05:25${ultimo ? ` (última: ${esc(fmtData(ultimo))})` : ''}.</p></details>
   </div>
   <style>
     .ui-graf{position:relative;width:100%}

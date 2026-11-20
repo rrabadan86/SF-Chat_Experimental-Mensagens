@@ -186,6 +186,9 @@ def _faturamento_mes(evo, now, branch_id=None):
                 "pago": pago_real,
                 "venc": str(r.get("dueDate") or "")[:10],
                 "sit": sit,
+                # cartão já passado, com repasse da operadora em data futura: não é
+                # atraso da aluna (o painel separa "cartão a cair" de "em atraso")
+                "prov": bool(receb and receb > hoje),
             })
         if len(rows) < take:
             break
