@@ -131,9 +131,13 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
   const corpo =`<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavSofia('conversas')}
-    <div class="sec-t" id="conv-head" data-nosec="1">Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span><button type="button" id="btnReimport" onclick="reimportarHistorico()" title="Relê o WhatsApp e repovoa as conversas no painel (recupera trechos perdidos, ex.: após um reinício da SoFIA). Pesado — faça num momento calmo." style="float:right;vertical-align:middle;font-size:.74rem;font-weight:700;padding:5px 11px;border:1px solid var(--linha);border-radius:999px;background:#fff;color:var(--cinza);cursor:pointer">↻ Reimportar histórico</button></div>
+    <div class="sec-t" id="conv-head" data-nosec="1">Conversas da SoFIA <span id="waTag" title="Situação do WhatsApp da SoFIA" style="display:inline-block;vertical-align:middle;margin:0 6px;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;background:#eee;color:#7a7a7a">⚪ …</span><button type="button" id="btnReimport" onclick="reimportarHistorico()" title="Relê o WhatsApp e repovoa as conversas no painel (recupera trechos perdidos, ex.: após um reinício da SoFIA). Pesado — faça num momento calmo." style="margin-left:auto;font-size:.74rem;font-weight:700;padding:5px 11px;border:1px solid var(--linha);border-radius:999px;background:#fff;color:var(--cinza);cursor:pointer">↻ Reimportar histórico</button></div>
     <style>
-      .inbox-grid{display:grid;grid-template-columns:288px minmax(0,1fr);gap:14px;align-items:start}
+      /* Título + situação + "Reimportar" numa linha que QUEBRA no celular. (O botão já foi
+         float:right: quando não cabia na linha do título, descia e "empurrava" a lista de
+         conversas, que ficava com metade da largura no celular.) */
+      #conv-head{display:flex;align-items:center;flex-wrap:wrap;gap:6px 4px}
+      .inbox-grid{display:grid;grid-template-columns:288px minmax(0,1fr);gap:14px;align-items:start;clear:both}
       .inbox-grid>div{min-width:0}
       /* Coluna da esquerda: mesma altura do chat; a LISTA rola por dentro (não
          empurra a página nem desalinha as duas colunas no desktop). */
