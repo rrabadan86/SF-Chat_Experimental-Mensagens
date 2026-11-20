@@ -140,6 +140,29 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
       for (const e of errosJs) reprovas.push('sem internet: erro de JavaScript — ' + e.slice(0, 160));
       await ctx.close();
     }
+    // Conversas: filtros rápidos por situação (a contagem bate com a lista); Funil: datas atrás do botão.
+    {
+      const ctx = await navegador.newContext({ viewport: { width: 1366, height: 860 } });
+      const page = await ctx.newPage();
+      const errosJs = []; page.on('pageerror', (e) => errosJs.push(String(e && e.message || e)));
+      await page.goto(`http://127.0.0.1:${inst.porta}/sofia?view=conversas`, { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('.cv-item', { timeout: 20000 }).catch(() => {});
+      const todas = await page.locator('.cv-item').count();
+      await page.click('#convSit a[data-s="encerradas"]'); await page.waitForTimeout(400);
+      const r = await page.evaluate(() => ({ n: parseInt(document.querySelector('#convSit a[data-s="encerradas"] b').textContent, 10), itens: document.querySelectorAll('.cv-item').length, on: document.querySelector('#convSit a.on').getAttribute('data-s') }));
+      if (r.on !== 'encerradas') reprovas.push('Conversas: o filtro "Encerradas" não ficou marcado');
+      if (r.n !== r.itens) reprovas.push(`Conversas: "Encerradas" diz ${r.n} mas a lista mostra ${r.itens}`);
+      await page.click('#convSit a[data-s="encerradas"]'); await page.waitForTimeout(400); // clicar de novo desliga o filtro
+      if (await page.locator('.cv-item').count() !== todas || await page.locator('#convSit a.on').count()) reprovas.push('Conversas: clicar de novo no filtro não trouxe a lista inteira de volta');
+      await page.goto(`http://127.0.0.1:${inst.porta}/funil`, { waitUntil: 'domcontentloaded' }); await page.waitForTimeout(500);
+      if (await page.locator('.ui-datas-det input[type=date]:visible').count()) reprovas.push('Funil: as datas deveriam ficar atrás do botão "Escolher datas"');
+      await page.click('.ui-datas-det > summary'); await page.waitForTimeout(200);
+      if (await page.locator('.ui-datas-det input[type=date]:visible').count() !== 2) reprovas.push('Funil: "Escolher datas" não mostrou os dois campos de data');
+      await page.goto(`http://127.0.0.1:${inst.porta}/funil?de=2026-01-01&ate=2026-01-31`, { waitUntil: 'domcontentloaded' }); await page.waitForTimeout(400);
+      if (await page.locator('.ui-datas-det input[type=date]:visible').count() !== 2) reprovas.push('Funil: com datas escolhidas, os campos deveriam vir abertos');
+      for (const e of errosJs) reprovas.push('filtros: erro de JavaScript — ' + e.slice(0, 160));
+      await ctx.close();
+    }
     // Telas longas: índice lateral no computador (clicar abre a seção); no celular, abrir uma seção fecha as outras.
     {
       const url = `http://127.0.0.1:${inst.porta}/sofia?view=config`;
