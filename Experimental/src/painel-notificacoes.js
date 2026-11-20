@@ -32,7 +32,7 @@ function manifesto() {
     short_name: (studio.replace(/^(studio\s+)?slimfit\s*/i, '').trim() || 'SlimFit').slice(0, 12),
     description: 'Painel do Studio SlimFit',
     lang: 'pt-BR', start_url: '/', scope: '/', display: 'standalone',
-    background_color: '#f4f4f6', theme_color: COR,
+    background_color: '#ffffff', theme_color: COR, // fundo branco: é o do logo (tela de abertura do app)
     icons: [
       { src: '/app-icone-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
       { src: '/app-icone-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
