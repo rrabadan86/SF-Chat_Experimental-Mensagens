@@ -1865,10 +1865,18 @@ function paginaSaude(list, extra = {}) {
       : `processo <b>${pr.online ? 'online' : pr.status}</b> · no ar há ${upTxt(pr.uptime)} · ${pr.restarts} reinício${pr.restarts === 1 ? '' : 's'}`;
   const procCor = (pr) => (!pr || !pr.existe || !pr.online) ? 'erro' : 'ok';
 
-  const card = (nome, cor, pill, linhas) => `<div class="card sd-card">
+  // Cada cartão fica registrado (nome, cor, linhas) para a tela montar o resumo do topo,
+  // subir o que pede atenção e mostrar o que funciona em lista compacta.
+  const sdItens = [];
+  const card = (nome, cor, pill, linhas) => {
+    const ls = linhas.filter(Boolean);
+    const html = `<div class="card sd-card">
       <div class="sd-top"><h3>${esc(nome)}</h3><span class="sd-pill sd-${cor}">${pill}</span></div>
-      ${linhas.filter(Boolean).map(l => `<div class="sd-line">${l}</div>`).join('')}
+      ${ls.map(l => `<div class="sd-line">${l}</div>`).join('')}
     </div>`;
+    sdItens.push({ nome, cor, pill, linhas: ls, html });
+    return html;
+  };
   const pior = (a, b) => (a === 'erro' || b === 'erro') ? 'erro' : ((a === 'warn' || b === 'warn') ? 'warn' : 'ok');
   const pillTxt = { ok: '🟢 OK', warn: '🟡 Atenção', erro: '🔴 Problema' };
 
@@ -2094,9 +2102,25 @@ function paginaSaude(list, extra = {}) {
   }
 
   E._saudeCor = { cor: [corExp, corSof, corEvo, corForm, corServ, corLid, corJobs].concat(IG_NO_PAINEL ? [corIg] : []).reduce(pior, 'ok'), em: Date.now() };
+  // Resumo no topo + o que pede atenção primeiro (vermelho antes de amarelo); o resto em lista compacta.
+  const sdDaTela = [cardExp, cardSof, cardEvo].concat(IG_NO_PAINEL ? [cardIg] : [], [cardForm, cardServ, cardLid, cardJobs])
+    .map(h => { const i = h && sdItens.find(x => x.html === h || h.includes(`<h3>${esc(x.nome)}</h3>`)); return i ? { ...i, html: h } : null; }).filter(Boolean); // (alguns cartões ganham estilo depois de montados — acha pelo título)
+  const sdAtencao = sdDaTela.filter(i => i.cor === 'erro').concat(sdDaTela.filter(i => i.cor === 'warn'));
+  const sdOk = sdDaTela.filter(i => i.cor === 'ok');
+  const nErro = sdAtencao.filter(i => i.cor === 'erro').length, nAt = sdAtencao.length;
+  const sdCorGeral = nErro ? 'erro' : nAt ? 'warn' : 'ok';
+  const sdResumo = `<div class="sd-resumo sd-r-${sdCorGeral}"><div class="sd-r-ic">${nErro ? '🔴' : nAt ? '⚠️' : '✅'}</div><div>
+      <div class="sd-r-t">${!nAt ? 'Tudo funcionando' : nErro ? `${nErro} ${nErro === 1 ? 'problema' : 'problemas'}${nAt > nErro ? ` e ${nAt - nErro} ${nAt - nErro === 1 ? 'ponto de atenção' : 'pontos de atenção'}` : ''}` : `${nAt} ${nAt === 1 ? 'ponto pede atenção' : 'pontos pedem atenção'}`}</div>
+      <div class="sd-r-s">${!nAt ? `Os ${sdOk.length} itens conferidos estão em dia.` : `${sdAtencao.map(i => esc(i.nome)).join(' · ')}${sdOk.length ? ` — ${sdOk.length === 1 ? 'o outro item está' : `os outros ${sdOk.length} itens estão`} em dia.` : ''}`}</div></div></div>`;
+  const sdLinha = (i) => i.linhas.length > 1
+    ? `<details class="sd-row"><summary><i></i><b>${esc(i.nome)}</b><span class="sd-row-r">${i.linhas[0]}</span><span class="sd-row-v">detalhes</span></summary><div class="sd-det">${i.linhas.slice(1).map(l => `<div class="sd-line">${l}</div>`).join('')}</div></details>`
+    : `<div class="sd-row"><div class="sd-row-s"><i></i><b>${esc(i.nome)}</b><span class="sd-row-r">${i.linhas[0] || ''}</span></div></div>`;
   const corpo = `<div class="wrap">
-    ${uiTopo({ titulo: 'Saúde do sistema', sub: 'O estado de cada parte da automação num lugar só: verde funcionando, amarelo atenção, vermelho com problema.', acoes: '<a href="/saude" class="ui-btn sec">↻ Atualizar</a>' })}
-    <div class="sd-grid">${cardExp}${cardSof}${cardEvo}${IG_NO_PAINEL ? cardIg : ''}${cardForm}${cardServ}${cardLid}${cardJobs}${cardVersao}</div>
+    ${uiTopo({ titulo: 'Saúde do sistema', sub: 'Cada parte da automação, com o que pede atenção primeiro.', acoes: '<a href="/saude" class="ui-btn sec">↻ Atualizar</a>' })}
+    ${sdResumo}
+    ${sdAtencao.length ? `<div class="sd-tit">Pedem atenção</div><div class="sd-grid">${sdAtencao.map(i => i.html).join('')}</div>` : ''}
+    ${sdOk.length ? `<div class="sd-tit">Funcionando <small>${sdOk.length} ${sdOk.length === 1 ? 'item' : 'itens'}</small></div><div class="sd-lista">${sdOk.map(sdLinha).join('')}</div>` : ''}
+    ${cardVersao ? `<div class="sd-grid" style="margin-top:14px">${cardVersao}</div>` : ''}
   </div>`;
   return chrome({ tab: 'Saúde', h1: 'Saúde', p: 'Estado de robô, SoFIA, painel e formulário.' }, 'saude', corpo);
 }

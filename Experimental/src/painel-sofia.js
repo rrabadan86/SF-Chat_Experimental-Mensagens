@@ -154,6 +154,10 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       .cv-tm{margin-left:auto;flex:none;color:#9a97a0;font-size:.7rem;font-variant-numeric:tabular-nums}
       .cv-ph{color:#6b6870;font-size:.72rem;margin:1px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .cv-chips{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:5px}
+      .cv-chips>span{margin-left:0!important}
+      .cv-tag{display:inline-block;background:var(--teal-soft);color:var(--teal-esc);border-radius:999px;padding:1px 9px;font-size:.68rem;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .cv-mais{font-size:.68rem;color:var(--faint);font-weight:600;cursor:default}
+      .cv-ph{font-size:.78rem}
       .cv-dot{position:absolute;right:9px;top:11px;width:9px;height:9px;border-radius:50%;background:#0e6e6b;box-shadow:0 0 0 2px var(--card,#fff)}
       #convPag{border-top:1px solid var(--linha);padding-top:8px}
       .ch-av{flex:none;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.9rem}
@@ -709,7 +713,11 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var on=(k===selecionada);
       var pendente = !!(ult && ult.autor==='aluna'); // última foi da aluna → esperando resposta
       var dot = pendente ? '<span title="aguardando resposta" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#0e6e6b;flex:none"></span>' : '';
-      var tgs=(c.tagsContato||[]).map(function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:0 7px;font-size:.64rem;margin-left:5px">'+escH(t)+'</span>';}).join('');
+      // Uma etiqueta só na lista: a etapa do funil ("FX - N. …", a mais avançada); as outras viram "+N" (nomes no title).
+      var tagsC=(c.tagsContato||[]).slice();
+      var etapa=tagsC.filter(function(t){return /^FX\\s*-/i.test(t);}).sort(function(a,b){return (parseInt((b.match(/\\d+/)||[0])[0],10)||0)-(parseInt((a.match(/\\d+/)||[0])[0],10)||0);})[0]||tagsC[0]||'';
+      var resto=tagsC.filter(function(t){return t!==etapa;});
+      var tgs=(etapa?'<span class="cv-tag">'+escH(etapa.replace(/^FX\\s*-\\s*\\d+\\.\\s*/i,''))+'</span>':'')+(resto.length?'<span class="cv-mais" title="'+escH(resto.join(' · '))+'">+'+resto.length+'</span>':'');
       var enc=encerrada(c)?'<span style="display:inline-block;background:#f3eaea;color:#a15a5a;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🔒 encerrada</span>':'';
       var hbMeu=c.humano&&c.humanoPor===MEU_USUARIO;
       var hb=c.humano?('<span title="'+(hbMeu?'Você assumiu esta conversa':'Assumida por '+escH(c.humanoPor||'atendente'))+'" style="display:inline-block;background:'+(hbMeu?'#e6f6ec;color:#1f8f52':'#fdf2e0;color:#8a5a00')+';border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">'+(hbMeu?'🙋 você':'🔒 '+escH(c.humanoPor||'atendente'))+'</span>'):'';
@@ -725,7 +733,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var itemHtml='<div class="'+cls+'" onclick="abrir(\\''+k+'\\')">'+av
         +'<div class="cv-b">'
         +  '<div class="cv-r1"><span class="cv-nm" style="font-weight:'+(pendente?'700':'600')+'">'+escH(c.nome||fmtTel(k))+'</span>'+agMini+'<span class="cv-tm">'+soHora(c.ultimaEm)+'</span></div>'
-        +  '<div class="cv-ph">'+escH(fmtTel(k))+'</div>'
+        +  '<div class="cv-ph" title="'+escH(fmtTel(k))+'">'+(ult&&(ult.texto||ult.foto)?((ult.autor==='aluna'?'':(ult.autor==='humano'?'Atendente: ':'SoFIA: '))+escH(String(ult.texto||'📷 foto').replace(/\\s+/g,' ').slice(0,90))):escH(fmtTel(k)))+'</div>'
         +  (chips?('<div class="cv-chips">'+chips+'</div>'):'')
         +'</div>'
         +'</div>';

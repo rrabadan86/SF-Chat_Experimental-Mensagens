@@ -728,6 +728,22 @@ const ESTILO = `
   .al-tx{display:flex;align-items:center;gap:10px;min-width:150px}.al-tx-b{flex:1;height:7px;border-radius:99px;background:#ececef;overflow:hidden}.al-tx-b i{display:block;height:100%;border-radius:99px;background:#b9b9c0}
   .al-tx>span:last-child{width:46px;text-align:right}.al-tx.alta .al-tx-b i{background:var(--erro)}.al-tx.alta>span:last-child{color:var(--erro);font-weight:600}
   @media(max-width:600px){.so-pc{display:none}.wrap .ui-tab :is(th,td){padding:9px 7px}}
+  /* Saúde: resumo no topo, atenção primeiro, o que funciona em lista compacta */
+  .sd-resumo{display:flex;gap:14px;align-items:center;padding:16px 18px;border-radius:14px;border:1px solid var(--linha);background:var(--card);margin:0 0 6px}
+  .sd-r-ic{flex:none;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:1.2rem;background:var(--ok-bg)}
+  .sd-r-t{font-size:1.08rem;font-weight:700;letter-spacing:-.02em}.sd-r-s{font-size:.86rem;color:var(--cinza)}
+  .sd-r-warn{border-color:var(--warn-bd);background:#fffdf7}.sd-r-warn .sd-r-ic{background:var(--warn-bg)}
+  .sd-r-erro{border-color:var(--erro-bd);background:#fffafa}.sd-r-erro .sd-r-ic{background:var(--erro-bg)}
+  .sd-tit{font-weight:700;font-size:.92rem;margin:18px 2px 8px}.sd-tit small{font-weight:500;color:var(--cinza);margin-left:4px}
+  .sd-lista{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:2px 18px}
+  .sd-row+.sd-row{border-top:1px solid var(--linha-soft)}
+  .sd-row>summary,.sd-row-s{display:grid;grid-template-columns:10px minmax(150px,250px) minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 0;list-style:none}
+  .sd-row>summary{cursor:pointer}.sd-row>summary::-webkit-details-marker{display:none}
+  .sd-row i{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+  .sd-row b{font-weight:600}.sd-row-r{color:var(--cinza);font-size:.86rem;min-width:0}
+  .sd-row-v{font-size:.78rem;color:var(--faint)}.sd-row[open] .sd-row-v{color:var(--teal-esc)}
+  .sd-det{padding:0 0 12px 22px}
+  @media(max-width:640px){.sd-row>summary,.sd-row-s{grid-template-columns:10px minmax(0,1fr) auto}.sd-row-r{grid-column:2 / -1;grid-row:2}.sd-row-v{grid-column:3;grid-row:1}}
   details.ui-rodape{text-align:left;max-width:none;margin:14px 2px 6px}
   details.ui-rodape>summary{cursor:pointer;list-style:none;display:inline-block;font-size:var(--fs-sm);font-weight:600;color:var(--teal-esc)}
   details.ui-rodape>summary::-webkit-details-marker{display:none}
