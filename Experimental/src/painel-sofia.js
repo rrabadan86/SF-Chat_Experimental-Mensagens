@@ -2284,7 +2284,7 @@ function paginaSofia(aviso, erro) {
       <div class="card">
         <p class="quando" style="margin:0 0 14px">Preencha aqui as credenciais <b>desta unidade</b> — assim não precisa editar o <code>.env</code> no servidor. Cada bloco diz <b>qual processo reiniciar</b> para valer: o <b>robô</b> lê o login do EVO no boot; a <b>SoFIA</b> lê as chaves de IA no boot.</p>
 
-        <label>Login do robô no EVO ${infoI('É o <b>usuário e senha</b> com que o robô entra no EVO (o mesmo que você usa no site do EVO) — a <b>EVO_EMAIL</b> e a <b>EVO_PASSWORD</b>. <b>Sem eles, os jobs diários do EVO falham</b> (confirmações, presença, aniversários, planilha…). Grava no <code>Experimental/.env</code>; vale <b>após reiniciar o robô</b>. Não é o mesmo que o <i>token</i> da API do EVO (esse fica no .env, montado pelo script).')}</label>
+        <label>Login do robô no EVO ${infoI('É o <b>usuário e senha</b> com que o robô entra no EVO (o mesmo que você usa no site do EVO) — a <b>EVO_EMAIL</b> e a <b>EVO_PASSWORD</b>. <b>Sem eles, os jobs diários do EVO falham</b> (confirmações, presença, aniversários, planilha…). Grava no <code>Experimental/.env</code> e <b>confere</b> se ficou igual ao que você digitou (senha com <b>#</b>, <b>$</b> ou espaço também). Vale <b>já no próximo job</b>, sem reiniciar o robô. Não é o mesmo que o <i>token</i> da API do EVO (esse fica no .env, montado pelo script).')}</label>
         <input type="email" id="evoEmailInput" value="${esc(lerEvoEmail())}" placeholder="email@dominio.com" autocomplete="off" spellcheck="false" style="max-width:600px;padding:9px;margin:0 0 8px">
         <div style="display:flex;gap:8px;align-items:center;max-width:600px">
           <input type="password" id="evoSenhaInput" value="" placeholder="${evoSenhaDefinida() ? '•••••••• (senha salva — deixe em branco p/ manter)' : 'senha do EVO'}" autocomplete="new-password" spellcheck="false" style="flex:1;padding:9px;font-family:monospace">
@@ -2337,7 +2337,7 @@ function paginaSofia(aviso, erro) {
           m.textContent='Salvando…';
           fetch('/sofia/evo-credenciais',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:(e.value||'').trim(), senha:(s.value||'')})})
             .then(function(r){return r.json();}).then(function(j){
-              if(j&&j.ok){ s.value=''; m.innerHTML='✅ Login salvo! Agora clique em <b>🔄 Reiniciar robô</b> (abaixo) para valer.'; }
+              if(j&&j.ok){ s.value=''; m.innerHTML=j.conferido ? '✅ Login salvo e <b>conferido</b>: o robô vai usar exatamente a senha que você digitou ('+j.tamanho+' caracteres). Vale já no próximo job — <b>não precisa reiniciar</b> o robô.' : '✅ E-mail salvo (a senha continua a mesma). Vale já no próximo job.'; }
               else { m.textContent='❌ '+((j&&j.erro)||'não consegui salvar'); }
             }).catch(function(){ m.textContent='❌ erro de rede'; });
         }

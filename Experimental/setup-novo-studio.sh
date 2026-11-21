@@ -208,6 +208,9 @@ set_env() {
   local k="$1" v="$2" f="$3" esc
   [ -n "$v" ] || return 0
   [ -f "$f" ] || return 0
+  # Valor com "#", "$", aspas duplas ou crase vai entre aspas simples: sem elas, quem
+  # lê o .env corta a senha no "#" (o robô entrava no EVO com meia senha).
+  case "$v" in *[#\$\"\`]*) case "$v" in *\'*) ;; *) v="'$v'" ;; esac ;; esac
   esc=$(printf '%s' "$v" | sed -e 's/[\\|&]/\\&/g')
   if grep -qE "^$k=" "$f"; then sed -i "s|^$k=.*|$k=$esc|" "$f"
   else printf '%s=%s\n' "$k" "$v" >> "$f"; fi
