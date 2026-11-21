@@ -802,6 +802,8 @@ function iniciarRodarJobWatcher() {
     historicoExperimentais: { nome: 'Histórico de experimentais (professoras) [manual]', fn: () => require('./historico-experimentais').runHistoricoExperimentais(), timeoutMs: 45 * 60 * 1000 },
     // "Enviar agora" do resumo mensal (Indicadores → Alunas ativas): manda nos grupos sem marcar o mês como enviado
     resumoSemanal:     { nome: 'Resumo da semana no WhatsApp [manual]', fn: (pedido) => require('./resumo-semanal').enviar({ ate: pedido && pedido.ate, teste: true, log }), timeoutMs: 12 * 60 * 1000 },
+    // "↻ Rodar de novo" do Log: refaz o envio automático de hoje que falhou (vale como o envio do dia)
+    resumoSemanalRefazer: { nome: 'Resumo da semana no WhatsApp [manual]', fn: () => require('./resumo-semanal').refazerHoje({ log }), timeoutMs: 12 * 60 * 1000 },
     resumoMensal:      { nome: 'Resumo mensal no WhatsApp [manual]', fn: (pedido) => require('./resumo-mensal').enviar({ mes: pedido && pedido.mes, teste: true, log }), timeoutMs: 12 * 60 * 1000 },
     freeAntecedencia:  { nome: 'Planos FREE — antecedência [manual]', fn: (pedido) => require('./free-antecedencia').runFreeAntecedencia({ dry: !!(pedido && pedido.dry) }) },
     // "↻ Rodar de novo" do Log do painel (falhas de job):
