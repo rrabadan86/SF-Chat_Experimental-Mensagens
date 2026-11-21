@@ -31,6 +31,7 @@ Formato da coluna "Teste": `arquivo.test.js` › título do teste.
 |---|---|---|
 | Retomada: só quem está na janela e sem impedimento | `retomada-sofia.js` | `retomada.test.js` › escolhe só quem está na janela e sem impedimento |
 | Retomada: se a recepção já falou com ela pelo Studio, não envia | `retomada-sofia.js` | `retomada.test.js` › se a recepção já falou com ela pelo Studio, não envia |
+| Resumo da semana: "Rodar de novo" vale como o envio do dia e não repete o que já saiu hoje | `resumo-semanal.js` | `resumo-semana-refazer.test.js` › resumo da semana: rodar de novo manda nos grupos, vale como o envio do dia e não repete |
 | Encerramento: quem virou aluna não recebe | `followup-encerramento.js` | `encerramento.test.js` › quem virou aluna não recebe encerramento |
 | Encerramento: quem agendou de novo depois da mensagem não recebe (vale o registro de agendamentos, mesmo sem etiqueta de "agendou") | `followup-encerramento.js`, `agendou-registro.js` | `encerramento.test.js` › quem agendou de novo depois da mensagem não recebe encerramento — mesmo sem etiqueta de "agendou" |
 | Tags do funil: entrar numa etapa tira a anterior | `contatos.js` | `contatos-mensagens.test.js` › tags do funil: entrar numa etapa tira a anterior, e a tag que chega fica |

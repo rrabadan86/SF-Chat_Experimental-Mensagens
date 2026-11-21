@@ -1244,6 +1244,7 @@ const JOBS_DO_LOG = [
   [/^Saída — não renovou/i, 'saidaGrupos', true, 'Retira dos grupos e manda a mensagem (quem já foi tratada não repete)'],
   [/^Sentimos sua falta/i, 'sentimosFalta', true, 'Sentimos sua falta: quem já recebeu não repete'],
   [/^Resumo do dia/i, 'resumoDia', false, 'Resumo do dia'],
+  [/^Resumo da semana/i, 'resumoSemanalRefazer', true, 'Resumo da semana: manda agora nos grupos; se o de hoje já saiu, não repete'],
   [/^Cobrança de inadimplentes/i, 'inadimplentes', true, 'Cobrança: manda só para quem ainda não foi cobrada hoje'],
   [/^Cobrança — boleto vence hoje/i, 'inadimplentesHoje', true, 'Boleto vence hoje: manda só para quem ainda não recebeu hoje'],
   [/^Planos FREE/i, 'freeAntecedencia', true, 'Planos FREE'],

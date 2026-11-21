@@ -242,6 +242,17 @@ async function enviar({ ate, teste = false, log = console.log } = {}) {
   return res;
 }
 
+// "↻ Rodar de novo" do Log: o envio automático de hoje falhou (ex.: o WhatsApp do
+// robô estava fora). Manda agora PARA VALER — marca como enviado, para o automático
+// não mandar outro mais tarde. Se o de hoje já saiu, não manda de novo.
+async function refazerHoje({ log = console.log } = {}) {
+  if (lerCfg().enviados[rm.agoraSP().dia]) {
+    log('📊 Resumo da semana: o de hoje já foi enviado — não mando de novo.');
+    return [];
+  }
+  return enviar({ log });
+}
+
 // Hora de enviar? Dias e horário do job resumoSemana; tenta até o fim do dia.
 function estaNaHora(cfg) {
   cfg = cfg || lerCfg();
@@ -255,7 +266,7 @@ function estaNaHora(cfg) {
   return true;
 }
 
-module.exports = { lerCfg, salvarCfg, dadosDaSemana, texto, imagemHtml, enviar, estaNaHora, DIAS_LONGO, ARQ_IMG };
+module.exports = { lerCfg, salvarCfg, dadosDaSemana, texto, imagemHtml, enviar, refazerHoje, estaNaHora, DIAS_LONGO, ARQ_IMG };
 
 if (require.main === module) {
   require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
