@@ -210,6 +210,8 @@ function gravarEvoCredenciais(email, senha) {
   // `pm2 restart --update-env`, que copia este ambiente para o robô.
   if (email) process.env.EVO_EMAIL = email;
   if (senha) process.env.EVO_PASSWORD = senha;
+  // Login salvo de novo: o robô volta a tentar entrar (se o EVO tinha recusado a senha).
+  try { require('./evo-login-estado').liberar(); } catch (_) {}
   return { ok: true, conferido: !!senha, tamanho: senha.length };
 }
 

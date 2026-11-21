@@ -80,6 +80,13 @@ function lerTranscricaoProvedor() {
 // nunca volta para a tela — grava só quando vem preenchida (em branco = mantém a
 // atual). Consumido pelo robô/formulário no boot → reiniciar o robô para valer.
 function lerEvoEmail() { return lerEnvVar('EVO_EMAIL', EXPERIMENTAL_ENV_FILE); }
+// O EVO recusou a senha e o robô parou de tentar? → "dd/mm, hh:mm" da recusa ('' se não).
+function evoLoginTravado() {
+  try {
+    const b = require('./evo-login-estado').bloqueio();
+    return b && b.motivo === 'senha' ? new Date(b.em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+  } catch (_) { return ''; }
+}
 function evoSenhaDefinida() { return !!lerEnvVar('EVO_PASSWORD', EXPERIMENTAL_ENV_FILE); }
 // De quantos em quantos SEGUNDOS a aba Conversas se atualiza sozinha. Editável em
 // SoFIA → Configuração → "Jeito de responder". Guardado em data/painel-refresh-seg.txt.
@@ -2279,10 +2286,11 @@ function paginaSofia(aviso, erro) {
     </details>
 
     ${(E._navSess && E._navSess.admin) ? `
-    <details class="acc-sec">
+    <details class="acc-sec"${evoLoginTravado() ? ' open' : ''}>
       <summary class="sec-t" style="cursor:pointer;padding:4px 0">🔑 Credenciais da unidade <small style="font-weight:400;color:var(--cinza)">— login do EVO e chaves de IA (só admin), sem abrir o .env</small></summary>
       <div class="card">
-        <p class="quando" style="margin:0 0 14px">Preencha aqui as credenciais <b>desta unidade</b> — assim não precisa editar o <code>.env</code> no servidor. Cada bloco diz <b>qual processo reiniciar</b> para valer: o <b>robô</b> lê o login do EVO no boot; a <b>SoFIA</b> lê as chaves de IA no boot.</p>
+        <p class="quando" style="margin:0 0 14px">Preencha aqui as credenciais <b>desta unidade</b> — assim não precisa editar o <code>.env</code> no servidor. Cada bloco diz <b>qual processo reiniciar</b> para valer: o login do EVO vale <b>na hora</b> (não precisa reiniciar); a <b>SoFIA</b> lê as chaves de IA no boot.</p>
+        ${evoLoginTravado() ? `<div class="aviso err" style="margin:0 0 14px">🔒 <b>O EVO recusou a senha do robô</b> (${esc(evoLoginTravado())}). O robô <b>parou de tentar entrar</b>, para o EVO não bloquear o usuário — os jobs do EVO não rodam enquanto isso. Confira a senha abaixo e clique em <b>Salvar login</b>: ao salvar, ele volta a tentar no próximo job.</div>` : ''}
 
         <label>Login do robô no EVO ${infoI('É o <b>usuário e senha</b> com que o robô entra no EVO (o mesmo que você usa no site do EVO) — a <b>EVO_EMAIL</b> e a <b>EVO_PASSWORD</b>. <b>Sem eles, os jobs diários do EVO falham</b> (confirmações, presença, aniversários, planilha…). Grava no <code>Experimental/.env</code> e <b>confere</b> se ficou igual ao que você digitou (senha com <b>#</b>, <b>$</b> ou espaço também). Vale <b>já no próximo job</b>, sem reiniciar o robô. Não é o mesmo que o <i>token</i> da API do EVO (esse fica no .env, montado pelo script).')}</label>
         <input type="email" id="evoEmailInput" value="${esc(lerEvoEmail())}" placeholder="email@dominio.com" autocomplete="off" spellcheck="false" style="max-width:600px;padding:9px;margin:0 0 8px">
@@ -2291,7 +2299,7 @@ function paginaSofia(aviso, erro) {
           <button type="button" title="Mostrar/ocultar" onclick="var i=document.getElementById('evoSenhaInput');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'" style="padding:8px 11px">👁</button>
           <button type="button" class="save" style="width:auto;padding:9px 14px" onclick="salvarEvoCred()">Salvar login</button>
         </div>
-        <p class="quando" id="evoCredMsg" style="margin:6px 0 0">Grava em <code>Experimental/.env</code>. Depois clique em <b>🔄 Reiniciar robô</b> (abaixo). Confira o resultado do login em <a href="/?view=saude">Saúde → EVO</a>.</p>
+        <p class="quando" id="evoCredMsg" style="margin:6px 0 0">Grava em <code>Experimental/.env</code> e confere se ficou igual ao digitado. Vale já no próximo job. Confira o resultado do login em <a href="/?view=saude">Saúde → EVO</a>.</p>
 
         <hr style="border:0;border-top:1px solid var(--linha);margin:16px 0">
 
