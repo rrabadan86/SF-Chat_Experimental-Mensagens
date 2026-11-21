@@ -50,6 +50,7 @@ async function nomeDaApi(id) {
     await sleep(4000);
     await require('./evo-login').esperarFormLogin(page);
     await page.click('input#usuario, input[type="email"], input[type="text"]', { clickCount: 3 });
+    require('./evo-login-estado').conferir(); // senha recusada pelo EVO? não insiste (evita bloquear o usuário)
     await page.type('input#usuario, input[type="email"], input[type="text"]', config.evo.email, { delay: 60 });
     await page.click('input#senha, input[type="password"]', { clickCount: 3 });
     await page.type('input#senha, input[type="password"]', config.evo.password, { delay: 60 });

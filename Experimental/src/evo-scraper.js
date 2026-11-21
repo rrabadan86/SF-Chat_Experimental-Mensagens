@@ -197,6 +197,7 @@ class EvoScraper {
 
     // Preenche email
     await this.page.click(emailSelector, { clickCount: 3 });
+    require('./evo-login-estado').conferir(); // senha recusada pelo EVO? não insiste (evita bloquear o usuário)
     await this.page.type(emailSelector, config.evo.email, { delay: 80 });
 
     // Encontra e preenche senha
@@ -244,11 +245,16 @@ class EvoScraper {
     await this.sleep(2500);
     const avisoLogin = await lerAvisos(this.page);
     if (avisoLogin) console.log(`   💬 [login] aviso do EVO: "${avisoLogin}"`);
+    // Usuário/senha recusados: não adianta esperar 30 s nem tentar de novo — para
+    // aqui com a mensagem certa (insistir é o que faz o EVO bloquear o usuário).
+    const loginEstado = require('./evo-login-estado');
+    if (loginEstado.ehRecusa(avisoLogin)) { await loginEstado.registrarRecusa(avisoLogin); loginEstado.conferir(); }
 
     // MFA do EVO (a partir de 30/10/2026): se a tela do autenticador (2FA)
     // aparecer, digita o código gerado do EVO_TOTP_SECRET e confirma. No-op se
     // não houver segredo/MFA — então unidades sem MFA seguem iguais.
     try { await preencher2FA(this.page); } catch (_) {}
+    loginEstado.conferir(); // recusa vista durante o 2FA, ou código que ninguém digitou
 
     // Aguarda navegação para dashboard
     try {
@@ -287,6 +293,7 @@ class EvoScraper {
       this.appOrigin = null;
     }
 
+    loginEstado.liberar();
     console.log('✅ Login realizado com sucesso!');
   }
 

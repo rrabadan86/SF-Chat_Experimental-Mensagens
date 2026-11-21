@@ -94,6 +94,7 @@ test('no painel: a senha salva pelo administrador é a que o robô lê; quem nã
   try {
     const arq = path.join(amb.exp, '.env');
     fs.writeFileSync(arq, `PAINEL_PORT=${porta}\nPAINEL_HOST=127.0.0.1\nPAINEL_USER=dono\nPAINEL_SENHA=${PAINEL}\nSOFIA_DIR=${amb.sofia}\nEVO_EMAIL=velho@exemplo.com.br\nEVO_PASSWORD=${ANTIGA}\n`);
+    amb.gravarSofia('sofia-prompt.txt', 'prompt de teste'); // para a tela de Configuração da SoFIA abrir
     amb.req('usuarios').criar({ usuario: 'recepcao', senha: 'teste-1234', telas: ['sofia_conversas'] });
     const env = { ...process.env }; for (const k of ['PAINEL_DEMO', 'PAINEL_PORT', 'PAINEL_USER', 'PAINEL_SENHA', 'SOFIA_DIR', 'EVO_EMAIL', 'EVO_PASSWORD']) delete env[k];
     painel = spawn(process.execPath, ['-r', path.resolve(__dirname, '..', 'bloqueios.js'), 'src/painel-mensagens.js'], { cwd: amb.exp, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -108,7 +109,15 @@ test('no painel: a senha salva pelo administrador é a que o robô lê; quem nã
     assert.deepStrictEqual(roboLe(), ['velho@exemplo.com.br', ANTIGA]);
 
     const adm = await entrar(porta, 'dono', PAINEL);
+    // o EVO recusou a senha: o painel mostra o aviso (na tela do login e na do código) e os jobs não entram
+    const trava = path.join(amb.data, 'evo-login-recusado.json');
+    fs.writeFileSync(trava, JSON.stringify({ motivo: 'senha', em: Date.now() + 2000, texto: 'Invalid username and/or password.' }));
+    assert.match((await pedir(porta, 'GET', '/sofia', adm)).corpo, /O EVO recusou a senha do robô/);
+    assert.match((await pedir(porta, 'GET', '/?view=config', adm)).corpo, /O EVO recusou a senha do robô/);
     const r = await pedir(porta, 'POST', '/sofia/evo-credenciais', adm, corpo);
+    // salvar o login libera o robô para tentar de novo
+    assert.strictEqual(fs.existsSync(trava), false, 'salvar o login tira a trava');
+    assert.doesNotMatch((await pedir(porta, 'GET', '/sofia', adm)).corpo, /O EVO recusou a senha do robô/);
     assert.deepStrictEqual(JSON.parse(r.corpo), { ok: true, conferido: true, tamanho: nova.length });
     assert.deepStrictEqual(roboLe(), ['robo@exemplo.com.br', nova]);
     assert.ok(!r.corpo.includes('Slim'), 'a resposta não devolve a senha');

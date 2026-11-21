@@ -25,6 +25,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const estado = require('./evo-login-estado');
 
 // Arquivos de "aperto de mão" (handshake) entre o ROBÔ e o PAINEL. Ficam na pasta
 // data/ do Experimental (compartilhada pelos dois processos, fora do Git).
@@ -146,6 +147,8 @@ async function digitarEConfirmar(page, sel, codigo) {
   await espera(2500);
   const aviso = await lerAvisos(page);
   const aberta = await page.$(sel).then((el) => el && el.boundingBox()).catch(() => null);
+  // A tela do código pede a senha junto: se o EVO recusou a senha aqui, para de insistir.
+  if (estado.ehRecusa(aviso)) await estado.registrarRecusa(aviso);
   console.log(`   💬 [2FA] após enviar: ${aviso ? 'aviso do EVO: "' + aviso + '"' : 'sem aviso'} · caixa do código ${aberta ? 'AINDA ABERTA' : 'fechou'}`);
 }
 
@@ -210,6 +213,23 @@ async function aguardarCodigoHumano(page, sel, { esperaMs = 240000, motivo = 'em
   }
   console.log('   ⏱️  Ninguém digitou o código no painel a tempo — seguindo (o login pode falhar).');
   limparHandshake();
+  estado.registrarSemCodigo(); // este job não pede outro código logo em seguida
+  return false;
+}
+
+// Logo depois do ENTRAR o EVO mostra por poucos segundos "Invalid username and/or
+// password". Olha por até 2,5 s (para na hora se entrou ou se apareceu a tela do
+// código). Achou a recusa → anota em evo-login-estado (os jobs param de insistir).
+async function notarRecusa(page, ms = 2500) {
+  const t0 = Date.now();
+  do {
+    const aviso = await lerAvisos(page);
+    if (estado.ehRecusa(aviso)) { await estado.registrarRecusa(aviso); return true; }
+    const seguiu = await page.evaluate(() => /\/inicio\/|\/app\//.test(window.location.hash)
+      || !!document.querySelector('input#codigo, input[name*="codig" i], input[formcontrolname*="codig" i]')).catch(() => false);
+    if (seguiu) return false;
+    await espera(300);
+  } while (Date.now() - t0 < ms);
   return false;
 }
 
@@ -218,6 +238,8 @@ async function aguardarCodigoHumano(page, sel, { esperaMs = 240000, motivo = 'em
 //   • e-mail, ou sem TOTP, ou TOTP recusado → pede o código pelo painel (plano B).
 // Seguro: sem MFA configurado (sem segredo e sem EVO_2FA_PAINEL), é no-op imediato.
 async function preencher2FA(page, { timeoutMs = 8000, permitirPainel, esperaPainelMs } = {}) {
+  // Antes de tudo: o EVO recusou usuário/senha? Anota, avisa e não tenta mais nada.
+  if (await notarRecusa(page)) return false;
   const secret = process.env.EVO_TOTP_SECRET || '';
   const painelLigado = /^(1|true|sim)$/i.test(process.env.EVO_2FA_PAINEL || '');
   // Unidade sem NENHUM MFA configurado → não perde tempo procurando a tela.
@@ -256,4 +278,4 @@ async function preencher2FA(page, { timeoutMs = 8000, permitirPainel, esperaPain
   return false;
 }
 
-module.exports = { gerarTOTP, preencher2FA, lerAvisos, PEDIDO_FILE, CODIGO_FILE, limparHandshake };
+module.exports = { gerarTOTP, preencher2FA, notarRecusa, lerAvisos, PEDIDO_FILE, CODIGO_FILE, limparHandshake };

@@ -219,6 +219,7 @@ async function runResumoDia() {
     catch (e) {
       ultimoErro = e;
       console.log(`   ⚠️  Tentativa ${i}/3 falhou: ${e.message}`);
+      if (e && e.evoLogin) break; // senha recusada / código não digitado: tentar de novo só piora
       if (i < 3) { console.log('   ⏳ aguardando 30s antes de tentar de novo...'); await sleep(30000); }
     }
   }

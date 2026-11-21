@@ -46,7 +46,12 @@ function barraTeste() {
 // robô o recebe (via arquivo compartilhado data/evo-2fa-codigo.json). O caminho
 // principal (autenticador/TOTP) é automático — este campo é só a rede de segurança.
 function card2FA() {
-  return `<div class="card" id="card2fa" style="border-left:4px solid #d7d2cb">
+  // O EVO recusou a SENHA do robô (não é caso de código): avisa aqui também, que é
+  // onde a pessoa vem quando o robô não entra no EVO.
+  let travado = null; try { travado = require('./evo-login-estado').bloqueio(); } catch (_) {}
+  const avisoSenha = travado && travado.motivo === 'senha'
+    ? `<div class="aviso err" style="margin:0 0 12px">🔒 <b>O EVO recusou a senha do robô.</b> O robô parou de tentar entrar, para o EVO não bloquear o usuário — os jobs do EVO não rodam enquanto isso. Confira a senha em <a href="/sofia"><b>SoFIA → Configuração → 🔑 Credenciais da unidade</b></a> (só o administrador) e clique em <b>Salvar login</b>.</div>` : '';
+  return `${avisoSenha}<div class="card" id="card2fa" style="border-left:4px solid #d7d2cb">
     <div class="chead" style="margin-bottom:2px"><h2 style="font-size:.98rem">🔐 Código do EVO (2FA)</h2><span id="c2faSt" class="pill" style="margin-left:auto;font-size:var(--fs-xs)">nada pendente</span></div>
     <p class="quando" id="c2faHint" style="margin:2px 0 8px">Só é usado quando o robô precisa entrar no EVO e o código vem por <b>e-mail</b>. Quando isso acontecer, aparece um aviso aqui (e no seu celular): pegue o código no e-mail do usuário do robô e digite abaixo. No dia a dia o robô resolve o 2FA sozinho (pelo autenticador) e este campo fica quieto.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">

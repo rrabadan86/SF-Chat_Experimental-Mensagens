@@ -794,7 +794,7 @@ function iniciarRodarJobWatcher() {
     aniversarioEx:     { nome: 'Aniversário ex-alunas [manual]', fn: () => require('./aniversario-ex').runAniversarioEx() },
     renovacao:         { nome: 'Renovação [manual]',          fn: () => require('./renovar-contratos').runRenovacao() },
     renovacoesMesGrupo:{ nome: 'Contratos a vencer no mês [manual]', fn: (pedido) => require('./renovacoes-mes-grupo').runRenovacoesMesGrupo({ mes: pedido && pedido.mes }) },
-    resumoDia:         { nome: 'Resumo do dia [manual]',        fn: () => require('./resumo-dia').runResumoDia() },
+    resumoDia:         { nome: 'Resumo do dia [manual]',        fn: () => require('./resumo-dia').runResumoDia(), timeoutMs: 12 * 60 * 1000 }, // cabe a espera do código do EVO (4 min)
     ausentes:          { nome: 'Ausentes 10 dias [manual]',     fn: () => require('./ausentes-10-dias').runAusentes10Dias() },
     planilha:          { nome: 'Leitura das alunas ativas — tags Aluna/Ex-aluna + planilha [manual]', fn: () => require('./planilha-aniversarios').runPlanilhaAniversarios(), timeoutMs: 20 * 60 * 1000 },
     // abre a ficha de cada devedora no EVO (pode passar dos 5 min padrão)
