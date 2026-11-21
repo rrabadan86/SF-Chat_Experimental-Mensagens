@@ -9,6 +9,22 @@
  * caiu depois (DISPLAY definido, mas sem o socket /tmp/.X11-unix/X<n>).
  */
 let avisou = '';
+
+// Há um servidor de tela (Xvfb/Xorg) rodando para o display :<n>? → true | false |
+// null (não deu para saber — sem /proc legível; aí não arrisca dizer que morreu).
+function servidorDeTelaVivo(n, lerCmdlines) {
+  let cmds;
+  try {
+    cmds = lerCmdlines ? lerCmdlines() : (() => {
+      const fs = require('fs');
+      return fs.readdirSync('/proc').filter((d) => /^\d+$/.test(d)).map((pid) => { try { return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8'); } catch (_) { return ''; } });
+    })();
+  } catch (_) { return null; }
+  if (!Array.isArray(cmds) || !cmds.length) return null;
+  const alvo = ':' + n;
+  return cmds.some((c) => { const p = String(c).split('\0'); return /(^|\/)(Xvfb|Xorg|X|Xwayland|Xephyr|Xvnc|Xtigervnc)$/.test(p[0] || '') && p.includes(alvo); });
+}
+
 function querTela() {
   if (process.env.HEADLESS !== 'false') return false;
   if (process.platform !== 'linux' || process.env.WAYLAND_DISPLAY) return true;
@@ -21,6 +37,9 @@ function querTela() {
     const m = /^[^:]*:(\d+)/.exec(disp);
     if (m && !disp.split(':')[0]) {
       try { require('fs').statSync('/tmp/.X11-unix/X' + m[1]); } catch (_) { motivo = `a tela virtual ${disp} não está no ar (o Xvfb caiu?)`; }
+      // O arquivo da tela pode ficar para trás depois de o Xvfb morrer (ex.: falta de
+      // memória): confere se ainda há um servidor de tela rodando para esse número.
+      if (!motivo && servidorDeTelaVivo(m[1]) === false) motivo = `a tela virtual ${disp} não está mais rodando (o Xvfb morreu e deixou o arquivo)`;
     }
   }
   if (motivo) {
@@ -34,4 +53,4 @@ function querTela() {
   }
   return true;
 }
-module.exports = { querTela };
+module.exports = { querTela, servidorDeTelaVivo };

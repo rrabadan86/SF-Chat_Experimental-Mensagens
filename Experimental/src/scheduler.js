@@ -1024,7 +1024,18 @@ async function main() {
     console.log('✅ WhatsApp pronto — jobs liberados para disparar.\n');
   } catch (e) {
     logError('Falha ao iniciar o cliente do WhatsApp', e);
-    console.log('⚠️  Seguindo assim mesmo; os jobs vão tentar reconectar.\n');
+    console.log('⚠️  Seguindo assim mesmo; tento reconectar sozinho em 2 min (e os jobs também tentam).\n');
+    // Não espera um job precisar do WhatsApp: tenta de novo em segundo plano. No boot
+    // o servidor está carregado (todos os processos sobem juntos); minutos depois costuma passar.
+    (async () => {
+      for (let i = 1; i <= 4; i++) {
+        await dormir(2 * 60 * 1000);
+        if (wa.isReady()) return;
+        try { await wa.initWhatsApp(); log(`✅ WhatsApp conectou na ${i}ª tentativa extra depois do boot.`); return; }
+        catch (err) { log(`⚠️  WhatsApp ainda não conectou (tentativa extra ${i}/4): ${(err && err.message) || err}`); }
+      }
+      logError('WhatsApp do robô não conectou depois de 5 tentativas', new Error('reinicie o robô fora do horário de envios; se pedir QR, escaneie pela aba WhatsApp do painel'));
+    })();
   }
 
   // Ponte de "enviar teste" do painel (lê data/teste-envio.json e dispara).
