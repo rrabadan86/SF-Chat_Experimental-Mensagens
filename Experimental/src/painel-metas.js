@@ -25,7 +25,7 @@ const fmtDia = (iso) => { const p = String(iso || '').slice(0, 10).split('-'); r
 const nomeMes = (k, longo) => ativasDados.rotuloPeriodo({ k }, 'mes', longo !== false);
 const taxaSaida = (p) => p && p.ini ? Math.round(p.s * 1000 / p.ini) / 10 : null;
 
-// Números do Funil de um intervalo (todos os canais). null se o histórico de tags
+// Números do Funil de um intervalo (todos os canais). null se o registro de agendamentos
 // não cobre o começo do intervalo — "0 agendaram" seria falta de registro.
 function funilDe(de, ate) {
   let n = null;
@@ -80,8 +80,17 @@ function rotina(forcar) {
     const fech = metas.fechamentos(), pos = metas.posicoes();
     // só meses inteiros no histórico (o primeiro pode começar no meio) e no máximo 12 para trás
     for (const p of meses.slice(1, -1).slice(-12)) {
-      if (fech[p.k] || !metas.podeFechar(p.k, hojeIso, tol)) continue;
       const fim = `${p.k}-${String(metas.diasNoMes(p.k)).padStart(2, '0')}`;
+      // Mês fechado SEM o funil (o histórico de agendamentos não alcançava o mês
+      // na hora de fechar): se agora alcança, completa só essa parte da foto.
+      if (fech[p.k]) {
+        if (fech[p.k].funil == null) {
+          const fuDepois = funilDe(`${p.k}-01`, fim);
+          if (fuDepois) metas.completar(p.k, { funil: fuDepois }, (foto) => ({ custo: custoDoMes(p.k, fuDepois, foto.ativas ? foto.ativas.novas : p.n) }));
+        }
+        continue;
+      }
+      if (!metas.podeFechar(p.k, hojeIso, tol)) continue;
       const fu = funilDe(`${p.k}-01`, fim);
       metas.fechar(p.k, {
         ativas: { ini: p.ini, fim: p.fim, entraram: p.e, novas: p.n, sairam: p.s, taxaSaida: taxaSaida(p) },

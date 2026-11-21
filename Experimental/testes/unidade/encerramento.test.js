@@ -42,6 +42,20 @@ test('quem virou aluna não recebe encerramento', async () => {
   } finally { volta(); amb.limpar(); }
 });
 
+test('quem agendou de novo depois da mensagem não recebe encerramento — mesmo sem etiqueta de "agendou"', async () => {
+  const amb = ambienteIsolado(); const volta = semEsperas();
+  try {
+    registro(amb, [['5562981110001', 'Ana', 20 * HORA, 'followup'], ['5562981110002', 'Bia', 20 * HORA, 'followup']]);
+    amb.gravarData('tags-config.json', {}); // unidade sem etiqueta com o gatilho "agendou"
+    // a Ana agendou pelo Formulário 2 h atrás (depois do follow-up); a Bia, não
+    amb.gravarSofia('sofia-agendou.jsonl', JSON.stringify({ telefone: '5562981110001', nome: 'Ana', when: '2026-12-01 07:00', canal: 'formulario', em: Date.now() - 2 * HORA }) + '\n');
+    amb.req('painel-automacao').processarAgendamentos();
+    const wa = amb.whatsappFalso();
+    await amb.req('followup-encerramento').runEncerramento({ log: () => {} });
+    assert.deepStrictEqual(wa.enviados.map(e => e.tel.slice(-4)), ['0002']);
+  } finally { volta(); amb.limpar(); }
+});
+
 test('sem conseguir ler a conversa, não envia', async () => {
   const amb = ambienteIsolado(); const volta = semEsperas();
   try {

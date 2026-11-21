@@ -1004,11 +1004,17 @@ function registrarTagLog(chave, tag, motivo, por, acao, em, canal) {
   } catch (_) { /* best-effort */ }
 }
 // Devolve os últimos eventos por conversa: { <chave-8díg>: [ {tag,motivo,por,acao,em,canal}, ... ] }.
-function lerTagLog() {
+// Por padrão lê só o FIM do arquivo (últimas 8000 linhas, 30 eventos por conversa):
+// é o que a linha do tempo da conversa precisa, e ela é lida o tempo todo.
+// `{ tudo: true }` lê o arquivo INTEIRO — para quem conta (agendou-registro.js): uma
+// troca de etiqueta em lote em milhares de contatos enche as 8000 linhas de uma vez
+// e, lendo só o fim, o histórico anterior "sumia" das contas.
+function lerTagLog(opcoes) {
+  const tudo = !!(opcoes && opcoes.tudo);
   const mapa = {};
   let linhas = [];
   try { linhas = fs.readFileSync(F.tagLog, 'utf8').split('\n'); } catch (_) { return mapa; }
-  if (linhas.length > 8000) linhas = linhas.slice(-8000); // performance
+  if (!tudo && linhas.length > 8000) linhas = linhas.slice(-8000); // performance
   for (const l of linhas) {
     const s = l.trim(); if (!s) continue;
     let o; try { o = JSON.parse(s); } catch (_) { continue; }
@@ -1016,7 +1022,7 @@ function lerTagLog() {
     if (!k8) continue;
     (mapa[k8] = mapa[k8] || []).push({ tag: o.tag || '', motivo: o.motivo || '', por: o.por || '', acao: (o.acao === 'remove' ? 'remove' : 'add'), em: Number(o.em) || 0, canal: String(o.canal || '').trim().toLowerCase() });
   }
-  for (const k in mapa) mapa[k] = mapa[k].slice(-30); // no máx 30 eventos por conversa
+  if (!tudo) for (const k in mapa) mapa[k] = mapa[k].slice(-30); // no máx 30 eventos por conversa
   return mapa;
 }
 

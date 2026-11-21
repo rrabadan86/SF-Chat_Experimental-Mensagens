@@ -56,7 +56,7 @@ function _conversaEmAndamento(tel) {
   return false;
 }
 // Aplica UMA tag a um contato e (se configurado) enfileira o aviso por WhatsApp.
-function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra, canal }) {
+function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra, canal, em }) {
   const tel = String(telefone || '').replace(/\D/g, '');
   if (!tel || !tag) return;
   // Gatilho 'novo' (lead novo → "Contato inicial"): se a pessoa JÁ está no CRM
@@ -78,7 +78,8 @@ function aplicarAutomacao({ telefone, nome, tag, avisarWpp, motivo, extra, canal
   // automação (igual aos marcadores de assumir/encerrar) — ajuda a diagnosticar.
   // Grava TAMBÉM o canal do agendamento (sofia/formulario/express) no evento, para
   // o Funil saber o canal DAQUELE agendamento (não um valor fixo por telefone).
-  try { sofia.registrarTagLog(tel, tag, motivo, '', 'add', undefined, (motivo === 'agendou' ? canal : '')); } catch (_) {}
+  // (no 'agendou' o instante é o do AGENDAMENTO, não o de quando o painel o processou)
+  try { sofia.registrarTagLog(tel, tag, motivo, '', 'add', (motivo === 'agendou' ? em : undefined), (motivo === 'agendou' ? canal : '')); } catch (_) {}
   // Tag configurada para encerrar a conversa (ex.: "Sem interesse") → fecha (🔒)
   // como o cadeado do painel: o follow-up para de incomodar e a SoFIA recomeça
   // do zero se a aluna voltar a escrever. Usa a mesma chave que o feed/inbox usa.
@@ -176,6 +177,9 @@ function processarAgendamentos() {
   let evs = [];
   try { evs = sofia.consumirAgendamentos(); } catch (_) { return; }
   if (!evs.length) return;
+  // Anota cada agendamento NA HORA, antes de etiqueta ou aviso: é daqui que o Funil,
+  // as Metas e o resumo da semana contam (não depende de etiqueta configurada).
+  try { require('./agendou-registro').registrar(evs); } catch (e) { console.log('[agendou] não consegui anotar o agendamento:', e && e.message); }
   try { fuMarcarAgendou(evs.map(ev => ev.telefone)); } catch (_) {} // registra p/ o follow-up NÃO incomodar quem agendou
   try { fuMarcarCanal(evs); } catch (_) {} // guarda o canal (sofia/formulario/express) p/ o Funil não contar Express
   try { fuMarcarAula(evs); } catch (_) {} // guarda dia/hora da aula agendada (mostrado no Funil)
@@ -201,7 +205,7 @@ function processarAgendamentos() {
   if (!autos.length) return;
   for (const ev of evs) {
     const nome = ev.nome || '';
-    for (const a of autos) aplicarAutomacao({ telefone: ev.telefone, nome, tag: a.tag, avisarWpp: a.avisarWpp, motivo: 'agendou', extra: ev.when ? `📅 ${ev.when}` : '', canal: ev.canal });
+    for (const a of autos) aplicarAutomacao({ telefone: ev.telefone, nome, tag: a.tag, avisarWpp: a.avisarWpp, motivo: 'agendou', extra: ev.when ? `📅 ${ev.when}` : '', canal: ev.canal, em: ev.em });
   }
 }
 

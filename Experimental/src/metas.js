@@ -158,8 +158,23 @@ function fechar(mes, dados, agora) {
   gravarJson(ARQ_FECH, o);
   return true;
 }
+// Preenche num mês JÁ fechado só o que ficou VAZIO (null) na foto — ex.: o funil de um
+// mês fechado quando o histórico de agendamentos estava incompleto. O que já tem
+// número não muda. `derivados` (opcional, função) recebe a foto já completada e devolve
+// o que depende do que foi preenchido (ex.: o custo por agendamento) — só é gravado se
+// algo foi completado.
+function completar(mes, dados, derivados) {
+  const o = fechamentos();
+  if (!o[mes] || !dados) return false;
+  let mudou = false;
+  for (const k of Object.keys(dados)) if (o[mes][k] == null && dados[k] != null) { o[mes][k] = dados[k]; mudou = true; }
+  if (!mudou) return false;
+  if (typeof derivados === 'function') Object.assign(o[mes], derivados(o[mes]) || {});
+  gravarJson(ARQ_FECH, o);
+  return true;
+}
 
 module.exports = {
   ARQ_METAS, ARQ_POS, ARQ_FECH, CAMPOS, ehMes, mesSeguinte, mesAnterior, diasNoMes,
-  lerMetas, metasDoMes, salvarMetas, investimentoDoMes, salvarInvestimento, custoAquisicao, numero, ritmo, posicoes, registrarPosicao, fechamentos, diaDeFechar, podeFechar, fechar,
+  lerMetas, metasDoMes, salvarMetas, investimentoDoMes, salvarInvestimento, custoAquisicao, numero, ritmo, posicoes, registrarPosicao, fechamentos, diaDeFechar, podeFechar, fechar, completar,
 };

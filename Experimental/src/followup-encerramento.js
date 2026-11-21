@@ -76,12 +76,10 @@ function virouAluna(tel) {
 }
 
 // Agendou de novo depois do envio? (todo agendamento — formulário, SoFIA, Express —
-// fica no histórico de tags com motivo 'agendou').
+// é anotado na hora em agendou-registro.js; não depende de etiqueta configurada nem
+// do tamanho do histórico de etiquetas.)
 function agendouDepois(tel, desde) {
-  try {
-    const evs = require('./sofia-editor').lerTagLog()[String(tel || '').replace(/\D/g, '').slice(-8)] || [];
-    return evs.some(e => e.acao === 'add' && e.motivo === 'agendou' && (e.em || 0) >= desde);
-  } catch (_) { return false; }
+  try { return require('./agendou-registro').agendouDesde(tel, desde); } catch (_) { return false; }
 }
 
 // Escreveu para a SoFIA depois do envio? (a retomada sai pelo Studio, mas ela pode responder à SoFIA)
