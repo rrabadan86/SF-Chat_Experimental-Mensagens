@@ -235,6 +235,10 @@ function criarClient() {
   return new Client({
     authStrategy: new LocalAuth({ dataPath: AUTH_DIR }),
     webVersionCache: { type: 'none' },
+    // Espera do WhatsApp Web abrir e conectar. O padrão da biblioteca (30 s) estoura
+    // em servidor com várias unidades reiniciando juntas (vários Chromium ao mesmo
+    // tempo): "Waiting failed: 30000ms exceeded" e o robô ficava sem WhatsApp.
+    authTimeoutMs: parseInt(process.env.WA_AUTH_TIMEOUT_MS || '120000', 10) || 120000,
     userAgent: WA_UA,
     puppeteer: {
       headless: HEADLESS,
@@ -422,7 +426,7 @@ function initWhatsApp() {
   resolverVersaoFixa(client)
     .catch(() => {})
     .then(() => client.initialize())
-    .catch((e) => {
+    .catch(async (e) => {
     const msg = (e && e.message) || String(e);
     if (/already running/i.test(msg)) {
       log('❌ Já existe uma sessão do WhatsApp aberta para este perfil.');
@@ -431,10 +435,23 @@ function initWhatsApp() {
     } else {
       log('❌ Falha ao inicializar o WhatsApp: ' + msg);
     }
+    // Fecha o navegador desta tentativa ANTES de liberar outra: ele ficava aberto,
+    // e cada tentativa nova abria MAIS um Chromium no mesmo perfil do WhatsApp — os
+    // dois brigavam pela sessão e o robô não conectava mais até ser reiniciado.
+    await fecharClienteMorto(client);
     initPromise = null; // permite nova tentativa depois
     if (rejectInit) rejectInit(new Error(msg));
   });
   return initPromise;
+}
+
+// Encerra um cliente que não chegou a conectar: destroy() com prazo e, se o
+// navegador continuar vivo, mata o processo dele.
+async function fecharClienteMorto(c) {
+  if (!c) return;
+  const proc = (() => { try { return c.pupBrowser && c.pupBrowser.process && c.pupBrowser.process(); } catch (_) { return null; } })();
+  try { await Promise.race([c.destroy(), new Promise((r) => setTimeout(r, 15000))]); } catch (_) { /* já morto / nem abriu */ }
+  try { if (proc && proc.exitCode == null && !proc.killed) proc.kill('SIGKILL'); } catch (_) {}
 }
 
 function isReady() { return pronto; }
