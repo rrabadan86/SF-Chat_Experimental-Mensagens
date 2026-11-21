@@ -60,26 +60,20 @@ function salvarCfg(mudar) {
   return lerCfg();
 }
 
-// ── agendamentos por canal (mesma fonte do Funil: o histórico de tags) ───────
+// ── agendamentos por canal (mesma fonte do Funil: agendou-registro.js) ───────
 function agendamentosPorJanela(janelas) {
-  let tagLog = {}, agTags = [], canalMap = {};
-  try { tagLog = require('./sofia-editor').lerTagLog() || {}; } catch (_) {}
-  try { agTags = require('./contatos').tagsPorGatilho('agendou').map(a => String(a.tag || '').trim()); } catch (_) {}
+  let pessoas = {}, canalMap = {};
+  try { pessoas = require('./agendou-registro').porPessoa() || {}; } catch (_) {}
   try { canalMap = JSON.parse(fs.readFileSync(path.join(require('./sofia-editor').DIR, 'sofia-agendaram-canal.json'), 'utf8')) || {}; } catch (_) {}
   const diaDe = (ms) => { try { return new Date(Number(ms)).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); } catch (_) { return ''; } };
   return janelas.map(([de, ate]) => {
     const r = { total: 0, sofia: 0, formulario: 0, express: 0, outro: 0 };
-    for (const l8 in tagLog) {
-      // último agendamento da pessoa DENTRO da janela (e o canal daquele evento)
+    for (const l8 in pessoas) {
+      // último agendamento da pessoa DENTRO da janela (e o canal daquele agendamento)
       let ult = null;
-      for (const e of tagLog[l8]) {
-        const ehAg = e.acao === 'add' && (e.motivo === 'agendou' || agTags.includes(String(e.tag || '').trim()));
-        if (!ehAg || !e.em) continue;
-        const d = diaDe(e.em);
-        if (d >= de && d <= ate && (!ult || e.em > ult.em)) ult = e;
-      }
+      for (const e of pessoas[l8]) { const d = diaDe(e.em); if (d >= de && d <= ate) ult = e; }
       if (!ult) continue;
-      const canal = ult.canal || String(canalMap[l8] || '').trim();
+      const canal = ult.manual ? '' : (ult.canal || String(canalMap[l8] || '').trim());
       r.total++; r[r[canal] != null ? canal : 'outro']++;
     }
     return r;

@@ -13,6 +13,7 @@ const bookings = require('./bookings');
 const autoTagAlunas = require('./auto-tag-alunas');
 const origens = require('./origens');
 const sofia = require('./sofia-editor');
+const agRegistro = require('./agendou-registro');
 const contatos = require('./contatos');
 const config = require('./config');
 const ativasDados = require('./ativas-dados');
@@ -789,9 +790,12 @@ function paginaSofiaFunil(params) {
   // agendamento no tagLog (abaixo); este mapa por telefone só é usado quando o
   // evento não tem canal gravado (agendamentos de antes dessa melhoria).
   let canalMap = {}; try { const m = fuLerJson(FU_AGENDOU_CANAL_FILE, {}); if (m && typeof m === 'object' && !Array.isArray(m)) canalMap = m; } catch (_) {}
-  let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => a.tag); } catch (_) {}
-  const agTagsLc = agTags.map(t => String(t || '').trim());
-  let tagLogMap = {}; try { tagLogMap = sofia.lerTagLog() || {}; } catch (_) {}
+  // Todos os agendamentos, por pessoa (registro próprio + histórico de etiquetas
+  // inteiro + última aula marcada) — ver agendou-registro.js.
+  let agReg = { pessoas: {}, semData: [], inicio: 0 }; try { agReg = agRegistro.tudo() || agReg; } catch (_) {}
+  const agPessoas = agReg.pessoas;
+  // "Tudo" diz desde quando há registro (antes disso não há o que contar).
+  if (!custom && per === '0' && agReg.inicio) rotulo = 'desde ' + new Date(agReg.inicio).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   let contatosMap = {}; try { contatosMap = contatos.carregar() || {}; } catch (_) {}
   const last8 = (k) => String(k).replace(/\D/g, '').slice(-8);
   const canalDe = (k) => String(canalMap[last8(k)] || '').trim();
@@ -803,27 +807,19 @@ function paginaSofiaFunil(params) {
     const n = (c && c.nome || '').trim(); if (n) return n;
     return last8(k);
   };
-  // Instante + CANAL do agendamento DENTRO do período. Lê o tagLog e pega a última
-  // aplicação (acao add) de uma tag de agendamento QUE CAIU NO PERÍODO. Conta por
-  // DATA DO AGENDAMENTO e usa o canal DAQUELE evento. Quem agendou no período e
-  // remarcou DEPOIS continua contando aqui (antes sumia: só valia o último de todos,
-  // e o número de um período antigo encolhia com o tempo). `ultimo` = este é também
-  // o agendamento mais recente da pessoa.
-  const ehAgEv = (e) => e && e.acao === 'add' && e.em && (e.motivo === 'agendou' || agTagsLc.includes(String(e.tag || '').trim()));
+  // Instante + CANAL do agendamento DENTRO do período: o último agendamento da
+  // pessoa QUE CAIU NO PERÍODO. Conta por DATA DO AGENDAMENTO e usa o canal DAQUELE
+  // agendamento. Quem agendou no período e remarcou DEPOIS continua contando aqui
+  // (antes sumia: só valia o último de todos, e o número de um período antigo
+  // encolhia com o tempo). `ultimo` = este é também o agendamento mais recente dela.
   const agNoIntervalo = (k, cabe) => {
-    const evs = tagLogMap[last8(k)] || [];
-    let ult = 0, canal = '', por = '', maior = 0;
-    for (const e of evs) {
-      if (!ehAgEv(e)) continue;
-      if (e.em > maior) maior = e.em;
-      if (e.em <= ult || !cabe(e.em)) continue;
-      ult = e.em; canal = String(e.canal || '').trim(); por = '';
-      // Tag de "agendou" posta À MÃO em Contatos (na ficha ou em lote): não
-      // veio de um agendamento do sistema — mostra como "Manual" e por quem.
-      if (!canal && e.motivo === 'manual') { canal = 'manual'; por = String(e.por || '').trim(); }
-    }
-    if (!ult) return null;
-    return { em: ult, canal, por, ultimo: ult === maior };
+    const evs = agPessoas[last8(k)] || [];
+    let e = null;
+    for (const x of evs) if (cabe(x.em)) e = x; // em ordem de data: fica o último que cabe
+    if (!e) return null;
+    // Tag de "agendou" posta À MÃO em Contatos (na ficha ou em lote): não
+    // veio de um agendamento do sistema — mostra como "Manual" e por quem.
+    return { em: e.em, canal: e.manual ? 'manual' : e.canal, por: e.manual ? e.por : '', ultimo: e === evs[evs.length - 1], when: e.when || '' };
   };
   const agendouEmNoPeriodo = (k) => agNoIntervalo(k, dentroMs);
   const rotCanal = (c, por) => c === 'manual' ? `✍️ Tag posta à mão${por ? ' por ' + esc(por) : ''}` : ({ sofia: '🤖 SoFIA', formulario: '📲 Formulário', express: '🏪 Express' }[c] || '— sem canal');
@@ -848,19 +844,23 @@ function paginaSofiaFunil(params) {
   const cont8 = {};
   for (const t in contatosMap) { const l = last8(t); if (l && !cont8[l]) cont8[l] = t; }
   // Agendamentos do período, de QUALQUER canal: cada agendamento (SoFIA, Formulário
-  // ou Express) aplica a tag de "agendou" e fica no histórico de tags com o canal.
+  // ou Express) é anotado na hora, com o canal (agendou-registro.js).
   const todosAg = [];
   // Quem foi EXCLUÍDO da aba Contatos (ex.: testes) sai do funil — o histórico
   // de tags continua guardado, mas não conta mais. (Se o CRM não carregar, não filtra.)
   const temCrm = Object.keys(cont8).length > 0;
-  for (const l8 in tagLogMap) {
-    const ag = agendouEmNoPeriodo(l8);
+  // Em "Tudo" entram também os agendamentos de que não sobrou a data (a pessoa está
+  // na lista de quem agendou, mas não há registro de quando) — num período com data
+  // de início não dá para saber se cabem.
+  const semDataAg = (!custom && per === '0') ? agReg.semData : [];
+  for (const l8 of [...Object.keys(agPessoas), ...semDataAg.map(x => x.l8)]) {
+    const ag = agPessoas[l8] ? agendouEmNoPeriodo(l8) : { em: 0, canal: (semDataAg.find(x => x.l8 === l8) || {}).canal || '', por: '', ultimo: true, when: '', semData: true };
     if (!ag) continue;
     if (temCrm && !cont8[l8]) continue;
     const ib = inbox8[l8];
     const canal = ag.canal || canalDe(l8) || (ib && conversou(ib.c) ? 'sofia' : '');
     const tel = (ib && ib.k) || cont8[l8] || l8;
-    todosAg.push({ nome: nomeDe(tel, ib && ib.c), canal, por: canal === 'manual' ? ag.por : '', em: ag.em, tel, ultimo: ag.ultimo });
+    todosAg.push({ nome: nomeDe(tel, ib && ib.c), canal, por: canal === 'manual' ? ag.por : '', em: ag.em, tel, ultimo: ag.ultimo, when: ag.when || '', semData: !!ag.semData });
     // quem agendou pela SoFIA no período conversou no período (garante que a etapa
     // de baixo do funil esteja sempre contida na de cima)
     if (canal === 'sofia') escreveu.add(l8);
@@ -875,18 +875,17 @@ function paginaSofiaFunil(params) {
   const agSofia = porCanal.sofia;
   // Comparação com o período ANTERIOR de mesmo tamanho (7 dias × os 7 anteriores…):
   // conta o que o funil mostraria no fim daquele período — o último agendamento de cada
-  // pessoa até aquela data. Só aparece quando o histórico de tags cobre o período todo
+  // pessoa até aquela data. Só aparece quando o registro de agendamentos cobre o período todo
   // (senão "0 antes" seria falta de registro, não queda de verdade).
   let agAntes = null;
   if (iniD && fimD) {
     try {
       const nDias = Math.round((new Date(fimD + 'T12:00:00') - new Date(iniD + 'T12:00:00')) / 86400e3) + 1;
       const pFim = menosDias(iniD, 1), pIni = menosDias(iniD, nDias);
-      let primeiro = Infinity, n = 0;
-      for (const l8 in tagLogMap) for (const e of (tagLogMap[l8] || [])) if (e && e.em && e.em < primeiro) primeiro = e.em;
+      const primeiro = agReg.inicio || Infinity; let n = 0;
       if (nDias >= 1 && nDias <= 366 && primeiro !== Infinity && diaDe(primeiro) <= pIni) {
         const pIniMs = msDia(pIni, false), pFimMs = msDia(pFim, true);
-        for (const l8 in tagLogMap) {
+        for (const l8 in agPessoas) {
           if (temCrm && !cont8[l8]) continue;
           const ag = agNoIntervalo(l8, (ms) => ms >= pIniMs && ms <= pFimMs);
           if (!ag) continue;
@@ -947,12 +946,14 @@ function paginaSofiaFunil(params) {
     return {};
   };
   for (const d of detAg) {
+    // Dia/hora da aula: o que foi gravado NAQUELE agendamento; sem isso, o último
+    // dia/hora gravado para o telefone, se for do mesmo agendamento (até 3 dias).
     const am = aulaMap[last8(d.tel)];
-    if (am && am.when && Math.abs((am.em || 0) - d.em) < 3 * 86400000) d.when = am.when;
+    if (!d.when && !d.semData && am && am.when && Math.abs((am.em || 0) - d.em) < 3 * 86400000) d.when = am.when;
     // Dia/hora que ela marcou (quando foi gravado): ajuda a achar a aula no EVO
     // mesmo com o nome diferente (ex.: CRM "Luciana Carvalho" × EVO com o nome todo).
     const quando = quandoDe(d.when);
-    try { d.exp = histExp.acharAula(idxExp, d.nome, diaDe(d.em), quando.dia ? quando : null); } catch (_) {}
+    try { d.exp = histExp.acharAula(idxExp, d.nome, d.semData ? '' : diaDe(d.em), quando.dia ? quando : null); } catch (_) {}
   }
   let fez = 0, fechou = 0, faltou = 0, aguardando = 0, semreg = 0;
   const hojeFu = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
@@ -983,7 +984,7 @@ function paginaSofiaFunil(params) {
     // também conta, mesmo antes dos 14 dias.
     if (d.sit === 'aguardando' && !d.exp) {
       const diaAula = quandoDe(d.when).dia;
-      if (diaAula ? diaAula < hojeFu : hojeFu > somaDiasFu(diaDe(d.em), 14)) d.semAulaEvo = true;
+      if (d.semData || (diaAula ? diaAula < hojeFu : hojeFu > somaDiasFu(diaDe(d.em), 14))) d.semAulaEvo = true;
     }
     // "Aguardando" é só quem ainda VAI fazer a aula. A aula já passou sem presença
     // no EVO, ou a experimental não está no EVO → "Sem registro" (barra própria).
@@ -997,8 +998,8 @@ function paginaSofiaFunil(params) {
     else aguardando++;
   }
   // Só os números (sem montar a página): usado pelas Metas, pelo fechamento do mês e pelos testes.
-  // (primeiroEvento = começo do histórico de tags: antes dele, "0 agendaram" é falta de registro)
-  if (params._numeros) { let p0 = Infinity; for (const l8 in tagLogMap) for (const e of (tagLogMap[l8] || [])) if (e && e.em && e.em < p0) p0 = e.em; params._primeiroEvento = p0 === Infinity ? 0 : p0; }
+  // (primeiroEvento = começo do registro de agendamentos: antes dele, "0 agendaram" é falta de registro)
+  if (params._numeros) params._primeiroEvento = agReg.inicio || 0;
   // Leads atendidas no período (para o custo por lead): quem agendou, por qualquer
   // canal, + quem escreveu para a SoFIA e NÃO é aluna hoje (aluna tirando dúvida não é lead).
   if (params._numeros) {
@@ -1061,7 +1062,7 @@ function paginaSofiaFunil(params) {
       nome: d.nome, href: d.tel ? linkContato(d.tel) : '', sit: d.sit, evo: d.evo,
       attrs: d.sit ? ` data-sit="${d.sit}"` : '',
       meta: [
-        `📅 Agendou <b>${esc(fmtDtCurta(d.em))}</b>`,
+        d.semData ? `📅 Agendou <span style="color:var(--faint)">— data não registrada</span>` : `📅 Agendou <b>${esc(fmtDtCurta(d.em))}</b>`,
         rotCanal(d.canal, d.por),
         aula ? `🏋️ Aula <b>${aula}</b>` : '',
         ex && ex.prof ? `👩‍🏫 <b>${esc(ex.prof)}</b>` : '',
@@ -1095,7 +1096,7 @@ function paginaSofiaFunil(params) {
       if (!alvo) continue;
       const l8 = last8(k);
       if (temCrm && !cont8[l8]) continue; // excluída de Contatos (ex.: teste)
-      const agendouDepois = (tagLogMap[l8] || []).some(e => e && e.acao === 'add' && (e.motivo === 'agendou' || agTagsLc.includes(String(e.tag || '').trim())) && (e.em || 0) >= (alvo.inicioEm || 0) - 3600e3);
+      const agendouDepois = (agPessoas[l8] || []).some(e => e.em >= (alvo.inicioEm || 0) - 3600e3);
       if (agendouDepois) continue;
       let tagsC = []; try { const r = contatos.acharPorTel(k, contatosMap); tagsC = (r && r.contato && r.contato.tags) || []; } catch (_) {}
       if (tAluna && tagsC.includes(tAluna)) continue; // já é aluna
@@ -1755,15 +1756,13 @@ function paginaProfessoras(params) {
     const tel = [...set][0];
     return { tel, c: cs[tel] };
   };
-  let tagLogMap = {}; try { tagLogMap = sofia.lerTagLog() || {}; } catch (_) {}
-  let agTags = []; try { agTags = contatos.tagsPorGatilho('agendou').map(a => String(a.tag || '').trim()); } catch (_) {}
-  // Último agendamento (tag de "agendou") ANTES ou no dia da aula → { em, canal }.
+  let agPessoas = {}; try { agPessoas = agRegistro.porPessoa() || {}; } catch (_) {}
+  // Último agendamento ANTES ou no dia da aula → { em, canal }.
   const agendouAntes = (tel, dia) => {
     let ult = null;
-    for (const e of (tagLogMap[String(tel).replace(/\D/g, '').slice(-8)] || [])) {
-      if (e.acao !== 'add' || !(e.motivo === 'agendou' || agTags.includes(String(e.tag || '').trim())) || !e.em) continue;
+    for (const e of (agPessoas[String(tel).replace(/\D/g, '').slice(-8)] || [])) {
       const d = new Date(e.em).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-      if (d <= dia && (!ult || e.em > ult.em)) ult = { em: e.em, canal: e.canal };
+      if (d <= dia) ult = { em: e.em, canal: e.canal }; // em ordem de data: fica o último
     }
     return ult;
   };
