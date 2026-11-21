@@ -161,16 +161,16 @@ function gravarAntecedenciaHoras(n) {
 }
 // Grava UMA variável no .env, preservando o resto do arquivo (substitui a linha
 // se existir, senão acrescenta no fim). Aceita valor vazio (para "desligar").
-function gravarEnvVar(nome, valor, arq) {
+// A gravação em si (aspas quando precisa, linha repetida, conferência depois de
+// gravar) fica em env-arquivo.js. `literal`: não tira aspas das pontas — para SENHA,
+// em que aspas podem fazer parte do valor (chave colada com aspas em volta: tira).
+function gravarEnvVar(nome, valor, arq, literal) {
   arq = arq || CHATBOT_ENV_FILE;
-  valor = String(valor || '').trim().replace(/^["']|["']$/g, '');
-  let txt = ''; try { txt = fs.readFileSync(arq, 'utf8'); } catch (_) {}
-  const linha = nome + '=' + valor;
-  const re = new RegExp('^' + nome + '=.*$', 'm');
-  if (re.test(txt)) txt = txt.replace(re, linha);
-  else txt = (txt.replace(/\s*$/, '') + '\n' + linha + '\n').replace(/^\n/, '');
-  try { fs.mkdirSync(path.dirname(arq), { recursive: true }); } catch (_) {}
-  try { fs.writeFileSync(arq, txt, 'utf8'); return true; } catch (_) { return false; }
+  valor = String(valor || '').trim();
+  if (!literal) valor = valor.replace(/^["']|["']$/g, '');
+  const r = require('./env-arquivo').gravar(nome, valor, arq);
+  gravarEnvVar.ultimoErro = r.ok ? '' : (r.erro || '');
+  return r.ok;
 }
 function gravarApiKey(key) {
   key = String(key || '').trim().replace(/^["']|["']$/g, '');
@@ -200,15 +200,17 @@ function gravarTranscricaoProvedor(prov) {
 function gravarEvoCredenciais(email, senha) {
   email = String(email || '').trim();
   if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, erro: 'e-mail inválido' };
-  let ok = true;
-  if (email) ok = gravarEnvVar('EVO_EMAIL', email, EXPERIMENTAL_ENV_FILE) && ok;
   senha = String(senha || '').trim();
-  if (senha) ok = gravarEnvVar('EVO_PASSWORD', senha, EXPERIMENTAL_ENV_FILE) && ok; // em branco: mantém a atual
+  if (/[\r\n]/.test(senha)) return { ok: false, erro: 'a senha não pode ter quebra de linha' };
+  if (email && !gravarEnvVar('EVO_EMAIL', email, EXPERIMENTAL_ENV_FILE)) return { ok: false, erro: gravarEnvVar.ultimoErro || 'não consegui salvar o e-mail' };
+  // em branco: mantém a atual. `literal`: a senha vai como foi digitada (a gravação
+  // relê o arquivo e só dá certo se o robô for ler exatamente esta senha).
+  if (senha && !gravarEnvVar('EVO_PASSWORD', senha, EXPERIMENTAL_ENV_FILE, true)) return { ok: false, erro: gravarEnvVar.ultimoErro || 'não consegui salvar a senha' };
   // Atualiza também o ambiente DESTE processo: o "Reiniciar robô" usa
   // `pm2 restart --update-env`, que copia este ambiente para o robô.
   if (email) process.env.EVO_EMAIL = email;
   if (senha) process.env.EVO_PASSWORD = senha;
-  return { ok };
+  return { ok: true, conferido: !!senha, tamanho: senha.length };
 }
 
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
@@ -2278,7 +2280,7 @@ const server = http.createServer(protegido((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       const r = gravarEvoCredenciais(d.email, d.senha);
       if (r.ok) { try { auditoria.registrar(sess.usuario, 'evo.credenciais', 'EVO_EMAIL/EVO_PASSWORD', 'login do EVO atualizado pelo painel' + (String(d.senha || '').trim() ? ' (com senha)' : ' (só e-mail)')); } catch (_) {} }
-      return res.end(JSON.stringify(r.ok ? { ok: true } : { ok: false, erro: r.erro || 'não consegui salvar' }));
+      return res.end(JSON.stringify(r.ok ? { ok: true, conferido: !!r.conferido, tamanho: r.tamanho || 0 } : { ok: false, erro: r.erro || 'não consegui salvar' }));
     });
   }
   // Serve a foto que VOCÊ enviou numa resposta manual (mostrada na bolha do chat).

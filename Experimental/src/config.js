@@ -11,6 +11,14 @@ try {
   for (const k of ['EVO_EMAIL', 'EVO_PASSWORD']) if (envArquivo[k]) process.env[k] = envArquivo[k];
 } catch (_) { /* sem .env legível → fica o que veio do ambiente */ }
 
+function loginEvo(nome) {
+  try {
+    const v = require('dotenv').parse(require('fs').readFileSync(require('path').resolve(__dirname, '..', '.env')))[nome];
+    if (v) return v;
+  } catch (_) { /* sem .env legível → fica o que veio do ambiente */ }
+  return process.env[nome];
+}
+
 // Cofre central de textos editáveis (padrão + edições do painel em data/mensagens.json).
 const mensagens = require('./mensagens');
 
@@ -54,8 +62,10 @@ function mapaAudio() {
 const config = {
   evo: {
     url: process.env.EVO_URL || 'https://slimfit.w12app.com.br',
-    email: process.env.EVO_EMAIL,
-    password: process.env.EVO_PASSWORD,
+    // Lidos do .env NA HORA de cada login (não só quando o robô liga): a senha
+    // trocada no painel vale já no próximo job, sem reiniciar o robô.
+    get email() { return loginEvo('EVO_EMAIL'); },
+    get password() { return loginEvo('EVO_PASSWORD'); },
     loginPath: process.env.EVO_LOGIN_PATH || '#/acesso/slimfit/autenticacao',
     experimentalPath: process.env.EVO_EXPERIMENTAL_PATH || '#/app/slimfit/15/gerencial/aula-experimental',
   },
