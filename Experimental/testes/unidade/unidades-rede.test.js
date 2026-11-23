@@ -56,7 +56,7 @@ const pedir = (porta, metodo, url, cookie, corpo = '') => new Promise((ok) => {
   req.end(corpo);
 });
 
-test('no painel: /unidades abre sem login e não dá sessão; só o administrador salva a lista', { timeout: 120000 }, async () => {
+test('PAI-01 PAI-03 no painel: /unidades abre sem login e não dá sessão; só o administrador salva a lista', { timeout: 120000 }, async () => {
   const amb = ambienteIsolado();
   const porta = await portaLivre();
   let painel;

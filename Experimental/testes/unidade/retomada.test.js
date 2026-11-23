@@ -28,7 +28,7 @@ function cenario() {
   return amb;
 }
 
-test('escolhe só quem está na janela e sem impedimento', () => {
+test('RET-01 escolhe só quem está na janela e sem impedimento', () => {
   const amb = cenario();
   try {
     const lista = amb.req('retomada-sofia').candidatas();
@@ -42,7 +42,7 @@ test('escolhe só quem está na janela e sem impedimento', () => {
   } finally { amb.limpar(); }
 });
 
-test('envia uma vez só, anota na hora e não repete na rodada seguinte', async () => {
+test('RET-01 ENV-01 envia uma vez só, anota na hora e não repete na rodada seguinte', async () => {
   const amb = cenario(); const volta = semEsperas();
   try {
     const wa = amb.whatsappFalso();
@@ -55,7 +55,7 @@ test('envia uma vez só, anota na hora e não repete na rodada seguinte', async 
   } finally { volta(); amb.limpar(); }
 });
 
-test('se a recepção já falou com ela pelo Studio, não envia', async () => {
+test('RET-01 se a recepção já falou com ela pelo Studio, não envia', async () => {
   const amb = cenario(); const volta = semEsperas();
   try {
     const wa = amb.whatsappFalso({ conferir: async () => ({ respondeu: false, humano: true }) });
@@ -65,7 +65,7 @@ test('se a recepção já falou com ela pelo Studio, não envia', async () => {
   } finally { volta(); amb.limpar(); }
 });
 
-test('sem conseguir ler a conversa não envia, e para depois de 3 falhas seguidas', async () => {
+test('RET-01 ENV-02 sem conseguir ler a conversa não envia, e para depois de 3 falhas seguidas', async () => {
   const amb = ambienteIsolado(); const volta = semEsperas();
   try {
     const agora = Date.now(), conv = {};

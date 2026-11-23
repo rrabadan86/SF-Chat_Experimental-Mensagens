@@ -50,7 +50,7 @@ test('metas: valem para os meses seguintes e recusam valor inválido', () => {
   } finally { amb.limpar(); }
 });
 
-test('fechamento: só fecha depois da tolerância de renovação e a foto não muda', () => {
+test('IND-06 fechamento: só fecha depois da tolerância de renovação e a foto não muda', () => {
   const amb = ambienteIsolado();
   try {
     const m = amb.req('metas');
@@ -80,7 +80,7 @@ test('posição do mês: guarda a leitura mais recente e não troca por uma mais
   } finally { amb.limpar(); }
 });
 
-test('tela de Metas: tira a foto dos meses fechados e mantém depois que os dados mudam', () => {
+test('IND-06 tela de Metas: tira a foto dos meses fechados e mantém depois que os dados mudam', () => {
   const amb = ambienteIsolado();
   try {
     // histórico de alunas ativas de 01/09 a 20/11: 1 entrada por dia, 1 saída a cada 2 dias

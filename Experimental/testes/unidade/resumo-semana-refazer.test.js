@@ -22,7 +22,7 @@ function preparar(amb) {
   return wa;
 }
 
-test('resumo da semana: rodar de novo manda nos grupos, vale como o envio do dia e não repete', async () => {
+test('GRP-01 resumo da semana: rodar de novo manda nos grupos, vale como o envio do dia e não repete', async () => {
   const amb = ambienteIsolado();
   try {
     const wa = preparar(amb);
@@ -45,7 +45,7 @@ test('resumo da semana: rodar de novo manda nos grupos, vale como o envio do dia
   } finally { amb.limpar(); }
 });
 
-test('resumo da semana: se o WhatsApp falhar de novo, dá erro e não marca como enviado', async () => {
+test('GRP-01 ENV-02 resumo da semana: se o WhatsApp falhar de novo, dá erro e não marca como enviado', async () => {
   const amb = ambienteIsolado();
   try {
     const wa = preparar(amb);
@@ -56,7 +56,7 @@ test('resumo da semana: se o WhatsApp falhar de novo, dá erro e não marca como
   } finally { amb.limpar(); }
 });
 
-test('o Log oferece "Rodar de novo" para o Resumo da semana que falhou, e o robô conhece esse job', () => {
+test('GRP-01 o Log oferece "Rodar de novo" para o Resumo da semana que falhou, e o robô conhece esse job', () => {
   const amb = ambienteIsolado();
   try {
     const fs = require('fs');

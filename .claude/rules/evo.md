@@ -29,6 +29,6 @@ Flask de `agendamento_evo/formulario_web/app.py`.
 - **AGE-05** Turma cheia não é erro de leitura: "lotada" devolve alternativas; soluço do EVO (timeout, limite) não vira "lotada".
 
 ## Formulário (Flask)
-- **AGE-06** Rotas internas exigem token (`FORM_OUTBOX_TOKEN`, `FORM_SLOTS_TOKEN`, `SOFIA_TOKEN`). Públicas: as páginas, `/api/slots`, `/api/book` e, por ora, `/api/diag-evo` (achado R4 em `CLAUDE.md`).
+- **AGE-06** Rotas internas exigem token (`FORM_OUTBOX_TOKEN`, `FORM_SLOTS_TOKEN`, `SOFIA_TOKEN`). Públicas: as páginas, `/api/slots`, `/api/book` e, por ora, `/api/diag-evo` (achado R4 em `docs/rastreabilidade.md`).
 
 Teste antes de commit: `cd Experimental/src/agendamento_evo && python3 -m tests.test_offline` (EVO simulado, sem rede).

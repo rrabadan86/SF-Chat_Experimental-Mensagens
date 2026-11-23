@@ -22,14 +22,14 @@ paths:
   - "Experimental/src/aniversari*.js"
   - "Experimental/src/resumo-*.js"
   - "Experimental/src/presentes-pendentes-grupo.js"
-  - "docs/REGRAS-DE-ENVIO.md"
+  - "docs/rastreabilidade.md"
 ---
 
 # Envios a clientes (robô do Studio)
 
 Mensagem para aluna ou lead não tem volta. Estas regras valem para todo job que envia.
 Horários abaixo são os **padrões**: o Studio muda dias/horário e liga/desliga cada envio
-no painel (`horarios.js`, `jobs-ativos.js`). Mapa regra → teste: `docs/REGRAS-DE-ENVIO.md`.
+no painel (`horarios.js`, `jobs-ativos.js`). Regra → código → teste: `docs/rastreabilidade.md`.
 
 ## Gerais
 - **ENV-01** Anota o envio **na hora** de cada mensagem (não só no fim do job). Nunca manda em dobro.
@@ -70,4 +70,4 @@ no painel (`horarios.js`, `jobs-ativos.js`). Mapa regra → teste: `docs/REGRAS-
 - **GRP-01** Resumo da semana "Rodar de novo" vale como o envio do dia e não repete o que já saiu.
 - **GRP-02** Circuito: convocatória quarta e lembrete sexta 16:15, só se houver Circuito no sábado. (decisão do dono, 23/11/2026)
 
-Regra nova ou alterada aqui → teste (ver `testes.md`) e linha em `docs/REGRAS-DE-ENVIO.md`.
+Regra nova ou alterada aqui → teste (ver `testes.md`) e linha na matriz `docs/rastreabilidade.md`.

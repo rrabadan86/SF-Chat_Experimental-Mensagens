@@ -28,7 +28,7 @@ const ANTIGO = `<div class="lista">
   <div class="row"><span>5415</span> <a href="#">Paula Gabriella da Silva Chaga</a> <span>19/11/1990</span> <span>Juliana</span></div>
   </div>`;
 
-test('lê a data pela coluna "Data de aniversário" (dia/mês), nunca a última presença', { skip: !playwright && 'sem playwright' }, async () => {
+test('EVO-02 ALU-09 lê a data pela coluna "Data de aniversário" (dia/mês), nunca a última presença', { skip: !playwright && 'sem playwright' }, async () => {
   const nav = await playwright.chromium.launch();
   try {
     const page = await nav.newPage();
@@ -47,14 +47,14 @@ test('lê a data pela coluna "Data de aniversário" (dia/mês), nunca a última 
   } finally { await nav.close(); }
 });
 
-test('dia/mês com e sem ano', () => {
+test('EVO-02 dia/mês com e sem ano', () => {
   assert.deepStrictEqual(diaMes('19/11'), { dia: 19, mes: 11 });
   assert.deepStrictEqual(diaMes('19/11/1990'), { dia: 19, mes: 11 });
   assert.deepStrictEqual(diaMes('1990-11-19'), { dia: 19, mes: 11 });
   assert.strictEqual(diaMes('-'), null);
 });
 
-test('trava: datas de outros meses (coluna errada) param o job em vez de dizer "ninguém hoje"', () => {
+test('EVO-02 trava: datas de outros meses (coluna errada) param o job em vez de dizer "ninguém hoje"', () => {
   const certas = ['01/11', '05/11', '18/11', '19/11', '20/11'].map(n => ({ nascimento: n }));
   assert.doesNotThrow(() => conferirMes(certas, 11));
   // o que o robô leu em 19/11/2026: a última presença de cada uma

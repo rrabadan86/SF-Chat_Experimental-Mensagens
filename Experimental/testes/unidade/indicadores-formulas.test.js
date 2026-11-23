@@ -7,7 +7,7 @@ const { ambienteIsolado, DIA } = require('../ajuda');
 const diaSP = (ms) => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 const meioDia = (iso) => Date.parse(iso + 'T12:00:00-03:00');
 
-test('recebimentos: previsto, recebido, em atraso e cartão a cair não se misturam', () => {
+test('IND-07 recebimentos: previsto, recebido, em atraso e cartão a cair não se misturam', () => {
   const { resumir } = require('../../src/financeiro-resumo');
   const r = resumir([
     { valor: 500, pago: 500, venc: '2026-11-05', sit: 'pago' },
@@ -28,7 +28,7 @@ test('recebimentos: previsto, recebido, em atraso e cartão a cair não se mistu
   assert.strictEqual(resumir([], '2026-11-20').inadPct, null);
 });
 
-test('alunas ativas: mês em andamento se compara com o outro mês nos MESMOS dias', () => {
+test('IND-01 alunas ativas: mês em andamento se compara com o outro mês nos MESMOS dias', () => {
   const { serie, periodos, mesAteDia } = require('../../src/ativas-dados');
   // outubro inteiro (31 dias) + novembro até o dia 20: 1 saída por dia nos dois
   const n = 31 + 20, ativas = [], sairam = [], entraram = [], novas = [];
@@ -46,7 +46,7 @@ test('alunas ativas: mês em andamento se compara com o outro mês nos MESMOS di
   assert.strictEqual(out.ate, '2026-10-20');
 });
 
-test('alunas ativas: quem venceu dentro da tolerância aparece como "ainda pode renovar"', () => {
+test('IND-01 alunas ativas: quem venceu dentro da tolerância aparece como "ainda pode renovar"', () => {
   const { emRenovacao } = require('../../src/ativas-dados');
   const pessoas = {
     1: { n: 'Ativa', iv: [['2026-01-01', '2026-12-31']] },
@@ -62,7 +62,7 @@ test('alunas ativas: quem venceu dentro da tolerância aparece como "ainda pode 
   assert.deepStrictEqual(r.find(x => x.id === '5').fila, ['Anual', '2026-11-22']);
 });
 
-test('funil: comparecimento, conversas e agendamento contam pelo período certo', () => {
+test('IND-03 IND-04 funil: comparecimento, conversas e agendamento contam pelo período certo', () => {
   const amb = ambienteIsolado();
   try {
     const agora = Date.now(), hoje = diaSP(agora);

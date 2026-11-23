@@ -36,7 +36,7 @@ function sofiaFalsa(amb, aoSubir) {
   return { alvo, chamadas, dir, auth };
 }
 
-test('reconectar: volta com o login salvo e não descarta nada', async () => {
+test('SOF-03 reconectar: volta com o login salvo e não descarta nada', async () => {
   const amb = ambienteIsolado();
   try {
     const f = sofiaFalsa(amb, () => 'conectado');
@@ -54,7 +54,7 @@ test('reconectar: volta com o login salvo e não descarta nada', async () => {
   } finally { amb.limpar(); }
 });
 
-test('reconectar: se não volta em 2 min com o login salvo, passa sozinho para o QR novo', async () => {
+test('SOF-03 reconectar: se não volta em 2 min com o login salvo, passa sozinho para o QR novo', async () => {
   const amb = ambienteIsolado();
   try {
     // com o login salvo a SoFIA fica "iniciando/desconectado" (como no Lago Norte); sem ele, mostra o QR
@@ -70,7 +70,7 @@ test('reconectar: se não volta em 2 min com o login salvo, passa sozinho para o
   } finally { amb.limpar(); }
 });
 
-test('reconectar: se nem o QR novo aparece, termina como "falhou" (não fica tentando para sempre)', async () => {
+test('SOF-03 reconectar: se nem o QR novo aparece, termina como "falhou" (não fica tentando para sempre)', async () => {
   const amb = ambienteIsolado();
   try {
     const f = sofiaFalsa(amb, () => 'iniciando');
@@ -94,7 +94,7 @@ test('reconectar: se nem o QR novo aparece, termina como "falhou" (não fica ten
   } finally { amb.limpar(); }
 });
 
-test('SoFIA: a pausa entre as tentativas de conectar é respeitada (o vigia do boot não a atropela)', () => {
+test('SOF-03 SoFIA: a pausa entre as tentativas de conectar é respeitada (o vigia do boot não a atropela)', () => {
   // No Lago Sul 1 (11/2026) o log mostrava "Esperando 4 min antes de tentar de novo" e, 13 s depois,
   // "travou — reiniciando…": o vigia de 75 s reiniciava a SoFIA no meio da pausa, ela batia no
   // WhatsApp sem parar e o contador de falhas andava em dobro (3 → 4, 5 → 6).
@@ -122,7 +122,7 @@ const entrar = (porta, usuario, senha) => new Promise((ok) => {
   req.on('error', () => ok('')); req.end(corpo);
 });
 
-test('no painel: o botão dispara o procedimento na SoFIA desta unidade; quem não tem acesso à Configuração da SoFIA não consegue', { timeout: 120000 }, async () => {
+test('SOF-03 PAI-02 no painel: o botão dispara o procedimento na SoFIA desta unidade; quem não tem acesso à Configuração da SoFIA não consegue', { timeout: 120000 }, async () => {
   const amb = ambienteIsolado();
   const porta = await portaLivre();
   const PAINEL = 'exemplo-do-painel-123';

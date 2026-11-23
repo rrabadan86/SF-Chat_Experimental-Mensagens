@@ -8,7 +8,10 @@
     "test:scrape": "node src/run-now.js scrape",
     "test:morning": "node src/run-now.js morning",
     "test:afternoon": "node src/run-now.js afternoon",
-    "test:whatsapp": "node src/run-now.js whatsapp"
+    "test:whatsapp": "node src/run-now.js whatsapp",
+    "test": "node --test testes/unidade/*.test.js",
+    "matriz": "node ../scripts/matriz.js",
+    "testar-alteracao": "node ../scripts/testar-alteracao.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

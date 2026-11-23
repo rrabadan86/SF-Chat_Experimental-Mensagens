@@ -45,7 +45,7 @@ function rodar(amb, extra) {
   return { r, saida, marcador: path.join(amb.data, 'wa-versao-reserva.json') };
 }
 
-test('robô: a versão ao vivo abre mas a conexão fica sem estado → a tentativa seguinte usa a versão reserva', { timeout: 60000 }, () => {
+test('SOF-04 robô: a versão ao vivo abre mas a conexão fica sem estado → a tentativa seguinte usa a versão reserva', { timeout: 60000 }, () => {
   const amb = ambienteIsolado();
   try {
     const { r, saida, marcador } = rodar(amb, { FALHAS: '1', SOCKET: '' });
@@ -57,7 +57,7 @@ test('robô: a versão ao vivo abre mas a conexão fica sem estado → a tentati
   } finally { amb.limpar(); }
 });
 
-test('robô: conexão presa em "abrindo" não é culpa da versão — continua na ao vivo', { timeout: 60000 }, () => {
+test('SOF-04 robô: conexão presa em "abrindo" não é culpa da versão — continua na ao vivo', { timeout: 60000 }, () => {
   const amb = ambienteIsolado();
   try {
     const { r, marcador } = rodar(amb, { FALHAS: '1', SOCKET: 'OPENING' });
@@ -66,7 +66,7 @@ test('robô: conexão presa em "abrindo" não é culpa da versão — continua n
   } finally { amb.limpar(); }
 });
 
-test('robô: nem a reserva funcionou → volta para a ao vivo; versão fixa no .env manda mais que a reserva', { timeout: 60000 }, () => {
+test('SOF-04 robô: nem a reserva funcionou → volta para a ao vivo; versão fixa no .env manda mais que a reserva', { timeout: 60000 }, () => {
   const amb = ambienteIsolado();
   try {
     const { r, saida } = rodar(amb, { FALHAS: '2', SOCKET: '' });
@@ -78,7 +78,7 @@ test('robô: nem a reserva funcionou → volta para a ao vivo; versão fixa no .
   } finally { amb.limpar(); }
 });
 
-test('reserva: o marcador vale 7 dias e a URL pode ser trocada', () => {
+test('SOF-04 reserva: o marcador vale 7 dias e a URL pode ser trocada', () => {
   const amb = ambienteIsolado();
   try {
     const R = amb.req('wa-versao-reserva');

@@ -21,7 +21,7 @@ const pagina = (estado) => ({
   $: async () => null,
 });
 
-test('reconhece a recusa de senha do EVO e não confunde com código inválido', () => {
+test('EVO-01 reconhece a recusa de senha do EVO e não confunde com código inválido', () => {
   const amb = ambienteIsolado();
   try {
     const { ehRecusa } = amb.req('evo-login-estado');
@@ -30,7 +30,7 @@ test('reconhece a recusa de senha do EVO e não confunde com código inválido',
   } finally { amb.limpar(); }
 });
 
-test('senha recusada: avisa uma vez, os jobs seguintes não tentam entrar, e salvar o login libera', async () => {
+test('EVO-01 senha recusada: avisa uma vez, os jobs seguintes não tentam entrar, e salvar o login libera', async () => {
   const amb = ambienteIsolado();
   try {
     const avisos = avisosFalsos(amb);
@@ -67,7 +67,7 @@ test('senha recusada: avisa uma vez, os jobs seguintes não tentam entrar, e sal
   } finally { amb.limpar(); }
 });
 
-test('login que seguiu normal (entrou, ou abriu a tela do código) não é tratado como recusa', async () => {
+test('EVO-01 login que seguiu normal (entrou, ou abriu a tela do código) não é tratado como recusa', async () => {
   const amb = ambienteIsolado();
   try {
     const avisos = avisosFalsos(amb);
@@ -79,7 +79,7 @@ test('login que seguiu normal (entrou, ou abriu a tela do código) não é trata
   } finally { amb.limpar(); }
 });
 
-test('código do EVO que ninguém digitou: o mesmo job não pede outro logo em seguida; a recusa de senha manda mais', async () => {
+test('EVO-01 código do EVO que ninguém digitou: o mesmo job não pede outro logo em seguida; a recusa de senha manda mais', async () => {
   const amb = ambienteIsolado();
   try {
     avisosFalsos(amb);
@@ -93,7 +93,7 @@ test('código do EVO que ninguém digitou: o mesmo job não pede outro logo em s
   } finally { amb.limpar(); }
 });
 
-test('todo job que entra no EVO confere a trava antes de digitar o login', () => {
+test('EVO-01 todo job que entra no EVO confere a trava antes de digitar o login', () => {
   const src = path.resolve(__dirname, '..', '..', 'src');
   const semTrava = [];
   for (const f of fs.readdirSync(src).filter(n => n.endsWith('.js'))) {
