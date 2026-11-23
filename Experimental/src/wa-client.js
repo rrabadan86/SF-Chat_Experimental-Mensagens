@@ -434,6 +434,7 @@ function initWhatsApp() {
       log('     pm2 stop slimfit-exp   (e depois: pm2 start slimfit-exp)');
     } else {
       log('❌ Falha ao inicializar o WhatsApp: ' + msg);
+      if (e && e.cause) log('   motivo por dentro: ' + String((e.cause && e.cause.message) || e.cause).split('\n')[0].slice(0, 200));
     }
     // Fecha o navegador desta tentativa ANTES de liberar outra: ele ficava aberto,
     // e cada tentativa nova abria MAIS um Chromium no mesmo perfil do WhatsApp — os
@@ -455,14 +456,16 @@ async function anotarEstadoNaFalha(c) {
     const info = await Promise.race([
       pg.evaluate(() => {
         const w = globalThis;
-        let socket = '', stream = '';
-        try { socket = String(w.require('WAWebSocketModel').Socket.state || ''); } catch (_) {}
+        let socket = '', stream = '', erroModulo = '', tela = '';
+        try { socket = String(w.require('WAWebSocketModel').Socket.state || ''); } catch (x) { erroModulo = String((x && x.message) || x).slice(0, 120); }
         try { stream = String(w.require('WAWebStreamModel').Stream.displayInfo || ''); } catch (_) {}
-        return { versao: String((w.Debug && w.Debug.VERSION) || ''), socket, stream, online: !!(w.navigator && w.navigator.onLine) };
+        try { tela = String((w.document && w.document.body && w.document.body.innerText) || '').replace(/\s+/g, ' ').trim().slice(0, 160); } catch (_) {}
+        return { versao: String((w.Debug && w.Debug.VERSION) || ''), socket, stream, erroModulo, tela, online: !!(w.navigator && w.navigator.onLine) };
       }),
       new Promise((r) => setTimeout(() => r(null), 5000)),
     ]).catch(() => null);
     log(info ? `   estado do WhatsApp Web na falha: página ${info.versao ? 'abriu (versão ' + info.versao + ')' : 'NÃO abriu'} · conexão: ${info.socket || '?'} · fluxo: ${info.stream || '?'} · rede do navegador: ${info.online ? 'ok' : 'SEM REDE'}`
+      + (info.erroModulo ? `\n      conexão ilegível: ${info.erroModulo}` : '') + (info.tela ? `\n      tela: "${info.tela}"` : '')
       : '   estado do WhatsApp Web na falha: não consegui ler (navegador sem resposta)');
   } catch (_) {}
 }
