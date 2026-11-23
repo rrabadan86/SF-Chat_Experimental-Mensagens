@@ -23,6 +23,11 @@ Claude Code (código aberto). Como ele entra:
    uma decisão sua (ex.: ⓘ em toda coluna, tabela que vira cartão no celular), vale o nosso —
    o Claude mostra a divergência e não aplica sozinho.
 
+**Instalado**: skill 4.10.0 (motor 0.1.27, conferido por SHA-256), Apache-2.0, em
+`.claude/skills/impeccable/` e `.claude/agents/`. O produto está em `PRODUCT.md`.
+O envio de uso está desligado (`.impeccable/config.json`). **Não fazer** `impeccable login`:
+com login, os relatórios de critique/audit e o DESIGN.md sobem para a conta do Impeccable.
+
 ## Passo 1 — Pegar os prints
 
 Escolha um dos dois jeitos:

@@ -22,3 +22,6 @@ sofia-pausa-min.txt
 # Demonstração: conversas reais anonimizadas ficam só no servidor
 sofia-demo/
 demo-conversas-reais*.json
+
+# Impeccable: só serve ao modo live, que não usamos (a trava de segredos dá alarme falso nele)
+.claude/skills/impeccable/scripts/live-browser.js
