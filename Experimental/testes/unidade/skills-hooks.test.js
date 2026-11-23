@@ -17,7 +17,8 @@ test('DEP-07 skills: as quatro existem, com nome e descrição, e só citam scri
   assert.deepStrictEqual(skills.filter(s => ['subir-versao', 'conferir-pr', 'conferir-celular', 'nova-tela'].includes(s)).length, 4, `skills: ${skills}`);
   const pacote = JSON.parse(fs.readFileSync(path.join(REPO, 'Experimental', 'package.json'), 'utf8'));
   const existe = (f) => [REPO, path.join(REPO, 'Experimental'), path.join(REPO, 'Experimental', 'src')].some(b => fs.existsSync(path.join(b, f)));
-  for (const s of skills) {
+  // impeccable é de terceiros (cópia fiel, versão fixa): não segue o nosso formato de cabeçalho
+  for (const s of skills.filter(s => s !== 'impeccable')) {
     const txt = fs.readFileSync(path.join(CLAUDE, 'skills', s, 'SKILL.md'), 'utf8');
     const fm = /^---\nname: ([^\n]+)\ndescription: ([^\n]{40,})\n---/.exec(txt);
     assert.ok(fm, `${s}: SKILL.md sem name/description no topo`);
