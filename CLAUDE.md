@@ -77,7 +77,8 @@ Plano de organização em fases, um PR por fase, plano mostrado antes de cada um
 - [x] Fase 2 — padrão visual (PR #435) — a revisão de design decide as telas fora do padrão listadas no `visual.md`
 - [x] Fase 3 — testes (PR #436) · [x] Fase 4 — matriz de rastreabilidade (`docs/rastreabilidade.md`)
 - [x] Fase 5 — skills e hooks (DEP-07, TST-10)
-- [ ] **Fase 6** — GitHub (rodada noturna, prints de referência — depois da revisão de design)
+- [x] Fase 6 — GitHub: resumo das regras no CI, rodada noturna, botão "Prints das telas" (DEP-08)
+- [ ] **Fase 7** — revisão de design (`docs/revisao-de-design.md`), com o Impeccable (ler o código antes de instalar; nosso `visual.md` e as decisões do dono mandam); no fim, prints de referência
 
 Outras:
 - A versão **reserva** do WhatsApp Web (SOF-04) vale até **23/01/2027**: antes disso, biblioteca corrigida ou reserva trocada.

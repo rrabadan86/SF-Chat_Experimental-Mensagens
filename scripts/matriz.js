@@ -4,6 +4,7 @@
  *
  *   npm run matriz              (em Experimental/) reconta o resumo e mostra o que está errado
  *   node scripts/matriz.js --conferir   só confere (sai com erro se algo estiver errado ou velho)
+ *   node scripts/matriz.js --resumo     só imprime o resumo (markdown, para o CI)
  *
  * Também é usado por testes/unidade/matriz.test.js e por scripts/testar-alteracao.js.
  * Não toca dado nenhum: só lê os arquivos do repositório.
@@ -184,7 +185,10 @@ function resumoEmDia(texto = fs.readFileSync(MATRIZ, 'utf8')) {
 
 module.exports = { REPO, EXP, MATRIZ, TELAS, PYTHON, codigosDoTitulo, codigosDasRegras, testesDoRepo, lerMatriz, conferir, resumo, comResumo, resumoEmDia, acharArquivo };
 
-if (require.main === module) {
+if (require.main === module && process.argv.includes('--resumo')) {
+  const { linhas, testes } = conferir();
+  console.log('### Matriz de rastreabilidade\n\n' + resumo(linhas, testes));
+} else if (require.main === module) {
   const soConferir = process.argv.includes('--conferir');
   const texto = fs.readFileSync(MATRIZ, 'utf8');
   const { erros, linhas, testes } = conferir({ texto });

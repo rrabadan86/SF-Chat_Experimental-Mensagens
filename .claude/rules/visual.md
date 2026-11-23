@@ -37,6 +37,7 @@ Resposta de salvar por `fetch`: `{ ok:false, erro:'texto para o dono', campo:'no
 Tabela antiga (sem `uiTabela`) vira cartão no celular sozinha: o script `sfCartoes` (em `painel-componentes.js`) põe em cada célula o rótulo e o ⓘ da coluna. Para uma tabela não virar cartão: `data-sem-cartao`.
 
 ## Telas que ainda não seguem o padrão (para a revisão de design decidir)
+Passo a passo da revisão: `docs/revisao-de-design.md` (Fase 7, com o Impeccable; o padrão deste arquivo manda).
 - Rolagem lateral: corrigida em 23/11/2026 (o teste de telas reprova se voltar). Ainda com `overflow-x:auto` (não rolam com os dados da demonstração): mapa de calor (`.hm-scroll`), filtros rápidos das Conversas (`.cv-sit`), Contatos no computador (`.ct-wrap`), respostas dos Formulários (`.fm-tabw`).
 - Cores `#hex` em `style=`: SoFIA (~85), WhatsApp (10), Páginas públicas (4), Perfis (3), base (3) (VIS-05).
 - `alert()` para erro: SoFIA (~62), Formulários (8), Slim Club (6), base (4), WhatsApp (1) (VIS-06).

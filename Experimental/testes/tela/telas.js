@@ -12,6 +12,9 @@
  *   node testes/tela/telas.js --estrito
  *   SAIDA=/pasta node testes/tela/telas.js  (prints das telas com problema)
  *   node testes/tela/telas.js --so=/funil,/metas --prints   (só essas telas, com print de todas)
+ *   node testes/tela/telas.js --prints --relogio=2026-11-23T10:00:00-03:00
+ *        (relógio parado nessa data no painel, nos dados da demonstração e no navegador —
+ *         os prints saem iguais a cada rodada; workflow "Prints das telas" no GitHub)
  *
  * Sem SAIDA, os prints vão para uma pasta temporária que é apagada no fim se ficar vazia.
  *
@@ -24,6 +27,8 @@ const http = require('http');
 const { spawn, execFileSync } = require('child_process');
 
 const ESTRITO = process.argv.includes('--estrito');
+const RELOGIO = (process.argv.find(a => a.startsWith('--relogio=')) || '').slice(10);
+if (RELOGIO && Number.isNaN(Date.parse(RELOGIO))) { console.error(`--relogio: data inválida (${RELOGIO})`); process.exit(2); }
 const EXP = path.resolve(__dirname, '..', '..');
 const REPO = path.resolve(EXP, '..');
 const PRINTS = process.argv.includes('--prints');
@@ -70,6 +75,7 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
   const inst = await montar();
   const env = { ...process.env };
   for (const k of ['SOFIA_DIR', 'PAINEL_DEMO', 'PAINEL_PORT', 'PAINEL_HOST', 'PM2_SLUG']) delete env[k]; // o .env da demonstração manda
+  if (RELOGIO) { env.SF_RELOGIO_FIXO = RELOGIO; env.NODE_OPTIONS = `${env.NODE_OPTIONS || ''} --require ${JSON.stringify(path.join(__dirname, 'relogio-fixo.js'))}`.trim(); }
   execFileSync(process.execPath, ['src/demo-dados.js'], { cwd: inst.exp, env, stdio: 'inherit' });
   const painel = spawn(process.execPath, ['src/painel-mensagens.js'], { cwd: inst.exp, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let logPainel = '';
@@ -86,6 +92,7 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
     ];
     for (const [nomeAp, opcoes] of aparelhos) {
       const ctx = await navegador.newContext(opcoes);
+      if (RELOGIO) await ctx.clock.setFixedTime(new Date(RELOGIO));
       for (const tela of (SO.length ? SO : TELAS)) {
         const page = await ctx.newPage();
         const errosJs = [];
