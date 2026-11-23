@@ -7,7 +7,7 @@ const { ambienteIsolado } = require('../ajuda');
 const amb = ambienteIsolado();
 test.after(() => amb.limpar());
 
-test('telefone: normaliza e reconhece com e sem o 9', () => {
+test('ENV-07 telefone: normaliza e reconhece com e sem o 9', () => {
   const c = amb.req('contatos');
   assert.strictEqual(c.normTel('(62) 98111-0001'), '5562981110001');
   assert.strictEqual(c.normTel('5562981110001'), '5562981110001');
@@ -16,14 +16,14 @@ test('telefone: normaliza e reconhece com e sem o 9', () => {
   assert.deepStrictEqual(c.variantes9('6281110001').sort(), ['556281110001', '5562981110001'].sort());
 });
 
-test('contato é achado pelo telefone mesmo sem o 9', () => {
+test('ENV-07 contato é achado pelo telefone mesmo sem o 9', () => {
   const c = amb.req('contatos');
   const map = { '5562981110001': { tel: '5562981110001', nome: 'Ana', tags: [] } };
   assert.strictEqual(c.acharPorTel('556281110001', map).contato.nome, 'Ana');
   assert.strictEqual(c.acharPorTel('5562999999999', map), null);
 });
 
-test('tags do funil: entrar numa etapa tira a anterior, e a tag que chega fica', () => {
+test('TAG-01 tags do funil: entrar numa etapa tira a anterior, e a tag que chega fica', () => {
   amb.gravarData('tags-config.json', {
     'FX - 5. Fez Aula Experimental': { remove: ['FX - 0. Sem interesse', 'FX - 3. Agendou Aula Exp'] },
     'FX - 3. Agendou Aula Exp': { remove: ['FX - 1. Contato inicial'] },
@@ -43,14 +43,14 @@ test('tags do funil: entrar numa etapa tira a anterior, e a tag que chega fica',
   assert.ok(tags('5562981110001').includes('FX - 0. Sem interesse'));
 });
 
-test('mensagens: preenche as variáveis e some com {nome} quando não há nome', () => {
+test('ENV-06 mensagens: preenche as variáveis e some com {nome} quando não há nome', () => {
   const m = amb.req('mensagens');
   assert.strictEqual(m.renderTexto('Oi, {nome}! Aula às {horario}.', { nome: 'Ana', horario: '09:30' }), 'Oi, Ana! Aula às 09:30.');
   const semNome = m.renderTexto('Oi, {nome}! Tudo bem?', {});
   assert.ok(!/\{nome\}|undefined|null/.test(semNome), `ficou: "${semNome}"`);
 });
 
-test('mensagens: todo texto padrão do catálogo existe e não tem variável desconhecida solta', () => {
+test('ENV-06 mensagens: todo texto padrão do catálogo existe e não tem variável desconhecida solta', () => {
   const m = amb.req('mensagens');
   for (const item of m.CATALOGO || []) {
     const t = m.texto(item.chave);

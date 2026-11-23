@@ -14,7 +14,7 @@ const { ambienteIsolado, portaLivre } = require('../ajuda');
 const ANTIGA = 'exemplo-antiga', PAINEL = 'exemplo-do-painel-123';
 const SENHAS = ['Abc12345', 'Slim#2026', 'Fit$$2026', 'a$&b', "x$'y", 'com espaco', '"aspas"', "it's", 'barra\\n', 'p@ss=word!', 'fim#', 'a`b', "mist'ura\"dupla", '#começa', '$1$2', 'ç~ã é'];
 
-test('.env: o valor lido é sempre igual ao gravado (#, $, aspas, espaço…)', () => {
+test('DAD-05 .env: o valor lido é sempre igual ao gravado (#, $, aspas, espaço…)', () => {
   const amb = ambienteIsolado();
   try {
     const env = amb.req('env-arquivo'), arq = path.join(amb.exp, '.env');
@@ -31,7 +31,7 @@ test('.env: o valor lido é sempre igual ao gravado (#, $, aspas, espaço…)', 
   } finally { amb.limpar(); }
 });
 
-test('.env: linha repetida vira uma só; valor impossível de gravar não altera o arquivo', () => {
+test('DAD-05 .env: linha repetida vira uma só; valor impossível de gravar não altera o arquivo', () => {
   const amb = ambienteIsolado();
   try {
     const env = amb.req('env-arquivo'), arq = path.join(amb.exp, '.env');
@@ -87,7 +87,7 @@ const entrar = async (porta, usuario, senha) => {
   return String((r || [])[0] || '').split(';')[0];
 };
 
-test('no painel: a senha salva pelo administrador é a que o robô lê; quem não é administrador não salva', { timeout: 120000 }, async () => {
+test('DAD-05 PAI-03 no painel: a senha salva pelo administrador é a que o robô lê; quem não é administrador não salva', { timeout: 120000 }, async () => {
   const amb = ambienteIsolado();
   const porta = await portaLivre();
   let painel;

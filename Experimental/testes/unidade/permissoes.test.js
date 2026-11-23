@@ -42,7 +42,7 @@ function rotas() {
 // Páginas públicas por natureza (cadastro/listagem do Slim Club, formulário de campanha, termos).
 const PUBLICAS = /^\/(login|logout|termos|politicadeprivacidade|midia-publica|auth\/google|slimclub|SlimClubCadastro|formulario\/|f\/)/i;
 
-test('usuário sem nenhuma permissão não acessa rota nenhuma do painel', { timeout: 180000 }, async () => {
+test('PAI-01 PAI-02 usuário sem nenhuma permissão não acessa rota nenhuma do painel', { timeout: 180000 }, async () => {
   const amb = ambienteIsolado();
   const porta = await portaLivre();
   let painel;

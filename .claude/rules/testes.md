@@ -2,19 +2,22 @@
 paths:
   - "Experimental/testes/**"
   - "Experimental/src/agendamento_evo/tests/**"
-  - "docs/REGRAS-DE-ENVIO.md"
+  - "docs/rastreabilidade.md"
+  - "scripts/matriz.js"
+  - "scripts/testar-alteracao.js"
 ---
 
 # Testes
 
 Comandos (todos rodam em cópia temporária):
-- Unidade: `cd Experimental && node --test testes/unidade/*.test.js`
+- Unidade: `cd Experimental && npm test` (= `node --test testes/unidade/*.test.js`)
+- Só o que a alteração pode ter quebrado primeiro: `cd Experimental && npm run testar-alteracao` (`-- --so` para não rodar o resto)
 - Telas: `cd Experimental && node testes/tela/telas.js --estrito` (demonstração, computador e celular)
 - Peças de tela no navegador: `cd Experimental && node --test testes/tela/componentes.test.js` (precisa do playwright)
 - EVO: `cd Experimental/src/agendamento_evo && python3 -m tests.test_offline`
 
 - **TST-01** Teste nunca toca dado real: use `ambienteIsolado()` de `testes/ajuda.js` (copia o código para uma pasta temporária; `amb.req`, `amb.gravarData`, `amb.gravarSofia`, `amb.whatsappFalso()`); painel em teste roda com `testes/bloqueios.js` (sem rede externa nem comandos).
-- **TST-02** Regra nova ou alterada → teste com o nome dizendo a regra em português, e linha no mapa `docs/REGRAS-DE-ENVIO.md` (se for de envio). `matriz-regras.test.js` falha se o mapa citar teste que não existe.
+- **TST-02** Regra nova ou alterada → teste cujo nome **começa pelo código** da regra (ex.: `CONF-02 2ª mensagem: ...`; formas curtas `PAI-01..04`, `VIS-02/03/06`) e linha na matriz `docs/rastreabilidade.md` citando o teste (`` `arquivo.test.js` › começo do título ``). `matriz.test.js` falha se: um código das regras não tem linha; um teste citado não existe (ou o começo do título serve para mais de um); um teste com código no nome não está na linha do código; o resumo está velho (`npm run matriz` reconta).
 - **TST-03** Tela nova → entra em `TELAS` de `testes/tela/telas.js`.
 - **TST-04** Teste que sobe servidor pede a porta a `portaLivre()` de `testes/ajuda.js`: faixa própria 41000–41999 (longe das portas que o navegador e o fetch recusam), conferida livre.
 - **TST-05** Teste instável: achar e corrigir a causa; nunca repetir a rodada até passar nem desligar o teste.

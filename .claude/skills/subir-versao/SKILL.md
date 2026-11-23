@@ -9,12 +9,12 @@ Siga na ordem. Pare e avise o usuário se algum passo falhar — nunca mescle co
 
 1. **Conferir localmente**
    - `node --check` em cada `.js` alterado. Se mexeu na SoFIA: `ChatBot/node_modules/.bin/esbuild ChatBot/sofia-listener.ts --format=esm --platform=node --log-level=error > /dev/null`.
-   - `cd Experimental && node --test testes/unidade/*.test.js`
+   - `cd Experimental && npm run testar-alteracao` (roda primeiro os testes das regras dos arquivos mexidos, avisa as regras sem teste e depois roda o resto dos testes de unidade)
    - Se mexeu em tela do painel: `cd Experimental && node testes/tela/telas.js` (sobe a demonstração numa pasta temporária; leia os avisos).
    - Se mexeu no `agendamento_evo`: `cd Experimental/src/agendamento_evo && python3 -m tests.test_offline`.
    - `git status`: nada de `Experimental/data/`, `.env`, sessões do WhatsApp ou prints soltos no commit.
 
-2. **Regras de envio**: regra nova/alterada que manda mensagem para cliente → linha em `docs/REGRAS-DE-ENVIO.md` com o teste que a garante.
+2. **Matriz**: regra nova/alterada → linha em `docs/rastreabilidade.md` com o teste que a garante (nome do teste começa pelo código da regra); depois `cd Experimental && npm run matriz` para recontar o resumo.
 3. **Novidades**: se o usuário vai notar a mudança, acrescente um item em *Novidades* de `Experimental/src/agendamento_evo/formulario_web/templates/implantacao.html` (e em *Manutenção* se for comando novo).
 
 4. **Commit e push** na branch de trabalho da sessão (mensagem em português, com as linhas de atribuição pedidas pela sessão). `git push -u origin <branch>`.

@@ -11,7 +11,7 @@ const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'u
   env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' } }).trim();
 const commit = (dir, msg) => { fs.writeFileSync(path.join(dir, 'a.txt'), msg); git(dir, 'add', '.'); git(dir, 'commit', '-q', '-m', msg); return git(dir, 'rev-parse', 'HEAD'); };
 
-test('baixa a "estavel" e conta o que ainda está no teste; sem ela, usa a main; --main força a main', () => {
+test('DEP-02 baixa a "estavel" e conta o que ainda está no teste; sem ela, usa a main; --main força a main', () => {
   const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-ramo-'));
   try {
     const origem = path.join(raiz, 'origem.git'), dev = path.join(raiz, 'dev'), srv = path.join(raiz, 'servidor');

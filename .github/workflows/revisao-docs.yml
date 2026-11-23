@@ -35,7 +35,7 @@ jobs:
             for f in docs/DOCUMENTACAO-SISTEMA.md \
                      Experimental/src/agendamento_evo/formulario_web/templates/implantacao.html \
                      Experimental/src/agendamento_evo/formulario_web/templates/manual.html \
-                     docs/REGRAS-DE-ENVIO.md; do
+                     docs/rastreabilidade.md; do
               echo "- [ ] \`$f\` — última mudança em $(git log -1 --format=%cs -- "$f")"
             done
             echo

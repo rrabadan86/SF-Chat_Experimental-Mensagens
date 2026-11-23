@@ -15,7 +15,7 @@ function carregar(amb, env = {}) {
 }
 const TODO_DIA = { FILA_JOBS_HORA_INI: '0', FILA_JOBS_HORA_FIM: '24' };
 
-test('job que esperava a vez quando o robô reiniciou roda depois; o que já tinha começado não repete', async () => {
+test('ENV-04 ENV-05 job que esperava a vez quando o robô reiniciou roda depois; o que já tinha começado não repete', async () => {
   const amb = ambienteIsolado();
   try {
     // Robô 1: Follow-up Manhã fica esperando; Renovação estava rodando.
@@ -43,7 +43,7 @@ test('job que esperava a vez quando o robô reiniciou roda depois; o que já tin
   } finally { amb.limpar(); }
 });
 
-test('job que desistiu de esperar (robô ocupado 40 min) roda quando o robô liberar', () => {
+test('ENV-03 ENV-04 job que desistiu de esperar (robô ocupado 40 min) roda quando o robô liberar', () => {
   const amb = ambienteIsolado();
   try {
     const b = carregar(amb, TODO_DIA);
@@ -55,7 +55,7 @@ test('job que desistiu de esperar (robô ocupado 40 min) roda quando o robô lib
   } finally { amb.limpar(); }
 });
 
-test('de noite não manda nada atrasado; atrasado demais sai da fila (com aviso)', () => {
+test('ENV-04 de noite não manda nada atrasado; atrasado demais sai da fila (com aviso)', () => {
   const amb = ambienteIsolado();
   try {
     const hora = new Date(Date.now() - 3 * 3600e3).getUTCHours(); // hora de Brasília agora
@@ -73,7 +73,7 @@ test('de noite não manda nada atrasado; atrasado demais sai da fila (com aviso)
   } finally { amb.limpar(); }
 });
 
-test('job sem etiqueta (manual pelo painel) não entra na fila', () => {
+test('ENV-04 job sem etiqueta (manual pelo painel) não entra na fila', () => {
   const amb = ambienteIsolado();
   try {
     const b = carregar(amb, TODO_DIA);

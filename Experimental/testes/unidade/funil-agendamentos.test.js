@@ -13,7 +13,7 @@ const contatosDe = (n) => { const c = {}; for (let i = 1; i <= n; i++) c[tel(i)]
 const base = (amb, n) => { amb.gravarSofia('sofia-conversas.json', {}); amb.gravarSofia('sofia-historico.json', {}); amb.gravarData('contatos.json', contatosDe(n)); };
 const funil = (amb, params) => amb.req('painel-indicadores').paginaSofiaFunil({ _numeros: true, ...params });
 
-test('funil: etiqueta trocada em lote em milhares de contatos não esconde os agendamentos antigos', () => {
+test('IND-02 funil: etiqueta trocada em lote em milhares de contatos não esconde os agendamentos antigos', () => {
   const amb = ambienteIsolado();
   try {
     base(amb, 12);
@@ -36,7 +36,7 @@ test('funil: etiqueta trocada em lote em milhares de contatos não esconde os ag
   } finally { amb.limpar(); }
 });
 
-test('funil: quem tem mais de 30 trocas de etiqueta depois de agendar continua contando', () => {
+test('IND-02 funil: quem tem mais de 30 trocas de etiqueta depois de agendar continua contando', () => {
   const amb = ambienteIsolado();
   try {
     base(amb, 2);
@@ -47,7 +47,7 @@ test('funil: quem tem mais de 30 trocas de etiqueta depois de agendar continua c
   } finally { amb.limpar(); }
 });
 
-test('funil: agendamento conta mesmo sem nenhuma etiqueta com o gatilho "agendou"', () => {
+test('IND-02 funil: agendamento conta mesmo sem nenhuma etiqueta com o gatilho "agendou"', () => {
   const amb = ambienteIsolado();
   try {
     base(amb, 3);
@@ -70,7 +70,7 @@ test('funil: agendamento conta mesmo sem nenhuma etiqueta com o gatilho "agendou
   } finally { amb.limpar(); }
 });
 
-test('funil: o mesmo agendamento visto no registro, na etiqueta e no arquivo da aula conta UMA vez', () => {
+test('IND-02 funil: o mesmo agendamento visto no registro, na etiqueta e no arquivo da aula conta UMA vez', () => {
   const amb = ambienteIsolado();
   try {
     base(amb, 2);
@@ -92,7 +92,7 @@ test('funil: o mesmo agendamento visto no registro, na etiqueta e no arquivo da 
   } finally { amb.limpar(); }
 });
 
-test('funil: agendamento antigo sem etiqueta entra pela data gravada com a aula; sem data nenhuma, só em "Tudo"', () => {
+test('IND-02 IND-04 funil: agendamento antigo sem etiqueta entra pela data gravada com a aula; sem data nenhuma, só em "Tudo"', () => {
   const amb = ambienteIsolado();
   try {
     base(amb, 4);
@@ -114,7 +114,7 @@ test('funil: agendamento antigo sem etiqueta entra pela data gravada com a aula;
   } finally { amb.limpar(); }
 });
 
-test('metas: mês fechado sem funil recebe o funil quando o histórico passa a alcançar o mês — e só isso', () => {
+test('IND-06 metas: mês fechado sem funil recebe o funil quando o histórico passa a alcançar o mês — e só isso', () => {
   const amb = ambienteIsolado();
   try {
     const metas = amb.req('metas');

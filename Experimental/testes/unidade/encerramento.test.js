@@ -10,7 +10,7 @@ function registro(amb, itens) {
   amb.gravarData('followups-enviados.json', o);
 }
 
-test('manda o encerramento só para quem não respondeu, uma vez só', async () => {
+test('FUP-03 ENV-01 manda o encerramento só para quem não respondeu, uma vez só', async () => {
   const amb = ambienteIsolado(); const volta = semEsperas();
   try {
     registro(amb, [
@@ -31,7 +31,7 @@ test('manda o encerramento só para quem não respondeu, uma vez só', async () 
   } finally { volta(); amb.limpar(); }
 });
 
-test('quem virou aluna não recebe encerramento', async () => {
+test('FUP-03 quem virou aluna não recebe encerramento', async () => {
   const amb = ambienteIsolado(); const volta = semEsperas();
   try {
     registro(amb, [['5562981110001', 'Ana', 20 * HORA, 'followup']]);
@@ -42,7 +42,7 @@ test('quem virou aluna não recebe encerramento', async () => {
   } finally { volta(); amb.limpar(); }
 });
 
-test('quem agendou de novo depois da mensagem não recebe encerramento — mesmo sem etiqueta de "agendou"', async () => {
+test('FUP-03 quem agendou de novo depois da mensagem não recebe encerramento — mesmo sem etiqueta de "agendou"', async () => {
   const amb = ambienteIsolado(); const volta = semEsperas();
   try {
     registro(amb, [['5562981110001', 'Ana', 20 * HORA, 'followup'], ['5562981110002', 'Bia', 20 * HORA, 'followup']]);
@@ -56,7 +56,7 @@ test('quem agendou de novo depois da mensagem não recebe encerramento — mesmo
   } finally { volta(); amb.limpar(); }
 });
 
-test('sem conseguir ler a conversa, não envia', async () => {
+test('FUP-03 ENV-02 sem conseguir ler a conversa, não envia', async () => {
   const amb = ambienteIsolado(); const volta = semEsperas();
   try {
     registro(amb, [['5562981110001', 'Ana', 20 * HORA, 'followup']]);
