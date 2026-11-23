@@ -396,7 +396,9 @@ const ESTILO = `
   .wa-card.warn{border-color:var(--erro-bd);background:var(--erro-bg)}
   .wa-ic{font-size:1.7rem;line-height:1}
   .wa-card h2{margin:4px 0 3px}
-  .wa-card p{color:var(--cinza);margin:3px auto 0;max-width:none;font-size:var(--fs-sm)}
+  .wa-card p{color:var(--cinza);margin:3px auto 0;max-width:68ch;font-size:var(--fs-sm)}
+  .wa-aviso{max-width:68ch;margin:12px auto 0;text-align:left;background:var(--card);border:1px solid var(--erro-bd);border-radius:10px;padding:10px 14px;font-size:var(--fs-sm);color:var(--tinta);line-height:1.5}
+  .wa-aviso b:first-child{color:var(--erro)}
   .wa-card .qr{width:280px;max-width:82%;height:auto;margin:16px auto 6px;display:block;border:8px solid #fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.12)}
   .wa-hint{font-size:var(--fs-sm)}
   .wa-upd{text-align:center;color:var(--cinza);font-size:var(--fs-xs);margin-top:10px}
@@ -1027,6 +1029,9 @@ ${corpo}
           var posI=function(){ var st=document.querySelector('.subtabs'); var tb=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h'))||60;
             navI.style.top=filhosI[iniI].offsetTop+'px'; caixaI.style.top=(tb+(st?st.offsetHeight:0)+14)+'px'; caixaI.style.maxHeight='calc(100vh - '+(tb+(st?st.offsetHeight:0)+34)+'px)'; };
           posI(); window.addEventListener('resize',posI); window.addEventListener('load',posI);
+          // um quadro acima das seções que muda de altura depois de abrir a tela (ex.: o
+          // estado do WhatsApp da SoFIA) deixava o índice por cima dele: reposiciona
+          try{ if(window.ResizeObserver) new ResizeObserver(function(){ posI(); }).observe(wrapI); }catch(e){}
           var marcaI=function(){ var lim=160, atual=secsI[0]; secsI.forEach(function(d){ if(d.getBoundingClientRect().top<=lim) atual=d; });
             secsI.forEach(function(d){ d.__ind.classList.toggle('on', d===atual); }); };
           marcaI(); window.addEventListener('scroll',marcaI,{passive:true});
