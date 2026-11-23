@@ -438,11 +438,33 @@ function initWhatsApp() {
     // Fecha o navegador desta tentativa ANTES de liberar outra: ele ficava aberto,
     // e cada tentativa nova abria MAIS um Chromium no mesmo perfil do WhatsApp — os
     // dois brigavam pela sessão e o robô não conectava mais até ser reiniciado.
+    await anotarEstadoNaFalha(client);
     await fecharClienteMorto(client);
     initPromise = null; // permite nova tentativa depois
     if (rejectInit) rejectInit(new Error(msg));
   });
   return initPromise;
+}
+
+// Em que ponto o WhatsApp Web parou? ("Waiting failed" sozinho não separa página que nem
+// abriu, conexão presa em "abrindo" — rede ou WhatsApp segurando — e "pareando".)
+async function anotarEstadoNaFalha(c) {
+  try {
+    const pg = c && c.pupPage;
+    if (!pg) return;
+    const info = await Promise.race([
+      pg.evaluate(() => {
+        const w = globalThis;
+        let socket = '', stream = '';
+        try { socket = String(w.require('WAWebSocketModel').Socket.state || ''); } catch (_) {}
+        try { stream = String(w.require('WAWebStreamModel').Stream.displayInfo || ''); } catch (_) {}
+        return { versao: String((w.Debug && w.Debug.VERSION) || ''), socket, stream, online: !!(w.navigator && w.navigator.onLine) };
+      }),
+      new Promise((r) => setTimeout(() => r(null), 5000)),
+    ]).catch(() => null);
+    log(info ? `   estado do WhatsApp Web na falha: página ${info.versao ? 'abriu (versão ' + info.versao + ')' : 'NÃO abriu'} · conexão: ${info.socket || '?'} · fluxo: ${info.stream || '?'} · rede do navegador: ${info.online ? 'ok' : 'SEM REDE'}`
+      : '   estado do WhatsApp Web na falha: não consegui ler (navegador sem resposta)');
+  } catch (_) {}
 }
 
 // Encerra um cliente que não chegou a conectar: destroy() com prazo e, se o

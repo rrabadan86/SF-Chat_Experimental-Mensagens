@@ -15,7 +15,8 @@ const path = require('path');
 const fake = { criados: [], destruidos: 0, mortos: 0 };
 class Client {
   constructor(opts) { this.options = opts; this.n = fake.criados.push(opts); this.ev = {};
-    this.pupBrowser = { process: () => ({ exitCode: null, killed: false, kill: () => { fake.mortos++; } }) }; }
+    this.pupBrowser = { process: () => ({ exitCode: null, killed: false, kill: () => { fake.mortos++; } }) };
+    this.pupPage = { evaluate: async () => ({ versao: '2.3000.1', socket: 'OPENING', stream: 'CONNECTING', online: true }) }; }
   on(e, f) { this.ev[e] = f; }
   async initialize() {
     if (this.n <= 2) throw new Error('Waiting failed: 30000ms exceeded');
@@ -54,6 +55,7 @@ test('WhatsApp do robô: espera 2 min para conectar e fecha o navegador de cada 
     assert.strictEqual(r.criados, 3);
     assert.strictEqual(r.destruidos, 2, 'o cliente que conectou continua aberto');
     assert.strictEqual(r.espera, 120000, 'a biblioteca esperava só 30 s — pouco para servidor com várias unidades');
+    assert.match(saida, /estado do WhatsApp Web na falha: página abriu \(versão 2\.3000\.1\) · conexão: OPENING · fluxo: CONNECTING · rede do navegador: ok/, 'o log diz em que ponto o WhatsApp parou');
   } finally { amb.limpar(); }
 });
 
