@@ -1,0 +1,61 @@
+# Prints das telas (DEP-08): botão manual (Actions → "Prints das telas" → Run workflow).
+# Sobe o painel de DEMONSTRAÇÃO (dados fictícios) com o relógio parado numa data e tira
+# print de cada tela no computador (1366 px) e no celular (390 px). Os prints ficam
+# anexados à rodada por 30 dias (zip "prints-telas"). Serve para a revisão de design.
+# Prints de REFERÊNCIA (guardados para comparar) só depois da revisão de design.
+name: Prints das telas
+
+on:
+  workflow_dispatch:
+    inputs:
+      telas:
+        description: "Só estas telas (ex.: /metas,/funil). Vazio = todas"
+        required: false
+        default: ""
+      relogio:
+        description: "Data e hora fixas dos prints"
+        required: false
+        default: "2026-11-23T10:00:00-03:00"
+
+permissions:
+  contents: read
+
+jobs:
+  prints:
+    name: Prints (computador e celular)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Experimental/package-lock.json
+      - name: Dependências
+        working-directory: Experimental
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "1"
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npm install --no-save --no-audit --no-fund playwright@1.49.1
+          npx playwright install --with-deps chromium
+      - name: Tirar os prints
+        working-directory: Experimental
+        env:
+          SAIDA: ${{ runner.temp }}/prints
+          TELAS: ${{ inputs.telas }}
+          RELOGIO: ${{ inputs.relogio }}
+        run: |
+          so=""
+          if [ -n "$TELAS" ]; then so="--so=$TELAS"; fi
+          node testes/tela/telas.js --prints "--relogio=$RELOGIO" $so
+      - name: Guardar os prints (30 dias)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prints-telas
+          path: ${{ runner.temp }}/prints
+          retention-days: 30
+          if-no-files-found: warn

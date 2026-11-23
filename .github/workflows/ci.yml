@@ -8,9 +8,10 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  workflow_call:   # a rodada noturna (noturno.yml) chama esta mesma bateria
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -20,6 +21,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # para comparar o PR com a main (regras mexidas)
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -44,6 +47,17 @@ jobs:
       - name: Testes de unidade (regras de envio, contatos, mensagens)
         working-directory: Experimental
         run: node --test testes/unidade/*.test.js
+      - name: Regras mexidas e matriz (resumo na página do CI)
+        if: always()
+        env:
+          EVENTO: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENTO" = "pull_request" ]; then
+            node scripts/testar-alteracao.js --resumo --base="origin/$BASE" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+          fi
+          node scripts/matriz.js --resumo >> "$GITHUB_STEP_SUMMARY"
 
   python:
     name: Agendamento EVO (Python)

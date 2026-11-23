@@ -1,0 +1,79 @@
+# Rodada noturna (DEP-08): toda madrugada roda a bateria inteira na main (a mesma do CI)
+# e os testes de unidade com o relógio do servidor em outros fusos. Se algo falhar, abre
+# (ou atualiza) o aviso "Rodada noturna com falha" no GitHub; quando volta a passar, fecha.
+# Não mexe em código nem nos servidores e não usa dado de verdade.
+name: Rodada noturna
+
+on:
+  schedule:
+    - cron: '37 6 * * *'   # 03:37 de Brasília
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  bateria:
+    name: Bateria completa
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: write   # o ci.yml declara a marca "estavel"; ela só anda num push na main, nunca aqui
+
+  fusos:
+    name: Datas com o servidor em outro fuso (${{ matrix.tz }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        tz: [America/Sao_Paulo, Asia/Tokyo, Pacific/Kiritimati]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Experimental/package-lock.json
+      - name: Dependências
+        working-directory: Experimental
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "1"
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Testes de unidade
+        working-directory: Experimental
+        env:
+          TZ: ${{ matrix.tz }}
+        run: node --test testes/unidade/*.test.js
+
+  aviso:
+    name: Aviso no GitHub
+    needs: [bateria, fusos]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Abrir, atualizar ou fechar o aviso
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BATERIA: ${{ needs.bateria.result }}
+          FUSOS: ${{ needs.fusos.result }}
+          RODADA: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          titulo="Rodada noturna com falha"
+          num=$(gh issue list --state open --search "\"$titulo\" in:title" --json number --jq '.[0].number // empty')
+          hoje=$(TZ=America/Sao_Paulo date +%d/%m/%Y)
+          if [ "$BATERIA" = "success" ] && [ "$FUSOS" = "success" ]; then
+            if [ -n "$num" ]; then gh issue close "$num" --comment "✅ Voltou a passar na rodada de $hoje: $RODADA"; fi
+            echo "✅ Tudo passou" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          corpo="A rodada noturna de $hoje falhou na main — bateria: **$BATERIA**, outros fusos: **$FUSOS**.
+
+          Veja o que falhou: $RODADA
+
+          A main é o que os servidores recebem (marca \`estavel\`). Corrija a causa num PR antes de atualizar qualquer servidor."
+          if [ -n "$num" ]; then gh issue comment "$num" --body "$corpo"; else gh issue create --title "$titulo" --body "$corpo"; fi
+          echo "❌ Falhou — aviso aberto/atualizado" >> "$GITHUB_STEP_SUMMARY"

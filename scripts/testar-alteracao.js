@@ -4,6 +4,7 @@
  *
  *   cd Experimental && npm run testar-alteracao            arquivos mexidos desde a main
  *   cd Experimental && npm run testar-alteracao -- --so    roda só os testes das regras mexidas
+ *   node scripts/testar-alteracao.js --resumo --base=origin/main   só o relatório (markdown, para o CI)
  *
  * 1. Lista os arquivos mexidos (commits desde a origin/main + o que ainda não foi commitado).
  * 2. Pela coluna "Onde" da matriz (docs/rastreabilidade.md), acha as regras desses arquivos.
@@ -18,10 +19,12 @@ const { execSync, spawnSync } = require('child_process');
 const M = require('./matriz');
 
 const so = process.argv.includes('--so');
+const soResumo = process.argv.includes('--resumo');
+const BASE = (process.argv.find(a => a.startsWith('--base=')) || '').slice(7) || 'origin/main';
 const sh = (c) => { try { return execSync(c, { cwd: M.REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch (_) { return ''; } };
 
 function mexidos() {
-  const base = sh('git merge-base origin/main HEAD').trim();
+  const base = sh(`git merge-base ${BASE} HEAD`).trim();
   const lista = [
     ...(base ? sh(`git diff --name-only ${base} HEAD`) : '').split('\n'),
     ...sh('git diff --name-only HEAD').split('\n'),
@@ -31,7 +34,7 @@ function mexidos() {
 }
 
 const arquivos = mexidos();
-if (!arquivos.length) { console.log('Nada mexido em relação à origin/main.'); process.exit(0); }
+if (!arquivos.length) { console.log(soResumo ? `### Regras mexidas\n\nNada mexido em relação à ${BASE}.` : `Nada mexido em relação à ${BASE}.`); process.exit(0); }
 
 const { erros, linhas } = M.conferir();
 const abs = (f) => path.join(M.REPO, f);
@@ -50,9 +53,19 @@ for (const a of arquivos) if (/\.test\.js$/.test(a)) jsPrimeiro.add(abs(a));
 if (arquivos.some(a => /^Experimental\/src\/agendamento_evo\//.test(a))) python = true;
 if (arquivos.some(a => /painel-|testes\/tela\//.test(a))) telas = true;
 
+const sem = afetadas.filter(l => l.cobertura === '❌'), parte = afetadas.filter(l => l.cobertura === 'parcial');
+if (soResumo) {
+  const out = ['### Regras mexidas neste PR', ''];
+  out.push(`${arquivos.length} arquivo(s) mexido(s). ` + (afetadas.length ? `Regras desses arquivos: ${afetadas.map(l => `\`${l.codigo}\``).join(', ')}.` : 'Nenhuma regra da matriz aponta para eles.'));
+  if (sem.length) out.push('', '**⚠️ Sem teste — conferir à mão:**', ...sem.map(l => `- \`${l.codigo}\` ${l.regra}`));
+  if (parte.length) out.push('', '**Teste só em parte:**', ...parte.map(l => `- \`${l.codigo}\` ${l.coberturaTexto.replace(/^parcial:?\s*/, 'falta: ')}`));
+  if (semRegra.length) out.push('', `Arquivos de código sem regra na matriz: ${semRegra.map(a => `\`${a}\``).join(', ')}`);
+  if (erros.length) out.push('', `**❌ A matriz tem ${erros.length} problema(s)** — rode \`npm run matriz\`.`);
+  console.log(out.join('\n'));
+  process.exit(0);
+}
 console.log(`Arquivos mexidos: ${arquivos.length}`);
 console.log(afetadas.length ? `Regras desses arquivos: ${afetadas.map(l => l.codigo).join(', ')}` : 'Nenhuma regra da matriz aponta para esses arquivos.');
-const sem = afetadas.filter(l => l.cobertura === '❌'), parte = afetadas.filter(l => l.cobertura === 'parcial');
 if (sem.length) console.log(`\n⚠️  Regras mexidas SEM teste — confira à mão ou escreva o teste:\n${sem.map(l => `   ${l.codigo} ${l.regra}`).join('\n')}`);
 if (parte.length) console.log(`\n⚠️  Regras mexidas com teste só em parte:\n${parte.map(l => `   ${l.codigo} ${l.coberturaTexto.replace(/^parcial:?\s*/, 'falta: ')}`).join('\n')}`);
 if (semRegra.length) console.log(`\nℹ️  Arquivos de código sem regra na matriz: ${semRegra.join(', ')}`);

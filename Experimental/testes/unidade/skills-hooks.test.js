@@ -88,3 +88,31 @@ test('TST-10 limpeza: apaga só pastas sf-* de teste com mais de 2 h, na pasta t
     assert.strictEqual(spawnSync(process.execPath, [LIMPAR], { input: '{}', env: { ...process.env, TMPDIR: tmp } }).status, 0);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
+
+test('DEP-08 GitHub: CI em todo PR, rodada noturna que abre/fecha o aviso, prints só pelo botão', () => {
+  const wf = (n) => fs.readFileSync(path.join(REPO, '.github', 'workflows', n), 'utf8');
+  const ci = wf('ci.yml'), noite = wf('noturno.yml'), prints = wf('prints.yml');
+  assert.match(ci, /\n  pull_request:/); assert.match(ci, /workflow_call:/, 'a rodada noturna reaproveita o CI');
+  assert.match(ci, /testar-alteracao\.js --resumo/); assert.match(ci, /matriz\.js --resumo/);
+  assert.match(ci, /group: ci-\$\{\{ github\.workflow \}\}-/, 'a rodada noturna não cancela o CI da main');
+  assert.match(ci, /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/, 'a marca estavel só anda num push na main');
+  assert.match(noite, /schedule:\s*\n\s*- cron: '37 6 \* \* \*'/);
+  assert.match(noite, /uses: \.\/\.github\/workflows\/ci\.yml/);
+  assert.match(noite, /TZ: \$\{\{ matrix\.tz \}\}/);
+  assert.match(noite, /gh issue close/); assert.match(noite, /gh issue create/);
+  assert.doesNotMatch(prints, /\n  (schedule|push|pull_request):/, 'prints só pelo botão');
+  assert.match(prints, /--prints "--relogio=\$RELOGIO"/);
+  for (const t of [ci, noite, prints]) assert.doesNotMatch(t, /run:[^\n]*\$\{\{ (github\.event|inputs)\./, 'entrada de fora vai por env, nunca direto no comando');
+  // o que o CI roda existe
+  assert.ok(fs.existsSync(path.join(REPO, 'scripts', 'testar-alteracao.js')) && fs.existsSync(path.join(REPO, 'scripts', 'matriz.js')));
+});
+
+test('DEP-08 relógio fixo dos prints: a data começa na pedida e anda; sem a variável nada muda', () => {
+  const fixo = path.join(REPO, 'Experimental', 'testes', 'tela', 'relogio-fixo.js');
+  const rodar = (env) => execFileSync(process.execPath, ['-r', fixo, '-e', "const a=Date.now(); const d=new Date(); console.log(JSON.stringify({iso: d.toISOString(), inst: d instanceof Date, str: typeof Date(), velho: new Date('2020-01-02T00:00:00Z').getUTCFullYear(), parse: Date.parse('2021-01-01T00:00:00Z')}))"], { env: { ...process.env, ...env }, encoding: 'utf8' });
+  const r = JSON.parse(rodar({ SF_RELOGIO_FIXO: '2026-03-02T10:00:00-03:00' }));
+  assert.ok(r.iso.startsWith('2026-03-02T13:00:0'), r.iso);
+  assert.deepStrictEqual([r.inst, r.str, r.velho, r.parse], [true, 'string', 2020, Date.parse('2021-01-01T00:00:00Z')]);
+  const sem = JSON.parse(rodar({ SF_RELOGIO_FIXO: '' }));
+  assert.ok(Math.abs(Date.parse(sem.iso) - Date.now()) < 60000, 'sem a variável o relógio é o de verdade');
+});
