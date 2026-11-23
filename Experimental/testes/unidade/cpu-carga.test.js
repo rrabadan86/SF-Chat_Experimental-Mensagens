@@ -13,11 +13,14 @@ const rodada = (ocup, steal = 0) => { t += 1000; st += steal * 10; oc += (100 - 
 const cfg = { limite: 85, rodadas: 3, cpus: 2, carga: [1.9, 1.8, 1.5] };
 
 test('lê a linha "cpu" do /proc/stat', () => {
-  const arq = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sf-cpu-')), 'stat');
-  fs.writeFileSync(arq, 'cpu  100 0 50 800 50 0 0 0 0 0\ncpu0 1 2 3\n');
-  const a = ler(arq);
-  assert.strictEqual(a.total, 1000); assert.strictEqual(a.ocioso, 850); assert.strictEqual(a.steal, 0);
-  assert.strictEqual(ler(arq + '-nao-existe'), null);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-cpu-'));
+  try {
+    const arq = path.join(dir, 'stat');
+    fs.writeFileSync(arq, 'cpu  100 0 50 800 50 0 0 0 0 0\ncpu0 1 2 3\n');
+    const a = ler(arq);
+    assert.strictEqual(a.total, 1000); assert.strictEqual(a.ocioso, 850); assert.strictEqual(a.steal, 0);
+    assert.strictEqual(ler(arq + '-nao-existe'), null);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('pico curto não alerta; 3 rodadas altas alertam; resolve só bem abaixo do limite', () => {

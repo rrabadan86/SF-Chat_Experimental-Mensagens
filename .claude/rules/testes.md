@@ -12,7 +12,7 @@ paths:
 Comandos (todos rodam em cópia temporária):
 - Unidade: `cd Experimental && npm test` (= `node --test testes/unidade/*.test.js`)
 - Só o que a alteração pode ter quebrado primeiro: `cd Experimental && npm run testar-alteracao` (`-- --so` para não rodar o resto)
-- Telas: `cd Experimental && node testes/tela/telas.js --estrito` (demonstração, computador e celular)
+- Telas: `cd Experimental && node testes/tela/telas.js --estrito` (demonstração, computador e celular); só algumas, com print de todas: `--so=/metas,/funil --prints` (skill `conferir-celular`)
 - Peças de tela no navegador: `cd Experimental && node --test testes/tela/componentes.test.js` (precisa do playwright)
 - EVO: `cd Experimental/src/agendamento_evo && python3 -m tests.test_offline`
 
@@ -25,3 +25,4 @@ Comandos (todos rodam em cópia temporária):
 - **TST-07** "Hoje" e "agora" vêm de `src/relogio.js` (fonte única; não crie outro `hojeSP`). Teste de data fixa o relógio com `NODE_ENV=test` + `SF_AGORA` (ISO); fora de teste o `SF_AGORA` é ignorado. Datas difíceis em `datas.test.js`: 1º do mês, fim de fevereiro/ano bissexto, 1º de janeiro, domingo, virada do dia em Brasília.
 - **TST-08** Perfis: `permissoes.test.js` (todas as rotas, usuário sem acesso) e `perfis.test.js` (cada perfil: o que vê no menu, o que abre, o que o servidor nega). Permissão ou perfil novo → linha em `PERFIS` de `perfis.test.js`.
 - **TST-09** Telas (`telas.js`): computador 1366 px e celular 390 px; abre as seções recolhidas; reprova erro de JavaScript, "undefined/null/NaN", rolagem lateral da página **e dentro** de cartão/tabela/bloco (texto com "…" não conta). Peças no navegador: `tela/componentes.test.js`. Clique só em elemento à vista (o Playwright recusa escondido; nos testes próprios, `clicar()` confere que está na tela).
+- **TST-10** Teste que cria pasta temporária usa o prefixo `sf-` e apaga no fim (`finally`). O que sobrar (teste interrompido, prints) o hook `limpar-restos-teste.js` apaga depois de 2 h — só pastas `sf-*` da pasta temporária do sistema.

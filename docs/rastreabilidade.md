@@ -29,13 +29,13 @@ o teste que a garante e a cobertura.
 | Indicadores e tags | 9 | 8 | 0 | 1 | 0 |
 | Dados e segredos | 7 | 4 | 1 | 0 | 2 |
 | Demonstração | 4 | 3 | 0 | 0 | 1 |
-| Publicar e atualizar | 6 | 1 | 0 | 2 | 3 |
-| Testes | 9 | 4 | 0 | 0 | 5 |
-| **Total** | 99 | 41 | 18 | 26 | 14 |
+| Publicar e atualizar | 7 | 2 | 0 | 2 | 3 |
+| Testes | 10 | 5 | 0 | 0 | 5 |
+| **Total** | 101 | 43 | 18 | 26 | 14 |
 
-Regras de código (sem as de processo): **59 de 85** com teste (41 inteiras, 18 em parte); **26** sem teste.
+Regras de código (sem as de processo): **61 de 87** com teste (43 inteiras, 18 em parte); **26** sem teste.
 
-Testes: 122 no total, 86 ligados a uma regra. Os outros 36 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
+Testes: 126 no total, 90 ligados a uma regra. Os outros 36 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
 <!-- resumo:fim -->
 
 ## Envios a clientes (`envio.md`)
@@ -172,6 +172,7 @@ Testes: 122 no total, 86 ligados a uma regra. Os outros 36 conferem funções qu
 | DEP-04 | Nomes do PM2 vêm de `pm2-nomes.js` | `pm2-nomes.js` | — | ❌ |
 | DEP-05 | Mudança que o dono nota → Novidades | `agendamento_evo/formulario_web/templates/implantacao.html` | — | processo |
 | DEP-06 | Comandos simples, um por linha; nada de backup sem pedido | `scripts/atualizar.js` | — | processo |
+| DEP-07 | Skills (subir-versao, conferir-pr, conferir-celular, nova-tela) e hooks (segredos, lembretes depois do git, limpeza) | `.claude/settings.json`, `.claude/hooks/depois-do-git.js`, `.claude/skills/conferir-pr/SKILL.md` | `skills-hooks.test.js` › DEP-07 skills<br>`skills-hooks.test.js` › DEP-07 hooks<br>`skills-hooks.test.js` › DEP-07 depois do commit | ✅ |
 
 ## Testes (`testes.md`)
 
@@ -186,6 +187,7 @@ Testes: 122 no total, 86 ligados a uma regra. Os outros 36 conferem funções qu
 | TST-07 | "Hoje" vem de `relogio.js`; teste fixa com `SF_AGORA` | `relogio.js` | `datas.test.js` › relógio | ✅ |
 | TST-08 | Perfis: todas as rotas e cada perfil | `testes/unidade/perfis.test.js` | `perfis.test.js` › PAI-01..04 cada perfil<br>`permissoes.test.js` › PAI-01 PAI-02 usuário sem nenhuma permissão | ✅ |
 | TST-09 | Telas a 1366 e 390 px, sem rolagem lateral | `testes/tela/telas.js` | `telas.js` | ✅ |
+| TST-10 | Teste apaga a pasta temporária; o hook apaga os restos `sf-*` com mais de 2 h | `.claude/hooks/limpar-restos-teste.js`, `testes/ajuda.js` | `skills-hooks.test.js` › TST-10 limpeza | ✅ |
 
 ## Achados
 

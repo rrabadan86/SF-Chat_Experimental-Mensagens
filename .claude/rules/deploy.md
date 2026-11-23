@@ -3,6 +3,8 @@ paths:
   - "scripts/**"
   - ".github/**"
   - ".claude/skills/**"
+  - ".claude/hooks/**"
+  - ".claude/settings.json"
   - "Experimental/setup-novo-studio.sh"
   - "Experimental/src/atualizacao-painel.js"
   - "Experimental/src/pm2-nomes.js"
@@ -17,3 +19,4 @@ paths:
 - **DEP-04** Nomes do PM2 vêm de `pm2-nomes.js` (Bueno `slimfit-*`, Lago Norte `lagonorte-*`, Lago Sul 1 e 2 `lagosul1-*` / `lagosul2-*` no mesmo servidor).
 - **DEP-05** Mudança que o dono vai notar → item em **Novidades** de `implantacao.html` dizendo o que reiniciar (e em Manutenção, se for comando).
 - **DEP-06** Comandos para o dono: simples, um por linha, sem `rm` com variável. Backup em branch (`backup/...`) e reescrever histórico só com pedido explícito.
+- **DEP-07** Skills (`.claude/skills/`): `subir-versao` (publicar), `conferir-pr` (lista ✓/✗ antes do merge), `conferir-celular` (telas mexidas a 390/1366 px com prints), `nova-tela` (passo a passo de tela nova). Hooks (`.claude/settings.json`): `bloquear-segredos.js` antes de commit/push (DAD-07); `depois-do-git.js` depois do commit lembra as regras da área dos arquivos e as regras sem teste, e depois do push lembra a `conferir-pr`; `limpar-restos-teste.js` ao fim de cada resposta (TST-10). Hook só avisa ou bloqueia — nunca muda arquivo do repositório.

@@ -11,6 +11,9 @@
  *   node testes/tela/telas.js              (precisa do pacote playwright)
  *   node testes/tela/telas.js --estrito
  *   SAIDA=/pasta node testes/tela/telas.js  (prints das telas com problema)
+ *   node testes/tela/telas.js --so=/funil,/metas --prints   (só essas telas, com print de todas)
+ *
+ * Sem SAIDA, os prints vão para uma pasta temporária que é apagada no fim se ficar vazia.
  *
  * Nada aqui toca os dados de verdade: tudo roda numa cópia em pasta temporária.
  */
@@ -23,6 +26,8 @@ const { spawn, execFileSync } = require('child_process');
 const ESTRITO = process.argv.includes('--estrito');
 const EXP = path.resolve(__dirname, '..', '..');
 const REPO = path.resolve(EXP, '..');
+const PRINTS = process.argv.includes('--prints');
+const SO = ((process.argv.find(a => a.startsWith('--so=')) || '').slice(5)).split(',').map(s => s.trim()).filter(Boolean);
 const SAIDA = process.env.SAIDA || fs.mkdtempSync(path.join(os.tmpdir(), 'sf-telas-saida-'));
 fs.mkdirSync(SAIDA, { recursive: true });
 
@@ -81,7 +86,7 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
     ];
     for (const [nomeAp, opcoes] of aparelhos) {
       const ctx = await navegador.newContext(opcoes);
-      for (const tela of TELAS) {
+      for (const tela of (SO.length ? SO : TELAS)) {
         const page = await ctx.newPage();
         const errosJs = [];
         page.on('pageerror', (e) => errosJs.push(String(e && e.message || e).slice(0, 200)));
@@ -135,7 +140,7 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
         if (r.ruins.length) marca(`aparece "undefined/null/NaN" — ${r.ruins.map(x => `«${x}»`).join(' · ')}`);
         if (r.total > r.largura + 2) marca(`a página rola para o lado (${r.total}px numa tela de ${r.largura}px) — ${r.largos.join(', ') || 'elemento não identificado'}`);
         if (r.dentro.length) marca(`rola para o lado dentro de: ${r.dentro.join(' · ')}`);
-        if (r.ruins.length || r.total > r.largura + 2 || r.dentro.length || errosJs.length || st >= 400) {
+        if (PRINTS || r.ruins.length || r.total > r.largura + 2 || r.dentro.length || errosJs.length || st >= 400) {
           try { await page.screenshot({ path: path.join(SAIDA, `${nomeAp}-${tela.replace(/[^a-z0-9]+/gi, '_')}.png`), fullPage: true }); } catch (_) {}
         }
         await page.close();
@@ -143,7 +148,7 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
       await ctx.close();
     }
     // Sem internet: a tela que se atualiza sozinha (Conversas) mostra o aviso e ele some quando a conexão volta.
-    {
+    if (!SO.length) {
       const ctx = await navegador.newContext({ viewport: { width: 1280, height: 900 } });
       const page = await ctx.newPage();
       const errosJs = []; page.on('pageerror', (e) => errosJs.push(String(e && e.message || e)));
@@ -159,7 +164,7 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
       await ctx.close();
     }
     // Conversas: filtros rápidos por situação (a contagem bate com a lista); Funil: datas atrás do botão.
-    {
+    if (!SO.length) {
       const ctx = await navegador.newContext({ viewport: { width: 1366, height: 860 } });
       const page = await ctx.newPage();
       const errosJs = []; page.on('pageerror', (e) => errosJs.push(String(e && e.message || e)));
@@ -182,7 +187,7 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
       await ctx.close();
     }
     // Telas longas: índice lateral no computador (clicar abre a seção); no celular, abrir uma seção fecha as outras.
-    {
+    if (!SO.length) {
       const url = `http://127.0.0.1:${inst.porta}/sofia?view=config`;
       const pc = await navegador.newContext({ viewport: { width: 1366, height: 860 } });
       const p1 = await pc.newPage();
@@ -206,7 +211,7 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
     }
     // Celular: o VOLTAR fecha a conversa/janela aberta (não sai da tela); ações em massa passam
     // pela janela de revisão; a explicação do ⓘ fica dentro da tela.
-    {
+    if (!SO.length) {
       const ctx = await navegador.newContext({ ...devices['iPhone 13'] });
       const page = await ctx.newPage();
       const errosJs = []; page.on('pageerror', (e) => errosJs.push(String(e && e.message || e)));
@@ -293,12 +298,15 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
     try { fs.rmSync(inst.raiz, { recursive: true, force: true }); } catch (_) {}
   }
 
-  const linhas = [`## Teste de telas (${TELAS.length} telas × computador e celular)`, ''];
+  const nTelas = SO.length || TELAS.length;
+  const linhas = [`## Teste de telas (${nTelas} telas × computador e celular${SO.length ? ' — só as pedidas' : ''})`, ''];
   linhas.push(reprovas.length ? `### ❌ Reprovado (${reprovas.length})` : '### ✅ Todas as telas abriram sem erro');
   reprovas.forEach(x => linhas.push('- ' + x));
   linhas.push('', avisos.length ? `### ⚠️ Avisos (${avisos.length})` : '### ✅ Sem avisos');
   avisos.forEach(x => linhas.push('- ' + x));
-  if (reprovas.length || avisos.length) linhas.push('', `Prints das telas com problema: ${SAIDA}`);
+  const prints = (() => { try { return fs.readdirSync(SAIDA).filter(f => f.endsWith('.png')).length; } catch (_) { return 0; } })();
+  if (prints) linhas.push('', `${PRINTS ? 'Prints das telas' : 'Prints das telas com problema'}: ${SAIDA}`);
+  else if (!process.env.SAIDA) { try { fs.rmSync(SAIDA, { recursive: true, force: true }); } catch (_) {} } // TST-10: não deixa pasta vazia para trás
   const rel = linhas.join('\n');
   console.log('\n' + rel);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, rel + '\n');

@@ -16,6 +16,7 @@ O dono escreve em português: **responda em português, em linguagem simples**.
 | EVO e formulário (Python) | `Experimental/src/agendamento_evo/` (API do EVO, Flask, leituras noturnas) |
 | Estado de cada servidor | arquivos JSON em `Experimental/data/` e em `SOFIA_DIR` (não há banco) |
 | Manuais | `/implantacao` e `/manual` em `agendamento_evo/formulario_web/templates/`; `docs/` |
+| Skills e hooks do Claude | `.claude/skills/` (`subir-versao`, `conferir-pr`, `conferir-celular`, `nova-tela`), `.claude/hooks/` ligados em `.claude/settings.json` (DEP-07) |
 | Comandos do servidor | `scripts/atualizar.js` (`slimfit-atualizar`), `scripts/sofia.js` (`slimfit-sofia`) |
 | Demonstração | `PAINEL_DEMO=1`: `demo-guard.js`, `demo-dados.js`, `demo-conversas.js` |
 | Testes | `Experimental/testes/` (unidade e telas), `agendamento_evo/tests/` |
@@ -75,8 +76,8 @@ Plano de organização em fases, um PR por fase, plano mostrado antes de cada um
 - [x] Fase 0 — diagnóstico · [x] limpeza (PR #433) · [x] Fase 1 — instruções (PR #434)
 - [x] Fase 2 — padrão visual (PR #435) — a revisão de design decide as telas fora do padrão listadas no `visual.md`
 - [x] Fase 3 — testes (PR #436) · [x] Fase 4 — matriz de rastreabilidade (`docs/rastreabilidade.md`)
-- [ ] **Fase 5** — skills (`subir-versao`, `conferir-pr`, `conferir-celular`, `nova-tela`) e hooks
-- [ ] Fase 6 — GitHub (rodada noturna, prints de referência — depois da revisão de design)
+- [x] Fase 5 — skills e hooks (DEP-07, TST-10)
+- [ ] **Fase 6** — GitHub (rodada noturna, prints de referência — depois da revisão de design)
 
 Outras:
 - A versão **reserva** do WhatsApp Web (SOF-04) vale até **23/01/2027**: antes disso, biblioteca corrigida ou reserva trocada.
