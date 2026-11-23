@@ -3105,15 +3105,18 @@ armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia
       const info: any = pg ? await Promise.race([
         pg.evaluate(() => {
           const w: any = globalThis as any;
-          let socket = "", stream = "";
-          try { socket = String(w.require?.("WAWebSocketModel")?.Socket?.state || ""); } catch {}
+          let socket = "", stream = "", erroModulo = "", tela = "";
+          try { socket = String(w.require?.("WAWebSocketModel")?.Socket?.state || ""); } catch (x: any) { erroModulo = String(x?.message || x).slice(0, 120); }
           try { stream = String(w.require?.("WAWebStreamModel")?.Stream?.displayInfo || ""); } catch {}
-          return { versao: String(w.Debug?.VERSION || ""), socket, stream, online: !!(w.navigator && w.navigator.onLine) };
+          try { tela = String(w.document?.body?.innerText || "").replace(/\s+/g, " ").trim().slice(0, 160); } catch {}
+          return { versao: String(w.Debug?.VERSION || ""), socket, stream, erroModulo, tela, online: !!(w.navigator && w.navigator.onLine) };
         }),
         new Promise((r) => setTimeout(() => r(null), 5000)),
       ]).catch(() => null) : null;
       log(info ? `   estado do WhatsApp Web na falha: página ${info.versao ? "abriu (versão " + info.versao + ")" : "NÃO abriu"} · conexão: ${info.socket || "?"} · fluxo: ${info.stream || "?"} · rede do navegador: ${info.online ? "ok" : "SEM REDE"}`
+        + (info.erroModulo ? `\n      conexão ilegível: ${info.erroModulo}` : "") + (info.tela ? `\n      tela: "${info.tela}"` : "")
         : "   estado do WhatsApp Web na falha: não consegui ler (navegador sem resposta)");
+      if (e?.cause) log(`   motivo por dentro: ${String(e.cause?.message || e.cause).split("\n")[0].slice(0, 200)}`);
     } catch {}
     // Backoff CRESCENTE persistido. Reiniciar de 50 em 50s martela o WhatsApp e
     // faz o servidor BLOQUEAR o número por excesso de tentativas — foi o que
