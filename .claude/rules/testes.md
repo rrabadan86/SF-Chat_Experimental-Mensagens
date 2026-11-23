@@ -10,6 +10,7 @@ paths:
 Comandos (todos rodam em cópia temporária):
 - Unidade: `cd Experimental && node --test testes/unidade/*.test.js`
 - Telas: `cd Experimental && node testes/tela/telas.js --estrito` (demonstração, computador e celular)
+- Peças de tela no navegador: `cd Experimental && node --test testes/tela/componentes.test.js` (precisa do playwright)
 - EVO: `cd Experimental/src/agendamento_evo && python3 -m tests.test_offline`
 
 - **TST-01** Teste nunca toca dado real: use `ambienteIsolado()` de `testes/ajuda.js` (copia o código para uma pasta temporária; `amb.req`, `amb.gravarData`, `amb.gravarSofia`, `amb.whatsappFalso()`); painel em teste roda com `testes/bloqueios.js` (sem rede externa nem comandos).

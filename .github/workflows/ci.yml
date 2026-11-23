@@ -82,6 +82,9 @@ jobs:
       - name: Leitura das tabelas do EVO (precisa de navegador)
         working-directory: Experimental
         run: node --test testes/unidade/aniversario-tabela.test.js
+      - name: Peças do padrão visual no navegador (tabela, janela de erro — computador e celular)
+        working-directory: Experimental
+        run: node --test testes/tela/componentes.test.js
       - name: Abrir todas as telas
         working-directory: Experimental
         env:

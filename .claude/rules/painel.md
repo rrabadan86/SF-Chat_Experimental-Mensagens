@@ -27,7 +27,7 @@ cada aba monta o HTML no servidor (`painel-<aba>.js`), com o kit de `painel-base
 
 ## Como as telas são feitas
 - **PAI-07** Todo dado que vai para o HTML passa por `esc()`. Nada de montar HTML com texto do usuário sem escapar.
-- **PAI-08** Use as peças de `painel-base.js` (`chrome`, `uiTopo`, `uiChips`, `uiDatas`, `infoI`, subnavs) antes de criar outra. Padrão visual: `visual.md` (Fase 2).
+- **PAI-08** Use as peças de `painel-base.js` (`chrome`, `uiTopo`, `uiChips`, `uiDatas`, `infoI`, subnavs) antes de criar outra. Padrão visual e peças: `visual.md`.
 - **PAI-09** Ação por `fetch` responde JSON `{ ok, erro }`; formulário clássico responde 303 de volta à tela com `?ok=` / `?erro=`.
 - **PAI-10** Demonstração: nenhum POST executa (`demoBloqueado`) — regras em `demo.md`.
 - **PAI-11** Tela nova entra em `TELAS` de `testes/tela/telas.js` (ver `testes.md`).
