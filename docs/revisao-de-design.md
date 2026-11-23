@@ -108,7 +108,7 @@ cadastro do Slim Club.
 
 Estas já estão listadas no `visual.md`. Diga, para cada uma: **corrigir agora**, **depois** ou **deixar como está**.
 
-1. **Quatro lugares que ainda podem rolar para o lado** com muitos dados: o mapa de calor, os filtros rápidos das Conversas, os Contatos no computador e as respostas dos Formulários. Com os dados da demonstração eles não rolam.
+1. **Dois lugares que ainda podem rolar para o lado** com muitos dados: o mapa de calor e as respostas dos Formulários. Com os dados da demonstração eles não rolam.
 2. **Cores escritas à mão** (cerca de 105), sobretudo na SoFIA. O efeito: a cor pode ficar diferente do resto do painel.
 3. **Avisos de erro em janelinha do navegador** (`alert`, cerca de 80), sobretudo na SoFIA. O padrão é a janela do painel, que marca o campo errado.
 4. **Listas longas sem busca nem páginas:** pessoas no Funil e em Professoras, Log, Auditoria e Campanhas.

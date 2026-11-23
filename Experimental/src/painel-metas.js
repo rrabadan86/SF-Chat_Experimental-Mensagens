@@ -212,7 +212,7 @@ function paginaMetas(params) {
   const fech = metas.fechamentos();
   const marcaMeta = (v, meta, menorMelhor) => meta == null || v == null ? '' : ` <span class="mt-m ${(menorMelhor ? v <= meta : v >= meta) ? 'ok' : 'nao'}" title="meta: ${meta}">${(menorMelhor ? v <= meta : v >= meta) ? '✓' : '✗'}</span>`;
   const linhaMes = (k, d, selo, mt) => `<tr>
-      <td><b>${esc(nomeMes(k))}</b><div class="quando" style="margin:0;font-size:.72rem">${selo}</div></td>
+      <td><b>${esc(nomeMes(k))}</b><div class="quando" style="margin:0;font-size:.72rem">${selo}</div><button type="button" class="reset mt-mais" aria-expanded="false" onclick="mtAbrir(this)">Ver tudo do mês</button></td>
       <td class="num"><b>${d.ativas ? d.ativas.fim : '—'}</b>${marcaMeta(d.ativas && d.ativas.fim, mt.ativas)}</td>
       <td class="num">${d.ativas ? '+' + d.ativas.entraram : '—'}${marcaMeta(d.ativas && d.ativas.entraram, mt.entradas)}</td>
       <td class="num">${d.ativas ? '−' + d.ativas.sairam : '—'}</td>
@@ -238,7 +238,7 @@ function paginaMetas(params) {
   const tabela = linhas.length ? `<div class="card"><table class="ui-tab mt-tab"><thead><tr>
       <th>Mês</th><th class="num">Ativas${infoI('Alunas ativas no <b>último dia</b> do mês.')}</th><th class="num">Entraram</th><th class="num">Saíram</th><th class="num so-pc">Saída %${infoI('<b>Taxa de saída</b> = saíram ÷ ativas no começo do mês.')}</th>
       <th class="num">Agendaram${infoI('Experimentais agendadas no mês, todos os canais. “—” = o histórico de agendamentos não cobre o mês inteiro.')}</th><th class="num so-pc">Comparec.${infoI('<b>Comparecimento</b> às experimentais = fez ÷ (fez + faltou).')}</th><th class="num so-pc">Fecharam</th>
-      <th class="num">Recebido${infoI('O que já tinha caído na <b>última leitura do EVO dentro do mês</b>. “—” = o mês não teve leitura guardada.')}</th><th class="num so-pc">Inadimp.</th><th class="num so-pc">Ocup.</th><th class="num so-pc">Custo/aluna${infoI('<b>Gasto do mês ÷ alunas novas</b> (anúncios informados + IA). Com * = só a IA, sem os anúncios.')}</th>
+      <th class="num">Recebido${infoI('O que já tinha caído na <b>última leitura do EVO dentro do mês</b>. “—” = o mês não teve leitura guardada.')}</th><th class="num so-pc">Inadimp.</th><th class="num so-pc">Ocup.</th><th class="num so-pc">Custo/<wbr>aluna${infoI('<b>Gasto do mês ÷ alunas novas</b> (anúncios informados + IA). Com * = só a IA, sem os anúncios.')}</th>
     </tr></thead><tbody>${linhas.join('')}</tbody></table></div>`
     : '<div class="card"><div class="vazio">Ainda sem histórico. Abra <b>Alunas ativas</b> e clique em <b>Atualizar agora</b>.</div></div>';
 
@@ -293,12 +293,33 @@ function paginaMetas(params) {
     .mt-campos{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
     .mt-campo{display:flex;flex-direction:column;gap:5px;font-size:var(--fs-sm);font-weight:600;color:var(--tinta)}
     .mt-campo input{width:100%}
-    .wrap .mt-tab th,.wrap .mt-tab td{padding-left:8px;padding-right:8px}
-    .mt-tab td:first-child{white-space:nowrap}
+    /* Mês a mês: 12 colunas cabem no cartão a partir de 1181 px; abaixo disso cada mês vira um
+       bloco com o nome de cada número; no celular, 6 números e "Ver tudo do mês". Nada rola para o lado. */
+    .wrap .mt-tab th,.wrap .mt-tab td{padding-left:5px;padding-right:5px}
+    .mt-tab td:first-child b{white-space:nowrap}
+    @media(min-width:1181px){.mt-tab td:first-child{min-width:162px}}
+    .mt-tab td.num{white-space:nowrap}
+    .mt-mais{display:none}
+    @media(min-width:641px) and (max-width:1180px){
+      .wrap .mt-tab thead{display:none}
+      .wrap .mt-tab,.wrap .mt-tab tbody{display:block}
+      .wrap .mt-tab tr{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px 12px;padding:12px 4px;border-bottom:1px solid var(--linha-soft)}
+      .wrap .mt-tab tbody tr:last-child{border-bottom:0}
+      .wrap .mt-tab td{display:flex;flex-direction:column;gap:2px;border:0;padding:0;text-align:left!important}
+      .wrap .mt-tab td:first-child{grid-column:1/-1}
+      .wrap .mt-tab td .tb-rot{display:inline-flex;align-items:center;gap:4px;color:var(--cinza);font-size:var(--fs-xs);font-weight:600}
+      .wrap .mt-tab td:hover,.wrap .mt-tab tbody tr:hover td{background:transparent}
+    }
+    @media(max-width:640px){
+      .wrap .mt-tab td.so-pc{display:none}
+      .wrap .mt-mais{display:block;width:100%;min-height:44px;margin-top:6px;font-size:var(--fs-sm)}
+      .wrap table.mt-tab.tb-auto tr.mt-aberto td.so-pc{display:flex!important}
+    }
     .ui-rodape a{color:var(--teal-esc)}
     .mt-m{font-weight:800;font-size:.78rem}.mt-m.ok{color:var(--ok)}.mt-m.nao{color:var(--erro)}
     @media(max-width:700px){.mt-grade{grid-template-columns:1fr}.mt-num b{font-size:1.5rem}}
-  </style>`;
+  </style>
+  <script>function mtAbrir(b){var a=b.closest('tr').classList.toggle('mt-aberto');b.setAttribute('aria-expanded',a);b.textContent=a?'Ver menos':'Ver tudo do mês';}</script>`;
   return chrome({ tab: 'Metas' }, 'metas', corpo);
 }
 

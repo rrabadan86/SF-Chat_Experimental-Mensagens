@@ -566,11 +566,11 @@ const ESTILO = `
   @media(max-width:600px){.ui-topo{padding:14px}.ip-row{grid-template-columns:1fr}.ip-meta{grid-row:auto}.ip-acao{grid-column:1;grid-row:auto}.ui-lbl{min-width:0;width:100%}}
   /* Tabelas: um só visual em todo o painel (cabeçalho discreto, linhas finas). */
   .ui-tab{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
-  .wrap :is(.ui-tab,.ct-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) th{text-align:left;font-family:"Inter";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;letter-spacing:.04em;padding:10px 12px;border-bottom:1px solid var(--linha);background:var(--bg);white-space:normal}
-  .wrap :is(.ui-tab,.ct-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) td{padding:10px 12px;border-bottom:1px solid var(--linha-soft);vertical-align:middle}
-  .wrap :is(.ui-tab,.ct-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) tbody tr:last-child td{border-bottom:0}
-  .wrap :is(.ui-tab,.ct-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) tbody tr:hover td{background:var(--linha-soft)}
-  .wrap :is(.ui-tab,.ct-tab,.fm-tab,.logtab,.pf-tab) td{font-variant-numeric:tabular-nums}
+  .wrap :is(.ui-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) th{text-align:left;font-family:"Inter";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;letter-spacing:.04em;padding:10px 12px;border-bottom:1px solid var(--linha);background:var(--bg);white-space:normal}
+  .wrap :is(.ui-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) td{padding:10px 12px;border-bottom:1px solid var(--linha-soft);vertical-align:middle}
+  .wrap :is(.ui-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) tbody tr:last-child td{border-bottom:0}
+  .wrap :is(.ui-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) tbody tr:hover td{background:var(--linha-soft)}
+  .wrap :is(.ui-tab,.fm-tab,.logtab,.pf-tab) td{font-variant-numeric:tabular-nums}
   /* Gráfico de barras padrão do painel: rótulo · trilho (com % dentro) · valor.
      Cores: teal = volume, verde (--ok) = sucesso, vermelho (--erro) = falta/erro,
      cinza = pendente. Usar uiBarra()/uiTrilho() — não desenhar barra à mão. */
@@ -580,7 +580,12 @@ const ESTILO = `
   .ui-bar-val small{font-weight:600;color:var(--cinza)}
   .ui-trilho{display:block;flex:1;min-width:80px;height:24px;background:var(--linha-soft);border-radius:8px;overflow:hidden;position:relative}
   .ui-trilho>i{display:block;height:100%;border-radius:8px 0 0 8px}
-  .ui-trilho>em{position:absolute;top:0;bottom:0;display:flex;align-items:center;font-style:normal;font-size:.76rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none}
+  .ui-trilho>em{position:absolute;top:0;bottom:0;display:flex;align-items:center;font-style:normal;font-size:.76rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none;color:var(--tinta)}
+  .ui-trilho>i{position:relative;z-index:1;overflow:hidden}
+  .ui-trilho>i[data-t]::before{content:attr(data-t);position:absolute;left:10px;top:0;bottom:0;display:flex;align-items:center;color:var(--card);font-style:normal;font-size:.76rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .ui-bar-meio{flex:1;min-width:80px;display:flex;flex-direction:column;gap:2px}
+  .ui-bar-meio .ui-trilho{flex:none}
+  .ui-bar-ex{color:var(--cinza);font-size:var(--fs-xs);font-weight:600;overflow-wrap:anywhere}
   .ui-bar.fino{margin:5px 0}
   .ui-bar.fino .ui-bar-rot{font-weight:500;color:var(--cinza);font-size:.8rem}
   .ui-bar.fino .ui-trilho{height:10px;border-radius:999px}
@@ -592,8 +597,6 @@ const ESTILO = `
   @media(max-width:600px){.ui-bar{flex-wrap:wrap;row-gap:3px}.ui-bar-rot{width:100%}}
   footer{color:var(--cinza);font-size:var(--fs-xs);text-align:center;padding:18px}
   /* Contatos — tabela + modal */
-  .ct-wrap{background:var(--card);border:1px solid var(--linha);border-radius:12px;overflow-x:auto;margin:10px 0}
-  .ct-tab{width:100%;border-collapse:collapse;font-size:var(--fs-sm);table-layout:fixed}
   .ct-int-tab{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
   .ct-int-tab th{text-align:left;font-family:"Inter";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;padding:9px 8px;border-bottom:1px solid var(--linha)}
   .ct-int-tab td{padding:10px 8px;border-bottom:1px solid var(--linha);vertical-align:middle}
@@ -656,23 +659,26 @@ const ESTILO = `
   .cp-h{font-family:"Inter";font-weight:700;font-size:var(--fs-sm);margin:0 0 4px}
   .cp-list{max-height:200px;overflow-y:auto;border:1px solid var(--linha);border-radius:10px;padding:2px 12px}
   .cp-list>div:last-child{border-bottom:0}
-  .ct-tab col.c-nome{width:32%}.ct-tab col.c-tel{width:21%}.ct-tab col.c-tags{width:31%}.ct-tab col.c-act{width:16%}
-  .ct-tab th{text-align:left;font-family:"Inter";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;letter-spacing:.03em;padding:11px 14px;border-bottom:1px solid var(--linha);white-space:nowrap;background:#fafbfb}
-  .ct-tab td{padding:10px 14px;border-bottom:1px solid var(--linha);vertical-align:middle}
-  .ct-tab tbody tr:last-child td{border-bottom:0}
   .ct-row{cursor:pointer;transition:background .12s}
   .ct-row:hover{background:#f6fbfb}
   .ct-av{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex:none;border-radius:50%;color:#fff;font-weight:700;font-size:.78rem;font-family:"Inter"}
-  .ct-nm{font-weight:700;color:var(--tinta);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-  .ct-tel{color:var(--cinza);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .ct-acts{text-align:right;white-space:normal}
-  .ct-ic{background:#fff;border:1px solid var(--linha);border-radius:8px;padding:4px 6px;cursor:pointer;font-size:.82rem;line-height:1;margin:2px 0 2px 3px}
+  .wrap #ctTab td{vertical-align:middle}
+  .ct-quem{display:flex;align-items:center;gap:10px;min-width:0}
+  .ct-marca{display:inline-flex;flex:none;margin:0;cursor:pointer}
+  .wrap :is(.ct-marca,.ct-todos) input{flex:none;width:18px;height:18px;margin:0;cursor:pointer}
+  .ct-todos{display:inline-flex;align-items:center;gap:8px;margin:0 0 8px;font-size:var(--fs-sm);font-weight:700;cursor:pointer}
+  .wrap .ct-nm{background:none;border:0;padding:0;text-align:left;font-size:inherit;font-weight:700;color:var(--tinta);min-width:0;overflow-wrap:break-word}
+  .wrap .ct-nm:hover{color:var(--teal-esc)}
+  .ct-ag{display:block;margin:0;font-size:var(--fs-xs)}
+  .ct-bl{flex:none}
+  .ct-tel{color:var(--cinza);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .ct-acts{display:flex;gap:4px}
+  @media(min-width:641px) and (max-width:860px){.ct-acts{display:grid;grid-template-columns:auto auto;justify-content:end}.wrap #ctTab :is(th,td){padding-left:8px;padding-right:8px}}
+  .ct-rot{display:none}
+  .ct-ic{background:var(--card);border:1px solid var(--linha);border-radius:8px;padding:6px 8px;cursor:pointer;font-size:.82rem;line-height:1}
   .ct-ic:hover{border-color:var(--teal)}
   .ct-ic.ct-del:hover{border-color:var(--erro);background:var(--erro-bg)}
-  .ct-fil{background:none;border:0;color:var(--cinza);cursor:pointer;font-size:.85rem;padding:0 2px}
-  .ct-sort{background:none;border:0;cursor:pointer;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;padding:0;display:inline-flex;align-items:center;gap:5px}
-  .ct-sort:hover{color:var(--teal-esc)}
-  .ct-ov{display:none;position:fixed;inset:0;background:rgba(30,28,32,.5);z-index:50;align-items:flex-start;justify-content:center;padding:20px 14px;overflow-y:auto}
+  .ct-ov{display:none;position:fixed;inset:0;background:rgba(30,28,32,.5);z-index:100;align-items:flex-start;justify-content:center;padding:20px 14px;overflow-y:auto}
   .ct-dlg{background:#fff;border-radius:16px;max-width:520px;width:100%;padding:20px 22px;margin:auto;box-shadow:0 10px 40px rgba(0,0,0,.25)}
   .ct-dh{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
   .ct-dh h2{margin:0;font-size:var(--fs-h2)}
@@ -686,7 +692,8 @@ const ESTILO = `
   .ct-tg{border:1px solid #e8e8ea;border-radius:999px;padding:5px 12px;font-size:.78rem;font-weight:600;cursor:pointer;transition:.12s}
   .ct-nova{display:flex;gap:8px;margin-top:10px}
   .ct-nova input{flex:1}
-  .ct-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--linha)}
+  .ct-foot{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--linha)}
+  @media(max-width:640px){.ct-foot>button{flex:1 1 42%;margin:0!important;min-height:44px}}
   /* ══ Leiaute 11/2026 — kit comum (vale para todas as telas) ══════════════════
      Três níveis com caras diferentes: menu = pílula; subabas = texto sublinhado;
      filtros = controle segmentado cinza. Uma moldura só por seção. Número dos
@@ -764,9 +771,17 @@ const ESTILO = `
     .tem-indice .ui-topo>.ui-linha:has(a[href^="#sec-"]){display:none} /* o "Ir para" vira o índice */
   }
   /* Contatos: os 4 botões de ação numa linha só (a linha fica mais baixa) */
-  .ct-acts{white-space:nowrap}
   /* VIS-02 — Contatos no celular: sem a coluna Telefone (aparece ao abrir o contato) e ações quebrando linha: nada rola para o lado */
-  @media(max-width:640px){.ct-tab col.c-tel{width:0}.ct-tab :is(th,td):nth-child(2){display:none}.ct-tab col.c-nome{width:44%}.ct-tab col.c-tags{width:30%}.ct-tab col.c-act{width:26%}.ct-tab :is(th,td){padding:9px 8px}.ct-acts{white-space:normal}.ct-wrap{overflow-x:visible}}
+  @media(max-width:640px){
+    .ct-marca,.ct-todos{min-height:44px;min-width:32px;align-items:center}
+    .wrap #ctTab td[data-k=acoes]{display:block}
+    .wrap #ctTab td[data-k=acoes] .tb-rot{display:none}
+    .wrap .ct-nm{min-height:44px}
+    .ct-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+    .ct-ic{display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;font-size:var(--fs-sm);font-weight:600;color:var(--tinta)}
+    .ct-ic.ct-del{color:var(--erro)}
+    .ct-rot{display:inline}
+  }
   .ui-datas-det>summary{list-style:none;cursor:pointer;display:inline-flex}.ui-datas-det>summary::-webkit-details-marker{display:none}
   .ui-datas-det>summary.on{border-color:var(--teal);color:var(--teal-esc)}
   .ui-datas-det>form{margin-top:8px}
@@ -878,6 +893,7 @@ window.addEventListener('online',function(){if(ruins){ruins=0;mostra(false);}});
 // Comportamentos comuns de tela (valem em todas as páginas montadas pelo chrome):
 // 1) Botão VOLTAR do celular (e do navegador) e a tecla Esc fecham a janela aberta
 //    (.ct-ov / .gr-ov) ou a conversa aberta no celular, em vez de sair da página.
+//    Janela com data-guarda decide sozinha se fecha (ex.: mudanças não salvas).
 // 2) A explicação do ⓘ abre na posição certa da tela, sem ser cortada por tabelas
 //    com rolagem lateral nem sair da borda do celular.
 const SCRIPT_TELA = `<script>(function(){
@@ -885,7 +901,7 @@ if(window.__sfTela)return;window.__sfTela=1;
 function visivel(o){var c=getComputedStyle(o);return c.display!=='none'&&c.visibility!=='hidden';}
 function camada(){
 var ovs=[].slice.call(document.querySelectorAll('.ct-ov,.gr-ov')).filter(visivel);
-if(ovs.length){ovs.sort(function(a,b){return (parseInt(getComputedStyle(b).zIndex)||0)-(parseInt(getComputedStyle(a).zIndex)||0);});var o=ovs[0];return function(){o.click();if(visivel(o)){o.style.display='none';o.classList.remove('open');}};}
+if(ovs.length){ovs.sort(function(a,b){return (parseInt(getComputedStyle(b).zIndex)||0)-(parseInt(getComputedStyle(a).zIndex)||0);});var o=ovs[0];return function(){o.click();if(visivel(o)&&!o.hasAttribute('data-guarda')){o.style.display='none';o.classList.remove('open');}};}
 if(document.body&&document.body.classList.contains('ver-conversa')&&typeof window.voltarLista==='function')return function(){window.voltarLista();};
 return null;}
 var marcado=false;
@@ -1335,18 +1351,20 @@ function lerJsonData(nome) {
 // Indicadores (menu de cima) = Funil + Formulário + Professoras + Alunas ativas + Grade. O Funil tem permissão própria
 // ('funil'); quem já via o Funil pela SoFIA (Conversas) continua vendo.
 function podeFunil(sess) { return !!(sess && (sess.admin || (sess.telas || []).includes('funil') || (sess.telas || []).includes('sofia_conversas'))); }
-// Trilho de barra: preenchimento n/max e, dentro, o % (ou um texto). Se a barra
-// for estreita, o texto vai logo depois dela. extra: 2ª informação após o %.
-function uiTrilho(n, max, { cor = 'var(--teal)', texto = 'pct', extra = '' } = {}) {
+// Trilho de barra: preenchimento n/max e o % (ou um texto curto). Cabendo na cor, o texto fica
+// dentro dela; senão, logo depois. Passou um pouco da cor? A parte de fora continua legível:
+// o texto é escuro no trilho e uma cópia branca (data-t) aparece só sobre a cor.
+function uiTrilho(n, max, { cor = 'var(--teal)', texto = 'pct' } = {}) {
   const w = (max && n > 0) ? Math.max(2, Math.min(100, Math.round(n / max * 100))) : 0;
-  let t = texto === 'pct' ? (max ? String(Math.round(n * 1000 / max) / 10).replace('.', ',').replace(/,0$/, '') + '%' : '') : (texto || '');
-  if (t && extra) t += ' · ' + extra;
-  const dentro = w >= (extra ? 42 : 14);
-  return `<span class="ui-trilho"><i style="width:${w}%;background:${cor}"></i>${t ? `<em style="${dentro ? 'left:10px;color:#fff' : `left:calc(${w}% + 8px);color:var(--cinza)`}">${t}</em>` : ''}</span>`;
+  const t = texto === 'pct' ? (max ? String(Math.round(n * 1000 / max) / 10).replace('.', ',').replace(/,0$/, '') + '%' : '') : (texto || '');
+  const dentro = w >= 25;
+  return `<span class="ui-trilho"><i${t && dentro ? ` data-t="${t.replace(/<[^>]*>/g, '').replace(/"/g, '&quot;')}"` : ''} style="width:${w}%;background:${cor}"></i>${t ? `<em style="left:${dentro ? '10px' : `calc(${w}% + 8px)`}">${t}</em>` : ''}</span>`;
 }
 // Linha de gráfico: rótulo · trilho · valor. fino = sub-linha discreta (ex.: por origem).
+// extra: 2ª informação, escrita EMBAIXO da barra (dentro dela não cabe e some).
 function uiBarra({ rot, n, max, cor, valor, texto, extra, fino, largo, cls, attrs, titulo }) {
-  return `<div class="ui-bar${fino ? ' fino' : ''}${largo ? ' largo' : ''}${cls ? ' ' + cls : ''}${attrs && /onclick|data-filtro/.test(attrs) ? ' clic' : ''}"${attrs || ''}${titulo ? ` title="${esc(titulo)}"` : ''}><span class="ui-bar-rot">${rot}</span>${uiTrilho(n, max, { cor, texto: texto === undefined ? 'pct' : texto, extra })}<span class="ui-bar-val">${valor !== undefined ? valor : n}</span></div>`;
+  const trilho = uiTrilho(n, max, { cor, texto: texto === undefined ? 'pct' : texto });
+  return `<div class="ui-bar${fino ? ' fino' : ''}${largo ? ' largo' : ''}${cls ? ' ' + cls : ''}${attrs && /onclick|data-filtro/.test(attrs) ? ' clic' : ''}"${attrs || ''}${titulo ? ` title="${esc(titulo)}"` : ''}><span class="ui-bar-rot">${rot}</span>${extra ? `<span class="ui-bar-meio">${trilho}<small class="ui-bar-ex">${extra}</small></span>` : trilho}<span class="ui-bar-val">${valor !== undefined ? valor : n}</span></div>`;
 }
 // Cartão de topo. linhas: HTML de cada linha (período, canal, datas…), vazias são puladas.
 function uiTopo({ titulo, sub, acoes, linhas }) {
