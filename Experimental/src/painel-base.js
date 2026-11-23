@@ -580,7 +580,12 @@ const ESTILO = `
   .ui-bar-val small{font-weight:600;color:var(--cinza)}
   .ui-trilho{display:block;flex:1;min-width:80px;height:24px;background:var(--linha-soft);border-radius:8px;overflow:hidden;position:relative}
   .ui-trilho>i{display:block;height:100%;border-radius:8px 0 0 8px}
-  .ui-trilho>em{position:absolute;top:0;bottom:0;display:flex;align-items:center;font-style:normal;font-size:.76rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none}
+  .ui-trilho>em{position:absolute;top:0;bottom:0;display:flex;align-items:center;font-style:normal;font-size:.76rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none;color:var(--tinta)}
+  .ui-trilho>i{position:relative;z-index:1;overflow:hidden}
+  .ui-trilho>i[data-t]::before{content:attr(data-t);position:absolute;left:10px;top:0;bottom:0;display:flex;align-items:center;color:var(--card);font-style:normal;font-size:.76rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .ui-bar-meio{flex:1;min-width:80px;display:flex;flex-direction:column;gap:2px}
+  .ui-bar-meio .ui-trilho{flex:none}
+  .ui-bar-ex{color:var(--cinza);font-size:var(--fs-xs);font-weight:600;overflow-wrap:anywhere}
   .ui-bar.fino{margin:5px 0}
   .ui-bar.fino .ui-bar-rot{font-weight:500;color:var(--cinza);font-size:.8rem}
   .ui-bar.fino .ui-trilho{height:10px;border-radius:999px}
@@ -668,6 +673,7 @@ const ESTILO = `
   .ct-bl{flex:none}
   .ct-tel{color:var(--cinza);font-variant-numeric:tabular-nums;white-space:nowrap}
   .ct-acts{display:flex;gap:4px}
+  @media(min-width:641px) and (max-width:860px){.ct-acts{display:grid;grid-template-columns:auto auto;justify-content:end}.wrap #ctTab :is(th,td){padding-left:8px;padding-right:8px}}
   .ct-rot{display:none}
   .ct-ic{background:var(--card);border:1px solid var(--linha);border-radius:8px;padding:6px 8px;cursor:pointer;font-size:.82rem;line-height:1}
   .ct-ic:hover{border-color:var(--teal)}
@@ -1345,18 +1351,20 @@ function lerJsonData(nome) {
 // Indicadores (menu de cima) = Funil + Formulário + Professoras + Alunas ativas + Grade. O Funil tem permissão própria
 // ('funil'); quem já via o Funil pela SoFIA (Conversas) continua vendo.
 function podeFunil(sess) { return !!(sess && (sess.admin || (sess.telas || []).includes('funil') || (sess.telas || []).includes('sofia_conversas'))); }
-// Trilho de barra: preenchimento n/max e, dentro, o % (ou um texto). Se a barra
-// for estreita, o texto vai logo depois dela. extra: 2ª informação após o %.
-function uiTrilho(n, max, { cor = 'var(--teal)', texto = 'pct', extra = '' } = {}) {
+// Trilho de barra: preenchimento n/max e o % (ou um texto curto). Cabendo na cor, o texto fica
+// dentro dela; senão, logo depois. Passou um pouco da cor? A parte de fora continua legível:
+// o texto é escuro no trilho e uma cópia branca (data-t) aparece só sobre a cor.
+function uiTrilho(n, max, { cor = 'var(--teal)', texto = 'pct' } = {}) {
   const w = (max && n > 0) ? Math.max(2, Math.min(100, Math.round(n / max * 100))) : 0;
-  let t = texto === 'pct' ? (max ? String(Math.round(n * 1000 / max) / 10).replace('.', ',').replace(/,0$/, '') + '%' : '') : (texto || '');
-  if (t && extra) t += ' · ' + extra;
-  const dentro = w >= (extra ? 42 : 14);
-  return `<span class="ui-trilho"><i style="width:${w}%;background:${cor}"></i>${t ? `<em style="${dentro ? 'left:10px;color:#fff' : `left:calc(${w}% + 8px);color:var(--cinza)`}">${t}</em>` : ''}</span>`;
+  const t = texto === 'pct' ? (max ? String(Math.round(n * 1000 / max) / 10).replace('.', ',').replace(/,0$/, '') + '%' : '') : (texto || '');
+  const dentro = w >= 25;
+  return `<span class="ui-trilho"><i${t && dentro ? ` data-t="${t.replace(/<[^>]*>/g, '').replace(/"/g, '&quot;')}"` : ''} style="width:${w}%;background:${cor}"></i>${t ? `<em style="left:${dentro ? '10px' : `calc(${w}% + 8px)`}">${t}</em>` : ''}</span>`;
 }
 // Linha de gráfico: rótulo · trilho · valor. fino = sub-linha discreta (ex.: por origem).
+// extra: 2ª informação, escrita EMBAIXO da barra (dentro dela não cabe e some).
 function uiBarra({ rot, n, max, cor, valor, texto, extra, fino, largo, cls, attrs, titulo }) {
-  return `<div class="ui-bar${fino ? ' fino' : ''}${largo ? ' largo' : ''}${cls ? ' ' + cls : ''}${attrs && /onclick|data-filtro/.test(attrs) ? ' clic' : ''}"${attrs || ''}${titulo ? ` title="${esc(titulo)}"` : ''}><span class="ui-bar-rot">${rot}</span>${uiTrilho(n, max, { cor, texto: texto === undefined ? 'pct' : texto, extra })}<span class="ui-bar-val">${valor !== undefined ? valor : n}</span></div>`;
+  const trilho = uiTrilho(n, max, { cor, texto: texto === undefined ? 'pct' : texto });
+  return `<div class="ui-bar${fino ? ' fino' : ''}${largo ? ' largo' : ''}${cls ? ' ' + cls : ''}${attrs && /onclick|data-filtro/.test(attrs) ? ' clic' : ''}"${attrs || ''}${titulo ? ` title="${esc(titulo)}"` : ''}><span class="ui-bar-rot">${rot}</span>${extra ? `<span class="ui-bar-meio">${trilho}<small class="ui-bar-ex">${extra}</small></span>` : trilho}<span class="ui-bar-val">${valor !== undefined ? valor : n}</span></div>`;
 }
 // Cartão de topo. linhas: HTML de cada linha (período, canal, datas…), vazias são puladas.
 function uiTopo({ titulo, sub, acoes, linhas }) {
