@@ -9,7 +9,6 @@ const { pullConfirmacoesNuvem } = require('./pull-confirmacoes-nuvem');
 const { estadoGradeNuvem } = require('./verificar-grade-nuvem');
 const notif = require('./notificar'); // alertas de saúde (ntfy.sh) — best-effort
 const atividade = require('./atividade'); // registro do que o robô fez (aba "Hoje")
-const igcfg = require('./instagram-config'); // liga/desliga o Instagram pelo painel
 const jobsAtivos = require('./jobs-ativos'); // liga/desliga de cada envio pelo painel
 // Agenda um job E registra disparo/falha (Saúde → Envios automáticos).
 const batimento = require('./jobs-batimento');
@@ -407,10 +406,9 @@ async function comRetry(nome, fn, { antesDeEsperar, depoisDeEsperar } = {}) {
 
 /**
  * Executa um job com proteção contra execução simultânea e timeout.
- * NÃO inicializa o WhatsApp aqui — cada executor abre a própria conexão
- * (Instagram usa porta 9224, WhatsApp usa 9226, etc.). Inicializar aqui
- * causava conflito: o init() do WhatsApp matava o Edge que o executor
- * do Instagram/Aniversariantes ia usar, e vice-versa.
+ * NÃO inicializa o WhatsApp aqui — cada executor abre a própria conexão.
+ * Inicializar aqui causava conflito: o init() do WhatsApp matava o navegador
+ * que o executor (ex.: Aniversariantes) ia usar, e vice-versa.
  */
 async function runJob(jobName, jobFn, timeoutMs, { retry = true, esperar = true } = {}) {
   if (jobRunning && !esperar) {
@@ -646,14 +644,6 @@ function checkMissedCrons() {
       scheduledMinutes: 17 * 60,
       validDays: [1], // Segunda-feira
       executor: () => require('./renovar-contratos').runRenovacao(),
-    },
-    {
-      name: 'Instagram — boas-vindas a novos seguidores',
-      horario: '07:00',
-      cron: config.schedule.instagram,
-      scheduledMinutes: 7 * 60,
-      validDays: [0, 1, 2, 3, 4, 5, 6], // todos os dias
-      executor: () => require('./instagram-boasvindas').runBoasVindas(),
     },
     {
       name: 'Aniversariantes — parabéns nos grupos',
@@ -935,58 +925,6 @@ function iniciarTesteWatcher(wa) {
   log('🧪 Watcher de "enviar teste" do painel ativo (a cada 4s).');
 }
 
-// Ponte de "DM de teste" do Instagram (painel). Usa o navegador+proxy+cookie do
-// IG, então respeita o jobRunning (não roda junto com outro job) e tem timeout.
-function iniciarTesteInstagramWatcher() {
-  const ti = require('./teste-instagram');
-  let ocupado = false;
-  const t = setInterval(async () => {
-    if (ocupado || jobRunning) return;
-    const p = ti.proximoPendente();
-    if (!p) return;
-    ocupado = true;
-    jobRunning = true; donoDaVez++;
-    ti.marcar(p.id, 'enviando');
-    const limite = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo esgotado (o navegador do Instagram demorou demais)')), 150000));
-    try {
-      await Promise.race([require('./instagram-boasvindas').enviarTesteDM(p.username, p.texto), limite]);
-      ti.marcar(p.id, 'enviado');
-      log(`🧪 DM de teste (IG) enviada para @${p.username}`);
-    } catch (e) {
-      ti.marcar(p.id, 'falha', e && e.message);
-      log(`🧪 DM de teste (IG) falhou para @${p.username}: ${e && e.message}`);
-    } finally { ocupado = false; jobRunning = false; }
-  }, 5000);
-  if (t.unref) t.unref();
-  log('🧪 Watcher de "DM de teste" do Instagram ativo (a cada 5s).');
-}
-
-// Ponte de "forçar boas-vindas do IG agora" (painel). Roda o job completo na
-// hora, respeitando jobRunning (não roda junto com outro job).
-function iniciarForcarIgWatcher() {
-  const igf = require('./ig-forcar');
-  let ocupado = false;
-  const t = setInterval(async () => {
-    if (ocupado || jobRunning) return;
-    const st = igf.estado();
-    if (!st || st.status !== 'pendente') return;
-    ocupado = true; jobRunning = true; donoDaVez++;
-    igf.marcar('executando');
-    log('▶️  Boas-vindas do IG FORÇADAS pelo painel — iniciando…');
-    const limite = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo esgotado (o navegador do Instagram demorou demais)')), 900000));
-    try {
-      await Promise.race([require('./instagram-boasvindas').runBoasVindas(), limite]);
-      igf.marcar('concluido');
-      log('▶️  Boas-vindas do IG (forçadas) concluídas.');
-    } catch (e) {
-      igf.marcar('falha', { erro: (e && e.message) || String(e) });
-      log(`▶️  Boas-vindas do IG (forçadas) falharam: ${e && e.message}`);
-    } finally { ocupado = false; jobRunning = false; }
-  }, 4000);
-  if (t.unref) t.unref();
-  log('▶️  Watcher de "forçar boas-vindas IG" ativo (a cada 4s).');
-}
-
 // ─── Main ──────────────────────────────────────────────────
 async function main() {
   console.log(`\n🏋️  ${config.STUDIO_NOME} — Confirmação de Aula Experimental`);
@@ -1044,10 +982,6 @@ async function main() {
   iniciarTesteWatcher(wa);
   iniciarRodarJobWatcher(); // gatilho manual de job (data/rodar-job.json)
   iniciarResumoMensal();    // resumo do mês no WhatsApp (dia/horário escolhidos no painel)
-  // Ponte de "DM de teste" do Instagram (lê data/teste-instagram.json).
-  iniciarTesteInstagramWatcher();
-  // Ponte de "forçar boas-vindas do IG agora" (lê data/ig-forcar.json).
-  iniciarForcarIgWatcher();
 
   // ─── Verifica jobs perdidos antes de agendar ─────────────
   // (lê o registro ANTES de marcar que estamos vivos agora)
@@ -1487,30 +1421,6 @@ async function main() {
     //   dispararem o boot push no mesmo instante (evita 429 no EVO).
     setTimeout(runSlotsPush, 15000 + (config.formSlotsMinuto || 0) * 1000);
   }
-
-  // Schedule: 07:00 todos os dias → Boas-vindas a novos seguidores do Instagram.
-  // DESLIGADO por padrão: a Meta bloqueia o navegador do VPS com 429. Religue
-  // com IG_ENABLED=true no .env quando tiver solução (PC de casa ou proxy).
-  // Sempre agenda; liga/desliga é decidido NO DISPARO por instagram-config
-  // (data/instagram-config.json, controlado no painel) ou pelo .env IG_ENABLED.
-  // Assim o Studio religa/pausa pelo painel sem reiniciar o robô.
-  agendar('instagram', config.schedule.instagram, async () => {
-    if (!igcfg.ligado()) { log('⏸️  Instagram DESLIGADO (painel/.env) — pulando o disparo de hoje'); return; }
-    if (!jobsAtivos.ativo('instagram')) { log('⏸️  Instagram desligado no painel (envio) — pulando'); return; }
-    log('⏰ Cron disparado: Instagram boas-vindas');
-    if (!(await esperarVez('Instagram'))) return; // ocupado: espera a vez em vez de pular
-    atividade.setContexto('Instagram (boas-vindas)');
-    const start = new Date();
-    comRetry('Instagram boas-vindas', () => require('./instagram-boasvindas').runBoasVindas())
-      .then(() => log('✅ Instagram boas-vindas concluído'))
-      .catch(err => logError('Instagram boas-vindas', err))
-      .finally(() => {
-        jobRunning = false;
-        log(`⏱️  Instagram finalizado em ${((new Date() - start) / 1000).toFixed(1)}s\n`);
-      });
-  }, { timezone: 'America/Sao_Paulo' });
-  log(`📅 Job INSTAGRAM agendado: ${config.schedule.instagram} (liga/desliga no painel — hoje: ${igcfg.ligado() ? 'LIGADO' : 'desligado'})`);
-  console.log('   → Boas-vindas a novos seguidores (perfil logado no Instagram)');
 
   // Schedule: 08:00 todos os dias → Parabéns às aniversariantes nos grupos
   agendar('aniversariantes', config.schedule.aniversariantes, async () => {

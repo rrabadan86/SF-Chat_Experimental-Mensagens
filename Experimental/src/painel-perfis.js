@@ -10,7 +10,7 @@ const auditoria = require('./auditoria');
 const E = require('./painel-estado');
 const unidadesRede = require('./unidades-rede');
 const {
-  esc, USER, ADMIN_EMAIL, uiTopo, chrome, IG_NO_PAINEL, fmtTel,
+  esc, USER, ADMIN_EMAIL, uiTopo, chrome, fmtTel,
 } = require('./painel-base');
 
 // Duração da sessão do painel, em DIAS. Editável SÓ pelo admin (Perfis → Acessos),
@@ -133,7 +133,7 @@ function paginaPerfis(aviso, erro, view, filtroAud = {}) {
     marcadas = (marcadas || []);
     // Compat: quem tinha a permissão antiga "msg_agendar" já aparece com a tela unificada marcada.
     if (marcadas.includes('msg_agendar') && !marcadas.includes('msg_express')) marcadas = marcadas.concat('msg_express');
-    const soltas = usuarios.TELAS.filter(t => !t.grupo && (t.key !== 'ig' || IG_NO_PAINEL)); // Instagram escondido → sem a opção
+    const soltas = usuarios.TELAS.filter(t => !t.grupo);
     const grupos = {};
     for (const t of usuarios.TELAS) if (t.grupo) (grupos[t.grupo] = grupos[t.grupo] || []).push(t);
     const linha = `<div style="display:flex;flex-wrap:wrap;gap:6px 18px">${soltas.map(t => umChk(t, marcadas, prefixo)).join('')}</div>`;

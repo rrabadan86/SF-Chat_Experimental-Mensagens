@@ -98,12 +98,6 @@ STUDIO_OUTBOX_FILE=/root/SF-Automacao/Experimental/src/agendamento_evo/confirmac
 
 # Grupo da equipe (nome exato do grupo no WhatsApp)
 GRUPO_EQUIPE=SlimFit Equipe 💪
-
-# Instagram (deixe desligado até ter IP residencial/proxy)
-IG_ENABLED=false
-IG_USERNAME=usuario_instagram
-IG_PASSWORD=senha_instagram
-# IG_PROXY=host:porta            # se for usar proxy residencial
 ```
 
 E o `.env` do fluxo Python (`Experimental/src/agendamento_evo/.env`) com os tokens do ZEE/EVO.

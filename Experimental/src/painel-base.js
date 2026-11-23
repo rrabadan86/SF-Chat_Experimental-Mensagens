@@ -200,7 +200,7 @@ const ESTILO = `
   .tabs a .ttx{font-size:.86rem}
   .tabs a:hover{color:var(--tinta);background:var(--linha-soft)}
   .tabs a.on{background:var(--teal);color:#fff;border-color:var(--teal)}
-  /* Mesma ordem no desktop E no mobile: SoFIA → WhatsApp → Instagram →
+  /* Mesma ordem no desktop E no mobile: SoFIA → WhatsApp →
      Formulário → Indicadores → Slim Club (no HTML a SoFIA fica por último; o order
      reordena). Perfis e Saúde ficam no menu da conta (avatar). */
   .tabs .nav-sofia{order:1}
@@ -775,8 +775,6 @@ const ESTILO = `
 `;
 
 // Menu de abas, mostrando só as telas que o usuário logado pode ver (+ Perfis p/ admin).
-// A aba Instagram fica escondida (o Studio não usa). Volta com PAINEL_INSTAGRAM=1 no .env.
-const IG_NO_PAINEL = /^(1|true|sim|on)$/i.test(String(process.env.PAINEL_INSTAGRAM || '').trim());
 // Pagamento dos professores (porte do sf-pagamento): só nas unidades com PAGAMENTO_PROFESSORES=1 no .env.
 const PAGAMENTO_ATIVO = /^(1|true|sim|on)$/i.test(String(process.env.PAGAMENTO_PROFESSORES || '').trim());
 function navTabs(ativo) {
@@ -786,11 +784,10 @@ function navTabs(ativo) {
   const item = (k, href, ic, tx) => pode(k) ? cel(href, ativo === k, ic, tx, k) : '';
   // Ordem no HTML mantém a SoFIA por ÚLTIMO: no mobile ela cai sozinha na 2ª
   // linha ocupando a largura toda (destaque). No DESKTOP, o CSS (order) exibe na
-  // ordem pedida: SoFIA → WhatsApp → Instagram → Formulário → Perfis.
+  // ordem pedida: SoFIA → WhatsApp → Formulário → Perfis.
   // Formulário = formulários de campanha (editáveis). Os números do formulário de agendamento ficam em Indicadores.
   let html = pode('formularios') ? cel('/formularios', ativo === 'formularios', '📈', 'Formulário', 'ind') : '';
   if (temMsg(sess)) html += cel(msgHref(sess), ativo === 'msg', '💬', 'WhatsApp', 'msg');
-  if (IG_NO_PAINEL) html += item('ig', '/instagram', '📸', 'Instagram');
   // Indicadores = Funil + Formulário + Professoras + Grade, cada um com a sua permissão. Abre no primeiro permitido.
   const indHref = podeFunil(sess) ? '/funil' : pode('ind') ? '/indicadores' : pode('professoras') ? '/professoras' : pode('ativas') ? '/ativas' : pode('grade') ? '/grade' : pode('metas') ? '/metas' : (PAGAMENTO_ATIVO && pode('pagamento')) ? '/pagamento' : '';
   if (indHref) html += cel(indHref, ativo === 'grade' || ativo === 'funil' || ativo === 'ind' || ativo === 'professoras' || ativo === 'ativas' || ativo === 'pagamento' || ativo === 'metas' || ativo === 'dicionario', '📊', 'Indicadores', 'grade');
@@ -1204,43 +1201,14 @@ function scriptPreviewTeste() {
   }
   // Volta com o bloco de áudio aberto depois de enviar/remover.
   (function(){ var h=location.hash; if(h.indexOf('#audio-')===0){ var d=document.getElementById(h.slice(1)); if(d){ d.open=true; setTimeout(function(){ d.scrollIntoView({block:'center'}); },50); } } })();
-  async function testarDMIg(btn){
-    var card = btn.closest('.card'); var ta = card.querySelector('textarea'); var b = card.querySelector('.prev');
-    var inp = card.querySelector('.igteste'); var u = ((inp&&inp.value)||'').replace(/^@+/,'').trim().split(/\\s+/)[0];
-    if(!u){ alert('Informe o @usuário do Instagram para testar.'); if(inp) inp.focus(); return; }
-    b.style.display='block'; b.innerHTML = '<div class="prev-b">⏳ Enviando DM de teste para @'+escHtml(u)+'… pode levar até ~1 min (abre o navegador, usa o proxy e o cookie).</div>';
-    btn.disabled=true;
-    try{
-      var r = await fetch('/instagram/teste-dm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u, texto:ta.value})});
-      var d = await r.json();
-      if(!d.ok){ b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(d.erro||'Não foi possível iniciar o teste.')+'</div>'; btn.disabled=false; return; }
-      var tries=0;
-      var iv=setInterval(async function(){
-        tries++;
-        try{
-          var s = await (await fetch('/instagram/teste-dm/status?id='+encodeURIComponent(d.id))).json();
-          if(s.status==='enviado'){ clearInterval(iv); b.innerHTML='<div class="prev-b ok">✅ DM enviada para @'+escHtml(u)+'! A sessão (cookie) está funcionando. Confira no Instagram.</div>'; btn.disabled=false; }
-          else if(s.status==='falha'){ clearInterval(iv); b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(s.erro||'Falha no envio.')+'</div>'; btn.disabled=false; }
-          else if(tries>60){ clearInterval(iv); b.innerHTML='<div class="prev-b">⏳ Ainda processando — o robô pode estar ocupado com outro envio. Tente de novo em instantes.</div>'; btn.disabled=false; }
-        }catch(_){ }
-      },3000);
-    }catch(err){ b.innerHTML='<div class="prev-b err">⚠️ '+escHtml(err.message||'Falha ao enviar.')+'</div>'; btn.disabled=false; }
-  }
 </script>`;
 }
 
 // Card de edição de UMA mensagem (texto + variáveis + preview/teste). Reusável.
-// opts.ig = true → o teste é um DM do Instagram para um @usuário (não WhatsApp).
 function cardMensagem(m, voltar, opts = {}) {
   const vars = (m.vars || []).map(([t, d]) => `<span class="var" title="${esc(d)} — clique para inserir" onclick="inserirVar(this,'{${esc(t)}}')">{${esc(t)}}</span>`).join(' ');
   const badge = m.editado ? '<span class="badge">editada</span>' : '';
-  const botaoTeste = opts.ig
-    ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
-        <input class="igteste" type="text" placeholder="@usuario para testar" style="max-width:220px">
-        <button type="button" class="tbtn" onclick="testarDMIg(this)">📩 Enviar DM de teste</button>
-        <small style="color:var(--cinza)">envia o DM de verdade — e comprova o cookie</small>
-       </div>`
-    : opts.cobranca
+  const botaoTeste = opts.cobranca
     ? `<button type="button" class="tbtn" onclick="testarCobranca(this)">🧪 Enviar teste (pela SoFIA)</button>`
     : `<button type="button" class="tbtn" onclick="testarMsg(this)">🧪 Enviar teste</button>`;
   return `<form method="POST" action="/salvar">
@@ -1253,10 +1221,9 @@ function cardMensagem(m, voltar, opts = {}) {
       <div class="acts">
         <button type="submit" class="save">Salvar texto</button>
         <button type="button" class="tbtn" onclick="previewMsg(this)">👁 Pré-visualizar</button>
-        ${opts.ig ? '' : botaoTeste}
+        ${botaoTeste}
         <button type="submit" name="reset" value="1" class="reset" onclick="return confirm('Voltar esta mensagem ao texto padrão?')">Restaurar padrão</button>
       </div>
-      ${opts.ig ? botaoTeste : ''}
       ${m.aceitaFoto ? cardFoto(m) : ''}
       <div class="prev" style="display:none"></div>
     </form>${audiosMsg.grupoDaChave(m.chave) ? cardAudio(audiosMsg.grupoDaChave(m.chave), m.chave) : ''}`;
@@ -1354,7 +1321,7 @@ function blocoHorario(info, sublabel, formId = 'fh') {
   </div>`;
 }
 
-// ── Página: Instagram (status + liga/desliga) ───────────────────────────────
+// Lê um JSON de data/ (null se não existir ou estiver quebrado).
 function lerJsonData(nome) {
   try { return JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'data', nome), 'utf8')); }
   catch (_) { return null; }
@@ -1454,5 +1421,5 @@ const FU_AGENDOU_AULA_FILE = path.join(sofia.DIR, 'sofia-agendaram-aula.json');
 
 module.exports = {
   HEAD_APP,
-  _pm2Slug, PM2_EXP, PM2_SOFIA, COMP_CFG_FILE, COMP_PADRAO, compTagsAgendou, compDias, compIntervalo, lerCompCfg, USER, SENHA, TODAS_TELAS, SEGREDO, assinar, SESSOES_FILE, _salvarSessoesJa, salvarSessoesSoon, tocarSessao, sessaoValida, lerToken, lerCookie, ehHttps, usuarioDaReq, ADMIN_EMAIL, SOFIA_SUBS, podeSofiaSub, temSofia, sofiaHref, podeMsgSub, temMsg, msgHref, esc, infoI, hojeSP, fmtData, fmtTel, ESTILO, IG_NO_PAINEL, PAGAMENTO_ATIVO, navTabs, FOTOS_FILE, fotoDe, iniciais, AV_CORES, avatar, menuConta, chrome, scriptPreviewTeste, cardMensagem, professorasRecentes, cardAudio, cardFoto, DIAS, blocoHorario, lerJsonData, podeFunil, uiTrilho, uiBarra, uiTopo, uiChips, uiDatas, UI_SIT, uiPessoa, subnavSofia, scIp, scBaseUrl, scStudio, scHtml, scJson, scSoJson, lerCorpo, FU_AGENDOU_CANAL_FILE, fuLerJson, FU_AGENDOU_AULA_FILE,
+  _pm2Slug, PM2_EXP, PM2_SOFIA, COMP_CFG_FILE, COMP_PADRAO, compTagsAgendou, compDias, compIntervalo, lerCompCfg, USER, SENHA, TODAS_TELAS, SEGREDO, assinar, SESSOES_FILE, _salvarSessoesJa, salvarSessoesSoon, tocarSessao, sessaoValida, lerToken, lerCookie, ehHttps, usuarioDaReq, ADMIN_EMAIL, SOFIA_SUBS, podeSofiaSub, temSofia, sofiaHref, podeMsgSub, temMsg, msgHref, esc, infoI, hojeSP, fmtData, fmtTel, ESTILO, PAGAMENTO_ATIVO, navTabs, FOTOS_FILE, fotoDe, iniciais, AV_CORES, avatar, menuConta, chrome, scriptPreviewTeste, cardMensagem, professorasRecentes, cardAudio, cardFoto, DIAS, blocoHorario, lerJsonData, podeFunil, uiTrilho, uiBarra, uiTopo, uiChips, uiDatas, UI_SIT, uiPessoa, subnavSofia, scIp, scBaseUrl, scStudio, scHtml, scJson, scSoJson, lerCorpo, FU_AGENDOU_CANAL_FILE, fuLerJson, FU_AGENDOU_AULA_FILE,
 };

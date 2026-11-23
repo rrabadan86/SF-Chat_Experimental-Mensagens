@@ -9,139 +9,28 @@ evo-chrome-data/
 wwebjs_auth/
 .wwebjs_auth/
 .wwebjs_cache/
+# Restos da antiga integração com o Instagram (cookies = acesso à conta) — NUNCA versionar
 instagram-chrome-data/
 instagram-login-*.png
-# Cookies da sessão do Instagram (contêm o sessionid = acesso à conta) — NUNCA versionar
 instagram-cookies.json
 # Credenciais (conta de serviço do Google) — NUNCA versionar
 service-account.json
 *service-account*.json
 # Screenshots de debug
 debug-*.png
-# Edições das mensagens feitas no painel (estado de cada VPS/franquia) — não versionar
-data/mensagens.json
-# Envios agendados no painel (dados/fotos de cada VPS) — não versionar
-data/agendamentos.json
-data/agendamentos-fotos/
-# Contas do IG que esgotaram tentativas de DM (estado por VPS)
-data/instagram-indisponiveis.json
-# Estado do WhatsApp (QR/conexao) — por VPS
-data/wa-status.json
-# Comando painel -> robo (ex.: desconectar) — efemero, por VPS
-data/wa-comando.json
-# Horários dos jobs editados no painel (estado por VPS/franquia) — não versionar
-data/horarios.json
-# Config de troca de tags por presença (editada no painel, estado por VPS) — o modelo
-# fica em ChatBot/comparecimento.default.json e o setup semeia a cópia viva aqui.
-data/comparecimento.json
-# Registro de atividade do robô (o que enviou hoje) — estado por VPS
-data/atividade.json
-# Ponte de "enviar teste" painel↔robô — estado por VPS
-data/teste-envio.json
-# Liga/desliga do Instagram pelo painel — estado por VPS
-data/instagram-config.json
-# Estado do watchdog (de-dup dos alertas) — por VPS
-data/watchdog-estado.json
-# Backups locais da pasta data/ — por VPS (não versionar)
+# Backups locais da pasta data/ — por servidor
 backups/
-# Indicadores do formulario (acessos/agendamentos) — por VPS
-data/indicadores.json
-data/experimentais-historico.json
-data/experimentais-historico.json.tmp
-# Foto de perfil do Google de cada usuário do painel (menu da conta)
-data/fotos-usuarios.json
-# Foto diária das alunas ativas (Indicadores → Alunas ativas)
-data/alunas-ativas-historico.json
-data/alunas-ativas-historico.json.tmp
-data/resumo-mensal.json
-data/resumo-mensal.json.tmp
-data/resumo-mensal.png
-data/resumo-semanal.json
-data/resumo-semanal.json.tmp
-data/resumo-semanal.png
-# Log completo dos agendamentos do formulario (dados da aluna) — por VPS
-data/bookings.json
-# DM de teste do Instagram (ponte painel<->robo) — por VPS
-data/teste-instagram.json
-# Forçar boas-vindas do IG agora (ponte painel<->robo) + saúde da sessão — por VPS
-data/ig-forcar.json
-data/instagram-sessao.json
-# Fotos (flyers) das mensagens (Circuito/Aniversario) — por VPS
-data/mensagens-fotos/
-# Contatos (CRM) — dado pessoal, por VPS, NÃO versionar
-data/contatos.json
-# Usuários do painel (hash de senha) e segredo de sessão — NUNCA versionar
-data/usuarios.json
-data/.sessao-segredo
-# Registro de acessos ao painel (último acesso + histórico de logins) — estado por VPS
-data/acessos-ultimo.json
-data/acessos-login.jsonl
-# Registro de atividades / auditoria (quem fez o quê) — estado por VPS
-data/auditoria.jsonl
 
-data/tags-config.json
-data/auto-tag-alunas.json
+# data/ = estado VIVO de cada servidor: chaves (push-vapid, sessões, usuários),
+# dados pessoais (contatos, Slim Club, formulários) e os marcadores de "JÁ ENVIEI".
+# Nada daqui vai para o Git: se um marcador entrasse, um git reset do servidor o
+# sobrescreveria e o robô reenviaria tudo. Arquivo novo em data/ já nasce protegido.
+data/*
+!data/.gitkeep
 
-# Baseline da última leitura boa da planilha de aniversários (auto-retry) — por VPS
-data/planilha-ultimo-total.json
-
-data/sofia-exp-limite.txt
-
-data/origens.json
-
-# Nomes dos grupos do WhatsApp editados no painel (ponte painel<->robo) — por VPS
-data/grupos.json
-
-# Instagram oficial (Graph API) — token e config por VPS, NUNCA versionar
-data/instagram-api-token.json
-data/instagram-api-config.json
-
-# Rastreadores de "JÁ ENVIEI" — estado VIVO por VPS. NUNCA versionar: se entram
-# no git, um git pull/reset sobrescreve o marcador local e o robô reenvia tudo
-# de novo (confirmações, aniversários, DMs do Instagram). Ficam só na VPS.
-data/aniversariantes-envios.json
-data/instagram-enviados.json
 # Fila de confirmações e seus marcadores (enviados/falhas/retidas) + backups
 src/agendamento_evo/confirmacoes_outbox.jsonl
 src/agendamento_evo/confirmacoes_outbox_enviados.json
 src/agendamento_evo/confirmacoes_outbox_falhas.json
 src/agendamento_evo/confirmacoes_outbox_retidas.json
 src/agendamento_evo/confirmacoes_outbox_enviados.json.bak-*
-
-# Cobrança de inadimplentes — estado de envios (por VPS)
-data/inadimplentes-enviados.json
-# Saídas locais dos diagnósticos de débito
-data/diag-debito.json
-data/diag-*.html
-# Liga/Desliga de cada envio (por VPS)
-data/jobs-ativos.json
-# Fila de cobrança (robô grava, SoFIA envia) — por VPS
-data/cobranca-outbox.jsonl
-data/cobranca-outbox.jsonl.*
-# Config da cobrança (dias de atraso) — por VPS
-data/inadimplentes-config.json
-data/diag-boleto.json
-data/diag-boleto.html
-data/diag-boleto-*.html
-# Slim Club (cadastros, fotos das alunas, config e segredo do acesso) — dado pessoal, por VPS
-data/slimclub.json
-data/slimclub.json.tmp
-data/slimclub-fotos/
-data/slimclub-config.json
-# Formulários de campanha (respostas = dado pessoal; por VPS)
-data/formularios.json
-data/formularios-respostas.json
-data/formularios-acessos.json
-data/formularios-capas/
-data/*.tmp
-data/.slimclub-segredo
-data/auto-tag-ultimo.json
-data/circuito-servico.txt
-
-# áudios das professoras (painel) e bloqueio do app — estado por VPS
-data/mensagens-audios/
-data/bloqueio-app.json
-data/bloqueio-app-estado.json
-data/assinaturas.json
-data/assinaturas-cfg.json
-data/assinaturas-pendentes.json

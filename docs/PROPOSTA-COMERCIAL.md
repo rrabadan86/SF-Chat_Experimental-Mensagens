@@ -64,11 +64,9 @@ WhatsApp mudarem, e suporte.
 
 ## Condições e observações importantes (transparência com o cliente)
 
-- **Credenciais próprias:** a franquia usa as suas próprias contas de EVO, WhatsApp, Google e Instagram.
+- **Credenciais próprias:** a franquia usa as suas próprias contas de EVO, WhatsApp e Google.
 - **WhatsApp:** automação de WhatsApp sempre tem risco de bloqueio do número pela política do WhatsApp;
   recomenda-se um **chip dedicado**. Parte do serviço de manutenção é justamente cuidar disso.
-- **Instagram:** o envio automático de DM **não funciona a partir de servidor** (a Meta bloqueia); pode ser
-  feito manualmente ou com IP residencial/proxy à parte.
 - **Dependência do EVO:** se a W12 mudar telas/relatórios, pequenos ajustes podem ser necessários (coberto
   pela manutenção).
 - **LGPD:** o sistema trata dados de alunas; a franquia é a controladora dos dados e deve ter a base legal

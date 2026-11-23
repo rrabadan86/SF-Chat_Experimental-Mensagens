@@ -40,7 +40,7 @@ function rotas() {
   return out;
 }
 // Páginas públicas por natureza (cadastro/listagem do Slim Club, formulário de campanha, termos).
-const PUBLICAS = /^\/(login|logout|termos|politicadeprivacidade|midia-publica|ig\/webhook|auth\/google|slimclub|SlimClubCadastro|formulario\/|f\/)/i;
+const PUBLICAS = /^\/(login|logout|termos|politicadeprivacidade|midia-publica|auth\/google|slimclub|SlimClubCadastro|formulario\/|f\/)/i;
 
 test('usuário sem nenhuma permissão não acessa rota nenhuma do painel', { timeout: 180000 }, async () => {
   const amb = ambienteIsolado();

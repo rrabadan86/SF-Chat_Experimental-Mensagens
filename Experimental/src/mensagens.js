@@ -2,7 +2,7 @@
  * Cofre central de mensagens editáveis.
  *
  * Os textos "principais" que o robô envia (confirmações, follow-up, faltas,
- * renovação, aniversário, Instagram, Circuito) ficam aqui como PADRÃO. As
+ * renovação, aniversário, Circuito) ficam aqui como PADRÃO. As
  * edições feitas no painel são gravadas em data/mensagens.json e têm
  * prioridade sobre o padrão.
  *
@@ -232,13 +232,6 @@ const CATALOGO = [
     padrao: 'Oi, {nome}! Tudo bem? 😊\n\nPassando de novo para dizer que a sua turma está te esperando! Já são {dias} dias sem você por aqui, e cada treino conta para os seus resultados. 💪\n\nQue tal voltar esta semana? Me fala o melhor dia que eu já deixo tudo certo para você. 💛',
   },
   {
-    chave: 'instagram',
-    titulo: 'Boas-vindas no Instagram (DM)',
-    quando: 'Enviada às 07:00 para novas seguidoras (em teste).',
-    vars: [],
-    padrao: 'Seja muito bem vinda ao SlimFit, a Revolução do Treinamento Feminino! ❤️\n\nEstou te presenteando com uma aula experimental gratuita para conhecer a nossa metodologia e o nosso studio! Faça o agendamento através deste link: [LINK DO FORMULÁRIO DA UNIDADE]\n\nNos links abaixo eu explico sobre a nossa metodologia:\n-> O que é o SlimFit: https://www.instagram.com/reel/Crluss-AWPu/\n\n-> Personal X SlimFit: https://www.instagram.com/p/CwkvRzggYrs/\n\nAté mais!',
-  },
-  {
     chave: 'circuito_convocacao',
     foto: true,
     titulo: 'Circuito — convocatória (quarta)',
@@ -442,9 +435,8 @@ function removerFoto(chave) {
   }
 }
 // Todas as mensagens de WhatsApp aceitam foto (flyer), MENOS as text-only:
-//  • 'instagram' — DM do Instagram (canal diferente, tratado na aba Instagram);
 //  • 'ausentes'  — listagem de texto no grupo da equipe (enviada sem mídia).
-const SEM_FOTO = new Set(['confirmacao_sem_resposta_equipe', 'instagram', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje', 'cobranca_saldo', 'cobranca_app_reativado']);
+const SEM_FOTO = new Set(['confirmacao_sem_resposta_equipe', 'ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje', 'cobranca_saldo', 'cobranca_app_reativado']);
 function aceitaFoto(chave) { const m = CATALOGO.find(x => x.chave === chave); return !!(m && !SEM_FOTO.has(m.chave)); }
 // ── Pacote de imagens (exportar/importar entre unidades) ─────────────────────
 // Um .json { tipo, versao, unidade, em, fotos: { <chave>: "data:image/...;base64,..." } }.

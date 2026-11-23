@@ -861,17 +861,6 @@ HEADLESS=false
 # WhatsApp roda bem headless (não precisa de tela) — deixe true p/ economizar.
 WA_HEADLESS=true
 
-# ===== Instagram — boas-vindas (opcional; ver Fase 6 do /implantacao) =====
-# Precisa de proxy residencial/móvel do BRASIL (IP de datacenter é bloqueado) e
-# dos cookies do Studio (instagram-cookies.json). O liga/desliga e o limite/dia
-# também dá para ajustar depois pela aba Instagram do painel.
-# IG_ENABLED=true
-# IG_USERNAME=usuario_do_studio
-# IG_MAX_DIA=5
-# IG_PROXY=HOST:PORTA
-# IG_PROXY_USER=
-# IG_PROXY_PASS=
-
 # ===== Alertas (ntfy) — tópico secreto só desta unidade =====
 NTFY_TOPIC=$NTFY_TOPIC_VAL
 NTFY_URL=https://ntfy.sh

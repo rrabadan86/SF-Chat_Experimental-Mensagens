@@ -132,7 +132,6 @@ Todos rodam no fuso de São Paulo, dentro do agendador (PM2 + node-cron).
 | Aniversariantes do mês | 05:30 | Dia 28 | Lista do mês seguinte no grupo da equipe |
 | **Ausentes 10 dias** | 06:10 | Segunda | Alunas ativas sem presença há 10+ dias → grupo da equipe |
 | Presentes pendentes | 06:45 | Segunda | Presentes de tempo de casa pendentes → grupo |
-| Instagram boas-vindas | 07:00 | Todos | DM a novos seguidores *(desligado no VPS — ver §11)* |
 | Aniversariantes do dia | 08:00 | Todos | Parabéns nos grupos em comum, com @menção |
 | Confirmação — HOJE | 08:30 | Seg–Sáb | Experimentais de hoje (status Agendado) |
 | Follow-up manhã | 10:30 | Seg–Sáb | Texto + áudio da professora (aula de ontem, manhã) |
@@ -185,20 +184,7 @@ login do EVO.
 
 ---
 
-## 11. Instagram — status atual
-
-O job de boas-vindas por DM **existe e está pronto**, mas **desligado por padrão no VPS**
-(`IG_ENABLED=false`). Motivo: a Meta **bloqueia o navegador automatizado a partir de IP de datacenter**
-(erro HTTP 429), mesmo com o IP "limpo". Caminhos para reativar:
-
-- **IP residencial** (rodar essa rotina num PC de casa), ou
-- **Proxy residencial/móvel** (suporte já embutido via `IG_PROXY` no `.env`).
-
-Enquanto isso, as boas-vindas do Instagram podem ser feitas manualmente. O resto do sistema não é afetado.
-
----
-
-## 12. Confiabilidade e segurança
+## 11. Confiabilidade e segurança
 
 - **PM2** mantém o robô no ar, reinicia sozinho e volta no boot do servidor (`pm2 save` / `pm2 startup`).
 - **Um job por vez** (trava de execução) + **heartbeat** no log.
