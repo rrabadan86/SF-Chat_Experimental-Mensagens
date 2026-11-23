@@ -222,7 +222,7 @@ function andamentoReconectar() {
   const r = _reconectar;
   if (!r.inicio) return null;
   if (!r.rodando && Date.now() - r.fim > 10 * 60 * 1000) return null; // resultado antigo: some da tela
-  return { rodando: r.rodando, etapa: r.etapa, msg: r.msg, inicio: r.inicio, fim: r.fim };
+  return { rodando: r.rodando, etapa: r.etapa, msg: r.msg, inicio: r.inicio, fim: r.fim, loginMantido: r.loginMantido !== false };
 }
 function iniciarReconectarSofia(por) {
   const destravar = require('./sofia-destravar');
@@ -234,7 +234,7 @@ function iniciarReconectarSofia(por) {
     dormir: (ms) => new Promise((r) => setTimeout(r, ms)),
   };
   _reconectar = { rodando: true, etapa: 'reconectando', msg: '', inicio: Date.now(), fim: 0, por };
-  destravar.destravar(alvo, ({ etapa, msg }) => { _reconectar.etapa = etapa; _reconectar.msg = msg || ''; })
+  destravar.destravar(alvo, ({ etapa, msg, loginMantido }) => { _reconectar.etapa = etapa; _reconectar.msg = msg || ''; if (loginMantido !== undefined) _reconectar.loginMantido = loginMantido; })
     .catch((e) => { _reconectar.etapa = 'falhou'; _reconectar.msg = String((e && e.message) || e).slice(0, 200); })
     .finally(() => { _reconectar.rodando = false; _reconectar.fim = Date.now(); console.log(`[painel] reconectar SoFIA (${por || '?'}): ${_reconectar.etapa}${_reconectar.msg ? ' — ' + _reconectar.msg : ''}`); });
 }
@@ -2422,8 +2422,10 @@ const server = http.createServer(protegido((req, res) => {
     return lerCorpo(req, 1e4, () => {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       if (_reconectar.rodando) return res.end(JSON.stringify({ ok: true, jaRodando: true }));
-      // Reiniciar a SoFIA em sequência pode fazer o WhatsApp bloquear o número: 5 min entre uma tentativa e outra.
-      const falta = _reconectar.fim ? 5 * 60 * 1000 - (Date.now() - _reconectar.fim) : 0;
+      // Reiniciar a SoFIA em sequência pode fazer o WhatsApp bloquear o número: 5 min entre uma
+      // tentativa e outra; 30 min se a última não conseguiu nem o QR (aí insistir só piora).
+      const pausa = (_reconectar.etapa === 'falhou' ? 30 : 5) * 60 * 1000;
+      const falta = _reconectar.fim ? pausa - (Date.now() - _reconectar.fim) : 0;
       if (falta > 0) return res.end(JSON.stringify({ ok: false, erro: `Acabei de tentar. Espere ${Math.ceil(falta / 60000)} min antes de tentar de novo — reiniciar a SoFIA em sequência pode fazer o WhatsApp bloquear o número.` }));
       try { auditoria.registrar(sess.usuario, 'sofia.reconectar', 'WhatsApp da SoFIA', ''); } catch (_) {}
       iniciarReconectarSofia((sess && sess.usuario) || '');

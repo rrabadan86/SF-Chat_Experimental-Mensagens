@@ -294,7 +294,9 @@ const client = new Client({
   ...(PAIR_BOOT ? { pairWithPhoneNumber: { phoneNumber: PAIR_BOOT, showNotification: true, intervalMs: 180000 } } : {}),
   // Espera do WhatsApp Web abrir/conectar. O padrão da biblioteca (30 s) estoura em
   // servidor com várias unidades (vários Chromium) e a SoFIA nunca chega no QR.
-  authTimeoutMs: parseInt(process.env.SOFIA_AUTH_TIMEOUT_MS || "60000", 10),
+  // (60 s ainda estourava no Lago Sul — 2 unidades no mesmo servidor — e com o perfil
+  // limpo, que baixa o WhatsApp Web inteiro de novo: agora 2 min.)
+  authTimeoutMs: parseInt(process.env.SOFIA_AUTH_TIMEOUT_MS || "120000", 10),
   userAgent: WA_UA,
   puppeteer: {
     headless: HEADLESS,
@@ -669,7 +671,9 @@ client.on("disconnected", (m: any) => {
 //      tentativa >= MAX → PARA de reiniciar e fica ociosa pedindo atenção
 //        (evita o loop infinito de reinícios). O contador zera quando conecta.
 //    Desligue com SOFIA_BOOT_TIMEOUT_MS=0.
-const BOOT_TIMEOUT_MS = parseInt(process.env.SOFIA_BOOT_TIMEOUT_MS || "75000", 10);  // 75s (0 desliga)
+// Tem de ser MAIOR que a espera do WhatsApp (SOFIA_AUTH_TIMEOUT_MS, 2 min): com 75 s o
+// vigia cortava uma subida lenta que ainda ia conectar.
+const BOOT_TIMEOUT_MS = parseInt(process.env.SOFIA_BOOT_TIMEOUT_MS || "150000", 10);  // 2,5 min (0 desliga)
 const BOOT_MAX_TENTATIVAS = parseInt(process.env.SOFIA_BOOT_MAX_TENTATIVAS || "6", 10);
 const FAILS_FILE = path.join(DIR, ".sofia-boot-fails");
 function lerFails() { try { return parseInt(fs.readFileSync(FAILS_FILE, "utf8").trim(), 10) || 0; } catch { return 0; } }
@@ -3087,6 +3091,12 @@ armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia
     // processo e o pm2 reinicia na hora — um laço de ~30s que nunca chega no QR.
     log(`❌ falha ao iniciar o WhatsApp: ${e?.message || e}`);
     setStatus("desconectado");
+    // Daqui em diante quem manda é a espera crescente abaixo. Sem desarmar o vigia
+    // do boot (75 s), ele reiniciava o processo ~15 s depois desta falha (a espera do
+    // WhatsApp é de 60 s) e a pausa de 1, 2, 4… min nunca acontecia: a SoFIA ficava
+    // batendo no WhatsApp sem parar — o que faz o WhatsApp bloquear o número — e o
+    // contador de falhas andava em dobro.
+    if (bootTimer) { clearTimeout(bootTimer); bootTimer = null; }
     // Backoff CRESCENTE persistido. Reiniciar de 50 em 50s martela o WhatsApp e
     // faz o servidor BLOQUEAR o número por excesso de tentativas — foi o que
     // derrubou de vez a conexão aqui. Cada falha seguida espera mais (1, 2, 4, 8…

@@ -28,7 +28,7 @@ function sofiaFalsa(amb, aoSubir) {
     pm2: async (args) => {
       chamadas.push(args.join(' '));
       if (args[0] !== 'start') return;
-      const qrNovo = fs.existsSync(path.join(dir, '.sofia-limpar-auth'));
+      const qrNovo = fs.existsSync(auth + '.guardado') || fs.existsSync(path.join(dir, '.sofia-limpar-auth')); // subiu com o perfil limpo?
       const estado = aoSubir(qrNovo);
       if (estado) amb.gravarSofia('sofia-wa-status.json', { estado, atualizadoEm: new Date(relogio + 1000).toISOString() });
     },
@@ -64,7 +64,8 @@ test('reconectar: se não volta em 2 min com o login salvo, passa sozinho para o
     assert.strictEqual(r, 'qr');
     assert.deepStrictEqual(etapas, ['reconectando', 'qr-novo', 'qr']);
     assert.deepStrictEqual(f.chamadas, ['stop unidade-sofia', 'start unidade-sofia', 'stop unidade-sofia', 'start unidade-sofia']);
-    assert.ok(fs.existsSync(path.join(f.dir, '.sofia-limpar-auth')), 'no 2º passo a SoFIA é avisada para descartar o login ao subir');
+    assert.ok(!fs.existsSync(path.join(f.auth, 'session', 'login-salvo')), 'no 2º passo a SoFIA sobe sem o login antigo');
+    assert.ok(!fs.existsSync(f.auth + '.guardado'), 'o QR apareceu: o login antigo não servia e a cópia guardada é apagada');
     assert.ok(JSON.parse(fs.readFileSync(path.join(f.dir, 'sofia-conversas.json'), 'utf8'))['5562999990001'], 'as conversas não são tocadas');
   } finally { amb.limpar(); }
 });
@@ -75,12 +76,37 @@ test('reconectar: se nem o QR novo aparece, termina como "falhou" (não fica ten
     const f = sofiaFalsa(amb, () => 'iniciando');
     const r = await amb.req('sofia-destravar').destravar(f.alvo);
     assert.strictEqual(r, 'falhou');
-    assert.strictEqual(f.chamadas.filter(c => c.startsWith('start')).length, 2, 'duas tentativas e para');
+    assert.strictEqual(f.chamadas.filter(c => c.startsWith('start')).length, 3, 'duas tentativas, mais a subida com o login devolvido — e para');
+    // o problema NÃO era o login (nem com o perfil limpo o QR apareceu): o login salvo volta para o lugar,
+    // para a SoFIA reconectar sozinha quando o WhatsApp liberar, sem precisar do celular
+    assert.ok(fs.existsSync(path.join(f.auth, 'session', 'login-salvo')), 'login salvo devolvido');
+    assert.ok(!fs.existsSync(f.auth + '.guardado'));
+    assert.ok(!fs.existsSync(path.join(f.dir, '.sofia-limpar-auth')), 'e a SoFIA não é mandada apagar o login ao subir');
+    const avisos = [];
+    const h = sofiaFalsa(amb, () => 'iniciando');
+    await amb.req('sofia-destravar').destravar(h.alvo, (e) => avisos.push(e));
+    assert.strictEqual(avisos[avisos.length - 1].etapa, 'falhou');
+    assert.strictEqual(avisos[avisos.length - 1].loginMantido, true, 'a tela é avisada de que o login foi mantido');
     // um estado ANTIGO de "conectado" (de antes de reiniciar) não engana a espera
     const g = sofiaFalsa(amb, () => '');
     amb.gravarSofia('sofia-wa-status.json', { estado: 'conectado', atualizadoEm: new Date(Date.now() - 3600e3).toISOString() });
     assert.strictEqual(await amb.req('sofia-destravar').destravar(g.alvo), 'falhou');
   } finally { amb.limpar(); }
+});
+
+test('SoFIA: a pausa entre as tentativas de conectar é respeitada (o vigia do boot não a atropela)', () => {
+  // No Lago Sul 1 (11/2026) o log mostrava "Esperando 4 min antes de tentar de novo" e, 13 s depois,
+  // "travou — reiniciando…": o vigia de 75 s reiniciava a SoFIA no meio da pausa, ela batia no
+  // WhatsApp sem parar e o contador de falhas andava em dobro (3 → 4, 5 → 6).
+  const ts = fs.readFileSync(path.resolve(__dirname, '..', '..', '..', 'ChatBot', 'sofia-listener.ts'), 'utf8');
+  const falha = ts.slice(ts.indexOf('falha ao iniciar o WhatsApp'));
+  const ateAPausa = falha.slice(0, falha.indexOf('const n = lerFails() + 1;'));
+  assert.match(ateAPausa, /clearTimeout\(bootTimer\)/, 'ao falhar, o vigia do boot é desarmado antes de começar a pausa');
+  const num = (nome) => Number((new RegExp(nome + ' \\|\\| "(\\d+)"').exec(ts) || [])[1]);
+  const espera = num('SOFIA_AUTH_TIMEOUT_MS'), vigia = num('SOFIA_BOOT_TIMEOUT_MS');
+  assert.ok(espera >= 120000, 'a SoFIA espera pelo menos 2 min o WhatsApp abrir');
+  assert.ok(vigia > espera, 'o vigia do boot só age depois que a espera do WhatsApp terminou');
+  assert.ok(require(path.resolve(__dirname, '..', '..', 'src', 'sofia-destravar.js')).ESPERA_MS > espera, 'o botão do painel espera mais que a própria SoFIA');
 });
 
 const pedir = (porta, metodo, url, cookie) => new Promise((ok) => {
