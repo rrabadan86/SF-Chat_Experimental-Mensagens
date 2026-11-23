@@ -4,7 +4,24 @@ Objetivo: olhar **cada tela** do painel no celular e no computador, decidir o qu
 que muda, e só então guardar os **prints de referência** (a partir daí, todo PR é comparado
 com eles). As regras do padrão visual estão em `.claude/rules/visual.md` (VIS-01 a VIS-07).
 
-Tempo: cerca de 1 h 30 para as 29 telas (uns 3 minutos por tela).
+Tempo: cerca de 1 h 30 para as 29 telas (uns 3 minutos por tela) — bem menos se você
+usar a lista pronta do Impeccable (abaixo) e só concordar, discordar ou acrescentar.
+
+## Impeccable (Fase 7 — ajuda na revisão e nas correções)
+
+O [Impeccable](https://github.com/pbakaus/impeccable) é um pacote de skills de design para o
+Claude Code (código aberto). Como ele entra:
+
+1. **Instalação** (no começo da Fase 7, por PR): o Claude lê o código dele antes (é de
+   terceiros), instala numa versão fixa dentro do repositório e aponta para o nosso padrão
+   (`.claude/rules/visual.md`).
+2. **Lista pronta**: o Claude roda o `critique` (hierarquia, clareza, impressão) e o `audit`
+   (acessibilidade, celular, desempenho) nas 29 telas e entrega a lista por tela já no
+   formato do Passo 5 (👍 / ✏️ / 🔁). Você usa os Passos 2 e 3 para conferir essa lista.
+3. **Correções**: um PR por grupo de telas, com o `polish` no acabamento e antes/depois.
+4. **Quem decide**: você. Quando o Impeccable sugerir algo contra o nosso padrão ou contra
+   uma decisão sua (ex.: ⓘ em toda coluna, tabela que vira cartão no celular), vale o nosso —
+   o Claude mostra a divergência e não aplica sozinho.
 
 ## Passo 1 — Pegar os prints
 
@@ -104,6 +121,6 @@ Pendência 3 (alert): corrigir agora
 
 ## Passo 6 — O que eu faço depois
 
-1. Agrupo os pedidos e mostro o **plano** antes de começar.
+1. Junto os seus pedidos com a lista do Impeccable e mostro o **plano** antes de começar.
 2. Faço um PR por grupo de telas, com **antes e depois** (celular e computador) para você aprovar.
 3. Quando todas as telas estiverem 👍, guardamos os **prints de referência**. Daí em diante, todo PR que mexer em tela é comparado com eles, e o que mudou sem querer aparece na hora.

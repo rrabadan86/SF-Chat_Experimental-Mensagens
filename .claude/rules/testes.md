@@ -12,7 +12,7 @@ paths:
 Comandos (todos rodam em cópia temporária):
 - Unidade: `cd Experimental && npm test` (= `node --test testes/unidade/*.test.js`)
 - Só o que a alteração pode ter quebrado primeiro: `cd Experimental && npm run testar-alteracao` (`-- --so` para não rodar o resto)
-- Telas: `cd Experimental && node testes/tela/telas.js --estrito` (demonstração, computador e celular); só algumas, com print de todas: `--so=/metas,/funil --prints` (skill `conferir-celular`)
+- Telas: `cd Experimental && node testes/tela/telas.js --estrito` (demonstração, computador e celular); só algumas, com print de todas: `--so=/metas,/funil --prints` (skill `conferir-celular`); relógio parado nos prints: `--relogio=2026-11-23T10:00:00-03:00` (`testes/tela/relogio-fixo.js`)
 - Peças de tela no navegador: `cd Experimental && node --test testes/tela/componentes.test.js` (precisa do playwright)
 - EVO: `cd Experimental/src/agendamento_evo && python3 -m tests.test_offline`
 
