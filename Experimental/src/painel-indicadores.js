@@ -21,6 +21,8 @@ const E = require('./painel-estado');
 const {
   uiChips, uiTopo, esc, uiBarra, fmtData, chrome, fmtTel, podeFunil, PAGAMENTO_ATIVO, uiDatas, UI_SIT, fuLerJson, FU_AGENDOU_CANAL_FILE, lerCompCfg, FU_AGENDOU_AULA_FILE, uiPessoa, uiTrilho, PM2_EXP, PM2_SOFIA, lerJsonData, infoI,
 } = require('./painel-base');
+const { uiTabela } = require('./painel-componentes');
+const { hojeSP } = require('./relogio');
 
 // ── Página: Indicadores do formulário ───────────────────────────────────────
 function paginaIndicadores(dias, aviso) {
@@ -365,7 +367,7 @@ function paginaGrade(off) {
     return { bar, prof, det };
   };
 
-  let corpo;
+  let corpo, diaIni0 = '';
   if (!snap || !Array.isArray(snap.turmas) || !snap.turmas.length) {
     corpo = `<div class="gr-wk-center">${navSem}</div><div class="card" style="text-align:center;padding:34px 20px">
       <div style="font-size:1.6rem;margin-bottom:6px">📋</div>
@@ -424,8 +426,13 @@ function paginaGrade(off) {
         const ti = tierOf(t), c = conteudo(t);
         return `<div class="gr-item t-${ti.k}" data-fx="${fxData(t)}" data-prof="${nrmFx(t.professora || '')}"><div class="gr-item-h"><span class="gr-hora">${escH(t.hora)}</span><span class="gr-vg" title="${escH(ti.tip || '')}">${ti.txt}</span></div>${c.prof}${c.bar}${c.det}</div>`;
       }).join('');
-      return `<div class="gr-day"><div class="gr-day-h">${WD[wd]} · ${fmtDia(data)}</div>${items}</div>`;
+      return `<div class="gr-day" data-dia="${escH(data)}"><div class="gr-day-h">${WD[wd]} · ${fmtDia(data)}</div>${items}</div>`;
     }).join('') + `</div>`;
+    // Celular e tablet: um dia por vez (começa em hoje; outra semana começa no 1º dia). "Todos" mostra a semana.
+    const hoje = hojeSP(), dias = byDay.map(x => x[0]);
+    const diaIni = off === 0 ? (dias.includes(hoje) ? hoje : '') : (dias[0] || '');
+    diaIni0 = diaIni;
+    const escolheDia = `<div class="gr-dias" role="group" aria-label="Dia da semana">${byDay.map(([data, wd]) => `<button type="button" data-dia="${escH(data)}" aria-pressed="${data === diaIni}">${WD[wd]}<small>${data === hoje ? 'hoje' : fmtDia(data)}</small></button>`).join('')}<button type="button" data-dia="" aria-pressed="${!diaIni}">Todos<small>semana</small></button></div>`;
 
     const profRows = porProf.length ? porProf.map(p => {
       const tier = profTier(p.pct);
@@ -453,14 +460,28 @@ function paginaGrade(off) {
       if (s === 'a receber' || s.indexOf('open') >= 0 || s.indexOf('pend') >= 0 || s.indexOf('provision') >= 0) return 'a receber';
       return s || '—'; };
     const sitFin = (it) => { const l = sitLbl(it.sit); return it.prov && l !== 'pago' ? 'cartão a cair' : l; };
-    const fatRows = fatIt.map(it => `<tr><td data-s="${nrmFx(it.aluna)}">${escH(it.aluna)}</td><td data-s="${nrmFx(it.contrato || '')}">${escH(it.contrato || '—')}</td><td data-s="${escH(it.venc || '')}">${fmtDia(it.venc)}</td><td class="v" data-s="${Number(it.valor) || 0}">${fmtBRL(it.valor)}</td><td class="v" data-s="${it.pago != null ? Number(it.pago) : -1}">${it.pago != null ? fmtBRL(it.pago) : '—'}</td><td data-s="${escH(sitFin(it))}"><span class="gr-sit">${escH(sitFin(it))}</span></td></tr>`).join('');
+    const fatTabela = () => uiTabela({ id: 'grFat', busca: 'Buscar aluna, contrato ou situação', porPagina: 20, vazio: 'Sem lançamentos no mês.', colunas: [
+      { chave: 'aluna', titulo: 'Aluna', celular: 'titulo', info: 'Aluna do lançamento no EVO.' },
+      { chave: 'contrato', titulo: 'Contrato', info: 'Plano ou serviço que gerou a cobrança.' },
+      { chave: 'venc', titulo: 'Vence', info: 'Dia do vencimento no EVO.' },
+      { chave: 'valor', titulo: 'Cobrado', num: true, info: 'Valor do lançamento.' },
+      { chave: 'pago', titulo: 'Pago', num: true, info: 'Quanto já foi pago. “—” = nada ainda.' },
+      { chave: 'sit', titulo: 'Situação', info: 'Pago, a receber, vencido ou cartão a cair (pago no cartão, que a operadora ainda vai repassar).' },
+    ], linhas: fatIt.map(it => ({
+      aluna: it.aluna, contrato: it.contrato || '',
+      venc: { valor: it.venc || '', html: escH(fmtDia(it.venc)) },
+      valor: { valor: Number(it.valor) || 0, html: fmtBRL(it.valor) },
+      pago: { valor: it.pago != null ? Number(it.pago) : -1, html: it.pago != null ? fmtBRL(it.pago) : '—' },
+      sit: { valor: sitFin(it), html: `<span class="gr-sit">${escH(sitFin(it))}</span>` },
+    })) });
     const fatTotPago = fatIt.reduce((a, it) => a + (Number(it.pago) || 0), 0);
     // Previsto × recebido × em atraso (os mesmos números das Metas e do fechamento do mês).
     const fin = finResumo.resumir(fatIt, String(snap.financeiro_em || '').slice(0, 10));
     const fmtPctFin = (v) => v == null ? '—' : String(v).replace('.', ',') + '%';
     const mFat = (fatMes == null) ? '' : `<div class="gr-ov" id="ov-fat" onclick="if(event.target===this)fecharM('fat')"><div class="gr-md">
       <div class="gr-md-h"><b>Recebimentos do mês</b><span>${r.fatura_n || 0} lançamentos</span><button type="button" onclick="fecharM('fat')" aria-label="Fechar">✕</button></div>
-      <div class="gr-md-b"><table class="gr-md-t gr-md-sort"><thead><tr><th data-type="t">Aluna</th><th data-type="t">Contrato</th><th data-type="d">Vence</th><th class="v" data-type="n">Cobrado</th><th class="v" data-type="n">Pago</th><th data-type="t">Situação</th></tr></thead><tbody>${fatRows || '<tr><td colspan="6" class="gr-md-vz">sem lançamentos no mês</td></tr>'}<tr class="gr-md-tot"><td colspan="3">Total do mês</td><td class="v">${fmtBRL(fatMes)}</td><td class="v">${fmtBRL(fatTotPago)}</td><td></td></tr></tbody></table></div>
+      <div class="gr-md-b gr-md-fat">${fatTabela()}</div>
+      <div class="gr-md-foot"><span>Total do mês: cobrado ${fmtBRL(fatMes)} · pago ${fmtBRL(fatTotPago)}</span></div>
       <div class="gr-md-foot"><span>Previsto ${fmtBRL(fin.previsto)}</span><span>recebido ${fmtBRL(fin.recebido)} · em atraso ${fmtBRL(fin.atraso)}${fin.aCair ? ` · cartão a cair ${fmtBRL(fin.aCair)}` : ''} · a vencer ${fmtBRL(fin.aVencer)}</span></div></div></div>`;
     const scRows = semCont.map(x => `<tr><td>${escH(x.nome)}${x.trancada ? ' <span class="gr-trc">🔒 trancada</span>' : ''}</td><td>${escH(x.plano || '—')}</td></tr>`).join('');
     const mTkm = (tkmMed == null) ? '' : `<div class="gr-ov" id="ov-tkm" onclick="if(event.target===this)fecharM('tkm')"><div class="gr-md" style="max-width:520px">
@@ -468,28 +489,26 @@ function paginaGrade(off) {
       <div class="gr-md-b"><table class="gr-md-t"><thead><tr><th>Aluna</th><th>Plano</th></tr></thead><tbody>${scRows || '<tr><td colspan="2" class="gr-md-vz">Todas as ativas têm valor de contrato 🎉</td></tr>'}</tbody></table></div>
       <p class="gr-md-nota">Ficam fora da média do TKM — <b>trancada</b> (plano congelado) ou contrato sem venda casável no EVO. <b>VIP/cortesia</b> (R$ 0) já são excluídas da base de alunas.</p></div></div>`;
 
-    corpo = `<div class="gr-kpis"><div class="stats">
+    // As turmas vêm primeiro; os números ficam embaixo, e dinheiro e professoras começam recolhidos (decisão do dono, 23/11/2026).
+    const numeros = `<div class="gr-kpis"><div class="stats">
       <div class="stat" title="Ocupação por matrículas fixas = fixas ÷ vagas (sem sábado/escala). Mede quanto da agenda já está vendida."><div class="n">${ocupPct != null ? ocupPct + '%' : '—'}</div><div class="l">taxa de ocupação FIXAS</div><div class="gr-sub">${ocupPct == null ? 'atualize a grade' : (r.ocupacao_vagas ? `${r.ocupacao_fixas}/${r.ocupacao_vagas} vagas · sem sáb` : '')}</div></div>
       <div class="stat prez" title="Presença real média = quem de fato ocupou a aula (fixas presentes + reposição + FREE) ÷ vagas, só nas aulas já realizadas da semana. Sem sábado (escala)."><div class="n">${presPct != null ? presPct + '%' : '—'}</div><div class="l">presença na turma</div><div class="gr-sub">${presPct == null ? 'aulas já realizadas' : (r.presenca_vagas ? `${r.presenca_real}/${r.presenca_vagas} vagas · realizadas` : '')}</div></div>
       <div class="stat" title="Alunas com matrícula FIXA (recorrente) em alguma turma da semana, e o quanto representam das alunas ativas do EVO."><div class="n">${alunasFixas != null ? alunasFixas : '—'}</div><div class="l">alunas fixas</div><div class="gr-sub">${alunasFixas == null ? 'atualize a grade' : (pctAlunasFixas != null ? `${pctAlunasFixas}% de ${totalAlunas} alunas` : (r.fixas != null ? `${r.fixas} matrículas fixas` : ''))}</div></div>
       <div class="stat tot" title="Total de turmas na semana (Seg a Sáb)."><div class="n">${r.turmas != null ? r.turmas : turmas.length}</div><div class="l">turmas</div></div>
-    </div>${(tkmMed != null || fatMes != null) ? `<div class="stats">
+    </div></div>
+    <div class="ui-secoes">
+    ${(tkmMed != null || fatMes != null) ? `<div class="sec-t" data-fechado>Dinheiro do mês</div>
+    <div class="card"><div class="stats">
       ${fatMes != null ? `<div class="stat fat gr-click" onclick="abrirM('fat')" title="Tudo o que VENCE neste mês (todas as alunas), pago ou não — é a previsão, não o que entrou. Clique para ver linha a linha."><div class="n">${fmtBRL(fin.previsto)}</div><div class="l">previsto para receber no mês</div><div class="gr-sub">${r.fatura_n ? `${r.fatura_n} lançamentos · ` : ''}a vencer ${fmtBRL(fin.aVencer)}${fin.aCair ? ` · cartão a cair ${fmtBRL(fin.aCair)}` : ''} <span class="gr-md-hint">▸ ver lista</span></div></div>
       <div class="stat fat gr-click" onclick="abrirM('fat')" title="O que já CAIU de fato até a última leitura do EVO (cartão que a operadora ainda vai repassar não conta)."><div class="n">${fmtBRL(fin.recebido)}</div><div class="l">recebido no mês</div><div class="gr-sub">${fin.previsto ? Math.round(fin.recebido * 100 / fin.previsto) + '% do previsto' : ''}</div></div>
       <div class="stat fat gr-click${fin.atraso ? ' alerta' : ''}" onclick="abrirM('fat')" title="Venceu e não foi pago. Inadimplência = em atraso ÷ tudo o que já venceu no mês (pago + em atraso). O que ainda vai vencer e o cartão a cair ficam fora da conta."><div class="n">${fmtBRL(fin.atraso)}</div><div class="l">em atraso</div><div class="gr-sub">${fin.nAtraso ? `${fin.nAtraso} lançamento${fin.nAtraso === 1 ? '' : 's'} · ` : ''}inadimplência <b>${fmtPctFin(fin.inadPct)}</b></div></div>` : ''}
       ${tkmMed != null ? `<div class="stat tkm gr-click" onclick="abrirM('tkm')" title="Ticket médio mensal = média do valor mensalizado do contrato vigente de cada aluna ativa (valor do contrato ÷ meses de duração). Inclui trancadas; exclui VIP/cortesia. Clique para ver quem está sem valor de contrato."><div class="n">${fmtBRL(tkmMed)}</div><div class="l">TKM médio</div><div class="gr-sub">contrato mensalizado · ${r.tkm_alunas || 0}${r.ativas ? ` de ${r.ativas}` : ''} ativas${r.trancadas ? ` · ${r.trancadas} trancada${r.trancadas === 1 ? '' : 's'}` : ''}${semCont.length ? ` <span class="gr-md-hint">▸ ${semCont.length} sem contrato</span>` : ''}</div></div>` : ''}
-    </div>` : ''}
-    </div>
-    <div class="sec-t" data-nosec>Ocupação &amp; presença por professora</div>
+    </div></div>` : ''}
+    <div class="sec-t" data-fechado>Ocupação &amp; presença por professora</div>
     <p class="quando gr-leg-prof"><span><i style="background:var(--teal)"></i>vagas fixas vendidas</span><span><i style="background:#9db8b6"></i>presença real</span>${infoI('<b>Fixas</b> = matrículas fixas ÷ vagas (quanto da agenda dela está vendida). <b>Presença</b> = quem de fato ocupou a aula (fixas presentes + reposição + FREE) ÷ vagas, só nas aulas já realizadas. Sem sábado (escala).')}</p>
     <div class="card" style="padding:10px 15px">${profRows}</div>
-    <p class="quando" style="display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:4px 0 8px">
-      <span>Período <b>${fmtDia(snap.inicio)}–${fmtDia(snap.fim)}</b></span>
-      <span class="gr-fresh">🕒 grade gerada <b>${escH(snap.gerado_em || '')}</b></span>
-      <span class="gr-fresh gr-fresh-fin">${snap.financeiro_em ? `💰 TKM/recebimentos de <b>${escH(snap.financeiro_em)}</b>` : '💰 TKM/recebimentos: clique “Atualizar tudo”'}</span>
-      <span class="gr-leg"><i><b class="lg-livre"></b>vaga matríc.</i><i><b class="lg-quase"></b>quase (1-2)</i><i><b class="lg-cheia"></b>lotada</i><i><b class="lg-repo"></b>repô/FREE</i></span>
-    </p>
-    <div class="gr-search">
+    </div>`;
+    corpo = `<div class="gr-search">
       ${(() => {
         const nomes = [...new Set(turmas.map(t => t.professora).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt'));
         if (!nomes.length) return '';
@@ -501,7 +520,16 @@ function paginaGrade(off) {
       <span id="grBuscaInfo" class="gr-busca-info"></span>
     </div>
     <div class="gr-wk-center">${navSem}</div>
-    ${desk}${mob}${mFat}${mTkm}`;
+    ${escolheDia}
+    <div id="grVazio" class="card vazio" style="display:none">Nenhuma turma neste dia com esse filtro.</div>
+    ${desk}${mob}
+    <p class="quando" style="display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:4px 0 8px">
+      <span>Período <b>${fmtDia(snap.inicio)}–${fmtDia(snap.fim)}</b></span>
+      <span class="gr-fresh">🕒 grade gerada <b>${escH(snap.gerado_em || '')}</b></span>
+      <span class="gr-fresh gr-fresh-fin">${snap.financeiro_em ? `💰 TKM/recebimentos de <b>${escH(snap.financeiro_em)}</b>` : '💰 TKM/recebimentos: clique “Atualizar tudo”'}</span>
+      <span class="gr-leg"><i><b class="lg-livre"></b>vaga matríc.</i><i><b class="lg-quase"></b>quase (1-2)</i><i><b class="lg-cheia"></b>lotada</i><i><b class="lg-repo"></b>repô/FREE</i></span>
+    </p>
+    ${numeros}${mFat}${mTkm}`;
   }
 
   const corpoWrap = `<div class="wrap">
@@ -517,7 +545,7 @@ function paginaGrade(off) {
     .gr-wk-b.off{opacity:.35;pointer-events:none;color:var(--faint)}
     .gr-wk-lbl{font-size:var(--fs-xs);font-weight:700;color:var(--cinza);min-width:140px;text-align:center;font-variant-numeric:tabular-nums}
     .gr-wk-center{display:flex;justify-content:center;margin:10px 0 6px}
-    .gr-fresh{display:inline-flex;align-items:center;gap:5px;color:var(--teal-esc);background:var(--teal-soft);border:1px solid var(--teal);border-radius:999px;padding:3px 11px;font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
+    .gr-fresh{display:inline-flex;align-items:center;gap:5px;color:var(--teal-esc);background:var(--teal-soft);border:1px solid var(--teal);border-radius:999px;padding:3px 11px;font-size:var(--fs-xs);font-weight:600}
     .gr-fresh b{font-weight:800;font-variant-numeric:tabular-nums}
     .gr-fresh-fin{color:#9a6b00;background:#fdf5e6;border-color:#e9d8ac}
     .gr-leg{display:inline-flex;gap:12px;align-items:center;flex-wrap:wrap}
@@ -555,13 +583,16 @@ function paginaGrade(off) {
     /* nesta página a grade precisa de mais largura (Seg→Sáb) do que o padrão 900px */
     .wrap{max-width:1080px}
     /* desktop: grade semanal (colunas = dia da semana; a estrutura fixa vale toda semana) */
-    .gr-wrap{overflow:auto;border:1px solid var(--linha);border-radius:14px;background:var(--card);box-shadow:0 1px 2px rgba(16,24,40,.04);max-height:78vh}
-    table.gr{border-collapse:separate;border-spacing:0;width:100%}
+    /* sem rolagem própria (VIS-02): as colunas dividem a largura e o cabeçalho dos dias gruda abaixo do menu */
+    .gr-wrap{border:1px solid var(--linha);border-radius:14px;background:var(--card);box-shadow:0 1px 2px rgba(16,24,40,.04)}
+    table.gr{border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed}
+    table.gr th.h{width:76px}
     table.gr th,table.gr td{border-bottom:1px solid var(--linha-soft);border-right:1px solid var(--linha-soft)}
-    table.gr thead th{background:var(--teal);color:#fff;font-size:var(--fs-xs);font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:9px 8px;position:sticky;top:0;z-index:3;text-align:center}
+    table.gr thead th{background:var(--teal);color:#fff;font-size:var(--fs-xs);font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:9px 8px;position:sticky;top:calc(var(--topbar-h,58px) + 41px);z-index:3;text-align:center}
     table.gr th.h{background:var(--teal-soft);color:var(--teal-esc);font-weight:700;white-space:nowrap;text-align:center;font-size:var(--fs-sm);position:sticky;left:0;z-index:2;padding:8px 10px;font-variant-numeric:tabular-nums}
     table.gr thead th.h{z-index:4}
-    .gr-cel{min-width:132px;vertical-align:top;padding:8px 10px;background:var(--card)}
+    .gr-cel{vertical-align:top;padding:8px 10px;background:var(--card);overflow-wrap:anywhere}
+    .gr-topo{flex-wrap:wrap}
     .gr-cel.t-quase{background:#fdfaf2}.gr-cel.t-cheia{background:#fcf2f1}
     td.gr-empty{background:#fafafa}
     /* mobile: lista por dia */
@@ -643,7 +674,7 @@ function paginaGrade(off) {
     .gr-md-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--linha)}
     .gr-md-h b{font-size:1rem;color:var(--tinta)}
     .gr-md-h span{color:var(--cinza);font-size:var(--fs-xs);font-weight:700}
-    .gr-md-h button{margin-left:auto;border:none;background:var(--linha-soft);color:var(--tinta);border-radius:9px;width:32px;height:32px;cursor:pointer;font-size:1rem;line-height:1}
+    .gr-md-h button{margin-left:auto;border:none;background:var(--linha-soft);color:var(--tinta);border-radius:9px;width:32px;height:32px;padding:0;cursor:pointer;font-size:1rem;line-height:1}
     .gr-md-h button:hover{background:var(--erro-bg);color:var(--erro)}
     .gr-md-b{overflow:auto}
     .gr-md-t{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
@@ -654,15 +685,28 @@ function paginaGrade(off) {
     .gr-md-t tbody tr:hover{background:var(--teal-soft)}
     .gr-md-vz{color:var(--faint);text-align:center;padding:20px}
     .gr-sit{font-size:var(--fs-xs);font-weight:700;color:var(--cinza)}
-    .gr-md-t tr.gr-md-tot td{border-top:2px solid var(--linha);font-weight:800;background:var(--teal-soft);position:sticky;bottom:0}
-    .gr-md-sort th{cursor:pointer;user-select:none;white-space:nowrap}
-    .gr-md-sort th:hover{filter:brightness(.96)}
-    .gr-md-sort th.up::after{content:" ▲";font-size:.7em;opacity:.85}
-    .gr-md-sort th.down::after{content:" ▼";font-size:.7em;opacity:.85}
-    .gr-md-foot{display:flex;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--linha);font-weight:800;font-size:1rem;color:var(--tinta)}
+    .gr-md-fat{padding:12px 16px}
+    .gr-md-foot{display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--linha);font-weight:700;font-size:var(--fs-sm);color:var(--tinta)}
     .gr-md-nota{margin:0;padding:12px 18px;color:var(--cinza);font-size:var(--fs-xs);border-top:1px solid var(--linha-soft)}
     .gr-trc{font-size:.66rem;font-weight:700;color:var(--cinza)}
-    @media(max-width:760px){ .gr-desk{display:none} .gr-mob{display:block} }
+    /* dia da semana (celular e tablet) */
+    .gr-dias{display:none}
+    .gr-dias button{flex:1 1 72px;display:flex;flex-direction:column;align-items:center;gap:1px;min-height:48px;padding:6px 4px;border:1px solid var(--linha);border-radius:10px;background:var(--card);color:var(--tinta);font-size:var(--fs-sm)}
+    .gr-dias small{font-size:var(--fs-xs);font-weight:500;color:var(--cinza)}
+    .gr-dias button[aria-pressed=true]{background:var(--teal);border-color:var(--teal);color:var(--card)}
+    .gr-dias button[aria-pressed=true] small{color:var(--card)}
+    .gr-dia-hide{display:none!important}
+    @media(max-width:960px){
+      .gr-desk{display:none}.gr-mob{display:block}
+      .gr-dias{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
+      .gr-item{overflow-wrap:anywhere}
+    }
+    @media(min-width:641px) and (max-width:960px){
+      .gr-day{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start}
+      .gr-day-h{grid-column:1/-1;justify-self:start}
+      .gr-item{margin:0}
+    }
+    @media(max-width:640px){.gr-search>*{flex:1 1 100%!important;max-width:none!important}.gr-md-h{flex-wrap:wrap}}
     </style>
     ${uiTopo({
       titulo: 'Grade de matrículas fixas',
@@ -705,31 +749,25 @@ function paginaGrade(off) {
         }
         sel.addEventListener('change', aplicar);
       })();
-      // Ordenar colunas do popup de faturamento ao clicar no cabeçalho.
-      (function(){
-        [].slice.call(document.querySelectorAll('table.gr-md-sort')).forEach(function(tbl){
-          if(!tbl.tHead) return;
-          var ths=[].slice.call(tbl.tHead.rows[0].cells);
-          ths.forEach(function(th,idx){
-            th.addEventListener('click', function(){
-              var type=th.getAttribute('data-type')||'t';
-              var asc=th.getAttribute('data-dir')!=='asc';
-              ths.forEach(function(h){ h.removeAttribute('data-dir'); h.classList.remove('up','down'); });
-              th.setAttribute('data-dir', asc?'asc':'desc'); th.classList.add(asc?'up':'down');
-              var tb=tbl.tBodies[0]; var tot=tb.querySelector('tr.gr-md-tot');
-              var rows=[].slice.call(tb.rows).filter(function(r){ return r!==tot && r.cells.length>idx; });
-              rows.sort(function(a,b){
-                var va=a.cells[idx].getAttribute('data-s'); if(va==null) va=a.cells[idx].textContent;
-                var vb=b.cells[idx].getAttribute('data-s'); if(vb==null) vb=b.cells[idx].textContent;
-                if(type==='n') return asc?(parseFloat(va)||0)-(parseFloat(vb)||0):(parseFloat(vb)||0)-(parseFloat(va)||0);
-                return asc?String(va).localeCompare(String(vb),'pt'):String(vb).localeCompare(String(va),'pt');
-              });
-              rows.forEach(function(r){ tb.appendChild(r); });
-              if(tot) tb.appendChild(tot);
-            });
-          });
-        });
-      })();
+      // Dia da semana (celular e tablet). Com busca ou professora escolhida, vale a semana inteira —
+      // senão a turma procurada poderia estar num dia escondido.
+      var grDia=${JSON.stringify(diaIni0)};
+      function grMostraDia(){
+        var q=document.getElementById('grBusca'), p=document.getElementById('grProf');
+        var semana=!grDia || (q && q.value.trim().length>=2) || (p && p.value);
+        var vis=0;
+        [].forEach.call(document.querySelectorAll('.gr-day'),function(d){ var m=semana||d.getAttribute('data-dia')===grDia; d.classList.toggle('gr-dia-hide',!m); if(m&&!d.classList.contains('gr-prof-hide')) vis++; });
+        [].forEach.call(document.querySelectorAll('.gr-dias button'),function(b){ b.setAttribute('aria-pressed', String(b.getAttribute('data-dia')===(semana?'':grDia))); });
+        var v=document.getElementById('grVazio'); if(v) v.style.display=vis?'none':'';
+      }
+      [].forEach.call(document.querySelectorAll('.gr-dias button'),function(b){ b.addEventListener('click',function(){
+        grDia=b.getAttribute('data-dia');
+        // escolher um dia sai da busca e da professora (senão o toque não mudaria nada)
+        var q=document.getElementById('grBusca'), p=document.getElementById('grProf');
+        if(grDia){ if(q && q.value){ q.value=''; q.dispatchEvent(new Event('input')); } if(p && p.value){ p.value=''; p.dispatchEvent(new Event('change')); } }
+        grMostraDia(); }); });
+      ['input','change'].forEach(function(ev){ document.addEventListener(ev,function(e){ if(e.target && (e.target.id==='grBusca'||e.target.id==='grProf')) setTimeout(grMostraDia,0); }); });
+      grMostraDia();
       // Busca de aluna: destaca as turmas em que ela é fixa e esmaece as demais.
       (function(){
         var inp=document.getElementById('grBusca'); if(!inp) return;
