@@ -72,8 +72,8 @@ data)" marca regra que é escolha do negócio — **não mude sem perguntar**.
 ## Pendências combinadas
 Plano de organização em fases, um PR por fase, plano mostrado antes de cada uma:
 - [x] Fase 0 — diagnóstico · [x] limpeza (PR #433) · [x] Fase 1 — instruções (PR #434)
-- [ ] **Fase 2 — padrão visual** (`visual.md`, `painel-componentes.js`) — a revisão de design decide as telas fora do padrão listadas no `visual.md`
-- [ ] Fase 3 — testes (perfis, datas difíceis com "hoje" fixo, telas com clique e rolagem dentro de cartões)
+- [x] Fase 2 — padrão visual (PR #435) — a revisão de design decide as telas fora do padrão listadas no `visual.md`
+- [ ] **Fase 3 — testes** (perfis, datas com relógio fixo, envios, telas a 1366/390 sem rolagem lateral)
 - [ ] Fase 4 — matriz de rastreabilidade (`docs/rastreabilidade.md`, `npm run matriz`, `npm run testar-alteracao`)
 - [ ] Fase 5 — skills (`subir-versao`, `conferir-pr`, `conferir-celular`, `nova-tela`) e hooks
 - [ ] Fase 6 — GitHub (rodada noturna, prints de referência — depois da revisão de design)
@@ -90,7 +90,7 @@ Outras:
 - **R5** GET que grava: abrir Metas fecha o mês (IND-06); `GET /logout`.
 - **R6** ~47 respostas do painel mostram `e.message` (pode trazer caminho de arquivo ou saída do git).
 - **R7** Telefone normalizado de 3 jeitos (`contatos.normTel`, `formularios.normTel`, `agendamentos.normalizarTelefone`) + ~20 "últimos 8 dígitos" soltos.
-- **R8** Regras repetidas: horários padrão em `config.js` e `horarios.js`; tolerância de 7 dias no Python e em 5 lugares do JS; identificação de navegador e versão reserva no robô e na SoFIA; dois `patch-wwebjs.js` diferentes.
+- **R8** Regras repetidas (o "hoje" já foi unificado em `relogio.js`): horários padrão em `config.js` e `horarios.js`; tolerância de 7 dias no Python e em 5 lugares do JS; identificação de navegador e versão reserva no robô e na SoFIA; dois `patch-wwebjs.js` diferentes.
 - **R11** `painel-mensagens.js` e `painel-sofia.js` (~3 mil linhas cada) misturam rota, regra e HTML.
 - **R12** IA, transcrição e envio real não têm simulação de teste.
-- Faltam testes: confirmação, follow-up, no-show, cobrança, boas-vindas, "vence hoje", campanhas, demonstração (11 linhas "falta teste" em `docs/REGRAS-DE-ENVIO.md`).
+- Faltam testes (5 linhas "falta teste" em `docs/REGRAS-DE-ENVIO.md`): follow-up e no-show (leem o EVO pelo navegador), FREE (Python), contratos a vencer (navegador) e campanhas da SoFIA (TypeScript). Pedem separar a leitura do EVO da decisão, como foi feito na cobrança (`inadimplentes.enfileirar`).

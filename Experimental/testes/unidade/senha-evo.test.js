@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { spawn, execFileSync } = require('child_process');
-const { ambienteIsolado } = require('../ajuda');
+const { ambienteIsolado, portaLivre } = require('../ajuda');
 
 // Tudo aqui é de mentira (valores de exemplo, criados para o teste).
 const ANTIGA = 'exemplo-antiga', PAINEL = 'exemplo-do-painel-123';
@@ -89,7 +89,7 @@ const entrar = async (porta, usuario, senha) => {
 
 test('no painel: a senha salva pelo administrador é a que o robô lê; quem não é administrador não salva', { timeout: 120000 }, async () => {
   const amb = ambienteIsolado();
-  const porta = 21000 + Math.floor(Math.random() * 900);
+  const porta = await portaLivre();
   let painel;
   try {
     const arq = path.join(amb.exp, '.env');

@@ -37,14 +37,19 @@ Formato da coluna "Teste": `arquivo.test.js` › título do teste.
 | Tags do funil: entrar numa etapa tira a anterior | `contatos.js` | `contatos-mensagens.test.js` › tags do funil: entrar numa etapa tira a anterior, e a tag que chega fica |
 | Aniversário: data pela coluna "Data de aniversário" (nunca a última presença) | `evo-tabela-aniversario.js` | `aniversario-tabela.test.js` › lê a data pela coluna "Data de aniversário" (dia/mês), nunca a última presença |
 | Aniversário: datas de outro mês (coluna errada) param o job e avisam | `evo-tabela-aniversario.js` | `aniversario-tabela.test.js` › trava: datas de outros meses (coluna errada) param o job em vez de dizer "ninguém hoje" |
-| Aniversário: não manda se o celular do cadastro é de outra aluna | `aniversariantes.js` | falta teste |
-| Confirmação da aula experimental (hoje/amanhã) | `scheduler.js`, `whatsapp-sender.js` | falta teste |
-| Confirmação sem resposta: 2ª mensagem e lista da equipe | `confirmacao-sem-resposta.js` | falta teste |
+| Aniversário: não manda se o celular do cadastro é de outra aluna | `aniversariantes.js` | `cobranca-aniversario.test.js` › ALU-09 aniversário: não manda quando o celular do cadastro é de OUTRA aluna |
+| Confirmação da aula experimental (hoje/amanhã): sem telefone não envia; anota na hora quem recebeu | `scheduler.js`, `whatsapp-sender.js` | `confirmacao-envio.test.js` › CONF-01 confirmação: envia a cada aluna com telefone, anota na hora quem recebeu e não anota quem falhou |
+| Confirmação sem resposta: 2ª mensagem (1h30+, aula longe, sem resposta, uma vez) | `confirmacao-sem-resposta.js` | `confirmacao-sem-resposta.test.js` › CONF-02 2ª mensagem: só quem ficou em silêncio 1h30+, com a aula ainda longe — e uma vez só |
+| Confirmação sem resposta: lista da equipe (uma vez por pessoa) | `confirmacao-sem-resposta.js` | `confirmacao-sem-resposta.test.js` › CONF-03 lista da equipe: quem recebeu a 2ª e continua sem responder entra UMA vez; quem respondeu sai |
 | Follow-up da experimental (manhã/tarde) | `followup-experimental.js` | falta teste |
 | Faltou (no-show) | `follow-up-no-show.js` | falta teste |
-| Boas-vindas e indicação (30 dias): uma vez por contrato | `boas-vindas.js` | falta teste |
-| Cobrança de inadimplentes: no máximo 1×/dia, só marca com envio confirmado | `inadimplentes.js` | falta teste |
+| Boas-vindas: uma vez por contrato, mensagem do tipo (nova, voltou, renovou) | `boas-vindas.js` | `boas-vindas.test.js` › ALU-03 boas-vindas: nova, voltou e renovou recebem a mensagem do seu tipo — e cada contrato uma vez só |
+| Indicação aos 30 dias: uma vez só | `boas-vindas.js` | `boas-vindas.test.js` › ALU-04 indicação: aos 30 dias do início do período, uma vez só |
+| Cobrança de inadimplentes: no máximo 1×/dia, só marca com envio confirmado | `inadimplentes.js` | `cobranca-aniversario.test.js` › COB-01 cobrança: no máximo 1 vez por dia, sem duplicar a fila, e só a SoFIA marca como cobrada |
+| Cobrança: boleto que vence hoje só no disparo "vence hoje" | `inadimplentes.js` | `cobranca-aniversario.test.js` › COB-02 cobrança: o boleto que vence hoje só sai no disparo "vence hoje", e o vencido só no regular |
 | Planos FREE: desmarca quem marcou com 2+ dias e avisa a equipe | `free-antecedencia.js` | falta teste |
 | Contratos a vencer: sem o filtro do EVO, falha e não envia lista vazia | `renovacoes-mes-grupo.js` | falta teste |
 | Campanhas da SoFIA: cada pessoa recebe uma vez; cancelada não retoma | `painel-mensagens.js`, `ChatBot/sofia-listener.ts` | falta teste |
-| Demonstração nunca toca a unidade real (pasta da SoFIA só dentro da instalação) | `demo-dados.js`, `demo-guard.js` | falta teste |
+| Demonstração nunca toca a unidade real (pasta da SoFIA só dentro da instalação) | `demo-dados.js`, `demo-guard.js` | `demonstracao.test.js` › DEM-01/02 demonstração: comandos e rede para fora bloqueados; pasta da SoFIA sempre dentro da instalação |
+| Sentimos sua falta: 14 dias sem presença para a 1ª, 10 dias depois a 2ª | `sentimos-falta.js` | `datas.test.js` › ALU-05 "Sentimos sua falta": a contagem de dias atravessa fevereiro e o mês da 2ª mensagem |
+| "Vence hoje": a segunda cobre o domingo sem disparo | `vence-hoje.js` | `datas.test.js` › ALU-02 "vence hoje": segunda cobre o domingo sem disparo, inclusive na virada de fevereiro para março |

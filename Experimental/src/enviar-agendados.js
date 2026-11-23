@@ -26,9 +26,7 @@ function intervaloMs() {
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Data de hoje em America/Sao_Paulo, no formato YYYY-MM-DD (igual ao <input date>).
-function hojeSP() {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-}
+const { hojeSP } = require('./relogio'); // fonte única do "hoje" (fixável em teste)
 
 async function runAgendados(turno, { dry = false } = {}) {
   const data = hojeSP();

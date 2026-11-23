@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { spawn } = require('child_process');
-const { ambienteIsolado } = require('../ajuda');
+const { ambienteIsolado, portaLivre } = require('../ajuda');
 
 // SoFIA de mentira: a cada "pm2 start" ela publica o estado que o teste mandar.
 function sofiaFalsa(amb, aoSubir) {
@@ -124,7 +124,7 @@ const entrar = (porta, usuario, senha) => new Promise((ok) => {
 
 test('no painel: o botão dispara o procedimento na SoFIA desta unidade; quem não tem acesso à Configuração da SoFIA não consegue', { timeout: 120000 }, async () => {
   const amb = ambienteIsolado();
-  const porta = 22000 + Math.floor(Math.random() * 900);
+  const porta = await portaLivre();
   const PAINEL = 'exemplo-do-painel-123';
   let painel;
   try {

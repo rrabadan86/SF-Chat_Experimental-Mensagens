@@ -35,7 +35,7 @@ function ler() { try { const o = JSON.parse(fs.readFileSync(ARQ, 'utf8')); retur
 function gravar(o) {
   try { fs.mkdirSync(path.dirname(ARQ), { recursive: true }); fs.writeFileSync(ARQ + '.tmp', JSON.stringify(o)); fs.renameSync(ARQ + '.tmp', ARQ); } catch (_) {}
 }
-const hojeSP = (desloc = 0) => new Date(Date.now() + desloc * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+const { hojeSP } = require('./relogio'); // fonte única do "hoje" (fixável em teste)
 // 'YYYY-MM-DD' + 'HH:MM' (Brasília) → ms
 function aulaMs(r) {
   const m = /^(\d{1,2}):(\d{2})/.exec(String(r.horario || ''));

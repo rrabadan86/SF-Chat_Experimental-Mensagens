@@ -36,7 +36,9 @@ function uiTabela({ id, colunas, linhas, busca = 'Buscar…', porPagina = 20, va
     const html = o.html != null ? String(o.html) : esc(o.valor == null || o.valor === '' ? '—' : o.valor);
     const val = o.valor != null ? o.valor : (o.html != null ? String(o.html).replace(/<[^>]*>/g, '') : '');
     const cls = [c.num ? 'num' : '', c.celular === 'titulo' ? 'tb-tit' : '', c.celular === 'oculto' ? 'tb-pc' : ''].filter(Boolean).join(' ');
-    return `<td data-k="${esc(c.chave)}" data-rot="${esc(c.titulo)}" data-v="${esc(val)}"${cls ? ` class="${cls}"` : ''}>${html}</td>`;
+    // rótulo da coluna (com o ⓘ) que só aparece no celular, quando a linha vira cartão
+    const rot = c.celular === 'titulo' ? '' : `<span class="tb-rot">${esc(c.titulo)}${c.info ? ' ' + info(c.info) : ''}</span>`;
+    return `<td data-k="${esc(c.chave)}" data-rot="${esc(c.titulo)}" data-v="${esc(val)}"${cls ? ` class="${cls}"` : ''}>${rot}${rot ? `<span class="tb-val">${html}</span>` : html}</td>`;
   };
   const cab = colunas.map(c => {
     const i = c.info ? ' ' + info(c.info) : ''; // ⓘ fora do botão: tocar nela não reordena
@@ -74,6 +76,7 @@ const CSS = `
   .tb tbody tr:hover td{background:var(--linha-soft)}
   .tb [hidden],.tb tr[hidden]{display:none!important}
   .tb :is(th,td).num{text-align:right;font-variant-numeric:tabular-nums}
+  .wrap .tb-rot{display:none}
   .tb-ord{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;text-transform:inherit;letter-spacing:inherit}
   .tb-ord:focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:4px}
   .tb-seta::after{content:'↕';opacity:.35;font-size:.9em}
@@ -94,12 +97,23 @@ const CSS = `
     .tb tbody tr{border:1px solid var(--linha);border-radius:12px;padding:8px 12px;margin:0 0 8px;background:var(--card)}
     .tb tbody tr:hover td{background:transparent}
     .tb td{border:0;padding:3px 0;display:flex;justify-content:space-between;gap:12px;text-align:right}
-    .tb td::before{content:attr(data-rot);flex:none;max-width:45%;text-align:left;color:var(--cinza);font-size:var(--fs-xs);font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding-top:2px}
+    .tb td .tb-rot{display:inline-flex;align-items:center;gap:4px;flex:none;max-width:48%;text-align:left;color:var(--cinza);font-size:var(--fs-xs);font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding-top:2px}
     .tb td.tb-tit{display:block;text-align:left;font-weight:700;font-size:var(--fs-body);padding-bottom:6px}
-    .tb td.tb-tit::before{display:none}
     .tb td.tb-pc{display:none}
     .tb tbody tr.tb-destaque{background:var(--teal-soft)}
     .tb tbody tr.tb-destaque td{background:transparent}
+  }
+  /* ── Tabelas antigas do painel: no celular viram cartão sozinhas (sfCartoes) — VIS-02 ── */
+  @media(max-width:640px){
+    .wrap table.tb-auto thead{display:none}
+    .wrap table.tb-auto,.wrap table.tb-auto tbody,.wrap table.tb-auto tr,.wrap table.tb-auto td{display:block;width:100%}
+    .wrap table.tb-auto tbody tr{border:1px solid var(--linha);border-radius:12px;padding:8px 12px;margin:0 0 8px;background:var(--card)}
+    .wrap table.tb-auto tbody tr:hover td{background:transparent}
+    .wrap table.tb-auto td{border:0!important;padding:3px 0!important;display:flex;justify-content:space-between;align-items:baseline;gap:12px;text-align:right!important;overflow-wrap:anywhere}
+    .wrap table.tb-auto td .tb-rot{display:inline-flex;align-items:center;gap:4px;flex:none;max-width:48%;text-align:left;color:var(--cinza);font-size:var(--fs-xs);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+    .wrap :is(table.tb-auto,.tb) td .tb-val{min-width:0;text-align:right}
+    .wrap table.tb-auto td:first-child{display:block;text-align:left!important;font-weight:700;font-size:var(--fs-body);padding-bottom:6px!important}
+    .wrap table.tb-auto td.so-pc,.wrap table.tb-auto td[hidden]{display:none!important}
   }
   /* ── Campo com erro (sfErroSalvar) ── */
   .campo-erro{border-color:var(--erro)!important;box-shadow:0 0 0 3px var(--erro-bg)!important}
@@ -116,7 +130,7 @@ function iniciar(tb){
   var pp=+tb.getAttribute('data-pp')||20,pag=0,q='';
   var corpo=tb.querySelector('tbody'),linhas=[].slice.call(corpo.querySelectorAll('tr[data-l]'));
   var inp=tb.querySelector('.tb-q'),conta=tb.querySelector('.tb-conta'),pagEl=tb.querySelector('.tb-pag'),vazio=tb.querySelector('.tb-vazio'),sel=tb.querySelector('.tb-ordem');
-  linhas.forEach(function(tr){tr.__t=norm(tr.textContent);});
+  linhas.forEach(function(tr){var c=tr.cloneNode(true);[].forEach.call(c.querySelectorAll('.tb-rot'),function(x){x.remove();});tr.__t=norm(c.textContent);});
   function desenhar(){
     var v=linhas.filter(function(tr){return !q||tr.__t.indexOf(q)>=0;}),np=Math.max(1,Math.ceil(v.length/pp));
     if(pag>=np)pag=np-1;if(pag<0)pag=0;
@@ -166,6 +180,19 @@ window.sfErroSalvar=function(msg,o){return new Promise(function(fim){
   ov.addEventListener('keydown',function(e){if(e.key==='Escape')sai();});
   setTimeout(function(){var b=ov.querySelector('#sfErroOk');if(b)b.focus();},30);
 });};
+// Tabelas antigas (sem uiTabela): cada célula ganha o rótulo da coluna, para o
+// CSS do celular mostrar a linha como cartão. Vale também para tabela criada depois.
+function cartoes(){[].forEach.call(document.querySelectorAll('.wrap table'),function(t){
+  if(t.__cartao||t.closest('.tb')||t.classList.contains('ct-tab')||t.hasAttribute('data-sem-cartao'))return;
+  var ths=t.querySelectorAll('thead th');if(!ths.length||!t.tBodies.length)return;t.__cartao=1;
+  var rot=[].map.call(ths,function(th){var c=th.cloneNode(true);var inf=c.querySelector('.info');[].forEach.call(c.querySelectorAll('.info,.tb-seta,button.ct-fil'),function(x){x.remove();});return {t:c.textContent.replace(/\\s+/g,' ').trim(),i:inf?inf.outerHTML:''};});
+  [].forEach.call(t.tBodies,function(tb){[].forEach.call(tb.rows,function(tr){var i=0;[].forEach.call(tr.cells,function(td,k){var r=rot[i]||{t:'',i:''};if(!td.hasAttribute('data-rot'))td.setAttribute('data-rot',r.t);
+    if(k>0&&r.t&&!td.querySelector('.tb-rot')){var v=document.createElement('span');v.className='tb-val';while(td.firstChild)v.appendChild(td.firstChild);var s=document.createElement('span');s.className='tb-rot';s.innerHTML=escT(r.t)+(r.i?' '+r.i:'');td.appendChild(s);td.appendChild(v);}
+    i+=td.colSpan||1;});});});
+  t.classList.add('tb-auto');});}
+window.sfCartoes=cartoes;
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',cartoes);else cartoes();
+var agCart=0;try{new MutationObserver(function(){if(agCart)return;agCart=setTimeout(function(){agCart=0;cartoes();},60);}).observe(document.documentElement,{childList:true,subtree:true});}catch(e){}
 window.sfSalvou=function(j,form){if(j&&j.ok)return true;window.sfErroSalvar((j&&(j.erro||j.msg))||'Não foi possível salvar. Tente de novo.',{campo:j&&j.campo,form:form});return false;};
 })();</script>`;
 

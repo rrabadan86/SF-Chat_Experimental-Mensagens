@@ -269,7 +269,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var badge=s.status==='ativa'?'<span class="ct-badge ativa">Em andamento</span>':'<span class="ct-badge enc">Encerrado</span>';
       return '<tr><td>'+badge+'</td><td>'+fmtDataHora(s.inicioEm)+'</td><td style="color:var(--cinza)">'+(s.nMsgs||0)+' msg</td><td style="text-align:right"><button type="button" class="ct-ic" title="Ver resumo" onclick="verResumo('+idx+')">📄</button></td></tr>';
     }).join('');
-    box.innerHTML='<div style="overflow-x:auto"><table class="ct-int-tab"><thead><tr><th>Status</th><th>Data</th><th>Trocas</th><th style="text-align:right">Resumo</th></tr></thead><tbody>'+linhas+'</tbody></table></div>'
+    box.innerHTML='<div><table class="ct-int-tab"><thead><tr><th>Status</th><th>Data</th><th>Trocas</th><th style="text-align:right">Resumo</th></tr></thead><tbody>'+linhas+'</tbody></table></div>'
       +'<p class="quando" style="margin:10px 0 0">Total de '+intSessoes.length+' interaç'+(intSessoes.length===1?'ão':'ões')+'.</p>';
   }
   function fecharInteracoes(){ document.getElementById('ctIntModal').style.display='none'; }
@@ -1319,7 +1319,7 @@ function paginaSofiaContatos(aviso, erro, params) {
       var badge=s.status==='ativa'?'<span class="ct-badge ativa">Em andamento</span>':'<span class="ct-badge enc">Encerrado</span>';
       return '<tr><td>'+badge+'</td><td>'+fmtDataHora(s.inicioEm)+'</td><td style="color:var(--cinza)">'+(s.nMsgs||0)+' msg</td><td style="text-align:right"><button type="button" class="ct-ic" title="Ver resumo" onclick="verResumo('+idx+')">📄</button></td></tr>';
     }).join('');
-    box.innerHTML='<div style="overflow-x:auto"><table class="ct-int-tab"><thead><tr><th>Status</th><th>Data</th><th>Trocas</th><th style="text-align:right">Resumo</th></tr></thead><tbody>'+linhas+'</tbody></table></div>'
+    box.innerHTML='<div><table class="ct-int-tab"><thead><tr><th>Status</th><th>Data</th><th>Trocas</th><th style="text-align:right">Resumo</th></tr></thead><tbody>'+linhas+'</tbody></table></div>'
       +'<p class="quando" style="margin:10px 0 0">Total de '+intSessoes.length+' interaç'+(intSessoes.length===1?'ão':'ões')+'.</p>';
   }
   function fecharInteracoes(){ document.getElementById('ctIntModal').style.display='none'; }
@@ -1599,7 +1599,7 @@ function paginaSofiaTags(aviso, erro) {
           <label class="chk" style="margin:0 0 12px"><input type="checkbox" name="on" value="1"${cmp.on ? ' checked' : ''}> Ligado</label>
           <div style="margin-bottom:12px">
             <label style="margin:0 0 4px">Tags de "agendou" (origem) <small style="font-weight:400;color:var(--cinza)">— pode marcar <b>várias</b>; o robô age em quem tem <b>qualquer uma</b> delas</small></label>
-            <div class="cfg-in" style="flex-direction:column;align-items:flex-start;gap:6px;max-height:180px;overflow:auto;padding:8px 10px">${cmpChecks(cmp.tagsAgendou)}</div>
+            <div class="cfg-in" style="flex-direction:column;flex-wrap:nowrap;align-items:flex-start;gap:6px;max-height:180px;overflow-y:auto;overflow-x:hidden;padding:8px 10px">${cmpChecks(cmp.tagsAgendou)}</div>
           </div>
           <div style="display:flex;gap:16px;flex-wrap:wrap">
             <div style="flex:1;min-width:220px"><label style="margin:0 0 4px">Compareceu → vira</label><select name="tagCompareceu">${cmpSel(cmp.tagCompareceu)}</select></div>
@@ -2429,7 +2429,7 @@ function paginaSofia(aviso, erro) {
           <div class="cfg-grid" style="margin-top:14px">
             <div style="grid-column:1 / -1">
               <label>Etiquetas que a SoFIA NÃO responde ${infoI('Marque as etiquetas do CRM de quem <b>não é lead</b> (aluna, ex-aluna…). A SoFIA fica calada para quem tem <b>qualquer uma</b> delas, no horário da recepção. Compara sem ligar para acento, maiúscula, numeração ou plural — <b>0. Aluna</b>, <b>Aluna</b> e <b>alunas</b> valem a mesma coisa.')}</label>
-              <div class="cfg-in" style="flex-direction:column;align-items:flex-start;gap:6px;max-height:200px;overflow:auto;padding:8px 10px">${tagsAlu.length ? tagsAlu.map(t => `<label class="chk" style="margin:0;font-weight:500"><input type="checkbox" name="tags" value="${esc(t)}"${selLower.has(String(t).trim().toLowerCase()) ? ' checked' : ''}> ${esc(t)}</label>`).join('') : '<span class="quando" style="margin:0">Nenhuma etiqueta encontrada no CRM (a sincronização de contatos precisa estar ativa).</span>'}</div>
+              <div class="cfg-in" style="flex-direction:column;flex-wrap:nowrap;align-items:flex-start;gap:6px;max-height:200px;overflow-y:auto;overflow-x:hidden;padding:8px 10px">${tagsAlu.length ? tagsAlu.map(t => `<label class="chk" style="margin:0;font-weight:500"><input type="checkbox" name="tags" value="${esc(t)}"${selLower.has(String(t).trim().toLowerCase()) ? ' checked' : ''}> ${esc(t)}</label>`).join('') : '<span class="quando" style="margin:0">Nenhuma etiqueta encontrada no CRM (a sincronização de contatos precisa estar ativa).</span>'}</div>
             </div>
             <div>
               <label>Horário da recepção ${infoI('Nesse intervalo a SoFIA <b>não responde</b> quem tem a tag de aluna — a recepcionista atende. Fora dele, a SoFIA assume. Pode virar a meia-noite (ex.: 17:00 às 07:00).')}</label>
@@ -2453,11 +2453,11 @@ function paginaSofia(aviso, erro) {
           <div class="cfg-grid">
             <div>
               <label>Etiquetas de ex-aluna</label>
-              <div class="cfg-in" style="flex-direction:column;align-items:flex-start;gap:6px;max-height:200px;overflow:auto;padding:8px 10px">${listaHist('tagsExAluna', selEx)}</div>
+              <div class="cfg-in" style="flex-direction:column;flex-wrap:nowrap;align-items:flex-start;gap:6px;max-height:200px;overflow-y:auto;overflow-x:hidden;padding:8px 10px">${listaHist('tagsExAluna', selEx)}</div>
             </div>
             <div>
               <label>Etiquetas de quem já fez aula experimental</label>
-              <div class="cfg-in" style="flex-direction:column;align-items:flex-start;gap:6px;max-height:200px;overflow:auto;padding:8px 10px">${listaHist('tagsFezExp', selFx)}</div>
+              <div class="cfg-in" style="flex-direction:column;flex-wrap:nowrap;align-items:flex-start;gap:6px;max-height:200px;overflow-y:auto;overflow-x:hidden;padding:8px 10px">${listaHist('tagsFezExp', selFx)}</div>
             </div>
           </div>
           <div class="acts" style="margin-top:14px"><button type="submit" class="save">Salvar etiquetas</button></div>
@@ -2604,7 +2604,7 @@ function paginaSofia(aviso, erro) {
             const sel = Array.isArray(e.followup.tagsExcluir) ? e.followup.tagsExcluir : [];
             for (const t of sel) { if (!fuTags.some(x => x.toLowerCase() === String(t).toLowerCase())) fuTags = [t].concat(fuTags); }
             const selL = new Set(sel.map(t => String(t).trim().toLowerCase()));
-            return '<div class="cfg-in" style="flex-direction:column;align-items:flex-start;gap:6px;max-height:180px;overflow:auto;padding:8px 10px">'
+            return '<div class="cfg-in" style="flex-direction:column;flex-wrap:nowrap;align-items:flex-start;gap:6px;max-height:180px;overflow-y:auto;overflow-x:hidden;padding:8px 10px">'
               + (fuTags.length
                   ? fuTags.map(t => `<label class="chk" style="margin:0;font-weight:500"><input type="checkbox" name="followupTagExcl" value="${esc(t)}"${selL.has(String(t).trim().toLowerCase()) ? ' checked' : ''}> ${esc(t)}</label>`).join('')
                   : '<span class="quando" style="margin:0">Nenhuma etiqueta no CRM ainda.</span>')

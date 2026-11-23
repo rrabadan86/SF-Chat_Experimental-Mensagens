@@ -16,7 +16,7 @@ const E = require('./painel-estado');
 const { uiTopo, esc, chrome, infoI } = require('./painel-base');
 const ind = require('./painel-indicadores');
 
-const hojeSP = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+const { hojeSP } = require('./relogio'); // fonte única do "hoje" (fixável em teste)
 const fmtInt = (n) => n == null || !isFinite(n) ? '—' : String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 const fmtBRL = (n) => n == null || !isFinite(n) ? '—' : 'R$ ' + fmtInt(n);
 const fmtPct = (n) => n == null || !isFinite(n) ? '—' : String(Math.round(n * 10) / 10).replace('.', ',') + '%';
@@ -235,7 +235,7 @@ function paginaMetas(params) {
       `prévia · fecha em ${fmtDia(metas.diaDeFechar(ant, tol))}`, metas.metasDoMes(ant).valores));
   }
   for (const k of Object.keys(fech).filter(metas.ehMes).sort().reverse().slice(0, 12)) linhas.push(linhaMes(k, fech[k], `🔒 fechado em ${fmtDia(fech[k].fechadoEm)}`, fech[k].metas || {}));
-  const tabela = linhas.length ? `<div class="card" style="overflow-x:auto"><table class="ui-tab mt-tab"><thead><tr>
+  const tabela = linhas.length ? `<div class="card"><table class="ui-tab mt-tab"><thead><tr>
       <th>Mês</th><th class="num">Ativas${infoI('Alunas ativas no <b>último dia</b> do mês.')}</th><th class="num">Entraram</th><th class="num">Saíram</th><th class="num so-pc">Saída %${infoI('<b>Taxa de saída</b> = saíram ÷ ativas no começo do mês.')}</th>
       <th class="num">Agendaram${infoI('Experimentais agendadas no mês, todos os canais. “—” = o histórico de agendamentos não cobre o mês inteiro.')}</th><th class="num so-pc">Comparec.${infoI('<b>Comparecimento</b> às experimentais = fez ÷ (fez + faltou).')}</th><th class="num so-pc">Fecharam</th>
       <th class="num">Recebido${infoI('O que já tinha caído na <b>última leitura do EVO dentro do mês</b>. “—” = o mês não teve leitura guardada.')}</th><th class="num so-pc">Inadimp.</th><th class="num so-pc">Ocup.</th><th class="num so-pc">Custo/aluna${infoI('<b>Gasto do mês ÷ alunas novas</b> (anúncios informados + IA). Com * = só a IA, sem os anúncios.')}</th>

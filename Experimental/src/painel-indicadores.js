@@ -190,7 +190,7 @@ function paginaIndicadores(dias, aviso) {
     <details class="card"${LOG.length ? '' : ' open'}>
       <summary style="cursor:pointer;font-weight:700">${LOG.length ? `Ver os ${LOG.length} agendamento${LOG.length === 1 ? '' : 's'} registrado${LOG.length === 1 ? '' : 's'}` : 'Nenhum agendamento registrado ainda'}</summary>
       <p class="quando" style="margin:10px 0">Tudo o que a aluna digitou no formulário (nome, CPF, telefone, e-mail e nascimento), o horário da aula e o que o EVO fez com o cadastro. Serve para conferir os dados quando o cadastro do EVO veio incompleto (ex.: cadastro antigo). Atualiza a cada ~2 min.</p>
-      ${LOG.length ? `<div style="overflow-x:auto"><table class="logtab">
+      ${LOG.length ? `<div><table class="logtab">
         <thead><tr><th>Quando</th><th>Nome</th><th>Telefone</th><th>CPF</th><th>E-mail</th><th>Nascimento</th><th>Aula</th><th>Origem</th><th>Cadastro no EVO</th></tr></thead>
         <tbody>${logRows}</tbody></table></div>` : '<div class="vazio">Assim que alguém agendar pelo formulário, os dados aparecem aqui.</div>'}
     </details>`;
@@ -1376,7 +1376,7 @@ function paginaAtivasLista(params) {
     ${topo([filtros, notaIgn].filter(Boolean))}
     <div class="card">
       ${resumo}
-      ${lista.length ? `<div style="overflow-x:auto"><table class="ui-tab al-tab"><thead><tr><th>Aluna</th><th>Contrato</th><th>${colData}</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>${paginacao}`
+      ${lista.length ? `<div><table class="ui-tab al-tab"><thead><tr><th>Aluna</th><th>Contrato</th><th>${colData}</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>${paginacao}`
         : `<div class="vazio">Ninguém ${cSel || q ? 'com esse filtro' : 'neste recorte'}.</div>`}
       ${semNome ? `<p class="quando" style="margin:10px 0 0">${semNome} nome${semNome === 1 ? '' : 's'} ainda só com o 1º nome — o nome completo vem do EVO aos poucos (a cada <b>Atualizar agora</b> e de madrugada).</p>` : ''}
     </div></div>`;
@@ -1585,7 +1585,7 @@ function paginaAtivas(params) {
   const fmtMeses = (v) => v == null ? '—' : (v >= 24 ? String(Math.round(v / 1.2) / 10).replace('.', ',') + ' anos' : String(v).replace('.', ',') + (v === 1 ? ' mês' : ' meses'));
   const retencaoHtml = (h.pessoas && Object.keys(h.pessoas).length) ? `
     <div class="sec-t" data-fechado>Retenção <small style="font-weight:600;color:var(--cinza)">(por que saíram e quanto tempo ficam)</small></div>
-    <div class="card" style="overflow-x:auto">
+    <div class="card">
       <h4 class="al-sub">Por que saíram <small>não renovou × cancelou antes do fim</small></h4>
       ${linhasMot ? `<div class="stats" style="margin:0 0 12px">
         <div class="stat"><div class="n">${totMot.n}</div><div class="l">não renovaram em 12 meses${infoI('O contrato <b>chegou ao fim</b> e ela não fez outro em até ' + tolRen + ' dias.')}</div></div>
@@ -1640,7 +1640,7 @@ function paginaAtivas(params) {
     <div class="sec-t">Evolução <small style="font-weight:600;color:var(--cinza)">(alunas ativas no fim de cada ${vis === 'mes' ? 'mês' : 'semana'})</small></div>
     <div class="card"><div class="ui-graf" data-graf="evol"></div></div>
     <div class="sec-t">${vis === 'mes' ? 'Mês a mês' : 'Semana a semana'}</div>
-    <div class="card" style="overflow-x:auto">
+    <div class="card">
       <table class="ui-tab"><thead><tr><th>${vis === 'mes' ? 'Mês' : 'Semana de'}</th><th class="num so-pc">Início${infoI('Alunas ativas quando o período <b>começou</b> (o fechamento do período anterior).')}</th><th class="num">Entraram${infoI('Contratos que <b>começaram</b> no período: alunas novas + as que <b>voltaram</b> depois de sair.')}</th><th class="so-pc"></th><th class="num">Saíram${infoI('Alunas que <b>perderam o contrato ativo</b> no período (venceu sem renovar ou cancelou).')}</th><th class="num">Fim${infoI('Alunas ativas no <b>último dia</b> do período (no período atual, hoje).')}</th><th class="num">Variação${infoI('<b>Fim − Início</b>: quanto a base cresceu ou encolheu.')}</th><th class="so-pc">Taxa de saída${infoI('<b>Saíram ÷ Início</b>: de cada 100 alunas que havia no começo, quantas saíram.')}</th></tr></thead><tbody>${linhasTab}</tbody></table>
     </div>
     ${retencaoHtml}
@@ -1887,7 +1887,7 @@ function paginaProfessoras(params) {
     </details>`;
   };
   const horasLista = Object.values(horas).sort((a, b) => a.hora.localeCompare(b.hora));
-  const tabHoras = horasLista.length ? `<div class="card" style="overflow-x:auto"><table class="pf-tab"><thead><tr><th>Horário</th><th>Vieram${infoI('Experimentais <b>feitas</b> neste horário (a aluna compareceu).')}</th><th>Fecharam${infoI('Das que vieram, quantas <b>fecharam contrato</b> depois da aula.')}</th><th>Conversão${infoI('<b>Fecharam ÷ Vieram</b>. Com menos de 5 aulas o número fica cinza: ainda é pouco para concluir.')}</th><th>Professoras</th></tr></thead><tbody>${horasLista.map(x => `<tr><td><b>${esc(x.hora)}</b></td><td>${x.veio}</td><td>${x.fechou}</td><td><b style="color:${x.veio < POUCAS ? 'var(--cinza)' : 'var(--ok)'}">${fmtPct(taxa(x.fechou, x.veio))}</b></td><td class="quando">${Object.entries(x.profs).sort((a, b) => b[1] - a[1]).map(([p, n]) => `${esc(p === SEM ? 'sem professora' : p.split(' ')[0])} (${n})`).join(', ')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="card"><div class="vazio">Sem aulas feitas no período.</div></div>';
+  const tabHoras = horasLista.length ? `<div class="card"><table class="pf-tab"><thead><tr><th>Horário</th><th>Vieram${infoI('Experimentais <b>feitas</b> neste horário (a aluna compareceu).')}</th><th>Fecharam${infoI('Das que vieram, quantas <b>fecharam contrato</b> depois da aula.')}</th><th>Conversão${infoI('<b>Fecharam ÷ Vieram</b>. Com menos de 5 aulas o número fica cinza: ainda é pouco para concluir.')}</th><th>Professoras</th></tr></thead><tbody>${horasLista.map(x => `<tr><td><b>${esc(x.hora)}</b></td><td>${x.veio}</td><td>${x.fechou}</td><td><b style="color:${x.veio < POUCAS ? 'var(--cinza)' : 'var(--ok)'}">${fmtPct(taxa(x.fechou, x.veio))}</b></td><td class="quando">${Object.entries(x.profs).sort((a, b) => b[1] - a[1]).map(([p, n]) => `${esc(p === SEM ? 'sem professora' : p.split(' ')[0])} (${n})`).join(', ')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="card"><div class="vazio">Sem aulas feitas no período.</div></div>';
 
   // Situação da leitura no EVO.
   const st = h.status || {};
@@ -2173,7 +2173,7 @@ function paginaSaude(list, extra = {}) {
                 }).catch(function(){ setTimeout(poll,6000); }); })();
               }).catch(function(){ btn.disabled=false; m.textContent='❌ erro de rede'; });
             }</script>` : '',
-        `<details><summary class="sd-muted" style="cursor:pointer">Ver todos os horários</summary><div style="overflow-x:auto"><table style="width:100%;font-size:.84rem;margin-top:6px"><tr><th style="text-align:left">Envio</th><th style="text-align:left">Último horário previsto</th><th style="text-align:left">Último disparo</th></tr>${tabela}</table></div><span class="sd-muted">Conferindo desde ${dh(sit.desde)} · robô iniciado em ${dh(sit.boot)}.</span></details>`,
+        `<details><summary class="sd-muted" style="cursor:pointer">Ver todos os horários</summary><div><table style="width:100%;font-size:.84rem;margin-top:6px"><tr><th style="text-align:left">Envio</th><th style="text-align:left">Último horário previsto</th><th style="text-align:left">Último disparo</th></tr>${tabela}</table></div><span class="sd-muted">Conferindo desde ${dh(sit.desde)} · robô iniciado em ${dh(sit.boot)}.</span></details>`,
       ]);
     }
   } catch (_) { cardJobs = ''; corJobs = 'ok'; }

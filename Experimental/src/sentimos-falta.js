@@ -31,7 +31,7 @@ const MAX_POR_VEZ = 120;  // acima disso a leitura do EVO é suspeita — não e
 const CONTEXTO = 'Sentimos sua falta';
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const hojeSP = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+const { hojeSP } = require('./relogio'); // fonte única do "hoje" (fixável em teste)
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 const last8 = (t) => String(t || '').replace(/\D/g, '').slice(-8);
 function lerJson(arq, padrao) { try { const o = JSON.parse(fs.readFileSync(arq, 'utf8')); return o && typeof o === 'object' ? o : padrao; } catch (_) { return padrao; } }

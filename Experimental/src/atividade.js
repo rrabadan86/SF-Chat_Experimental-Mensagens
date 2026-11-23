@@ -24,7 +24,7 @@ const FRESCOR_MS = 6 * 60 * 1000; // contexto vale por até 6 min após setConte
 
 let ctx = { nome: '', ts: 0 };
 
-function hojeSP() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); }
+const { hojeSP } = require('./relogio'); // fonte única do "hoje" (fixável em teste)
 function horaSP() { return new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }); }
 
 function setContexto(nome) { ctx = { nome: nome || '', ts: Date.now() }; }

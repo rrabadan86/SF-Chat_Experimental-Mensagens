@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { spawn } = require('child_process');
-const { ambienteIsolado } = require('../ajuda');
+const { ambienteIsolado, portaLivre } = require('../ajuda');
 
 test('lista de unidades: só entra endereço https, sem repetição e sem senha no endereço', () => {
   const amb = ambienteIsolado();
@@ -58,7 +58,7 @@ const pedir = (porta, metodo, url, cookie, corpo = '') => new Promise((ok) => {
 
 test('no painel: /unidades abre sem login e não dá sessão; só o administrador salva a lista', { timeout: 120000 }, async () => {
   const amb = ambienteIsolado();
-  const porta = 20000 + Math.floor(Math.random() * 900);
+  const porta = await portaLivre();
   let painel;
   try {
     fs.writeFileSync(path.join(amb.exp, '.env'), `PAINEL_PORT=${porta}\nPAINEL_HOST=127.0.0.1\nPAINEL_USER=dono\nPAINEL_SENHA=senha-do-teste-123\nSOFIA_DIR=${amb.sofia}\n`);

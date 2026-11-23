@@ -74,7 +74,7 @@ function primeiroNome(s) {
   const p = String(s || '').trim().split(/\s+/)[0] || '';
   return p ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : '';
 }
-function hojeSP() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); }
+const { hojeSP } = require('./relogio'); // fonte única do "hoje" (fixável em teste)
 function dataValida(s) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
   const d = new Date(s + 'T12:00:00Z');

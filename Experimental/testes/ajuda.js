@@ -45,6 +45,7 @@ function ambienteIsolado() {
         conferir: opcoes.conferir || (async () => ({ respondeu: false, reagiu: false, humano: false, lidas: 1 })),
         async conferirResposta(tel, desde) { wa.leituras++; return wa.conferir(tel, desde, wa.leituras); },
         async sendTexto(tel, texto, contexto, chave) { wa.enviados.push({ tel, texto, contexto, chave }); return true; },
+        async sendGrupo(grupo, texto, contexto) { wa.enviados.push({ grupo, texto, contexto }); return true; },
       };
       require.cache[amb.arq('wa-client')] = { id: amb.arq('wa-client'), filename: amb.arq('wa-client'), loaded: true, exports: wa };
       return wa;
@@ -86,4 +87,19 @@ function aparelhoPush(n) {
   };
 }
 
-module.exports = { ambienteIsolado, semEsperas, HORA, DIA, aparelhoPush };
+// Porta para teste que sobe servidor: sorteada numa faixa PRÓPRIA (41000–41999), longe
+// das portas que o navegador e o fetch recusam (6000, 6665–6669, 10080…) e das dos
+// servidores de verdade; confere que está livre antes de devolver.
+const FAIXA_PORTAS = [41000, 41999];
+function portaEstaLivre(porta) {
+  return new Promise((ok) => { const srv = require('net').createServer(); srv.once('error', () => ok(false)); srv.listen(porta, '127.0.0.1', () => srv.close(() => ok(true))); });
+}
+async function portaLivre() {
+  for (let i = 0; i < 60; i++) {
+    const p = FAIXA_PORTAS[0] + Math.floor(Math.random() * (FAIXA_PORTAS[1] - FAIXA_PORTAS[0] + 1));
+    if (await portaEstaLivre(p)) return p;
+  }
+  throw new Error('nenhuma porta livre na faixa dos testes');
+}
+
+module.exports = { ambienteIsolado, semEsperas, HORA, DIA, aparelhoPush, portaLivre, FAIXA_PORTAS };

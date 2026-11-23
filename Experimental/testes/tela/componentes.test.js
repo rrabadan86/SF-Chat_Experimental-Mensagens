@@ -21,7 +21,9 @@ function paginaDeTeste(amb) {
   ], linhas });
   const form = `<form id="fT" class="card" onsubmit="event.preventDefault();sfSalvou({ok:false,erro:'Telefone inválido: use DDD + número.',campo:'telefone'},this)">
     <label>Telefone <input name="telefone" value="123"></label> <button type="submit" class="save" id="btSalvar">Salvar</button></form>`;
-  return chrome({ tab: 'Teste' }, '', `<div class="wrap"><div class="card">${tabela}</div>${form}</div>`) + (amb._comErro ? uiErroSalvar('Data inválida.', 'telefone') : '');
+  const antiga = `<table class="ui-tab" id="tbAntiga"><thead><tr><th>Mês</th><th class="num">Alunas ativas<span class="info" tabindex="0">i<span class="info-pop">No último dia.</span></span></th><th>Situação</th></tr></thead>
+    <tbody><tr><td>nov/2026</td><td class="num">130</td><td>${esc('fechado — '.repeat(12))}</td></tr><tr><td>out/2026</td><td class="num">125</td><td>ok</td></tr></tbody></table>`;
+  return chrome({ tab: 'Teste' }, '', `<div class="wrap"><div class="card">${tabela}</div><div class="card">${antiga}</div>${form}</div>`) + (amb._comErro ? uiErroSalvar('Data inválida.', 'telefone') : '');
 }
 
 // Clique só em elemento à vista (nunca em escondido): rola até ele e confere que aparece na tela.
@@ -99,6 +101,13 @@ test('VIS-02/03/06 tabela padrão e janela de erro — computador (1366 px) e ce
       // nada rola para o lado, mesmo com texto longo sem espaço
       await page.fill('#tbT .tb-q', 'Débora Reis 4');
       assert.deepStrictEqual(await semRolagemLateral(page), [], msg('nada rola para o lado'));
+      // tabela antiga (sem uiTabela): no celular vira cartão, com o rótulo e o ⓘ de cada coluna
+      const antiga = await page.evaluate(() => { const td = document.querySelector('#tbAntiga tbody td:nth-child(2)'); const r = td.querySelector('.tb-rot'); return { cls: document.querySelector('#tbAntiga').className, rot: r ? r.firstChild.textContent.trim() : '', info: !!(r && r.querySelector('.info')), vis: r ? getComputedStyle(r).display !== 'none' : false }; });
+      assert.match(antiga.cls, /tb-auto/, msg('tabela antiga preparada para virar cartão'));
+      assert.strictEqual(antiga.rot, 'Alunas ativas', msg('rótulo da coluna inteiro (sem perder letras)'));
+      assert.ok(antiga.info, msg('o ⓘ da coluna vai junto'));
+      assert.strictEqual(antiga.vis, aparelho === 'celular', msg('rótulo só aparece no celular'));
+      if (aparelho === 'celular') assert.strictEqual(await page.isVisible('#tbAntiga thead'), false, msg('no celular o cabeçalho da tabela antiga some'));
       // janela de erro ao salvar: abre, marca o campo e devolve o foco
       await clicar(page, '#btSalvar');
       await page.waitForSelector('#sfErroSalvar', { state: 'visible' });
