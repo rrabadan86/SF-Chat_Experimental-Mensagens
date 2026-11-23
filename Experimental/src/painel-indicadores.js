@@ -6,7 +6,6 @@
 const fs = require('fs');
 const path = require('path');
 const waStatus = require('./wa-status');
-const igcfg = require('./instagram-config');
 const indicadores = require('./indicadores');
 const histExp = require('./experimentais-hist');
 const bookings = require('./bookings');
@@ -20,7 +19,7 @@ const ativasDados = require('./ativas-dados');
 const finResumo = require('./financeiro-resumo');
 const E = require('./painel-estado');
 const {
-  uiChips, uiTopo, esc, uiBarra, fmtData, chrome, fmtTel, podeFunil, PAGAMENTO_ATIVO, uiDatas, UI_SIT, fuLerJson, FU_AGENDOU_CANAL_FILE, lerCompCfg, FU_AGENDOU_AULA_FILE, uiPessoa, uiTrilho, PM2_EXP, PM2_SOFIA, lerJsonData, IG_NO_PAINEL, infoI,
+  uiChips, uiTopo, esc, uiBarra, fmtData, chrome, fmtTel, podeFunil, PAGAMENTO_ATIVO, uiDatas, UI_SIT, fuLerJson, FU_AGENDOU_CANAL_FILE, lerCompCfg, FU_AGENDOU_AULA_FILE, uiPessoa, uiTrilho, PM2_EXP, PM2_SOFIA, lerJsonData, infoI,
 } = require('./painel-base');
 
 // ── Página: Indicadores do formulário ───────────────────────────────────────
@@ -1969,7 +1968,7 @@ function paginaProfessoras(params) {
 }
 
 // ── Página: Saúde do sistema (admin) ────────────────────────────────────────
-// Reúne num só lugar o estado de cada serviço: robô, SoFIA, painel, Instagram e
+// Reúne num só lugar o estado de cada serviço: robô, SoFIA, painel e
 // formulário — cada um com um selo (OK / atenção / problema) e quando foi visto.
 function fmtIdadeSaude(ts) {
   if (!ts) return { txt: 'sem registro', min: Infinity };
@@ -2034,16 +2033,6 @@ function paginaSaude(list, extra = {}) {
 
   // (O próprio painel não entra aqui: se estivesse fora do ar, esta página nem
   // carregaria — então mostrá-lo seria redundante.)
-
-  // Instagram — ligado/pausado + saúde da sessão na última execução.
-  let igLig = false; try { igLig = igcfg.ligado(); } catch (_) {}
-  const sessIg = lerJsonData('instagram-sessao.json');
-  const igId = fmtIdadeSaude(sessIg && sessIg.em);
-  const corIg = !igLig ? 'warn' : (sessIg ? (sessIg.ok ? 'ok' : 'erro') : 'warn');
-  const cardIg = card('Instagram', corIg, !igLig ? '🟡 Pausado' : pillTxt[corIg], [
-    igLig ? 'Envio de boas-vindas <b>ligado</b>.' : 'Envio de boas-vindas <b>pausado</b>.',
-    sessIg ? `Sessão ${sessIg.ok ? '<b>ativa</b>' : '<b>caiu</b> (reimporte os cookies)'} <span class="sd-muted">(verificada ${igId.txt})</span>` : '<span class="sd-muted">sessão ainda não verificada por uma execução</span>',
-  ]);
 
   // Formulário (Render) — não dá para medir o Render daqui; usamos o último
   // acesso registrado como sinal de vida do fluxo.
@@ -2231,9 +2220,9 @@ function paginaSaude(list, extra = {}) {
     ]).replace('class="card sd-card"', 'class="card sd-card" style="grid-column:1/-1"');
   }
 
-  E._saudeCor = { cor: [corExp, corSof, corEvo, corForm, corServ, corLid, corJobs].concat(IG_NO_PAINEL ? [corIg] : []).reduce(pior, 'ok'), em: Date.now() };
+  E._saudeCor = { cor: [corExp, corSof, corEvo, corForm, corServ, corLid, corJobs].reduce(pior, 'ok'), em: Date.now() };
   // Resumo no topo + o que pede atenção primeiro (vermelho antes de amarelo); o resto em lista compacta.
-  const sdDaTela = [cardExp, cardSof, cardEvo].concat(IG_NO_PAINEL ? [cardIg] : [], [cardForm, cardServ, cardLid, cardJobs])
+  const sdDaTela = [cardExp, cardSof, cardEvo, cardForm, cardServ, cardLid, cardJobs]
     .map(h => { const i = h && sdItens.find(x => x.html === h || h.includes(`<h3>${esc(x.nome)}</h3>`)); return i ? { ...i, html: h } : null; }).filter(Boolean); // (alguns cartões ganham estilo depois de montados — acha pelo título)
   const sdAtencao = sdDaTela.filter(i => i.cor === 'erro').concat(sdDaTela.filter(i => i.cor === 'warn'));
   const sdOk = sdDaTela.filter(i => i.cor === 'ok');

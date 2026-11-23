@@ -29,10 +29,6 @@ const slimclub = require('./slimclub');               // Slim Club: benefícios 
 const slimclubPaginas = require('./slimclub-paginas'); // páginas públicas do Slim Club (cadastro e listagem)
 const formularios = require('./formularios');               // formulários de campanha (ex.: lista da Black Friday)
 const formulariosPaginas = require('./formularios-paginas'); // página pública /formulario/<endereço>
-const igcfg = require('./instagram-config');
-const igApi = require('./instagram-api'); // integração OFICIAL (Graph API): webhook comentário/DM → resposta
-const igcookies = require('./instagram-cookies');
-const igforcar = require('./ig-forcar');
 const jobsAtivos = require('./jobs-ativos'); // liga/desliga de cada envio
 const inadConfig = require('./inadimplentes-config'); // "vencido há X+ dias" (configurável)
 // Número para o código de pareamento: só dígitos e, se veio SEM o DDI (10–11
@@ -79,7 +75,6 @@ function numeroPareamento(v) {
   return d;
 }
 const freeCfg = require('./free-antecedencia-config'); // planos FREE: intervalo (horas) + janela (dias)
-const testeIg = require('./teste-instagram');
 const indicadores = require('./indicadores');
 const audiosMsg = require('./audios-msg'); // áudio da professora (follow-up, confirmação)
 const histExp = require('./experimentais-hist'); // agenda de experimentais do EVO (Indicadores → Professoras)
@@ -98,7 +93,7 @@ const https = require('https');
 // estavam: painel-estado (estado compartilhado), painel-base e uma por aba.
 const E = require('./painel-estado');
 const {
-  _pm2Slug, PM2_EXP, PM2_SOFIA, COMP_CFG_FILE, COMP_PADRAO, compTagsAgendou, compDias, compIntervalo, lerCompCfg, USER, SENHA, TODAS_TELAS, SEGREDO, assinar, SESSOES_FILE, _salvarSessoesJa, salvarSessoesSoon, tocarSessao, sessaoValida, lerToken, lerCookie, ehHttps, usuarioDaReq, ADMIN_EMAIL, SOFIA_SUBS, podeSofiaSub, temSofia, sofiaHref, podeMsgSub, temMsg, msgHref, esc, infoI, hojeSP, fmtData, fmtTel, ESTILO, IG_NO_PAINEL, PAGAMENTO_ATIVO, navTabs, FOTOS_FILE, fotoDe, iniciais, AV_CORES, avatar, menuConta, chrome, scriptPreviewTeste, cardMensagem, professorasRecentes, cardAudio, cardFoto, DIAS, blocoHorario, lerJsonData, podeFunil, uiTrilho, uiBarra, uiTopo, uiChips, uiDatas, UI_SIT, uiPessoa, subnavSofia, scIp, scBaseUrl, scStudio, scHtml, scJson, scSoJson, lerCorpo, FU_AGENDOU_CANAL_FILE, fuLerJson, FU_AGENDOU_AULA_FILE,
+  _pm2Slug, PM2_EXP, PM2_SOFIA, COMP_CFG_FILE, COMP_PADRAO, compTagsAgendou, compDias, compIntervalo, lerCompCfg, USER, SENHA, TODAS_TELAS, SEGREDO, assinar, SESSOES_FILE, _salvarSessoesJa, salvarSessoesSoon, tocarSessao, sessaoValida, lerToken, lerCookie, ehHttps, usuarioDaReq, ADMIN_EMAIL, SOFIA_SUBS, podeSofiaSub, temSofia, sofiaHref, podeMsgSub, temMsg, msgHref, esc, infoI, hojeSP, fmtData, fmtTel, ESTILO, PAGAMENTO_ATIVO, navTabs, FOTOS_FILE, fotoDe, iniciais, AV_CORES, avatar, menuConta, chrome, scriptPreviewTeste, cardMensagem, professorasRecentes, cardAudio, cardFoto, DIAS, blocoHorario, lerJsonData, podeFunil, uiTrilho, uiBarra, uiTopo, uiChips, uiDatas, UI_SIT, uiPessoa, subnavSofia, scIp, scBaseUrl, scStudio, scHtml, scJson, scSoJson, lerCorpo, FU_AGENDOU_CANAL_FILE, fuLerJson, FU_AGENDOU_AULA_FILE,
 } = require('./painel-base');
 const {
   CIRC_SERV_FILE, lerCircuitoServico, horaAg, turnoLabel, barraTeste, card2FA, blocoWaRobo, subnavMensagens, cardGrupos, paginaMensagens, itemHtml, cardHorariosAgendados, blocoAgendarMsg, paginaExpress, paginaWa, HORARIOS_DA_MSG, TOGGLE_EXTRA_DA_MSG, jobsDoCard, cardDeMsg, blocoAnivExcluir, blocoSaidas, blocoVenceHoje, blocoSentimos, blocoRenovDias, OUTROS_JOBS, switchEnvio, horaTurno, FOTO_POR_CONTEXTO, JOBS_DO_LOG, jobDoLog, RODAR_JOB_ST, statusRodarJob, LOG_REFEITOS, lerRefeitos, hhmm, fotoDoEnvio, paginaHoje, paginaCobranca,
@@ -111,9 +106,6 @@ const {
 } = require('./painel-indicadores');
 const painelMetas = require('./painel-metas');
 const metasDados = require('./metas');
-const {
-  paginaInstagram,
-} = require('./painel-instagram');
 const {
   SESSAO_DIAS_FILE, SESSAO_DIAS_DEFAULT, lerSessaoDias, PERFIS_SUBS, subnavPerfis, paginaPerfis,
 } = require('./painel-perfis');
@@ -332,7 +324,6 @@ function validarLogin(usuario, senha) {
 function telaDaUrl(u) {
   if (u === '/hoje' || u.startsWith('/hoje/')) return 'msg'; // Hoje virou sub-aba do WhatsApp
   if (u === '/indicadores' || u === '/origens/criar' || u === '/origens/excluir') return 'ind';
-  if (u === '/instagram' || u.startsWith('/instagram/')) return 'ig';
   if (u === '/sofia' || u.startsWith('/sofia/')) return 'sofia';
   if (u === '/perfis' || u.startsWith('/perfis/')) return 'perfis';
   if (u === '/saude') return 'saude'; // liberável por usuário (checkbox em Perfis) — a checagem genérica cobre
@@ -383,7 +374,6 @@ function primeiraTela(sess) {
   if (sess.admin) return '/hoje';
   if (temMsg(sess)) return msgHref(sess);
   if (sess.telas.includes('ind')) return '/indicadores';
-  if (IG_NO_PAINEL && sess.telas.includes('ig')) return '/instagram';
   if (temSofia(sess)) return sofiaHref(sess);
   if (sess.telas.includes('slimclub')) return '/clube';
   if (sess.telas.includes('formularios')) return '/formularios';
@@ -581,29 +571,6 @@ const server = http.createServer(protegido((req, res) => {
     const tipo = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
     res.writeHead(200, { 'Content-Type': tipo, 'Cache-Control': 'public, max-age=300' });
     return fs.createReadStream(caminho).pipe(res);
-  }
-  // ── Webhook OFICIAL do Instagram (público — a Meta chama sem login) ────────
-  // GET = verificação (devolve o hub.challenge). POST = eventos (comentário/DM),
-  // com assinatura conferida pelo APP_SECRET antes de processar.
-  if (url === '/ig/webhook') {
-    if (req.method === 'GET') {
-      const challenge = igApi.verificar(req.url.split('?')[1] || '');
-      if (challenge !== null) { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end(challenge); }
-      res.writeHead(403, { 'Content-Type': 'text/plain' }); return res.end('forbidden');
-    }
-    if (req.method === 'POST') {
-      return lerCorpo(req, 1e6, corpo => {
-        // Registra só o que precisa de atenção (assinatura inválida ou evento que o
-        // processar ignora) — antes, um log de diagnóstico gravava TODO webhook.
-        const assinOk = igApi.assinaturaValida(corpo, req.headers['x-hub-signature-256']);
-        let body = null; try { body = JSON.parse(corpo); } catch (_) { body = null; }
-        if (!assinOk) { console.log(`[ig-webhook] POST ${corpo.length}B com assinatura INVÁLIDA — ignorado`); res.writeHead(403, { 'Content-Type': 'text/plain' }); return res.end('bad signature'); }
-        if (!body || body.object !== 'instagram') console.log(`[ig-webhook] evento ignorado: ${body ? 'object=' + body.object : 'corpo não-JSON'}`);
-        res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('EVENT_RECEIVED'); // responde rápido; processa depois
-        if (body) igApi.processar(body).catch(e => console.log('[ig-api] processar:', e.message));
-      });
-    }
-    res.writeHead(405, { 'Content-Type': 'text/plain' }); return res.end('method not allowed');
   }
   // Login com Google — só ativo com GOOGLE_CLIENT_ID/SECRET no .env.
   if (url === '/auth/google') {
@@ -1229,7 +1196,7 @@ const server = http.createServer(protegido((req, res) => {
     return lerCorpo(req, 1e6, corpo => {
       const p = new URLSearchParams(corpo);
       const vRaw = p.get('voltar');
-      const voltar = (vRaw === '/instagram' || vRaw === '/sofia?view=cobranca') ? vRaw : '/'; // whitelist
+      const voltar = (vRaw === '/sofia?view=cobranca') ? vRaw : '/'; // whitelist
       try {
         if (p.get('reset')) mensagens.salvarOverride(p.get('chave'), '');
         else mensagens.salvarOverride(p.get('chave'), p.get('texto') || '');
@@ -1238,7 +1205,7 @@ const server = http.createServer(protegido((req, res) => {
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         const msg = 'Erro ao salvar: ' + e.message;
-        res.end(voltar === '/instagram' ? paginaInstagram(msg, true) : voltar === '/sofia?view=cobranca' ? paginaCobranca(msg, true) : paginaMensagens(msg, true));
+        res.end(voltar === '/sofia?view=cobranca' ? paginaCobranca(msg, true) : paginaMensagens(msg, true));
       }
     });
   }
@@ -1633,7 +1600,7 @@ const server = http.createServer(protegido((req, res) => {
     return lerCorpo(req, 1e6, corpo => {
       const p = new URLSearchParams(corpo);
       const vRaw = p.get('voltar');
-      const voltar = (vRaw === '/agendar' || vRaw === '/instagram' || vRaw === '/sofia?view=cobranca') ? vRaw : '/'; // whitelist
+      const voltar = (vRaw === '/agendar' || vRaw === '/sofia?view=cobranca') ? vRaw : '/'; // whitelist
       try {
         // Valida TUDO antes de salvar qualquer coisa (build lança em entrada inválida).
         const planos = horarios.CATALOGO.map(j => {
@@ -1647,7 +1614,7 @@ const server = http.createServer(protegido((req, res) => {
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         const msg = 'Erro ao salvar horários: ' + e.message + ' (nada foi alterado).';
-        return res.end(voltar === '/agendar' ? paginaExpress(msg, true) : voltar === '/instagram' ? paginaInstagram(msg, true) : voltar === '/sofia?view=cobranca' ? paginaCobranca(msg, true) : paginaMensagens(msg, true));
+        return res.end(voltar === '/agendar' ? paginaExpress(msg, true) : voltar === '/sofia?view=cobranca' ? paginaCobranca(msg, true) : paginaMensagens(msg, true));
       }
       // Reinicia o robô para reagendar os jobs com os novos horários.
       exec('pm2 restart ' + PM2_EXP + ' --update-env', { timeout: 25000 }, (err) => {
@@ -2879,134 +2846,6 @@ const server = http.createServer(protegido((req, res) => {
     });
   }
 
-  // Página do Instagram (status + liga/desliga + limite + mensagem + horário)
-  if (req.method === 'GET' && url === '/instagram') {
-    const q = req.url.split('?')[1] || '';
-    let aviso = '', erro = false;
-    if (/(?:^|&)oficial=1/.test(q)) aviso = '🤖 Instagram oficial salvo! Vale na hora — palavra-chave, mensagem, link e botões atualizados.';
-    else if (/(?:^|&)ib=1/.test(q)) aviso = '🎉 Botões de boas-vindas publicados na conta do Instagram!';
-    else if (/(?:^|&)on=1/.test(q)) aviso = '📸 Instagram LIGADO. Vale no próximo disparo (07:00).';
-    else if (/(?:^|&)off=1/.test(q)) aviso = '⏸️ Instagram pausado. Nenhuma DM automática será enviada.';
-    else if (/(?:^|&)lim=1/.test(q)) aviso = '🎯 Limite salvo. Vale já no próximo disparo — sem reiniciar.';
-    else if (/(?:^|&)ck=\d/.test(q)) aviso = '🍪 Cookies importados (' + (q.match(/ck=(\d+)/) || [])[1] + '). A sessão do Instagram foi renovada — vale na próxima execução.';
-    else if (/(?:^|&)ok=1/.test(q)) aviso = 'Mensagem salva! Já vale no próximo envio.';
-    else if (/(?:^|&)okh=1/.test(q)) aviso = '🕒 Horário salvo e robô reiniciado. Já vale.';
-    else if (/(?:^|&)errh=1/.test(q)) { aviso = '⚠️ Horário salvo, mas não consegui reiniciar o robô. Rode: pm2 restart ' + PM2_EXP; erro = true; }
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(paginaInstagram(aviso, erro));
-  }
-  if (req.method === 'POST' && url === '/instagram/toggle') {
-    return lerCorpo(req, 1e5, corpo => {
-      const alvo = new URLSearchParams(corpo).get('alvo');
-      try { igcfg.definir(alvo === 'on'); } catch (_) {}
-      res.writeHead(303, { Location: alvo === 'on' ? '/instagram?on=1' : '/instagram?off=1' }); res.end();
-    });
-  }
-  // Salva a config da integração OFICIAL (palavra-chave, mensagem, link, on/off).
-  if (req.method === 'POST' && url === '/instagram/oficial/salvar') {
-    return lerCorpo(req, 1e5, corpo => {
-      const p = new URLSearchParams(corpo);
-      const palavras = (p.get('palavras') || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-      const iceBreakers = [];
-      for (let i = 0; i < 4; i++) {
-        const pergunta = (p.get('ib' + i + '_p') || '').trim().slice(0, 80);
-        const resposta = (p.get('ib' + i + '_r') || '').trim().slice(0, 1000);
-        if (pergunta) iceBreakers.push({ pergunta, resposta });
-      }
-      try {
-        igApi.gravarCfg({
-          enabled: p.get('enabled') === 'on',
-          responderDM: p.get('responderDM') === 'on',
-          palavras,
-          mensagem: (p.get('mensagem') || '').slice(0, 2000),
-          link: (p.get('link') || '').trim().slice(0, 500),
-          iceBreakers,
-        });
-        res.writeHead(303, { Location: '/instagram?oficial=1' }); res.end();
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(paginaInstagram('Erro ao salvar o Instagram oficial: ' + e.message, true));
-      }
-    });
-  }
-  // Publica os Ice Breakers (botões de boas-vindas) na conta via API.
-  if (req.method === 'POST' && url === '/instagram/oficial/icebreakers') {
-    return lerCorpo(req, 1e4, () => {
-      igApi.publicarIceBreakers()
-        .then(() => { res.writeHead(303, { Location: '/instagram?ib=1' }); res.end(); })
-        .catch(e => {
-          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end(paginaInstagram('Não deu pra publicar os botões: ' + e.message + ' — se falar em "capability"/permissão, é porque o app ainda não está "Ao vivo". Depois da aprovação, publique de novo.', true));
-        });
-    });
-  }
-  if (req.method === 'POST' && url === '/instagram/limite') {
-    return lerCorpo(req, 1e5, corpo => {
-      try { igcfg.definirMax(new URLSearchParams(corpo).get('max')); res.writeHead(303, { Location: '/instagram?lim=1' }); res.end(); }
-      catch (e) {
-        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(paginaInstagram('Erro ao salvar o limite: ' + e.message, true));
-      }
-    });
-  }
-  if (req.method === 'POST' && url === '/instagram/teste-dm') {
-    return lerCorpo(req, 1e6, corpo => {
-      try {
-        const d = JSON.parse(corpo || '{}');
-        const textoFinal = mensagens.renderTexto(d.texto || '', mensagens.EXEMPLOS);
-        const id = testeIg.solicitar({ username: d.username, texto: textoFinal });
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: true, id }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message }));
-      }
-    });
-  }
-  if (req.method === 'GET' && url === '/instagram/teste-dm/status') {
-    const id = new URLSearchParams(req.url.split('?')[1] || '').get('id');
-    const p = testeIg.ler(id);
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    return res.end(JSON.stringify(p ? { status: p.status, erro: p.erro } : { status: 'desconhecido' }));
-  }
-  // Liga/Desliga de um envio (toggle do card). Salva em data/jobs-ativos.json.
-  if (req.method === 'POST' && url === '/envio/ativo') {
-    return lerCorpo(req, 1e5, corpo => {
-      try {
-        const d = JSON.parse(corpo || '{}');
-        const chaves = Array.isArray(d.chaves) ? d.chaves : (d.chave ? [d.chave] : []);
-        const limpa = chaves.map(c => String(c || '').trim()).filter(Boolean);
-        if (!limpa.length) throw new Error('sem chave');
-        const on = d.ativo !== false;
-        limpa.forEach(c => jobsAtivos.setAtivo(c, on));
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-        return res.end(JSON.stringify({ ok: true, chaves: limpa, ativo: on }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-        return res.end(JSON.stringify({ ok: false, erro: e.message }));
-      }
-    });
-  }
-  // Forçar as boas-vindas do IG agora (o robô, que tem o navegador, executa).
-  if (req.method === 'POST' && url === '/instagram/forcar') {
-    try { const st = igforcar.pedir(); res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: true, status: st.status })); }
-    catch (e) { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: false, erro: e.message })); }
-  }
-  if (req.method === 'GET' && url === '/instagram/forcar/status') {
-    const st = igforcar.estado() || {};
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    return res.end(JSON.stringify({ status: st.status || 'nenhum', erro: st.erro || '' }));
-  }
-  if (req.method === 'POST' && url === '/instagram/cookies') {
-    return lerCorpo(req, 4e6, corpo => { // cookies podem somar alguns KB
-      try {
-        const n = igcookies.salvar(new URLSearchParams(corpo).get('cookies') || '');
-        res.writeHead(303, { Location: '/instagram?ck=' + n }); res.end();
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(paginaInstagram('Erro ao importar cookies: ' + e.message, true));
-      }
-    });
-  }
-
   // Estado do WhatsApp em JSON — o banner da aba Mensagens atualiza só este bloco
   // (sem recarregar a página, para não apagar o texto que está sendo editado).
   if (req.method === 'GET' && url === '/wa/estado') {
@@ -3111,10 +2950,7 @@ try {
 server.listen(PORT, HOST, () => {
   if (!SENHA) console.warn('⚠️  PAINEL_SENHA não definido no .env — o painel vai NEGAR todo acesso até você definir usuário e senha.');
   console.log(`🖥️  Painel do Studio ouvindo em ${HOST}:${PORT} (usuário: ${USER}).`);
-  console.log('   Páginas: /hoje · /indicadores · /  (WhatsApp+mensagens) · /agendar · /instagram · /sofia. Exponha SEMPRE atrás de HTTPS.');
-  // Instagram oficial (Graph API): valida token e descobre a conta. Silencioso
-  // se as variáveis não estiverem no .env — não atrapalha o resto do painel.
-  try { igApi.bootstrap().catch(() => {}); } catch (_) {}
+  console.log('   Páginas: /hoje · /indicadores · /  (WhatsApp+mensagens) · /agendar · /sofia. Exponha SEMPRE atrás de HTTPS.');
   // Estado da Saúde para a bolinha do avatar: a cada 3 min (pm2 jlist é leve).
   const atualizarSaudeCor = () => exec('pm2 jlist', { timeout: 15000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) => {
     let list = null; try { list = JSON.parse(stdout); } catch (_) {}

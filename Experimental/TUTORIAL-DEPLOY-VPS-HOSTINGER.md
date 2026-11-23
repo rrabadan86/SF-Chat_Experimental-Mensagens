@@ -285,7 +285,7 @@ O que você controla pelo `.env` (Etapa 4):
 > `.env`: `CHROMIUM_PATH=/usr/bin/chromium-browser`
 
 > ⚠️ **Nota:** outros scripts auxiliares que também abrem o Edge
-> (`enviar_confirmacoes.js`, `instagram-seguidores.js`, etc.) ainda são
+> (`enviar_confirmacoes.js`, etc.) ainda são
 > Windows-only. O fluxo principal de **confirmação de aulas experimentais**
 > (scheduler → `whatsapp-sender.js`) já roda no Linux. Os demais serão
 > adaptados sob demanda, quando forem necessários no VPS.
@@ -387,7 +387,6 @@ Deixe rodar até o próximo horário agendado (ver tabela abaixo) e confirme no
 | Aniversariantes do mês (grupo) | `30 5 28 * *` | 05:30 dia 28 |
 | Ausentes há 10+ dias (grupo) | `10 6 * * 1` | 06:10 segunda |
 | Presentes de tempo de casa (grupo) | `45 6 * * 1` | 06:45 segunda |
-| Instagram (boas-vindas) | `0 7 * * *` | 07:00 diário |
 | Aniversariantes (parabéns nos grupos) | `0 8 * * *` | 08:00 diário |
 | Confirmação (hoje) | `30 8 * * 1-6` | 08:30 seg–sáb |
 | Follow-up pós-aula — manhã | `30 10 * * 1-6` | 10:30 seg–sáb |

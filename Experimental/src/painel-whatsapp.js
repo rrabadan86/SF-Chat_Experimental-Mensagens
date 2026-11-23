@@ -31,7 +31,7 @@ function lerCircuitoServico() { try { const v = String(fs.readFileSync(CIRC_SERV
 function horaAg(turno) { return horaTurno(turno === 'manha' ? 'agendadosManha' : 'agendadosTarde') || (turno === 'manha' ? '10:45' : '15:45'); }
 function turnoLabel(turno) { return (turno === 'manha' ? '☀️ Manhã · ' : '🌇 Tarde · ') + horaAg(turno); }
 
-// Barra "número para testes" (compartilhada por Mensagens e Instagram).
+// Barra "número para testes" (aba WhatsApp → Mensagens).
 function barraTeste() {
   return `<div class="card testbar">
     <label>Número para testes</label>
@@ -137,11 +137,10 @@ function paginaMensagens(aviso, erro) {
   const cardDe = (m) => cardDeMsg(m, hmap);
 
   // Mensagens que vão para GRUPOS do WhatsApp (o resto é individual, 1 para 1).
-  // A do Instagram é editada na aba "📸 Instagram" (fica tudo do IG lá).
   const MSGS_GRUPO = new Set(['ausentes', 'aniversariantes_mes', 'renovacoes_mes', 'aniversario', 'circuito_convocacao', 'circuito_lembrete']);
-  // 'instagram' fica na aba Instagram; as cobranças ficam na aba SoFIA → Cobrança.
+  // As cobranças ficam na aba SoFIA → Cobrança.
   const COBRANCA_MSGS = new Set(['cobranca_recorrente', 'cobranca_boleto', 'cobranca_boleto_hoje', 'cobranca_saldo', 'cobranca_app_reativado']);
-  const listaMsgs = mensagens.listar().filter(m => m.chave !== 'instagram' && !COBRANCA_MSGS.has(m.chave));
+  const listaMsgs = mensagens.listar().filter(m => !COBRANCA_MSGS.has(m.chave));
   // Individuais (1 p/ 1): "Aniversário — ex-alunas" (reativação, direto no WhatsApp)
   // aparece no TOPO, acima de "Confirmação — aula de hoje".
   const indiv = listaMsgs.filter(m => !MSGS_GRUPO.has(m.chave));
@@ -841,7 +840,6 @@ const HORARIOS_DA_MSG = {
   assinatura_contrato: [['assinaturas', '']],
   aniversario:         [['aniversariantes', '']],
   aniversario_ex:      [['aniversarioEx', '']],
-  instagram:           [['instagram', '']],
   circuito_convocacao: [['circuitoConvoca', '']],
   circuito_lembrete:   [['circuitoLembrete', '']],
   cobranca_recorrente: [['inadimplentes', '']],

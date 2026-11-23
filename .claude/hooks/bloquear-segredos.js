@@ -9,6 +9,8 @@
  * Procura: chaves conhecidas (Anthropic, OpenAI, Groq, GitHub, Google, AWS, Slack,
  * Fitily), chaves privadas, "SENHA/TOKEN/SECRET/API_KEY=<valor>", e arquivos que não
  * podem subir (.env, Experimental/data/, sessões do WhatsApp, conversas reais da demo).
+ * Arquivo APAGADO não conta (tirar dado do Git é o que se quer); o .gitkeep vazio de
+ * Experimental/data/ (só mantém a pasta) também pode.
  */
 const { execSync } = require('child_process');
 
@@ -27,20 +29,20 @@ process.stdin.on('data', d => (entrada += d)).on('end', () => {
   if (commit) {
     diff += sh('git diff --cached -U0') + sh('git diff -U0');
     const novos = sh('git ls-files --others --exclude-standard').split('\n').filter(Boolean);
-    arquivos.push(...sh('git diff --cached --name-only').split('\n'), ...sh('git diff --name-only').split('\n'), ...novos);
+    arquivos.push(...sh('git diff --cached --name-only --diff-filter=d').split('\n'), ...sh('git diff --name-only --diff-filter=d').split('\n'), ...novos);
     for (const f of novos) { try { if (require('fs').statSync(require('path').join(raiz, f)).size < 2e6) diff += `+++ b/${f}\n` + require('fs').readFileSync(require('path').join(raiz, f), 'utf8').split('\n').map(l => '+' + l).join('\n') + '\n'; } catch (_) {} }
   }
   if (push) {
     const base = sh('git rev-parse --abbrev-ref --symbolic-full-name @{u}').trim() || 'origin/main';
     diff += sh(`git log -p -U0 --format= ${base}..HEAD`);
-    arquivos.push(...sh(`git diff --name-only ${base}...HEAD`).split('\n'));
+    arquivos.push(...sh(`git diff --name-only --diff-filter=d ${base}...HEAD`).split('\n'));
   }
   arquivos = [...new Set(arquivos.filter(Boolean))];
 
   const achados = [];
   const PROIBIDOS = [
     [/(^|\/)\.env$|(^|\/)[^/]+\.env$/, 'arquivo .env'],
-    [/^Experimental\/data\//, 'dados da unidade (Experimental/data/)'],
+    [/^Experimental\/data\/(?!\.gitkeep$)/, 'dados da unidade (Experimental/data/)'],
     [/(^|\/)\.?wwebjs_auth\//, 'sessão do WhatsApp'],
     [/(^|\/)sofia-demo\/|demo-conversas-reais[^/]*\.json$/, 'conversas reais da demonstração'],
   ];
