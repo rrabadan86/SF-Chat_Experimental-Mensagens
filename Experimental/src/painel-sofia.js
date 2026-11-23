@@ -14,6 +14,7 @@ const E = require('./painel-estado');
 const {
   _pm2Slug, esc, subnavSofia, chrome, podeSofiaSub, uiTopo, hojeSP, uiTrilho, lerCompCfg, blocoHorario, infoI, PM2_SOFIA, uiChips, uiDatas, uiBarra, uiPessoa,
 } = require('./painel-base');
+const { uiTabela } = require('./painel-componentes');
 
 const PM2_PAINEL = require('./pm2-nomes').nome('painel');
 
@@ -167,8 +168,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       .cv-chips{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:5px}
       .cv-chips>span{margin-left:0!important}
       .cv-tag{display:inline-block;background:var(--teal-soft);color:var(--teal-esc);border-radius:999px;padding:1px 9px;font-size:.68rem;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .cv-sit{display:flex;flex:none;justify-content:space-between;gap:10px;margin:0 2px 8px;font-size:.8rem;white-space:nowrap;overflow-x:auto;scrollbar-width:none}
-      .cv-sit::-webkit-scrollbar{display:none}
+      .cv-sit{display:flex;flex:none;flex-wrap:wrap;justify-content:space-between;gap:2px 6px;margin:0 2px 8px;font-size:.8rem;white-space:nowrap}
       .cv-sit a{color:var(--cinza);font-weight:500;text-decoration:none;padding:3px 0;border-bottom:2px solid transparent}
       .cv-sit a b{font-weight:600;color:var(--faint);margin-left:2px}
       .cv-sit a.on{color:var(--tinta);font-weight:600;border-bottom-color:var(--teal)}.cv-sit a.on b{color:var(--teal)}
@@ -178,6 +178,23 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       #convPag{border-top:1px solid var(--linha);padding-top:8px}
       .ch-av{flex:none;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.9rem}
       .voltar-lista{display:none}
+      .chat-head{flex-wrap:wrap}
+      .chat-acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+      .ch-bt{display:inline-flex;align-items:center;gap:4px;padding:6px 11px;font-size:var(--fs-sm);font-weight:700;white-space:nowrap;border-radius:10px}
+      .ch-dono{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-bd);border-radius:999px;padding:4px 11px;font-size:var(--fs-sm);font-weight:700;overflow-wrap:anywhere}
+      .chat-head{position:relative}
+      .ch-mais>summary{list-style:none;cursor:pointer}
+      .ch-mais>summary::-webkit-details-marker{display:none}
+      .ch-mais>summary:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+      .ch-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:20;display:flex;flex-direction:column;min-width:190px;padding:5px;background:var(--card);border:1px solid var(--linha);border-radius:12px;box-shadow:0 8px 24px rgba(16,24,40,.14)}
+      .ch-menu button{background:none;border:0;text-align:left;padding:9px 11px;font-size:var(--fs-sm);font-weight:600;color:var(--tinta);border-radius:8px}
+      .ch-menu button:hover{background:var(--linha-soft)}
+      .ch-menu .ch-perigo{color:var(--erro)}
+      .ch-assumir{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:10px;padding-top:10px;border-top:1px solid var(--linha)}
+      .ch-assumir .quando{margin:0}
+      .cv-sit a[data-s=aguardando].tem{color:var(--tinta);font-weight:600}
+      .cv-sit a[data-s=aguardando].tem b{display:inline-block;min-width:20px;padding:0 6px;border-radius:999px;background:var(--teal);color:var(--card);text-align:center}
+      .cv-agu{background:var(--teal);color:var(--card);border-radius:999px;padding:1px 9px;font-size:var(--fs-xs);font-weight:700}
       /* Mobile: mostra a LISTA ou a CONVERSA (master-detail), não as duas ── item 5 ── */
       @media(max-width:760px){
         #convChat{display:none}
@@ -188,7 +205,9 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
         /* Cabeçalho da conversa: botões de ação descem pra 2ª linha e o nome+telefone
            ficam com a 1ª linha inteira (senão o nome sai como "Glória …"). */
         .chat-head{flex-wrap:wrap}
-        .chat-head .chat-acts{flex-basis:100%;justify-content:flex-end;margin-top:5px}
+        .chat-head .chat-acts{flex-basis:100%;margin-top:5px}
+        .ch-bt,.ch-menu button{min-height:44px}
+        .ch-assumir .save{width:100%;min-height:48px}
         /* Com a conversa aberta, o título "Conversas da SoFIA…" só ocupa espaço. */
         body.ver-conversa #conv-head{display:none}
       }
@@ -235,7 +254,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       <div id="ctIntBody"><p class="quando">Carregando…</p></div>
     </div>
   </div>
-  <div id="ctResModal" class="ct-ov" style="z-index:60" onclick="if(event.target===this)fecharResumo()">
+  <div id="ctResModal" class="ct-ov" style="z-index:110" onclick="if(event.target===this)fecharResumo()">
     <div class="ct-dlg" style="max-width:460px">
       <div class="ct-dh"><h2>Resumo do atendimento</h2><button type="button" class="ct-x" onclick="fecharResumo()">×</button></div>
       <div id="ctResData" class="quando" style="margin:0 0 8px"></div>
@@ -332,9 +351,9 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     // Divisória de SESSÃO: fica PERMANENTE no histórico entre uma conversa e a
     // seguinte. Aparece quando o intervalo entre duas mensagens passa do Tempo de
     // sessão (memória) OU quando houve encerramento manual (cadeado) entre elas.
-    function divisorHtml(txt, cor, corLinha){ var c=cor||'#a15a5a', l=corLinha||'#e6cfcf'; return '<div style="display:flex;align-items:center;gap:10px;margin:16px 2px 8px;color:'+c+'"><span style="flex:1;height:1px;background:'+l+'"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap">'+txt+'</span><span style="flex:1;height:1px;background:'+l+'"></span></div>'; }
+    function divisorHtml(txt, cor, corLinha){ var c=cor||'#a15a5a', l=corLinha||'#e6cfcf'; return '<div style="display:flex;align-items:center;gap:10px;margin:16px 2px 8px;color:'+c+'"><span style="flex:1 1 12px;height:1px;background:'+l+'"></span><span style="flex:0 1 auto;min-width:0;text-align:center;overflow-wrap:anywhere;font-size:.7rem;font-weight:700">'+txt+'</span><span style="flex:1 1 12px;height:1px;background:'+l+'"></span></div>'; }
     // Marcador: resposta manual DIRETO pelo celular da SoFIA (dispara a pausa por tempo).
-    function wppDivisor(){ return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#f0dcc2"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#b45309;background:var(--warn-bg);border-radius:999px;padding:2px 11px">📱 Resposta manual pelo WhatsApp · SoFIA pausada por '+fmtPausa(PAUSA_MIN)+' nesta conversa</span><span style="flex:1;height:1px;background:#f0dcc2"></span></div>'; }
+    function wppDivisor(){ return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1 1 12px;height:1px;background:#f0dcc2"></span><span style="flex:0 1 auto;min-width:0;text-align:center;overflow-wrap:anywhere;font-size:.7rem;font-weight:700;color:#b45309;background:var(--warn-bg);border-radius:999px;padding:2px 11px">📱 Resposta manual pelo WhatsApp · SoFIA pausada por '+fmtPausa(PAUSA_MIN)+' nesta conversa</span><span style="flex:1 1 12px;height:1px;background:#f0dcc2"></span></div>'; }
     var encPorTxt=(c.encPor && String(c.encPor).trim())?escH(c.encPor):'';
     // A "nova conversa" após um encerramento começa na PRÓXIMA mensagem da aluna
     // depois do fechamento — não na resposta que a SoFIA ainda mandou de despedida.
@@ -386,20 +405,20 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
         var cor = rem ? '#a15a5a' : '#6b3fa0';    // remoção em tom avermelhado, aplicação em roxo
         var bg  = rem ? '#f7ecec' : '#f2eaf9';
         var ln  = rem ? '#e6cfcf' : '#e3d5ef';
-        return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:'+ln+'"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:'+cor+';background:'+bg+';border-radius:999px;padding:2px 11px">🏷️ '+verbo+': "'+escH(e.tag)+'"'+suf+' · '+soHora(e.em)+'</span><span style="flex:1;height:1px;background:'+ln+'"></span></div>';
+        return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1 1 12px;height:1px;background:'+ln+'"></span><span style="flex:0 1 auto;min-width:0;text-align:center;overflow-wrap:anywhere;font-size:.7rem;font-weight:700;color:'+cor+';background:'+bg+';border-radius:999px;padding:2px 11px">🏷️ '+verbo+': "'+escH(e.tag)+'"'+suf+' · '+soHora(e.em)+'</span><span style="flex:1 1 12px;height:1px;background:'+ln+'"></span></div>';
       }
       if(e.acao==='aviso'){
         var dst=fmtTelCurto(e.destino);
-        if(e.ok) return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#f0dcc2"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#9a5b00;background:var(--warn-bg);border-radius:999px;padding:2px 11px">🔔 Recepção avisada'+(dst?' · '+escH(dst):'')+' · '+soHora(e.em)+'</span><span style="flex:1;height:1px;background:#f0dcc2"></span></div>';
-        return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#e6cfcf"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#a12626;background:#f7ecec;border-radius:999px;padding:2px 11px" title="'+escH(e.erro||'')+'">⚠️ Aviso para a recepção não saiu'+(dst?' ('+escH(dst)+')':'')+' · '+soHora(e.em)+'</span><span style="flex:1;height:1px;background:#e6cfcf"></span></div>';
+        if(e.ok) return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1 1 12px;height:1px;background:#f0dcc2"></span><span style="flex:0 1 auto;min-width:0;text-align:center;overflow-wrap:anywhere;font-size:.7rem;font-weight:700;color:#9a5b00;background:var(--warn-bg);border-radius:999px;padding:2px 11px">🔔 Recepção avisada'+(dst?' · '+escH(dst):'')+' · '+soHora(e.em)+'</span><span style="flex:1 1 12px;height:1px;background:#f0dcc2"></span></div>';
+        return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1 1 12px;height:1px;background:#e6cfcf"></span><span style="flex:0 1 auto;min-width:0;text-align:center;overflow-wrap:anywhere;font-size:.7rem;font-weight:700;color:#a12626;background:#f7ecec;border-radius:999px;padding:2px 11px" title="'+escH(e.erro||'')+'">⚠️ Aviso para a recepção não saiu'+(dst?' ('+escH(dst)+')':'')+' · '+soHora(e.em)+'</span><span style="flex:1 1 12px;height:1px;background:#e6cfcf"></span></div>';
       }
-      if(e.acao==='assumir') return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cdeadd"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#1f7a4d;background:#e7f6ec;border-radius:999px;padding:2px 11px">🙋 Conversa assumida por '+(quem||'atendente')+'</span><span style="flex:1;height:1px;background:#cdeadd"></span></div>';
+      if(e.acao==='assumir') return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1 1 12px;height:1px;background:#cdeadd"></span><span style="flex:0 1 auto;min-width:0;text-align:center;overflow-wrap:anywhere;font-size:.7rem;font-weight:700;color:#1f7a4d;background:#e7f6ec;border-radius:999px;padding:2px 11px">🙋 Conversa assumida por '+(quem||'atendente')+'</span><span style="flex:1 1 12px;height:1px;background:#cdeadd"></span></div>';
       // Fim do prazo de pausa da resposta manual pelo celular (computado por horário).
       if(e.acao==='wpp-fim'){
-        if(e.ativo) return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#f0dcc2"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#b45309;background:var(--warn-bg);border-radius:999px;padding:2px 11px">⏳ SoFIA pausada até '+soHora(e.em)+' (resposta manual pelo WhatsApp)</span><span style="flex:1;height:1px;background:#f0dcc2"></span></div>';
-        return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cfe4e3"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#0b6f72;background:#e4efee;border-radius:999px;padding:2px 11px">🤖 Prazo da pausa terminou — SoFIA voltou a responder</span><span style="flex:1;height:1px;background:#cfe4e3"></span></div>';
+        if(e.ativo) return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1 1 12px;height:1px;background:#f0dcc2"></span><span style="flex:0 1 auto;min-width:0;text-align:center;overflow-wrap:anywhere;font-size:.7rem;font-weight:700;color:#b45309;background:var(--warn-bg);border-radius:999px;padding:2px 11px">⏳ SoFIA pausada até '+soHora(e.em)+' (resposta manual pelo WhatsApp)</span><span style="flex:1 1 12px;height:1px;background:#f0dcc2"></span></div>';
+        return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1 1 12px;height:1px;background:#cfe4e3"></span><span style="flex:0 1 auto;min-width:0;text-align:center;overflow-wrap:anywhere;font-size:.7rem;font-weight:700;color:#0b6f72;background:#e4efee;border-radius:999px;padding:2px 11px">🤖 Prazo da pausa terminou — SoFIA voltou a responder</span><span style="flex:1 1 12px;height:1px;background:#cfe4e3"></span></div>';
       }
-      return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1;height:1px;background:#cfe4e3"></span><span style="flex:none;font-size:.7rem;font-weight:700;white-space:nowrap;color:#0b6f72;background:#e4efee;border-radius:999px;padding:2px 11px">🤖 Devolvida à SoFIA'+(quem?' por '+quem:(e.auto?' — trava expirou':''))+'</span><span style="flex:1;height:1px;background:#cfe4e3"></span></div>';
+      return '<div style="display:flex;align-items:center;gap:10px;margin:14px 2px 8px"><span style="flex:1 1 12px;height:1px;background:#cfe4e3"></span><span style="flex:0 1 auto;min-width:0;text-align:center;overflow-wrap:anywhere;font-size:.7rem;font-weight:700;color:#0b6f72;background:#e4efee;border-radius:999px;padding:2px 11px">🤖 Devolvida à SoFIA'+(quem?' por '+quem:(e.auto?' — trava expirou':''))+'</span><span style="flex:1 1 12px;height:1px;background:#cfe4e3"></span></div>';
     }
     // Prazo da pausa (resposta pelo celular): a SoFIA volta PAUSA_MIN min após a
     // ÚLTIMA resposta manual seguida. Marca "voltou" (se já passou) ou "pausada até"
@@ -439,21 +458,22 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     var donoTxt = c.humanoPor||'';
     var restaMin = (hum && c.humanoEm) ? Math.max(1, Math.ceil((c.humanoEm+LOCK_MS-Date.now())/60000)) : 0;
     // Cabeçalho enxuto: nome + telefone à esquerda, botão de controle (compacto) à direita.
-    // 🧑 assumir · 🤖 devolver à SoFIA · 🔒 (bloqueado) quando OUTRO atendente assumiu.
+    // Assumir fica embaixo, no lugar do campo de escrever ("🧑 Assumir e responder").
     var pill = donoOutro
-      ? '<button type="button" disabled title="Assumida por '+escH(donoTxt)+' — livre em ~'+restaMin+' min" style="padding:5px 10px;font-size:.9rem;white-space:nowrap;opacity:.55;cursor:not-allowed">🔒</button>'
-      : '<button type="button" onclick="toggleHumano()" class="'+(donoMeu?'save':'reset')+'" title="'+(donoMeu?'Devolver à SoFIA (ela volta a responder)':'Assumir a conversa (você atende — trava por '+LOCK_MIN+' min)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">'+(donoMeu?'🤖':'🧑')+'</button>';
-    var btnInt='<button type="button" onclick="abrirInteracoes(selecionada)" class="reset" title="Interações" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">📊</button>';
-    var btnAgendar='<button type="button" onclick="toggleAgendar()" class="'+(agAberto?'save':'reset')+'" title="Agendar aula experimental no EVO (cadastra + marca, igual a SoFIA)" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">📅</button>';
+      ? '<span class="ch-dono" title="Livre em ~'+restaMin+' min">🔒 '+escH(donoTxt||'outro atendente')+'</span>'
+      : (donoMeu ? '<button type="button" onclick="toggleHumano()" class="save ch-bt" title="Devolver à SoFIA (ela volta a responder)">🤖 Devolver à SoFIA</button>' : '');
+    var btnInt='<button type="button" onclick="abrirInteracoes(selecionada)" class="reset ch-bt" title="Atendimentos anteriores">📊 Interações</button>';
+    var btnAgendar='<button type="button" onclick="toggleAgendar()" class="'+(agAberto?'save':'reset')+' ch-bt" title="Agendar aula experimental no EVO (cadastra + marca, igual a SoFIA)">📅 Agendar</button>';
     var encM=!!c.enc; // encerrada AGORA (cadeado à mão / automático por tag)
-    // Botão alternador: 🔒 encerra (a SoFIA recomeça do zero se a aluna voltar) ·
-    // 🔓 reabre (tira o cadeado, a SoFIA volta a responder). A aluna voltando a
-    // escrever também reabre sozinho — o 🔓 serve para reabrir na hora, sem esperar.
+    // Encerrar/Reabrir e Bloquear/Desbloquear ficam em "⋯ Mais" (longe do que se usa toda hora) e
+    // continuam pedindo confirmação. A aluna voltando a escrever também reabre sozinho — o Reabrir
+    // serve para reabrir na hora, sem esperar.
     var btnEnc = encM
-      ? '<button type="button" onclick="reabrirConversa()" class="reset" title="Reabrir esta conversa (tira o cadeado 🔒 — a SoFIA volta a responder)" style="padding:5px 10px;font-size:.9rem;white-space:nowrap;color:#1c8f52">🔓</button>'
-      : '<button type="button" onclick="encerrarConversa()" class="reset" title="Encerrar conversa agora (cadeado — a SoFIA recomeça do zero)" style="padding:5px 10px;font-size:.9rem;white-space:nowrap">🔒</button>';
+      ? '<button type="button" onclick="reabrirConversa()" title="Tira o cadeado — a SoFIA volta a responder">🔓 Reabrir conversa</button>'
+      : '<button type="button" onclick="encerrarConversa()" title="Cadeado — a SoFIA recomeça do zero">🔒 Encerrar conversa</button>';
     var bloq=!!c.bloq;
-    var btnBloq='<button type="button" onclick="bloquearConversa()" class="reset" title="'+(bloq?'Desbloquear contato':'Bloquear contato (a SoFIA ignora)')+'" style="padding:5px 10px;font-size:.9rem;white-space:nowrap'+(bloq?';color:#1c8f52':'')+'">'+(bloq?'✅':'🚫')+'</button>';
+    var btnBloq='<button type="button" onclick="bloquearConversa()"'+(bloq?'':' class="ch-perigo"')+' title="'+(bloq?'A SoFIA volta a atender este contato':'A SoFIA ignora este contato')+'">'+(bloq?'✅ Desbloquear contato':'🚫 Bloquear contato')+'</button>';
+    var btnMais='<details class="ch-mais"><summary class="reset ch-bt">⋯ Mais</summary><div class="ch-menu">'+btnEnc+btnBloq+'</div></details>';
     var selo=bloq?'<span title="Contato bloqueado" style="background:var(--erro-bg);color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700;margin-left:6px">🚫 bloqueado</span>':'';
     var agSelo=c.agendou?'<span title="Aula experimental agendada" style="display:inline-flex;align-items:center;justify-content:center;font-size:1.05rem;margin-right:2px">📅</span>':'';
     var chAv='<div class="ch-av" style="background:'+corAv(c.nome||k)+'">'+escH(iniciais(c.nome,k))+'</div>';
@@ -461,7 +481,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     var header='<div class="chat-head" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
       +btnVoltar+chAv
       +'<div style="flex:1 1 auto;min-width:0"><div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(c.nome||'(sem nome)')+selo+'</div><div class="quando" style="margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(fmtTel(k))+'</div></div>'
-      +'<div class="chat-acts" style="display:flex;gap:6px;align-items:center;flex:none">'+agSelo+btnAgendar+btnInt+btnEnc+btnBloq+pill+'</div></div>';
+      +'<div class="chat-acts">'+agSelo+pill+btnAgendar+btnInt+btnMais+'</div></div>';
     // Linha de tags recolhível — o editor completo só aparece ao clicar em "editar".
     var mini=function(t){return '<span style="display:inline-block;background:#eef7f7;color:#0e8e91;border-radius:999px;padding:1px 8px;font-size:.7rem;margin:0 4px 0 0">'+escH(t)+'</span>';};
     var resumo = ncSel.length ? ncSel.map(mini).join('') : '<span class="quando" style="margin:0">sem tags</span>';
@@ -484,11 +504,11 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       +'<button type="button" id="ncSalvar" class="save" style="padding:5px 12px" onclick="salvarContato(\\''+k+'\\')">💾 '+(c.salvo?'Salvar tags':'Salvar contato')+'</button>'
       +'<span id="ncMsg" class="quando" style="margin:0"></span>'
       +'</div></div>') : '';
-    // Só o dono da trava escreve. Placeholder explica o porquê quando bloqueado.
+    // Só o dono da trava escreve. Sem dono: no lugar do campo, o botão de assumir.
     var podeEscrever = donoMeu;
-    var phBloq = donoOutro ? ('🔒 '+ (donoTxt||'Outro atendente') +' está atendendo (livre em ~'+restaMin+' min)') : '🔒 Clique em “assumir” para responder';
+    var phBloq = '🔒 '+escH(donoTxt||'Outro atendente')+' está atendendo (livre em ~'+restaMin+' min)';
     var bannerDono = donoOutro ? ('<div style="margin-top:8px;background:var(--warn-bg);color:#8a5a00;border:1px solid #f0d9a8;border-radius:8px;padding:6px 10px;font-size:.78rem;font-weight:600">🔒 Conversa assumida por '+escH(donoTxt||'outro atendente')+' — você não pode escrever agora (livre em ~'+restaMin+' min).</div>') : '';
-    var composer='<div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end">'
+    var composer=!hum ? '<div class="ch-assumir"><button type="button" class="save" onclick="assumirEResponder()">🧑 Assumir e responder</button><span class="quando">A SoFIA para nesta conversa e ela fica com você por '+LOCK_MIN+' min.</span></div>' : '<div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end">'
       +'<input type="file" id="msgFoto" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="msgFotoSel()">'
       +'<button type="button" id="msgClip" title="Anexar foto" onclick="msgAbreFoto()" '+(podeEscrever?'':'disabled')+' style="padding:9px 12px;font-size:1.05rem;line-height:1;background:#fff;border:1px solid var(--linha,#ddd);border-radius:8px;cursor:pointer'+(podeEscrever?'':';opacity:.4;cursor:not-allowed')+'">📎</button>'
       +'<textarea id="msgTxt" rows="2" '+(podeEscrever?'':'disabled')+' placeholder="'+(podeEscrever?'Escreva uma mensagem…  (Enter envia)':phBloq)+'" oninput="if(selecionada)rascunhos[selecionada]=this.value" onkeydown="msgKey(event)" style="flex:1;resize:vertical;min-height:44px;font-size:.9rem'+(podeEscrever?'':';background:#f5f5f5;color:#aaa;cursor:not-allowed')+'"></textarea>'
@@ -555,14 +575,16 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
         })();
       }).catch(function(){ if(st)st.textContent='❌ erro de rede'; });
   }
-  function toggleHumano(){
+  // Assume e já deixa o cursor no campo de escrever (que só existe depois de assumir).
+  function assumirEResponder(){ toggleHumano(function(){ var t=document.getElementById('msgTxt'); if(t) t.focus(); }); }
+  function toggleHumano(depois){
     var k=selecionada; if(!k) return;
     var c=ultimoData[k]||{};
     // Se OUTRO atendente é o dono (trava ativa), nem tenta — o servidor recusaria.
     if(c.humano && c.humanoPor!==MEU_USUARIO){ alert('🔒 Conversa assumida por '+(c.humanoPor||'outro atendente')+'. Você não pode assumir nem devolver agora.'); return; }
     var novo=!c.humano;
     fetch('/sofia/humano',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,ativo:novo})})
-      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k]){ ultimoData[k].humano=novo; ultimoData[k].humanoPor=novo?(j.por||MEU_USUARIO):''; ultimoData[k].humanoEm=novo?Date.now():0; } ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[k],k); } else { alert(j.erro||'Não consegui atualizar o controle da conversa.'); } })
+      .then(function(r){return r.json();}).then(function(j){ if(j.ok){ if(ultimoData[k]){ ultimoData[k].humano=novo; ultimoData[k].humanoPor=novo?(j.por||MEU_USUARIO):''; ultimoData[k].humanoEm=novo?Date.now():0; } ultimoRender={chave:null,n:-1,humano:null}; if(selecionada===k){ renderChat(ultimoData[k],k); if(depois) depois(); } } else { alert(j.erro||'Não consegui atualizar o controle da conversa.'); } })
       .catch(function(){ alert('Erro de rede.'); });
   }
   function bloquearConversa(){
@@ -619,7 +641,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     var foto=fotoPend[k]||'';
     var st=document.getElementById('msgStatus');
     if(c.humano && c.humanoPor!==MEU_USUARIO){ if(st)st.textContent='🔒 Assumida por '+(c.humanoPor||'outro atendente')+' — você não pode escrever agora.'; return; }
-    if(!c.humano || c.humanoPor!==MEU_USUARIO){ if(st)st.textContent='Clique em “assumir” (🧑) para responder.'; return; }
+    if(!c.humano || c.humanoPor!==MEU_USUARIO){ if(st)st.textContent='Toque em “Assumir e responder” antes de enviar.'; return; }
     if(!txt && !foto){ if(st)st.textContent=''; return; }
     if(st)st.textContent='Enviando…';
     fetch('/sofia/responder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,jid:jid,texto:txt,fotoBase64:foto})})
@@ -727,7 +749,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     if(dataIniMs || dataFimMs) chaves = chaves.filter(function(k){ return naData(ultimoData[k]||{}); });
     var nSit={aguardando:0,agendaram:0,encerradas:0};
     chaves.forEach(function(k){ var x=sitDe(ultimoData[k]); if(x.aguardando)nSit.aguardando++; if(x.agendaram)nSit.agendaram++; if(x.encerradas)nSit.encerradas++; });
-    [].forEach.call(document.querySelectorAll('#convSit a'),function(a){ var v=a.getAttribute('data-s'); a.classList.toggle('on', v===sitFiltro); var b=a.querySelector('b'); if(b) b.textContent=nSit[v]||0; });
+    [].forEach.call(document.querySelectorAll('#convSit a'),function(a){ var v=a.getAttribute('data-s'); a.classList.toggle('on', v===sitFiltro); var b=a.querySelector('b'); if(b) b.textContent=nSit[v]||0; a.classList.toggle('tem', v==='aguardando'&&nSit.aguardando>0); });
     if(sitFiltro) chaves = chaves.filter(function(k){ return sitDe(ultimoData[k])[sitFiltro]; });
     var total=chaves.length;
     if(!total && sitFiltro){ var lv=document.getElementById('convLista'); if(lv)lv.innerHTML='<p class="quando" style="padding:12px">Nenhuma conversa '+({aguardando:'aguardando resposta',agendaram:'com aula agendada',encerradas:'encerrada'})[sitFiltro]+' aqui.</p>'; ultimoInboxHtml=''; var pv=document.getElementById('convPag'); if(pv)pv.innerHTML=''; return; }
@@ -739,8 +761,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     fatia.forEach(function(k){
       var c=ultimoData[k]; var ult=c.msgs&&c.msgs.length?c.msgs[c.msgs.length-1]:null;
       var on=(k===selecionada);
-      var pendente = !!(ult && ult.autor==='aluna'); // última foi da aluna → esperando resposta
-      var dot = pendente ? '<span title="aguardando resposta" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#0e6e6b;flex:none"></span>' : '';
+      var pendente = sitDe(c).aguardando; // mesma regra do filtro "Aguardando": última foi da aluna e a conversa não encerrou
       // Uma etiqueta só na lista: a etapa do funil ("FX - N. …", a mais avançada); as outras viram "+N" (nomes no title).
       var tagsC=(c.tagsContato||[]).slice();
       var etapa=tagsC.filter(function(t){return /^FX\\s*-/i.test(t);}).sort(function(a,b){return (parseInt((b.match(/\\d+/)||[0])[0],10)||0)-(parseInt((a.match(/\\d+/)||[0])[0],10)||0);})[0]||tagsC[0]||'';
@@ -755,7 +776,8 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       var blq=c.bloq?'<span title="Contato bloqueado" style="display:inline-block;background:var(--erro-bg);color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">🚫 bloqueado</span>':'';
       // Cartão v2: avatar (iniciais) + nome/hora + telefone + chips de status/tag numa linha.
       var cp=c.campanha?'<span title="Vai receber a campanha &quot;'+escH(c.campanha.nome)+'&quot; — '+escH(c.campanha.prev)+'" style="display:inline-block;background:#eef0fb;color:#4b4fb0;border-radius:999px;padding:0 7px;font-size:.62rem;font-weight:700;margin-left:5px">📣 campanha</span>':'';
-      var chips=[blq,at,cp,tgs,hb,enc,fu].join(''); // já vêm como <span>…</span> estilizados
+      var agu=pendente?'<span class="cv-agu">aguardando</span>':'';
+      var chips=[agu,blq,at,cp,tgs,hb,enc,fu].join(''); // já vêm como <span>…</span> estilizados
       var cls='cv-item'+(on?' on':'')+((c.atencao&&!on)?' aten':'');
       var av='<div class="cv-av" style="background:'+corAv(c.nome||k)+'">'+escH(iniciais(c.nome,k))+(pendente?'<span class="cv-badge" title="aguardando resposta"></span>':'')+'</div>';
       var itemHtml='<div class="'+cls+'" onclick="abrir(\\''+k+'\\')">'+av
@@ -844,6 +866,9 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       else { restaura(); alert('Não consegui disparar: '+((j&&j.erro)||'erro')); }
     }).catch(function(e){ restaura(); alert('Falha ao disparar: '+e); });
   }
+  // "⋯ Mais": clicar fora, escolher uma opção ou Esc fecha o menu.
+  document.addEventListener('click',function(e){ [].forEach.call(document.querySelectorAll('.ch-mais[open]'),function(d){ if(!d.contains(e.target)||e.target.closest('.ch-menu')) d.open=false; }); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') [].forEach.call(document.querySelectorAll('.ch-mais[open]'),function(d){ d.open=false; }); });
   atualizaInbox(); setInterval(atualizaInbox, ${refreshMs});
   try { if(localStorage.getItem('convFiltrosOpen')==='1'){ var _d=document.getElementById('convFiltrosDet'); if(_d)_d.open=true; } } catch(e){}
 </script>`;
@@ -888,27 +913,22 @@ function paginaSofiaContatos(aviso, erro, params) {
   const linhas = r.itens.map(c => {
     const nm = c.nome || '';
     const jc = esc(JSON.stringify(c.tel));
-    const btnConversa = podeConversa ? `<button type="button" class="ct-ic" title="Ir para a conversa" onclick='irConversa(${jc})'>💬</button>` : '';
+    const quem = esc(nm || fmtTelP(c.tel));
     const bloq = sofia.estaBloqueado(c.tel);
-    return `<tr class="ct-row" data-nome="${esc((nm || '').toLowerCase())}" data-tel="${esc(c.tel)}" data-bloq="${bloq ? '1' : '0'}" onclick='abrirModal(${jc})'>
-      <td>
-        <div style="display:flex;align-items:center;gap:10px;min-width:0">
-          <input type="checkbox" class="ct-chk" value="${esc(c.tel)}" onclick="event.stopPropagation();atualizarSel()" title="Selecionar" style="flex:none;width:16px;height:16px;margin:0;cursor:pointer">
-          <span class="ct-av" style="background:${corAv(nm || c.tel)}">${esc(iniciais(nm, c.tel))}</span>
-          <span class="ct-nm">${esc(nm || '(sem nome)')}${c.nomeAgendado ? `<span class="quando" style="display:block;font-size:.72rem;margin:0" title="Nome informado no agendamento — não substituiu o nome do contato (outro primeiro nome ou nome editado pela equipe)">📅 agendou como ${esc(c.nomeAgendado)}</span>` : ''}</span>
-          ${bloq ? '<span title="Contato bloqueado" style="flex:none;color:#c0392b;font-size:.9rem">🚫</span>' : ''}
-        </div>
-      </td>
-      <td class="ct-tel">${esc(fmtTelP(c.tel))}</td>
-      <td>${(c.tags || []).map(chipTag).join('') || '<span class="quando" style="font-size:.74rem">—</span>'}</td>
-      <td class="ct-acts" onclick="event.stopPropagation()">
-        <button type="button" class="ct-ic" title="Interações" onclick='abrirInteracoes(${jc})'>📊</button>
-        ${btnConversa}
-        <button type="button" class="ct-ic" title="Editar" onclick='abrirModal(${jc})'>✏️</button>
-        <button type="button" class="ct-ic ct-del" title="Excluir" onclick='excluirContato(${jc})'>🗑️</button>
-      </td>
-    </tr>`;
-  }).join('');
+    const bot = (ic, rot, fn, cls) => `<button type="button" class="ct-ic${cls || ''}" title="${rot}" aria-label="${rot}: ${quem}" onclick='${fn}(${jc})'><span aria-hidden="true">${ic}</span><span class="ct-rot">${rot}</span></button>`;
+    return {
+      _attrs: `class="ct-row" data-tel="${esc(c.tel)}" data-bloq="${bloq ? '1' : '0'}" onclick='abrirModal(${jc})'`,
+      nome: { valor: nm, html: `<div class="ct-quem">
+          <label class="ct-marca" onclick="event.stopPropagation()"><input type="checkbox" class="ct-chk" value="${esc(c.tel)}" onclick="atualizarSel()" aria-label="Selecionar ${quem}"></label>
+          <span class="ct-av" style="background:${corAv(nm || c.tel)}" aria-hidden="true">${esc(iniciais(nm, c.tel))}</span>
+          <button type="button" class="ct-nm">${esc(nm || '(sem nome)')}${c.nomeAgendado ? `<span class="quando ct-ag" title="Nome informado no agendamento — não substituiu o nome do contato (outro primeiro nome ou nome editado pela equipe)">📅 agendou como ${esc(c.nomeAgendado)}</span>` : ''}</button>
+          ${bloq ? '<span class="ct-bl" title="Contato bloqueado">🚫</span>' : ''}
+        </div>` },
+      tel: { valor: c.tel, html: `<span class="ct-tel">${esc(fmtTelP(c.tel))}</span>` },
+      tags: { html: (c.tags || []).map(chipTag).join('') || '<span class="quando">—</span>' },
+      acoes: { html: `<div class="ct-acts" onclick="event.stopPropagation()">${podeConversa ? bot('💬', 'Conversa', 'irConversa') : ''}${bot('📊', 'Interações', 'abrirInteracoes')}${bot('✏️', 'Editar', 'abrirModal')}${bot('🗑️', 'Excluir', 'excluirContato', ' ct-del')}</div>` },
+    };
+  });
 
   const opcoes = ['<option value="">Todas as tags</option>', `<option value="__sem__"${tagSel === '__sem__' ? ' selected' : ''}>Sem tag</option>`]
     .concat(tags.map(t => `<option value="${esc(t.tag)}"${t.tag === tagSel ? ' selected' : ''}>${esc(t.tag)} (${t.n})</option>`)).join('');
@@ -982,17 +1002,14 @@ function paginaSofiaContatos(aviso, erro, params) {
       <button type="button" id="ctExcLote" onclick="excluirSelecionados()" style="padding:3px 10px;font-size:.78rem;border:1px solid #e3b4b4;background:#fbeeee;color:#a12626;border-radius:8px;font-weight:700;cursor:pointer">🗑️ Excluir selecionados</button>
     </div>` : ''}
 
-    ${r.itens.length ? `<div class="ct-wrap">
-      <table class="ct-tab">
-        <colgroup><col class="c-nome"><col class="c-tel"><col class="c-tags"><col class="c-act"></colgroup>
-        <thead><tr>
-          <th><span style="display:inline-flex;align-items:center;gap:8px"><input type="checkbox" id="ctChkAll" onclick="marcarTodos(this)" title="Selecionar todos" style="width:16px;height:16px;margin:0;cursor:pointer"><button type="button" class="ct-sort" title="Ordenar por nome" onclick="ordenarContatos()">Nome <span id="ctSortArr" style="opacity:.4">↕</span></button></span></th>
-          <th>Telefone</th>
-          <th>Tags <button type="button" class="ct-fil" title="Filtrar por tag" onclick="abrirFiltroTag()">▾</button></th>
-          <th style="text-align:right">Ações</th>
-        </tr></thead>
-        <tbody>${linhas}</tbody>
-      </table>
+    ${r.itens.length ? `<div class="card ct-lista">
+      <label class="ct-todos"><input type="checkbox" id="ctChkAll" onclick="marcarTodos(this)"> Selecionar todos (${r.total})</label>
+      ${/* sem a busca da tabela: a busca da tela é a do filtro acima, a mesma que vale para "Aplicar ao filtro" */ uiTabela({ id: 'ctTab', busca: false, porPagina: 20, ordem: { chave: 'nome', dir: 'asc' }, linhas, colunas: [
+        { chave: 'nome', titulo: 'Nome', celular: 'titulo', info: 'Nome salvo do contato. Toque nele para editar o nome e as tags.' },
+        { chave: 'tel', titulo: 'Telefone', info: 'Número do WhatsApp, com DDD. É por ele que o contato é reconhecido.' },
+        { chave: 'tags', titulo: 'Tags', ordenar: false, info: 'Etiquetas do contato: as que a equipe marcou e as que a automação aplicou.' },
+        { chave: 'acoes', titulo: 'Ações', ordenar: false },
+      ] })}
     </div>` : '<div class="card"><p class="quando">Nenhum contato encontrado. Importe um CSV acima ou ajuste o filtro.</p></div>'}
     ${r.itens.length ? `<p class="quando" style="text-align:center;margin:10px 0 0">${r.total} contato(s) no filtro atual.</p>` : ''}
   </div>
@@ -1004,7 +1021,7 @@ function paginaSofiaContatos(aviso, erro, params) {
       <div id="ctIntBody"><p class="quando">Carregando…</p></div>
     </div>
   </div>
-  <div id="ctResModal" class="ct-ov" style="z-index:60" onclick="if(event.target===this)fecharResumo()">
+  <div id="ctResModal" class="ct-ov" style="z-index:110" onclick="if(event.target===this)fecharResumo()">
     <div class="ct-dlg" style="max-width:460px">
       <div class="ct-dh"><h2>Resumo do atendimento</h2><button type="button" class="ct-x" onclick="fecharResumo()">×</button></div>
       <div id="ctResData" class="quando" style="margin:0 0 8px"></div>
@@ -1069,7 +1086,7 @@ function paginaSofiaContatos(aviso, erro, params) {
     </div>
   </div>
 
-  <div id="ctModal" class="ct-ov" onclick="if(event.target===this)fecharModal()">
+  <div id="ctModal" class="ct-ov" data-guarda onclick="if(event.target===this)fecharModal()">
     <div class="ct-dlg">
       <div class="ct-dh"><h2>Editar contato</h2><button type="button" class="ct-x" onclick="fecharModal()">×</button></div>
       <div class="ct-hero"><span id="ctAv" class="ct-av ct-av-lg"></span><div id="ctHnome" class="ct-hnome"></div><div id="ctHtel" class="ct-htel"></div><div id="ctBloqTag" style="display:none;margin-top:6px"><span style="background:var(--erro-bg);color:#c0392b;border:1px solid #f0c8c4;border-radius:999px;padding:2px 12px;font-size:.74rem;font-weight:700">🚫 Contato bloqueado</span></div></div>
@@ -1171,7 +1188,6 @@ function paginaSofiaContatos(aviso, erro, params) {
   function _hash(s){var h=0;s=String(s||'');for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
   function corTagJs(t){return PAL_TAG[_hash(t)%PAL_TAG.length];}
   var ctSel=null, ctTags=[];
-  function abrirFiltroTag(){var s=document.getElementById('ctTagSel');if(s){s.focus();if(s.showPicker)try{s.showPicker();}catch(e){}}}
   function contatosMarcados(){ return Array.prototype.slice.call(document.querySelectorAll('.ct-chk:checked')).map(function(c){return c.value;}); }
   function loteForm(){ return document.querySelector('form[action="/sofia/contatos/lote"]'); }
   function atualizarSel(){
@@ -1207,35 +1223,6 @@ function paginaSofiaContatos(aviso, erro, params) {
       itens: sel.length ? nomesMarcados(sel) : [],
       texto:'Vai '+acoes.join(' e ')+' em <b>'+esc(alvo)+'</b>.'+(sel.length?'':' (Nenhum contato marcado: vale para todos os que aparecem com o filtro atual, inclusive os das outras páginas.)')+(add?' As regras de transição de funil da tag também valem.':'') });
   }
-  var ctSoBloq=false;
-  function filtrarBloqueados(){
-    ctSoBloq=!ctSoBloq;
-    var btn=document.getElementById('ctBloqFil');
-    if(btn){ btn.classList.toggle('save',ctSoBloq); btn.classList.toggle('reset',!ctSoBloq); btn.textContent=ctSoBloq?'✅ Ver todos':'🚫 Bloqueados'; }
-    var linhas=document.querySelectorAll('.ct-tab tbody tr');
-    var n=0;
-    linhas.forEach(function(tr){ var bl=tr.getAttribute('data-bloq')==='1'; var mostra=!ctSoBloq||bl; tr.style.display=mostra?'':'none'; if(mostra&&bl)n++; });
-    var av=document.getElementById('ctBloqAviso');
-    if(ctSoBloq&&!n&&!av){ var tb=document.querySelector('.ct-tab tbody'); if(tb){ var tr=document.createElement('tr'); tr.id='ctBloqAviso'; tr.innerHTML='<td colspan="4" style="text-align:center;color:var(--cinza);padding:18px">Nenhum contato bloqueado.</td>'; tb.appendChild(tr); } }
-    else if(av){ av.style.display=(ctSoBloq&&!n)?'':'none'; }
-  }
-  var ctOrdemNome=0; // 0=original, 1=crescente (A→Z), 2=decrescente (Z→A)
-  function ordenarContatos(){
-    var tb=document.querySelector('.ct-tab tbody'); if(!tb) return;
-    ctOrdemNome=(ctOrdemNome+1)%3; // alterna: original → crescente → decrescente
-    var arr=document.querySelector('#ctSortArr');
-    if(ctOrdemNome===0){ if(arr){arr.textContent='↕';arr.style.opacity='.4';} location.reload(); return; }
-    var asc=(ctOrdemNome===1);
-    if(arr){ arr.textContent=asc?'▲':'▼'; arr.style.opacity='1'; }
-    var linhas=Array.prototype.slice.call(tb.querySelectorAll('tr'));
-    linhas.sort(function(a,b){
-      var na=a.getAttribute('data-nome')||'', nb=b.getAttribute('data-nome')||'';
-      if(!na&&nb) return 1; if(na&&!nb) return -1; // sem nome sempre por último
-      var c=na.localeCompare(nb,'pt-BR',{sensitivity:'base',numeric:true});
-      return asc?c:-c;
-    });
-    linhas.forEach(function(tr){ tb.appendChild(tr); });
-  }
   function abrirModal(tel){
     var c=null; for(var i=0;i<CONTATOS.length;i++){if(CONTATOS[i].tel===tel){c=CONTATOS[i];break;}}
     if(!c) return;
@@ -1267,7 +1254,22 @@ function paginaSofiaContatos(aviso, erro, params) {
         } else { ctPintaBloqueio(ctSel.bloq); alert(j.erro||'Não consegui atualizar o bloqueio.'); }
       }).catch(function(){ if(b) b.disabled=false; ctPintaBloqueio(ctSel.bloq); alert('Erro de rede.'); });
   }
-  function fecharModal(){document.getElementById('ctModal').style.display='none';ctSel=null;}
+  // Mudou algo e ainda não salvou? Sair (×, Cancelar, Esc, voltar, clicar fora, Ver conversa) pergunta antes.
+  var ctDescarte=false;
+  function ctMudou(){
+    if(!ctSel) return false;
+    var ord=function(a){ return a.slice().sort().join('\\n'); };
+    return document.getElementById('ctNome').value!==(ctSel.nome||'') || ord(ctTags)!==ord(ctSel.tags||[]) || !!document.getElementById('ctNovaTag').value.trim();
+  }
+  function ctSair(depois){
+    if(ctDescarte) return;
+    if(!ctMudou()){ depois(); return; }
+    ctDescarte=true;
+    sfRevisar({ titulo:'Sair sem salvar?', perigo:true, botao:'Sair sem salvar', texto:'As mudanças em <b>'+esc(ctSel.nome||ctSel.telFmt)+'</b> ainda não foram salvas e vão se perder.' })
+      .then(function(ok){ ctDescarte=false; if(ok) depois(); });
+    setTimeout(function(){ var n=document.getElementById('sfRevNao'); if(n) n.focus(); },60); // Enter sem querer não descarta
+  }
+  function fecharModal(){ ctSair(function(){ document.getElementById('ctModal').style.display='none'; ctSel=null; }); }
   function renderTags(){
     var todas=TODAS_TAGS.slice();
     for(var i=0;i<ctTags.length;i++) if(todas.indexOf(ctTags[i])<0) todas.push(ctTags[i]);
@@ -1298,7 +1300,7 @@ function paginaSofiaContatos(aviso, erro, params) {
       }).catch(function(){ b.disabled=false; b.textContent='Salvar'; alert('❌ erro de rede'); });
   }
   function irConversa(tel){ location.href='/sofia?view=conversas&chat='+encodeURIComponent(tel); }
-  function irConversaModal(){ if(ctSel) irConversa(ctSel.tel); }
+  function irConversaModal(){ if(!ctSel) return; var tel=ctSel.tel; ctSair(function(){ irConversa(tel); }); }
   var intSessoes=[];
   function fmtDataHora(ts){ try{ return new Date(ts).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})+'h'; }catch(e){ return ''; } }
   function abrirInteracoes(tel){
