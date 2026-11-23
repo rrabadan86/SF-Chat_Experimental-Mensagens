@@ -10,7 +10,7 @@ Siga na ordem. Pare e avise o usuário se algum passo falhar — nunca mescle co
 1. **Conferir localmente**
    - `node --check` em cada `.js` alterado. Se mexeu na SoFIA: `ChatBot/node_modules/.bin/esbuild ChatBot/sofia-listener.ts --format=esm --platform=node --log-level=error > /dev/null`.
    - `cd Experimental && npm run testar-alteracao` (roda primeiro os testes das regras dos arquivos mexidos, avisa as regras sem teste e depois roda o resto dos testes de unidade)
-   - Se mexeu em tela do painel: `cd Experimental && node testes/tela/telas.js` (sobe a demonstração numa pasta temporária; leia os avisos).
+   - Se mexeu em tela do painel: skill `conferir-celular` (telas mexidas a 390 px e 1366 px, com prints) e `cd Experimental && node testes/tela/telas.js --estrito` (todas as telas).
    - Se mexeu no `agendamento_evo`: `cd Experimental/src/agendamento_evo && python3 -m tests.test_offline`.
    - `git status`: nada de `Experimental/data/`, `.env`, sessões do WhatsApp ou prints soltos no commit.
 
@@ -22,7 +22,7 @@ Siga na ordem. Pare e avise o usuário se algum passo falhar — nunca mescle co
 5. **PR** para `main` (título e descrição em português; diga o que muda e como foi testado).
 
 6. **Esperar o CI** (`.github/workflows/ci.yml`: "Código e regras (Node)", "Agendamento EVO (Python)", "Telas"). Consulte o estado do PR pelas ferramentas do GitHub até todos os checks terminarem.
-   - ✓ em tudo → siga.
+   - ✓ em tudo → rode a skill `conferir-pr` e só siga com a lista dela toda ✓.
    - ✗ → leia o log do job que falhou, corrija na mesma branch, faça push e espere de novo. Não mescle.
 
 7. **Merge**: squash. Depois sincronize a branch: `git fetch origin main && git merge --no-edit origin/main && git push origin <branch>`.
