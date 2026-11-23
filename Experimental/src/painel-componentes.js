@@ -183,9 +183,9 @@ window.sfErroSalvar=function(msg,o){return new Promise(function(fim){
 // Tabelas antigas (sem uiTabela): cada célula ganha o rótulo da coluna, para o
 // CSS do celular mostrar a linha como cartão. Vale também para tabela criada depois.
 function cartoes(){[].forEach.call(document.querySelectorAll('.wrap table'),function(t){
-  if(t.__cartao||t.closest('.tb')||t.classList.contains('ct-tab')||t.hasAttribute('data-sem-cartao'))return;
+  if(t.__cartao||t.closest('.tb')||t.hasAttribute('data-sem-cartao'))return;
   var ths=t.querySelectorAll('thead th');if(!ths.length||!t.tBodies.length)return;t.__cartao=1;
-  var rot=[].map.call(ths,function(th){var c=th.cloneNode(true);var inf=c.querySelector('.info');[].forEach.call(c.querySelectorAll('.info,.tb-seta,button.ct-fil'),function(x){x.remove();});return {t:c.textContent.replace(/\\s+/g,' ').trim(),i:inf?inf.outerHTML:''};});
+  var rot=[].map.call(ths,function(th){var c=th.cloneNode(true);var inf=c.querySelector('.info');[].forEach.call(c.querySelectorAll('.info,.tb-seta'),function(x){x.remove();});return {t:c.textContent.replace(/\\s+/g,' ').trim(),i:inf?inf.outerHTML:''};});
   [].forEach.call(t.tBodies,function(tb){[].forEach.call(tb.rows,function(tr){var i=0;[].forEach.call(tr.cells,function(td,k){var r=rot[i]||{t:'',i:''};if(!td.hasAttribute('data-rot'))td.setAttribute('data-rot',r.t);
     if(k>0&&r.t&&!td.querySelector('.tb-rot')){var v=document.createElement('span');v.className='tb-val';while(td.firstChild)v.appendChild(td.firstChild);var s=document.createElement('span');s.className='tb-rot';s.innerHTML=escT(r.t)+(r.i?' '+r.i:'');td.appendChild(s);td.appendChild(v);}
     i+=td.colSpan||1;});});});

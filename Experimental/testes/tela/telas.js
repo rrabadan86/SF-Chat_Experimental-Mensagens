@@ -265,6 +265,39 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
         await page.click('#sfRevNao'); await page.waitForTimeout(300);
         if (await page.$('#sfRevisar')) falha('o "Voltar" da revisão não fechou a janela');
       }
+      // VIS-02/VIS-03 Contatos: cartão com telefone e botões com nome; a seleção vale para todas as páginas.
+      await page.goto(url + '/sofia?view=contatos', { waitUntil: 'domcontentloaded' }); await page.waitForTimeout(500);
+      const ct = await page.evaluate(() => { const l = [...document.querySelectorAll('tr.ct-row')].filter(x => !x.hidden); const ver = (s) => l.every(t => [...t.querySelectorAll(s)].every(e => e.getBoundingClientRect().width > 0)); const tot = document.querySelectorAll('tr.ct-row').length; document.getElementById('ctChkAll').click(); return { n: l.length, tot, tel: ver('.ct-tel'), rot: ver('.ct-rot'), cortado: l.filter(t => { const e = t.querySelector('.ct-nm'); return e.scrollWidth > e.clientWidth + 1; }).length, marcados: contatosMarcados().length, barra: document.getElementById('ctSelNum').textContent }; });
+      if (ct.n !== 20 || ct.tot <= 20) falha(`Contatos: esperava 20 por página (achei ${ct.n} de ${ct.tot})`);
+      if (!ct.tel || !ct.rot || ct.cortado) falha(`Contatos: telefone (${ct.tel}), nome dos botões (${ct.rot}) ou nome cortado (${ct.cortado})`);
+      if (ct.marcados !== ct.tot || +ct.barra !== ct.tot) falha(`Contatos: "Selecionar todos" deveria marcar os ${ct.tot} do filtro (marcou ${ct.marcados}; a barra diz ${ct.barra})`);
+      // Editar contato: nada fica coberto pelo menu nem fora da tela; sair com mudança pergunta antes.
+      await page.locator('tr.ct-row:visible .ct-nm').first().click(); await page.waitForTimeout(400);
+      const cobertos = await page.evaluate(() => [...document.querySelectorAll('#ctModal .ct-x, #ctNome, #ctModal .ct-foot button')].filter(e => { e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(), t = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !(t && (t === e || e.contains(t))) || r.left < 0 || r.right > innerWidth; }).map(e => e.id || e.textContent.trim()));
+      if (cobertos.length) falha('Editar contato: coberto ou fora da tela — ' + cobertos.join(', '));
+      await page.fill('#ctNome', 'Nome trocado'); await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+      if (!(await page.isVisible('#sfRevisar')) || !(await page.isVisible('#ctModal'))) falha('Editar contato: sair com mudança não salva deveria perguntar antes');
+      else {
+        await page.click('#sfRevNao');
+        if (await page.inputValue('#ctNome') !== 'Nome trocado') falha('Editar contato: "Voltar" perdeu o que foi digitado');
+        await page.keyboard.press('Escape'); await page.waitForSelector('#sfRevSim'); await page.click('#sfRevSim'); await page.waitForTimeout(200);
+        if (await page.isVisible('#ctModal')) falha('Editar contato: "Sair sem salvar" não fechou a janela');
+      }
+      // Conversas: "aguardando" escrito bate com o filtro; Assumir com nome; Encerrar e Bloquear em "⋯ Mais".
+      await page.goto(url + '/sofia?view=conversas', { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('.cv-item', { timeout: 20000 }).catch(() => {});
+      const ag = await page.evaluate(() => [+document.querySelector('#convSit a[data-s="aguardando"] b').textContent, document.querySelectorAll('.cv-agu').length]);
+      if (ag[0] !== ag[1]) falha(`Conversas: o filtro diz ${ag[0]} aguardando e a lista marca ${ag[1]}`);
+      await page.route('**/sofia/humano', r => r.fulfill({ json: { ok: true } })); // a demonstração recusa todo POST
+      await page.locator('.cv-item').first().click(); await page.waitForTimeout(500);
+      const bts = await page.locator('.chat-acts > button:visible, .chat-acts summary:visible').allTextContents();
+      if (!['Agendar', 'Interações', 'Mais'].every(n => bts.some(b => b.includes(n)))) falha('Conversas: botão sem nome — ' + bts.join(' | '));
+      await page.click('.ch-mais summary');
+      const menu = (await page.locator('.ch-menu button:visible').allTextContents()).join(' ');
+      if (!/Encerrar|Reabrir/.test(menu) || !/loquear/.test(menu)) falha('Conversas: "Mais" deveria ter Encerrar e Bloquear — ' + menu);
+      await page.click('.ch-mais summary');
+      await page.click('.ch-assumir button');
+      if (!(await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'msgTxt', null, { timeout: 2500 }).then(() => true, () => false))) falha('Conversas: "Assumir e responder" não levou ao campo de escrever');
       // ⓘ dentro da tela (tabela com rolagem lateral em Alunas ativas).
       await page.goto(url + '/ativas', { waitUntil: 'domcontentloaded' });
       const info = await page.locator('table .info:visible').first().elementHandle({ timeout: 5000 }).catch(() => null); // o 1º ⓘ VISÍVEL (no celular algumas colunas somem)
