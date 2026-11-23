@@ -2832,14 +2832,26 @@ function paginaSofia(aviso, erro) {
     </form>
   </div>
 <script>
+  // 🔧 Reconectar a SoFIA: o mesmo que o comando slimfit-sofia do servidor, pelo painel.
+  var BTN_RECON = '<p style="margin:12px 0 0"><button type="button" class="save" style="width:auto;padding:9px 16px" onclick="sofiaReconectar(this)">🔧 Reconectar a SoFIA</button></p><p class="wa-hint">Tenta voltar com o login salvo; se não der, mostra aqui um <b>QR novo</b> para escanear. Leva até 4 minutos. Conversas, tags e configurações não são apagadas.</p>';
+  function sofiaReconectar(btn){
+    if(!confirm('Reconectar a SoFIA agora?\\n\\nPrimeiro tento voltar com o login salvo. Se não der, descarto o login e mostro aqui um QR novo, para escanear com o celular do número da SoFIA.\\n\\nLeva até 4 minutos. Conversas, tags e configurações não são apagadas.')) return;
+    btn.disabled=true; btn.textContent='Começando…';
+    fetch('/sofia/reconectar',{method:'POST'}).then(function(r){return r.json();}).then(function(j){
+      if(j&&j.ok){ atualizaSofiaWa(); return; }
+      btn.disabled=false; btn.textContent='🔧 Reconectar a SoFIA'; alert((j&&(j.erro||j.msg))||'Não consegui começar. Tente de novo.');
+    }).catch(function(){ btn.disabled=false; btn.textContent='🔧 Reconectar a SoFIA'; alert('Erro de rede. Tente de novo.'); });
+  }
   function renderSofiaWa(st){
-    var e = st && st.estado;
+    var e = st && st.estado, rc = st && st.reconectar;
     if(e==='conectado') return '<div class="wa-card ok"><div class="wa-ic">🤖</div><h2>WhatsApp da SoFIA conectado</h2><p>A SoFIA está no ar e responde as alunas neste número.</p></div>';
     if(e==='codigo' && st.codigo) return '<div class="wa-card warn"><div class="wa-ic">🔑</div><h2>Conectar a SoFIA</h2><p>No celular do número da SoFIA (WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b>), use <b>um</b> destes:</p><p style="margin:8px 0 2px"><b>1) Por código</b> — toque em <b>Conectar com número de telefone</b> e digite:</p><div style="font-family:ui-monospace,monospace;font-size:2rem;font-weight:800;letter-spacing:.18em;text-align:center;margin:6px 0;user-select:all">'+st.codigo+'</div>'+(st.qr?'<p style="margin:10px 0 2px"><b>2) Por QR</b> — ou aponte a câmera para este código:</p><img class="qr" src="'+st.qr+'" alt="QR da SoFIA">':'')+'<p class="wa-hint">O código vale alguns minutos e se renova sozinho. Assim que conectar, vira “🤖 conectado”.</p></div>';
     if(e==='qr' && st.qr) return '<div class="wa-card warn"><div class="wa-ic">📲</div><h2>Escaneie o QR da SoFIA</h2><p>Este é o WhatsApp <b>da SoFIA</b> (número próprio, diferente do robô de mensagens). No celular do número da SoFIA: WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b> → aponte para o código.</p>'+(st.erro?'<p style="color:var(--erro);font-weight:600">⚠️ '+String(st.erro).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];})+'</p>':'')+'<img class="qr" src="'+st.qr+'" alt="QR da SoFIA"><p class="wa-hint">Atualiza sozinho — assim que conectar, vira “🤖 conectado”.</p></div>';
-    if(e==='iniciando') return '<div class="wa-card"><div class="wa-ic">⏳</div><h2>Iniciando…</h2><p>Subindo a conexão da SoFIA. Se precisar de QR, ele aparece aqui.</p></div>';
-    if(e==='desconectado') return '<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>A SoFIA caiu. Se aparecer um QR aqui, escaneie de novo.</p></div>';
-    return '<div class="wa-card"><div class="wa-ic">❔</div><h2>Conexão da SoFIA — sem informação</h2><p>O processo da SoFIA (${PM2_SOFIA}) precisa estar rodando e publicando o estado.</p></div>';
+    if(rc && rc.rodando) return '<div class="wa-card"><div class="wa-ic">🔧</div><h2>Reconectando a SoFIA…</h2><p>' + (rc.etapa==='qr-novo' ? '<b>Passo 2 de 2:</b> não voltou com o login salvo. Estou gerando um <b>QR novo</b> — ele aparece aqui para você escanear com o celular do número da SoFIA (até 2 minutos).' : '<b>Passo 1 de 2:</b> tentando voltar com o login salvo (até 2 minutos).') + '</p><p class="wa-hint">Pode deixar esta tela aberta: ela atualiza sozinha.</p></div>';
+    var falhou = (rc && !rc.rodando && rc.etapa==='falhou') ? '<p style="color:var(--erro);font-weight:600">⚠️ Tentei reconectar e gerar um QR novo, e a SoFIA não respondeu. Espere alguns minutos e tente de novo. Se repetir, é o servidor ou a ligação dele com o WhatsApp: chame o suporte.</p>' : '';
+    if(e==='iniciando') return '<div class="wa-card"><div class="wa-ic">⏳</div><h2>Iniciando…</h2><p>Subindo a conexão da SoFIA. Se precisar de QR, ele aparece aqui.</p>' + falhou + '<p class="wa-hint" style="margin-top:12px">Está assim há vários minutos, ou fica alternando com “Desconectado”?</p>' + BTN_RECON + '</div>';
+    if(e==='desconectado') return '<div class="wa-card warn"><div class="wa-ic">⚠️</div><h2>Desconectado</h2><p>O WhatsApp da SoFIA caiu: ela não recebe nem responde mensagens até reconectar.</p>' + falhou + BTN_RECON + '</div>';
+    return '<div class="wa-card"><div class="wa-ic">❔</div><h2>Conexão da SoFIA — sem informação</h2><p>O processo da SoFIA (${PM2_SOFIA}) precisa estar rodando e publicando o estado.</p>' + falhou + BTN_RECON + '</div>';
   }
   function atualizaSofiaWa(){
     fetch('/sofia/estado',{cache:'no-store'}).then(function(r){return r.json();}).then(function(st){

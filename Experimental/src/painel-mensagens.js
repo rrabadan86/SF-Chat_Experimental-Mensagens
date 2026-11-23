@@ -215,6 +215,30 @@ function gravarEvoCredenciais(email, senha) {
   return { ok: true, conferido: !!senha, tamanho: senha.length };
 }
 
+// ── 🔧 Reconectar a SoFIA pelo painel ───────────────────────────────────────
+// Andamento guardado na memória do painel (a tela consulta a cada 5 s em /sofia/estado).
+let _reconectar = { rodando: false, etapa: '', msg: '', inicio: 0, fim: 0, por: '' };
+function andamentoReconectar() {
+  const r = _reconectar;
+  if (!r.inicio) return null;
+  if (!r.rodando && Date.now() - r.fim > 10 * 60 * 1000) return null; // resultado antigo: some da tela
+  return { rodando: r.rodando, etapa: r.etapa, msg: r.msg, inicio: r.inicio, fim: r.fim };
+}
+function iniciarReconectarSofia(por) {
+  const destravar = require('./sofia-destravar');
+  const alvo = {
+    pm2Id: PM2_SOFIA,
+    dir: sofia.DIR,
+    auth: path.resolve(lerEnvVar('SOFIA_WA_AUTH', CHATBOT_ENV_FILE) || path.join(sofia.DIR, '.wwebjs_auth')),
+    pm2: (args) => new Promise((ok, falha) => require('child_process').execFile(process.env.PM2_BIN || 'pm2', args, { timeout: 60000 }, (e) => (e ? falha(e) : ok()))),
+    dormir: (ms) => new Promise((r) => setTimeout(r, ms)),
+  };
+  _reconectar = { rodando: true, etapa: 'reconectando', msg: '', inicio: Date.now(), fim: 0, por };
+  destravar.destravar(alvo, ({ etapa, msg }) => { _reconectar.etapa = etapa; _reconectar.msg = msg || ''; })
+    .catch((e) => { _reconectar.etapa = 'falhou'; _reconectar.msg = String((e && e.message) || e).slice(0, 200); })
+    .finally(() => { _reconectar.rodando = false; _reconectar.fim = Date.now(); console.log(`[painel] reconectar SoFIA (${por || '?'}): ${_reconectar.etapa}${_reconectar.msg ? ' — ' + _reconectar.msg : ''}`); });
+}
+
 const PORT = parseInt(process.env.PAINEL_PORT || '8080', 10);
 // Por padrão escuta SÓ no localhost da VPS: o acesso vem pelo HTTPS do Caddy
 // (reverse_proxy localhost:8080) ou por um túnel SSH — nunca direto da internet.
@@ -340,7 +364,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/auto-tag-alunas' || url === '/sofia/auto-tag-alunas/rodar') return has('sofia_contatos') || has('sofia_config'); // auto-tag Aluna/Ex-aluna (aba Tags)
   if (url === '/sofia/midia-upload' || url === '/sofia/midia') return has('sofia_config'); // upload/preview das imagens (preços/grade)
   if (url === '/sofia/msgs-anuncio') return has('sofia_config'); // boas-vindas do anúncio que não pausam a SoFIA
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/parear' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/historico-tags' || url === '/sofia/prompt/download' || url === '/sofia/prompt/previa' || url === '/sofia/prompt/importar' || url === '/sofia/simulador/enviar' || url === '/sofia/simulador/resultado') return has('sofia_config');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/reconectar' || url === '/sofia/parear' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/historico-tags' || url === '/sofia/prompt/download' || url === '/sofia/prompt/previa' || url === '/sofia/prompt/importar' || url === '/sofia/simulador/enviar' || url === '/sofia/simulador/resultado') return has('sofia_config');
   return false;
 }
 // Rota da aba WhatsApp → sub-permissão. Agendamento = /agendar* e /?view=agendar;
@@ -2390,7 +2414,21 @@ const server = http.createServer(protegido((req, res) => {
   if (req.method === 'GET' && url === '/sofia/estado') {
     const st = sofia.waStatus() || {};
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    return res.end(JSON.stringify({ estado: st.estado || '', qr: st.qr || '', codigo: st.codigo || '', erro: st.erro || '', atualizadoEm: st.atualizadoEm || '' }));
+    return res.end(JSON.stringify({ estado: st.estado || '', qr: st.qr || '', codigo: st.codigo || '', erro: st.erro || '', atualizadoEm: st.atualizadoEm || '', reconectar: andamentoReconectar() }));
+  }
+  // 🔧 Reconectar a SoFIA (o mesmo que o comando slimfit-sofia, sem entrar no servidor):
+  // tenta mantendo o login; se não conectar, descarta o login e mostra um QR novo.
+  if (req.method === 'POST' && url === '/sofia/reconectar') {
+    return lerCorpo(req, 1e4, () => {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      if (_reconectar.rodando) return res.end(JSON.stringify({ ok: true, jaRodando: true }));
+      // Reiniciar a SoFIA em sequência pode fazer o WhatsApp bloquear o número: 5 min entre uma tentativa e outra.
+      const falta = _reconectar.fim ? 5 * 60 * 1000 - (Date.now() - _reconectar.fim) : 0;
+      if (falta > 0) return res.end(JSON.stringify({ ok: false, erro: `Acabei de tentar. Espere ${Math.ceil(falta / 60000)} min antes de tentar de novo — reiniciar a SoFIA em sequência pode fazer o WhatsApp bloquear o número.` }));
+      try { auditoria.registrar(sess.usuario, 'sofia.reconectar', 'WhatsApp da SoFIA', ''); } catch (_) {}
+      iniciarReconectarSofia((sess && sess.usuario) || '');
+      return res.end(JSON.stringify({ ok: true }));
+    });
   }
   if (req.method === 'POST' && url === '/sofia/toggle') {
     return lerCorpo(req, 1e5, () => {
