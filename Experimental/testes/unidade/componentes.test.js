@@ -27,8 +27,8 @@ test('VIS-03 tabela padrão: texto vindo de fora é escapado; html só quando a 
   const h = C.uiTabela({ colunas, linhas: [{ nome: '<img src=x onerror=alert(1)>', n: { html: '<b>7</b>', valor: 7 }, obs: '' }] });
   assert.doesNotMatch(h, /<img src=x/);
   assert.match(h, /&lt;img src=x onerror=alert\(1\)&gt;/);
-  assert.match(h, /data-k="n" data-rot="Aulas" data-v="7" class="num"><b>7<\/b>/);
-  assert.match(h, /data-k="obs"[^>]*>—<\/td>/, 'vazio vira travessão');
+  assert.match(h, /data-k="n" data-rot="Aulas" data-v="7" class="num"><span class="tb-rot">Aulas <span class="info"[^]*?<\/span><\/span><b>7<\/b>/, 'no celular o rótulo leva o ⓘ junto');
+  assert.match(h, /data-k="obs"[^>]*><span class="tb-rot">Obs<\/span>—<\/td>/, 'vazio vira travessão');
 });
 
 test('VIS-03 tabela vazia mostra o texto de vazio; sem busca quando pedido', () => {
@@ -49,4 +49,10 @@ test('VIS-02 a tabela não usa rolagem lateral; no celular vira cartão', () => 
   assert.doesNotMatch(C.CSS, /overflow-x:\s*auto/);
   assert.match(C.CSS, /@media\(max-width:640px\)\{[^]*\.tb thead\{display:none\}/);
   assert.match(C.CSS, /\.tb \[hidden\],\.tb tr\[hidden\]\{display:none!important\}/, 'o que a tabela esconde (linha, páginas, vazio) não reaparece pelo CSS');
+});
+
+test('VIS-02 o script que vai para o navegador mantém as barras das expressões (\\s, acentos)', () => {
+  // dentro do texto do servidor, "\\s" vira "s" se faltar barra — e os rótulos perderiam as letras "s"
+  assert.match(C.SCRIPT, /textContent\.replace\(\/\\s\+\/g,' '\)/);
+  assert.match(C.SCRIPT, /\[\\u0300-\\u036f\]/);
 });

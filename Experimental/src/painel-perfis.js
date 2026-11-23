@@ -256,7 +256,7 @@ function paginaPerfis(aviso, erro, view, filtroAud = {}) {
     <div class="card">
       <p class="quando" style="margin:0 0 12px">Registro das ações de <b>impacto e segurança</b>: campanhas (criar/iniciar/pausar/cancelar/excluir), configuração/prompt da SoFIA, gestão de usuários, bloqueio/encerramento de conversa e reiniciar/desconectar. Mostra os 150 mais recentes.</p>
       ${formFiltroAuditoria(logsAudTodos, fa, logsAudFiltrados.length, logsAud.length)}
-      ${logsAud.length ? `<div style="overflow-x:auto"><table class="ui-tab">
+      ${logsAud.length ? `<div><table class="ui-tab">
         <thead><tr>
           <th>Quando</th>
           <th>Usuário</th>

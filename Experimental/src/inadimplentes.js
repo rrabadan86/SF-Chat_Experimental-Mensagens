@@ -49,7 +49,7 @@ const cfg = require('./inadimplentes-config');
 function mesmoDiaSp(iso) {
   if (!iso) return false;
   const fmt = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); // YYYY-MM-DD
-  try { return fmt(new Date(iso)) === fmt(new Date()); } catch (_) { return false; }
+  try { return fmt(new Date(iso)) === require('./relogio').hojeSP(); } catch (_) { return false; }
 }
 // Fila de cobrança consumida pela SoFIA (envia pelo NÚMERO dela, não o do robô).
 const OUTBOX_FILE = process.env.COBRANCA_OUTBOX_FILE || path.resolve(__dirname, '..', 'data', 'cobranca-outbox.jsonl');
@@ -528,8 +528,6 @@ async function lerInadimplentes({ aoTerminar = null } = {}) {
 // é a SoFIA, pelo NÚMERO dela. dry=true: só imprime. Reenvia TODO DIA enquanto o
 // débito segue em aberto, no máximo 1x por dia (dedup por idCliente+dia).
 async function runInadimplentes({ dry = false, modo = 'todos' } = {}) {
-  const mensagens = require('./mensagens');
-  const diasMin = cfg.lerDias();
   // Bloqueio do app (painel → Cobrança): roda junto com a cobrança regular (não na
   // "boleto vence hoje" nem no dry/CLI), na mesma sessão do EVO.
   const bloqueio = require('./bloqueio-app');
@@ -537,6 +535,13 @@ async function runInadimplentes({ dry = false, modo = 'todos' } = {}) {
     ? (ctx, leitura) => bloqueio.executar(ctx, leitura, { outboxFile: OUTBOX_FILE })
     : null;
   const lista = await lerInadimplentes({ aoTerminar });
+  return enfileirar(lista, { dry, modo });
+}
+
+// Monta a fila da SoFIA a partir da lista lida do EVO (separado da leitura para ser testável).
+// COB-01: no máximo 1x por dia; não duplica o que já está na fila; só a SoFIA marca "cobrada".
+function enfileirar(lista, { dry = false, modo = 'todos' } = {}) {
+  const mensagens = require('./mensagens');
   const res = { enfileirados: 0, skipped: 0, failed: 0, details: [] };
   if (!lista.length) { console.log('   📭 Ninguém a cobrar — nada a enfileirar.'); return res; }
 
@@ -613,7 +618,7 @@ async function runInadimplentes({ dry = false, modo = 'todos' } = {}) {
   return res;
 }
 
-module.exports = { lerInadimplentes, runInadimplentes, diasDeAtraso, ehRecorrente, fmtData, OUTBOX_FILE };
+module.exports = { lerInadimplentes, runInadimplentes, enfileirar, diasDeAtraso, ehRecorrente, fmtData, OUTBOX_FILE };
 
 // ─── CLI ────────────────────────────────────────────────────────────────────
 if (require.main === module) {

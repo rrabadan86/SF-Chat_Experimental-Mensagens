@@ -28,7 +28,7 @@ const CFG = path.join(DATA, 'assinaturas-cfg.json');
 const CONTEXTO = 'Contrato sem assinatura';
 const MAX_POR_DIA = 80;   // acima disso a leitura do EVO é suspeita → não envia e avisa
 
-const hojeSP = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+const { hojeSP } = require('./relogio'); // fonte única do "hoje" (fixável em teste)
 const last8 = (t) => String(t || '').replace(/\D/g, '').slice(-8);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 function lerJson(arq, padrao) { try { const o = JSON.parse(fs.readFileSync(arq, 'utf8')); return o && typeof o === 'object' ? o : padrao; } catch (_) { return padrao; } }

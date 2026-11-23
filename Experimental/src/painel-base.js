@@ -136,7 +136,7 @@ const esc = s => String(s == null ? '' : s)
 // estático (confiável) — pode ter <b>. Usado ao lado dos rótulos de config.
 const infoI = html => `<span class="info" tabindex="0">i<span class="info-pop">${html}</span></span>`;
 
-function hojeSP() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); }
+const { hojeSP } = require('./relogio'); // fonte única do "hoje" (fixável em teste)
 function fmtData(d) { const p = String(d || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : d; }
 function fmtTel(t) { // 5562999999999 → (62) 99999-9999
   const d = String(t || '').replace(/\D/g, '').replace(/^55/, '');
@@ -566,7 +566,7 @@ const ESTILO = `
   @media(max-width:600px){.ui-topo{padding:14px}.ip-row{grid-template-columns:1fr}.ip-meta{grid-row:auto}.ip-acao{grid-column:1;grid-row:auto}.ui-lbl{min-width:0;width:100%}}
   /* Tabelas: um só visual em todo o painel (cabeçalho discreto, linhas finas). */
   .ui-tab{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
-  .wrap :is(.ui-tab,.ct-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) th{text-align:left;font-family:"Inter";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;letter-spacing:.04em;padding:10px 12px;border-bottom:1px solid var(--linha);background:var(--bg);white-space:nowrap}
+  .wrap :is(.ui-tab,.ct-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) th{text-align:left;font-family:"Inter";font-weight:700;font-size:var(--fs-xs);color:var(--cinza);text-transform:uppercase;letter-spacing:.04em;padding:10px 12px;border-bottom:1px solid var(--linha);background:var(--bg);white-space:normal}
   .wrap :is(.ui-tab,.ct-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) td{padding:10px 12px;border-bottom:1px solid var(--linha-soft);vertical-align:middle}
   .wrap :is(.ui-tab,.ct-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) tbody tr:last-child td{border-bottom:0}
   .wrap :is(.ui-tab,.ct-tab,.ct-int-tab,.fm-tab,.logtab,.pf-tab) tbody tr:hover td{background:var(--linha-soft)}
@@ -691,7 +691,8 @@ const ESTILO = `
      Três níveis com caras diferentes: menu = pílula; subabas = texto sublinhado;
      filtros = controle segmentado cinza. Uma moldura só por seção. Número dos
      indicadores em preto — cor só quando é sinal (.ok / .err). */
-  .subtabs{flex-wrap:nowrap;gap:0 22px;margin:0 0 18px;padding:0;box-shadow:inset 0 -1px 0 var(--linha);overflow-x:auto;scrollbar-width:none}
+  .subtabs{flex-wrap:wrap;gap:0 22px;margin:0 0 18px;padding:0;box-shadow:inset 0 -1px 0 var(--linha)} /* VIS-02: quebra linha em vez de rolar para o lado */
+  @media(max-width:640px){.subtabs{gap:0 16px}.subtabs a{padding:10px 0 8px}}
   .subtabs::-webkit-scrollbar{display:none}
   .subtabs a{flex:none;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:13px 0 11px;font-size:.9rem;white-space:nowrap}
   .subtabs a:hover{background:transparent;color:var(--tinta);border-color:transparent;border-bottom-color:var(--faint)}
@@ -764,6 +765,8 @@ const ESTILO = `
   }
   /* Contatos: os 4 botões de ação numa linha só (a linha fica mais baixa) */
   .ct-acts{white-space:nowrap}
+  /* VIS-02 — Contatos no celular: sem a coluna Telefone (aparece ao abrir o contato) e ações quebrando linha: nada rola para o lado */
+  @media(max-width:640px){.ct-tab col.c-tel{width:0}.ct-tab :is(th,td):nth-child(2){display:none}.ct-tab col.c-nome{width:44%}.ct-tab col.c-tags{width:30%}.ct-tab col.c-act{width:26%}.ct-tab :is(th,td){padding:9px 8px}.ct-acts{white-space:normal}.ct-wrap{overflow-x:visible}}
   .ui-datas-det>summary{list-style:none;cursor:pointer;display:inline-flex}.ui-datas-det>summary::-webkit-details-marker{display:none}
   .ui-datas-det>summary.on{border-color:var(--teal);color:var(--teal-esc)}
   .ui-datas-det>form{margin-top:8px}

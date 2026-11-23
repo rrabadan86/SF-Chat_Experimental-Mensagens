@@ -822,7 +822,7 @@ async function runAniversariantes() {
   MODO_ENVIO = true;
   return main();
 }
-module.exports = { runAniversariantes, main };
+module.exports = { runAniversariantes, main, celularPeloNome, donoDoTelefone };
 
 if (require.main === module) {
   main().catch(err => { console.error('\n❌ Erro fatal:', err.message); process.exit(1); });

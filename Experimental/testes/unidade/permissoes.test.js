@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { spawn } = require('child_process');
-const { ambienteIsolado } = require('../ajuda');
+const { ambienteIsolado, portaLivre } = require('../ajuda');
 
 const SRC = path.resolve(__dirname, '..', '..', 'src');
 const pedir = (porta, metodo, url, cookie, corpo = '') => new Promise((ok) => {
@@ -44,7 +44,7 @@ const PUBLICAS = /^\/(login|logout|termos|politicadeprivacidade|midia-publica|au
 
 test('usuário sem nenhuma permissão não acessa rota nenhuma do painel', { timeout: 180000 }, async () => {
   const amb = ambienteIsolado();
-  const porta = 19000 + Math.floor(Math.random() * 900);
+  const porta = await portaLivre();
   let painel;
   try {
     fs.writeFileSync(path.join(amb.exp, '.env'), `PAINEL_PORT=${porta}\nPAINEL_HOST=127.0.0.1\nPAINEL_USER=dono\nPAINEL_SENHA=senha-do-teste-123\nSOFIA_DIR=${amb.sofia}\n`);

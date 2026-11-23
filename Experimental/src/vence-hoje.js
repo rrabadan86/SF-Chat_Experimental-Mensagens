@@ -24,7 +24,7 @@ const REG = path.join(DATA, 'vence-hoje.json');
 const MAX_POR_DIA = 60;
 const CONTEXTO = 'Vence hoje — sem renovação';
 
-const hojeSP = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+const { hojeSP } = require('./relogio'); // fonte única do "hoje" (fixável em teste)
 function somaDias(dia, n) { const d = new Date(dia + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 const diaSemana = (dia) => new Date(dia + 'T12:00:00Z').getUTCDay();
 const last8 = (t) => String(t || '').replace(/\D/g, '').slice(-8);

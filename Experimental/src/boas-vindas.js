@@ -36,7 +36,7 @@ const CONTEXTO = { nova: 'Boas-vindas — aluna nova', retorno: 'Boas-vindas —
 const MSG = { nova: 'boasvindas_nova', retorno: 'boasvindas_retorno', renovacao: 'boasvindas_renovacao' };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-const hojeSP = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+const { hojeSP } = require('./relogio'); // fonte única do "hoje" (fixável em teste)
 const somaDias = (dia, n) => { const d = new Date(dia + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 function lerJson(f, padrao) { try { const o = JSON.parse(fs.readFileSync(f, 'utf8')); return (o && typeof o === 'object') ? o : padrao; } catch (_) { return padrao; } }
 function gravarJson(f, o) { fs.mkdirSync(DATA, { recursive: true }); fs.writeFileSync(f + '.tmp', JSON.stringify(o, null, 2)); fs.renameSync(f + '.tmp', f); }

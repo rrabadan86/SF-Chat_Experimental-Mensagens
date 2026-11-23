@@ -36,7 +36,7 @@ const TELAS = [
 ];
 
 // ── 1. instalação de demonstração numa pasta temporária ─────────────────────
-function montar() {
+async function montar() {
   const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-telas-'));
   const exp = path.join(raiz, 'Experimental');
   fs.cpSync(path.join(EXP, 'src'), path.join(exp, 'src'), { recursive: true, filter: (s) => !/[\\/]agendamento_evo[\\/](\.venv|__pycache__)/.test(s) });
@@ -45,7 +45,7 @@ function montar() {
   // arquivos-base da SoFIA (o demo-dados copia de ../ChatBot)
   fs.mkdirSync(path.join(raiz, 'ChatBot'));
   for (const f of fs.readdirSync(path.join(REPO, 'ChatBot'))) if (/\.default\./.test(f)) fs.copyFileSync(path.join(REPO, 'ChatBot', f), path.join(raiz, 'ChatBot', f));
-  const porta = 18000 + Math.floor(Math.random() * 2000);
+  const porta = await require('../ajuda').portaLivre();
   fs.writeFileSync(path.join(exp, '.env'), [
     'PAINEL_DEMO=1', `PAINEL_PORT=${porta}`, 'PAINEL_HOST=127.0.0.1', 'PM2_SLUG=exemplo',
     `SOFIA_DIR=${path.join(raiz, 'sofia-demo')}`, 'STUDIO_NOME=Studio SlimFit Demonstração',
@@ -62,7 +62,7 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
 
 (async () => {
   const { chromium, devices } = require('playwright');
-  const inst = montar();
+  const inst = await montar();
   const env = { ...process.env };
   for (const k of ['SOFIA_DIR', 'PAINEL_DEMO', 'PAINEL_PORT', 'PAINEL_HOST', 'PM2_SLUG']) delete env[k]; // o .env da demonstração manda
   execFileSync(process.execPath, ['src/demo-dados.js'], { cwd: inst.exp, env, stdio: 'inherit' });
@@ -76,7 +76,7 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
     await esperarNoAr(inst.porta);
     navegador = await chromium.launch();
     const aparelhos = [
-      ['computador', { viewport: { width: 1280, height: 900 } }],
+      ['computador', { viewport: { width: 1366, height: 900 } }],
       ['celular', { ...devices['iPhone 13'] }],
     ];
     for (const [nomeAp, opcoes] of aparelhos) {
@@ -89,6 +89,9 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
         try { resp = await page.goto(`http://127.0.0.1:${inst.porta}${tela}`, { waitUntil: 'domcontentloaded', timeout: 30000 }); }
         catch (e) { reprovas.push(`${tela} (${nomeAp}): não abriu — ${e.message.split('\n')[0]}`); await page.close(); continue; }
         await page.waitForTimeout(700);
+        // Abre todas as seções recolhidas: o que está dentro delas também não pode rolar para o lado.
+        await page.evaluate(() => { for (const d of document.querySelectorAll('.wrap details')) d.open = true; }).catch(() => {});
+        await page.waitForTimeout(250);
         const st = resp ? resp.status() : 0;
         if (st >= 400) reprovas.push(`${tela} (${nomeAp}): HTTP ${st}`);
         for (const e of errosJs) reprovas.push(`${tela} (${nomeAp}): erro de JavaScript — ${e}`);
@@ -109,15 +112,30 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
               }
             }
           }
-          return { ruins, largura, total, largos, tamTexto: txt.length, titulo: document.title };
+          // VIS-02: nada rola para o lado DENTRO de cartão, tabela ou bloco (campos de texto não contam).
+          const dentro = [];
+          const nomeEl = (el) => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '');
+          for (const el of document.querySelectorAll('.wrap *')) {
+            if (/^(INPUT|TEXTAREA|SELECT|OPTION|svg|path)$/i.test(el.tagName) || el.closest('textarea,select,svg')) continue;
+            if (el.offsetParent === null) continue;
+            const cs = getComputedStyle(el), ox = cs.overflowX;
+            if (cs.textOverflow === 'ellipsis') continue; // texto de uma linha cortado com "…" é de propósito
+            if ((ox === 'auto' || ox === 'scroll' || ox === 'hidden') && el.scrollWidth > el.clientWidth + 2) {
+              const pai = el.parentElement && el.parentElement.closest('.wrap *');
+              dentro.push(`${nomeEl(el)}${pai ? ' em ' + nomeEl(el.closest('.card,.ui-topo,details,section') || el.parentElement) : ''} (${el.scrollWidth}>${el.clientWidth})`);
+              if (dentro.length >= 4) break;
+            }
+          }
+          return { ruins, largura, total, largos, dentro, tamTexto: txt.length, titulo: document.title };
         });
         const marca = (txt) => avisos.push(`${tela} (${nomeAp}): ${txt}`);
         if (process.env.DETALHE) console.log(`   ${nomeAp.padEnd(10)} ${tela.padEnd(26)} HTTP ${st} · ${r.tamTexto} letras · largura ${r.total}/${r.largura} · "${r.titulo}"`);
         if (/^Entrar/.test(r.titulo)) reprovas.push(`${tela} (${nomeAp}): caiu na tela de login (o modo demonstração não ligou)`);
         else if (r.tamTexto < 150) reprovas.push(`${tela} (${nomeAp}): tela quase vazia (${r.tamTexto} letras)`);
         if (r.ruins.length) marca(`aparece "undefined/null/NaN" — ${r.ruins.map(x => `«${x}»`).join(' · ')}`);
-        if (nomeAp === 'celular' && r.total > r.largura + 2) marca(`rola para o lado (${r.total}px numa tela de ${r.largura}px) — ${r.largos.join(', ') || 'elemento não identificado'}`);
-        if (r.ruins.length || (nomeAp === 'celular' && r.total > r.largura + 2) || errosJs.length || st >= 400) {
+        if (r.total > r.largura + 2) marca(`a página rola para o lado (${r.total}px numa tela de ${r.largura}px) — ${r.largos.join(', ') || 'elemento não identificado'}`);
+        if (r.dentro.length) marca(`rola para o lado dentro de: ${r.dentro.join(' · ')}`);
+        if (r.ruins.length || r.total > r.largura + 2 || r.dentro.length || errosJs.length || st >= 400) {
           try { await page.screenshot({ path: path.join(SAIDA, `${nomeAp}-${tela.replace(/[^a-z0-9]+/gi, '_')}.png`), fullPage: true }); } catch (_) {}
         }
         await page.close();

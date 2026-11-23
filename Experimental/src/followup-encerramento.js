@@ -42,7 +42,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const PRAZO_JOB_MS = 18 * 60 * 1000;
 function ler() { try { const o = JSON.parse(fs.readFileSync(ARQ, 'utf8')); return (o && typeof o === 'object') ? o : {}; } catch (_) { return {}; } }
 function gravar(o) { try { fs.mkdirSync(path.dirname(ARQ), { recursive: true }); fs.writeFileSync(ARQ + '.tmp', JSON.stringify(o)); fs.renameSync(ARQ + '.tmp', ARQ); } catch (_) {} }
-const hojeSP = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+const { hojeSP } = require('./relogio'); // fonte única do "hoje" (fixável em teste)
 const primeiro = (n) => { const p = String(n || '').trim().split(/\s+/)[0] || ''; return p && p === p.toUpperCase() ? p.charAt(0) + p.slice(1).toLowerCase() : p; };
 
 // Chamado pelo follow-up pós-aula (origem 'followup', só "ainda não fechou") e

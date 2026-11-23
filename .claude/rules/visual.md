@@ -34,8 +34,10 @@ Princípios (decisão do dono, 23/11/2026):
 
 Resposta de salvar por `fetch`: `{ ok:false, erro:'texto para o dono', campo:'nome-do-input' }` → `if (!sfSalvou(j, form)) return;`.
 
+Tabela antiga (sem `uiTabela`) vira cartão no celular sozinha: o script `sfCartoes` (em `painel-componentes.js`) põe em cada célula o rótulo e o ⓘ da coluna. Para uma tabela não virar cartão: `data-sem-cartao`.
+
 ## Telas que ainda não seguem o padrão (para a revisão de design decidir)
-- `overflow-x:auto` em tabelas: Indicadores (6), SoFIA (3), WhatsApp (2), base (3), Formulários, Metas, Perfis → Auditoria (VIS-02).
+- Rolagem lateral: corrigida em 23/11/2026 (o teste de telas reprova se voltar). Ainda com `overflow-x:auto` (não rolam com os dados da demonstração): mapa de calor (`.hm-scroll`), filtros rápidos das Conversas (`.cv-sit`), Contatos no computador (`.ct-wrap`), respostas dos Formulários (`.fm-tabw`).
 - Cores `#hex` em `style=`: SoFIA (~85), WhatsApp (10), Páginas públicas (4), Perfis (3), base (3) (VIS-05).
 - `alert()` para erro: SoFIA (~62), Formulários (8), Slim Club (6), base (4), WhatsApp (1) (VIS-06).
 - Listas longas sem busca/páginas no padrão: Funil e Professoras (pessoas), Log, Perfis → Auditoria, Campanhas (VIS-03).
