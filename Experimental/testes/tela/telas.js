@@ -216,6 +216,21 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
       if (await p2.locator('.ui-indice:visible').count()) reprovas.push('celular: o índice lateral não deveria aparecer');
       await cel.close();
     }
+    // VIS-02 larguras de tablet (641, 768, 1024) e computador: Metas, Funil e Contatos não rolam para o lado,
+    // e a tabela "Mês a mês" não sai do cartão (a Grade entra no PR dela).
+    if (!SO.length) {
+      const ctx = await navegador.newContext({ viewport: { width: 768, height: 900 } });
+      const page = await ctx.newPage();
+      for (const tela of ['/metas', '/funil', '/sofia?view=contatos']) for (const larg of [641, 768, 1024, 1180, 1181, 1366]) {
+        await page.setViewportSize({ width: larg, height: 900 });
+        await page.goto(`http://127.0.0.1:${inst.porta}${tela}`, { waitUntil: 'domcontentloaded' }); await page.waitForTimeout(350);
+        await page.evaluate(() => { for (const d of document.querySelectorAll('.wrap details')) d.open = true; }); await page.waitForTimeout(100);
+        const r = await page.evaluate(() => { const fora = [...document.querySelectorAll('.wrap table, .tb')].filter(t => { const c = t.closest('.card'); return c && t.offsetParent && t.getBoundingClientRect().right > c.getBoundingClientRect().right + 1; }).map(t => t.className); return { pag: document.documentElement.scrollWidth, fora }; });
+        if (r.pag > larg + 1) reprovas.push(`${tela} (${larg} px): a página rola para o lado (${r.pag})`);
+        if (r.fora.length) reprovas.push(`${tela} (${larg} px): tabela sai do cartão — ${r.fora.join(', ')}`);
+      }
+      await ctx.close();
+    }
     // Celular: o VOLTAR fecha a conversa/janela aberta (não sai da tela); ações em massa passam
     // pela janela de revisão; a explicação do ⓘ fica dentro da tela.
     if (!SO.length) {
@@ -309,6 +324,17 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
         if (!b || !b.vis) falha('Alunas ativas: a explicação do ⓘ não abriu ao tocar');
         else if (b.l < 0 || b.r > b.w) falha(`Alunas ativas: a explicação do ⓘ sai da tela (${Math.round(b.l)}–${Math.round(b.r)} de ${b.w}px)`);
       }
+      // VIS-02 Funil: texto da barra nunca sai dela; a 2ª taxa fica embaixo, inteira.
+      await page.goto(url + '/funil?per=0', { waitUntil: 'domcontentloaded' }); await page.waitForTimeout(400);
+      const fu = await page.evaluate(() => ({ n: document.querySelectorAll('.ui-bar-ex').length, ruins: [...document.querySelectorAll('.ui-trilho > em, .ui-bar-ex')].filter(e => { const r = e.getBoundingClientRect(), t = e.parentElement.getBoundingClientRect(); return r.width && (r.right > t.right + 1 || e.scrollWidth > e.clientWidth + 1); }).map(e => e.textContent) }));
+      if (!fu.n || fu.ruins.length) falha(`Funil: texto da barra cortado (${fu.n} com 2ª taxa) — ${fu.ruins.join(' · ')}`);
+      // Metas no celular: "Ver tudo do mês" mostra as colunas que ficam recolhidas.
+      await page.goto(url + '/metas', { waitUntil: 'domcontentloaded' }); await page.waitForTimeout(400);
+      const visMes = () => page.evaluate(() => [...document.querySelectorAll('.mt-tab tbody tr:first-child td.so-pc')].filter(t => t.getBoundingClientRect().height > 0).length);
+      const recolhidas = await visMes();
+      const sel = page.locator('.mt-mais').first(); await page.evaluate(() => { for (const d of document.querySelectorAll('.wrap details')) d.open = true; });
+      await sel.click(); const abertas2 = await visMes();
+      if (recolhidas !== 0 || abertas2 !== 6) falha(`Metas: "Ver tudo do mês" deveria mostrar 6 números (antes ${recolhidas}, depois ${abertas2})`);
       // Metas: um cartão por meta, cada um com situação; e os meses fechados na tabela.
       await page.goto(url + '/metas', { waitUntil: 'domcontentloaded' });
       const mt = await page.evaluate(() => ({ cartoes: document.querySelectorAll('.mt-card').length, sit: [...document.querySelectorAll('.mt-card .mt-st')].filter(x => x.textContent.trim()).length, fechados: [...document.querySelectorAll('.mt-tab tbody tr')].filter(t => /fechado em/.test(t.textContent)).length }));
