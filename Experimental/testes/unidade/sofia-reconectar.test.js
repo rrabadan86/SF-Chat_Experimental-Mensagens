@@ -107,6 +107,7 @@ test('SoFIA: a pausa entre as tentativas de conectar é respeitada (o vigia do b
   assert.ok(espera >= 120000, 'a SoFIA espera pelo menos 2 min o WhatsApp abrir');
   assert.ok(vigia > espera, 'o vigia do boot só age depois que a espera do WhatsApp terminou');
   assert.ok(require(path.resolve(__dirname, '..', '..', 'src', 'sofia-destravar.js')).ESPERA_MS > espera, 'o botão do painel espera mais que a própria SoFIA');
+  assert.match(falha.slice(0, 3000), /WAWebSocketModel/, 'na falha, o log diz em que estado a conexão do WhatsApp parou');
 });
 
 const pedir = (porta, metodo, url, cookie) => new Promise((ok) => {

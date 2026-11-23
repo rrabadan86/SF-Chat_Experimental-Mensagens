@@ -3097,6 +3097,24 @@ armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia
     // batendo no WhatsApp sem parar — o que faz o WhatsApp bloquear o número — e o
     // contador de falhas andava em dobro.
     if (bootTimer) { clearTimeout(bootTimer); bootTimer = null; }
+    // Em que ponto o WhatsApp Web parou? "Waiting failed" sozinho não diz se a página
+    // nem abriu, se a conexão com o WhatsApp ficou "abrindo" (rede / WhatsApp segurando)
+    // ou se ficou "pareando". Anota o estado real da página antes de desistir.
+    try {
+      const pg: any = (client as any).pupPage;
+      const info: any = pg ? await Promise.race([
+        pg.evaluate(() => {
+          const w: any = globalThis as any;
+          let socket = "", stream = "";
+          try { socket = String(w.require?.("WAWebSocketModel")?.Socket?.state || ""); } catch {}
+          try { stream = String(w.require?.("WAWebStreamModel")?.Stream?.displayInfo || ""); } catch {}
+          return { versao: String(w.Debug?.VERSION || ""), socket, stream, online: !!(w.navigator && w.navigator.onLine) };
+        }),
+        new Promise((r) => setTimeout(() => r(null), 5000)),
+      ]).catch(() => null) : null;
+      log(info ? `   estado do WhatsApp Web na falha: página ${info.versao ? "abriu (versão " + info.versao + ")" : "NÃO abriu"} · conexão: ${info.socket || "?"} · fluxo: ${info.stream || "?"} · rede do navegador: ${info.online ? "ok" : "SEM REDE"}`
+        : "   estado do WhatsApp Web na falha: não consegui ler (navegador sem resposta)");
+    } catch {}
     // Backoff CRESCENTE persistido. Reiniciar de 50 em 50s martela o WhatsApp e
     // faz o servidor BLOQUEAR o número por excesso de tentativas — foi o que
     // derrubou de vez a conexão aqui. Cada falha seguida espera mais (1, 2, 4, 8…
