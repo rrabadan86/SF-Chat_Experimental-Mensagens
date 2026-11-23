@@ -1010,16 +1010,47 @@ async function reinicializar() {
  * estiver morto/detached, RECONECTA sozinho (reinicializar) — antes só avisava,
  * e o cliente ficava travado até o restart das 03:00.
  */
+// ENV-09: WhatsApp "oco" — a página abriu sem as peças internas e o getState falha sem
+// ser erro passageiro (ex.: "Cannot read properties of null (reading 'Socket')"). Em
+// 23/11/2026 o robô da Lago Sul 2 ficou assim por horas, parecendo online, sem avisar
+// ninguém, e perdeu o login. Agora: 1ª falha só registra; na 2ª seguida (~30 min) avisa
+// a equipe UMA vez por episódio e tenta religar; enquanto não volta, tenta religar de
+// hora em hora. Respondeu de novo → zera e registra que voltou.
+function avaliarKeepAlive(est, ok, transiente) {
+  const atual = { falhas: (est && est.falhas) || 0, avisado: !!(est && est.avisado) };
+  if (ok) return { est: { falhas: 0, avisado: false }, acao: atual.avisado ? 'voltou' : 'nada' };
+  const falhas = atual.falhas + 1;
+  if (transiente) return { est: { falhas, avisado: atual.avisado }, acao: 'reinicializar' }; // frame morto → autorrecupera
+  if (falhas >= 2 && !atual.avisado) return { est: { falhas, avisado: true }, acao: 'avisar' };
+  if (falhas > 2 && (falhas - 2) % 4 === 0) return { est: { falhas, avisado: atual.avisado }, acao: 'reinicializar' };
+  return { est: { falhas, avisado: atual.avisado }, acao: 'nada' };
+}
+
+let keepAliveEstado = { falhas: 0, avisado: false };
 function iniciarKeepAlive(minutos = 15) {
   if (keepAliveTimer) return;
   keepAliveTimer = setInterval(async () => {
+    let r;
     try {
       const s = await client.getState();
       log('💓 keep-alive — estado: ' + s);
+      r = avaliarKeepAlive(keepAliveEstado, true);
     } catch (e) {
       log('⚠️  keep-alive falhou: ' + e.message);
-      if (ehTransiente(e)) await reinicializar(); // frame morto → autorrecupera
+      r = avaliarKeepAlive(keepAliveEstado, false, ehTransiente(e));
     }
+    keepAliveEstado = r.est;
+    if (r.acao === 'voltou') log('✅ WhatsApp voltou a responder.');
+    if (r.acao === 'avisar') {
+      log('🚨 WhatsApp sem responder há 2 verificações seguidas — avisando a equipe e tentando religar.');
+      notif.alertar(
+        'WhatsApp do robo parou de responder',
+        'O WhatsApp do robo nao responde ha cerca de 30 min. Ate voltar, NENHUMA mensagem sai. '
+        + 'O robo esta tentando religar sozinho; se o painel (aba WhatsApp) pedir QR, escaneie com o celular do numero do robo.',
+        { prioridade: 'urgent', tags: 'rotating_light' },
+      );
+    }
+    if (r.acao === 'avisar' || r.acao === 'reinicializar') await reinicializar();
   }, minutos * 60 * 1000);
   if (keepAliveTimer.unref) keepAliveTimer.unref();
 }
@@ -1037,6 +1068,7 @@ module.exports = {
   sendTexto, sendMidia, sendGrupo, acharGrupo, listarGrupos,
   getCommonGroups, removerDoGrupo, sendGrupoComMencao, sendGrupoMidia, sendGrupoMidiaComMencao,
   iniciarKeepAlive, destroy, toChatId, MessageMedia, conferirResposta,
+  avaliarKeepAlive,
 };
 
 // ── Standalone: escanear o QR pela 1ª vez e deixar a sessão salva ────────────

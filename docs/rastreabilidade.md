@@ -21,7 +21,7 @@ o teste que a garante e a cobertura.
 <!-- resumo:inicio -->
 | Área | Regras | ✅ | parcial | ❌ | processo |
 |---|---|---|---|---|---|
-| Envios a clientes | 29 | 13 | 7 | 9 | 0 |
+| Envios a clientes | 30 | 14 | 7 | 9 | 0 |
 | Painel | 11 | 4 | 2 | 3 | 2 |
 | Padrão visual | 7 | 2 | 3 | 1 | 1 |
 | SoFIA | 7 | 0 | 4 | 3 | 0 |
@@ -31,11 +31,11 @@ o teste que a garante e a cobertura.
 | Demonstração | 4 | 3 | 0 | 0 | 1 |
 | Publicar e atualizar | 8 | 2 | 1 | 2 | 3 |
 | Testes | 10 | 5 | 0 | 0 | 5 |
-| **Total** | 102 | 43 | 19 | 26 | 14 |
+| **Total** | 103 | 44 | 19 | 26 | 14 |
 
-Regras de código (sem as de processo): **62 de 88** com teste (43 inteiras, 19 em parte); **26** sem teste.
+Regras de código (sem as de processo): **63 de 89** com teste (44 inteiras, 19 em parte); **26** sem teste.
 
-Testes: 128 no total, 92 ligados a uma regra. Os outros 36 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
+Testes: 130 no total, 94 ligados a uma regra. Os outros 36 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
 <!-- resumo:fim -->
 
 ## Envios a clientes (`envio.md`)
@@ -50,6 +50,7 @@ Testes: 128 no total, 92 ligados a uma regra. Os outros 36 conferem funções qu
 | ENV-06 | Texto de `mensagens.js`; `{nome}` some quando não há nome | `mensagens.js` | `contatos-mensagens.test.js` › ENV-06 mensagens: preenche<br>`contatos-mensagens.test.js` › ENV-06 mensagens: todo texto padrão | ✅ |
 | ENV-07 | Contato achado pelo telefone com ou sem o 9 | `contatos.js` | `contatos-mensagens.test.js` › ENV-07 telefone: normaliza<br>`contatos-mensagens.test.js` › ENV-07 contato é achado | ✅ |
 | ENV-08 | Trancada não recebe avisos de ausência nem de vencimento | `suspensoes.js`, `sentimos-falta.js`, `ausentes-10-dias.js` | — | ❌ |
+| ENV-09 | WhatsApp do robô sem responder: 2 verificações seguidas avisam a equipe e religam | `wa-client.js` | `whatsapp-keepalive.test.js` › ENV-09 WhatsApp oco<br>`whatsapp-keepalive.test.js` › ENV-09 uma falha solta | ✅ |
 | CONF-01 | Confirmação da aula: hoje 08:30 e amanhã 15:30; anota quem recebeu | `scheduler.js`, `whatsapp-sender.js`, `horarios.js` | `confirmacao-envio.test.js` › CONF-01 confirmação | parcial: os horários padrão não têm teste |
 | CONF-02 | 2ª mensagem 1h30+ depois, aula ainda longe, sem resposta | `confirmacao-sem-resposta.js` | `confirmacao-sem-resposta.test.js` › CONF-02 2ª mensagem<br>`datas.test.js` › CONF-02 confirmação: a hora da aula | ✅ |
 | CONF-03 | Quem segue sem responder entra uma vez na lista da equipe | `confirmacao-sem-resposta.js` | `confirmacao-sem-resposta.test.js` › CONF-03 lista da equipe | ✅ |
