@@ -27,8 +27,8 @@ test('VIS-03 tabela padrão: texto vindo de fora é escapado; html só quando a 
   const h = C.uiTabela({ colunas, linhas: [{ nome: '<img src=x onerror=alert(1)>', n: { html: '<b>7</b>', valor: 7 }, obs: '' }] });
   assert.doesNotMatch(h, /<img src=x/);
   assert.match(h, /&lt;img src=x onerror=alert\(1\)&gt;/);
-  assert.match(h, /data-k="n" data-rot="Aulas" data-v="7" class="num"><span class="tb-rot">Aulas <span class="info"[^]*?<\/span><\/span><b>7<\/b>/, 'no celular o rótulo leva o ⓘ junto');
-  assert.match(h, /data-k="obs"[^>]*><span class="tb-rot">Obs<\/span>—<\/td>/, 'vazio vira travessão');
+  assert.match(h, /data-k="n" data-rot="Aulas" data-v="7" class="num"><span class="tb-rot">Aulas <span class="info"[^]*?<\/span><\/span><span class="tb-val"><b>7<\/b><\/span>/, 'no celular o rótulo leva o ⓘ junto');
+  assert.match(h, /data-k="obs"[^>]*><span class="tb-rot">Obs<\/span><span class="tb-val">—<\/span><\/td>/, 'vazio vira travessão');
 });
 
 test('VIS-03 tabela vazia mostra o texto de vazio; sem busca quando pedido', () => {

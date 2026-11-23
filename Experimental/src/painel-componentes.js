@@ -38,7 +38,7 @@ function uiTabela({ id, colunas, linhas, busca = 'Buscar…', porPagina = 20, va
     const cls = [c.num ? 'num' : '', c.celular === 'titulo' ? 'tb-tit' : '', c.celular === 'oculto' ? 'tb-pc' : ''].filter(Boolean).join(' ');
     // rótulo da coluna (com o ⓘ) que só aparece no celular, quando a linha vira cartão
     const rot = c.celular === 'titulo' ? '' : `<span class="tb-rot">${esc(c.titulo)}${c.info ? ' ' + info(c.info) : ''}</span>`;
-    return `<td data-k="${esc(c.chave)}" data-rot="${esc(c.titulo)}" data-v="${esc(val)}"${cls ? ` class="${cls}"` : ''}>${rot}${html}</td>`;
+    return `<td data-k="${esc(c.chave)}" data-rot="${esc(c.titulo)}" data-v="${esc(val)}"${cls ? ` class="${cls}"` : ''}>${rot}${rot ? `<span class="tb-val">${html}</span>` : html}</td>`;
   };
   const cab = colunas.map(c => {
     const i = c.info ? ' ' + info(c.info) : ''; // ⓘ fora do botão: tocar nela não reordena
@@ -111,6 +111,7 @@ const CSS = `
     .wrap table.tb-auto tbody tr:hover td{background:transparent}
     .wrap table.tb-auto td{border:0!important;padding:3px 0!important;display:flex;justify-content:space-between;align-items:baseline;gap:12px;text-align:right!important;overflow-wrap:anywhere}
     .wrap table.tb-auto td .tb-rot{display:inline-flex;align-items:center;gap:4px;flex:none;max-width:48%;text-align:left;color:var(--cinza);font-size:var(--fs-xs);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+    .wrap :is(table.tb-auto,.tb) td .tb-val{min-width:0;text-align:right}
     .wrap table.tb-auto td:first-child{display:block;text-align:left!important;font-weight:700;font-size:var(--fs-body);padding-bottom:6px!important}
     .wrap table.tb-auto td.so-pc,.wrap table.tb-auto td[hidden]{display:none!important}
   }
@@ -186,7 +187,7 @@ function cartoes(){[].forEach.call(document.querySelectorAll('.wrap table'),func
   var ths=t.querySelectorAll('thead th');if(!ths.length||!t.tBodies.length)return;t.__cartao=1;
   var rot=[].map.call(ths,function(th){var c=th.cloneNode(true);var inf=c.querySelector('.info');[].forEach.call(c.querySelectorAll('.info,.tb-seta,button.ct-fil'),function(x){x.remove();});return {t:c.textContent.replace(/\\s+/g,' ').trim(),i:inf?inf.outerHTML:''};});
   [].forEach.call(t.tBodies,function(tb){[].forEach.call(tb.rows,function(tr){var i=0;[].forEach.call(tr.cells,function(td,k){var r=rot[i]||{t:'',i:''};if(!td.hasAttribute('data-rot'))td.setAttribute('data-rot',r.t);
-    if(k>0&&r.t&&!td.querySelector('.tb-rot')){var s=document.createElement('span');s.className='tb-rot';s.innerHTML=escT(r.t)+(r.i?' '+r.i:'');td.insertBefore(s,td.firstChild);}
+    if(k>0&&r.t&&!td.querySelector('.tb-rot')){var v=document.createElement('span');v.className='tb-val';while(td.firstChild)v.appendChild(td.firstChild);var s=document.createElement('span');s.className='tb-rot';s.innerHTML=escT(r.t)+(r.i?' '+r.i:'');td.appendChild(s);td.appendChild(v);}
     i+=td.colSpan||1;});});});
   t.classList.add('tb-auto');});}
 window.sfCartoes=cartoes;
