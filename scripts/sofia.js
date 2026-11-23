@@ -6,11 +6,11 @@
  * Acha sozinho as SoFIAs do PM2 (inclusive 2 unidades no mesmo servidor, como o
  * Lago Sul), mostra o estado de cada uma e deixa escolher:
  *   1) Reconectar (mantém o login): zera o contador de falhas, tira a trava do
- *      Chromium, limpa o cache do WhatsApp Web e reinicia. Se em 2 min não conectar,
+ *      Chromium, limpa o cache do WhatsApp Web e reinicia. Se em 3 min não conectar,
  *      passa SOZINHO para o QR novo (5 s para cancelar com Ctrl+C).
  *   2) QR novo: faz o mesmo e ainda descarta o login salvo do WhatsApp da SoFIA
  *      (precisa escanear o QR de novo). Conversas, tags e configurações NÃO são apagadas.
- * Depois espera até 2 min e diz se apareceu o QR / se conectou.
+ * Depois espera até 3 min e diz se apareceu o QR / se conectou.
  * O mesmo procedimento está no painel: SoFIA → Configuração → "🔧 Reconectar a SoFIA"
  * (os passos ficam em Experimental/src/sofia-destravar.js, usados pelos dois).
  *
@@ -103,7 +103,7 @@ function perguntar(q) {
   const escalar = !flags.has('--reconectar');
   if (!modo) {
     console.log(`O que fazer com a SoFIA de ${neg(alvo.unidade)}?`);
-    console.log(`  1) ${neg('Reconectar')} — mantém o login do WhatsApp; se não conectar em 2 min, passo sozinho para o QR novo`);
+    console.log(`  1) ${neg('Reconectar')} — mantém o login do WhatsApp; se não conectar em 3 min, passo sozinho para o QR novo`);
     console.log(`  2) ${neg('QR novo')} — descarta o login salvo e mostra um QR para escanear`);
     console.log('     (conversas, tags e configurações NÃO são apagadas)');
     console.log('  3) Só ver o log');
@@ -123,23 +123,39 @@ function perguntar(q) {
       modo: m, pm2Id: alvo.id, dir: alvo.dir, auth: alvo.auth,
       pm2: async (a) => { sh('pm2', a); },
       dormir: async (ms) => { await espera(ms); const w = D.estadoWa(alvo.dir); if (w.estado !== ultimo) { ultimo = w.estado; console.log(`   … ${ROT[w.estado] || w.estado || '?'}`); } },
-      aoPasso: (t) => { console.log(`   ${t === 'parada' ? '⏸ ' : t === 'iniciada' ? '▶ ' : '✔'} ${t}`); if (t === 'iniciada') console.log('\n   aguardando o WhatsApp (até 2 min)…'); },
+      aoPasso: (t) => { console.log(`   ${t === 'parada' ? '⏸ ' : t === 'iniciada' ? '▶ ' : '✔'} ${t}`); if (t === 'iniciada') console.log('\n   aguardando o WhatsApp (até 3 min)…'); },
     });
   };
-  let r = '';
+  // QR novo com rede de segurança: se o QR não aparecer, o login salvo volta para o lugar.
+  let ultimoQr = '';
+  const rodarQr = async () => {
+    console.log(neg(`\n🔧 Gerando QR novo — SoFIA de ${alvo.unidade}`));
+    const q = await D.qrNovo({
+      pm2Id: alvo.id, dir: alvo.dir, auth: alvo.auth,
+      pm2: async (a) => { sh('pm2', a); },
+      dormir: async (ms) => { await espera(ms); const w = D.estadoWa(alvo.dir); if (w.estado !== ultimoQr) { ultimoQr = w.estado; console.log(`   … ${ROT[w.estado] || w.estado || '?'}`); } },
+    }, (t) => { console.log(`   ${t === 'parada' ? '⏸ ' : t === 'iniciada' ? '▶ ' : '✔'} ${t}`); if (t === 'iniciada') console.log('\n   aguardando o WhatsApp (até 3 min)…'); });
+    loginDevolvido = q.devolvido;
+    return q.estado;
+  };
+  let r = '', loginDevolvido = false;
   try {
-    r = await rodar(modo);
-    if (!r && modo === 'reconectar' && escalar) {
-      console.log(aviso('\n⚠️  Não conectou mantendo o login. Vou gerar um QR novo em 5 segundos (Ctrl+C cancela)…'));
-      await espera(5000);
-      modo = 'qr';
-      r = await rodar('qr');
+    if (modo === 'qr') r = await rodarQr();
+    else {
+      r = await rodar('reconectar');
+      if (!r && escalar) {
+        console.log(aviso('\n⚠️  Não conectou mantendo o login. Vou gerar um QR novo em 5 segundos (Ctrl+C cancela)…'));
+        await espera(5000);
+        modo = 'qr';
+        r = await rodarQr();
+      }
     }
   } catch (e) { console.log(erro(`   ❌ não consegui iniciar: pm2 start ${alvo.id} (${(e && e.message || '').split('\n')[0]})`)); process.exit(1); }
   if (r === 'conectado') { console.log(ok(`\n✅ SoFIA de ${alvo.unidade} conectada.`)); process.exit(0); }
   if (r === 'qr') { console.log(ok(`\n✅ QR pronto. Abra o painel de ${alvo.unidade} → SoFIA → Configuração e escaneie com o celular da SoFIA`) + '\n   (WhatsApp → Dispositivos conectados → Conectar dispositivo).'); process.exit(0); }
   if (r === 'codigo') { console.log(ok('\n✅ Código de pareamento pronto — veja no painel (SoFIA → Configuração).')); process.exit(0); }
-  console.log(erro('\n⚠️  Em 2 min não apareceu QR nem conexão.') + (modo === 'reconectar' ? ` Rode de novo e escolha ${neg('2) QR novo')}.` : ' O problema não é o login: pode ser o servidor ou a ligação dele com o WhatsApp.'));
+  console.log(erro('\n⚠️  Em 3 min não apareceu QR nem conexão.') + (modo === 'reconectar' ? ` Rode de novo e escolha ${neg('2) QR novo')}.`
+    : ` O problema NÃO é o login${loginDevolvido ? ' (ele foi devolvido ao lugar)' : ''}: o WhatsApp não abriu nem com o perfil limpo.\n   O mais comum é o WhatsApp segurar a conexão depois de muitas tentativas seguidas — deixe a SoFIA quieta por algumas horas antes de tentar de novo.`));
   mostrarLog(alvo);
   process.exit(1);
 })();
