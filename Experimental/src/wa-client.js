@@ -300,7 +300,30 @@ async function resolverVersaoFixa(client) {
   if (process.env.WA_WEB_VERSION_URL && !VERSAO_FIXA_DESLIGADA) {
     try { const ok = await versaoFixaUsavel(); if (ok) client.options.webVersionCache = { type: 'remote', remotePath: WEB_VERSION_URL }; }
     catch (_) {}
+    return;
   }
+  // Sem versão fixa no .env: se a ao vivo não chegou no QR há pouco, usa a RESERVA.
+  usandoReserva = false;
+  const reserva = require('./wa-versao-reserva');
+  const marca = reserva.ativa(ARQ_RESERVA), urlRes = reserva.url();
+  if (marca && urlRes) {
+    client.options.webVersionCache = { type: 'remote', remotePath: urlRes };
+    usandoReserva = true;
+    log(`WhatsApp Web: versão RESERVA ${urlRes.split('/').pop()} — a versão ao vivo${marca.versao ? ' (' + marca.versao + ')' : ''} abriu mas não chegou no QR. Volta a tentar a ao vivo em ${reserva.RESERVA_DIAS} dias.`);
+  }
+}
+const ARQ_RESERVA = path.resolve(__dirname, '..', 'data', 'wa-versao-reserva.json');
+let usandoReserva = false;
+// Depois de uma falha: a versão ao vivo é a culpada? Então a próxima tentativa usa a
+// reserva. Se nem a reserva funcionou, apaga o marcador (volta para a ao vivo).
+function decidirReserva(info) {
+  if (process.env.WA_WEB_VERSION_FILE || process.env.WA_WEB_VERSION_URL) return; // o .env manda
+  const reserva = require('./wa-versao-reserva');
+  if (!reserva.falhaDeVersao(info)) return;
+  if (usandoReserva) { reserva.limpar(ARQ_RESERVA); log('   nem a versão reserva do WhatsApp Web chegou no QR — a próxima tentativa volta para a ao vivo.'); return; }
+  if (!reserva.url()) return;
+  try { require('fs').mkdirSync(path.dirname(ARQ_RESERVA), { recursive: true }); } catch (_) {}
+  if (reserva.marcar(ARQ_RESERVA, info.versao)) log(`   a versão ao vivo do WhatsApp Web (${info.versao}) abriu mas não chegou no QR — a próxima tentativa usa a versão reserva.`);
 }
 
 /**
@@ -439,7 +462,7 @@ function initWhatsApp() {
     // Fecha o navegador desta tentativa ANTES de liberar outra: ele ficava aberto,
     // e cada tentativa nova abria MAIS um Chromium no mesmo perfil do WhatsApp — os
     // dois brigavam pela sessão e o robô não conectava mais até ser reiniciado.
-    await anotarEstadoNaFalha(client);
+    decidirReserva(await anotarEstadoNaFalha(client));
     await fecharClienteMorto(client);
     initPromise = null; // permite nova tentativa depois
     if (rejectInit) rejectInit(new Error(msg));
@@ -452,7 +475,7 @@ function initWhatsApp() {
 async function anotarEstadoNaFalha(c) {
   try {
     const pg = c && c.pupPage;
-    if (!pg) return;
+    if (!pg) return null;
     const info = await Promise.race([
       pg.evaluate(() => {
         const w = globalThis;
@@ -467,7 +490,8 @@ async function anotarEstadoNaFalha(c) {
     log(info ? `   estado do WhatsApp Web na falha: página ${info.versao ? 'abriu (versão ' + info.versao + ')' : 'NÃO abriu'} · conexão: ${info.socket || '?'} · fluxo: ${info.stream || '?'} · rede do navegador: ${info.online ? 'ok' : 'SEM REDE'}`
       + (info.erroModulo ? `\n      conexão ilegível: ${info.erroModulo}` : '') + (info.tela ? `\n      tela: "${info.tela}"` : '')
       : '   estado do WhatsApp Web na falha: não consegui ler (navegador sem resposta)');
-  } catch (_) {}
+    return info;
+  } catch (_) { return null; }
 }
 
 // Encerra um cliente que não chegou a conectar: destroy() com prazo e, se o

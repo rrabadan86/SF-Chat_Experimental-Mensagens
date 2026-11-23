@@ -233,7 +233,7 @@ let modoPareamento = false;  // enquanto true, NÃO reiniciamos por watchdog (es
 // a combinação provada em produção (UA certo + ao vivo → QR). Só fixa se você
 // pedir explícito no .env: WA_WEB_VERSION_FILE (arquivo) ou WA_WEB_VERSION_URL.
 const CACHE_DIR = path.join(DIR, ".wwebjs_cache");
-function resolverCacheInicial(): { cache: any; webVersion?: string } {
+function resolverCacheInicial(): { cache: any; webVersion?: string; origem?: string } {
   const file = process.env.WA_WEB_VERSION_FILE;
   if (file) {
     try {
@@ -253,10 +253,30 @@ function resolverCacheInicial(): { cache: any; webVersion?: string } {
     log(`WhatsApp Web: versão fixa ${url}`);
     return { cache: { type: "remote", remotePath: url } };
   }
+  // Sem versão fixa no .env: se a ao vivo abriu mas não chegou no QR há pouco, usa a
+  // RESERVA (mesma lógica de Experimental/src/wa-versao-reserva.js). Em 23/11/2026 o
+  // WhatsApp Web mudou e a biblioteca deixou de perceber o QR: todo QR novo falhava.
+  const marca = reservaAtiva(), urlRes = urlReserva();
+  if (marca && urlRes) {
+    log(`WhatsApp Web: versão RESERVA ${urlRes.split("/").pop()} — a versão ao vivo${marca.versao ? " (" + marca.versao + ")" : ""} abriu mas não chegou no QR. Volta a tentar a ao vivo em ${RESERVA_DIAS} dias.`);
+    return { cache: { type: "remote", remotePath: urlRes }, origem: "reserva" };
+  }
   log("WhatsApp Web: versão ao vivo (padrão)");
-  return { cache: { type: "none" } };
+  return { cache: { type: "none" }, origem: "aovivo" };
 }
-const WEB0 = resolverCacheInicial();
+const RESERVA_URL_PADRAO = "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1055837054-alpha.html";
+const RESERVA_DIAS = 7;
+const RESERVA_FILE = path.join(DIR, ".sofia-versao-reserva.json");
+function urlReserva(): string {
+  const v = String(process.env.WA_WEB_VERSION_RESERVA ?? "").trim();
+  if (/^(off|none|nao|não|0)$/i.test(v)) return "";
+  return v || RESERVA_URL_PADRAO;
+}
+function reservaAtiva(): { em: number; versao?: string } | null {
+  try { const o = JSON.parse(fs.readFileSync(RESERVA_FILE, "utf8")); if (o?.em && Date.now() - o.em < RESERVA_DIAS * 86400_000) return o; } catch { /* sem marcador */ }
+  return null;
+}
+const WEB0: { cache: any; webVersion?: string; origem?: string } = resolverCacheInicial();
 
 // CONECTAR POR CÓDIGO — do jeito que a biblioteca suporta: o cliente NASCE no modo
 // "parear com número" (opção pairWithPhoneNumber) e ela mesma pede o código na hora
@@ -3117,6 +3137,16 @@ armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia
         + (info.erroModulo ? `\n      conexão ilegível: ${info.erroModulo}` : "") + (info.tela ? `\n      tela: "${info.tela}"` : "")
         : "   estado do WhatsApp Web na falha: não consegui ler (navegador sem resposta)");
       if (e?.cause) log(`   motivo por dentro: ${String(e.cause?.message || e.cause).split("\n")[0].slice(0, 200)}`);
+      // A página abriu mas a conexão ficou sem estado: é a versão do WhatsApp Web que a
+      // biblioteca não entende. Próxima tentativa com a reserva (ou volta à ao vivo).
+      if (info && info.versao && !info.socket && (WEB0.origem === "aovivo" || WEB0.origem === "reserva")) {
+        if (WEB0.origem === "reserva") {
+          try { fs.rmSync(RESERVA_FILE, { force: true }); } catch {}
+          log("   nem a versão reserva do WhatsApp Web chegou no QR — a próxima tentativa volta para a ao vivo.");
+        } else if (urlReserva()) {
+          try { fs.writeFileSync(RESERVA_FILE, JSON.stringify({ em: Date.now(), versao: info.versao })); log(`   a versão ao vivo do WhatsApp Web (${info.versao}) abriu mas não chegou no QR — a próxima tentativa usa a versão reserva.`); } catch {}
+        }
+      }
     } catch {}
     // Backoff CRESCENTE persistido. Reiniciar de 50 em 50s martela o WhatsApp e
     // faz o servidor BLOQUEAR o número por excesso de tentativas — foi o que
