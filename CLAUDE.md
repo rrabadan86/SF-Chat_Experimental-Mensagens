@@ -36,6 +36,7 @@ data)" marca regra que é escolha do negócio — **não mude sem perguntar**.
 |---|---|
 | `.claude/rules/envio.md` — jobs que mandam mensagem | ENV, CONF, FUP, RET, ALU, COB, GRP |
 | `.claude/rules/painel.md` — rotas, perfis, telas | PAI |
+| `.claude/rules/visual.md` — padrão visual e peças de tela | VIS |
 | `.claude/rules/sofia.md` — SoFIA | SOF |
 | `.claude/rules/evo.md` — EVO e aula experimental | EVO, AGE |
 | `.claude/rules/indicadores.md` — números, metas, tags | IND, TAG |
@@ -70,8 +71,8 @@ data)" marca regra que é escolha do negócio — **não mude sem perguntar**.
 
 ## Pendências combinadas
 Plano de organização em fases, um PR por fase, plano mostrado antes de cada uma:
-- [x] Fase 0 — diagnóstico · [x] limpeza (PR #433) · [ ] **Fase 1 — instruções** (este)
-- [ ] Fase 2 — padrão visual (`.claude/rules/visual.md` + peças reutilizáveis)
+- [x] Fase 0 — diagnóstico · [x] limpeza (PR #433) · [x] Fase 1 — instruções (PR #434)
+- [ ] **Fase 2 — padrão visual** (`visual.md`, `painel-componentes.js`) — a revisão de design decide as telas fora do padrão listadas no `visual.md`
 - [ ] Fase 3 — testes (perfis, datas difíceis com "hoje" fixo, telas com clique e rolagem dentro de cartões)
 - [ ] Fase 4 — matriz de rastreabilidade (`docs/rastreabilidade.md`, `npm run matriz`, `npm run testar-alteracao`)
 - [ ] Fase 5 — skills (`subir-versao`, `conferir-pr`, `conferir-celular`, `nova-tela`) e hooks

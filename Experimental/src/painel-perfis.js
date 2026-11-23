@@ -12,6 +12,7 @@ const unidadesRede = require('./unidades-rede');
 const {
   esc, USER, ADMIN_EMAIL, uiTopo, chrome, fmtTel,
 } = require('./painel-base');
+const { uiTabela } = require('./painel-componentes');
 
 // Duração da sessão do painel, em DIAS. Editável SÓ pelo admin (Perfis → Acessos),
 // guardada em data/painel-sessao-dias.txt. Sem o arquivo, usa o .env
@@ -222,26 +223,31 @@ function paginaPerfis(aviso, erro, view, filtroAud = {}) {
     <div class="sec-t">Sessões ativas <small style="font-weight:600;color:var(--cinza)">— quem está logado agora</small></div>
     <div class="card">
       <p class="quando" style="margin:0 0 12px">Cada linha é um <b>login ativo</b> (um navegador/aparelho). O admin pode <b>Encerrar</b> qualquer sessão — a pessoa é <b>deslogada</b> e precisa entrar de novo. A <b>sua sessão atual</b> aparece destacada. Some daqui sozinho ao expirar (${sessDias} dia${sessDias === 1 ? '' : 's'}) ou no logout.</p>
-      ${sessArr.length ? `<div style="overflow-x:auto"><table class="ui-tab">
-        <thead><tr>
-          <th>Usuário</th>
-          <th>Entrou</th>
-          <th>Último uso</th>
-          <th>Como</th>
-          <th>Dispositivo</th>
-          <th style="font-weight:700;text-align:right">Ação</th>
-        </tr></thead>
-        <tbody>${sessArr.map(s => { const eu = (s.sid === meuSid); return `<tr${eu ? ' style="background:var(--teal-soft)"' : ''}>
-          <td style="font-weight:600">${esc(s.usuario || '—')}${eu ? ' <span style="background:#e6f6ec;color:#1f8f52;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700">você</span>' : ''}</td>
-          <td style="font-variant-numeric:tabular-nums">${fmtAcesso(s.criadoEm)}</td>
-          <td style="font-variant-numeric:tabular-nums">${fmtAcesso(s.ultimoEm)}</td>
-          <td>${s.metodo === 'google' ? '🟢 Google' : '🔑 Senha'}</td>
-          <td>${esc(uaCurto(s.ua))}</td>
-          <td style="text-align:right">${eu
-            ? `<a href="/logout" class="reset" style="padding:5px 12px;text-decoration:none;white-space:nowrap;color:#c0392b">Sair</a>`
-            : `<form method="POST" action="/perfis/sessao-encerrar" style="display:inline" onsubmit="return confirm('Encerrar a sessão de ${esc(s.usuario || 'usuário')}? A pessoa vai precisar entrar de novo.')"><input type="hidden" name="sid" value="${esc(s.sid)}"><button type="submit" class="reset" style="padding:5px 12px;white-space:nowrap;color:#c0392b">Encerrar</button></form>`}</td>
-        </tr>`; }).join('')}</tbody>
-      </table></div>` : '<p class="vazio" style="margin:0">Nenhuma sessão ativa registrada. Assim que alguém entrar (senha ou Google), aparece aqui. <small>(Quem já estava logado antes desta atualização aparece só depois de entrar de novo.)</small></p>'}
+      ${uiTabela({
+        id: 'tbSessoes', busca: 'Buscar usuário ou dispositivo…', porPagina: 15,
+        ordem: { chave: 'ultimo', dir: 'desc' },
+        vazio: 'Nenhuma sessão ativa registrada. Assim que alguém entrar (senha ou Google), aparece aqui.',
+        colunas: [
+          { chave: 'usuario', titulo: 'Usuário', celular: 'titulo' },
+          { chave: 'entrou', titulo: 'Entrou', info: 'Quando a pessoa fez o login nesta sessão.' },
+          { chave: 'ultimo', titulo: 'Último uso', info: 'A última vez que esta sessão abriu uma tela do painel.' },
+          { chave: 'como', titulo: 'Como', info: 'Entrou com usuário e senha ou com a conta Google.' },
+          { chave: 'disp', titulo: 'Dispositivo', info: 'Navegador e sistema do aparelho, como o próprio navegador informa.', celular: 'oculto' },
+          { chave: 'acao', titulo: 'Ação', ordenar: false },
+        ],
+        linhas: sessArr.map(s => { const eu = (s.sid === meuSid); return {
+          _attrs: eu ? 'class="tb-destaque"' : '',
+          usuario: { html: `${esc(s.usuario || '—')}${eu ? ' <span class="sd-pill sd-ok">você</span>' : ''}`, valor: s.usuario || '' },
+          entrou: { html: fmtAcesso(s.criadoEm), valor: s.criadoEm || 0 },
+          ultimo: { html: fmtAcesso(s.ultimoEm), valor: s.ultimoEm || 0 },
+          como: s.metodo === 'google' ? '🟢 Google' : '🔑 Senha',
+          disp: uaCurto(s.ua),
+          acao: { html: eu
+            ? `<a href="/logout" class="reset tb-acao-perigo">Sair</a>`
+            : `<form method="POST" action="/perfis/sessao-encerrar" class="tb-acao-form" onsubmit="return confirm(this.dataset.msg)" data-msg="${esc(`Encerrar a sessão de ${s.usuario || 'usuário'}? A pessoa vai precisar entrar de novo.`)}"><input type="hidden" name="sid" value="${esc(s.sid)}"><button type="submit" class="reset tb-acao-perigo">Encerrar</button></form>` },
+        }; }),
+      })}
+      ${sessArr.length ? '' : '<p class="quando" style="margin:6px 0 0"><small>(Quem já estava logado antes desta atualização aparece só depois de entrar de novo.)</small></p>'}
     </div>`;
 
   // ── Sub-aba: Auditoria (quem fez o quê) ──

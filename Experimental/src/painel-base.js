@@ -14,6 +14,7 @@ const sofia = require('./sofia-editor');
 const usuarios = require('./usuarios');
 const config = require('./config');
 const E = require('./painel-estado');
+const COMP = require('./painel-componentes'); // peças do padrão visual (tabela, janela de erro)
 
 // ── Nomes dos processos no PM2 (por unidade) ────────────────────────────────
 // Cada studio tem os seus: <slug>-exp, <slug>-painel, <slug>-sofia. O painel usa
@@ -931,7 +932,7 @@ function chrome(titSubtitulo, ativo, corpo) {
 <link rel="icon" type="image/png" sizes="32x32" href="https://slimfitbrasil.com.br/wp-content/uploads/2025/09/cropped-Untitled-1-32x32.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<style>${ESTILO}</style>${SCRIPT_REDE}${SCRIPT_TELA}</head><body>${require('./demo-guard').ativo ? DEMO_FAIXA : ''}
+<style>${ESTILO}${COMP.CSS}</style>${SCRIPT_REDE}${SCRIPT_TELA}${COMP.SCRIPT}</head><body>${require('./demo-guard').ativo ? DEMO_FAIXA : ''}
 <nav class="topbar"><div class="in">
   <img class="tb-logo" alt="SlimFit Studio" src="https://drive.google.com/thumbnail?id=1pl1mh709FGcitG9uHo0J6nzMUKFYqg-w&sz=w400">
   <div class="tabs">${navTabs(ativo)}</div>
