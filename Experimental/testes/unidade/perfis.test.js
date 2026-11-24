@@ -25,7 +25,7 @@ const PERFIS = [
   { nome: 'recepcao', telas: ['sofia_conversas'], menu: ['grade', 'sofia'], // Funil liberado de propósito (IND-05)
     abre: ['/sofia?view=conversas', '/funil', '/dicionario', '/sofia/agendar/slots'], // horários com vaga do Agendar da conversa
     nega: [['GET', '/perfis'], ['GET', '/?view=config'], ['GET', '/hoje'], ['GET', '/grade'], ['GET', '/metas'], ['GET', '/clube'], ['GET', '/formularios'], ['GET', '/saude'],
-      ['POST', '/sofia/salvar'], ['POST', '/sofia/campanhas/criar'], ['POST', '/sofia/contatos/excluir-lote'], ['POST', '/salvar'], ['POST', '/perfis/criar']],
+      ['POST', '/sofia/salvar'], ['POST', '/sofia/aquecimento'], ['POST', '/sofia/campanhas/criar'], ['POST', '/sofia/contatos/excluir-lote'], ['POST', '/salvar'], ['POST', '/perfis/criar']],
     naoMostra: { url: '/sofia?view=config', texto: 'Configuração da SoFIA' } },
   { nome: 'configsofia', telas: ['sofia_config'], menu: ['sofia'],
     abre: ['/sofia?view=config', '/sofia?view=cobranca'],

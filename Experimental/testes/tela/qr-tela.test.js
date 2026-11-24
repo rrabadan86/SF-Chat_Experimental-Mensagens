@@ -44,3 +44,43 @@ test('SOF-08 tela nova de entrada: lê o QR da página (fundo branco), marca "co
     assert.strictEqual(await page.$eval('input', (c) => c.checked), false);
   } finally { await navegador.close(); }
 });
+
+// Conectar por CÓDIGO na tela nova (a biblioteca também não entrega o código ali).
+const TELA_CODIGO = `<body>
+  <h1>Scan to log in</h1><a href="#" id="lk" onclick="mostrar();return false">Link with phone number instead</a>
+  <div id="fone" style="display:none"><input type="text" aria-label="Type your phone number" id="tel"><button id="nx" onclick="codigo()">Next</button></div>
+  <div id="cod" style="display:none"><p>Enter code on phone</p><div><span>W</span><span>9</span><span>K</span><span>2</span> - <span>X</span><span>F</span><span>7</span><span>Q</span></div></div>
+  <script>
+    function mostrar(){ document.getElementById('fone').style.display='block'; }
+    function codigo(){ window.numeroDigitado=document.getElementById('tel').value; document.getElementById('fone').style.display='none'; setTimeout(function(){ document.getElementById('cod').style.display='block'; }, 400); }
+  </script></body>`;
+
+test('SOF-08 código pela tela: pelo módulo interno do WhatsApp Web, ou clicando em "conectar com número" e lendo o código mostrado', { timeout: 60000 }, async () => {
+  const { pedirCodigoPelaTela } = require(path.resolve(__dirname, '..', '..', 'src', 'wa-qr-tela.js'));
+  const { chromium } = require('playwright');
+  const navegador = await chromium.launch();
+  try {
+    const page = await navegador.newPage();
+    // 1) módulo interno disponível
+    await page.setContent('<body><h1>Scan to log in</h1></body>');
+    await page.evaluate(() => { window.require = (m) => (m === 'WAWebAltDeviceLinkingApi' ? { startAltLinkingFlow: async (n) => { window.pedidoPara = n; return 'ab12cd34'; } } : null); });
+    let r = await pedirCodigoPelaTela(page, '55 61 98428-0000');
+    assert.strictEqual(r.codigo, 'AB12-CD34');
+    assert.strictEqual(r.via, 'interno');
+    assert.strictEqual(await page.evaluate(() => window.pedidoPara), '5561984280000');
+    // 2) sem o módulo: pela tela
+    await page.evaluate(() => { delete window.require; });
+    await page.setContent(TELA_CODIGO);
+    r = await pedirCodigoPelaTela(page, '5561984280000');
+    assert.strictEqual(r.codigo, 'W9K2-XF7Q', JSON.stringify(r));
+    assert.strictEqual(r.via, 'tela');
+    assert.strictEqual(await page.evaluate(() => window.numeroDigitado), '+5561984280000');
+    // 3) tela sem nada disso: devolve vazio com o motivo e o texto da tela (para o log)
+    await page.setContent('<body><h1>Algo diferente</h1></body>');
+    r = await pedirCodigoPelaTela(page, '5561984280000', { tempoMs: 30000 });
+    assert.strictEqual(r.codigo, '');
+    assert.match(r.erro, /conectar com número|campo/);
+    assert.match(r.tela, /Algo diferente/);
+    assert.strictEqual((await pedirCodigoPelaTela(page, '123')).erro, 'número inválido');
+  } finally { await navegador.close(); }
+});

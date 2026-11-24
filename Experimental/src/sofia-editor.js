@@ -1175,6 +1175,7 @@ function lerSimulacao(id) {
 }
 
 module.exports = {
+  DIR, // pasta de dados da SoFIA (SOFIA_DIR) — usada pelo aquecimento (SOF-12)
   enfileirarPedidoFicha, lerFichas, enfileirarSimulacao, lerSimulacao, textoPrompt, textoExtracao, textoFollowupCfg, gravarTextosSofia,
   disponivel, estado, salvar, restaurar, estadoAtivo, gravarEstado, previaImportacao, importarPrompt,
   lerCusto, lerCustoPorConversa, lerCustoPorTipo, lerCustoLimite, gravarCustoLimite, lerAvisoHumano, gravarAvisoHumano, PALAVRAS_HUMANO_PADRAO, lerAtencao, setAtencao,
