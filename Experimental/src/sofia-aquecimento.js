@@ -17,6 +17,8 @@ const fs = require('fs');
 const path = require('path');
 
 const ARQ = 'sofia-aquecimento.json';
+const ARQ_FUP = 'sofia-aquecimento-followups.jsonl'; // follow-ups que não saíram no aquecimento (para a recepção retomar)
+const FUP_MAX = 500;
 const DIAS_MAX = 30;
 const QUIETO_MIN_PADRAO = 30;
 
@@ -41,6 +43,8 @@ function gravar(dir, dias, agora = Date.now()) {
   if (!n) { try { fs.rmSync(arq, { force: true }); } catch (_) {} return ler(dir); }
   const hoje = hojeSP(agora);
   fs.mkdirSync(dir, { recursive: true });
+  // aquecimento novo, lista nova (ao DESLIGAR a lista fica: é quando a recepção vai retomar)
+  if (!ativo(dir, agora)) { try { fs.rmSync(path.join(dir, ARQ_FUP), { force: true }); } catch (_) {} }
   // grava num arquivo ao lado e troca de uma vez: a SoFIA lê este arquivo a cada poucos
   // segundos, e um arquivo pela metade seria lido como "desligado" (soltaria os envios)
   const tmp = arq + '.' + process.pid + '.tmp';
@@ -76,4 +80,42 @@ function separarFila(linhas) {
   return { guardar, descartar };
 }
 
-module.exports = { ARQ, DIAS_MAX, QUIETO_MIN_PADRAO, dirPadrao, ler, gravar, ativo, bloqueio, separarFila, hojeSP };
+/**
+ * Anota os follow-ups que NÃO saíram por causa do aquecimento (a fila é descartada).
+ * @param linhasFila linhas JSON da fila de follow-up ({ tel, instrucao, em }) → quantos anotou
+ */
+function anotarFollowups(dir, linhasFila, agora = Date.now()) {
+  const novos = [];
+  for (const l of linhasFila || []) {
+    let ent = null; try { ent = JSON.parse(l); } catch (_) { continue; }
+    const tel = String((ent && ent.tel) || '').replace(/\D/g, '');
+    if (tel) novos.push(JSON.stringify({ tel, em: agora }));
+  }
+  if (!novos.length) return 0;
+  const arq = path.join(dir, ARQ_FUP);
+  let antigos = [];
+  try { antigos = fs.readFileSync(arq, 'utf8').split('\n').filter((x) => x.trim()); } catch (_) {}
+  const todos = antigos.concat(novos).slice(-FUP_MAX); // não cresce sem fim
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = arq + '.' + process.pid + '.tmp';
+  fs.writeFileSync(tmp, todos.join('\n') + '\n');
+  fs.renameSync(tmp, arq);
+  return novos.length;
+}
+/** → [{ tel, em, vezes }] uma linha por telefone, a mais recente primeiro */
+function lerFollowups(dir) {
+  const porTel = new Map();
+  try {
+    for (const l of fs.readFileSync(path.join(dir, ARQ_FUP), 'utf8').split('\n')) {
+      if (!l.trim()) continue;
+      let o = null; try { o = JSON.parse(l); } catch (_) { continue; }
+      const tel = String((o && o.tel) || '').replace(/\D/g, ''); const em = +(o && o.em) || 0;
+      if (!tel) continue;
+      const a = porTel.get(tel);
+      porTel.set(tel, { tel, em: Math.max(em, a ? a.em : 0), vezes: (a ? a.vezes : 0) + 1 });
+    }
+  } catch (_) {}
+  return [...porTel.values()].sort((a, b) => b.em - a.em);
+}
+
+module.exports = { ARQ, ARQ_FUP, anotarFollowups, lerFollowups, DIAS_MAX, QUIETO_MIN_PADRAO, dirPadrao, ler, gravar, ativo, bloqueio, separarFila, hojeSP };

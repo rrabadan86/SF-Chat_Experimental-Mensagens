@@ -87,3 +87,48 @@ test('SOF-12 bloqueio do app: com a SoFIA em aquecimento, o grupo da equipe é a
   assert.match(textoGrupo(u, [], true), /SoFIA em aquecimento: o aviso dela só sai depois — avise a aluna/);
   assert.doesNotMatch(textoGrupo(u, [], true), /a SoFIA avisou a aluna/);
 });
+
+test('SOF-12 follow-up segurado pelo aquecimento fica anotado para a recepção: uma linha por pessoa, zera num aquecimento novo', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-teste-aquec-'));
+  try {
+    const t0 = MEIO_DIA('2026-11-24');
+    aq.gravar(dir, 7, t0);
+    const fila = (tel) => JSON.stringify({ tel, instrucao: 'retome', em: 1 });
+    assert.strictEqual(aq.anotarFollowups(dir, [fila('5561999990001'), fila('(61) 99999-0002'), '{estragada', JSON.stringify({ instrucao: 'sem telefone' })], t0), 2);
+    assert.strictEqual(aq.anotarFollowups(dir, [fila('5561999990001')], t0 + 3600e3), 1, 'a mesma pessoa de novo, mais tarde');
+    assert.strictEqual(aq.anotarFollowups(dir, [], t0), 0);
+    const lista = aq.lerFollowups(dir);
+    assert.deepStrictEqual(lista.map((f) => [f.tel, f.vezes]), [['5561999990001', 2], ['61999990002', 1]], 'uma linha por telefone, a mais recente primeiro');
+    assert.strictEqual(lista[0].em, t0 + 3600e3);
+    assert.deepStrictEqual(fs.readdirSync(dir).sort(), [aq.ARQ, aq.ARQ_FUP].sort(), 'sem arquivo temporário sobrando');
+    aq.gravar(dir, 0, t0);
+    assert.strictEqual(aq.lerFollowups(dir).length, 2, 'desligar NÃO apaga: é quando a recepção vai retomar');
+    aq.gravar(dir, 3, t0 + 86400e3);
+    assert.deepStrictEqual(aq.lerFollowups(dir), [], 'aquecimento novo começa com a lista vazia');
+    // ligado e salvo de novo (estendendo): a lista continua
+    aq.anotarFollowups(dir, [fila('5561999990003')], t0 + 86400e3);
+    aq.gravar(dir, 14, t0 + 86400e3);
+    assert.strictEqual(aq.lerFollowups(dir).length, 1);
+    assert.deepStrictEqual(aq.lerFollowups(path.join(dir, 'nao-existe')), []);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('SOF-12 painel: o quadro do aquecimento lista quem ficou sem follow-up, com o nome do contato e o atalho para a conversa', () => {
+  const { ambienteIsolado } = require('../ajuda');
+  const amb = ambienteIsolado();
+  try {
+    const aqI = amb.req('sofia-aquecimento');
+    amb.gravarData('contatos.json', { '5561999990001': { tel: '5561999990001', nome: 'Marina <b>Teste</b>', tags: [] } });
+    amb.gravarSofia('sofia-prompt.txt', 'Você é a SoFIA, assistente do Studio. '.repeat(5)); // sem o roteiro a tela diz "SoFIA não encontrada"
+    aqI.gravar(amb.sofia, 7);
+    aqI.anotarFollowups(amb.sofia, [JSON.stringify({ tel: '5561999990001' }), JSON.stringify({ tel: '5561988880002' })]);
+    const html = amb.req('painel-sofia').paginaSofia('', false);
+    const quadro = html.slice(html.indexOf('id="aquecimento"'), html.indexOf('id="aquecimento"') + 6000);
+    assert.match(quadro, /2 follow-ups não enviados neste aquecimento/);
+    assert.match(quadro, /href="\/sofia\?view=conversas&chat=5561999990001"[^>]*>Marina &lt;b&gt;Teste&lt;\/b&gt;<\/a>/, 'nome escapado (PAI-07) e link para a conversa');
+    assert.match(quadro, /\(sem nome\)/, 'quem não está nos contatos aparece pelo telefone');
+    assert.match(quadro, /\(61\) 98888-0002/);
+    const s = fs.readFileSync(path.join(CHATBOT, 'sofia-listener.ts'), 'utf8');
+    assert.match(s, /aquecimento\.anotarFollowups\(DIR, linhasA\)[\s\S]{0,200}fs\.rmSync\(tmpA/, 'a SoFIA anota antes de apagar a fila');
+  } finally { amb.limpar(); }
+});

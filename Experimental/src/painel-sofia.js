@@ -2350,7 +2350,29 @@ function paginaSofia(aviso, erro) {
             ${on ? '<input type="hidden" name="dias" value="0"><button type="submit" class="reset" style="padding:6px 12px">Desligar o aquecimento</button>'
               : '<select name="dias" aria-label="Por quantos dias" style="width:auto;padding:6px 8px"><option value="3">3 dias</option><option value="7" selected>7 dias</option><option value="14">14 dias</option></select><button type="submit" class="save" style="padding:6px 12px">Ligar</button>'}
           </form>
-        </div></div>`;
+        </div>
+        ${(() => { // quem ficou sem follow-up neste aquecimento (para a recepção retomar à mão)
+          const fups = aq.lerFollowups(dir);
+          if (!fups.length) return '';
+          const mapa = (() => { try { return contatos.carregar(); } catch (_) { return {}; } })(); // lê os contatos uma vez só
+          const linhas = fups.map(f => {
+            const c = (() => { try { return contatos.acharPorTel(f.tel, mapa); } catch (_) { return null; } })();
+            const nome = (c && c.contato && c.contato.nome) || '(sem nome)';
+            return {
+              nome: { html: `<a href="/sofia?view=conversas&chat=${esc(f.tel)}" style="color:var(--teal-esc);font-weight:600">${esc(nome)}</a>`, valor: nome },
+              tel: f.tel.replace(/^55(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3'),
+              em: { html: esc(new Date(f.em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })), valor: f.em },
+            };
+          });
+          return `<details style="margin-top:10px"${on ? '' : ' open'}><summary style="cursor:pointer;font-weight:600">📋 ${fups.length} follow-up${fups.length === 1 ? '' : 's'} não enviado${fups.length === 1 ? '' : 's'} neste aquecimento</summary>
+            <p class="quando" style="margin:6px 0 8px">Leads que receberiam a mensagem de retomada da SoFIA e não receberam. Toque no nome para abrir a conversa e retomar à mão, se quiser. A lista zera quando um novo aquecimento é ligado.</p>
+            ${uiTabela({ id: 'aqFup', busca: fups.length > 10 ? 'Buscar nome ou telefone' : false, porPagina: 10, ordem: { chave: 'em', dir: 'desc' }, vazio: 'Nenhum.', linhas, colunas: [
+              { chave: 'nome', titulo: 'Lead', celular: 'titulo', info: 'Nome do contato (toque para abrir a conversa).' },
+              { chave: 'tel', titulo: 'Telefone', info: 'Número que receberia o follow-up.' },
+              { chave: 'em', titulo: 'Quando', info: 'Quando o follow-up sairia e foi segurado pelo aquecimento.' },
+            ] })}</details>`;
+        })()}
+        </div>`;
     })()}
 
     <details class="acc-sec">
