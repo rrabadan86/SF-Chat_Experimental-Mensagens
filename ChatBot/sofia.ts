@@ -21,6 +21,7 @@ import "dotenv/config";
 import { query, tool, createSdkMcpServer, type ClaudeAgentOptions } from "@anthropic-ai/claude-agent-sdk";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import iaConta from "../Experimental/src/ia-conta.js"; // SOF-09: IA sem crédito/chave recusada → avisa a equipe, não insiste
 import * as readline from "node:readline/promises";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -105,9 +106,10 @@ function registrarCusto(rec: { tipo: string; model?: string; inTok?: number; out
 // Preço aproximado por modelo (US$ por 1 MILHÃO de tokens: entrada / saída).
 // Usado para ESTIMAR o custo das chamadas fora da conversa (gerador, resumos,
 // tags, follow-up), que usam a API messages e não trazem total_cost_usd. Ajustável.
+// Preços de lista da Anthropic (nov/2026): Opus 5 = 5/25, Sonnet 5 = 2/10, Haiku 4.5 = 1/5.
 const PRECO_MODELO: Record<string, { in: number; out: number }> = {
-  opus: { in: 15, out: 75 },
-  sonnet: { in: 3, out: 15 },
+  opus: { in: 5, out: 25 },
+  sonnet: { in: 2, out: 10 },
   haiku: { in: 1, out: 5 },
 };
 function custoUSD(model: string, inTok: number, outTok: number): number {
@@ -141,11 +143,20 @@ function semearSeFaltar(vivo: string) {
 // A API pode responder "Overloaded" em picos; em vez de quebrar, esperamos
 // um pouco (com tempo crescente) e tentamos de novo, algumas vezes.
 // ══════════════════════════════════════════════════════════════════════════
+// SOF-09: sem crédito ou chave recusada não é passageiro — não insiste e avisa a
+// equipe uma vez (quem avisa é o sofia-listener, por definirAvisoContaIA).
+let avisarContaIA: ((titulo: string, corpo: string, motivo: string) => unknown) | null = null;
+export function definirAvisoContaIA(fn: (titulo: string, corpo: string, motivo: string) => unknown) { avisarContaIA = fn; }
+const contaIA = iaConta.criarAvisoConta((t: string, c: string, m: string) => avisarContaIA && avisarContaIA(t, c, m));
 async function comRetry<T>(fn: () => Promise<T>, tentativas = 5): Promise<T> {
   for (let i = 0; i < tentativas; i++) {
     try {
-      return await fn();
+      const r = await fn();
+      contaIA.ok();
+      return r;
     } catch (err: any) {
+      const motivoConta = contaIA.falhou(err);
+      if (motivoConta) { console.log(`⚠️  IA parada (${motivoConta}): não adianta repetir — equipe avisada.`); throw err; }
       const status = err?.status;
       const ehTemporario = status === 429 || status === 529 || status >= 500;
       if (!ehTemporario || i === tentativas - 1) throw err; // erro definitivo ou acabaram as tentativas
@@ -722,6 +733,10 @@ const options: ClaudeAgentOptions = {
   model: MODELO_CONVERSA,
   // systemPrompt é injetado por conversa (lido do arquivo) — veja responderComMemoria.
   mcpServers: { slimfit: servidor },
+  // SOF-10: só as ferramentas da SoFIA. Sem isto, a biblioteca manda junto, em toda
+  // chamada, as ferramentas de programador do Claude Code (terminal, arquivos, web…):
+  // milhares de tokens pagos a cada mensagem, e ela "enxergaria" o terminal do servidor.
+  tools: [],
   allowedTools: [
     "mcp__slimfit__enviar_midia",
     "mcp__slimfit__verificar_disponibilidade",
@@ -794,7 +809,7 @@ export async function simularResposta(sessao: string, mensagem: string, promptRa
           registrarCusto({ tipo: "simulador", model: MODELO_CONVERSA, inTok: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0), outTok: u.output_tokens || 0, usd: (msg as any).total_cost_usd || 0 });
         } catch { /* best-effort */ }
         if (msg.subtype === "success") resposta = msg.result;
-        else throw Object.assign(new Error("Agent SDK result de erro"), { status: 529 });
+        else throw Object.assign(new Error("Agent SDK result de erro: " + [((msg as any).errors || []).join("; "), (msg as any).result].filter(Boolean).join(" ")), { status: 529 });
       }
     }
   });
@@ -1067,7 +1082,10 @@ export async function responderComMemoria(telefone: string, mensagem: string, te
           } catch { /* best-effort */ }
           if (msg.subtype === "success") resposta = msg.result;
           // Se o próprio SDK sinalizar erro no result, deixa o retry tratar.
-          if (msg.subtype !== "success") throw Object.assign(new Error("Agent SDK result de erro"), { status: 529 });
+          if (msg.subtype !== "success") {
+            const det = [((msg as any).errors || []).join("; "), (msg as any).result].filter(Boolean).join(" ");
+            throw Object.assign(new Error("Agent SDK result de erro" + (det ? ": " + det : "")), { status: 529 });
+          }
         }
       }
     });

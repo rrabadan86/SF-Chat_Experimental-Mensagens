@@ -25,7 +25,7 @@ import * as crypto from "node:crypto";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
 import qrTela from "../Experimental/src/wa-qr-tela.js"; // SOF-08: QR pela tela nova de entrada do WhatsApp Web
-import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirEClassificar, fichaDaLead, simularResposta, pareceMensagemAutomatica, gerarFollowup, classificarIntencaoTags, agendarManual, temTagSemInteresse } from "./sofia";
+import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirEClassificar, fichaDaLead, simularResposta, pareceMensagemAutomatica, gerarFollowup, classificarIntencaoTags, agendarManual, temTagSemInteresse, definirAvisoContaIA } from "./sofia";
 
 // Pasta dos arquivos da Sofia. Por padrão, a pasta de trabalho (comportamento
 // atual). Se SOFIA_DIR estiver definida, usa ela — permite guardar prompt/estado
@@ -69,6 +69,8 @@ async function enviarNtfy(title: string, body: string, tags = "warning", priorit
     log(`alerta enviado (ntfy): ${title}`);
   } catch (e: any) { log("falha ao enviar alerta ntfy: " + (e?.message || e)); }
 }
+// SOF-09: IA sem crédito / chave recusada → push no celular, uma vez por episódio.
+definirAvisoContaIA((titulo, corpo) => { log(titulo); return enviarNtfy(titulo, corpo, "rotating_light", "urgent"); });
 let ultimoAlertaQr = 0;
 async function alertarQuedaQR() {
   const agora = Date.now();
