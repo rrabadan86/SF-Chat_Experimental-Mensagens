@@ -124,7 +124,7 @@ async function runPresentesPendentes() {
   return { enviado: ok };
 }
 
-module.exports = { runPresentesPendentes };
+module.exports = { runPresentesPendentes, montarMensagem };
 
 if (require.main === module) {
   runPresentesPendentes()

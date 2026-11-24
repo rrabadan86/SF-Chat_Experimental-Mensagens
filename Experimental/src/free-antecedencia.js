@@ -124,7 +124,7 @@ async function runFreeAntecedencia({ dry = false } = {}) {
   return { total: itens.length, desmarcadas, falhas, postado, dry, janela: `${res.inicio}→${res.fim}` };
 }
 
-module.exports = { runFreeAntecedencia };
+module.exports = { runFreeAntecedencia, montarMensagem: _montarMensagem };
 
 // Execução direta (teste manual)
 if (require.main === module) {
