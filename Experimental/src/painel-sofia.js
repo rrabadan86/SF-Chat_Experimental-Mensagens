@@ -2480,10 +2480,10 @@ function paginaSofia(aviso, erro) {
         <div style="display:flex;gap:18px;flex-wrap:wrap">
           <div style="flex:1;min-width:240px">
             <label>Modelo da conversa ${infoI('É o cérebro que <b>fala com as alunas</b> e escreve o <b>follow-up</b> — a parte mais importante, porque a qualidade aqui vira agendamento.<br><br><b>Recomendado: Sonnet 5</b> (equilíbrio).<br><b>Opus 5:</b> qualidade máxima para conversas difíceis, mas mais caro.<br><b>Haiku 4.5:</b> mais barato, porém pode soar mais robótico e escorregar nas regras — só use se topar <b>testar e medir a conversão no Funil</b>.<br><br>Padrão: Sonnet 5.')}</label>
-            <select name="modeloConversa" style="width:100%;padding:9px">${e.modelosValidos.map(m => `<option value="${esc(m.id)}"${m.id === e.modelos.conversa ? ' selected' : ''}>${esc(m.rot)}</option>`).join('')}</select>
+            <select name="modeloConversa" style="width:100%;padding:9px">${e.modelosValidos.filter(m => !m.soExtracao).map(m => `<option value="${esc(m.id)}"${m.id === e.modelos.conversa ? ' selected' : ''}>${esc(m.rot)}</option>`).join('')}</select>
           </div>
           <div style="flex:1;min-width:240px">
-            <label>Modelo de extração/resumos ${infoI('Tarefa <b>simples e nos bastidores</b>: só <b>extrai dados</b> do agendamento (nome, e-mail, dia, hora) e gera os <b>resumos</b> das interações. A aluna não vê.<br><br><b>Melhor lugar para economizar: use Haiku 4.5</b> — é seguro aqui e corta custo, sem perda perceptível.<br><br>Padrão: Sonnet 5.')}</label>
+            <label>Modelo de extração/resumos ${infoI('Tarefa <b>simples e nos bastidores</b>: só <b>extrai dados</b> do agendamento (nome, e-mail, dia, hora) e gera os <b>resumos</b> das interações. A aluna não vê.<br><br><b>Melhor lugar para economizar: use Haiku 5.5</b> (o mais barato, ≈10× menos que o Haiku 4.5) — é tarefa simples; confira os resumos e as tags dos primeiros dias. O Haiku 5.5 só aparece aqui, não na conversa.<br><br>Padrão: Sonnet 5.')}</label>
             <select name="modeloExtracao" style="width:100%;padding:9px">${e.modelosValidos.map(m => `<option value="${esc(m.id)}"${m.id === e.modelos.extracao ? ' selected' : ''}>${esc(m.rot)}</option>`).join('')}</select>
           </div>
         </div>

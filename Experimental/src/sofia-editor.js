@@ -867,15 +867,17 @@ const MODELOS_VALIDOS = [
   { id: 'claude-sonnet-5', rot: 'Sonnet 5 — equilíbrio (qualidade alta · custo médio) · recomendado p/ conversa' },
   { id: 'claude-opus-5', rot: 'Opus 5 — qualidade máxima (mais caro e um pouco mais lento)' },
   { id: 'claude-haiku-4-5-20251001', rot: 'Haiku 4.5 — rápido e barato (qualidade um pouco menor) · ideal p/ extração' },
+  // SOF-11: só para extração (resumos, tags, ficha, frases); não aparece na conversa.
+  { id: 'claude-haiku-5-5', rot: 'Haiku 5.5 — o mais barato (≈10× menos que o Haiku 4.5) · só p/ extração', soExtracao: true },
 ];
-function _modeloValido(m) { return MODELOS_VALIDOS.some(x => x.id === m) ? m : MODELO_PADRAO; }
+function _modeloValido(m, qual) { return MODELOS_VALIDOS.some(x => x.id === m && !(qual === 'conversa' && x.soExtracao)) ? m : MODELO_PADRAO; }
 function lerModelos() {
   let o = {};
   try { o = JSON.parse(ler(F.modelo)) || {}; } catch (_) { o = {}; }
-  return { conversa: _modeloValido(o.conversa), extracao: _modeloValido(o.extracao) };
+  return { conversa: _modeloValido(o.conversa, 'conversa'), extracao: _modeloValido(o.extracao) };
 }
 function gravarModelos({ conversa, extracao }) {
-  const cfg = { conversa: _modeloValido(conversa), extracao: _modeloValido(extracao) };
+  const cfg = { conversa: _modeloValido(conversa, 'conversa'), extracao: _modeloValido(extracao) };
   gravarArquivo(F.modelo, JSON.stringify(cfg));
   return cfg;
 }
