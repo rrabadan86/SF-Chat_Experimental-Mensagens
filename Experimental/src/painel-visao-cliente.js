@@ -65,7 +65,7 @@ const GERADO = {
   resumo_semana: () => { const rs = require('./resumo-semanal'); return { html: rs.imagemHtml(SEMANA, studioNome()), legenda: rs.texto(SEMANA) }; },
   resumo_mes: () => { const rm = require('./resumo-mensal'); return { html: rm.imagemHtml(MES, studioNome()), legenda: rm.texto(MES) }; },
   presentes: () => require('./presentes-pendentes-grupo').montarMensagem({ '1 ano': ['Carla Mendes', 'Sofia Ramos'], '2 anos': ['Luciana Prado'] }, ['Bruna Teles']),
-  bloqueio_app: () => require('./bloqueio-app').textoGrupo({ dias: 11, bloqueadas: [{ nome: 'MARIA CLARA SOUZA', dias: 14, tipo: 'boleto' }], reativadas: [{ nome: 'ANA LUIZA COSTA', motivo: 'pagou', avisou: true }] }, []),
+  bloqueio_app: () => require('./bloqueio-app').textoGrupo({ dias: 11, bloqueadas: [{ nome: 'MARIA CLARA SOUZA', dias: 14, tipo: 'boleto' }], reativadas: [{ nome: 'ANA LUIZA COSTA', motivo: 'pagou', avisou: true }] }, [], false),
   free_antecedencia: () => require('./free-antecedencia').montarMensagem({ itens: [{ data: '2026-11-20', hora: '07:00', nome: 'Aline Torres', plano: 'FREE 2X MENSAL', desmarcada: true }] }),
   presenca: () => require('./comparecimento').textoRelatorio({
     compareceu: [{ nome: 'Juliana Rocha', data: '18/11' }, { nome: 'Patrícia Lima', data: '18/11' }],

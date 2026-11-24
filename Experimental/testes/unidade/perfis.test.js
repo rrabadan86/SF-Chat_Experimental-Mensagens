@@ -78,6 +78,17 @@ test('PAI-01..04 cada perfil vê só o que foi liberado e o servidor nega o rest
     const sw = await pedir(porta, 'POST', '/envio/ativo', adm, JSON.stringify({ chaves: ['cobrancaRecorrente'], ativo: false }));
     if (sw.st !== 200 || !/"ok":true/.test(sw.corpo || '')) falhas.push(`admin: POST /envio/ativo deveria desligar o envio (deu ${sw.st})`);
     else if (amb.req('jobs-ativos').ativo('cobrancaRecorrente') !== false) falhas.push('admin: desligou pelo painel, mas o envio continua ligado');
+    // SOF-12: ligar o aquecimento grava o arquivo e volta com a confirmação; desligar apaga
+    const aqDir = amb.sofia, aqArq = require('path').join(aqDir, 'sofia-aquecimento.json');
+    const liga = await pedir(porta, 'POST', '/sofia/aquecimento', adm, 'dias=7');
+    if (liga.st !== 303 || !/okaq=1/.test(String(liga.loc || '')) || !require('fs').existsSync(aqArq)) falhas.push(`admin: POST /sofia/aquecimento deveria ligar e confirmar (deu ${liga.st} ${liga.loc || ''})`);
+    const desl = await pedir(porta, 'POST', '/sofia/aquecimento', adm, 'dias=0');
+    if (desl.st !== 303 || !/okaq=0/.test(String(desl.loc || '')) || require('fs').existsSync(aqArq)) falhas.push(`admin: POST /sofia/aquecimento dias=0 deveria desligar (deu ${desl.st} ${desl.loc || ''})`);
+    // "Gerar código": um pedido a cada 3 min (cada pedido reinicia a SoFIA e abre outra conexão)
+    const c1 = await pedir(porta, 'POST', '/sofia/parear', adm, JSON.stringify({ numero: '5561999990000' }));
+    const c2 = await pedir(porta, 'POST', '/sofia/parear', adm, JSON.stringify({ numero: '5561999990000' }));
+    if (!/"ok":true/.test(c1.corpo || '')) falhas.push(`admin: 1º pedido de código deveria passar (${c1.corpo})`);
+    if (!/"ok":false/.test(c2.corpo || '') || !/Espere \d+ s/.test(c2.corpo || '')) falhas.push(`admin: 2º pedido de código em seguida deveria ser recusado (${c2.corpo})`);
     const tudo = menu((await pedir(porta, 'GET', '/funil', adm)).corpo || '');
     if (tudo.length !== 5) falhas.push(`admin: menu incompleto [${tudo.join(', ')}]`);
     assert.deepStrictEqual(falhas, [], falhas.join('\n') + '\n' + log.slice(-800));

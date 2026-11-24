@@ -20,6 +20,8 @@ const ARQ = 'sofia-aquecimento.json';
 const DIAS_MAX = 30;
 const QUIETO_MIN_PADRAO = 30;
 
+// Pasta de dados da SoFIA vista do painel e do robô (mesma regra do sofia-editor.js).
+function dirPadrao() { return process.env.SOFIA_DIR || path.resolve(__dirname, '..', '..', 'ChatBot'); }
 function hojeSP(agora = Date.now()) { return new Date(agora).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); }
 function somaDias(dia, n) { const d = new Date(dia + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 
@@ -39,7 +41,11 @@ function gravar(dir, dias, agora = Date.now()) {
   if (!n) { try { fs.rmSync(arq, { force: true }); } catch (_) {} return ler(dir); }
   const hoje = hojeSP(agora);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(arq, JSON.stringify({ desde: hoje, ate: somaDias(hoje, n - 1), dias: n }));
+  // grava num arquivo ao lado e troca de uma vez: a SoFIA lê este arquivo a cada poucos
+  // segundos, e um arquivo pela metade seria lido como "desligado" (soltaria os envios)
+  const tmp = arq + '.' + process.pid + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify({ desde: hoje, ate: somaDias(hoje, n - 1), dias: n }));
+  fs.renameSync(tmp, arq);
   return ler(dir);
 }
 
@@ -56,4 +62,18 @@ function bloqueio({ dir, prontaDesde, agora = Date.now(), quietoMin = QUIETO_MIN
   return '';
 }
 
-module.exports = { ARQ, DIAS_MAX, QUIETO_MIN_PADRAO, ler, gravar, ativo, bloqueio, hojeSP };
+/**
+ * Fila de cobrança em aquecimento: o que descartar (o robô repõe) e o que GUARDAR.
+ * Guarda o aviso de "acesso ao app reativado" (tipo "app"): o robô grava uma vez só.
+ * @param linhas linhas JSON da fila → { guardar: [linha], descartar: [objeto] }
+ */
+function separarFila(linhas) {
+  const guardar = [], descartar = [];
+  for (const linha of linhas || []) {
+    let ent = null; try { ent = JSON.parse(linha); } catch (_) { continue; } // linha estragada: fora
+    if (ent && String(ent.tipo || '') === 'app') guardar.push(linha); else if (ent) descartar.push(ent);
+  }
+  return { guardar, descartar };
+}
+
+module.exports = { ARQ, DIAS_MAX, QUIETO_MIN_PADRAO, dirPadrao, ler, gravar, ativo, bloqueio, separarFila, hojeSP };

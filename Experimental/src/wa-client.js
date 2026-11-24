@@ -108,6 +108,7 @@ async function versaoFixaUsavel() {
 
 let client = null;
 let pronto = false;
+let autenticadoEm = 0; // última vez que o WhatsApp autenticou neste processo (SOF-08)
 let initPromise = null;
 let keepAliveTimer = null;
 let comandoTimer = null;
@@ -414,7 +415,7 @@ function initWhatsApp() {
       }, 5000);
     };
 
-    client.on('authenticated', () => { nAuth++; log(`🔐 Autenticado (${nAuth}).`); iniciarPoll(); });
+    client.on('authenticated', () => { nAuth++; autenticadoEm = Date.now(); log(`🔐 Autenticado (${nAuth}).`); iniciarPoll(); });
     client.on('auth_failure', (m) => log('❌ auth_failure: ' + m));
     client.on('loading_screen', (percent, message) => { log(`⏳ carregando ${percent}% ${message || ''}`); if (Number(percent) >= 100) iniciarPoll(); });
     client.on('change_state', (s) => { log('🔄 estado: ' + s); if (s === 'CONNECTED') marcarPronto('change_state CONNECTED'); });
@@ -487,10 +488,15 @@ function initWhatsApp() {
         // ("PRONTO" logo depois do login). Aí NÃO reinicia: fechar e subir de novo logo
         // após vincular fazia o WhatsApp ver duas conexões e desfazer o vínculo (LOGOUT —
         // Lago Norte, 24/11/2026). Só reinicia se não ficar pronto.
-        const gravarMs = Number(process.env.WA_QR_TELA_GRAVAR_MS) || 15000;
-        const ate = Date.now() + Math.max(gravarMs, Number(process.env.WA_QR_TELA_PRONTO_MS) || 60000);
-        while (!pronto && Date.now() < ate) await new Promise((r) => setTimeout(r, 1000));
-        if (pronto) { log('QR pela tela: conectado neste mesmo processo — sem reiniciar.'); return; }
+        // Autenticou mas ainda não ficou pronto: está sincronizando com o celular — espera
+        // bem mais antes de desistir (fechar no meio da sincronização desfaz o vínculo).
+        const desde = Date.now();
+        const oQue = await require('./wa-qr-tela').esperarConexaoAposLogin({
+          estaPronto: () => pronto, autenticou: () => autenticadoEm >= desde - 30000,
+          prontoMs: Math.max(Number(process.env.WA_QR_TELA_GRAVAR_MS) || 15000, Number(process.env.WA_QR_TELA_PRONTO_MS) || 60000),
+          sincMs: Number(process.env.WA_QR_TELA_SINC_MS) || 300000,
+        });
+        if (oQue === 'pronto') { log('QR pela tela: conectado neste mesmo processo — sem reiniciar.'); return; }
         await fecharClienteMorto(client);
         initPromise = null;
         log('subindo de novo com o login salvo…');

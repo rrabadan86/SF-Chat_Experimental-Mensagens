@@ -84,3 +84,17 @@ test('SOF-08 código pela tela: pelo módulo interno do WhatsApp Web, ou clicand
     assert.strictEqual((await pedirCodigoPelaTela(page, '123')).erro, 'número inválido');
   } finally { await navegador.close(); }
 });
+
+test('SOF-08 leitura sem cliques: com o código de conexão na tela, lerTela(true) não marca nem recarrega nada', { timeout: 60000 }, async () => {
+  const { chromium } = require('playwright');
+  const navegador = await chromium.launch();
+  try {
+    const page = await navegador.newPage();
+    await page.setContent(ENTRADA);
+    const r = await page.evaluate(lerTela, true);
+    assert.strictEqual(r.naTelaDeLogin, true);
+    assert.match(r.img, /^data:image\/png;base64,/, 'continua lendo o QR');
+    assert.strictEqual(await page.$eval('#ficar', (c) => c.checked), false, 'não marcou a caixa');
+    assert.strictEqual(await page.evaluate(() => window.recarregou), undefined, 'não clicou em recarregar');
+  } finally { await navegador.close(); }
+});

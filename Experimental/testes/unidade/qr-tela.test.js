@@ -119,3 +119,22 @@ test('SOF-08 robô: se o WhatsApp conecta sozinho depois do QR lido, NÃO reinic
     assert.doesNotMatch(saida, /subindo de novo/);
   } finally { amb.limpar(); }
 });
+
+test('SOF-08 depois do login: pronto → segue; autenticou e ainda sincroniza → espera bem mais; nem autenticou → reinicia', async () => {
+  const { esperarConexaoAposLogin } = require(path.resolve(__dirname, '..', '..', 'src', 'wa-qr-tela.js'));
+  const caso = async ({ prontoAos, autenticaAos }) => {
+    const r = relogio();
+    const res = await esperarConexaoAposLogin({
+      estaPronto: () => prontoAos != null && r.agora() >= prontoAos, autenticou: () => autenticaAos != null && r.agora() >= autenticaAos,
+      dormir: r.dormir, agora: r.agora, prontoMs: 60000, sincMs: 300000,
+    });
+    return [res, r.agora()];
+  };
+  assert.deepStrictEqual(await caso({ prontoAos: 16000, autenticaAos: 13000 }), ['pronto', 16000], 'caso normal (Lago Norte: pronta 15 s depois do QR)');
+  // autenticou aos 13 s e só ficou pronto aos 2 min: NÃO pode fechar o navegador aos 60 s (sincronizando)
+  assert.deepStrictEqual(await caso({ prontoAos: 120000, autenticaAos: 13000 }), ['pronto', 120000]);
+  let [res, t] = await caso({ prontoAos: null, autenticaAos: 13000 });
+  assert.strictEqual(res, 'reiniciar'); assert.strictEqual(t, 300000, 'autenticado sem ficar pronto: desiste só aos 5 min');
+  [res, t] = await caso({ prontoAos: null, autenticaAos: null });
+  assert.strictEqual(res, 'reiniciar'); assert.strictEqual(t, 60000, 'nem autenticou: 60 s');
+});

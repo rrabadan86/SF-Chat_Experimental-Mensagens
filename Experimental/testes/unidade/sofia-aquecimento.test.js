@@ -19,6 +19,9 @@ test('SOF-12 aquecimento: liga por N dias (contando hoje), vale até o último d
     assert.strictEqual(aq.gravar(dir, 99, MEIO_DIA('2026-11-24')).dias, 30, 'no máximo 30 dias');
     aq.gravar(dir, 0);
     assert.strictEqual(aq.ativo(dir, MEIO_DIA('2026-11-24')), false);
+    assert.deepStrictEqual(fs.readdirSync(dir), [], 'desligar apaga o arquivo e não deixa resto');
+    aq.gravar(dir, 3, MEIO_DIA('2026-11-24'));
+    assert.deepStrictEqual(fs.readdirSync(dir), [aq.ARQ], 'grava de uma vez (arquivo ao lado + troca): sem .tmp sobrando');
     fs.writeFileSync(path.join(dir, aq.ARQ), '{quebrado');
     assert.strictEqual(aq.ativo(dir), false, 'arquivo estragado = desligado');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
@@ -43,11 +46,13 @@ test('SOF-12 SoFIA: cobrança, follow-up e campanha passam pela trava; responder
   assert.match(s, /client\.on\("ready", \(\) => \{ pronta = true; prontaDesde = Date\.now\(\);/);
   assert.match(corpo('processarCobranca'), /bloqueioEnvioAtivo\("cobrança"\)/);
   assert.match(corpo('processarCobranca'), /descartarCobrancasEmAquecimento\(\)/);
+  assert.match(s, /aquecimento\.separarFila\(linhas\)/, 'a fila passa pelo separarFila');
+  assert.match(s, /if \(r\.guardar\.length\) \{ try \{ fs\.appendFileSync\(COBRANCA_OUTBOX, r\.guardar\.join/, 'o que é para guardar volta para a fila');
   assert.match(corpo('processarFollowups'), /bloqueioEnvioAtivo\("follow-up"\)/);
   assert.match(corpo('tickCampanha'), /bloqueioEnvioAtivo\(`campanha/);
   for (const livre of ['processarRespostas', 'processarAvisos']) assert.doesNotMatch(corpo(livre), /bloqueioEnvioAtivo/, `${livre} continua livre`);
   // descartada no aquecimento: fica no Log como não enviada e NÃO é marcada como avisada (o robô repõe)
-  const desc = s.slice(s.indexOf('function descartarCobrancasEmAquecimento'), s.indexOf('function descartarCobrancasEmAquecimento') + 900);
+  const desc = s.slice(s.indexOf('function descartarCobrancasEmAquecimento'), s.indexOf('function descartarCobrancasEmAquecimento') + 1500);
   assert.match(desc, /registrarAtividadeCobranca\(ent, tel, .*, false, "não enviada/);
   assert.doesNotMatch(desc, /marcarCobrancaEnviada/);
 });
@@ -56,11 +61,29 @@ test('SOF-08 SoFIA: depois do QR (ou do código), se já conectou NÃO reinicia;
   const s = fs.readFileSync(path.join(CHATBOT, 'sofia-listener.ts'), 'utf8');
   const qr = s.slice(s.lastIndexOf('if (res === "entrou")'), s.lastIndexOf('if (res === "entrou")') + 1400); // o do QR
   const cod = s.slice(s.indexOf('if (res === "entrou")'), s.indexOf('if (res === "entrou")') + 600); // o do código
-  assert.match(cod, /if \(pronta\) \{ log\("Código: conectada neste mesmo processo/);
-  assert.match(qr, /while \(!pronta && Date\.now\(\) < ate\)/);
-  assert.match(qr, /if \(pronta\) \{ log\("QR pela tela: conectada neste mesmo processo/);
+  assert.match(cod, /if \(await conexaoAposLogin\(\) === "pronto"\) \{ log\("Código: conectada neste mesmo processo/);
+  assert.match(qr, /if \(await conexaoAposLogin\(\) === "pronto"\) \{ log\("QR pela tela: conectada neste mesmo processo/);
+  assert.match(s, /qrTela\.esperarConexaoAposLogin\(\{\s*estaPronto: \(\) => pronta, autenticou: \(\) => autenticadaEm >= desde - 30000/);
   assert.match(qr, /await fecharNavegador\(\);\s*log\("subindo de novo/);
   const fn = s.slice(s.indexOf('async function fecharNavegador'), s.indexOf('async function fecharNavegador') + 500);
   assert.match(fn, /kill\("SIGKILL"\)/);
   assert.match(s, /qrTela\.pedirCodigoPelaTela\(pg, PAIR_BOOT\)/, 'código pela página no modo "conectar por código"');
+});
+
+test('SOF-12 fila de cobrança em aquecimento: cobrança é descartada (o robô repõe), aviso de "app reativado" fica guardado', () => {
+  const cob = JSON.stringify({ idCliente: 7, telefone: '5561999990001', texto: 'boleto', tipo: 'boleto' });
+  const app = JSON.stringify({ id: 'app-9-1', telefone: '5561999990002', texto: 'acesso reativado', tipo: 'app', chaveMsg: 'cobranca_app_reativado' });
+  const r = aq.separarFila([cob, app, '{linha estragada', '']);
+  assert.deepStrictEqual(r.guardar, [app], 'o robô grava esse aviso uma vez só: não pode se perder');
+  assert.deepStrictEqual(r.descartar.map((e) => e.idCliente), [7]);
+  assert.deepStrictEqual(aq.separarFila([app]).descartar, [], 'só avisos guardados: nada a descartar (não regrava o arquivo)');
+  assert.deepStrictEqual(aq.separarFila(null), { guardar: [], descartar: [] });
+});
+
+test('SOF-12 bloqueio do app: com a SoFIA em aquecimento, o grupo da equipe é avisado de que precisa falar com a aluna', () => {
+  const { textoGrupo } = require(path.resolve(__dirname, '..', '..', 'src', 'bloqueio-app.js'));
+  const u = { dias: 11, bloqueadas: [], reativadas: [{ nome: 'ANA LUIZA COSTA', motivo: 'pagou', avisou: true }] };
+  assert.match(textoGrupo(u, [], false), /a SoFIA avisou a aluna/);
+  assert.match(textoGrupo(u, [], true), /SoFIA em aquecimento: o aviso dela só sai depois — avise a aluna/);
+  assert.doesNotMatch(textoGrupo(u, [], true), /a SoFIA avisou a aluna/);
 });
