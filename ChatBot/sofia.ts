@@ -106,14 +106,21 @@ function registrarCusto(rec: { tipo: string; model?: string; inTok?: number; out
 // Preço aproximado por modelo (US$ por 1 MILHÃO de tokens: entrada / saída).
 // Usado para ESTIMAR o custo das chamadas fora da conversa (gerador, resumos,
 // tags, follow-up), que usam a API messages e não trazem total_cost_usd. Ajustável.
-// Preços de lista da Anthropic (nov/2026): Opus 5 = 5/25, Sonnet 5 = 2/10, Haiku 4.5 = 1/5.
+// Preços de lista da Anthropic (nov/2026): Opus 5 = 5/25, Sonnet 5 = 2/10, Haiku 4.5 = 1/5, Haiku 5.5 = 0,10/0,50.
 const PRECO_MODELO: Record<string, { in: number; out: number }> = {
   opus: { in: 5, out: 25 },
   sonnet: { in: 2, out: 10 },
   haiku: { in: 1, out: 5 },
+  haiku55: { in: 0.1, out: 0.5 },
 };
+// SOF-11: o Haiku 5.5 pensa antes de responder se ninguém disser que não; nas chamadas
+// curtas (resumo, tags: 120–300 tokens) o pensamento comeria a resposta. Desligado.
+function semPensar(model: string): { thinking?: { type: "disabled" } } {
+  return /haiku-5/i.test(String(model || "")) ? { thinking: { type: "disabled" } } : {};
+}
 function custoUSD(model: string, inTok: number, outTok: number): number {
   const m = String(model || "").toLowerCase();
+  if (m.includes("haiku-5")) return (inTok / 1e6) * PRECO_MODELO.haiku55.in + (outTok / 1e6) * PRECO_MODELO.haiku55.out;
   const p = m.includes("opus") ? PRECO_MODELO.opus : m.includes("haiku") ? PRECO_MODELO.haiku : PRECO_MODELO.sonnet;
   return (inTok / 1e6) * p.in + (outTok / 1e6) * p.out;
 }
@@ -716,12 +723,14 @@ function carregarPrompt(): string {
 // sofia-modelo.json; lido AQUI no boot (mudar → reiniciar o sofia-listener).
 // Lista fixa de válidos + padrão Sonnet 5 (se o arquivo faltar ou vier inválido).
 const MODELO_PADRAO = "claude-sonnet-5";
-const MODELOS_VALIDOS = ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5-20251001"];
+const MODELOS_VALIDOS = ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5-20251001", "claude-haiku-5-5"];
+// SOF-11: Haiku 5.5 é só para extração (resumos, tags, ficha, frases) — não conversa.
+const SO_EXTRACAO = ["claude-haiku-5-5"];
 function lerModelo(qual: "conversa" | "extracao"): string {
   try {
     const o = JSON.parse(fs.readFileSync(path.join(BASE_DIR, "sofia-modelo.json"), "utf-8"));
     const m = o && o[qual];
-    if (typeof m === "string" && MODELOS_VALIDOS.includes(m)) return m;
+    if (typeof m === "string" && MODELOS_VALIDOS.includes(m) && !(qual === "conversa" && SO_EXTRACAO.includes(m))) return m;
   } catch { /* sem arquivo/ inválido → padrão */ }
   return MODELO_PADRAO;
 }
@@ -1175,6 +1184,7 @@ Mensagem:
     const resp = await comRetry(() =>
       anthropic.messages.create({
         model: MODELO_EXTRACAO,
+        ...semPensar(MODELO_EXTRACAO),
         max_tokens: 3000,
         messages: [{ role: "user", content: instr }],
       }),
@@ -1215,6 +1225,7 @@ Pedido:
     const resp = await comRetry(() =>
       anthropic.messages.create({
         model: mdl,
+        ...semPensar(mdl),
         max_tokens: 700,
         messages: [{ role: "user", content: instr }],
       }),
@@ -1242,6 +1253,7 @@ export async function resumirConversa(linhas: { autor: string; texto: string }[]
     const resp = await comRetry(() =>
       anthropic.messages.create({
         model: MODELO_EXTRACAO,
+        ...semPensar(MODELO_EXTRACAO),
         max_tokens: 260,
         system:
           "Você resume atendimentos de um Studio de treinamento para mulheres (SlimFit). " +
@@ -1275,6 +1287,7 @@ export async function resumirEClassificar(linhas: { autor: string; texto: string
     const resp = await comRetry(() =>
       anthropic.messages.create({
         model: MODELO_EXTRACAO,
+        ...semPensar(MODELO_EXTRACAO),
         max_tokens: 320,
         system:
           "Você analisa atendimentos de um Studio de treinamento para mulheres (SlimFit) entre a pessoa (Aluna) e a SoFIA (assistente). " +
@@ -1323,6 +1336,7 @@ export async function fichaDaLead(linhas: { autor: string; texto: string }[]): P
     const resp = await comRetry(() =>
       anthropic.messages.create({
         model: MODELO_EXTRACAO,
+        ...semPensar(MODELO_EXTRACAO),
         max_tokens: 300,
         system:
           "Você prepara a ficha de uma lead que acabou de agendar uma aula experimental num Studio de treinamento para mulheres (SlimFit). " +
@@ -1377,6 +1391,7 @@ export async function classificarIntencaoTags(
     const resp = await comRetry(() =>
       anthropic.messages.create({
         model: MODELO_EXTRACAO,
+        ...semPensar(MODELO_EXTRACAO),
         max_tokens: 120,
         system:
           "Você classifica conversas de atendimento de um Studio de treinamento para mulheres (SlimFit). " +
@@ -1440,6 +1455,7 @@ export async function gerarFollowup(
     const resp = await comRetry(() =>
       anthropic.messages.create({
         model: MODELO_CONVERSA,
+        ...semPensar(MODELO_CONVERSA),
         max_tokens: 320,
         system:
           "Você é a SoFIA, atendente virtual do SlimFit (Studio de treinamento para mulheres). " +
@@ -1487,6 +1503,7 @@ async function extrairResumo(conversa: Conversa, nomeWhatsapp: string): Promise<
   const resp = await comRetry(() =>
     anthropic.messages.create({
       model: MODELO_EXTRACAO,
+      ...semPensar(MODELO_EXTRACAO),
       max_tokens: 300,
       // Cacheia o prompt de extração (fixo e reusado) — leitura barata nas próximas.
       system: [{ type: "text", text: carregarPromptExtracao(), cache_control: { type: "ephemeral" } }] as any,

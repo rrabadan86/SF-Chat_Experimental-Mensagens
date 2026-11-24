@@ -24,18 +24,18 @@ o teste que a garante e a cobertura.
 | Envios a clientes | 30 | 14 | 7 | 9 | 0 |
 | Painel | 11 | 4 | 2 | 3 | 2 |
 | Padrão visual | 7 | 2 | 3 | 1 | 1 |
-| SoFIA | 10 | 0 | 7 | 3 | 0 |
+| SoFIA | 11 | 0 | 8 | 3 | 0 |
 | EVO e aula experimental | 10 | 2 | 1 | 7 | 0 |
 | Indicadores e tags | 9 | 8 | 0 | 1 | 0 |
 | Dados e segredos | 7 | 4 | 1 | 0 | 2 |
 | Demonstração | 4 | 3 | 0 | 0 | 1 |
 | Publicar e atualizar | 8 | 2 | 1 | 2 | 3 |
 | Testes | 10 | 5 | 0 | 0 | 5 |
-| **Total** | 106 | 44 | 22 | 26 | 14 |
+| **Total** | 107 | 44 | 23 | 26 | 14 |
 
-Regras de código (sem as de processo): **66 de 92** com teste (44 inteiras, 22 em parte); **26** sem teste.
+Regras de código (sem as de processo): **67 de 93** com teste (44 inteiras, 23 em parte); **26** sem teste.
 
-Testes: 139 no total, 103 ligados a uma regra. Os outros 36 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
+Testes: 141 no total, 105 ligados a uma regra. Os outros 36 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
 <!-- resumo:fim -->
 
 ## Envios a clientes (`envio.md`)
@@ -115,6 +115,7 @@ Testes: 139 no total, 103 ligados a uma regra. Os outros 36 conferem funções q
 | SOF-08 | QR pela tela nova de entrada do WhatsApp Web (SoFIA e robô) | `wa-qr-tela.js`, `wa-client.js`, `ChatBot/sofia-listener.ts` | `qr-tela.test.js` › SOF-08 QR pela tela: copia<br>`qr-tela.test.js` › SOF-08 QR pela tela: uma leitura<br>`qr-tela.test.js` › SOF-08 robô<br>`qr-tela.test.js` › SOF-08 tela nova de entrada | parcial: a SoFIA (TypeScript) usa a mesma peça mas não tem teste próprio; o WhatsApp de verdade só se confere na loja |
 | SOF-09 | IA sem crédito / chave recusada: não insiste, avisa a equipe uma vez por episódio | `ia-conta.js`, `ChatBot/sofia.ts`, `ChatBot/sofia-listener.ts` | `ia-conta.test.js` › SOF-09 IA parada: reconhece<br>`ia-conta.test.js` › SOF-09 IA parada: avisa<br>`ia-conta.test.js` › SOF-09 SoFIA: não repete | parcial: a ligação no TypeScript é conferida pelo texto do código |
 | SOF-10 | A IA só recebe as ferramentas da SoFIA (`tools: []`) | `ChatBot/sofia.ts` | `ia-conta.test.js` › SOF-10 SoFIA | parcial: conferido pelo texto do código |
+| SOF-11 | Modelos da IA pelo painel; Haiku 5.5 só extração e sem pensamento | `sofia-editor.js`, `painel-sofia.js`, `ChatBot/sofia.ts` | `ia-modelos.test.js` › SOF-11 modelos<br>`ia-modelos.test.js` › SOF-11 SoFIA | parcial: o TypeScript é conferido pelo texto do código |
 
 ## EVO e aula experimental (`evo.md`)
 
