@@ -23,13 +23,13 @@ const NOME_MENU = { ind: 'Formulário', msg: 'WhatsApp', grade: 'Indicadores', s
 // Cada perfil: telas liberadas, o que aparece no menu, o que abre e o que é negado.
 const PERFIS = [
   { nome: 'recepcao', telas: ['sofia_conversas'], menu: ['grade', 'sofia'], // Funil liberado de propósito (IND-05)
-    abre: ['/sofia?view=conversas', '/funil', '/dicionario'],
+    abre: ['/sofia?view=conversas', '/funil', '/dicionario', '/sofia/agendar/slots'], // horários com vaga do Agendar da conversa
     nega: [['GET', '/perfis'], ['GET', '/?view=config'], ['GET', '/hoje'], ['GET', '/grade'], ['GET', '/metas'], ['GET', '/clube'], ['GET', '/formularios'], ['GET', '/saude'],
       ['POST', '/sofia/salvar'], ['POST', '/sofia/campanhas/criar'], ['POST', '/sofia/contatos/excluir-lote'], ['POST', '/salvar'], ['POST', '/perfis/criar']],
     naoMostra: { url: '/sofia?view=config', texto: 'Configuração da SoFIA' } },
   { nome: 'configsofia', telas: ['sofia_config'], menu: ['sofia'],
     abre: ['/sofia?view=config', '/sofia?view=cobranca'],
-    nega: [['GET', '/funil'], ['GET', '/?view=config'], ['GET', '/perfis'], ['POST', '/sofia/responder'], ['POST', '/sofia/contatos/excluir-lote'], ['POST', '/sofia/campanhas/criar'], ['POST', '/salvar']] },
+    nega: [['GET', '/funil'], ['GET', '/?view=config'], ['GET', '/perfis'], ['GET', '/sofia/agendar/slots'], ['POST', '/sofia/responder'], ['POST', '/sofia/contatos/excluir-lote'], ['POST', '/sofia/campanhas/criar'], ['POST', '/salvar']] },
   { nome: 'indicadores', telas: ['funil', 'ind', 'professoras', 'ativas', 'grade', 'metas'], menu: ['grade'],
     abre: ['/funil', '/indicadores', '/professoras', '/ativas', '/grade', '/metas', '/dicionario'],
     nega: [['GET', '/sofia?view=conversas'], ['GET', '/?view=config'], ['GET', '/perfis'], ['GET', '/clube'], ['POST', '/sofia/salvar'], ['POST', '/salvar'], ['POST', '/perfis/criar'], ['POST', '/envio/ativo']] },
