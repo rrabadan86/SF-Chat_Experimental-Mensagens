@@ -216,16 +216,16 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
       if (await p2.locator('.ui-indice:visible').count()) reprovas.push('celular: o índice lateral não deveria aparecer');
       await cel.close();
     }
-    // VIS-02 larguras de tablet (641, 768, 1024) e computador: Metas, Funil e Contatos não rolam para o lado,
-    // e a tabela "Mês a mês" não sai do cartão (a Grade entra no PR dela).
+    // VIS-02 larguras de tablet (641, 768, 1024) e computador: Metas, Funil, Contatos e Grade não rolam para o lado,
+    // e a tabela "Mês a mês" não sai do cartão.
     if (!SO.length) {
       const ctx = await navegador.newContext({ viewport: { width: 768, height: 900 } });
       const page = await ctx.newPage();
-      for (const tela of ['/metas', '/funil', '/sofia?view=contatos']) for (const larg of [641, 768, 1024, 1180, 1181, 1366]) {
+      for (const tela of ['/metas', '/funil', '/sofia?view=contatos', '/grade']) for (const larg of [641, 768, 1024, 1180, 1181, 1366]) {
         await page.setViewportSize({ width: larg, height: 900 });
         await page.goto(`http://127.0.0.1:${inst.porta}${tela}`, { waitUntil: 'domcontentloaded' }); await page.waitForTimeout(350);
         await page.evaluate(() => { for (const d of document.querySelectorAll('.wrap details')) d.open = true; }); await page.waitForTimeout(100);
-        const r = await page.evaluate(() => { const fora = [...document.querySelectorAll('.wrap table, .tb')].filter(t => { const c = t.closest('.card'); return c && t.offsetParent && t.getBoundingClientRect().right > c.getBoundingClientRect().right + 1; }).map(t => t.className); return { pag: document.documentElement.scrollWidth, fora }; });
+        const r = await page.evaluate(() => { const wr = document.querySelector('.gr-wrap'); if (wr && wr.offsetParent && document.querySelector('table.gr').getBoundingClientRect().right > wr.getBoundingClientRect().right + 1) return { pag: 0, fora: ['grade'] }; const fora = [...document.querySelectorAll('.wrap table, .tb')].filter(t => { const c = t.closest('.card'); return c && t.offsetParent && t.getBoundingClientRect().right > c.getBoundingClientRect().right + 1; }).map(t => t.className); return { pag: document.documentElement.scrollWidth, fora }; });
         if (r.pag > larg + 1) reprovas.push(`${tela} (${larg} px): a página rola para o lado (${r.pag})`);
         if (r.fora.length) reprovas.push(`${tela} (${larg} px): tabela sai do cartão — ${r.fora.join(', ')}`);
       }
@@ -335,6 +335,26 @@ const esperarNoAr = (porta, ms = 30000) => new Promise((ok, erro) => {
       const sel = page.locator('.mt-mais').first(); await page.evaluate(() => { for (const d of document.querySelectorAll('.wrap details')) d.open = true; });
       await sel.click(); const abertas2 = await visMes();
       if (recolhidas !== 0 || abertas2 !== 6) falha(`Metas: "Ver tudo do mês" deveria mostrar 6 números (antes ${recolhidas}, depois ${abertas2})`);
+      // VIS-01 Grade: turmas antes dos números; no celular, um dia por vez; busca e professora valem para a semana toda.
+      await page.goto(url + '/grade', { waitUntil: 'domcontentloaded' }); await page.waitForTimeout(500);
+      const diasVis = () => page.evaluate(() => [...document.querySelectorAll('.gr-day')].filter(d => d.getBoundingClientRect().height > 0).map(d => d.getAttribute('data-dia')));
+      const gr = await page.evaluate(() => { const y = (e) => e.getBoundingClientRect().top; const k = document.querySelector('.gr-kpis'), d = [...document.querySelectorAll('summary')].find(x => /Dinheiro do mês/.test(x.textContent)); return { ordem: y(document.querySelector('.gr-item')) < y(k), dinheiro: d ? d.parentElement.open : null }; });
+      if (!gr.ordem) falha('Grade: as turmas deveriam vir antes dos números');
+      if (gr.dinheiro !== false) falha('Grade: "Dinheiro do mês" deveria começar recolhido (' + gr.dinheiro + ')');
+      await page.locator('.gr-dias button').nth(1).click();
+      const um = await diasVis(), escolhido = await page.locator('.gr-dias button').nth(1).getAttribute('data-dia');
+      if (um.length !== 1 || um[0] !== escolhido) falha('Grade: escolher um dia deveria mostrar só ele — ' + um.join(', '));
+      const nDias = await page.locator('.gr-day').count();
+      await page.fill('#grBusca', 'ana'); await page.waitForTimeout(100);
+      if ((await diasVis()).length !== nDias) falha('Grade: a busca deveria olhar a semana inteira');
+      await page.fill('#grBusca', ''); await page.waitForTimeout(100);
+      if ((await diasVis()).length !== 1) falha('Grade: limpar a busca deveria voltar ao dia escolhido');
+      await page.locator('.gr-dias button[data-dia=""]').click();
+      if ((await diasVis()).length !== nDias) falha('Grade: "Todos" deveria mostrar a semana');
+      // VIS-03 Recebimentos: busca, ordenação e páginas.
+      await page.evaluate(() => abrirM('fat')); await page.waitForTimeout(200);
+      const fat = await page.evaluate(() => { const t = [...document.querySelectorAll('#grFat tbody tr')]; const i = document.querySelector('#grFat .tb-q'); const vis = () => t.filter(x => !x.hidden).length; const pag = vis(); i.value = t[0].querySelector('.tb-tit').textContent; i.dispatchEvent(new Event('input')); return { tot: t.length, pag, busca: vis(), larg: document.querySelector('#ov-fat .gr-md').scrollWidth - document.querySelector('#ov-fat .gr-md').clientWidth }; });
+      if (fat.tot <= 20 || fat.pag !== 20 || !fat.busca || fat.busca >= 20 || fat.larg > 1) falha('Grade: Recebimentos sem busca ou páginas — ' + JSON.stringify(fat));
       // Metas: um cartão por meta, cada um com situação; e os meses fechados na tabela.
       await page.goto(url + '/metas', { waitUntil: 'domcontentloaded' });
       const mt = await page.evaluate(() => ({ cartoes: document.querySelectorAll('.mt-card').length, sit: [...document.querySelectorAll('.mt-card .mt-st')].filter(x => x.textContent.trim()).length, fechados: [...document.querySelectorAll('.mt-tab tbody tr')].filter(t => /fechado em/.test(t.textContent)).length }));
