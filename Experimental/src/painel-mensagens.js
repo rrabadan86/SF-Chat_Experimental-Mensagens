@@ -1845,6 +1845,9 @@ const server = http.createServer(protegido((req, res) => {
     else if (/(?:^|&)ctok=1/.test(q)) aviso = 'Tags salvas.';
     else if (/(?:^|&)lote=/.test(q)) aviso = `🏷️ ${(q.match(/lote=(\d+)/) || [])[1] || '0'} contato(s) atualizado(s) em lote.`;
     else if (/(?:^|&)dcon=1/.test(q)) aviso = '🔌 Desconexão solicitada. A SoFIA vai encerrar a sessão e, em alguns segundos, mostrar um QR novo aqui para reconectar.';
+    else if (/(?:^|&)erraq=1/.test(q)) { aviso = '⚠️ Não consegui gravar o aquecimento do número — ele NÃO mudou. Tente de novo; se repetir, confira o espaço em disco em Saúde.'; erro = true; }
+    else if (/(?:^|&)okaq=1/.test(q)) aviso = '🌱 Aquecimento ligado: a SoFIA só responde quem escreve (sem cobrança, campanha nem follow-up).';
+    else if (/(?:^|&)okaq=0/.test(q)) aviso = 'Aquecimento desligado: a SoFIA volta a enviar cobranças, campanhas e follow-ups (30 min depois de conectar).';
     else if (/(?:^|&)oksof=1/.test(q)) aviso = '🔄 SoFIA reiniciando… ela volta ao ar em ~1 minuto (o selo do WhatsApp acima mostra quando reconectar). Modelo e transcrição já valem.';
     else if (/(?:^|&)errsof=1/.test(q)) { aviso = '⚠️ Não consegui reiniciar a SoFIA pelo painel. Rode no servidor: pm2 restart ' + PM2_SOFIA; erro = true; }
     else if (/(?:^|&)okc=criada/.test(q)) aviso = '📣 Campanha criada! A IA está gerando as variações. Quando ficar “pronta”, clique em ▶️ Iniciar para começar o envio.';
@@ -2611,10 +2614,14 @@ const server = http.createServer(protegido((req, res) => {
   if (req.method === 'POST' && url === '/sofia/aquecimento') {
     return lerCorpo(req, 1e4, corpo => {
       const dias = parseInt(new URLSearchParams(corpo).get('dias') || '0', 10) || 0;
-      let st = null;
-      try { st = require('./sofia-aquecimento').gravar(sofia.DIR || process.env.SOFIA_DIR, dias); } catch (_) {}
-      try { auditoria.registrar(sess.usuario, dias ? 'sofia.aquecimento.ligar' : 'sofia.aquecimento.desligar', 'SoFIA', st && st.ate ? 'até ' + st.ate : ''); } catch (_) {}
-      res.writeHead(303, { Location: '/sofia?view=config#aquecimento' }); res.end();
+      const aq = require('./sofia-aquecimento');
+      let st = null, falhou = false;
+      try { st = aq.gravar(sofia.DIR || aq.dirPadrao(), dias); } catch (_) { falhou = true; }
+      // Freio de segurança: se pediu para ligar e não ficou ligado, a tela tem que dizer (não pode parecer ligado).
+      if (dias > 0 && !(st && st.ate)) falhou = true;
+      if (dias === 0 && st && st.ate) falhou = true;
+      try { auditoria.registrar(sess.usuario, dias ? 'sofia.aquecimento.ligar' : 'sofia.aquecimento.desligar', 'SoFIA', falhou ? 'FALHOU ao gravar' : (st && st.ate ? 'até ' + st.ate : '')); } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?view=config&' + (falhou ? 'erraq=1' : 'okaq=' + (dias > 0 ? '1' : '0')) + '#aquecimento' }); res.end();
     });
   }
   // Desconectar o WhatsApp da Sofia (envia comando ao listener → logout + reinicia → QR novo).
@@ -2632,7 +2639,12 @@ const server = http.createServer(protegido((req, res) => {
       const numero = numeroPareamento(d.numero);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       if (numero.length < 10) return res.end(JSON.stringify({ ok: false, erro: 'número inválido (use DDI+DDD+número)' }));
+      // Cada pedido reinicia a SoFIA e abre outra conexão com o WhatsApp: pedir em sequência
+      // é o que faz o WhatsApp bloquear o número. Um pedido a cada 3 minutos.
+      const faltam = Math.ceil((180000 - (Date.now() - (E._sofiaParearEm || 0))) / 1000);
+      if (faltam > 0) return res.end(JSON.stringify({ ok: false, erro: `Já há um código sendo gerado. Espere ${faltam} s antes de pedir outro — pedir várias vezes seguidas faz o WhatsApp bloquear a conexão.` }));
       try {
+        E._sofiaParearEm = Date.now();
         sofia.enviarComando('parear', { numero });
         try { auditoria.registrar(sess.usuario, 'sofia.parear', 'WhatsApp da SoFIA', numero); } catch (_) {}
         return res.end(JSON.stringify({ ok: true }));

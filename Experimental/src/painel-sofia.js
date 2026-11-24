@@ -711,8 +711,8 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       fetch('/sofia/agendar/slots',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){ agSlots=(j&&j.dias)||{}; agRender(); }).catch(function(){ agSlots={}; agRender(); }); return; }
     var hoje=new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'});
     var agoraHM=new Date().toLocaleTimeString('en-GB',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'});
-    var vagas=function(d){ return (agSlots[d]||[]).filter(function(s){ return s.disponivel && (d!==hoje || String(s.time)>agoraHM); }); }; // hoje: só o que ainda não passou
-    var dias=Object.keys(agSlots).filter(function(d){ return d>=hoje && vagas(d).length; }).sort();
+    var vagas=function(d){ return (agSlots[d]||[]).filter(function(s){ return s && s.disponivel && /^\\d{2}:\\d{2}$/.test(String(s.time)) && (d!==hoje || String(s.time)>agoraHM); }); }; // hoje: só o que ainda não passou
+    var dias=Object.keys(agSlots).filter(function(d){ return /^\\d{4}-\\d{2}-\\d{2}$/.test(d) && d>=hoje && vagas(d).length; }).sort();
     if(!dias.length){ dEl.innerHTML='<span class="quando">Não consegui ler os horários com vaga agora — digite a data e o horário abaixo.</span>'; hEl.innerHTML=''; if(man) man.style.display='flex'; return; }
     if(man) man.style.display='none';
     if(dias.indexOf(agDia)<0){ agDia=dias[0]; agHoraSel=''; }
@@ -720,7 +720,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       return '<button type="button" class="ag-dia'+(on?' on':'')+'" data-d="'+d+'" aria-pressed="'+on+'">'+(d===hoje?'Hoje':DSEM[dt.getUTCDay()])+' '+d.slice(8,10)+'/'+d.slice(5,7)+'<small>'+n+(n===1?' horário':' horários')+'</small></button>'; }).join('');
     var lista=vagas(agDia);
     if(!lista.some(function(s){return s.time===agHoraSel;})) agHoraSel='';
-    hEl.innerHTML=lista.map(function(s){ var on=s.time===agHoraSel, v=s.freeSpots!=null?(s.freeSpots+(s.freeSpots===1?' vaga':' vagas')):'com vaga';
+    hEl.innerHTML=lista.map(function(s){ var on=s.time===agHoraSel, nv=parseInt(s.freeSpots,10), v=isFinite(nv)?(nv+(nv===1?' vaga':' vagas')):'com vaga';
       return '<button type="button" class="ag-hora'+(on?' on':'')+'" data-h="'+escH(s.time)+'" aria-pressed="'+on+'">'+escH(s.time)+'<small>'+v+'</small></button>'; }).join('');
     dEl.onclick=function(e){ var b=e.target.closest?e.target.closest('[data-d]'):null; if(!b) return; agDia=b.getAttribute('data-d'); agHoraSel=''; agRender(); };
     hEl.onclick=function(e){ var b=e.target.closest?e.target.closest('[data-h]'):null; if(!b) return; agHoraSel=b.getAttribute('data-h'); agRender(); };
@@ -2339,7 +2339,7 @@ function paginaSofia(aviso, erro) {
     ${(() => { // SOF-12: número em aquecimento
       const aq = (() => { try { return require('./sofia-aquecimento'); } catch (_) { return null; } })();
       if (!aq) return '';
-      const dir = (() => { try { return require('./sofia-editor').DIR || process.env.SOFIA_DIR || ''; } catch (_) { return process.env.SOFIA_DIR || ''; } })();
+      const dir = sofia.DIR || aq.dirPadrao();
       const st = aq.ler(dir), on = aq.ativo(dir);
       const dm = (d) => d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '';
       return `<div class="card" id="aquecimento" style="margin:0 0 12px">
@@ -2951,7 +2951,7 @@ function paginaSofia(aviso, erro) {
     fetch('/sofia/parear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero:num})})
       .then(function(r){return r.json();}).then(function(j){
         btn.disabled=false;
-        if(j&&j.ok){ msg.style.color='#0a7a52'; msg.textContent='Pedido enviado — o código aparece acima em ~20s.'; atualizaSofiaWa(); }
+        if(j&&j.ok){ msg.style.color='#0a7a52'; msg.textContent='Pedido enviado — o código aparece acima em até 1 minuto.'; atualizaSofiaWa(); }
         else { msg.style.color='#c0392b'; msg.textContent=(j&&j.erro)||'Não consegui pedir o código.'; }
       }).catch(function(){ btn.disabled=false; msg.style.color='#c0392b'; msg.textContent='Falha de conexão.'; });
   }

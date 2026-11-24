@@ -249,10 +249,12 @@ function avisarReativacao(b, outboxFile) {
 // "ANA PAULA SOUZA" → "Ana Paula Souza"
 const nomeBonito = (nome) => String(nome || '').toLowerCase().replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase()).replace(/\b(Da|De|Do|Das|Dos|E)\b/g, (x) => x.toLowerCase());
 const TIPO_TXT = { recorrente: 'cartão recorrente', boleto: 'boleto', saldo: 'saldo devedor' };
-function textoGrupo(u, falhas) {
+// `aquecendo`: a SoFIA está com o número em aquecimento (SOF-12) — o aviso à aluna fica
+// guardado e só sai depois; a equipe precisa saber para avisar à mão.
+function textoGrupo(u, falhas, aquecendo = (() => { try { const aq = require('./sofia-aquecimento'); return aq.ativo(aq.dirPadrao()); } catch (_) { return false; } })()) {
   const p = ['📵 *Bloqueio do app — inadimplência*'];
   if (u.bloqueadas.length) p.push(`\n*Login do app EXCLUÍDO* (${u.dias}+ dias de atraso):\n` + u.bloqueadas.map(b => `• ${nomeBonito(b.nome)} — ${b.dias} dias (${TIPO_TXT[b.tipo] || b.tipo})`).join('\n'));
-  if (u.reativadas.length) p.push('\n*Acesso REATIVADO:*\n' + u.reativadas.map(r => `• ${nomeBonito(r.nome)} — ${/exce/.test(r.motivo || '') ? 'exceção marcada no painel' : 'pagou'}${r.avisou ? '; a SoFIA avisou a aluna (senha padrão)' : r.jaTinha ? '; a recepção já tinha recriado' : /exce/.test(r.motivo || '') ? '; avise a aluna que a senha voltou à padrão' : '; ⚠️ sem telefone: avise que a senha voltou à padrão'}`).join('\n'));
+  if (u.reativadas.length) p.push('\n*Acesso REATIVADO:*\n' + u.reativadas.map(r => `• ${nomeBonito(r.nome)} — ${/exce/.test(r.motivo || '') ? 'exceção marcada no painel' : 'pagou'}${r.avisou ? (aquecendo ? '; ⚠️ SoFIA em aquecimento: o aviso dela só sai depois — avise a aluna que a senha voltou à padrão' : '; a SoFIA avisou a aluna (senha padrão)') : r.jaTinha ? '; a recepção já tinha recriado' : /exce/.test(r.motivo || '') ? '; avise a aluna que a senha voltou à padrão' : '; ⚠️ sem telefone: avise que a senha voltou à padrão'}`).join('\n'));
   if (falhas.length) p.push('\n⚠️ *Não consegui reativar* — criar pela recepção (Cadastro → Área do aluno → Criar acesso):\n' + falhas.map(f => `• ${nomeBonito(f.nome)} — ${f.motivo}`).join('\n'));
   if (u.reativadas.length || falhas.length) p.push('\nSenha padrão ao recriar: 3 primeiras letras do nome + nascimento (ddmmaaaa).');
   return p.join('\n');

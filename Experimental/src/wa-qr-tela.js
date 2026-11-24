@@ -15,7 +15,8 @@
 
 // Roda DENTRO da página do WhatsApp Web (puppeteer: page.evaluate(lerTela)).
 // Não pode usar nada de fora desta função.
-function lerTela() {
+// `somenteLer` = true: não clica em nada (usado enquanto um código de conexão está na tela).
+function lerTela(somenteLer) {
   const d = document;
   const corpo = String((d.body && d.body.innerText) || '');
   const naTelaDeLogin = /\/login/.test(String(location.pathname || ''))
@@ -23,14 +24,14 @@ function lerTela() {
   // "Stay logged in on this browser": marcado, para o login ficar salvo no perfil.
   try {
     const caixas = Array.prototype.slice.call(d.querySelectorAll('input[type="checkbox"]'));
-    if (naTelaDeLogin && caixas.length === 1 && !caixas[0].checked
+    if (!somenteLer && naTelaDeLogin && caixas.length === 1 && !caixas[0].checked
       && /stay logged in|manter conectad|continuar conectad/i.test(corpo)) caixas[0].click();
   } catch (_) {}
   // Depois de alguns minutos o WhatsApp pede um clique para gerar QR novo.
   try {
     const botoes = Array.prototype.slice.call(d.querySelectorAll('button, [role="button"]'));
     const recarregar = botoes.find((b) => /reload|recarregar|gerar novo/i.test(String(b.innerText || b.getAttribute('aria-label') || '')));
-    if (naTelaDeLogin && recarregar) recarregar.click();
+    if (!somenteLer && naTelaDeLogin && recarregar) recarregar.click();
   } catch (_) {}
   // O QR é o maior canvas quadrado da tela. Vai para o painel com fundo branco e margem
   // (a câmera precisa da "zona quieta" em volta, e o painel pode estar no tema escuro).
@@ -173,7 +174,8 @@ async function esperarEntrada(pg, codigo, { log = () => {}, dormir, pausaMs = 30
   let fora = 0;
   while (agora() - ini < limiteMs) {
     let r = null;
-    try { r = await Promise.race([pg.evaluate(lerTela), espera(10000).then(() => null)]); } catch (_) { r = null; }
+    // só leitura: um clique em "recarregar/gerar novo" aqui trocaria o código que a pessoa está digitando
+    try { r = await Promise.race([pg.evaluate(lerTela, true), espera(10000).then(() => null)]); } catch (_) { r = null; }
     if (r) {
       const aindaCodigo = so && String(r.texto || '').toUpperCase().replace(/[^A-Z0-9]/g, '').includes(so);
       fora = (r.conexao === 'CONNECTED' || (!r.naTelaDeLogin && !aindaCodigo && !r.img)) ? fora + 1 : 0;
@@ -184,8 +186,29 @@ async function esperarEntrada(pg, codigo, { log = () => {}, dormir, pausaMs = 30
   return 'tempo';
 }
 
+/**
+ * Depois que alguém escaneou o QR (ou digitou o código): o que fazer com este processo?
+ * Nos primeiros minutos o celular entrega as chaves e os dados iniciais ao aparelho novo;
+ * fechar o navegador nesse meio faz o WhatsApp Web desistir e desfazer o vínculo (Lago
+ * Norte, 24/11/2026). Por isso:
+ *   - ficou pronto → 'pronto' (segue neste processo, sem reiniciar);
+ *   - autenticou mas ainda não ficou pronto → espera bem mais (`sincMs`) antes de desistir;
+ *   - nem autenticou em `prontoMs` → 'reiniciar' (o login não chegou a este processo).
+ * @param estaPronto  () => boolean      @param autenticou () => boolean
+ */
+async function esperarConexaoAposLogin({ estaPronto, autenticou, dormir, agora = Date.now, prontoMs = 60000, sincMs = 300000, pausaMs = 1000 } = {}) {
+  const espera = dormir || ((ms) => new Promise((r) => setTimeout(r, ms)));
+  const ini = agora();
+  for (;;) {
+    if (estaPronto()) return 'pronto';
+    const limite = (autenticou && autenticou()) ? Math.max(prontoMs, sincMs) : prontoMs;
+    if (agora() - ini >= limite) return 'reiniciar';
+    await espera(pausaMs);
+  }
+}
+
 // A falha foi na tela nova de entrada? (texto lido da página por quem chamou)
 const TELA_DE_ENTRADA = /scan to log in|link with phone|escaneie o qr|conectar com (o )?n[uú]mero/i;
 function ehTelaDeEntrada(info) { return !!(info && info.versao && !info.socket && TELA_DE_ENTRADA.test(String(info.tela || ''))); }
 
-module.exports = { lerTela, esperarQrPelaTela, ehTelaDeEntrada, pedirCodigoNaPagina, pedirCodigoPelaTela, esperarEntrada };
+module.exports = { lerTela, esperarQrPelaTela, ehTelaDeEntrada, pedirCodigoNaPagina, pedirCodigoPelaTela, esperarEntrada, esperarConexaoAposLogin };

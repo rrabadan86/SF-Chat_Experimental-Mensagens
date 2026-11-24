@@ -646,7 +646,7 @@ client.on("qr", async (qr) => {
   try { const dataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 }); setStatus("qr", dataUrl); }
   catch { setStatus("qr", ""); }
 });
-client.on("authenticated", () => { log("autenticada."); setStatus("iniciando"); armarWatchdogBoot(); });
+client.on("authenticated", () => { autenticadaEm = Date.now(); log("autenticada."); setStatus("iniciando"); armarWatchdogBoot(); });
 client.on("ready", () => { pronta = true; prontaDesde = Date.now(); modoPareamento = false; codigoPareamento = ""; try { fs.rmSync(PAREAR_FILE, { force: true }); } catch {} if (bootTimer) clearTimeout(bootTimer); gravarFails(0); log("PRONTA — respondendo as alunas."); setStatus("conectado"); agendarReconciliacaoLids(); agendarCatchup(); });
 client.on("change_state", (s: string) => log("estado: " + s));
 // Código de pareamento emitido pela própria biblioteca (modo pairWithPhoneNumber).
@@ -667,8 +667,8 @@ async function codigoPelaTela() {
   const pg: any = (client as any).pupPage;
   if (pronta || codigoPareamento || fluxoCodigo || !pg) return;
   let tela: any = null;
-  try { tela = await Promise.race([pg.evaluate(qrTela.lerTela), sleep(8000).then(() => null)]); } catch { tela = null; }
-  if (!tela || !tela.naTelaDeLogin) return;
+  try { tela = await Promise.race([pg.evaluate(qrTela.lerTela, true), sleep(8000).then(() => null)]); } catch { tela = null; }
+  if (!tela || !tela.naTelaDeLogin) return; // a tela de entrada ainda não abriu — a próxima tentativa confere de novo
   fluxoCodigo = true;
   log(`🔢 pedindo o código de conexão pela página (número ${PAIR_BOOT})…`);
   const r: any = await qrTela.pedirCodigoPelaTela(pg, PAIR_BOOT);
@@ -686,9 +686,7 @@ async function codigoPelaTela() {
   const res = await qrTela.esperarEntrada(pg, r.codigo, { log, dormir: sleep });
   if (res === "entrou") {
     gravarFails(0); setStatus("iniciando");
-    const ate = Date.now() + 60000;
-    while (!pronta && Date.now() < ate) await sleep(1000);
-    if (pronta) { log("Código: conectada neste mesmo processo — sem reiniciar."); return; }
+    if (await conexaoAposLogin() === "pronto") { log("Código: conectada neste mesmo processo — sem reiniciar."); return; }
     await fecharNavegador(); log("subindo de novo com o login salvo…"); process.exit(0); return;
   }
   log("ninguém digitou o código em 10 min — voltando ao QR.");
@@ -696,7 +694,8 @@ async function codigoPelaTela() {
   await fecharNavegador(); process.exit(0);
 }
 if (PAIR_BOOT) {
-  setTimeout(() => { codigoPelaTela().catch((e) => { log("erro no código pela página: " + (e?.message || e)); fluxoCodigo = false; }); }, 25_000);
+  // Tenta aos 25 s e de 10 em 10 s até 75 s: em servidor lento a tela de entrada demora a abrir.
+  for (const t of [25, 35, 45, 55, 65, 75]) setTimeout(() => { codigoPelaTela().catch((e) => { log("erro no código pela página: " + (e?.message || e)); fluxoCodigo = false; }); }, t * 1000);
   // Sem código em 90 s → desiste do modo código e volta ao QR (reinicia).
   setTimeout(() => {
     if (pronta || codigoPareamento || fluxoCodigo) return;
@@ -786,6 +785,7 @@ function limparLoginSePedido() {
   log(`login antigo apagado (${porque}) — vou gerar um QR novo. Conversas e configurações não foram tocadas.`);
 }
 let pronta = false;
+let autenticadaEm = 0; // SOF-08: última autenticação neste processo
 let prontaDesde = 0; // SOF-12: quando conectou (envios que ELA inicia esperam um pouco)
 // SOF-12: pode a SoFIA INICIAR um envio agora (cobrança, campanha, follow-up)? '' = pode.
 const avisosBloqueio: Record<string, number> = {};
@@ -799,6 +799,17 @@ function bloqueioEnvioAtivo(oque: string): string {
   return m;
 }
 let bootTimer: ReturnType<typeof setTimeout> | null = null;
+// Depois do QR lido / código digitado: espera a conexão neste processo. Se autenticou mas
+// ainda não ficou pronta, está sincronizando com o celular — espera bem mais (o vigia de
+// boot, armado no "autenticada", cuida do travamento de verdade).
+function conexaoAposLogin(): Promise<string> {
+  const desde = Date.now();
+  return qrTela.esperarConexaoAposLogin({
+    estaPronto: () => pronta, autenticou: () => autenticadaEm >= desde - 30000, dormir: sleep,
+    prontoMs: Math.max(15000, parseInt(process.env.SOFIA_QR_TELA_PRONTA_MS || "60000", 10) || 60000),
+    sincMs: parseInt(process.env.SOFIA_QR_TELA_SINC_MS || "300000", 10) || 300000,
+  });
+}
 // Fecha o WhatsApp Web DE VERDADE antes de sair: se o Chromium antigo ficar vivo, o
 // novo processo entra com o mesmo login e o WhatsApp desfaz o vínculo (duas conexões).
 async function fecharNavegador() {
@@ -2176,16 +2187,23 @@ setInterval(() => { processarCobranca().catch(() => {}); }, 5000);
 // SOF-12: em aquecimento a cobrança da fila não sai e não fica acumulando (senão sairia
 // tudo de uma vez no fim). Fica no Log como não enviada; o robô põe de novo na fila no
 // próximo dia de cobrança (só marca "avisada" quem recebeu de verdade).
+// O aviso de "acesso ao app reativado" (tipo "app") é gravado UMA vez pelo robô e ninguém
+// repõe: esse fica guardado na fila e sai quando o aquecimento acabar.
 function descartarCobrancasEmAquecimento() {
+  let atuais: string[] = [];
+  try { atuais = fs.readFileSync(COBRANCA_OUTBOX, "utf8").split("\n").map((l) => l.trim()).filter(Boolean); } catch { return; }
+  const r0 = aquecimento.separarFila(atuais);
+  if (!r0.descartar.length) return; // só há avisos guardados: nada a fazer (não regrava o arquivo à toa)
   const tmp = COBRANCA_OUTBOX + "." + Date.now() + ".aquec";
   let linhas: string[] = [];
   try { fs.renameSync(COBRANCA_OUTBOX, tmp); linhas = fs.readFileSync(tmp, "utf8").split("\n").map((l) => l.trim()).filter(Boolean); fs.rmSync(tmp, { force: true }); } catch { return; }
-  for (const linha of linhas) {
-    let ent: any; try { ent = JSON.parse(linha); } catch { continue; }
+  const r = aquecimento.separarFila(linhas);
+  if (r.guardar.length) { try { fs.appendFileSync(COBRANCA_OUTBOX, r.guardar.join("\n") + "\n", "utf8"); } catch (e: any) { log("erro ao guardar avisos do app na fila: " + (e?.message || e)); } }
+  for (const ent of r.descartar) {
     const tel = String(ent?.telefone || "").replace(/\D/g, "");
     try { registrarAtividadeCobranca(ent, tel, String(ent?.texto || ""), false, "não enviada: número da SoFIA em aquecimento"); } catch {}
   }
-  if (linhas.length) log(`cobrança: ${linhas.length} item(ns) não enviado(s) — número em aquecimento (o robô repõe na fila depois).`);
+  log(`cobrança: ${r.descartar.length} item(ns) não enviado(s) — número em aquecimento (o robô repõe na fila depois)${r.guardar.length ? `; ${r.guardar.length} aviso(s) de app reativado guardado(s) para depois` : ""}.`);
 }
 
 // ── Agendamento MANUAL pelo painel (atendente) ──────────────────────────────
@@ -3250,9 +3268,7 @@ armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia
           // deixava o navegador antigo conectado junto com o novo — o WhatsApp via duas
           // conexões e desfazia o vínculo (LOGOUT, Lago Norte 24/11/2026). Só reinicia se
           // não ficar pronta, e fecha o navegador antigo de verdade antes.
-          const ate = Date.now() + Math.max(15000, parseInt(process.env.SOFIA_QR_TELA_PRONTA_MS || "60000", 10) || 60000);
-          while (!pronta && Date.now() < ate) await sleep(1000);
-          if (pronta) { log("QR pela tela: conectada neste mesmo processo — sem reiniciar."); return; }
+          if (await conexaoAposLogin() === "pronto") { log("QR pela tela: conectada neste mesmo processo — sem reiniciar."); return; }
           await fecharNavegador();
           log("subindo de novo com o login salvo…");
           process.exit(0);
