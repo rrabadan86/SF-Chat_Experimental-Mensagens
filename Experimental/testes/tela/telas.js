@@ -37,7 +37,7 @@ const SAIDA = process.env.SAIDA || fs.mkdtempSync(path.join(os.tmpdir(), 'sf-tel
 fs.mkdirSync(SAIDA, { recursive: true });
 
 const TELAS = [
-  '/hoje', '/?view=config', '/?view=express', '/visao-cliente',
+  '/hoje', '/?view=config', '/?view=express', '/visao-cliente', '/visao-cliente?j=resumos', '/visao-cliente?j=avisos',
   '/sofia?view=conversas', '/sofia?view=config', '/sofia?view=contatos', '/sofia?view=tags',
   '/sofia?view=campanhas', '/sofia?view=cobranca', '/sofia?view=custo',
   '/indicadores', '/funil', '/professoras', '/ativas', '/grade', '/metas', '/dicionario', // (/pagamento só existe com PAGAMENTO_ATIVO)
