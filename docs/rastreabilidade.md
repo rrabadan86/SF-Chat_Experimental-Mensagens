@@ -24,18 +24,18 @@ o teste que a garante e a cobertura.
 | Envios a clientes | 30 | 14 | 7 | 9 | 0 |
 | Painel | 11 | 4 | 2 | 3 | 2 |
 | Padrão visual | 7 | 2 | 3 | 1 | 1 |
-| SoFIA | 7 | 0 | 4 | 3 | 0 |
+| SoFIA | 8 | 0 | 5 | 3 | 0 |
 | EVO e aula experimental | 10 | 2 | 1 | 7 | 0 |
 | Indicadores e tags | 9 | 8 | 0 | 1 | 0 |
 | Dados e segredos | 7 | 4 | 1 | 0 | 2 |
 | Demonstração | 4 | 3 | 0 | 0 | 1 |
 | Publicar e atualizar | 8 | 2 | 1 | 2 | 3 |
 | Testes | 10 | 5 | 0 | 0 | 5 |
-| **Total** | 103 | 44 | 19 | 26 | 14 |
+| **Total** | 104 | 44 | 20 | 26 | 14 |
 
-Regras de código (sem as de processo): **63 de 89** com teste (44 inteiras, 19 em parte); **26** sem teste.
+Regras de código (sem as de processo): **64 de 90** com teste (44 inteiras, 20 em parte); **26** sem teste.
 
-Testes: 130 no total, 94 ligados a uma regra. Os outros 36 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
+Testes: 134 no total, 98 ligados a uma regra. Os outros 36 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
 <!-- resumo:fim -->
 
 ## Envios a clientes (`envio.md`)
@@ -107,11 +107,12 @@ Testes: 130 no total, 94 ligados a uma regra. Os outros 36 conferem funções qu
 |---|---|---|---|---|
 | SOF-01 | Recepção assume → SoFIA pausa naquela conversa | `ChatBot/sofia-engine.ts`, `ChatBot/sofia-listener.ts` | — | ❌ |
 | SOF-02 | Campanha: teto por dia, janela, pausa; uma vez por pessoa; cancelada não volta | `ChatBot/sofia-listener.ts`, `painel-mensagens.js` | — | ❌ |
-| SOF-03 | Conexão: esperas crescentes; reconectar pelo painel ou `slimfit-sofia` | `ChatBot/sofia-listener.ts`, `painel-sofia.js`, `scripts/sofia.js` | `sofia-reconectar.test.js` › SOF-03 reconectar: volta<br>`sofia-reconectar.test.js` › SOF-03 reconectar: se não volta<br>`sofia-reconectar.test.js` › SOF-03 reconectar: se nem o QR<br>`sofia-reconectar.test.js` › SOF-03 SoFIA: a pausa<br>`sofia-reconectar.test.js` › SOF-03 PAI-02 no painel | parcial: "8 falhas seguidas descartam o login salvo" sem teste |
+| SOF-03 | Conexão: esperas crescentes; reconectar pelo painel ou `slimfit-sofia` | `ChatBot/sofia-listener.ts`, `painel-sofia.js`, `scripts/sofia.js` | `sofia-reconectar.test.js` › SOF-03 reconectar: volta<br>`sofia-reconectar.test.js` › SOF-03 reconectar: se não volta<br>`sofia-reconectar.test.js` › SOF-03 reconectar: se nem o QR<br>`sofia-reconectar.test.js` › SOF-03 SoFIA: a pausa<br>`sofia-reconectar.test.js` › SOF-03 PAI-02 no painel | parcial: "não apaga o login sozinho" (TypeScript) sem teste |
 | SOF-04 | WhatsApp Web: ao vivo; sem estado → versão reserva por 7 dias | `wa-versao-reserva.js`, `wa-client.js`, `ChatBot/sofia-listener.ts` | `whatsapp-versao-reserva.test.js` › SOF-04 robô: a versão ao vivo<br>`whatsapp-versao-reserva.test.js` › SOF-04 robô: conexão presa<br>`whatsapp-versao-reserva.test.js` › SOF-04 robô: nem a reserva<br>`whatsapp-versao-reserva.test.js` › SOF-04 reserva: o marcador | parcial: a cópia em TypeScript da SoFIA sem teste |
 | SOF-05 | SoFIA pode agendar experimental para quem já fez | `ChatBot/rota_book_sofia.py`, `agendamento_evo/formulario_web/app.py` | — | ❌ |
 | SOF-06 | Cobrança: a SoFIA envia a fila do robô, até 3 tentativas | `ChatBot/sofia-listener.ts`, `inadimplentes.js` | `cobranca-aniversario.test.js` › COB-01 cobrança | parcial: as 3 tentativas da SoFIA sem teste |
 | SOF-07 | Chaves da IA e da transcrição só no `.env`/painel | `painel-sofia.js`, `env-arquivo.js` | `trava-segredos.test.js` › DAD-07 trava de segredos: barra | parcial: a trava pega chave no código; o painel não tem teste |
+| SOF-08 | QR pela tela nova de entrada do WhatsApp Web (SoFIA e robô) | `wa-qr-tela.js`, `wa-client.js`, `ChatBot/sofia-listener.ts` | `qr-tela.test.js` › SOF-08 QR pela tela: copia<br>`qr-tela.test.js` › SOF-08 QR pela tela: uma leitura<br>`qr-tela.test.js` › SOF-08 robô<br>`qr-tela.test.js` › SOF-08 tela nova de entrada | parcial: a SoFIA (TypeScript) usa a mesma peça mas não tem teste próprio; o WhatsApp de verdade só se confere na loja |
 
 ## EVO e aula experimental (`evo.md`)
 

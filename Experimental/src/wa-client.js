@@ -336,9 +336,9 @@ function initWhatsApp() {
   client = criarClient();
   iniciarWatcherComando(); // escuta o pedido de "desconectar" vindo do painel
 
-  let rejectInit = null;
+  let rejectInit = null, resolveInit = null;
   initPromise = new Promise((resolve, reject) => {
-    rejectInit = reject;
+    rejectInit = reject; resolveInit = resolve;
     client.on('qr', async (qr) => {
       // Modo CÓDIGO (pairing): se o painel pediu conexão por número, pedimos o
       // código de 8 dígitos ao WhatsApp (1x por comando) e NÃO mostramos o QR.
@@ -462,7 +462,35 @@ function initWhatsApp() {
     // Fecha o navegador desta tentativa ANTES de liberar outra: ele ficava aberto,
     // e cada tentativa nova abria MAIS um Chromium no mesmo perfil do WhatsApp — os
     // dois brigavam pela sessão e o robô não conectava mais até ser reiniciado.
-    decidirReserva(await anotarEstadoNaFalha(client));
+    const info = await anotarEstadoNaFalha(client);
+    decidirReserva(info);
+    // SOF-08: sem login, o WhatsApp Web novo (24/11/2026) abre a tela de entrada e a
+    // biblioteca não percebe o QR. Copiamos o QR da página para o painel até alguém
+    // escanear; aí fechamos com calma e subimos de novo, já com o login salvo.
+    if (require('./wa-qr-tela').ehTelaDeEntrada(info) && client && client.pupPage) {
+      const res = await require('./wa-qr-tela').esperarQrPelaTela(client.pupPage, {
+        aoQr: (img) => {
+          waStatus.set('qr', img);
+          if (!qrAvisado) {
+            qrAvisado = true;
+            notif.alertar('WhatsApp CAIU — precisa de QR',
+              'A sessao do WhatsApp expirou. Abra o painel (aba WhatsApp) e escaneie o QR. Ate la, NENHUMA mensagem sai.',
+              { prioridade: 'urgent', tags: 'rotating_light' });
+          }
+        },
+        log,
+      });
+      if (res === 'entrou') {
+        try { require('./wa-versao-reserva').limpar(ARQ_RESERVA); } catch (_) {} // com login salvo, a ao vivo funciona
+        waStatus.set('iniciando', null);
+        await new Promise((r) => setTimeout(r, Number(process.env.WA_QR_TELA_GRAVAR_MS) || 15000)); // deixa o login gravar no perfil
+        await fecharClienteMorto(client);
+        initPromise = null;
+        log('subindo de novo com o login salvo…');
+        initWhatsApp().then(resolveInit, rejectInit);
+        return;
+      }
+    }
     await fecharClienteMorto(client);
     initPromise = null; // permite nova tentativa depois
     if (rejectInit) rejectInit(new Error(msg));
