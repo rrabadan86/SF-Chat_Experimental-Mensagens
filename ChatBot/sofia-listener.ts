@@ -24,6 +24,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import QRCode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
+import qrTela from "../Experimental/src/wa-qr-tela.js"; // SOF-08: QR pela tela nova de entrada do WhatsApp Web
 import { responderComMemoria, assumirConversa, registrarNaMemoria, drenarMidias, gerarVariacoes, gerarTextoCampanha, deveResponder, janelaSessaoMs, resumirEClassificar, fichaDaLead, simularResposta, pareceMensagemAutomatica, gerarFollowup, classificarIntencaoTags, agendarManual, temTagSemInteresse } from "./sofia";
 
 // Pasta dos arquivos da Sofia. Por padrão, a pasta de trabalho (comportamento
@@ -3147,6 +3148,26 @@ armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia
           try { fs.writeFileSync(RESERVA_FILE, JSON.stringify({ em: Date.now(), versao: info.versao })); log(`   a versão ao vivo do WhatsApp Web (${info.versao}) abriu mas não chegou no QR — a próxima tentativa usa a versão reserva.`); } catch {}
         }
       }
+      // SOF-08: sem login, o WhatsApp Web novo (24/11/2026) abre a tela de entrada e a
+      // biblioteca não percebe o QR. Copiamos o QR da página para o painel até alguém
+      // escanear; aí fechamos o navegador com calma e subimos de novo com o login salvo.
+      if (qrTela.ehTelaDeEntrada(info) && pg) {
+        let avisou = false;
+        const res = await qrTela.esperarQrPelaTela(pg, {
+          aoQr: (img: string) => { setStatus("qr", img); if (!avisou) { avisou = true; alertarQuedaQR(); } },
+          log, dormir: sleep,
+        });
+        if (res === "entrou") {
+          try { fs.rmSync(RESERVA_FILE, { force: true }); } catch {} // com login salvo, a versão ao vivo funciona
+          gravarFails(0);
+          setStatus("iniciando");
+          await sleep(15000); // deixa o login gravar no perfil antes de fechar o navegador
+          try { await Promise.race([client.destroy(), sleep(20000)]); } catch {}
+          log("subindo de novo com o login salvo…");
+          process.exit(0);
+          return;
+        }
+      }
     } catch {}
     // Backoff CRESCENTE persistido. Reiniciar de 50 em 50s martela o WhatsApp e
     // faz o servidor BLOQUEAR o número por excesso de tentativas — foi o que
@@ -3159,7 +3180,11 @@ armarWatchdogBoot(); // se não chegar em PRONTA a tempo, limpa cache e reinicia
     // "abrindo/pareando"): depois de muitas falhas SEGUIDAS, o login guardado está
     // morto — apaga só ele no próximo boot para aparecer um QR novo. Conversas,
     // tags e configurações não moram ali.
-    const LIMITE_SESSAO_MORTA = parseInt(process.env.SOFIA_LIMPAR_LOGIN_APOS || "8", 10);
+    // SOF-03 (decisão do dono, 24/11/2026): o login salvo NÃO é mais apagado sozinho. Em
+    // 23/11 a Lago Norte apagou um login por falhas que eram da versão do WhatsApp Web,
+    // não da sessão. Apagar só pelo painel ("QR novo") ou pelo slimfit-sofia. Quem quiser
+    // o comportamento antigo põe SOFIA_LIMPAR_LOGIN_APOS=8 no .env.
+    const LIMITE_SESSAO_MORTA = parseInt(process.env.SOFIA_LIMPAR_LOGIN_APOS || "0", 10);
     if (LIMITE_SESSAO_MORTA > 0 && n >= LIMITE_SESSAO_MORTA && /Waiting failed|auth timeout|timeout/i.test(String(e?.message || e)) && fs.existsSync(AUTH_DIR)) {
       pedirLimpezaDoLogin(`${n} falhas seguidas ao abrir o WhatsApp — sessão salva travada`);
       gravarFails(0);
