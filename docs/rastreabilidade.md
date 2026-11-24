@@ -35,7 +35,7 @@ o teste que a garante e a cobertura.
 
 Regras de código (sem as de processo): **64 de 90** com teste (44 inteiras, 20 em parte); **26** sem teste.
 
-Testes: 134 no total, 98 ligados a uma regra. Os outros 36 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
+Testes: 135 no total, 99 ligados a uma regra. Os outros 36 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
 <!-- resumo:fim -->
 
 ## Envios a clientes (`envio.md`)
@@ -78,7 +78,7 @@ Testes: 134 no total, 98 ligados a uma regra. Os outros 36 conferem funções qu
 | Código | Regra | Onde | Teste | Cobertura |
 |---|---|---|---|---|
 | PAI-01 | Toda rota exige login, menos as públicas | `painel-mensagens.js` | `permissoes.test.js` › PAI-01 PAI-02 usuário sem nenhuma permissão<br>`perfis.test.js` › PAI-01..04 cada perfil<br>`unidades-rede.test.js` › PAI-01 PAI-03 no painel: /unidades | ✅ |
-| PAI-02 | Rota nova tem regra de acesso no servidor | `painel-mensagens.js`, `painel-sofia.js`, `painel-whatsapp.js` | `permissoes.test.js` › PAI-01 PAI-02 usuário sem nenhuma permissão<br>`perfis.test.js` › PAI-01..04 cada perfil<br>`sofia-reconectar.test.js` › SOF-03 PAI-02 no painel | ✅ |
+| PAI-02 | Rota nova tem regra de acesso no servidor | `painel-mensagens.js`, `painel-sofia.js`, `painel-whatsapp.js` | `permissoes.test.js` › PAI-01 PAI-02 usuário sem nenhuma permissão<br>`perfis.test.js` › PAI-01..04 cada perfil<br>`sofia-reconectar.test.js` › SOF-03 PAI-02 no painel<br>`rotas-telas.test.js` › PAI-02 todo fetch | ✅ |
 | PAI-03 | Admin vê tudo; Perfis, sistema e credenciais só admin | `painel-mensagens.js` | `perfis.test.js` › PAI-01..04 cada perfil<br>`senha-evo.test.js` › DAD-05 PAI-03 no painel<br>`unidades-rede.test.js` › PAI-01 PAI-03 no painel: /unidades | ✅ |
 | PAI-04 | Permissões por tela de `usuarios.js`; chave desconhecida descartada | `usuarios.js` | `perfis.test.js` › PAI-01..04 cada perfil | ✅ |
 | PAI-05 | Login: 10 erros em 15 min bloqueiam; cookie HttpOnly, assinado | `painel-mensagens.js`, `usuarios.js` | — | ❌ |
