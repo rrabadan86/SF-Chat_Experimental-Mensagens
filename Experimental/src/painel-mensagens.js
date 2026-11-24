@@ -343,7 +343,7 @@ function telaDaUrl(u) {
 // (marcar tags/salvar contato a partir de uma conversa) vale para Conversas OU Contatos.
 function sofiaRotaPermitida(sess, url) {
   const has = k => (sess.telas || []).includes(k);
-  if (url === '/sofia/agendar' || url === '/sofia/agendar/status') return has('sofia_conversas') || has('msg_express') || has('msg_agendar'); // agendar no EVO: das Conversas OU do Cadastro Express (aba WhatsApp)
+  if (url === '/sofia/agendar' || url === '/sofia/agendar/status' || url === '/sofia/agendar/slots') return has('sofia_conversas') || has('msg_express') || has('msg_agendar'); // agendar no EVO: das Conversas OU do Cadastro Express (aba WhatsApp)
   if (url === '/sofia/conversas' || url === '/sofia/responder' || url === '/sofia/humano' || url === '/sofia/humano-foto' || url === '/sofia/conversas/encerrar') return has('sofia_conversas');
   if (url === '/sofia/importar' || url === '/sofia/importar/status') return has('sofia_conversas') || has('sofia_config');
   if (url === '/sofia/contatos/salvar-novo') return has('sofia_conversas') || has('sofia_contatos');
@@ -367,6 +367,28 @@ function msgRotaPermitida(sess, url, fullUrl) {
   if (url === '/agendar' || url.startsWith('/agendar/')) return podeExpr;
   if (url === '/' && /(?:^|[?&])view=(agendar|express)/.test(fullUrl || '')) return podeExpr;
   return has('msg_config'); // /, /salvar, /mensagem/*, /teste/*, /horarios*, /wa*
+}
+// Grade de horários com vaga (proxy do formulário, /api/slots): { dias: { 'AAAA-MM-DD': [{ time, disponivel, freeSpots }] } }.
+// Na demonstração não há formulário: devolve uma grade de exemplo.
+function gradeDemo(agora = Date.now()) {
+  const dias = {}, HORAS = ['06:00', '07:00', '08:00', '09:30', '12:00', '17:00', '18:00', '19:00', '20:00'];
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(agora + i * 864e5).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    if (new Date(d + 'T12:00:00Z').getUTCDay() === 0) continue; // domingo sem aula
+    dias[d] = HORAS.map((time, k) => { const v = (i * 7 + k * 3) % 5; return { time, disponivel: v > 0, freeSpots: v }; });
+  }
+  return dias;
+}
+function gradeDoFormulario(res) {
+  const responder = (o) => { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(o)); };
+  if (DEMO.ativo) return responder({ dias: gradeDemo() });
+  const FORM_BASE = (process.env.FORM_CLOUD_URL || '').replace(/\/+$/, '');
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 12000);
+  return fetch(FORM_BASE + '/api/slots?days=10', { signal: ctrl.signal })
+    .then(r => r.json())
+    .then(j => { clearTimeout(t); responder({ dias: (j && j.dias) || {} }); })
+    .catch(e => { clearTimeout(t); responder({ dias: {}, erro: String((e && e.message) || e) }); });
 }
 function primeiraTela(sess) {
   // Tela inicial ao logar: Conversas da SoFIA (para quem tem acesso — inclui admin).
@@ -2201,15 +2223,8 @@ const server = http.createServer(protegido((req, res) => {
       res.writeHead(303, { Location: '/?view=express' }); res.end();
     });
   }
-  if (req.method === 'GET' && url === '/agendar/slots') {
-    const FORM_BASE = (process.env.FORM_CLOUD_URL || '').replace(/\/+$/, '');
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 12000);
-    return fetch(FORM_BASE + '/api/slots?days=10', { signal: ctrl.signal })
-      .then(r => r.json())
-      .then(j => { clearTimeout(t); res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ dias: (j && j.dias) || {} })); })
-      .catch(e => { clearTimeout(t); res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ dias: {}, erro: String((e && e.message) || e) })); });
-  }
+  // Mesma grade para o Agendar das Conversas da SoFIA (/sofia/agendar/slots).
+  if (req.method === 'GET' && (url === '/agendar/slots' || url === '/sofia/agendar/slots')) return gradeDoFormulario(res);
   // Atualizar a grade AGORA (botão 🔄 do Cadastro Express): recalcula a grade no
   // EVO e reenvia ao formulário (push_slots). Assim a recepção vê as vagas na hora,
   // sem esperar o envio automático (a cada ~30 min). Usa o venv do agendamento.

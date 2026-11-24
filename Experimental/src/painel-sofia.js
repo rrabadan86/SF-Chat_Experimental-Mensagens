@@ -195,6 +195,36 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       .cv-sit a[data-s=aguardando].tem{color:var(--tinta);font-weight:600}
       .cv-sit a[data-s=aguardando].tem b{display:inline-block;min-width:20px;padding:0 6px;border-radius:999px;background:var(--teal);color:var(--card);text-align:center}
       .cv-agu{background:var(--teal);color:var(--card);border-radius:999px;padding:1px 9px;font-size:var(--fs-xs);font-weight:700}
+      /* Editor de tags da conversa: pílulas que se marcam com um toque, em grupos */
+      .tg-box{margin:0 0 12px;padding:12px;background:var(--card);border:1px solid var(--linha);border-radius:12px}
+      .tg-top{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+      .tg-top input{flex:1 1 180px;min-width:0}
+      .tg-top .quando{margin:0}
+      .tg-lista{max-height:260px;overflow-y:auto;padding:2px}
+      .tg-grp{margin:0 0 10px}
+      .tg-grp-t{font-size:var(--fs-xs);font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--cinza);margin:0 0 6px}
+      .tg-chips{display:flex;flex-wrap:wrap;gap:6px}
+      .tg-chip{border:1px solid var(--linha);background:var(--card);color:var(--tinta);border-radius:999px;padding:5px 12px;font-size:var(--fs-sm);font-weight:600;cursor:pointer;line-height:1.3;overflow-wrap:anywhere;text-align:left}
+      .tg-chip:hover{border-color:var(--teal)}
+      .tg-chip.on{background:var(--teal);border-color:var(--teal);color:var(--card)}
+      .tg-chip:focus-visible,.ag-dia:focus-visible,.ag-hora:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+      .tg-rod{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--linha)}
+      .tg-rod .quando{margin:0}
+      /* Agendar pela conversa: dias e horários com vaga, como no Cadastro Express */
+      .ag-box{margin:0 0 12px;padding:12px;background:var(--teal-soft);border:1px solid var(--linha);border-radius:12px}
+      .ag-tit{font-weight:700;font-size:var(--fs-sm);margin-bottom:8px}
+      .ag-campos{display:flex;gap:8px;flex-wrap:wrap}
+      .ag-campos input{flex:1 1 180px;min-width:0}
+      .ag-rot{font-size:var(--fs-xs);font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--cinza);margin:12px 0 6px}
+      .ag-dias,.ag-horas{display:flex;flex-wrap:wrap;gap:6px}
+      .ag-dia,.ag-hora{border:1px solid var(--linha);background:var(--card);color:var(--tinta);border-radius:10px;padding:6px 11px;font-size:var(--fs-sm);font-weight:700;cursor:pointer;line-height:1.25;text-align:center;min-width:64px}
+      .ag-dia small,.ag-hora small{display:block;font-weight:500;color:var(--cinza);font-size:var(--fs-xs)}
+      .ag-dia.on,.ag-hora.on{background:var(--teal);border-color:var(--teal);color:var(--card)}
+      .ag-dia.on small,.ag-hora.on small{color:var(--card)}
+      .ag-acoes{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+      .ag-acoes .quando{margin:0;text-decoration:underline}
+      .ag-box .quando{overflow-wrap:anywhere}
+      @media(max-width:760px){.tg-chip,.ag-dia,.ag-hora{min-height:40px}.ag-acoes .save{width:100%;min-height:46px}}
       /* Mobile: mostra a LISTA ou a CONVERSA (master-detail), não as duas ── item 5 ── */
       @media(max-width:760px){
         #convChat{display:none}
@@ -264,7 +294,7 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
 <script>
   var sitFiltro=''; // filtro rápido da lista: '' (todas) | aguardando | agendaram | encerradas — clicar de novo desliga
   try{ var sitUrl=new URLSearchParams(location.search).get('sit'); if(['aguardando','agendaram','encerradas'].indexOf(sitUrl)>=0) sitFiltro=sitUrl; }catch(e){} // link de Indicadores → Metas → Atendimento
-  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ultimoInboxHtml='', ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', buscaTexto='', quietoFiltro=false, atencaoFiltro=false, respondeuFiltro=false, tagEdAberto=false, agAberto=false, ncNome='', ncDirty=false, ncTodas=[];
+  var selecionada=null, pagina=0, POR_PAGINA=10, ultimoData={}, ultimoRender={chave:null,n:-1,humano:null}, ultimoInboxHtml='', ncSel=[], rascunhos={}, fotoPend={}, tagFiltro='', buscaTexto='', quietoFiltro=false, atencaoFiltro=false, respondeuFiltro=false, tagEdAberto=false, agAberto=false, ncNome='', ncDirty=false, ncTodas=[], tgBusca='', agSlots=null, agDia='', agHoraSel='', agNomeV='', agEmailV='';
   // Atalho vindo de Contatos: ?chat=<telefone> abre a conversa correspondente.
   var alvoChat=(new URLSearchParams(location.search).get('chat')||'').replace(/\\D/g,''), alvoAplicado=false;
   function mesmoTel(a,b){ a=String(a||'').replace(/\\D/g,''); b=String(b||'').replace(/\\D/g,''); if(!a||!b) return false; if(a===b) return true; var la=a.slice(-8), lb=b.slice(-8); return la.length===8 && la===lb; }
@@ -489,21 +519,14 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       +'🏷️ '+(tagEdAberto?'':resumo)
       +'<a href="javascript:void(0)" onclick="toggleTagEd()" class="quando" style="margin:0;text-decoration:underline">'+(tagEdAberto?'fechar':'editar')+'</a>'
       +((!tagEdAberto && ncDirty)?'<span style="color:#9a6b00;font-weight:700">⚠️ não salvo</span>':'')+'</div>';
-    var editor = tagEdAberto ? ('<div style="margin:0 0 12px;padding:10px 12px;background:#fafafa;border:1px solid #eee;border-radius:10px">'
-      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
-      +'<span class="quando" style="margin:0">Nome</span>'
-      +'<input id="ncNome" value="'+escH(ncNome)+'" placeholder="nome do contato" oninput="ncNome=this.value;ncMarcaSujo()" style="flex:1;min-width:150px;font-size:.85rem">'
-      +'</div>'
-      +'<div class="quando" style="margin:0 0 4px">Tags <small>(marque as que se aplicam)</small></div>'
-      +'<div id="ncTags" style="max-height:190px;overflow:auto;border:1px solid #eee;border-radius:8px;padding:6px 10px;background:#fff;margin-bottom:8px"></div>'
-      +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
-      +'<input id="ncNovaTag" placeholder="criar nova tag" style="flex:1;min-width:150px;font-size:.85rem" onkeydown="if(event.key===\\'Enter\\'){event.preventDefault();ncAddNovaTag();}">'
-      +'<button type="button" class="reset" style="padding:5px 12px" onclick="ncAddNovaTag()">+ criar</button>'
-      +'</div>'
-      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
-      +'<button type="button" id="ncSalvar" class="save" style="padding:5px 12px" onclick="salvarContato(\\''+k+'\\')">💾 '+(c.salvo?'Salvar tags':'Salvar contato')+'</button>'
-      +'<span id="ncMsg" class="quando" style="margin:0"></span>'
-      +'</div></div>') : '';
+    var editor = tagEdAberto ? ('<div class="tg-box">'
+      +'<div class="tg-top"><label class="quando" for="ncNome">Nome</label>'
+      +'<input id="ncNome" type="text" value="'+escH(ncNome)+'" placeholder="nome do contato" oninput="ncNome=this.value;ncMarcaSujo()"></div>'
+      +'<div class="tg-top"><input id="ncNovaTag" type="search" value="'+escH(tgBusca)+'" placeholder="🔎 Procurar ou criar tag" aria-label="Procurar tag ou digitar uma nova" oninput="tgFiltrar(this.value)" onkeydown="if(event.key===\\'Enter\\'){event.preventDefault();ncAddNovaTag();}">'
+      +'<button type="button" id="ncCriar" class="reset" onclick="ncAddNovaTag()" disabled>+ criar tag</button></div>'
+      +'<div id="ncTags" class="tg-lista" aria-label="Tags — toque para marcar ou desmarcar"></div>'
+      +'<div class="tg-rod"><button type="button" id="ncSalvar" class="save" onclick="salvarContato(\\''+k+'\\')">💾 '+(c.salvo?'Salvar tags':'Salvar contato')+'</button>'
+      +'<span id="ncMsg" class="quando"></span></div></div>') : '';
     // Só o dono da trava escreve. Sem dono: no lugar do campo, o botão de assumir.
     var podeEscrever = donoMeu;
     var phBloq = '🔒 '+escH(donoTxt||'Outro atendente')+' está atendendo (livre em ~'+restaMin+' min)';
@@ -519,23 +542,27 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
       +'<span class="quando" style="margin:0">foto anexada</span> '
       +'<a href="javascript:void(0)" onclick="msgFotoLimpa()" class="quando" style="margin:0;text-decoration:underline">remover</a></div>'
       +'<div id="msgStatus" class="quando" style="margin-top:4px;min-height:14px;font-size:.75rem"></div>';
-    var agBox = agAberto ? ('<div style="margin:0 0 12px;padding:12px;background:#f4fbfb;border:1px solid #cfe8e7;border-radius:10px">'
-      +'<div style="font-weight:700;font-size:.9rem;margin-bottom:8px">📅 Agendar aula experimental no EVO</div>'
-      +'<div style="display:flex;gap:8px;flex-wrap:wrap"><input id="agNome" placeholder="Nome completo" value="'+escH(c.nome||'')+'" style="flex:1 1 180px;min-width:0;font-size:.85rem"><input id="agEmail" type="email" placeholder="E-mail" style="flex:1 1 180px;min-width:0;font-size:.85rem"></div>'
-      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center"><input id="agData" type="date" style="font-size:.85rem"><input id="agHora" type="time" step="900" style="font-size:.85rem"><button type="button" class="save" onclick="enviarAgendamento()" style="padding:7px 14px">Agendar no EVO</button><a href="javascript:void(0)" onclick="toggleAgendar()" class="quando" style="margin:0;text-decoration:underline">cancelar</a></div>'
+    var agBox = agAberto ? ('<div class="ag-box">'
+      +'<div class="ag-tit">📅 Agendar aula experimental no EVO</div>'
+      +'<div class="ag-campos"><input id="agNome" type="text" placeholder="Nome completo" aria-label="Nome completo" value="'+escH(agNomeV)+'" oninput="agNomeV=this.value"><input id="agEmail" type="email" placeholder="E-mail" aria-label="E-mail" value="'+escH(agEmailV)+'" oninput="agEmailV=this.value"></div>'
+      +'<div class="ag-rot">Dia</div><div id="agDias" class="ag-dias" role="group" aria-label="Dia da aula"></div>'
+      +'<div class="ag-rot">Horário com vaga</div><div id="agHoras" class="ag-horas" role="group" aria-label="Horário da aula"></div>'
+      +'<div id="agManual" class="ag-campos" style="display:none;margin-top:6px"><input id="agData" type="date" aria-label="Data"><input id="agHora" type="time" step="900" aria-label="Horário"></div>'
+      +'<div class="ag-acoes"><button type="button" id="agBtn" class="save" onclick="enviarAgendamento()">Agendar no EVO</button><a href="javascript:void(0)" onclick="toggleAgendar()" class="quando">cancelar</a></div>'
       +'<div id="agMsg" class="quando" style="margin:8px 0 0;min-height:16px"></div>'
-      +'<p class="quando" style="margin:6px 0 0">Cadastra e marca no EVO, igual a SoFIA. Turma cheia → mostra alternativas.</p></div>') : '';
+      +'<p class="quando" style="margin:4px 0 0">Cadastra e marca no EVO, igual a SoFIA. Os horários com vaga são os do Cadastro Express (a grade se atualiza sozinha a cada ~30 min).</p></div>') : '';
     var cpBox = c.campanha ? ('<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-2px 0 10px;padding:7px 10px;background:#eef0fb;border:1px solid #d9dcf5;border-radius:10px;font-size:.82rem;color:#3d4196">'
       +'<span>📣 Vai receber a campanha <b>'+escH(c.campanha.nome)+'</b> · '+escH(c.campanha.prev)+' <span style="opacity:.75">(posição '+c.campanha.pos+' de '+c.campanha.total+' na fila)</span></span>'
       +'<button type="button" class="reset" onclick="naoEnviarCampanha()" style="padding:3px 10px;font-size:.78rem;margin-left:auto">Não enviar para ela</button></div>') : '';
     chat.innerHTML = header+tagLinha+cpBox+editor+agBox+'<div id="bolhas" style="flex:1;min-height:120px;overflow:auto;padding-right:4px">'+bolhas+fim+'</div>'+composer;
     if(tagEdAberto){ ncRenderTags(); ncAtualizaStatus(); }
+    if(agAberto) agRender();
     var ta=document.getElementById('msgTxt'); if(ta) ta.value=rascunhos[k]||'';
     msgFotoMostra(k); // reexibe a prévia se havia foto anexada nessa conversa
     var b=document.getElementById('bolhas'); if(b) b.scrollTop=b.scrollHeight;
   }
   function toggleTagEd(){ tagEdAberto=!tagEdAberto; if(selecionada){ ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[selecionada],selecionada); } }
-  function toggleAgendar(){ agAberto=!agAberto; if(selecionada){ ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[selecionada],selecionada); } }
+  function toggleAgendar(){ agAberto=!agAberto; if(agAberto){ var cc=ultimoData[selecionada]||{}; agNomeV=cc.nome||''; agEmailV=''; agHoraSel=''; } if(selecionada){ ultimoRender={chave:null,n:-1,humano:null}; renderChat(ultimoData[selecionada],selecionada); } }
   function agDupSobrescrever(){ enviarAgendamento('sobrescrever'); }
   function agDupNovo(){ enviarAgendamento('novo'); }
   function enviarAgendamento(acaoDup){
@@ -543,10 +570,11 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     var k=selecionada; if(!k) return;
     var nome=(document.getElementById('agNome').value||'').trim();
     var email=(document.getElementById('agEmail').value||'').trim();
-    var data=(document.getElementById('agData').value||'').trim();
-    var hora=(document.getElementById('agHora').value||'').trim();
+    var manual=document.getElementById('agManual'), usaManual=manual&&manual.style.display!=='none';
+    var data=usaManual?((document.getElementById('agData').value||'').trim()):agDia;
+    var hora=usaManual?((document.getElementById('agHora').value||'').trim()):agHoraSel;
     var st=document.getElementById('agMsg');
-    if(!nome||!email||!data||!hora){ if(st)st.textContent='Preencha nome, e-mail, data e horário.'; return; }
+    if(!nome||!email||!data||!hora){ if(st)st.textContent=(!nome||!email)?'Preencha nome e e-mail.':'Escolha o dia e o horário.'; return; }
     var when=data+' '+hora; // AAAA-MM-DD HH:MM (o EVO/form entende)
     if(st)st.innerHTML=acaoDup==='novo'?'⏳ Criando um cadastro novo…':(acaoDup==='sobrescrever'?'⏳ Atualizando o cadastro existente…':'⏳ Agendando no EVO…');
     fetch('/sofia/agendar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:k,nome:nome,email:email,when:when,origem:'painel',acao_duplicado:acaoDup})})
@@ -652,17 +680,52 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
         else if(st){ st.textContent='❌ '+(j.erro||'não consegui enviar'); }
       }).catch(function(){ if(st)st.textContent='❌ erro de rede'; });
   }
+  // Tags em pílulas: toque marca/desmarca. Grupos pelo começo do nome ("0." = situação,
+  // "FX" = etapas do funil); a busca filtra e, se não existir, oferece criar.
+  function tgNorm(s){ return String(s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim(); }
+  function tgGrupo(t){ return /^0\\./.test(t)?0:(/^FX\\b/i.test(t)?1:2); }
   function ncRenderTags(){
     var el=document.getElementById('ncTags'); if(!el) return;
     ncTodas = TAGS_EXISTENTES.slice();
     ncSel.forEach(function(t){ if(ncTodas.indexOf(t)<0) ncTodas.push(t); });
-    ncTodas.sort(function(a,b){ return a.localeCompare(b,'pt-BR'); });
-    el.innerHTML = ncTodas.map(function(t,i){ var on=ncSel.indexOf(t)>=0;
-      return '<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:.85rem;cursor:pointer"><input type="checkbox" '+(on?'checked':'')+' onchange="ncToggleTagIdx('+i+',this.checked)" style="width:16px;height:16px;margin:0;flex:none"> '+escH(t)+'</label>';
-    }).join('') || '<span class="quando" style="margin:0">Nenhuma tag ainda — crie a primeira em "criar nova tag".</span>';
+    ncTodas.sort(function(a,b){ return a.localeCompare(b,'pt-BR',{numeric:true}); });
+    var q=tgNorm(tgBusca), NOMES=['Situação','Funil','Outras'], grupos=[[],[],[]];
+    ncTodas.forEach(function(t,i){ if(q && tgNorm(t).indexOf(q)<0) return; grupos[tgGrupo(t)].push(i); });
+    var html=grupos.map(function(g,gi){ if(!g.length) return '';
+      return '<div class="tg-grp"><div class="tg-grp-t">'+NOMES[gi]+'</div><div class="tg-chips">'+g.map(function(i){ var t=ncTodas[i], on=ncSel.indexOf(t)>=0;
+        return '<button type="button" class="tg-chip'+(on?' on':'')+'" data-i="'+i+'" aria-pressed="'+(on?'true':'false')+'">'+(on?'✓ ':'')+escH(t)+'</button>'; }).join('')+'</div></div>';
+    }).join('');
+    el.innerHTML = html || (ncTodas.length ? '<span class="quando">Nenhuma tag com “'+escH(tgBusca)+'”. Toque em <b>+ criar tag</b> para criar.</span>' : '<span class="quando">Nenhuma tag ainda — digite o nome acima e toque em <b>+ criar tag</b>.</span>');
+    el.onclick=function(e){ var b=e.target.closest?e.target.closest('[data-i]'):null; if(!b) return; var t=ncTodas[+b.getAttribute('data-i')]; if(!t) return; var idx=ncSel.indexOf(t); if(idx<0) ncSel.push(t); else ncSel.splice(idx,1); ncMarcaSujo(); ncRenderTags(); };
+    var cr=document.getElementById('ncCriar'); if(cr){ var v=String(tgBusca||'').trim(); var existe=ncTodas.some(function(t){ return tgNorm(t)===tgNorm(v); }); cr.disabled=!v||existe; cr.textContent=(v&&!existe)?'+ criar “'+v+'”':'+ criar tag'; }
   }
-  function ncToggleTagIdx(i,checked){ var t=ncTodas[i]; if(!t) return; var idx=ncSel.indexOf(t); if(checked){ if(idx<0) ncSel.push(t); } else if(idx>=0){ ncSel.splice(idx,1); } ncMarcaSujo(); }
-  function ncAddNovaTag(){ var inp=document.getElementById('ncNovaTag'); if(!inp) return; var t=(inp.value||'').trim(); inp.value=''; if(!t) return; if(ncSel.indexOf(t)<0) ncSel.push(t); ncRenderTags(); ncMarcaSujo(); }
+  function tgFiltrar(v){ tgBusca=v||''; ncRenderTags(); }
+  function ncAddNovaTag(){ var inp=document.getElementById('ncNovaTag'); if(!inp) return; var t=(inp.value||'').trim(); if(!t) return;
+    var ja=null; (ncTodas||[]).forEach(function(x){ if(tgNorm(x)===tgNorm(t)) ja=x; }); if(ja) t=ja; // já existe: só marca
+    inp.value=''; tgBusca=''; if(ncSel.indexOf(t)<0) ncSel.push(t); ncRenderTags(); ncMarcaSujo(); }
+  // Agendar pela conversa: dias e horários com vaga (mesma grade do Cadastro Express).
+  var DSEM=['dom','seg','ter','qua','qui','sex','sáb'];
+  function agRender(){
+    var dEl=document.getElementById('agDias'), hEl=document.getElementById('agHoras'), man=document.getElementById('agManual'); if(!dEl||!hEl) return;
+    if(agSlots===null){ dEl.innerHTML='<span class="quando">⏳ carregando os horários do EVO…</span>'; hEl.innerHTML='';
+      fetch('/sofia/agendar/slots',{cache:'no-store'}).then(function(r){return r.json();}).then(function(j){ agSlots=(j&&j.dias)||{}; agRender(); }).catch(function(){ agSlots={}; agRender(); }); return; }
+    var hoje=new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'});
+    var agoraHM=new Date().toLocaleTimeString('en-GB',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'});
+    var vagas=function(d){ return (agSlots[d]||[]).filter(function(s){ return s.disponivel && (d!==hoje || String(s.time)>agoraHM); }); }; // hoje: só o que ainda não passou
+    var dias=Object.keys(agSlots).filter(function(d){ return d>=hoje && vagas(d).length; }).sort();
+    if(!dias.length){ dEl.innerHTML='<span class="quando">Não consegui ler os horários com vaga agora — digite a data e o horário abaixo.</span>'; hEl.innerHTML=''; if(man) man.style.display='flex'; return; }
+    if(man) man.style.display='none';
+    if(dias.indexOf(agDia)<0){ agDia=dias[0]; agHoraSel=''; }
+    dEl.innerHTML=dias.map(function(d){ var n=vagas(d).length, dt=new Date(d+'T12:00:00Z'), on=d===agDia;
+      return '<button type="button" class="ag-dia'+(on?' on':'')+'" data-d="'+d+'" aria-pressed="'+on+'">'+(d===hoje?'Hoje':DSEM[dt.getUTCDay()])+' '+d.slice(8,10)+'/'+d.slice(5,7)+'<small>'+n+(n===1?' horário':' horários')+'</small></button>'; }).join('');
+    var lista=vagas(agDia);
+    if(!lista.some(function(s){return s.time===agHoraSel;})) agHoraSel='';
+    hEl.innerHTML=lista.map(function(s){ var on=s.time===agHoraSel, v=s.freeSpots!=null?(s.freeSpots+(s.freeSpots===1?' vaga':' vagas')):'com vaga';
+      return '<button type="button" class="ag-hora'+(on?' on':'')+'" data-h="'+escH(s.time)+'" aria-pressed="'+on+'">'+escH(s.time)+'<small>'+v+'</small></button>'; }).join('');
+    dEl.onclick=function(e){ var b=e.target.closest?e.target.closest('[data-d]'):null; if(!b) return; agDia=b.getAttribute('data-d'); agHoraSel=''; agRender(); };
+    hEl.onclick=function(e){ var b=e.target.closest?e.target.closest('[data-h]'):null; if(!b) return; agHoraSel=b.getAttribute('data-h'); agRender(); };
+    var bt=document.getElementById('agBtn'); if(bt) bt.textContent=agHoraSel?('Agendar '+DSEM[new Date(agDia+'T12:00:00Z').getUTCDay()]+' '+agDia.slice(8,10)+'/'+agDia.slice(5,7)+' às '+agHoraSel):'Agendar no EVO';
+  }
   function ncMarcaSujo(){ ncDirty=true; ncAtualizaStatus(); }
   function ncAtualizaStatus(){
     var msg=document.getElementById('ncMsg'), btn=document.getElementById('ncSalvar'); if(!msg) return;
@@ -670,7 +733,6 @@ function paginaSofiaConversas(aviso, erro, meuUsuario) {
     else { var c=ultimoData[selecionada]||{}; msg.innerHTML=c.salvo?'<span style="color:#1c8f52">✓ salvo</span>':''; if(btn)btn.style.boxShadow='none'; }
   }
   function salvarContato(k){
-    ncAddNovaTag(); // comita qualquer "nova tag" digitada e não adicionada
     var msg=document.getElementById('ncMsg'); if(msg)msg.textContent='Salvando…';
     var nome=(ncNome||'').trim();
     fetch('/sofia/contatos/salvar-novo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:k,nome:nome,tags:ncSel})})
