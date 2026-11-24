@@ -824,6 +824,27 @@ const server = http.createServer(protegido((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(painelMetas.paginaMetas({ ok: sp.get('ok') || '', msg: sp.get('msg') || '' }));
   }
+  // Liga/Desliga de um envio (toggle dos cartões do WhatsApp e da Cobrança da SoFIA).
+  // Salva em data/jobs-ativos.json. (Saiu sem querer na limpeza do Instagram, #433, e
+  // voltou em 24/11/2026 — rotas-telas.test.js agora reprova fetch sem rota.)
+  if (req.method === 'POST' && url === '/envio/ativo') {
+    return lerCorpo(req, 1e5, corpo => {
+      try {
+        const d = JSON.parse(corpo || '{}');
+        const chaves = Array.isArray(d.chaves) ? d.chaves : (d.chave ? [d.chave] : []);
+        const limpa = chaves.map(c => String(c || '').trim()).filter(Boolean);
+        if (!limpa.length) throw new Error('sem chave');
+        const on = d.ativo !== false;
+        limpa.forEach(c => jobsAtivos.setAtivo(c, on));
+        try { auditoria.registrar(sess.usuario, on ? 'envio.ligar' : 'envio.desligar', limpa.join(', '), ''); } catch (_) {}
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        return res.end(JSON.stringify({ ok: true, chaves: limpa, ativo: on }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        return res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+  }
   if (req.method === 'POST' && url === '/metas/salvar') {
     return lerCorpo(req, 2e4, corpo => {
       const q = new URLSearchParams(corpo);

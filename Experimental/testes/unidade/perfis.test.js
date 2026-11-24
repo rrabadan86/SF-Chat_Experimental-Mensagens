@@ -32,7 +32,7 @@ const PERFIS = [
     nega: [['GET', '/funil'], ['GET', '/?view=config'], ['GET', '/perfis'], ['POST', '/sofia/responder'], ['POST', '/sofia/contatos/excluir-lote'], ['POST', '/sofia/campanhas/criar'], ['POST', '/salvar']] },
   { nome: 'indicadores', telas: ['funil', 'ind', 'professoras', 'ativas', 'grade', 'metas'], menu: ['grade'],
     abre: ['/funil', '/indicadores', '/professoras', '/ativas', '/grade', '/metas', '/dicionario'],
-    nega: [['GET', '/sofia?view=conversas'], ['GET', '/?view=config'], ['GET', '/perfis'], ['GET', '/clube'], ['POST', '/sofia/salvar'], ['POST', '/salvar'], ['POST', '/perfis/criar']] },
+    nega: [['GET', '/sofia?view=conversas'], ['GET', '/?view=config'], ['GET', '/perfis'], ['GET', '/clube'], ['POST', '/sofia/salvar'], ['POST', '/salvar'], ['POST', '/perfis/criar'], ['POST', '/envio/ativo']] },
   { nome: 'whatsapp', telas: ['msg_config', 'msg_express', 'msg_hoje'], menu: ['msg'],
     abre: ['/?view=config', '/?view=express', '/hoje'],
     nega: [['GET', '/sofia?view=conversas'], ['GET', '/funil'], ['GET', '/perfis'], ['GET', '/grade'], ['POST', '/sofia/campanhas/criar'], ['POST', '/sofia/salvar'], ['POST', '/perfis/criar']] },
@@ -74,6 +74,10 @@ test('PAI-01..04 cada perfil vê só o que foi liberado e o servidor nega o rest
     for (const u of ['/sofia?view=config', '/sofia?view=conversas', '/?view=config', '/funil', '/grade', '/metas', '/perfis', '/perfis?view=auditoria', '/clube', '/formularios', '/saude']) {
       const r = await pedir(porta, 'GET', u, adm); if (r.st !== 200) falhas.push(`admin: GET ${u} deveria abrir (deu ${r.st})`);
     }
+    // Liga/desliga de um envio (toggle dos cartões do WhatsApp e da Cobrança da SoFIA)
+    const sw = await pedir(porta, 'POST', '/envio/ativo', adm, JSON.stringify({ chaves: ['cobrancaRecorrente'], ativo: false }));
+    if (sw.st !== 200 || !/"ok":true/.test(sw.corpo || '')) falhas.push(`admin: POST /envio/ativo deveria desligar o envio (deu ${sw.st})`);
+    else if (amb.req('jobs-ativos').ativo('cobrancaRecorrente') !== false) falhas.push('admin: desligou pelo painel, mas o envio continua ligado');
     const tudo = menu((await pedir(porta, 'GET', '/funil', adm)).corpo || '');
     if (tudo.length !== 5) falhas.push(`admin: menu incompleto [${tudo.join(', ')}]`);
     assert.deepStrictEqual(falhas, [], falhas.join('\n') + '\n' + log.slice(-800));
