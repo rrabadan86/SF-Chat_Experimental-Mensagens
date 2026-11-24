@@ -215,7 +215,8 @@
         <li><span class="box">✓</span><span>Uma <b>VPS Ubuntu</b> com acesso SSH (IP + senha/chave). Duas lojas na mesma VPS pedem 8&nbsp;GB.</span></li>
         <li><span class="box">✓</span><span><b>Dois números de WhatsApp</b>: o do <b>robô</b> (o do Studio) e o da <b>SoFIA</b> (exclusivo dela), com alguém do lado do cliente para escanear os QRs.</span></li>
         <li><span class="box">✓</span><span>Do <b>EVO da unidade</b>: o <b>tenant</b> e o <b>branch</b> (na URL: <code>…/app/&lt;tenant&gt;/&lt;branch&gt;/…</code>), o <b>DNS + Secret Key</b> da API de integração e um <b>usuário do site só para o robô</b> (e-mail + senha).</span></li>
-        <li><span class="box">✓</span><span>A <b>chave da IA</b> (Anthropic) para a SoFIA — é o que tem custo por conversa.</span></li>
+        <li><span class="box">✓</span><span>A <b>chave da IA</b> (Anthropic) para a SoFIA — é o que tem custo por conversa. A conta precisa ter <b>crédito</b>: em <code>console.anthropic.com</code> → <b>Settings → Billing</b>, coloque crédito e ligue a <b>recarga automática (Auto-reload)</b>. Sem crédito a SoFIA para de responder (ela avisa no celular).</span></li>
+        <li><span class="box">✓</span><span>O <b>painel do Setor Bueno</b> aberto (login de admin), para <b>copiar a configuração</b> para a loja nova (passo 3.1) — economiza horas de digitação.</span></li>
       </ul>
     </div>
 
@@ -226,7 +227,7 @@
         <tr><td>&lt;slug&gt;-exp</td><td>O <b>robô</b>: agenda e dispara os envios e mantém o <b>WhatsApp do Studio</b> conectado.</td></tr>
         <tr><td>&lt;slug&gt;-sofia</td><td>A <b>SoFIA</b> (atendente com IA), com o <b>WhatsApp dela</b>.</td></tr>
         <tr><td>&lt;slug&gt;-form</td><td>O <b>formulário</b> de aula experimental, em <code>https://SEU-PAINEL/agendamentoexperimental</code>.</td></tr>
-        <tr><td>Pastas</td><td>Código em <code>~/SF-Chat_Experimental-Mensagens</code> · formulário em <code>~/sf-form-&lt;slug&gt;</code> · dados da SoFIA em <code>~/sofia-data-&lt;slug&gt;</code> · o que é editado no painel fica em <code>Experimental/data/</code> (fora do Git, com backup diário).</td></tr>
+        <tr><td>Pastas</td><td>Código em <code>~/SF-Chat_Experimental-Mensagens</code> · formulário no mesmo código (pasta <code>Experimental/src/agendamento_evo</code>, com <code>.env</code> próprio) · dados da SoFIA em <code>~/sofia-data-&lt;slug&gt;</code> · o que é editado no painel fica em <code>Experimental/data/</code> (fora do Git, com backup diário).</td></tr>
       </table>
     </div>
   </section>
@@ -273,6 +274,7 @@ cd SF-Chat_Experimental-Mensagens/Experimental</pre>
         <li><span class="box">✓</span><span><b><code>--slug</code></b>: apelido curto, minúsculo, sem espaço/acento. Vira o nome dos processos (<code>marista-exp</code>…) e das pastas.</span></li>
         <li><span class="box">✓</span><span><b><code>--evo-tenant</code> e <code>--evo-branch</code></b>: da URL do EVO da loja. <b>Sem eles</b> o robô cai no padrão do Setor Bueno (<code>slimfit/15</code>) e lê a loja <b>errada</b>.</span></li>
         <li><span class="box">✓</span><span>O que você não passar por flag (DNS/Secret Key do EVO, senha do robô, chave da IA, grupo da equipe) o script <b>pergunta</b> — senha e chaves ficam ocultas. Pode deixar em branco e preencher depois no painel: <b>SoFIA → Configuração → 🔑 Credenciais da unidade</b>.</span></li>
+        <li><span class="box">✓</span><span>Para conferir se ficou tudo completo e coerente (os três <code>.env</code>, tokens, URLs): <code>bash setup-novo-studio.sh --slug <b>marista</b> --check</code>. Tem que terminar sem ❌.</span></li>
         <li><span class="box">✓</span><span>No fim ele imprime a <b>senha do painel</b> (usuário <code>admin</code>) e o <b>IPv4 da VPS</b>. Anote os dois. Para rever a senha: <code>grep ^PAINEL_SENHA= .env</code>.</span></li>
       </ul>
       <div class="tip">⚠️ Nunca use <code>&lt; &gt;</code> nos valores (no terminal são redirecionamento): <code>--evo-branch 22</code>, nunca <code>--evo-branch &lt;22&gt;</code>. O script se atualiza sozinho pelo Git antes de instalar (<code>--no-git-pull</code> desliga).</div>
@@ -297,7 +299,8 @@ cd SF-Chat_Experimental-Mensagens/Experimental</pre>
 <pre class="term-body">pm2 save
 pm2 startup        <span class="c"># rode a linha que ele imprimir: sobe tudo sozinho após reboot</span></pre>
       </div>
-      <div class="tip">Escaneie <b>uma vez só</b> e deixe o robô quieto por algumas horas. Muitas tentativas seguidas fazem o WhatsApp bloquear novas conexões por algumas horas (“Não foi possível conectar o dispositivo”). Se o QR não pegar, use <b>Conectar por código</b> na mesma tela. A linha do robô precisa estar <b>dentro do grupo da equipe</b>.</div>
+      <div class="tip">O QR pode levar até <b>2 minutos</b> para aparecer no painel e se renova sozinho até alguém escanear (desde 24/11 o WhatsApp Web abre uma tela nova de entrada; o sistema copia o QR de lá). Escaneie <b>uma vez só</b> e deixe o robô quieto por algumas horas. Muitas tentativas seguidas fazem o WhatsApp bloquear novas conexões por algumas horas (“Não foi possível conectar o dispositivo”). Se o QR não pegar, use <b>Conectar por código</b> na mesma tela. A linha do robô precisa estar <b>dentro do grupo da equipe</b>.</div>
+      <div class="tip">⚠️ <b>Número novo na SoFIA:</b> o WhatsApp desconfia de número recém-ativado que manda mensagem para quem não tem o número salvo, e pode <b>restringir a conta</b> por horas (aconteceu no Lago Norte, em 24/11, só com cobranças). Nos primeiros dias: use o número normalmente no celular (conversas com contatos), deixe a <b>Cobrança</b> desligada (SoFIA → Cobrança) e não dispare <b>campanhas</b>. A SoFIA só responde quem escreve primeiro, e isso não tem risco.</div>
     </div>
 
     <div class="stepblock">
@@ -306,8 +309,18 @@ pm2 startup        <span class="c"># rode a linha que ele imprimir: sobe tudo so
         <div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">VPS</span></div>
 <pre class="term-body">bash setup-novo-studio.sh --slug <b>marista</b> --evo-tenant <b>slimfit</b> --evo-branch <b>22</b> --evo-ids</pre>
       </div>
-      <p>Ele lista as <b>atividades</b> e os <b>serviços</b> do EVO. Ache a atividade <b>SlimFit</b> e o serviço <b>“Aula experimental”</b> e grave os ids nos <b>dois</b> <code>.env</code> (<code>EVO_ACTIVITY_ID</code> e <code>EVO_SERVICE_ID</code>): <code>Experimental/.env</code> e <code>~/sf-form-marista/.env</code>. Depois: <code>pm2 restart marista-form marista-exp</code>. Se já souber os ids, dá para passar <code>--evo-activity-id</code>/<code>--evo-service-id</code> no <code>--tudo</code>.</p>
+      <p>Ele lista as <b>atividades</b> e os <b>serviços</b> do EVO. Ache a atividade <b>SlimFit</b> e o serviço <b>“Aula experimental”</b> e grave os ids nos <b>dois</b> <code>.env</code> (<code>EVO_ACTIVITY_ID</code> e <code>EVO_SERVICE_ID</code>): <code>Experimental/.env</code> e <code>Experimental/src/agendamento_evo/.env</code> (o do formulário). Depois: <code>pm2 restart marista-form marista-exp</code>. Se já souber os ids, dá para passar <code>--evo-activity-id</code>/<code>--evo-service-id</code> no <code>--tudo</code>.</p>
       <div class="tip">Não confunda os dois acessos ao EVO: <b>DNS + Secret Key</b> (<code>EVO_DNS</code>/<code>EVO_TOKEN</code>) são a <b>API de integração</b>; o <b>e-mail/senha</b> (<code>EVO_EMAIL</code>/<code>EVO_PASSWORD</code>) são o login do site, usado pelo robô para ler grade, faltas e segmentações.</div>
+    </div>
+
+    <div class="stepblock">
+      <h3><span class="num">2.7</span> Atalhos de manutenção (uma vez por servidor)</h3>
+      <p>Cria o <code>slimfit-atualizar</code> (atualizar tudo) e o <code>slimfit-sofia</code> (destravar a SoFIA), usados no dia a dia — veja <a href="#manutencao">Manutenção</a>.</p>
+      <div class="term">
+        <div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">VPS · uma vez por servidor</span></div>
+<pre class="term-body">node ~/SF-Chat_Experimental-Mensagens/scripts/atualizar.js --instalar
+slimfit-atualizar               <span class="c"># cria também o slimfit-sofia; numa loja recém-instalada não reinicia nada</span></pre>
+      </div>
     </div>
   </section>
 
@@ -324,8 +337,24 @@ pm2 startup        <span class="c"># rode a linha que ele imprimir: sobe tudo so
       </div>
     </div>
 
+    <div class="stepblock">
+      <h3><span class="num">3.1</span> Copiar a configuração do Setor Bueno (o atalho)</h3>
+      <p>Em vez de escrever tudo do zero, traga a configuração de uma loja que já funciona:</p>
+      <ol style="margin:0 0 10px;padding-left:20px;color:var(--text-soft);font-size:.95rem;display:flex;flex-direction:column;gap:5px">
+        <li>No painel do <b>Setor Bueno</b> (admin): <b>💬 WhatsApp → Configuração → 📦 Copiar a configuração para outra unidade → ⬇️ Baixar a configuração desta unidade</b>. Sai um arquivo <code>.json</code>.</li>
+        <li>No painel da <b>loja nova</b>, no mesmo lugar: <b>⬆️ Importar de outra unidade</b>, escolha o arquivo, confira a <b>prévia</b> (o que vai mudar) e confirme.</li>
+        <li>Vêm junto: textos das mensagens do robô, imagens, horários e dias dos envios, tags e automações, o <b>roteiro (prompt) da SoFIA</b>, o script de integração e o follow-up da SoFIA.</li>
+        <li><b>Não vêm</b> (são de cada loja): números de WhatsApp de aviso, grupos, campanhas, áudios das professoras, EVO/<code>.env</code>, contatos e conversas.</li>
+      </ol>
+      <div class="tip">⚠️ Depois de importar, <b>troque tudo o que é do Bueno</b>: endereço, link do Maps, telefones, nome da unidade, valores, nomes das professoras e as imagens de grade e preços. Procure nos textos (e no roteiro da SoFIA) por <b>Bueno</b> e pelo telefone do Bueno. Errou? O botão <b>↩️ Desfazer a última importação</b> volta tudo como estava.</div>
+    </div>
+
     <ul class="chk">
-      <li><span class="box">✓</span><span><b>Identidade do formulário</b> — em <code>~/sf-form-&lt;slug&gt;/.env</code>: <code>FORM_UNIDADE</code>, <code>FORM_ENDERECO</code>, <code>FORM_MAPS_URL</code>, <code>FORM_WHATSAPP</code> (só dígitos, com 55), <code>ZEE_STUDIO_PHONE</code> (recepção) e <code>PAINEL_URL</code>. Sem eles a página mostra os dados do <b>Setor Bueno</b>. Depois: <code>pm2 restart &lt;slug&gt;-form</code>.</span></li>
+      <li><span class="box">✓</span><span><b>Conferir as mensagens</b> — em <b>💬 WhatsApp → Visão do cliente</b> aparecem <b>todas</b> as mensagens automáticas (aluna, lead, equipe e grupos) do jeito que vão chegar. Leia uma por uma procurando dado de outra loja ou <code>[COLCHETES]</code>.</span></li>
+      <li><span class="box">✓</span><span><b>Ligar os envios que começam desligados</b> — por segurança, estes vêm <b>desligados</b> numa loja nova e só saem depois que alguém liga em <b>💬 WhatsApp → Configuração</b> (botão <b>Ativado/Desligado</b> de cada cartão): 2ª mensagem e lista da confirmação sem resposta, encerramentos (follow-up, falta e retomada), retomada de quem parou de responder a SoFIA, boas-vindas, indicação aos 30 dias, “vence hoje”, contrato sem assinatura, “sentimos sua falta” e saída dos grupos. Ligue só o que a loja combinou.</span></li>
+      <li><span class="box">✓</span><span><b>IA da SoFIA</b> — em <b>SoFIA → Configuração</b>: modelo da conversa <b>Sonnet 5</b> e modelo de extração/resumos <b>Haiku 5.5</b> (o mais barato); depois de trocar, clique em <b>🔄 Reiniciar SoFIA</b> na mesma tela. Acompanhe o gasto em <b>SoFIA → Custo IA</b>. Teste o roteiro em <b>Testar a SoFIA</b> antes de divulgar.</span></li>
+      <li><span class="box">✓</span><span><b>Cobrança pela SoFIA</b> — em <b>SoFIA → Cobrança</b>, confira os textos (o de <b>saldo devedor</b> precisa da chave PIX da loja) e os dias. Com <b>número novo</b> na SoFIA, deixe desligada nos primeiros dias (veja o aviso do passo 2.5).</span></li>
+      <li><span class="box">✓</span><span><b>Identidade do formulário</b> — em <code>Experimental/src/agendamento_evo/.env</code> (o <code>.env</code> do formulário, gerado pelo script): <code>FORM_UNIDADE</code>, <code>FORM_ENDERECO</code>, <code>FORM_MAPS_URL</code>, <code>FORM_WHATSAPP</code> (só dígitos, com 55), <code>ZEE_STUDIO_PHONE</code> (recepção) e <code>PAINEL_URL</code>. Sem eles a página mostra os dados do <b>Setor Bueno</b>. Depois: <code>pm2 restart &lt;slug&gt;-form</code>.</span></li>
       <li><span class="box">✓</span><span><b>Segmento do EVO para renovações</b> — em <b>Clientes → Segmentação</b> do EVO, crie um segmento com nome contendo <b>“Vencimento de Contrato Seman”</b> (ex.: <i>Vencimento de Contrato Semanal</i>, igual ao do Bueno) e o filtro <b>“Vencimento do contrato”</b>. A <b>renovação</b> (todo dia, 14:30, direto para as alunas) e os <b>contratos a vencer no mês</b> (dia 28, no grupo da equipe) dependem dele: <b>sem o segmento os dois falham</b>. Teste com <code>node src/renovacoes-mes-grupo.js --dry</code>.</span></li>
       <li><span class="box">✓</span><span><b>2FA do EVO</b> — se o usuário do robô tem verificação em duas etapas, siga <a href="#opcionais">“2FA do EVO”</a> em Recursos opcionais. Sem isso, os jobs param com <code>Waiting failed: 30000ms</code>.</span></li>
       <li><span class="box">✓</span><span><b>Grupos do WhatsApp</b> — confira o nome do <b>grupo da equipe</b> (e do Circuito, se houver) em <b>💬 WhatsApp → Configuração → 👥 Grupos</b>, e que a linha do robô está nesses grupos.</span></li>
@@ -358,6 +387,7 @@ xvfb-run -a node src/renovar-contratos.js                <span class="c"># renov
 xvfb-run -a node src/comparecimento.js --dry             <span class="c"># presença / troca de tags</span>
 xvfb-run -a node src/enviar-circuito.js --convocacao --dry <span class="c"># circuito</span>
 xvfb-run -a node src/ausentes-10-dias.js --dry           <span class="c"># ausentes 10 dias</span>
+xvfb-run -a node src/resumo-dia.js --dry                 <span class="c"># equipe: resumo do dia</span>
 xvfb-run -a node src/planilha-aniversarios.js --dry      <span class="c"># planilha + tags automáticas de alunas</span>
 xvfb-run -a node src/inadimplentes.js                    <span class="c"># cobrança: só LÊ os débitos</span>
 node src/free-antecedencia.js --dry                      <span class="c"># planos FREE: só lista</span>
@@ -399,7 +429,7 @@ pm2 restart <b>lagosul2</b>-exp
 <span class="c"># 4) DNS da loja 2 → o MESMO IPv4 da VPS · 5) QRs da loja 2 no painel dela · depois:</span>
 pm2 save</pre>
       </div>
-      <p>O script cuida sozinho do resto da loja 2: processos <code>lagosul2-*</code>, formulário em <code>~/sf-form-lagosul2</code> na porta do painel <b>+ 10</b> (<code>8091</code>), dados da SoFIA, tokens e tópico de alertas próprios, bloco do HTTPS <b>acrescentado</b> no Caddy (sem mexer no da loja 1) e backup diário próprio. Depois, faça na loja 2 a seção <a href="#pos">Configurar antes de divulgar</a> inteira — inclusive os IDs do EVO e o segmento de renovações <b>no EVO da loja 2</b>.</p>
+      <p>O script cuida sozinho do resto da loja 2: processos <code>lagosul2-*</code>, formulário (na pasta da loja 2, <code>~/slimfit-lagosul2/Experimental/src/agendamento_evo</code>) na porta do painel <b>+ 10</b> (<code>8091</code>), dados da SoFIA, tokens e tópico de alertas próprios, bloco do HTTPS <b>acrescentado</b> no Caddy (sem mexer no da loja 1) e backup diário próprio. Depois, faça na loja 2 a seção <a href="#pos">Configurar antes de divulgar</a> inteira — inclusive os IDs do EVO e o segmento de renovações <b>no EVO da loja 2</b>.</p>
       <div class="tip">⚠️ <b>Portas:</b> loja 1 = <code>8080</code> (painel) e <code>8090</code> (formulário); loja 2 = <code>8081</code> e <code>8091</code>. <b>Não</b> use <code>--port 8090</code> na loja 2 — bate com o formulário da loja 1.</div>
       <div class="tip">⚠️ <b><code>FORM_SLOTS_MINUTO</code> é 15, não 30:</b> o robô envia a grade no minuto escolhido <b>e 30 min depois</b>. Com loja 1 = 0 e loja 2 = 30, as duas mandariam juntas em :00 e :30 e estourariam o limite de 40 pedidos/min do EVO (a grade some das duas).</div>
     </div>
@@ -441,13 +471,15 @@ free -h                                                  <span class="c"># confe
       <div class="tip" style="margin-bottom:10px">Jeito fácil: <code>slimfit-atualizar</code> atualiza <b>todas</b> as lojas do servidor de uma vez e reinicia só o que mudou — veja <a href="#manutencao">Manutenção</a>. Os comandos abaixo são o jeito manual, loja por loja.</div>
       <div class="term">
         <div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">VPS · atualizar</span></div>
-<pre class="term-body"><span class="c"># código (sempre pela main — todas as lojas atualizam por ela)</span>
-cd ~/SF-Chat_Experimental-Mensagens &amp;&amp; git fetch origin main &amp;&amp; git reset --hard FETCH_HEAD
+<pre class="term-body"><span class="c"># código (a versão aprovada no teste automático: marca "estavel")</span>
+cd ~/SF-Chat_Experimental-Mensagens &amp;&amp; git fetch origin estavel &amp;&amp; git reset --hard FETCH_HEAD
 pm2 restart <b>SEU-SLUG</b>-painel                  <span class="c"># + SEU-SLUG-exp / -sofia se a atualização pedir</span>
 
-<span class="c"># formulário (repositório próprio)</span>
-cd ~/sf-form-<b>SEU-SLUG</b> &amp;&amp; git fetch origin main &amp;&amp; git reset --hard FETCH_HEAD
-pm2 restart <b>SEU-SLUG</b>-form                    <span class="c"># páginas de texto (manual, implantação) nem precisam</span></pre>
+<span class="c"># formulário: roda do mesmo código — o comando acima já atualizou</span>
+pm2 restart <b>SEU-SLUG</b>-form                    <span class="c"># páginas de texto (manual, implantação) nem precisam</span>
+
+<span class="c"># loja ANTIGA com o formulário numa pasta separada (~/sf-form-…): passe para o código principal uma vez</span>
+bash ~/SF-Chat_Experimental-Mensagens/Experimental/trocar-form-para-repo.sh <b>SEU-SLUG</b>-form /root/sf-form-<b>PASTA</b></pre>
       </div>
       <div class="tip">O <code>reset --hard</code> só mexe no código: o que foi editado no painel (<code>data/</code>), os <code>.env</code> e as sessões do WhatsApp ficam intactos (estão fora do Git). Se uma atualização trouxer dependência nova, ela avisa para rodar <code>npm install</code> na pasta <code>Experimental</code>.</div>
     </div>
@@ -598,7 +630,34 @@ pm2 save</pre></div>
       <summary>🤖 A SoFIA pede QR ou travou em “Iniciando…”</summary>
       <div class="in">
         <p>No painel da loja, em <b>SoFIA → Configuração</b>, clique em <b>🔧 Reconectar a SoFIA</b>: ele tenta voltar com o login salvo e, se não der, mostra um QR novo para escanear. Se o painel também estiver fora, rode <code>slimfit-sofia</code> no servidor e escolha a loja: <b>1) Reconectar</b> (se não resolver, ele passa sozinho para o QR novo) ou direto <b>2) QR novo</b> (descarta só o login — conversas, tags e roteiro ficam). Ele avisa quando o QR está pronto. Passo a passo em <a href="#manutencao">Manutenção → Destravar a SoFIA</a>.</p>
-        <p style="color:var(--text-soft);font-size:.93rem">No log aparece <code>Waiting failed: 30000ms exceeded</code> ou <code>travou NNNx seguidas</code>? É a sessão salva travada — use o <b>2) QR novo</b>. A SoFIA também faz isso sozinha depois de 8 falhas seguidas.</p>
+        <p style="color:var(--text-soft);font-size:.93rem">No log aparece <code>Waiting failed: 30000ms exceeded</code> ou <code>travou NNNx seguidas</code>? É a sessão salva travada — use o <b>2) QR novo</b>. A SoFIA <b>não</b> apaga o login sozinha (decisão de 24/11): entre as tentativas ela espera 1, 2, 4, 8 e 15 minutos, e o login só é trocado pelo painel ou pelo <code>slimfit-sofia</code>.</p>
+      </div>
+    </details>
+
+    <details class="fold">
+      <summary>💸 A SoFIA responde “tivemos uma instabilidade” para todo mundo</summary>
+      <div class="in">
+        <p>Quase sempre é a conta da IA <b>sem crédito</b> (ou a chave recusada). A SoFIA avisa no celular (<b>“SoFIA parada - IA sem credito”</b>) e não fica insistindo. Para confirmar:</p>
+        <div class="term" style="margin:6px 0 10px"><div class="term-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="lbl">VPS</span></div>
+<pre class="term-body">pm2 logs --lines 500 --nostream | grep -i -A2 "Falha ao gerar"</pre></div>
+        <ul>
+          <li><b>“Credit balance is too low”</b> — coloque crédito em <code>console.anthropic.com</code> → Settings → Billing e ligue o <b>Auto-reload</b>. Não precisa reiniciar: a próxima mensagem já é respondida.</li>
+          <li><b>“invalid x-api-key”</b> — a chave foi recusada: troque em <b>SoFIA → Configuração → 🔑 Credenciais da unidade</b>.</li>
+          <li><b>“Overloaded”/529</b> — a Anthropic estava sobrecarregada; passa sozinho.</li>
+        </ul>
+        <p>Depois, peça para a recepção responder quem recebeu “instabilidade” nesse período.</p>
+      </div>
+    </details>
+
+    <details class="fold">
+      <summary>🚫 “Sua conta está restringida no momento” no celular da SoFIA</summary>
+      <div class="in">
+        <p>O WhatsApp limitou o número — comum em <b>número novo</b> que manda mensagem para quem não tem o número salvo (cobranças, campanhas). A restrição costuma durar algumas horas e vale só para iniciar conversas.</p>
+        <ul>
+          <li>Desligue a <b>Cobrança</b> (SoFIA → Cobrança) e pause as <b>campanhas</b> até o número “esquentar”.</li>
+          <li>Não fique reconectando nem reiniciando a SoFIA — cada nova conexão piora.</li>
+          <li>Use o número normalmente no celular por alguns dias (conversas com contatos salvos).</li>
+        </ul>
       </div>
     </details>
 
@@ -750,6 +809,7 @@ chmod +x ~/duckdns/duck.sh &amp;&amp; ~/duckdns/duck.sh &amp;&amp; cat ~/duckdns
       <summary>Ver todas as novidades</summary>
       <div class="in">
 <ul style="margin:6px 0 0;padding-left:18px">
+          <li>📘 <b>Guia de implantação revisado</b> (nada a reiniciar): passo <b>3.1</b> para copiar a configuração do Setor Bueno para a loja nova; lista dos envios que começam <b>desligados</b>; modelos da IA (Sonnet 5 na conversa, Haiku 5.5 nos resumos) e crédito com recarga automática na Anthropic; cuidado com <b>número novo</b> na SoFIA; atalhos <code>slimfit-atualizar</code>/<code>slimfit-sofia</code> no passo 2.7; e dois casos novos em “Quando algo dá errado” (IA sem crédito e conta restringida).</li>
           <li>🏷️ <b>Conversas da SoFIA: tags e agendamento mais fáceis</b> (<code>slimfit-atualizar --painel</code>; reinicia só o painel): (1) em <b>editar</b> tags, a lista de caixinhas virou <b>pílulas</b> que se marcam com um toque, separadas em <b>Situação</b> (0.), <b>Funil</b> (FX) e <b>Outras</b>, com busca. Digitou uma tag que não existe? Aparece <b>+ criar “nome”</b>; (2) o <b>📅 Agendar</b> da conversa mostra os <b>dias e os horários com vaga</b> do EVO, iguais aos do Cadastro Express (com o número de vagas). É só tocar no horário e em <b>Agendar qua 25/11 às 08:00</b>. Se a grade não carregar, aparecem os campos de data e hora para digitar.</li>
           <li>📱 <b>Visão do cliente mostra todas as mensagens automáticas</b> (<code>slimfit-atualizar --painel</code>; reinicia só o painel): em <b>WhatsApp → Visão do cliente</b> estão agora as <b>35 mensagens</b> configuráveis (antes eram 16) e as que o robô monta sozinho. Ficam em duas partes: <b>para a aluna e a lead</b> (15 jornadas, incluindo Cadastro Express, lead que não responde, retomada da SoFIA, contrato sem assinatura, quem não renovou e cobranças de cartão e saldo) e <b>para a equipe e os grupos</b> (resumo do dia, resumo da semana e do mês com a imagem, listas da equipe, presentes, bloqueio do app, aulas FREE desmarcadas, relatório de presença, aniversário e Circuito nos grupos). Os horários são os padrões. No celular, tocar numa jornada leva direto ao celular simulado.</li>
           <li>🪶 <b>Haiku 5.5 para resumos e tags da SoFIA</b> (<code>slimfit-atualizar</code>; reinicia painel, robô, SoFIA e formulário — rode fora do horário de envios): em <b>SoFIA → Configuração → Modelo de extração/resumos</b> aparece o <b>Haiku 5.5</b>, cerca de 10× mais barato que o Haiku 4.5, para os trabalhos de bastidor (resumos, tags automáticas, ficha da lead, frases de campanha). Ele não aparece no modelo da conversa, que continua no Sonnet 5. Nada muda sozinho: escolha no painel e reinicie a SoFIA (<code>pm2 restart</code> da SoFIA, fora do horário de envios). Nos primeiros dias, confira se os resumos e as tags continuam bons.</li>
@@ -861,7 +921,7 @@ chmod +x ~/duckdns/duck.sh &amp;&amp; ~/duckdns/duck.sh &amp;&amp; cat ~/duckdns
       <li>Atualiza o próprio código pelo Git (<code>git pull --ff-only</code>).</li>
       <li>Com <code>--install-deps</code>: instala Node 20, pm2, tsx, Xvfb, Chromium e Python.</li>
       <li>Instala as dependências do robô (<code>Experimental</code>) e da SoFIA (<code>ChatBot</code>).</li>
-      <li>Clona o formulário em <code>~/sf-form-&lt;slug&gt;</code> e cria o ambiente Python dele.</li>
+      <li>Prepara o formulário a partir do <b>mesmo código</b> (<code>Experimental/src/agendamento_evo</code>), no mesmo ambiente Python do agendamento.</li>
       <li>Gera os três <code>.env</code> (robô, SoFIA, formulário) com <b>segredos novos</b> e os tokens que ligam um ao outro; nunca sobrescreve um <code>.env</code> que já exista.</li>
       <li>Pergunta as credenciais que faltam e confere tudo (<code>--check</code>).</li>
       <li>Sobe os 4 processos no pm2 — robô e SoFIA com <code>--kill-timeout 15000</code>, para salvarem a sessão do WhatsApp ao reiniciar.</li>
