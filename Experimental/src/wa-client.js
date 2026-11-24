@@ -483,7 +483,14 @@ function initWhatsApp() {
       if (res === 'entrou') {
         try { require('./wa-versao-reserva').limpar(ARQ_RESERVA); } catch (_) {} // com login salvo, a ao vivo funciona
         waStatus.set('iniciando', null);
-        await new Promise((r) => setTimeout(r, Number(process.env.WA_QR_TELA_GRAVAR_MS) || 15000)); // deixa o login gravar no perfil
+        // SOF-08: quase sempre a biblioteca termina de conectar sozinha NESTE processo
+        // ("PRONTO" logo depois do login). Aí NÃO reinicia: fechar e subir de novo logo
+        // após vincular fazia o WhatsApp ver duas conexões e desfazer o vínculo (LOGOUT —
+        // Lago Norte, 24/11/2026). Só reinicia se não ficar pronto.
+        const gravarMs = Number(process.env.WA_QR_TELA_GRAVAR_MS) || 15000;
+        const ate = Date.now() + Math.max(gravarMs, Number(process.env.WA_QR_TELA_PRONTO_MS) || 60000);
+        while (!pronto && Date.now() < ate) await new Promise((r) => setTimeout(r, 1000));
+        if (pronto) { log('QR pela tela: conectado neste mesmo processo — sem reiniciar.'); return; }
         await fecharClienteMorto(client);
         initPromise = null;
         log('subindo de novo com o login salvo…');

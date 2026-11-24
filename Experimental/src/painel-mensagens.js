@@ -355,7 +355,7 @@ function sofiaRotaPermitida(sess, url) {
   if (url === '/sofia/auto-tag-alunas' || url === '/sofia/auto-tag-alunas/rodar') return has('sofia_contatos') || has('sofia_config'); // auto-tag Aluna/Ex-aluna (aba Tags)
   if (url === '/sofia/midia-upload' || url === '/sofia/midia') return has('sofia_config'); // upload/preview das imagens (preços/grade)
   if (url === '/sofia/msgs-anuncio') return has('sofia_config'); // boas-vindas do anúncio que não pausam a SoFIA
-  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/reconectar' || url === '/sofia/parear' || url === '/sofia/custo-limite' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/historico-tags' || url === '/sofia/prompt/download' || url === '/sofia/prompt/previa' || url === '/sofia/prompt/importar' || url === '/sofia/simulador/enviar' || url === '/sofia/simulador/resultado') return has('sofia_config');
+  if (url === '/sofia/salvar' || url === '/sofia/restaurar' || url === '/sofia/toggle' || url === '/sofia/estado' || url === '/sofia/desconectar' || url === '/sofia/reiniciar' || url === '/sofia/reconectar' || url === '/sofia/parear' || url === '/sofia/custo-limite' || url === '/sofia/aquecimento' || url === '/sofia/aviso-humano' || url === '/sofia/nao-responder' || url === '/sofia/alunas' || url === '/sofia/historico-tags' || url === '/sofia/prompt/download' || url === '/sofia/prompt/previa' || url === '/sofia/prompt/importar' || url === '/sofia/simulador/enviar' || url === '/sofia/simulador/resultado') return has('sofia_config');
   return false;
 }
 // Rota da aba WhatsApp → sub-permissão. Agendamento = /agendar* e /?view=agendar;
@@ -2605,6 +2605,16 @@ const server = http.createServer(protegido((req, res) => {
     return lerCorpo(req, 1e4, corpo => {
       try { sofia.gravarCustoLimite(new URLSearchParams(corpo).get('limite') || '0'); } catch (_) {}
       res.writeHead(303, { Location: '/sofia?view=custo' }); res.end();
+    });
+  }
+  // SOF-12: número em aquecimento (a SoFIA só responde quem escreve por N dias).
+  if (req.method === 'POST' && url === '/sofia/aquecimento') {
+    return lerCorpo(req, 1e4, corpo => {
+      const dias = parseInt(new URLSearchParams(corpo).get('dias') || '0', 10) || 0;
+      let st = null;
+      try { st = require('./sofia-aquecimento').gravar(sofia.DIR || process.env.SOFIA_DIR, dias); } catch (_) {}
+      try { auditoria.registrar(sess.usuario, dias ? 'sofia.aquecimento.ligar' : 'sofia.aquecimento.desligar', 'SoFIA', st && st.ate ? 'até ' + st.ate : ''); } catch (_) {}
+      res.writeHead(303, { Location: '/sofia?view=config#aquecimento' }); res.end();
     });
   }
   // Desconectar o WhatsApp da Sofia (envia comando ao listener → logout + reinicia → QR novo).

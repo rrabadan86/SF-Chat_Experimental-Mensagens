@@ -2336,6 +2336,23 @@ function paginaSofia(aviso, erro) {
       </div>
     </div>
 
+    ${(() => { // SOF-12: número em aquecimento
+      const aq = (() => { try { return require('./sofia-aquecimento'); } catch (_) { return null; } })();
+      if (!aq) return '';
+      const dir = (() => { try { return require('./sofia-editor').DIR || process.env.SOFIA_DIR || ''; } catch (_) { return process.env.SOFIA_DIR || ''; } })();
+      const st = aq.ler(dir), on = aq.ativo(dir);
+      const dm = (d) => d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '';
+      return `<div class="card" id="aquecimento" style="margin:0 0 12px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between">
+          <div style="min-width:0;flex:1 1 260px"><b>🌱 Número em aquecimento</b> ${infoI('Número <b>novo</b> (ou que acabou de ser restringido) que sai mandando mensagem para quem não tem o número salvo é <b>restringido pelo WhatsApp</b>. Em aquecimento, a SoFIA <b>só responde quem escreve</b>: <b>não</b> envia cobrança, campanha nem follow-up. Os avisos para a equipe e o que a recepção escreve pelo painel continuam.<br><br>A cobrança desse período não fica acumulada (sairia tudo de uma vez no fim): o robô põe de novo na fila no próximo dia de cobrança. As campanhas esperam.<br><br>Sempre, mesmo sem aquecimento, depois de conectar a SoFIA espera <b>30 min</b> antes de iniciar qualquer envio.')}
+            <div class="quando" style="margin:2px 0 0">${on ? `<span class="sd-pill sd-warn">ligado</span> até <b>${esc(dm(st.ate))}</b> — ela só responde quem escreve.` : 'Desligado — a SoFIA envia cobranças, campanhas e follow-ups normalmente.'}</div></div>
+          <form method="POST" action="/sofia/aquecimento" style="margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            ${on ? '<input type="hidden" name="dias" value="0"><button type="submit" class="reset" style="padding:6px 12px">Desligar o aquecimento</button>'
+              : '<select name="dias" aria-label="Por quantos dias" style="width:auto;padding:6px 8px"><option value="3">3 dias</option><option value="7" selected>7 dias</option><option value="14">14 dias</option></select><button type="submit" class="save" style="padding:6px 12px">Ligar</button>'}
+          </form>
+        </div></div>`;
+    })()}
+
     <details class="acc-sec">
       <summary class="sec-t" style="cursor:pointer;padding:4px 0">🔢 Conectar a SoFIA por código (sem QR)</summary>
       <div class="card">

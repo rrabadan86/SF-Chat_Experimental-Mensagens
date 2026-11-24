@@ -60,7 +60,14 @@ class Client {
       return { versao: '2.3000.1055969240', socket: '', stream: '', online: true, tela: 'Scan to log in Link with phone number instead' };
     } }; }
   on(e, f) { this.ev[e] = f; }
-  async initialize() { if (this.n === 1) throw new Error('Waiting failed: 120000ms exceeded'); setTimeout(() => this.ev.ready && this.ev.ready(), 5); }
+  async initialize() {
+    if (this.n === 1) {
+      // PRONTO_NO_1: como no Lago Norte (24/11), a biblioteca conecta sozinha depois do QR lido
+      if (process.env.PRONTO_NO_1) setTimeout(() => this.ev.ready && this.ev.ready(), 300);
+      throw new Error('Waiting failed: 120000ms exceeded');
+    }
+    setTimeout(() => this.ev.ready && this.ev.ready(), 5);
+  }
   async destroy() {}
   async getState() { return 'CONNECTED'; }
 }
@@ -82,7 +89,8 @@ test('SOF-08 robô: na tela nova de entrada mostra o QR da página no painel, av
   try {
     fs.writeFileSync(path.join(amb.exp, 'roteiro.js'), ROTEIRO);
     const leituras = [naEntrada('data:image/png;base64,QR1'), naEntrada('data:image/png;base64,QR2'), entrou, entrou];
-    const env = { ...process.env, LEITURAS: JSON.stringify(leituras), WA_QR_TELA_GRAVAR_MS: '10' };
+    const env = { ...process.env, LEITURAS: JSON.stringify(leituras), WA_QR_TELA_GRAVAR_MS: '10', WA_QR_TELA_PRONTO_MS: '20' };
+    delete env.PRONTO_NO_1;
     for (const k of ['PAINEL_DEMO', 'WA_WEB_VERSION_FILE', 'WA_WEB_VERSION_URL', 'WA_WEB_VERSION_RESERVA']) delete env[k];
     const saida = execFileSync(process.execPath, ['roteiro.js'], { cwd: amb.exp, env, encoding: 'utf8', timeout: 50000 });
     const r = JSON.parse((/RESULTADO(.*)/.exec(saida) || [])[1] || 'null');
@@ -92,5 +100,22 @@ test('SOF-08 robô: na tela nova de entrada mostra o QR da página no painel, av
     assert.deepStrictEqual(r.status.filter(s => s.startsWith('qr:')), ['qr:data:image/png;base64,QR1', 'qr:data:image/png;base64,QR2']);
     assert.deepStrictEqual(r.alertas, ['WhatsApp CAIU — precisa de QR'], 'um aviso só');
     assert.match(saida, /QR pela tela: login feito/);
+  } finally { amb.limpar(); }
+});
+
+test('SOF-08 robô: se o WhatsApp conecta sozinho depois do QR lido, NÃO reinicia (reiniciar logo após vincular desfazia o vínculo)', { timeout: 60000 }, () => {
+  const amb = ambienteIsolado();
+  try {
+    fs.writeFileSync(path.join(amb.exp, 'roteiro.js'), ROTEIRO);
+    const leituras = [naEntrada('data:image/png;base64,QR1'), entrou, entrou];
+    const env = { ...process.env, LEITURAS: JSON.stringify(leituras), WA_QR_TELA_GRAVAR_MS: '10', PRONTO_NO_1: '1' };
+    for (const k of ['PAINEL_DEMO', 'WA_WEB_VERSION_FILE', 'WA_WEB_VERSION_URL', 'WA_WEB_VERSION_RESERVA']) delete env[k];
+    const saida = execFileSync(process.execPath, ['roteiro.js'], { cwd: amb.exp, env, encoding: 'utf8', timeout: 50000 });
+    const r = JSON.parse((/RESULTADO(.*)/.exec(saida) || [])[1] || 'null');
+    assert.ok(r, 'o roteiro não terminou:\n' + saida);
+    assert.strictEqual(r.pronto, true);
+    assert.strictEqual(r.criados, 1, 'um navegador só: não fechou nem subiu outro');
+    assert.deepStrictEqual(r.status, ['iniciando', 'qr:data:image/png;base64,QR1', 'conectado'], 'conectou direto, sem voltar a "iniciando"');
+    assert.doesNotMatch(saida, /subindo de novo/);
   } finally { amb.limpar(); }
 });
