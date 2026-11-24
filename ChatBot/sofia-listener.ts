@@ -2444,7 +2444,15 @@ async function processarFollowups() {
   const travaFup = bloqueioEnvioAtivo("follow-up"); // SOF-12
   if (travaFup === "acabou-de-conectar") return; // espera uns minutos
   if (travaFup === "aquecimento") { // não sai e não acumula (sairia tudo junto no fim do aquecimento)
-    try { const tmpA = FOLLOWUP_FILE + "." + Date.now() + ".aquec"; fs.renameSync(FOLLOWUP_FILE, tmpA); const n = fs.readFileSync(tmpA, "utf8").split("\n").filter((l) => l.trim()).length; fs.rmSync(tmpA, { force: true }); if (n) log(`follow-up: ${n} não enviado(s) — número em aquecimento.`); } catch {}
+    try {
+      const tmpA = FOLLOWUP_FILE + "." + Date.now() + ".aquec";
+      fs.renameSync(FOLLOWUP_FILE, tmpA);
+      const linhasA = fs.readFileSync(tmpA, "utf8").split("\n").filter((l) => l.trim());
+      // anota ANTES de apagar: o painel mostra quem ficou sem follow-up (SoFIA → Configuração)
+      let n = 0; try { n = aquecimento.anotarFollowups(DIR, linhasA); } catch (e: any) { log("não consegui anotar os follow-ups do aquecimento: " + (e?.message || e)); }
+      fs.rmSync(tmpA, { force: true });
+      if (linhasA.length) log(`follow-up: ${linhasA.length} não enviado(s) — número em aquecimento${n ? " (anotado(s) no painel: SoFIA → Configuração)" : ""}.`);
+    } catch {}
     return;
   }
   processandoFollowup = true;
