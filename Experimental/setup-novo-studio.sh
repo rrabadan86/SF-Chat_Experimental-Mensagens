@@ -258,7 +258,7 @@ prompt_secrets() {
 }
 
 # Grava os segredos recebidos (flag/perguntados) nos .env já criados.
-aplicar_segredos() { echo "DBG[$EVO_EMAIL_IN][$EVO_PASSWORD_IN][$GRUPO_EQUIPE_IN]"
+aplicar_segredos() {
   set_env EVO_DNS           "$EVO_DNS_IN"      "$EXP_DIR/.env"
   set_env EVO_TOKEN         "$EVO_TOKEN_IN"    "$EXP_DIR/.env"
   set_env EVO_EMAIL         "$EVO_EMAIL_IN"    "$EXP_DIR/.env"

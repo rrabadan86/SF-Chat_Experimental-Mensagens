@@ -96,3 +96,11 @@ test('NOV-01 nova loja: num servidor de verdade — senha só na 1ª vez, depois
   const r4 = await nl.instalar({ ...d, slug: 'outra' }, { senha: 'errada', comando: 'true' });
   assert.match(r4.erro, /recusados/);
 }));
+
+test('NOV-01 setup-novo-studio.sh: nunca mostra segredo na tela (echo/printf de senha, token ou chave)', () => {
+  const sh = fs.readFileSync(path.resolve(__dirname, '..', '..', 'setup-novo-studio.sh'), 'utf8');
+  const ruins = sh.split('\n').map((l, i) => [i + 1, l]).filter(([, l]) => !/^\s*#/.test(l)
+    && /\b(echo|printf)\b[^;|&]*\$\{?(EVO_PASSWORD_IN|EVO_TOKEN_IN|ANTHROPIC_IN|EVO_DNS_IN|EVO_EMAIL_IN)\b/.test(l));
+  assert.deepStrictEqual(ruins, [], 'linha que mostra segredo: ' + JSON.stringify(ruins));
+  assert.doesNotMatch(sh, /DBG\[/, 'sobrou linha de depuração');
+});
