@@ -52,6 +52,12 @@ function validar(d) {
   return e;
 }
 
+/** "https://evo.w12app.com.br/#/app/slimfit/22/inicio" → { tenant: 'slimfit', branch: '22' } | null */
+function evoDaUrl(u) {
+  const m = /\/app\/([a-z0-9][a-z0-9_-]{0,40})\/(\d{1,5})(?:[/?#]|$)/i.exec(String(u || ''));
+  return m ? { tenant: m[1], branch: m[2] } : null;
+}
+
 // Aspas simples do shell: o valor nunca é interpretado (nem $(), crase, ;).
 function q(v) { return "'" + String(v).replace(/'/g, "'\\''") + "'"; }
 
@@ -160,12 +166,12 @@ function conectar({ host, portaSsh = 22, usuario = 'root', senha, chavePrivada, 
  * Roda um comando (bash -s, o script vai pela entrada — não aparece no `ps`), linha a linha.
  * → { codigo, ultimas: [linhas] }
  */
-function executar(con, script, { aoLinha, tempoMs = 60 * 60 * 1000, segredos = [] } = {}) {
+function executar(con, script, { aoLinha, tempoMs = 60 * 60 * 1000, segredos = [], guardar = 60 } = {}) {
   return new Promise((resolve, reject) => {
     con.exec('bash -s', (err, st) => {
       if (err) return reject(err);
       const ultimas = []; let resto = { out: '', err: '' };
-      const linha = (l) => { const m = mascarar(l, segredos); ultimas.push(m); if (ultimas.length > 60) ultimas.shift(); try { aoLinha && aoLinha(m); } catch (_) {} };
+      const linha = (l) => { const m = mascarar(l, segredos); ultimas.push(m); if (ultimas.length > guardar) ultimas.shift(); try { aoLinha && aoLinha(m); } catch (_) {} };
       const pedaco = (qual) => (buf) => {
         const t = resto[qual] + buf.toString('utf8'); const partes = t.split('\n'); resto[qual] = partes.pop();
         for (const p of partes) linha(p);
@@ -232,7 +238,9 @@ async function instalar(d, { senha, segredos = {}, aoLinha = () => {}, comando }
   if (erros.length) return { ok: false, etapa: 'dados', erro: erros.map((x) => x.msg).join('; ') };
   const slug = d.slug;
   const est = lerEstado(slug) || { slug, criadoEm: Date.now(), passos: {} };
-  Object.assign(est, { host: d.host, portaSsh: +d.portaSsh || 22, usuario: d.usuario, dominio: String(d.dominio).toLowerCase(), studio: String(d.studio).trim(), segundaLoja: !!d.segundaLoja, atualizadoEm: Date.now() });
+  Object.assign(est, { host: d.host, portaSsh: +d.portaSsh || 22, usuario: d.usuario, dominio: String(d.dominio).toLowerCase(), studio: String(d.studio).trim(), segundaLoja: !!d.segundaLoja, atualizadoEm: Date.now(),
+    // o que dá para preencher de novo no "Continuar" (nada de senha/segredo)
+    dados: { host: d.host, portaSsh: String(d.portaSsh || '22'), usuario: d.usuario, slug, studio: String(d.studio).trim(), dominio: String(d.dominio).toLowerCase(), evoTenant: d.evoTenant, evoBranch: String(d.evoBranch), porta: String(d.porta || ''), segundaLoja: !!d.segundaLoja, contaDuck: d.contaDuck ? String(d.contaDuck) : '' } });
   const mascara = [senha, ...Object.values(segredos)];
   const fala = (t) => { const m = mascarar(t, mascara); anotarLog(slug, `[${new Date().toISOString()}] ${m}`); aoLinha(m); };
   const passo = (nome, info) => { est.passos[nome] = Object.assign({ em: Date.now() }, info || {}); est.atualizadoEm = Date.now(); gravarEstado(slug, est); };
@@ -268,16 +276,20 @@ async function instalar(d, { senha, segredos = {}, aoLinha = () => {}, comando }
       fala('🔑 Chave do painel instalada — daqui em diante não preciso mais da senha do servidor.');
     }
 
-    // 4) segredos (arquivo 600, apagado pelo script depois de ler) e instalação
+    // 4) segredos (arquivo 600, apagado pelo script depois de ler) e instalação SOLTA no
+    //    servidor (setsid/nohup): se o painel reiniciar no meio, a instalação continua;
+    //    o painel só acompanha (acompanhar()).
+    const rem = remotos(slug);
+    const ja = await executar(con, `test -f ${q(rem.exit)} && echo "EXIT=$(cat ${q(rem.exit)})"; pgrep -f ${q(rem.script)} >/dev/null && echo RODANDO; true`, { tempoMs: 15000 });
+    if (ja.ultimas.includes('RODANDO')) { fala('⏳ A instalação já está rodando no servidor — acompanhando.'); passo('lancada', { em: (est.passos.lancada || {}).em || Date.now() }); return { ok: true, etapa: 'rodando' }; }
     await enviarArquivo(con, ARQ_SEGREDOS_REMOTO, arquivoSegredos(segredos));
-    fala('📦 Instalando (leva de 10 a 25 minutos; o andamento aparece abaixo)…');
-    const r = await executar(con, comando || comandoInstalacao(d), { aoLinha: (l) => fala(l), segredos: mascara });
-    // se o script parou antes de ler o arquivo, apaga mesmo assim
-    try { await executar(con, `rm -f ${q(ARQ_SEGREDOS_REMOTO)}`, { tempoMs: 15000 }); } catch (_) {}
-    if (r.codigo !== 0) { passo('instalacao', { ok: false, codigo: r.codigo }); return { ok: false, etapa: 'instalacao', erro: `A instalação parou (código ${r.codigo}). Veja as últimas linhas.`, ultimas: r.ultimas }; }
-    passo('instalacao', { ok: true });
-    fala('🎉 Instalação concluída.');
-    return { ok: true, etapa: 'instalacao', diagnostico: diag, ultimas: r.ultimas };
+    await enviarArquivo(con, rem.script, (comando || comandoInstalacao(d)) + '\n');
+    const lanc = await executar(con, `rm -f ${q(rem.exit)}; setsid nohup bash -c ${q(`bash ${rem.script} > ${rem.log} 2>&1; echo $? > ${rem.exit}; rm -f ${ARQ_SEGREDOS_REMOTO} ${rem.script}`)} >/dev/null 2>&1 </dev/null & echo LANCADA`, { tempoMs: 15000 });
+    if (!lanc.ultimas.includes('LANCADA')) return { ok: false, etapa: 'instalacao', erro: 'Não consegui iniciar a instalação no servidor.' };
+    delete est.passos.instalacao;
+    passo('lancada');
+    fala('📦 Instalação iniciada no servidor (leva de 10 a 25 minutos). Pode fechar esta tela: ela continua sozinha.');
+    return { ok: true, etapa: 'rodando', diagnostico: diag };
   } catch (e) {
     fala('❌ ' + (e && e.message || e));
     return { ok: false, etapa: est.passos.conexao ? 'instalacao' : 'conexao', erro: e && e.message || String(e) };
@@ -286,4 +298,45 @@ async function instalar(d, { senha, segredos = {}, aoLinha = () => {}, comando }
   }
 }
 
-module.exports = { validar, q, arquivoSegredos, mascarar, comandoInstalacao, pastaDaLoja, conectar, executar, enviarArquivo, lerDiagnostico, avaliarDiagnostico, instalar, lerEstado, chaveDoPainel, impressaoDe, SCRIPT_DIAG, SEGREDOS_ACEITOS, ARQ_SEGREDOS_REMOTO, DIR };
+// Arquivos da instalação no servidor (o apelido já foi validado: só [a-z0-9-]).
+function remotos(slug) { return { script: `/root/.sf-nova-loja-${slug}.sh`, log: `/root/sf-nova-loja-${slug}.log`, exit: `/root/sf-nova-loja-${slug}.exit` }; }
+function lerAcompanhamento(linhas) {
+  const i = linhas.lastIndexOf('@@FIM@@');
+  const corpo = i >= 0 ? linhas.slice(0, i) : linhas;
+  const m = linhas.map((l) => /^@@EXIT=(\d*)$/.exec(l)).filter(Boolean).pop();
+  const codigo = m && m[1] !== '' ? +m[1] : null;
+  return { linhas: corpo.filter((l) => !/^@@EXIT=/.test(l)), terminou: codigo !== null, codigo };
+}
+
+/**
+ * Andamento da instalação que está rodando no servidor (entra com a chave do painel).
+ * Atualiza o estado quando termina. → { ok, terminou, codigo, linhas } | { ok:false, erro }
+ */
+async function acompanhar(slug, { linhas = 200 } = {}) {
+  if (!RX.slug.test(String(slug || ''))) return { ok: false, erro: 'apelido inválido' };
+  const est = lerEstado(slug);
+  if (!est || !est.passos || !est.passos.chave) return { ok: false, erro: 'Esta instalação ainda não começou.' };
+  const rem = remotos(slug);
+  let con = null;
+  try {
+    ({ con } = await conectar({ host: est.host, portaSsh: est.portaSsh, usuario: est.usuario, chavePrivada: chaveDoPainel().privada, impressaoEsperada: est.impressao, tempoMs: 15000 }));
+    const r = await executar(con, `tail -n ${Math.max(10, Math.min(1000, +linhas || 200))} ${q(rem.log)} 2>/dev/null; echo "@@EXIT=$(cat ${q(rem.exit)} 2>/dev/null)"; echo @@FIM@@`, { tempoMs: 20000, guardar: 1010 });
+    const a = lerAcompanhamento(r.ultimas);
+    if (a.terminou && !(est.passos.instalacao && est.passos.instalacao.codigo === a.codigo)) {
+      est.passos.instalacao = { em: Date.now(), ok: a.codigo === 0, codigo: a.codigo };
+      est.atualizadoEm = Date.now(); gravarEstado(slug, est);
+      anotarLog(slug, `[${new Date().toISOString()}] ${a.codigo === 0 ? '🎉 Instalação concluída.' : `❌ A instalação parou (código ${a.codigo}).`}`);
+    }
+    return { ok: true, ...a };
+  } catch (e) { return { ok: false, erro: e && e.message || String(e) }; }
+  finally { if (con) try { con.end(); } catch (_) {} }
+}
+
+/** Instalações deste painel (as mais recentes primeiro), sem segredo nenhum. */
+function listar() {
+  let nomes = [];
+  try { nomes = fs.readdirSync(DIR).filter((f) => /^[a-z0-9][a-z0-9-]{1,30}\.json$/.test(f)); } catch (_) {}
+  return nomes.map((f) => lerEstado(f.slice(0, -5))).filter(Boolean).sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0));
+}
+
+module.exports = { evoDaUrl, remotos, lerAcompanhamento, acompanhar, listar, validar, q, arquivoSegredos, mascarar, comandoInstalacao, pastaDaLoja, conectar, executar, enviarArquivo, lerDiagnostico, avaliarDiagnostico, instalar, lerEstado, chaveDoPainel, impressaoDe, SCRIPT_DIAG, SEGREDOS_ACEITOS, ARQ_SEGREDOS_REMOTO, DIR };

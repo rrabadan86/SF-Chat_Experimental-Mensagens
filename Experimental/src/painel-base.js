@@ -292,7 +292,7 @@ const ESTILO = `
   .var{display:inline-block;background:#eef7f7;color:var(--teal-esc);border:1px solid #cdeaea;border-radius:6px;padding:2px 8px;font-family:ui-monospace,monospace;font-size:var(--fs-sm);cursor:pointer;user-select:none;transition:.12s}
   .var:hover{background:var(--teal);color:#fff;border-color:var(--teal)}
   label{display:block;font-weight:600;font-size:var(--fs-sm);margin:12px 0 4px}
-  input[type=text],input[type=search],input[type=tel],input[type=email],input[type=date],input[type=time],input[type=number],textarea{width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
+  input[type=text],input[type=search],input[type=tel],input[type=email],input[type=password],input[type=date],input[type=time],input[type=number],textarea{width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:10px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
   select{width:100%;max-width:100%;border:1px solid #dcdcdc;border-radius:10px;padding:9px 12px;font-size:var(--fs-body);font-family:inherit;background:#fff}
   textarea{line-height:1.5;resize:vertical}
   input:focus,textarea:focus,select:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(14,110,107,.16)}

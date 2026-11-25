@@ -25,7 +25,8 @@ const PERFIS = [
   { nome: 'recepcao', telas: ['sofia_conversas'], menu: ['grade', 'sofia'], // Funil liberado de propósito (IND-05)
     abre: ['/sofia?view=conversas', '/funil', '/dicionario', '/sofia/agendar/slots'], // horários com vaga do Agendar da conversa
     nega: [['GET', '/perfis'], ['GET', '/?view=config'], ['GET', '/hoje'], ['GET', '/grade'], ['GET', '/metas'], ['GET', '/clube'], ['GET', '/formularios'], ['GET', '/saude'],
-      ['POST', '/sofia/salvar'], ['POST', '/sofia/aquecimento'], ['POST', '/sofia/campanhas/criar'], ['POST', '/sofia/contatos/excluir-lote'], ['POST', '/salvar'], ['POST', '/perfis/criar']],
+      ['POST', '/sofia/salvar'], ['POST', '/sofia/aquecimento'], ['POST', '/sofia/campanhas/criar'], ['POST', '/sofia/contatos/excluir-lote'], ['POST', '/salvar'], ['POST', '/perfis/criar'],
+      ['GET', '/perfis?view=novaloja'], ['GET', '/perfis/novaloja/status?slug=marista'], ['POST', '/perfis/novaloja/iniciar'], ['POST', '/perfis/novaloja/duckdns']], // NOV-01: Nova loja só admin
     naoMostra: { url: '/sofia?view=config', texto: 'Configuração da SoFIA' } },
   { nome: 'configsofia', telas: ['sofia_config'], menu: ['sofia'],
     abre: ['/sofia?view=config', '/sofia?view=cobranca'],
@@ -71,7 +72,7 @@ test('PAI-01..04 cada perfil vê só o que foi liberado e o servidor nega o rest
     }
     // Administrador: vê tudo (inclusive Perfis) e o menu completo.
     const adm = await entrar('dono', 'exemplo-do-dono-123');
-    for (const u of ['/sofia?view=config', '/sofia?view=conversas', '/?view=config', '/funil', '/grade', '/metas', '/perfis', '/perfis?view=auditoria', '/clube', '/formularios', '/saude']) {
+    for (const u of ['/sofia?view=config', '/sofia?view=conversas', '/?view=config', '/funil', '/grade', '/metas', '/perfis', '/perfis?view=auditoria', '/perfis?view=novaloja', '/clube', '/formularios', '/saude']) {
       const r = await pedir(porta, 'GET', u, adm); if (r.st !== 200) falhas.push(`admin: GET ${u} deveria abrir (deu ${r.st})`);
     }
     // Liga/desliga de um envio (toggle dos cartões do WhatsApp e da Cobrança da SoFIA)

@@ -26,10 +26,10 @@ function lerSessaoDias() {
 
 // Aba "Perfis" (só admin): cria usuários, define telas, senha e exclui.
 // Sub-abas de Perfis (igual à subnav da SoFIA): Usuários · Acessos · Auditoria.
-const PERFIS_SUBS = ['usuarios', 'acessos', 'auditoria', 'unidades'];
+const PERFIS_SUBS = ['usuarios', 'acessos', 'auditoria', 'unidades', 'novaloja'];
 function subnavPerfis(view) {
   const item = (v, rot) => `<a href="/perfis${v === 'usuarios' ? '' : '?view=' + v}"${view === v ? ' class="on"' : ''}>${rot}</a>`;
-  return `<div class="subtabs">${item('usuarios', 'Usuários')}${item('acessos', 'Acessos')}${item('auditoria', 'Auditoria')}${item('unidades', 'Unidades')}</div>`;
+  return `<div class="subtabs">${item('usuarios', 'Usuários')}${item('acessos', 'Acessos')}${item('auditoria', 'Auditoria')}${item('unidades', 'Unidades')}${item('novaloja', '🏪 Nova loja')}</div>`;
 }
 // ── Auditoria: filtros, rótulos e exportação ────────────────────────────────
 // Área = o começo do código da ação ("campanha.criar" → "campanha").
@@ -281,8 +281,8 @@ function paginaPerfis(aviso, erro, view, filtroAud = {}) {
   const corpo = `<div class="wrap">
     ${aviso ? `<div class="aviso${erro ? ' err' : ''}">${esc(aviso)}</div>` : ''}
     ${subnavPerfis(view)}
-    ${uiTopo({ titulo: 'Perfis e acessos', sub: view === 'unidades' ? 'As unidades da rede que aparecem na tela de acesso único: escolher a unidade, entrar e cair no painel dela.' : view === 'acessos' ? 'Quem está logado agora e o histórico de entradas no painel. Encerre qualquer sessão por aqui.' : view === 'auditoria' ? 'Quem fez o quê no painel (salvou, excluiu, exportou…).' : 'Crie usuários, defina a senha ou o login pelo Google e escolha quais telas cada um pode ver.' })}
-    ${view === 'unidades' ? secUnidades : view === 'acessos' ? secAcessos : view === 'auditoria' ? secAuditoria : secUsuarios}
+    ${uiTopo({ titulo: 'Perfis e acessos', sub: view === 'novaloja' ? 'Instale uma loja nova num servidor (KVM) sem abrir terminal: preencha, clique em instalar e acompanhe aqui.' : view === 'unidades' ? 'As unidades da rede que aparecem na tela de acesso único: escolher a unidade, entrar e cair no painel dela.' : view === 'acessos' ? 'Quem está logado agora e o histórico de entradas no painel. Encerre qualquer sessão por aqui.' : view === 'auditoria' ? 'Quem fez o quê no painel (salvou, excluiu, exportou…).' : 'Crie usuários, defina a senha ou o login pelo Google e escolha quais telas cada um pode ver.' })}
+    ${view === 'novaloja' ? require('./painel-nova-loja').secaoNovaLoja({ demo: require('./demo-guard').ativo }) : view === 'unidades' ? secUnidades : view === 'acessos' ? secAcessos : view === 'auditoria' ? secAuditoria : secUsuarios}
   </div>`;
   return chrome({ tab: 'Perfis', h1: 'Perfis', p: 'Crie usuários e escolha quais telas cada um pode acessar.' }, 'perfis', corpo);
 }
