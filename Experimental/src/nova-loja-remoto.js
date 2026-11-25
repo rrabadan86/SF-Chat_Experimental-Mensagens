@@ -20,7 +20,7 @@ const path = require('path');
 const DIR = path.resolve(__dirname, '..', 'data', 'nova-loja');
 const REPO_URL = 'https://github.com/rrabadan86/SF-Chat_Experimental-Mensagens.git';
 const ARQ_SEGREDOS_REMOTO = '/root/.sf-nova-loja-segredos';
-const SEGREDOS_ACEITOS = ['EVO_DNS', 'EVO_TOKEN', 'EVO_EMAIL', 'EVO_PASSWORD', 'EVO_ACTIVITY', 'EVO_SERVICE', 'EVO_ACTIVITY_ID', 'EVO_SERVICE_ID', 'ANTHROPIC_API_KEY', 'GRUPO_EQUIPE'];
+const SEGREDOS_ACEITOS = ['EVO_DNS', 'EVO_TOKEN', 'EVO_EMAIL', 'EVO_PASSWORD', 'EVO_ACTIVITY', 'EVO_SERVICE', 'EVO_ACTIVITY_ID', 'EVO_SERVICE_ID', 'ANTHROPIC_API_KEY', 'GRUPO_EQUIPE', 'PAINEL_SENHA'];
 
 let _ssh2 = null;
 function ssh2() { if (!_ssh2) _ssh2 = require('ssh2'); return _ssh2; }
@@ -332,6 +332,86 @@ async function acompanhar(slug, { linhas = 200 } = {}) {
   finally { if (con) try { con.end(); } catch (_) {} }
 }
 
+// ── conferência depois de instalar (NOV-03) ───────────────────────────────────
+/** O script que confere a loja no servidor (só lê; liga o aquecimento se pedido). */
+function scriptConferencia(est, { ligarAquecimento = false } = {}) {
+  const exp = pastaDaLoja(est) + '/Experimental';
+  return [
+    `cd ${q(exp)} 2>/dev/null || { echo "@@SEM_PASTA"; exit 0; }`,
+    'echo "@@CHECK"',
+    `bash setup-novo-studio.sh --slug ${q(est.slug)} --check --no-git-pull 2>&1 | grep -E "✅|❌" | tail -40`,
+    'echo "@@PM2"',
+    `pm2 jlist 2>/dev/null | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{for(const p of JSON.parse(s))if(p.name.startsWith(process.argv[1]+'-'))console.log('PM2 '+p.name+' '+p.pm2_env.status)}catch(e){}})" ${q(est.slug)}`,
+    'echo "@@IA"',
+    // a chave é lida do .env pelo node (não vai para a linha de comando)
+    `node -e "require('dotenv').config({path:'../ChatBot/.env'});const k=process.env.ANTHROPIC_API_KEY;if(!k){console.log('IA=vazia');process.exit(0)}fetch('https://api.anthropic.com/v1/models',{headers:{'x-api-key':k,'anthropic-version':'2023-06-01'}}).then(r=>console.log('IA='+r.status)).catch(()=>console.log('IA=erro'))" 2>/dev/null || echo "IA=erro"`,
+    'echo "@@SEG"',
+    'timeout 200 node src/conferir-segmentos.js 2>/dev/null | grep "^SEGMENTOS_JSON=" | tail -1',
+    'echo "@@AQ"',
+    ligarAquecimento
+      ? `node -e "require('dotenv').config({path:'.env'});const a=require('./src/sofia-aquecimento');const d=process.env.SOFIA_DIR;if(!d){console.log('AQ=sem-dir')}else if(a.ativo(d)){console.log('AQ=ja')}else{a.gravar(d,7);console.log('AQ=ligado')}" 2>/dev/null || echo "AQ=erro"`
+      : 'echo "AQ=nao-pedido"',
+    'echo "@@FIM@@"',
+  ].join('\n');
+}
+
+/** Saída do script → itens ✅/❌ para a tela. */
+function lerConferencia(linhas) {
+  const blocos = {}; let atual = '';
+  for (const l of linhas || []) { const m = /^@@([A-Z0-9_]+)@*$/.exec(l); if (m) { atual = m[1]; blocos[atual] = blocos[atual] || []; continue; } if (atual) blocos[atual].push(l); }
+  if (blocos.SEM_PASTA) return [{ id: 'pasta', ok: false, titulo: 'Instalação', detalhe: 'A pasta da loja não existe no servidor — a instalação não chegou ao fim.' }];
+  const itens = [];
+  const chk = (blocos.CHECK || []).map((l) => l.trim());
+  const ruins = chk.filter((l) => l.startsWith('❌')).map((l) => l.replace(/^❌\s*/, ''));
+  itens.push({ id: 'check', ok: chk.length > 0 && !ruins.length, titulo: 'Configuração (.env)', detalhe: !chk.length ? 'Não consegui rodar a conferência do script.' : ruins.length ? ruins.slice(0, 6).join(' · ') : 'Tudo preenchido e coerente.' });
+  const pm2 = (blocos.PM2 || []).map((l) => /^PM2 (\S+) (\S+)$/.exec(l)).filter(Boolean);
+  const fora = pm2.filter((m) => m[2] !== 'online').map((m) => `${m[1]} (${m[2]})`);
+  itens.push({ id: 'pm2', ok: pm2.length >= 4 && !fora.length, titulo: 'Processos (painel, robô, SoFIA, formulário)', detalhe: !pm2.length ? 'Nenhum processo da loja no pm2.' : fora.length ? 'Fora do ar: ' + fora.join(', ') : `${pm2.length} no ar.` });
+  const ia = ((blocos.IA || []).find((l) => /^IA=/.test(l)) || 'IA=erro').slice(3);
+  itens.push({ id: 'ia', ok: ia === '200', titulo: 'Chave da IA (SoFIA)', detalhe: ia === '200' ? 'Chave aceita pela Anthropic.' : ia === 'vazia' ? 'Ainda sem chave — preencha no painel da loja (SoFIA → Configuração → Credenciais).' : ia === '401' || ia === '403' ? 'A Anthropic recusou a chave.' : 'Não consegui testar a chave agora.' });
+  const segL = (blocos.SEG || []).find((l) => l.startsWith('SEGMENTOS_JSON='));
+  let seg = null; try { seg = segL ? JSON.parse(segL.slice('SEGMENTOS_JSON='.length)) : null; } catch (_) {}
+  if (!seg) itens.push({ id: 'evo', ok: false, titulo: 'EVO: segmentos', detalhe: 'Não consegui ler o EVO agora (o robô precisa do login do EVO preenchido).' });
+  else if (!seg.ok) itens.push({ id: 'evo', ok: false, titulo: 'EVO: segmentos', detalhe: 'Não entrei no EVO: ' + String(seg.erro || '') });
+  else for (const x of seg.segmentos || []) itens.push({ id: 'seg-' + x.id, ok: !!x.achado, titulo: `EVO: segmento "${x.nome}"`, detalhe: x.achado ? `Encontrado (${x.uso}).` : `Falta — crie em Clientes → Segmentação com: ${x.filtros}. Sem ele: ${x.uso}.` });
+  const aq = ((blocos.AQ || []).find((l) => /^AQ=/.test(l)) || '').slice(3);
+  if (aq && aq !== 'nao-pedido') itens.push({ id: 'aquecimento', ok: aq === 'ligado' || aq === 'ja', titulo: '🌱 Número em aquecimento (7 dias)', detalhe: aq === 'ligado' ? 'Ligado: a SoFIA só responde quem escreve até o número esquentar.' : aq === 'ja' ? 'Já estava ligado.' : 'Não consegui ligar — ligue em SoFIA → Configuração antes de escanear o QR.' });
+  return itens;
+}
+
+/** Código HTTP de uma página (0 = não abriu). */
+function httpsStatus(url) {
+  return new Promise((resolve) => {
+    try {
+      const r = require('https').get(url, { timeout: 15000 }, (res) => { res.resume(); resolve(res.statusCode || 0); });
+      r.on('timeout', () => { r.destroy(); resolve(0); }); r.on('error', () => resolve(0));
+    } catch (_) { resolve(0); }
+  });
+}
+
+/** Roda a conferência no servidor (chave do painel) e guarda no estado. → { ok, itens } */
+async function conferir(slug, { ligarAquecimento, verWeb } = {}) { // verWeb: só nos testes
+  if (!RX.slug.test(String(slug || ''))) return { ok: false, erro: 'apelido inválido' };
+  const est = lerEstado(slug);
+  if (!est || !est.passos || !est.passos.chave) return { ok: false, erro: 'Esta instalação ainda não começou.' };
+  const ligar = ligarAquecimento !== undefined ? !!ligarAquecimento : !est.passos.aquecimento;
+  let con = null;
+  try {
+    ({ con } = await conectar({ host: est.host, portaSsh: est.portaSsh, usuario: est.usuario, chavePrivada: chaveDoPainel().privada, impressaoEsperada: est.impressao, tempoMs: 15000 }));
+    const r = await executar(con, scriptConferencia(est, { ligarAquecimento: ligar }), { tempoMs: 6 * 60 * 1000, guardar: 400 });
+    const itens = lerConferencia(r.ultimas);
+    const web = await (verWeb || httpsStatus)(`https://${est.dominio}/login`);
+    itens.unshift({ id: 'https', ok: web >= 200 && web < 400, titulo: `Painel no ar (https://${est.dominio})`, detalhe: web >= 200 && web < 400 ? 'Abre com cadeado (https).' : web ? `Respondeu com erro ${web}.` : 'Ainda não abre — confira se o endereço aponta para o servidor (o https liga sozinho em alguns minutos depois que apontar).' });
+    const aq = itens.find((i) => i.id === 'aquecimento');
+    if (aq && aq.ok) est.passos.aquecimento = { em: Date.now() };
+    est.conferencia = { em: Date.now(), itens };
+    est.atualizadoEm = Date.now(); gravarEstado(slug, est);
+    anotarLog(slug, `[${new Date().toISOString()}] 🔎 Conferência: ${itens.filter((i) => i.ok).length}/${itens.length} ok.`);
+    return { ok: true, itens };
+  } catch (e) { return { ok: false, erro: e && e.message || String(e) }; }
+  finally { if (con) try { con.end(); } catch (_) {} }
+}
+
 /** Instalações deste painel (as mais recentes primeiro), sem segredo nenhum. */
 function listar() {
   let nomes = [];
@@ -339,4 +419,4 @@ function listar() {
   return nomes.map((f) => lerEstado(f.slice(0, -5))).filter(Boolean).sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0));
 }
 
-module.exports = { evoDaUrl, remotos, lerAcompanhamento, acompanhar, listar, validar, q, arquivoSegredos, mascarar, comandoInstalacao, pastaDaLoja, conectar, executar, enviarArquivo, lerDiagnostico, avaliarDiagnostico, instalar, lerEstado, chaveDoPainel, impressaoDe, SCRIPT_DIAG, SEGREDOS_ACEITOS, ARQ_SEGREDOS_REMOTO, DIR };
+module.exports = { scriptConferencia, lerConferencia, conferir, evoDaUrl, remotos, lerAcompanhamento, acompanhar, listar, validar, q, arquivoSegredos, mascarar, comandoInstalacao, pastaDaLoja, conectar, executar, enviarArquivo, lerDiagnostico, avaliarDiagnostico, instalar, lerEstado, chaveDoPainel, impressaoDe, SCRIPT_DIAG, SEGREDOS_ACEITOS, ARQ_SEGREDOS_REMOTO, DIR };

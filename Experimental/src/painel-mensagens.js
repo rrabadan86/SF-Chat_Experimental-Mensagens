@@ -1165,6 +1165,14 @@ const server = http.createServer(protegido((req, res) => {
         return json(r);
       });
     }
+    if (req.method === 'POST' && url === '/perfis/novaloja/conferir') {
+      return lerCorpo(req, 2e3, corpo => {
+        let f = {}; try { f = JSON.parse(corpo || '{}') || {}; } catch (_) {}
+        const r = require('./nova-loja').conferir(String(f.slug || ''));
+        if (r.ok && !r.jaRodando) { try { auditoria.registrar(sess.usuario, 'perfil.novaloja.conferir', String(f.slug || ''), ''); } catch (_) {} }
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(JSON.stringify(r));
+      });
+    }
     if (req.method === 'GET' && url === '/perfis/novaloja/status') {
       const slug = new URLSearchParams(req.url.split('?')[1] || '').get('slug') || '';
       require('./nova-loja').status(slug).then((o) => { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(o)); })
