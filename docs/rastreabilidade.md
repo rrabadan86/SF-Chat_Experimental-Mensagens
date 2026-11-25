@@ -24,18 +24,18 @@ o teste que a garante e a cobertura.
 | Envios a clientes | 30 | 14 | 7 | 9 | 0 |
 | Painel | 11 | 4 | 2 | 3 | 2 |
 | Padrão visual | 7 | 2 | 3 | 1 | 1 |
-| SoFIA | 12 | 0 | 9 | 3 | 0 |
+| SoFIA | 13 | 0 | 10 | 3 | 0 |
 | EVO e aula experimental | 10 | 2 | 1 | 7 | 0 |
 | Indicadores e tags | 9 | 8 | 0 | 1 | 0 |
 | Dados e segredos | 7 | 4 | 1 | 0 | 2 |
 | Demonstração | 4 | 3 | 0 | 0 | 1 |
 | Publicar e atualizar | 8 | 2 | 1 | 2 | 3 |
 | Testes | 10 | 5 | 0 | 0 | 5 |
-| **Total** | 108 | 44 | 24 | 26 | 14 |
+| **Total** | 109 | 44 | 25 | 26 | 14 |
 
-Regras de código (sem as de processo): **68 de 94** com teste (44 inteiras, 24 em parte); **26** sem teste.
+Regras de código (sem as de processo): **69 de 95** com teste (44 inteiras, 25 em parte); **26** sem teste.
 
-Testes: 155 no total, 117 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
+Testes: 156 no total, 118 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
 <!-- resumo:fim -->
 
 ## Envios a clientes (`envio.md`)
@@ -116,6 +116,7 @@ Testes: 155 no total, 117 ligados a uma regra. Os outros 38 conferem funções q
 | SOF-09 | IA sem crédito / chave recusada: não insiste, avisa a equipe uma vez por episódio | `ia-conta.js`, `ChatBot/sofia.ts`, `ChatBot/sofia-listener.ts` | `ia-conta.test.js` › SOF-09 IA parada: reconhece<br>`ia-conta.test.js` › SOF-09 IA parada: avisa<br>`ia-conta.test.js` › SOF-09 SoFIA: não repete | parcial: a ligação no TypeScript é conferida pelo texto do código |
 | SOF-10 | A IA só recebe as ferramentas da SoFIA (`tools: []`) | `ChatBot/sofia.ts` | `ia-conta.test.js` › SOF-10 SoFIA | parcial: conferido pelo texto do código |
 | SOF-11 | Modelos da IA pelo painel; Haiku 5.5 só extração e sem pensamento | `sofia-editor.js`, `painel-sofia.js`, `ChatBot/sofia.ts` | `ia-modelos.test.js` › SOF-11 modelos<br>`ia-modelos.test.js` › SOF-11 SoFIA | parcial: o TypeScript é conferido pelo texto do código |
+| SOF-13 | Já fez experimental: sem perguntar da aula antiga, convite para a aula para relembrar (gratuita) | `ChatBot/sofia.ts`, `painel-sofia.js` | `sofia-historico.test.js` › SOF-13 já fez experimental | parcial: conferido pelo texto do código (o que a IA responde só se vê na conversa) |
 | SOF-12 | Envios que a SoFIA inicia: 30 min após conectar e nada em aquecimento | `sofia-aquecimento.js`, `ChatBot/sofia-listener.ts`, `painel-sofia.js` | `sofia-aquecimento.test.js` › SOF-12 aquecimento<br>`sofia-aquecimento.test.js` › SOF-12 envios<br>`sofia-aquecimento.test.js` › SOF-12 SoFIA<br>`sofia-aquecimento.test.js` › SOF-12 fila de cobrança<br>`sofia-aquecimento.test.js` › SOF-12 bloqueio do app<br>`sofia-aquecimento.test.js` › SOF-12 follow-up segurado<br>`sofia-aquecimento.test.js` › SOF-12 painel | parcial: a ligação no TypeScript é conferida pelo texto do código |
 
 ## EVO e aula experimental (`evo.md`)
