@@ -1145,6 +1145,7 @@ const server = http.createServer(protegido((req, res) => {
       });
     }
     // 🏪 Nova loja (NOV-01/NOV-02): contas do DuckDNS, iniciar/continuar e andamento.
+    if (url.startsWith('/perfis/novaloja/') && !require('./nova-loja').ativa()) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Nova loja só no painel do Bueno.'); }
     if (req.method === 'POST' && url === '/perfis/novaloja/duckdns') {
       return lerCorpo(req, 4e3, corpo => {
         const p = new URLSearchParams(corpo);

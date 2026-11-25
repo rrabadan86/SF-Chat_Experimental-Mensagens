@@ -29,7 +29,7 @@ function lerSessaoDias() {
 const PERFIS_SUBS = ['usuarios', 'acessos', 'auditoria', 'unidades', 'novaloja'];
 function subnavPerfis(view) {
   const item = (v, rot) => `<a href="/perfis${v === 'usuarios' ? '' : '?view=' + v}"${view === v ? ' class="on"' : ''}>${rot}</a>`;
-  return `<div class="subtabs">${item('usuarios', 'Usuários')}${item('acessos', 'Acessos')}${item('auditoria', 'Auditoria')}${item('unidades', 'Unidades')}${item('novaloja', '🏪 Nova loja')}</div>`;
+  return `<div class="subtabs">${item('usuarios', 'Usuários')}${item('acessos', 'Acessos')}${item('auditoria', 'Auditoria')}${item('unidades', 'Unidades')}${require('./nova-loja').ativa() ? item('novaloja', '🏪 Nova loja') : ''}</div>`;
 }
 // ── Auditoria: filtros, rótulos e exportação ────────────────────────────────
 // Área = o começo do código da ação ("campanha.criar" → "campanha").
@@ -114,6 +114,7 @@ function auditoriaCsv(filtro) {
 }
 
 function paginaPerfis(aviso, erro, view, filtroAud = {}) {
+  if (view === 'novaloja' && !require('./nova-loja').ativa()) view = 'usuarios'; // 🏪 só no Bueno
   view = PERFIS_SUBS.includes(view) ? view : 'usuarios';
   const lista = usuarios.listar();
   let ults = {}; try { ults = acessos.ultimosAcessos(); } catch (_) {}          // { usuario: ts }
