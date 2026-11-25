@@ -44,6 +44,7 @@ async function ler() {
     await require('./evo-login').esperarFormLogin(page);
     const campo = 'input#usuario, input[type="email"], input[type="text"]';
     await page.click(campo, { clickCount: 3 });
+    require('./evo-login-estado').conferir(); // EVO-01: confere de novo logo antes de digitar
     await page.type(campo, config.evo.email, { delay: 60 });
     await page.click('input#senha, input[type="password"]', { clickCount: 3 });
     await page.type('input#senha, input[type="password"]', config.evo.password, { delay: 60 });
