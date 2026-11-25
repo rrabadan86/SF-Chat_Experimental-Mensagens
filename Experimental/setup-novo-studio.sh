@@ -36,6 +36,8 @@
 #    passo). O --tudo exige --domain. Segredos por flag:
 #       --evo-dns --evo-token --evo-email --evo-password
 #       --evo-activity --evo-service --anthropic-key --grupo-equipe
+#    Ou todos num arquivo: --segredos <arquivo> (NOME=<base64> por linha; é apagado
+#    depois de lido — é o que o painel "Nova loja" usa).
 #
 #  EVO POR UNIDADE: --evo-tenant e --evo-branch montam os caminhos que o robô usa
 #  para LER o EVO (grade, faltantes, suspensões). Ache os dois na URL do EVO da
@@ -78,6 +80,7 @@ EVO_ACTIVITY_ID_IN="" # --evo-activity-id (id da atividade, alternativa ao nome)
 EVO_SERVICE_ID_IN=""  # --evo-service-id  (id do serviço, alternativa ao nome)
 ANTHROPIC_IN=""    # --anthropic-key (chave da IA da SoFIA)
 GRUPO_EQUIPE_IN="" # --grupo-equipe (nome EXATO do grupo da equipe no WhatsApp)
+SEGREDOS_ARQ=""    # --segredos <arquivo>: os segredos num arquivo (o painel "Nova loja" usa), apagado depois de lido
 ORIG_ARGS=("$@")   # guardado p/ reexecutar após a auto-atualização do Git
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -104,6 +107,7 @@ while [ $# -gt 0 ]; do
     --evo-service-id)  EVO_SERVICE_ID_IN="${2:-}"; shift 2 ;;
     --anthropic-key) ANTHROPIC_IN="${2:-}"; shift 2 ;;
     --grupo-equipe)  GRUPO_EQUIPE_IN="${2:-}"; shift 2 ;;
+    --segredos)      SEGREDOS_ARQ="${2:-}"; shift 2 ;;
     -h|--help)
       grep -E '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Argumento desconhecido: $1"; exit 1 ;;
@@ -167,6 +171,30 @@ if [ "$AUTO_PULL" = "1" ] && [ "${SETUP_JA_ATUALIZOU:-}" != "1" ] \
     echo "       git -C \"$REPO_DIR\" pull --ff-only"
   fi
 fi
+# ---- segredos por arquivo (--segredos) --------------------------------------
+# Usado pelo painel "Nova loja": os segredos chegam num arquivo (modo 600), um por
+# linha NOME=<base64>, em vez de irem na linha de comando (que aparece no "ps").
+# Só os nomes conhecidos são aceitos; o valor nunca é executado. Lido DEPOIS da
+# auto-atualização (o reexec precisa do arquivo) e apagado logo em seguida.
+if [ -n "$SEGREDOS_ARQ" ]; then
+  [ -f "$SEGREDOS_ARQ" ] || { echo "❌ --segredos: arquivo não encontrado"; exit 1; }
+  while IFS= read -r _l || [ -n "$_l" ]; do
+    case "$_l" in *=*) ;; *) continue ;; esac
+    _k="${_l%%=*}"; _v="${_l#*=}"   # corta só no 1º "=" (o base64 pode terminar em "=")
+    _d="$(printf '%s' "$_v" | base64 -d 2>/dev/null)" || { echo "❌ --segredos: valor ilegível em $_k"; rm -f "$SEGREDOS_ARQ"; exit 1; }
+    case "$_k" in
+      EVO_DNS) EVO_DNS_IN="$_d" ;; EVO_TOKEN) EVO_TOKEN_IN="$_d" ;;
+      EVO_EMAIL) EVO_EMAIL_IN="$_d" ;; EVO_PASSWORD) EVO_PASSWORD_IN="$_d" ;;
+      EVO_ACTIVITY) EVO_ACTIVITY_IN="$_d" ;; EVO_SERVICE) EVO_SERVICE_IN="$_d" ;;
+      EVO_ACTIVITY_ID) EVO_ACTIVITY_ID_IN="$_d" ;; EVO_SERVICE_ID) EVO_SERVICE_ID_IN="$_d" ;;
+      ANTHROPIC_API_KEY) ANTHROPIC_IN="$_d" ;; GRUPO_EQUIPE) GRUPO_EQUIPE_IN="$_d" ;;
+      *) echo "⚠️  --segredos: nome desconhecido ignorado ($_k)" ;;
+    esac
+  done < "$SEGREDOS_ARQ"
+  rm -f "$SEGREDOS_ARQ"; unset _l _k _v _d
+  echo "🔐 Segredos lidos do arquivo (e o arquivo foi apagado)."
+fi
+
 SOFIA_DIR="${SOFIA_DIR:-$HOME/sofia-data-$SLUG}"   # dados vivos, FORA do repo
 
 # Formulário (roda no PRÓPRIO VPS, sob /agendamentoexperimental). PADRÃO: roda do
@@ -230,7 +258,7 @@ prompt_secrets() {
 }
 
 # Grava os segredos recebidos (flag/perguntados) nos .env já criados.
-aplicar_segredos() {
+aplicar_segredos() { echo "DBG[$EVO_EMAIL_IN][$EVO_PASSWORD_IN][$GRUPO_EQUIPE_IN]"
   set_env EVO_DNS           "$EVO_DNS_IN"      "$EXP_DIR/.env"
   set_env EVO_TOKEN         "$EVO_TOKEN_IN"    "$EXP_DIR/.env"
   set_env EVO_EMAIL         "$EVO_EMAIL_IN"    "$EXP_DIR/.env"
@@ -480,7 +508,7 @@ run_check() {
 
 # --tudo: no modo "tudo de uma vez", pergunta os segredos LOGO (antes das instalações
 # demoradas), pra você preencher e deixar o resto rodar sozinho.
-if [ "$TUDO" = "1" ]; then prompt_secrets; fi
+if [ "$TUDO" = "1" ] && [ -z "$SEGREDOS_ARQ" ]; then prompt_secrets; fi   # com --segredos (painel) não pergunta nada
 
 # ---- --install-deps: instala os pré-requisitos ANTES de qualquer fase --------
 if [ "$INSTALL_DEPS" = "1" ]; then install_system_deps || true; fi
