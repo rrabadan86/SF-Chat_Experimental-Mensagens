@@ -34,6 +34,12 @@ function lerFormulario(f) {
   const unicos = []; for (const e of erros) if (!unicos.some((u) => u.campo === e.campo)) unicos.push(e);
   if (duck.subdominioDe(dominio) && d.contaDuck && !duck.tokenDa(d.contaDuck)) unicos.push({ campo: 'contaDuck', msg: 'Essa conta do DuckDNS ainda não tem o token guardado (veja "Contas do DuckDNS" acima).' });
   const segredos = { EVO_DNS: s('evoDns'), EVO_TOKEN: s('evoToken'), EVO_EMAIL: s('evoEmail'), EVO_PASSWORD: String((f && f.evoSenha) || ''), ANTHROPIC_API_KEY: s('iaChave'), GRUPO_EQUIPE: s('grupoEquipe'), PAINEL_SENHA: String((f && f.painelSenha) || '') };
+  // aula experimental no EVO: nome ou número (número vai para o campo de id)
+  const nomeOuId = (v, nome, id) => { if (!v) return; if (/^\d{1,9}$/.test(v)) segredos[id] = v; else segredos[nome] = v; };
+  nomeOuId(s('evoAtividade'), 'EVO_ACTIVITY', 'EVO_ACTIVITY_ID');
+  nomeOuId(s('evoServico'), 'EVO_SERVICE', 'EVO_SERVICE_ID');
+  if (s('circuitoServico')) { if (/^\d{1,9}$/.test(s('circuitoServico'))) segredos.CIRCUITO_SERVICO = s('circuitoServico'); else unicos.push({ campo: 'circuitoServico', msg: 'O serviço do Circuito Slim é um número (ex.: 316).' }); }
+  Object.assign(d, { evoAtividade: s('evoAtividade'), evoServico: s('evoServico'), circuitoServico: s('circuitoServico') });
   if (segredos.PAINEL_SENHA && (segredos.PAINEL_SENHA.length < 8 || /[\r\n]/.test(segredos.PAINEL_SENHA))) unicos.push({ campo: 'painelSenha', msg: 'A senha do painel novo precisa ter pelo menos 8 letras ou números.' });
   return { d, segredos, senha: String((f && f.senha) || ''), erros: unicos };
 }

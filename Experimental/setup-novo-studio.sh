@@ -80,6 +80,7 @@ EVO_ACTIVITY_ID_IN="" # --evo-activity-id (id da atividade, alternativa ao nome)
 EVO_SERVICE_ID_IN=""  # --evo-service-id  (id do serviço, alternativa ao nome)
 ANTHROPIC_IN=""    # --anthropic-key (chave da IA da SoFIA)
 GRUPO_EQUIPE_IN="" # --grupo-equipe (nome EXATO do grupo da equipe no WhatsApp)
+CIRCUITO_SERVICO_IN="" # só por --segredos: número do serviço da experimental do Circuito Slim no EVO
 PAINEL_SENHA_IN="" # só por --segredos: a senha do painel que o dono escolheu no assistente "Nova loja"
 SEGREDOS_ARQ=""    # --segredos <arquivo>: os segredos num arquivo (o painel "Nova loja" usa), apagado depois de lido
 ORIG_ARGS=("$@")   # guardado p/ reexecutar após a auto-atualização do Git
@@ -190,6 +191,7 @@ if [ -n "$SEGREDOS_ARQ" ]; then
       EVO_ACTIVITY_ID) EVO_ACTIVITY_ID_IN="$_d" ;; EVO_SERVICE_ID) EVO_SERVICE_ID_IN="$_d" ;;
       ANTHROPIC_API_KEY) ANTHROPIC_IN="$_d" ;; GRUPO_EQUIPE) GRUPO_EQUIPE_IN="$_d" ;;
       PAINEL_SENHA) PAINEL_SENHA_IN="$_d" ;;
+      CIRCUITO_SERVICO) CIRCUITO_SERVICO_IN="$_d" ;;
       *) echo "⚠️  --segredos: nome desconhecido ignorado ($_k)" ;;
     esac
   done < "$SEGREDOS_ARQ"
@@ -272,6 +274,10 @@ aplicar_segredos() {
   set_env GRUPO_EQUIPE      "$GRUPO_EQUIPE_IN" "$EXP_DIR/.env"
   set_env ANTHROPIC_API_KEY "$ANTHROPIC_IN"    "$CHATBOT_DIR/.env"
   set_env PAINEL_SENHA      "$PAINEL_SENHA_IN" "$EXP_DIR/.env"   # escolhida no assistente (troca a sugerida)
+  # Circuito Slim: o painel e o formulário leem o serviço deste arquivo (WhatsApp → Express)
+  if printf '%s' "$CIRCUITO_SERVICO_IN" | grep -qE '^[0-9]{1,9}$'; then
+    mkdir -p "$EXP_DIR/data" && printf '%s' "$CIRCUITO_SERVICO_IN" > "$EXP_DIR/data/circuito-servico.txt"
+  fi
   if [ -n "$DOMAIN" ]; then
     set_env FORM_CLOUD_URL "https://$DOMAIN$FORM_PREFIX"                "$EXP_DIR/.env"
     set_env SOFIA_BOOK_URL "https://$DOMAIN$FORM_PREFIX/api/book-sofia" "$CHATBOT_DIR/.env"
