@@ -162,3 +162,15 @@ test('NOV-01 nova loja: atividade e serviço da experimental (nome ou número) e
   assert.match(sh, /CIRCUITO_SERVICO\) CIRCUITO_SERVICO_IN="\$_d"/);
   assert.match(sh, /> "\$EXP_DIR\/data\/circuito-servico\.txt"/, 'o script grava o serviço onde o painel e o formulário leem');
 }));
+
+test('NOV-01 nova loja: só no painel do Bueno (NOVA_LOJA liga/desliga; sem ela, segue o Pagamento dos professores)', () => comAmb(async (amb) => {
+  const { ativa } = amb.req('nova-loja');
+  assert.strictEqual(ativa({}), false, 'loja comum: não aparece');
+  assert.strictEqual(ativa({ PAGAMENTO_PROFESSORES: '1' }), true, 'Bueno (tem o pagamento): aparece sem configurar nada');
+  assert.strictEqual(ativa({ NOVA_LOJA: '1' }), true);
+  assert.strictEqual(ativa({ NOVA_LOJA: '0', PAGAMENTO_PROFESSORES: '1' }), false, 'dá para desligar no Bueno');
+  const perfis = fs.readFileSync(require('path').join(amb.exp, 'src', 'painel-perfis.js'), 'utf8');
+  assert.match(perfis, /require\('\.\/nova-loja'\)\.ativa\(\) \? item\('novaloja'/, 'a aba só aparece onde está ligada');
+  const rotas = fs.readFileSync(require('path').join(amb.exp, 'src', 'painel-mensagens.js'), 'utf8');
+  assert.match(rotas, /url\.startsWith\('\/perfis\/novaloja\/'\) && !require\('\.\/nova-loja'\)\.ativa\(\)\) \{ res\.writeHead\(404/, 'e as rotas respondem 404 fora do Bueno');
+}));

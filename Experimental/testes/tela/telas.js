@@ -57,7 +57,7 @@ async function montar() {
   for (const f of fs.readdirSync(path.join(REPO, 'ChatBot'))) if (/\.default\./.test(f)) fs.copyFileSync(path.join(REPO, 'ChatBot', f), path.join(raiz, 'ChatBot', f));
   const porta = await require('../ajuda').portaLivre();
   fs.writeFileSync(path.join(exp, '.env'), [
-    'PAINEL_DEMO=1', `PAINEL_PORT=${porta}`, 'PAINEL_HOST=127.0.0.1', 'PM2_SLUG=exemplo',
+    'PAINEL_DEMO=1', `PAINEL_PORT=${porta}`, 'PAINEL_HOST=127.0.0.1', 'PM2_SLUG=exemplo', 'NOVA_LOJA=1', // 🏪 só no Bueno: ligado aqui para a tela ser conferida
     `SOFIA_DIR=${path.join(raiz, 'sofia-demo')}`, 'STUDIO_NOME=Studio SlimFit Demonstração',
   ].join('\n') + '\n');
   return { raiz, exp, porta };

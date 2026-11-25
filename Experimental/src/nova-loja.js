@@ -14,6 +14,18 @@
 const remoto = require('./nova-loja-remoto');
 const duck = require('./nova-loja-duckdns');
 
+/**
+ * O assistente só existe no painel do Bueno (decisão do dono, 25/11/2026): liga com
+ * NOVA_LOJA=1 e desliga com NOVA_LOJA=0; sem a variável, acompanha o Pagamento dos
+ * professores (PAGAMENTO_PROFESSORES=1), que só o Bueno tem ligado.
+ */
+function ativa(env = process.env) {
+  const sim = (v) => /^(1|true|sim|on)$/i.test(String(v || '').trim());
+  const v = String(env.NOVA_LOJA || '').trim();
+  if (v) return sim(v);
+  return sim(env.PAGAMENTO_PROFESSORES);
+}
+
 const emAndamento = new Map(); // slug → { linhas: [], inicio }
 const cacheRemoto = new Map(); // slug → { em, r } (não abrir SSH a cada 2 s)
 const MAX_LINHAS = 120;
@@ -121,4 +133,4 @@ function conferir(slug, { remotoFn = remoto } = {}) {
 /** Esquece a parte em memória de uma instalação que já terminou (a tela não precisa mais). */
 function limpar(slug) { const j = emAndamento.get(slug); if (j && j.fim) emAndamento.delete(slug); }
 
-module.exports = { lerFormulario, iniciar, status, conferir, limpar, _emAndamento: emAndamento };
+module.exports = { ativa, lerFormulario, iniciar, status, conferir, limpar, _emAndamento: emAndamento };
