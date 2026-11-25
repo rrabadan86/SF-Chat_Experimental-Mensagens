@@ -20,7 +20,7 @@ const path = require('path');
 const DIR = path.resolve(__dirname, '..', 'data', 'nova-loja');
 const REPO_URL = 'https://github.com/rrabadan86/SF-Chat_Experimental-Mensagens.git';
 const ARQ_SEGREDOS_REMOTO = '/root/.sf-nova-loja-segredos';
-const SEGREDOS_ACEITOS = ['EVO_DNS', 'EVO_TOKEN', 'EVO_EMAIL', 'EVO_PASSWORD', 'EVO_ACTIVITY', 'EVO_SERVICE', 'EVO_ACTIVITY_ID', 'EVO_SERVICE_ID', 'ANTHROPIC_API_KEY', 'GRUPO_EQUIPE', 'PAINEL_SENHA'];
+const SEGREDOS_ACEITOS = ['EVO_DNS', 'EVO_TOKEN', 'EVO_EMAIL', 'EVO_PASSWORD', 'EVO_ACTIVITY', 'EVO_SERVICE', 'EVO_ACTIVITY_ID', 'EVO_SERVICE_ID', 'ANTHROPIC_API_KEY', 'GRUPO_EQUIPE', 'PAINEL_SENHA', 'CIRCUITO_SERVICO'];
 
 let _ssh2 = null;
 function ssh2() { if (!_ssh2) _ssh2 = require('ssh2'); return _ssh2; }
@@ -240,7 +240,7 @@ async function instalar(d, { senha, segredos = {}, aoLinha = () => {}, comando }
   const est = lerEstado(slug) || { slug, criadoEm: Date.now(), passos: {} };
   Object.assign(est, { host: d.host, portaSsh: +d.portaSsh || 22, usuario: d.usuario, dominio: String(d.dominio).toLowerCase(), studio: String(d.studio).trim(), segundaLoja: !!d.segundaLoja, atualizadoEm: Date.now(),
     // o que dá para preencher de novo no "Continuar" (nada de senha/segredo)
-    dados: { host: d.host, portaSsh: String(d.portaSsh || '22'), usuario: d.usuario, slug, studio: String(d.studio).trim(), dominio: String(d.dominio).toLowerCase(), evoTenant: d.evoTenant, evoBranch: String(d.evoBranch), porta: String(d.porta || ''), segundaLoja: !!d.segundaLoja, contaDuck: d.contaDuck ? String(d.contaDuck) : '' } });
+    dados: { host: d.host, portaSsh: String(d.portaSsh || '22'), usuario: d.usuario, slug, studio: String(d.studio).trim(), dominio: String(d.dominio).toLowerCase(), evoTenant: d.evoTenant, evoBranch: String(d.evoBranch), porta: String(d.porta || ''), segundaLoja: !!d.segundaLoja, contaDuck: d.contaDuck ? String(d.contaDuck) : '', evoAtividade: String(d.evoAtividade || '').slice(0, 60), evoServico: String(d.evoServico || '').slice(0, 60), circuitoServico: String(d.circuitoServico || '').slice(0, 12) } });
   const mascara = [senha, ...Object.values(segredos)];
   const fala = (t) => { const m = mascarar(t, mascara); anotarLog(slug, `[${new Date().toISOString()}] ${m}`); aoLinha(m); };
   const passo = (nome, info) => { est.passos[nome] = Object.assign({ em: Date.now() }, info || {}); est.atualizadoEm = Date.now(); gravarEstado(slug, est); };

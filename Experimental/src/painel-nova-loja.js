@@ -77,6 +77,12 @@ function secaoNovaLoja({ demo = false } = {}) {
         ${campo('evoEmail', 'E-mail do robô no EVO', { ph: 'robo@loja.com.br' })}
         ${campo('evoSenha', 'Senha do robô no EVO', { tipo: 'password' })}
       </div>
+      <p class="quando" style="margin:14px 0 8px"><b>Aula experimental no EVO</b> — pode deixar para depois (WhatsApp → Express, no painel da loja).</p>
+      <div class="cfg-grid">
+        ${campo('evoAtividade', 'Atividade SlimFit', { ph: 'SLIMFIT B', dica: 'A atividade das turmas SlimFit no EVO, onde a aula experimental é marcada. O nome (como aparece no EVO) ou o número.' })}
+        ${campo('evoServico', 'Serviço da aula experimental', { ph: 'Aula experimental', dica: 'O serviço que o EVO "vende" (grátis) na aula experimental do SlimFit. O nome ou o número.' })}
+        ${campo('circuitoServico', 'Serviço do Circuito Slim (número)', { ph: '316', dica: 'O número do serviço da aula experimental do Circuito Slim no EVO (cada loja tem o seu). Sem ele, o Express não marca Circuito. Loja sem Circuito: deixe em branco.' })}
+      </div>
       <h3 class="nl-t">5. SoFIA e equipe <small style="font-weight:400;color:var(--cinza)">— pode deixar para depois</small></h3>
       <div class="cfg-grid">
         ${campo('iaChave', 'Chave da IA (Anthropic)', { tipo: 'password', ph: 'sk-ant-…' })}

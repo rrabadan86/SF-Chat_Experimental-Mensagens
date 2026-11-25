@@ -147,3 +147,18 @@ test('NOV-03 conferência: concluiu → confere sozinha uma vez; o botão não r
   const s2 = await nl.status('marista', { remotoFn, agora: 20000 });
   assert.deepStrictEqual([s2.conferindo, s2.conferencia.itens[0].id, conferencias], [false, 'https', 1], 'não confere de novo sozinha');
 }));
+
+test('NOV-01 nova loja: atividade e serviço da experimental (nome ou número) e o serviço do Circuito Slim', () => comAmb(async (amb) => {
+  process.env.DUCKDNS_TOKEN_1 = TOKEN;
+  const nl = amb.req('nova-loja');
+  const a = nl.lerFormulario({ ...FORM, evoAtividade: 'SLIMFIT B', evoServico: '128', circuitoServico: '316' });
+  assert.deepStrictEqual(a.erros, []);
+  assert.deepStrictEqual([a.segredos.EVO_ACTIVITY, a.segredos.EVO_ACTIVITY_ID, a.segredos.EVO_SERVICE, a.segredos.EVO_SERVICE_ID, a.segredos.CIRCUITO_SERVICO], ['SLIMFIT B', undefined, undefined, '128', '316']);
+  assert.deepStrictEqual([a.d.evoAtividade, a.d.evoServico, a.d.circuitoServico], ['SLIMFIT B', '128', '316'], 'guardados para o "Continuar daqui"');
+  assert.strictEqual(nl.lerFormulario({ ...FORM, circuitoServico: 'circuito' }).erros[0].campo, 'circuitoServico');
+  const arq = amb.req('nova-loja-remoto').arquivoSegredos({ CIRCUITO_SERVICO: '316', EVO_ACTIVITY: 'SLIMFIT B' });
+  assert.match(arq, /^EVO_ACTIVITY=/m); assert.match(arq, /^CIRCUITO_SERVICO=/m);
+  const sh = fs.readFileSync(require('path').resolve(__dirname, '..', '..', 'setup-novo-studio.sh'), 'utf8');
+  assert.match(sh, /CIRCUITO_SERVICO\) CIRCUITO_SERVICO_IN="\$_d"/);
+  assert.match(sh, /> "\$EXP_DIR\/data\/circuito-servico\.txt"/, 'o script grava o serviço onde o painel e o formulário leem');
+}));
