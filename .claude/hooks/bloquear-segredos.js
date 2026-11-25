@@ -60,8 +60,12 @@ process.stdin.on('data', d => (entrada += d)).on('end', () => {
     [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, 'chave privada'],
   ];
   // "SENHA=valor" etc. com valor de verdade (não exemplo/variável/vazio)
-  const ATRIB = /\b([A-Z0-9_]*(SENHA|PASSWORD|PASSWD|TOKEN|SECRET|API_KEY|APIKEY|ACCESS_KEY))\s*[:=]\s*['"]?([^\s'"`,;)]{8,})/;
-  const EXEMPLO = /^(\$|\{|<|process\.env|xxx|sua|seu|exemplo|example|changeme|placeholder|dummy|\*+|\.\.\.)|xxxx|exemplo|example/i;
+  const ATRIB = /\b([A-Z0-9_]*(SENHA|PASSWORD|PASSWD|TOKEN|SECRET|API_KEY|APIKEY|ACCESS_KEY))\s*[:=]\s*(['"]?)([^\s'"`,;)]{8,})/;
+  // exemplo: palavras de exemplo, ou um valor só de zeros/traços (ex.: token 00000000-0000-…)
+  const EXEMPLO = /^(\$|\{|<|process\.env|xxx|sua|seu|exemplo|example|changeme|placeholder|dummy|\*+|\.\.\.)|xxxx|exemplo|example|^[0-]+$/i;
+  // Em arquivo de CÓDIGO, valor SEM aspas que parece código (regra de formato /.../, leitura
+  // de campo f.x, chamada de função) é expressão, não segredo escrito.
+  const CODIGO = /\.(c|m)?(js|ts)$|\.py$/;
   let arqAtual = '';
   for (const l of diff.split('\n')) {
     if (l.startsWith('+++ ')) { arqAtual = l.replace(/^\+\+\+ (b\/)?/, ''); continue; }
@@ -69,7 +73,8 @@ process.stdin.on('data', d => (entrada += d)).on('end', () => {
     const linha = l.slice(1);
     for (const [re, o] of CHAVES) if (re.test(linha)) achados.push(`${arqAtual} — ${o}`);
     const m = ATRIB.exec(linha);
-    if (m && !EXEMPLO.test(m[3]) && !/\.(md|html)$/.test(arqAtual) && !/process\.env|lerEnv|\$\{/.test(linha)) achados.push(`${arqAtual} — ${m[1]} com valor`);
+    const expressao = m && !m[3] && CODIGO.test(arqAtual) && /^\/|[(.[]/.test(m[4]); // /regra/, f.campo, funcao(…)
+    if (m && !expressao && !EXEMPLO.test(m[4]) && !/\.(md|html)$/.test(arqAtual) && !/process\.env|lerEnv|\$\{/.test(linha)) achados.push(`${arqAtual} — ${m[1]} com valor`);
   }
   if (!achados.length) process.exit(0);
   process.stderr.write(`🔒 Bloqueado: possível segredo no que vai para o repositório:\n${[...new Set(achados)].slice(0, 15).map(a => '  - ' + a).join('\n')}\n`

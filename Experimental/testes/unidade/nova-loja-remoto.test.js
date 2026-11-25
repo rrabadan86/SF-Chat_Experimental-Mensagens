@@ -64,37 +64,51 @@ test('NOV-01 setup-novo-studio.sh: --segredos lê valores difíceis, recusa nome
 });
 
 const VPS = process.env.SF_TESTE_VPS, VPS_SENHA = process.env.SF_TESTE_VPS_SENHA;
-test('NOV-01 nova loja: num servidor de verdade — senha só na 1ª vez, depois a chave; impressão digital conferida; segredos apagados', { skip: !(VPS && VPS_SENHA) && 'sem SF_TESTE_VPS' }, () => comAmbAsync(async (amb, nl) => {
+async function esperarFim(nl, slug) {
+  for (let i = 0; i < 40; i++) { const a = await nl.acompanhar(slug); if (a.ok && a.terminou) return a; await new Promise((r) => setTimeout(r, 500)); }
+  throw new Error('a instalação de teste não terminou');
+}
+test('NOV-01 nova loja: num servidor de verdade — senha só na 1ª vez, depois a chave; roda solta no servidor; impressão digital conferida; segredos apagados', { skip: !(VPS && VPS_SENHA) && 'sem SF_TESTE_VPS' }, () => comAmbAsync(async (amb, nl) => {
   const [host, portaSsh] = VPS.split(':');
   const d = { ...BOM, host, portaSsh: portaSsh || '22' };
   const linhas = [];
-  const comando = `echo "rodando"; ls -l ${nl.ARQ_SEGREDOS_REMOTO} | cut -c1-10; cat ${nl.ARQ_SEGREDOS_REMOTO} | cut -d= -f1; echo "senha ${VPS_SENHA} vazou?"`;
+  const comando = `echo "rodando"; ls -l ${nl.ARQ_SEGREDOS_REMOTO} | cut -c1-10; cut -d= -f1 ${nl.ARQ_SEGREDOS_REMOTO}; sleep 1; echo fim-1`;
   const r1 = await nl.instalar(d, { senha: VPS_SENHA, segredos: { EVO_PASSWORD: 'exemplo-senha-evo-1', EVO_EMAIL: 'robo@x.com' }, aoLinha: (l) => linhas.push(l), comando });
-  assert.ok(r1.ok, JSON.stringify(r1));
-  assert.ok(linhas.includes('-rw-------'), 'arquivo de segredos com permissão 600: ' + linhas.join(' | '));
-  assert.ok(linhas.includes('EVO_EMAIL') && linhas.includes('EVO_PASSWORD'));
-  assert.ok(linhas.includes('senha •••• vazou?'), 'a senha do servidor não aparece no log');
+  assert.ok(r1.ok && r1.etapa === 'rodando', JSON.stringify(r1));
+  const a1 = await esperarFim(nl, 'marista');
+  assert.strictEqual(a1.codigo, 0);
+  assert.ok(a1.linhas.includes('-rw-------'), 'arquivo de segredos com permissão 600: ' + a1.linhas.join(' | '));
+  assert.ok(a1.linhas.includes('EVO_EMAIL') && a1.linhas.includes('EVO_PASSWORD') && a1.linhas.includes('fim-1'));
   const log = fs.readFileSync(path.join(nl.DIR, 'marista.log'), 'utf8');
   assert.ok(!log.includes(VPS_SENHA) && !log.includes('exemplo-senha-evo-1'), 'nenhum segredo no log gravado');
   const est = nl.lerEstado('marista');
-  assert.ok(est.passos.chave && /^SHA256:/.test(est.impressao));
+  assert.ok(est.passos.chave && est.passos.instalacao.ok && /^SHA256:/.test(est.impressao));
   assert.ok(!JSON.stringify(est).includes(VPS_SENHA), 'a senha não vai para o estado');
-  // 2ª vez: sem senha (usa a chave do painel) e o arquivo de segredos sumiu
+  assert.deepStrictEqual(nl.listar().map((x) => x.slug), ['marista']);
+  // 2ª vez: sem senha (usa a chave do painel); no fim o servidor não guarda segredo nem o script
   const r2 = await nl.instalar(d, { aoLinha: () => {}, comando: 'echo SEGUNDA' });
-  assert.ok(r2.ok && r2.ultimas.includes('SEGUNDA'), JSON.stringify(r2));
+  assert.ok(r2.ok, JSON.stringify(r2));
+  assert.ok((await esperarFim(nl, 'marista')).linhas.includes('SEGUNDA'));
   const { con } = await nl.conectar({ host, portaSsh, chavePrivada: nl.chaveDoPainel().privada, impressaoEsperada: nl.lerEstado('marista').impressao });
   try {
-    const r = await nl.executar(con, `test -e ${nl.ARQ_SEGREDOS_REMOTO} && echo AINDA_EXISTE || echo APAGADO; date +%Z`, { tempoMs: 15000 });
-    assert.ok(r.ultimas.includes('APAGADO'), 'o arquivo de segredos não fica no servidor: ' + r.ultimas.join(' | '));
+    const r = await nl.executar(con, `for f in ${nl.ARQ_SEGREDOS_REMOTO} ${nl.remotos('marista').script}; do test -e $f && echo "SOBROU $f"; done; echo CONFERIDO`, { tempoMs: 15000 });
+    assert.deepStrictEqual(r.ultimas, ['CONFERIDO'], 'segredos e script apagados do servidor');
   } finally { con.end(); }
-  // impressão digital diferente → recusa
+  // impressão digital diferente → recusa (instalar e acompanhar)
   const est2 = nl.lerEstado('marista'); est2.impressao = 'SHA256:outra'; fs.writeFileSync(path.join(nl.DIR, 'marista.json'), JSON.stringify(est2));
   const r3 = await nl.instalar(d, { comando: 'echo nao-devia-rodar' });
   assert.strictEqual(r3.ok, false);
   assert.match(r3.erro, /impressão digital do servidor MUDOU/);
+  assert.match((await nl.acompanhar('marista')).erro, /MUDOU/);
   // senha errada na 1ª vez de outra loja
   const r4 = await nl.instalar({ ...d, slug: 'outra' }, { senha: 'errada', comando: 'true' });
   assert.match(r4.erro, /recusados/);
+}));
+
+test('NOV-01 nova loja: leitura do andamento (fim e código de saída)', () => comAmb((amb, nl) => {
+  assert.deepStrictEqual(nl.lerAcompanhamento(['a', 'b', '@@EXIT=', '@@FIM@@']), { linhas: ['a', 'b'], terminou: false, codigo: null });
+  assert.deepStrictEqual(nl.lerAcompanhamento(['a', '@@EXIT=1', '@@FIM@@']), { linhas: ['a'], terminou: true, codigo: 1 });
+  assert.deepStrictEqual(nl.remotos('marista'), { script: '/root/.sf-nova-loja-marista.sh', log: '/root/sf-nova-loja-marista.log', exit: '/root/sf-nova-loja-marista.exit' });
 }));
 
 test('NOV-01 setup-novo-studio.sh: nunca mostra segredo na tela (echo/printf de senha, token ou chave)', () => {

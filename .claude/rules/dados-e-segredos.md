@@ -17,4 +17,4 @@ paths:
 - **DAD-04** Teste e experimento usam cópia temporária (`ambienteIsolado()`), nunca a `data/` do repositório nem a de um servidor.
 - **DAD-05** O painel grava o `.env` só por `env-arquivo.js` (aspas quando precisa, uma linha, troca atômica e releitura para conferir).
 - **DAD-06** Arquivo de estado novo grava de forma atômica (`.tmp` + `rename`).
-- **DAD-07** A trava `.claude/hooks/bloquear-segredos.js` barra commit/push com segredo ou arquivo proibido (arquivo apagado não conta). Falso alarme: mostrar ao dono e pedir confirmação — nunca contornar.
+- **DAD-07** A trava `.claude/hooks/bloquear-segredos.js` barra commit/push com segredo ou arquivo proibido (arquivo apagado não conta). Não conta como segredo: valor de exemplo ("exemplo…", só zeros) e, em arquivo de código, valor sem aspas que parece código (`/regra/`, `f.campo`, `funcao(…)`) (decisão do dono, 25/11/2026). Falso alarme: mostrar ao dono e pedir confirmação — nunca contornar.

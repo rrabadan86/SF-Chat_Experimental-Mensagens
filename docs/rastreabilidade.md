@@ -29,13 +29,13 @@ o teste que a garante e a cobertura.
 | Indicadores e tags | 10 | 9 | 0 | 1 | 0 |
 | Dados e segredos | 7 | 4 | 1 | 0 | 2 |
 | Demonstração | 4 | 3 | 0 | 0 | 1 |
-| Publicar e atualizar | 9 | 2 | 2 | 2 | 3 |
+| Publicar e atualizar | 10 | 2 | 3 | 2 | 3 |
 | Testes | 10 | 5 | 0 | 0 | 5 |
-| **Total** | 111 | 45 | 26 | 26 | 14 |
+| **Total** | 112 | 45 | 27 | 26 | 14 |
 
-Regras de código (sem as de processo): **71 de 97** com teste (45 inteiras, 26 em parte); **26** sem teste.
+Regras de código (sem as de processo): **72 de 98** com teste (45 inteiras, 27 em parte); **26** sem teste.
 
-Testes: 165 no total, 127 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
+Testes: 171 no total, 133 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
 <!-- resumo:fim -->
 
 ## Envios a clientes (`envio.md`)
@@ -159,7 +159,7 @@ Testes: 165 no total, 127 ligados a uma regra. Os outros 38 conferem funções q
 | DAD-04 | Teste usa cópia temporária | `testes/ajuda.js` | — | processo |
 | DAD-05 | `.env` gravado só por `env-arquivo.js` | `env-arquivo.js` | `senha-evo.test.js` › DAD-05 .env: o valor lido<br>`senha-evo.test.js` › DAD-05 .env: linha repetida<br>`senha-evo.test.js` › DAD-05 PAI-03 no painel | ✅ |
 | DAD-06 | Arquivo de estado novo grava de forma atômica | — | — | processo |
-| DAD-07 | A trava barra commit/push com segredo | `.claude/hooks/bloquear-segredos.js` | `trava-segredos.test.js` › DAD-07 trava de segredos: barra<br>`trava-segredos.test.js` › DAD-07 trava de segredos: deixa passar | ✅ |
+| DAD-07 | A trava barra commit/push com segredo | `.claude/hooks/bloquear-segredos.js` | `trava-segredos.test.js` › DAD-07 trava de segredos: barra<br>`trava-segredos.test.js` › DAD-07 trava de segredos: deixa passar<br>`trava-segredos.test.js` › DAD-07 trava de segredos: no código | ✅ |
 
 ## Demonstração (`demo.md`)
 
@@ -182,7 +182,8 @@ Testes: 165 no total, 127 ligados a uma regra. Os outros 38 conferem funções q
 | DEP-06 | Comandos simples, um por linha; nada de backup sem pedido | `scripts/atualizar.js` | — | processo |
 | DEP-07 | Skills (subir-versao, conferir-pr, conferir-celular, nova-tela) e hooks (segredos, lembretes depois do git, limpeza) | `.claude/settings.json`, `.claude/hooks/depois-do-git.js`, `.claude/skills/conferir-pr/SKILL.md` | `skills-hooks.test.js` › DEP-07 skills<br>`skills-hooks.test.js` › DEP-07 hooks<br>`skills-hooks.test.js` › DEP-07 depois do commit | ✅ |
 | DEP-08 | GitHub: CI em todo PR, rodada noturna com aviso, botão de prints com relógio fixo | `.github/workflows/ci.yml`, `.github/workflows/noturno.yml`, `.github/workflows/prints.yml`, `testes/tela/relogio-fixo.js` | `skills-hooks.test.js` › DEP-08 GitHub<br>`skills-hooks.test.js` › DEP-08 relógio fixo | parcial: o workflow em si só roda no GitHub; aqui se confere a montagem e o relógio |
-| NOV-01 | Nova loja pelo painel: senha só na 1ª vez, chave depois, impressão digital, segredos em arquivo apagado | `nova-loja-remoto.js`, `setup-novo-studio.sh` | `nova-loja-remoto.test.js` › NOV-01 nova loja: dados<br>`nova-loja-remoto.test.js` › NOV-01 nova loja: segredos<br>`nova-loja-remoto.test.js` › NOV-01 nova loja: diagnóstico<br>`nova-loja-remoto.test.js` › NOV-01 setup-novo-studio.sh: --segredos<br>`nova-loja-remoto.test.js` › NOV-01 nova loja: num servidor<br>`nova-loja-remoto.test.js` › NOV-01 setup-novo-studio.sh: nunca | parcial: o teste com servidor de verdade (SSH) só roda com `SF_TESTE_VPS` (Ubuntu em Docker) |
+| NOV-01 | Nova loja pelo painel: senha só na 1ª vez, chave depois, impressão digital, segredos em arquivo apagado | `nova-loja-remoto.js`, `nova-loja.js`, `painel-nova-loja.js`, `setup-novo-studio.sh` | `nova-loja-remoto.test.js` › NOV-01 nova loja: dados<br>`nova-loja-remoto.test.js` › NOV-01 nova loja: segredos<br>`nova-loja-remoto.test.js` › NOV-01 nova loja: diagnóstico<br>`nova-loja-remoto.test.js` › NOV-01 setup-novo-studio.sh: --segredos<br>`nova-loja-remoto.test.js` › NOV-01 nova loja: num servidor<br>`nova-loja-remoto.test.js` › NOV-01 setup-novo-studio.sh: nunca<br>`nova-loja-remoto.test.js` › NOV-01 nova loja: leitura<br>`nova-loja.test.js` › NOV-01 nova loja: o formulário<br>`nova-loja.test.js` › NOV-01 nova loja: endereço primeiro<br>`nova-loja.test.js` › NOV-01 nova loja: andamento<br>`perfis.test.js` › PAI-01..04 cada perfil | parcial: o teste com servidor de verdade (SSH) só roda com `SF_TESTE_VPS` (Ubuntu em Docker) |
+| NOV-02 | Endereço no DuckDNS (2 contas, tokens só no .env), apontado e conferido antes de instalar | `nova-loja-duckdns.js`, `nova-loja.js` | `nova-loja.test.js` › NOV-02 duckdns | parcial: o DuckDNS de verdade não é chamado nos testes |
 
 ## Testes (`testes.md`)
 

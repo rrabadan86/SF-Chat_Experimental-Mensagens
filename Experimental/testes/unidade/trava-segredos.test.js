@@ -54,3 +54,22 @@ test('DAD-07 trava de segredos: deixa passar o .gitkeep, o exemplo, o arquivo ap
     assert.strictEqual(r.commit('git status').status, 0, 'comando que não é commit/push não é conferido');
   } finally { r.limpar(); }
 });
+
+test('DAD-07 trava de segredos: no código, expressão sem aspas e token só de zeros passam; segredo entre aspas continua barrado', () => {
+  const K = 'TOK' + 'EN', P = 'PASS' + 'WORD';
+  const r = repo();
+  try {
+    r.gravar('Experimental/src/a.js', `const RX_${K} = /^[0-9a-f]{8}-[0-9a-f]{4}$/i;\nconst s = { EVO_${P}: String((f && f.evoSenha) || '') };\nconst ${K} = '00000000-0000-0000-0000-000000000000';\n`);
+    assert.strictEqual(r.commit().status, 0, 'regra de formato, leitura de campo e token de zeros não são segredo');
+  } finally { r.limpar(); }
+  for (const [arq, txt] of [
+    ['Experimental/src/b.js', `const s = { EVO_${P}: '${'Qw7' + 'xYz9Kp'}' };\n`],
+    ['Experimental/src/c.py', `EVO_${P} = "${'Qw7' + 'xYz9Kp'}"\n`],
+    ['Experimental/config.txt', `EVO_${P}=${'Qw7' + 'xYz9Kp'}\n`],
+    ['Experimental/src/d.js', `const ${K} = '${'01234567' + '-89ab-cdef-0123-456789abcdef'}';\n`],
+    ['Experimental/src/e.js', `const x = { EVO_${P}: ${'Qw7' + 'xYz9Kp'} };\n`],
+  ]) {
+    const r2 = repo();
+    try { r2.gravar(arq, txt); assert.strictEqual(r2.commit().status, 2, `${arq}: segredo escrito deveria ser barrado`); } finally { r2.limpar(); }
+  }
+});

@@ -1116,6 +1116,7 @@ const server = http.createServer(protegido((req, res) => {
       else if (/(?:^|&)ok=sessao/.test(q)) aviso = 'Duração da sessão salva. Vale para os próximos logins.';
       else if (/(?:^|&)ok=sess-enc/.test(q)) aviso = 'Sessão encerrada. A pessoa precisará entrar de novo.';
       else if (/(?:^|&)ok=unidades/.test(q)) aviso = 'Lista de unidades salva.';
+      else if (/(?:^|&)ok=duckdns/.test(q)) aviso = 'Contas do DuckDNS salvas.';
       else if (/(?:^|&)err=/.test(q)) { aviso = (() => { try { return decodeURIComponent((q.match(/err=([^&]*)/) || [])[1] || 'Erro.'); } catch (_) { return 'Erro.'; } })(); erro = true; }
       const spP = new URLSearchParams(q);
       const viewPerfis = spP.get('view') || 'usuarios';
@@ -1142,6 +1143,33 @@ const server = http.createServer(protegido((req, res) => {
         try { const l = unidadesRede.salvarTexto(p.get('unidades') || ''); try { auditoria.registrar(sess.usuario, 'perfil.unidades', '', l.map(u => u.nome).join(', ') || 'lista vazia'); } catch (_) {} res.writeHead(303, { Location: '/perfis?view=unidades&ok=unidades' }); res.end(); }
         catch (e) { res.writeHead(303, { Location: '/perfis?view=unidades&err=' + encodeURIComponent(e.message) }); res.end(); }
       });
+    }
+    // 🏪 Nova loja (NOV-01/NOV-02): contas do DuckDNS, iniciar/continuar e andamento.
+    if (req.method === 'POST' && url === '/perfis/novaloja/duckdns') {
+      return lerCorpo(req, 4e3, corpo => {
+        const p = new URLSearchParams(corpo);
+        try {
+          const duck = require('./nova-loja-duckdns');
+          for (const n of [1, 2]) duck.salvarConta(n, { nome: p.get('nome' + n) || '', token: p.get('token' + n) || '' });
+          try { auditoria.registrar(sess.usuario, 'perfil.novaloja.duckdns', '', [1, 2].filter(n => p.get('token' + n)).map(n => 'token ' + n + ' trocado').join(', ') || 'apelidos'); } catch (_) {}
+          res.writeHead(303, { Location: '/perfis?view=novaloja&ok=duckdns' }); res.end();
+        } catch (e) { res.writeHead(303, { Location: '/perfis?view=novaloja&err=' + encodeURIComponent(e.message) }); res.end(); }
+      });
+    }
+    if (req.method === 'POST' && url === '/perfis/novaloja/iniciar') {
+      return lerCorpo(req, 2e4, corpo => {
+        const json = (o) => { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(o)); };
+        let f = {}; try { f = JSON.parse(corpo || '{}') || {}; } catch (_) { return json({ ok: false, erro: 'Pedido inválido.' }); }
+        const r = require('./nova-loja').iniciar(f);
+        if (r.ok) { try { auditoria.registrar(sess.usuario, 'perfil.novaloja.instalar', r.slug, `servidor ${String(f.host || '').slice(0, 60)}`); } catch (_) {} }
+        return json(r);
+      });
+    }
+    if (req.method === 'GET' && url === '/perfis/novaloja/status') {
+      const slug = new URLSearchParams(req.url.split('?')[1] || '').get('slug') || '';
+      require('./nova-loja').status(slug).then((o) => { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(o)); })
+        .catch((e) => { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, erro: e.message })); });
+      return;
     }
     if (req.method === 'POST' && url === '/perfis/sessao') {
       return lerCorpo(req, 1e5, corpo => {
