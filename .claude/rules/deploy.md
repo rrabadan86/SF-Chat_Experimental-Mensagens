@@ -8,6 +8,7 @@ paths:
   - "Experimental/setup-novo-studio.sh"
   - "Experimental/src/atualizacao-painel.js"
   - "Experimental/src/pm2-nomes.js"
+  - "Experimental/src/nova-loja-*.js"
   - "Experimental/src/agendamento_evo/formulario_web/templates/implantacao.html"
 ---
 
@@ -21,3 +22,6 @@ paths:
 - **DEP-06** Comandos para o dono: simples, um por linha, sem `rm` com variável. Backup em branch (`backup/...`) e reescrever histórico só com pedido explícito.
 - **DEP-07** Skills (`.claude/skills/`): `subir-versao` (publicar), `conferir-pr` (lista ✓/✗ antes do merge), `conferir-celular` (telas mexidas a 390/1366 px com prints), `nova-tela` (passo a passo de tela nova). Hooks (`.claude/settings.json`): `bloquear-segredos.js` antes de commit/push (DAD-07); `depois-do-git.js` depois do commit lembra as regras da área dos arquivos e as regras sem teste, e depois do push lembra a `conferir-pr`; `limpar-restos-teste.js` ao fim de cada resposta (TST-10). Hook só avisa ou bloqueia — nunca muda arquivo do repositório.
 - **DEP-08** GitHub (`.github/workflows/`): `ci.yml` em todo PR e na main (unidade, EVO, telas; a página do CI mostra as regras mexidas e o resumo da matriz); `noturno.yml` toda madrugada (03:37) roda a mesma bateria na main mais os testes em outros fusos e abre o aviso "Rodada noturna com falha" (fecha sozinho quando volta a passar); `prints.yml` é manual: prints de todas as telas com o relógio parado, anexados por 30 dias. Prints de **referência** (guardados para comparar) só depois da revisão de design (`docs/revisao-de-design.md`). (decisão do dono, 23/11/2026)
+
+## Nova loja pelo painel (🏪, só no Bueno, só admin)
+- **NOV-01** O painel instala a loja por SSH com o mesmo `setup-novo-studio.sh --tudo` (fonte única: `nova-loja-remoto.js`). A **senha do servidor** só serve para entrar a 1ª vez — não é gravada; logo depois o painel instala a **chave** dele e usa só ela. A **impressão digital** do servidor é anotada e, se mudar, o painel não entra. Os segredos da loja vão num arquivo 600 (`--segredos`) que o script apaga depois de ler — nunca na linha de comando nem no log. Tudo o que o admin digita é conferido (`validar`) e vai entre aspas simples. Estado e log em `data/nova-loja/`, sem segredos. (decisão do dono, 25/11/2026)
