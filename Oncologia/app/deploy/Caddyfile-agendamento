@@ -1,0 +1,42 @@
+# Caddy — alternativa ao nginx, e a melhor escolha se a máquina já roda Caddy.
+#
+# Ele cuida do certificado sozinho: pede ao Let's Encrypt no primeiro acesso e
+# renova sem cron, sem certbot, sem plugin. Não existe o impasse do nginx com
+# "listen 443 ssl" sem certificado.
+#
+# Acrescente este bloco ao /etc/caddy/Caddyfile (ou salve em
+# /etc/caddy/conf.d/agendamento.caddy se o seu Caddyfile tiver um import),
+# troque SEU_DOMINIO e recarregue:
+#
+#   sudo caddy validate --config /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+
+SEU_DOMINIO {
+    encode gzip
+
+    # dado de saúde: nada de referer vazando para fora, nada de sniffing
+    header {
+        Referrer-Policy        "same-origin"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options        "SAMEORIGIN"
+        Strict-Transport-Security "max-age=31536000"
+        -Server
+    }
+
+    # O Caddy já manda X-Forwarded-For e X-Forwarded-Proto, que é o que o
+    # Express precisa para saber o IP real e que a conexão veio por HTTPS.
+    reverse_proxy 127.0.0.1:3000
+
+    log {
+        output file /var/log/caddy/agendamento.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+}
+
+# Observação sobre o freio de login:
+# o Caddy não tem limitador de taxa embutido (existe plugin, mas exige
+# recompilar). Não é bloqueio aqui: o próprio sistema já bloqueia o IP após 8
+# tentativas erradas em 15 minutos, em src/auth.js. A camada do servidor web
+# seria só um reforço.

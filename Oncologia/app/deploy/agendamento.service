@@ -1,0 +1,28 @@
+# systemd — alternativa ao PM2, se você preferir não instalar o PM2.
+#   sudo cp deploy/agendamento.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now agendamento
+[Unit]
+Description=Agendamento de consultas (oncologia)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=SEU_USUARIO
+WorkingDirectory=/home/SEU_USUARIO/agendamento-onco/app
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+EnvironmentFile=/home/SEU_USUARIO/agendamento-onco/app/.env
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/SEU_USUARIO/agendamento-onco/app/logs/saida.log
+StandardError=append:/home/SEU_USUARIO/agendamento-onco/app/logs/erro.log
+
+# o WhatsApp precisa escrever a sessão; o resto pode ser só leitura
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
