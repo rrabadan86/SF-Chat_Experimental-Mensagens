@@ -62,6 +62,7 @@ function secaoNovaLoja({ demo = false } = {}) {
       <div class="cfg-grid">
         ${campo('studio', 'Nome da loja', { ph: 'Studio SlimFit Marista', obrig: true, dica: 'Como a aluna vê (formulário, mensagens).' })}
         ${campo('slug', 'Apelido', { ph: 'marista', obrig: true, dica: 'Curto, minúsculo, sem espaço nem acento. Vira o nome dos processos (marista-exp…) e das pastas.' })}
+        ${campo('painelSenha', 'Senha do painel novo', { tipo: 'password', dica: 'Escolha a senha com que você vai entrar no painel da loja nova (usuário admin). Pelo menos 8 letras ou números. No "Continuar" pode deixar em branco.' })}
       </div>
       <h3 class="nl-t">3. Endereço do painel</h3>
       <div class="cfg-grid">
@@ -87,6 +88,7 @@ function secaoNovaLoja({ demo = false } = {}) {
     <div id="nlAnd" class="card" hidden>
       <div class="ui-linha"><b id="nlTit">Andamento</b><span id="nlPill" class="sd-pill sd-warn">⏳</span></div>
       <ol id="nlPassos" class="quando" style="margin:10px 0 0;padding-left:20px"></ol>
+      <div id="nlConf" hidden style="margin-top:12px"></div>
       <pre id="nlLog" style="margin:10px 0 0;max-height:360px;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.78rem;background:var(--fundo,transparent);border:1px solid var(--linha);border-radius:10px;padding:10px"></pre>
     </div>`;
 
@@ -97,7 +99,7 @@ function secaoNovaLoja({ demo = false } = {}) {
     t('nlBotao').disabled=true;
     fetch('/perfis/novaloja/iniciar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)}).then(function(r){return r.json();}).then(function(j){
       t('nlBotao').disabled=false; if(!window.sfSalvou(j,f))return;
-      ['senha','evoToken','evoSenha','iaChave'].forEach(function(n){var c=f.elements[n];if(c)c.value='';});
+      ['senha','evoToken','evoSenha','iaChave','painelSenha'].forEach(function(n){var c=f.elements[n];if(c)c.value='';});
       nlVer(j.slug);
     }).catch(function(){t('nlBotao').disabled=false;window.sfErroSalvar('Sem resposta do painel. Tente de novo.',{});});
     return false;};
@@ -112,6 +114,12 @@ function secaoNovaLoja({ demo = false } = {}) {
     var p=s.passos||{},itens=[['conexao','Entrou no servidor'],['diagnostico','Servidor conferido'],['chave','Chave do painel instalada (senha esquecida)'],['lancada','Instalação iniciada'],['instalacao','Instalação concluída']];
     var ol=t('nlPassos');ol.textContent='';itens.forEach(function(i){var li=document.createElement('li');var x=p[i[0]];li.textContent=(x?(x.ok===false?'✗ ':'✓ '):'· ')+i[1];ol.appendChild(li);});
     var linhas=[].concat(s.painel?s.painel.linhas:[]);if(s.remoto)linhas=linhas.concat(['— no servidor —'],s.remoto.linhas);if(s.erro&&s.fase==='sem-contato')linhas.push('⚠️ '+s.erro);
+    var cf=t('nlConf');cf.hidden=s.fase!=='concluida';if(!cf.hidden){cf.textContent='';var h=document.createElement('div');h.className='ui-linha';var b=document.createElement('b');b.textContent='🔎 Conferência da loja';h.appendChild(b);
+      var bt=document.createElement('button');bt.type='button';bt.className='ui-btn sec';bt.textContent=s.conferindo?'Conferindo… (até 5 min)':'Conferir de novo';bt.disabled=!!s.conferindo;bt.onclick=function(){bt.disabled=true;bt.textContent='Conferindo… (até 5 min)';fetch('/perfis/novaloja/conferir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:s.slug})});};h.appendChild(bt);cf.appendChild(h);
+      var it=(s.conferencia&&s.conferencia.itens)||[];if(!it.length){var p0=document.createElement('p');p0.className='quando';p0.textContent=s.conferindo?'Conferindo o painel, o EVO, a IA e os processos da loja nova…':'Ainda não conferida.';cf.appendChild(p0);}
+      var ul=document.createElement('ul');ul.style.cssText='margin:8px 0 0;padding-left:0;list-style:none';it.forEach(function(i){var li=document.createElement('li');li.style.cssText='margin:6px 0;overflow-wrap:anywhere';var bb=document.createElement('b');bb.textContent=(i.ok?'✅ ':'❌ ')+i.titulo;li.appendChild(bb);var sp=document.createElement('div');sp.className='quando';sp.textContent=i.detalhe;li.appendChild(sp);ul.appendChild(li);});cf.appendChild(ul);
+      if(s.dominio){var lk=document.createElement('div');lk.className='ui-linha';lk.style.marginTop='10px';[['Abrir o painel da loja ↗','/'],['QR do robô ↗','/?view=config'],['QR da SoFIA ↗','/sofia?view=config']].forEach(function(x){var a=document.createElement('a');a.className='ui-btn sec';a.target='_blank';a.rel='noopener';a.href='https://'+s.dominio+x[1];a.textContent=x[0];lk.appendChild(a);});cf.appendChild(lk);
+        var dica=document.createElement('p');dica.className='quando';dica.style.margin='8px 0 0';dica.textContent='Para entrar no painel da loja: usuário admin e a senha que você escolheu aqui. Escaneie primeiro o QR do robô (número do Studio) e depois o da SoFIA, com o aquecimento ligado.';cf.appendChild(dica);}}
     var pre=t('nlLog'),embaixo=pre.scrollTop+pre.clientHeight>=pre.scrollHeight-20;pre.textContent=linhas.join('\\n');if(embaixo)pre.scrollTop=pre.scrollHeight;}
 })();</script>`;
 

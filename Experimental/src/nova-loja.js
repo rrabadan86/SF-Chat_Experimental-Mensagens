@@ -33,7 +33,8 @@ function lerFormulario(f) {
   const erros = remoto.validar(d).map((e) => (e.campo === 'evoTenant' || e.campo === 'evoBranch' ? { campo: 'evoUrl', msg: 'Cole o link do EVO da loja (o endereço que aparece no navegador com o EVO aberto: .../app/<rede>/<número>/...)' } : e.campo === 'dominio' ? { campo: 'endereco', msg: e.msg } : e));
   const unicos = []; for (const e of erros) if (!unicos.some((u) => u.campo === e.campo)) unicos.push(e);
   if (duck.subdominioDe(dominio) && d.contaDuck && !duck.tokenDa(d.contaDuck)) unicos.push({ campo: 'contaDuck', msg: 'Essa conta do DuckDNS ainda não tem o token guardado (veja "Contas do DuckDNS" acima).' });
-  const segredos = { EVO_DNS: s('evoDns'), EVO_TOKEN: s('evoToken'), EVO_EMAIL: s('evoEmail'), EVO_PASSWORD: String((f && f.evoSenha) || ''), ANTHROPIC_API_KEY: s('iaChave'), GRUPO_EQUIPE: s('grupoEquipe') };
+  const segredos = { EVO_DNS: s('evoDns'), EVO_TOKEN: s('evoToken'), EVO_EMAIL: s('evoEmail'), EVO_PASSWORD: String((f && f.evoSenha) || ''), ANTHROPIC_API_KEY: s('iaChave'), GRUPO_EQUIPE: s('grupoEquipe'), PAINEL_SENHA: String((f && f.painelSenha) || '') };
+  if (segredos.PAINEL_SENHA && (segredos.PAINEL_SENHA.length < 8 || /[\r\n]/.test(segredos.PAINEL_SENHA))) unicos.push({ campo: 'painelSenha', msg: 'A senha do painel novo precisa ter pelo menos 8 letras ou números.' });
   return { d, segredos, senha: String((f && f.senha) || ''), erros: unicos };
 }
 
@@ -51,6 +52,7 @@ function iniciar(form, { duckFn = duck, remotoFn = remoto } = {}) {
   if (erros.length) return { ok: false, erro: erros[0].msg, campo: erros[0].campo, erros };
   const est = remotoFn.lerEstado(d.slug);
   if (!senha && !(est && est.passos && est.passos.chave)) return { ok: false, erro: 'Falta a senha do servidor (só é pedida na primeira vez).', campo: 'senha' };
+  if (!segredos.PAINEL_SENHA && !(est && est.passos && est.passos.lancada)) return { ok: false, erro: 'Escolha a senha do painel da loja nova (é com ela que você entra lá, usuário admin).', campo: 'painelSenha' };
   if (est && est.host && est.host !== d.host) return { ok: false, erro: `O apelido "${d.slug}" já foi usado para outro servidor (${est.host}). Escolha outro apelido.`, campo: 'slug' };
   if (emAndamento.has(d.slug) && !emAndamento.get(d.slug).fim) return { ok: false, erro: 'Essa instalação já está em andamento.', campo: 'slug' };
   const job = { linhas: [], inicio: Date.now(), fim: null, resultado: null };
@@ -92,10 +94,25 @@ async function status(slug, { remotoFn = remoto, agora = Date.now() } = {}) {
   const r = c.r;
   if (!r.ok) return { ...base, fase: 'sem-contato', erro: r.erro };
   const est2 = remotoFn.lerEstado(slug) || est;
-  return { ...base, passos: est2.passos, fase: r.terminou ? (r.codigo === 0 ? 'concluida' : 'parou') : 'instalando', remoto: { linhas: r.linhas.slice(-MAX_LINHAS), codigo: r.codigo } };
+  const fase = r.terminou ? (r.codigo === 0 ? 'concluida' : 'parou') : 'instalando';
+  // concluiu e ainda não conferiu: confere sozinho uma vez (liga o aquecimento junto)
+  if (fase === 'concluida' && !est2.conferencia && !conferindo.has(slug)) conferir(slug, { remotoFn });
+  return { ...base, passos: est2.passos, fase, remoto: { linhas: r.linhas.slice(-MAX_LINHAS), codigo: r.codigo }, conferencia: est2.conferencia || null, conferindo: conferindo.has(slug) };
+}
+
+// ── conferência no fim (NOV-03) ──────────────────────────────────────────────
+const conferindo = new Map(); // slug → true
+/** Começa a conferência em segundo plano (uma por vez por loja). → { ok } */
+function conferir(slug, { remotoFn = remoto } = {}) {
+  if (conferindo.has(slug)) return { ok: true, jaRodando: true };
+  const est = remotoFn.lerEstado(slug);
+  if (!est || !est.passos || !est.passos.chave) return { ok: false, erro: 'Esta instalação ainda não começou.' };
+  conferindo.set(slug, true);
+  Promise.resolve().then(() => remotoFn.conferir(slug)).catch(() => {}).finally(() => conferindo.delete(slug));
+  return { ok: true };
 }
 
 /** Esquece a parte em memória de uma instalação que já terminou (a tela não precisa mais). */
 function limpar(slug) { const j = emAndamento.get(slug); if (j && j.fim) emAndamento.delete(slug); }
 
-module.exports = { lerFormulario, iniciar, status, limpar, _emAndamento: emAndamento };
+module.exports = { lerFormulario, iniciar, status, conferir, limpar, _emAndamento: emAndamento };

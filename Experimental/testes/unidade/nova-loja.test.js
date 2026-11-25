@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const { ambienteIsolado } = require('../ajuda');
 
-const FORM = { host: '203.0.113.10', usuario: 'root', senha: 'exemplo-senha-root', studio: 'Studio SlimFit Marista', slug: 'marista', endereco: 'painel-marista', contaDuck: '1', evoUrl: 'https://evo.w12app.com.br/#/app/slimfit/22/inicio', evoEmail: 'robo@x.com', evoSenha: 'exemplo-evo-1' };
+const FORM = { host: '203.0.113.10', usuario: 'root', senha: 'exemplo-senha-root', studio: 'Studio SlimFit Marista', slug: 'marista', endereco: 'painel-marista', contaDuck: '1', evoUrl: 'https://evo.w12app.com.br/#/app/slimfit/22/inicio', evoEmail: 'robo@x.com', evoSenha: 'exemplo-evo-1', painelSenha: 'exemplo-painel-1' };
 const TOKEN = '00000000-0000-0000-0000-000000000000'; // token de exemplo (só zeros)
 
 async function comAmb(fn) { const amb = ambienteIsolado(); try { return await fn(amb); } finally { delete process.env.DUCKDNS_TOKEN_1; delete process.env.DUCKDNS_NOME_1; try { fs.rmSync(amb.raiz, { recursive: true, force: true }); } catch (_) {} } }
@@ -96,4 +96,54 @@ test('NOV-01 nova loja: andamento — instalando, concluída, parou e sem contat
   est = { ...est, passos: {} };
   assert.strictEqual((await nl.status('marista', { remotoFn, agora: 25000 })).fase, 'nao-iniciada');
   assert.strictEqual((await nl.status('nada', { remotoFn: { lerEstado: () => null } })).ok, false);
+}));
+
+test('NOV-03 conferência: lê o resultado do servidor em itens ✅/❌ com o que fazer', () => comAmb(async (amb) => {
+  const nl = amb.req('nova-loja-remoto');
+  const seg = { ok: true, segmentos: amb.req('conferir-segmentos').avaliar(['Clientes Ativos', 'Vencimento de contrato semana atual', 'Aniversariantes', 'Com débito pendente']) };
+  const itens = nl.lerConferencia(['@@CHECK', '   ✅ EVO_EMAIL ok', '   ❌ ANTHROPIC_API_KEY vazio — a SoFIA não responde.', '@@PM2', 'PM2 marista-painel online', 'PM2 marista-exp online', 'PM2 marista-sofia online', 'PM2 marista-form errored',
+    '@@IA', 'IA=vazia', '@@SEG', 'SEGMENTOS_JSON=' + JSON.stringify(seg), '@@AQ', 'AQ=ligado', '@@FIM@@']);
+  const por = Object.fromEntries(itens.map((i) => [i.id, i]));
+  assert.strictEqual(por.check.ok, false); assert.match(por.check.detalhe, /ANTHROPIC_API_KEY vazio/);
+  assert.strictEqual(por.pm2.ok, false); assert.match(por.pm2.detalhe, /marista-form \(errored\)/);
+  assert.strictEqual(por.ia.ok, false); assert.match(por.ia.detalhe, /Credenciais/);
+  assert.strictEqual(por['seg-vencimento'].ok, true);
+  assert.strictEqual(por['seg-aniversariantes'].ok, true);
+  assert.strictEqual(por['seg-debito'].ok, false, '"Com débito pendente" não é o nome exato que a cobrança procura');
+  assert.match(por['seg-debito'].detalhe, /Com débito: Sim/);
+  assert.strictEqual(por.aquecimento.ok, true);
+  assert.deepStrictEqual(nl.lerConferencia(['@@SEM_PASTA']).map((i) => i.ok), [false]);
+  const semEvo = nl.lerConferencia(['@@SEG', 'SEGMENTOS_JSON={"ok":false,"erro":"Senha do EVO recusada antes — o robô não tenta de novo."}']);
+  assert.match(semEvo.find((i) => i.id === 'evo').detalhe, /recusada/);
+}));
+
+test('NOV-03 conferência: o script só lê, não leva segredo na linha de comando e só liga o aquecimento quando pedido', () => comAmb(async (amb) => {
+  const nl = amb.req('nova-loja-remoto');
+  const est = { slug: 'marista', segundaLoja: false };
+  const sc = nl.scriptConferencia(est, { ligarAquecimento: true });
+  assert.match(sc, /setup-novo-studio\.sh --slug 'marista' --check --no-git-pull/);
+  assert.match(sc, /node src\/conferir-segmentos\.js/);
+  assert.match(sc, /a\.gravar\(d,7\)/, 'aquecimento de 7 dias');
+  assert.doesNotMatch(sc, /x-api-key: \$|curl/, 'a chave da IA é lida pelo node, não vai na linha de comando');
+  assert.match(nl.scriptConferencia(est, { ligarAquecimento: false }), /AQ=nao-pedido/);
+  assert.match(nl.scriptConferencia({ slug: 'ls2', segundaLoja: true }), /cd '\/root\/slimfit-ls2\/Experimental'/);
+  // conferir-segmentos: mesmos nomes que os jobs procuram
+  const av = amb.req('conferir-segmentos').avaliar(['VENCIMENTO DE CONTRATO SEMANAL', 'aniversariantes do mês', 'Com  Débito']);
+  assert.deepStrictEqual(av.map((x) => x.achado), [true, true, true]);
+}));
+
+test('NOV-03 conferência: concluiu → confere sozinha uma vez; o botão não roda duas ao mesmo tempo', () => comAmb(async (amb) => {
+  const nl = amb.req('nova-loja');
+  let est = { slug: 'marista', dominio: 'painel-marista.duckdns.org', passos: { chave: {}, lancada: {} } };
+  let conferencias = 0, solta;
+  const remotoFn = { lerEstado: () => est, acompanhar: async () => ({ ok: true, terminou: true, codigo: 0, linhas: [] }), conferir: async () => { conferencias++; await new Promise((r) => { solta = r; }); est = { ...est, conferencia: { em: 1, itens: [{ id: 'https', ok: true }] } }; return { ok: true }; } };
+  const s1 = await nl.status('marista', { remotoFn, agora: 1 });
+  assert.strictEqual(s1.fase, 'concluida');
+  await new Promise((r) => setImmediate(r));
+  assert.strictEqual(conferencias, 1, 'começou a conferir sozinha');
+  assert.strictEqual(nl.conferir('marista', { remotoFn }).jaRodando, true);
+  assert.strictEqual((await nl.status('marista', { remotoFn, agora: 10000 })).conferindo, true);
+  solta(); await new Promise((r) => setTimeout(r, 10));
+  const s2 = await nl.status('marista', { remotoFn, agora: 20000 });
+  assert.deepStrictEqual([s2.conferindo, s2.conferencia.itens[0].id, conferencias], [false, 'https', 1], 'não confere de novo sozinha');
 }));
