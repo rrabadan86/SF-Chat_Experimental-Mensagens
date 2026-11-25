@@ -13,6 +13,9 @@
  *     era frequência × dias/7 (ex.: 1x num mês com 5 segundas dividia por 4).
  *   - Aula com valor abaixo do piso recebe o piso; acima do teto, o teto.
  *   - Sábado: diária fixa (padrão R$70), uma por sábado, mesmo com várias aulas.
+ *     A partir do mês em "sabadoPorAulaDesde" (PAG-01, decisão do dono 25/11/2026):
+ *     R$35 POR AULA para quem deu aquela aula — duas professoras no mesmo sábado
+ *     recebem 35 cada; a mesma nas duas aulas, 70. Aula vazia/feriado também paga.
  *   - Aluna que não pagou CONTA para o professor (o "pagou" é só informativo).
  *   - Professor identificado pelo código do EVO (não pelo nome).
  *   - Regras (Free R$11, sábado, desconto 3%, padrões, VIPs que não contam)
@@ -354,7 +357,8 @@ function calcularMes(ano, mes, { cfg = pcfg.ler() } = {}) {
       const bruto = round2(alunas.reduce((s, al) => s + al.contrib, 0));
       const sab = dowDe(x.a.d) === 6;
       let valor, regra;
-      if (sab) {
+      if (sab && pcfg.sabadoPorAula(R, ym)) { valor = R.sabadoAulaValor; regra = 'sábado por aula'; } // PAG-01: cada aula paga quem deu (feriado/aula vazia também)
+      else if (sab) {
         if (sabados.has(x.a.d)) { valor = 0; regra = 'diária do sábado já contada em outra aula'; }
         else { valor = R.sabadoValor; regra = 'diária do sábado'; sabados.add(x.a.d); }
       } else if (bruto < v.piso) { valor = v.piso; regra = 'piso'; }

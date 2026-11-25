@@ -10,7 +10,9 @@ const ARQ = path.resolve(__dirname, '..', '..', 'data', 'pagamento', 'config.jso
 // Regras que antes estavam fixas no código do sf-pagamento (valores do Bueno).
 const REGRAS_PADRAO = {
   freeValor: 11,          // R$ por presença de aluna Free / avulsa / reposição com plano Free
-  sabadoValor: 70,        // diária do sábado, uma por sábado, independente de quantas aulas
+  sabadoValor: 70,        // diária do sábado, uma por sábado, independente de quantas aulas (até o mês anterior a sabadoPorAulaDesde)
+  sabadoAulaValor: 35,    // PAG-01: a partir de sabadoPorAulaDesde, cada aula de sábado paga este valor a quem deu a aula
+  sabadoPorAulaDesde: '', // 'AAAA-MM' — vazio = continua a diária
   descontoFixoPct: 3,     // % descontado da mensalidade das fixas antes do rateio (taxa)
   pctPadrao: 20,          // % do professor sem configuração própria
   pisoPadrao: 55,         // R$ mínimo por aula
@@ -18,7 +20,7 @@ const REGRAS_PADRAO = {
   capacidade: 9,          // presenças máximas por aula (acima disso = aviso de lançamento errado)
   vipZero: ['juliana quintiliano', 'paula vanessa carmo', 'amanda ferreira de castro', 'lorena dos santos silva amorim'],
 };
-const LIMITES = { freeValor: [0, 500], sabadoValor: [0, 1000], descontoFixoPct: [0, 50], pctPadrao: [0, 100], pisoPadrao: [0, 1000], tetoPadrao: [0, 2000], capacidade: [1, 50] };
+const LIMITES = { freeValor: [0, 500], sabadoValor: [0, 1000], sabadoAulaValor: [0, 1000], descontoFixoPct: [0, 50], pctPadrao: [0, 100], pisoPadrao: [0, 1000], tetoPadrao: [0, 2000], capacidade: [1, 50] };
 
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
@@ -41,10 +43,19 @@ function salvarRegras(v) {
     if (!Number.isFinite(n) || n < LIMITES[k][0] || n > LIMITES[k][1]) throw new Error(`Valor inválido em "${k}".`);
     cfg.regras[k] = n;
   }
+  if (v.sabadoPorAulaDesde !== undefined) {
+    const d = String(v.sabadoPorAulaDesde || '').trim();
+    if (d && !/^\d{4}-(0[1-9]|1[0-2])$/.test(d)) throw new Error('Mês do sábado por aula inválido (use AAAA-MM).');
+    cfg.regras.sabadoPorAulaDesde = d;
+  }
   if (v.vipZero !== undefined) cfg.regras.vipZero = String(v.vipZero).split(/\n|;/).map(s => norm(s)).filter(Boolean);
   if (cfg.regras.pisoPadrao > cfg.regras.tetoPadrao) throw new Error('O piso não pode ser maior que o teto.');
   gravar(cfg); return cfg.regras;
 }
+
+// PAG-01: sábado por aula (R$ por aula, para quem deu a aula) a partir do mês escolhido;
+// antes dele, a diária antiga (uma por sábado para cada professor).
+function sabadoPorAula(regras, ym) { const d = String((regras && regras.sabadoPorAulaDesde) || ''); return !!d && String(ym) >= d; }
 
 // Percentual vigente de um professor num mês ('AAAA-MM'): o registro mais recente
 // com "desde" <= mês. Sem registro → padrão das regras (configurado: false).
@@ -104,4 +115,4 @@ function importarCsvSupabase(csv, nomesParaChave) {
   gravar(cfg); return res;
 }
 
-module.exports = { ler, salvarRegras, vigente, salvarProfessor, removerVigencia, importarCsvSupabase, REGRAS_PADRAO, LIMITES, norm };
+module.exports = { ler, salvarRegras, vigente, sabadoPorAula, salvarProfessor, removerVigencia, importarCsvSupabase, REGRAS_PADRAO, LIMITES, norm };

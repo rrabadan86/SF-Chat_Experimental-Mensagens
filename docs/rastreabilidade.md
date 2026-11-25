@@ -26,16 +26,16 @@ o teste que a garante e a cobertura.
 | Padrão visual | 7 | 2 | 3 | 1 | 1 |
 | SoFIA | 13 | 0 | 10 | 3 | 0 |
 | EVO e aula experimental | 10 | 2 | 1 | 7 | 0 |
-| Indicadores e tags | 9 | 8 | 0 | 1 | 0 |
+| Indicadores e tags | 10 | 9 | 0 | 1 | 0 |
 | Dados e segredos | 7 | 4 | 1 | 0 | 2 |
 | Demonstração | 4 | 3 | 0 | 0 | 1 |
 | Publicar e atualizar | 8 | 2 | 1 | 2 | 3 |
 | Testes | 10 | 5 | 0 | 0 | 5 |
-| **Total** | 109 | 44 | 25 | 26 | 14 |
+| **Total** | 110 | 45 | 25 | 26 | 14 |
 
-Regras de código (sem as de processo): **69 de 95** com teste (44 inteiras, 25 em parte); **26** sem teste.
+Regras de código (sem as de processo): **70 de 96** com teste (45 inteiras, 25 em parte); **26** sem teste.
 
-Testes: 156 no total, 118 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
+Testes: 159 no total, 121 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
 <!-- resumo:fim -->
 
 ## Envios a clientes (`envio.md`)
@@ -146,6 +146,7 @@ Testes: 156 no total, 118 ligados a uma regra. Os outros 38 conferem funções q
 | IND-06 | O mês fecha no dia 9 e a foto não muda | `metas.js`, `painel-metas.js` | `metas.test.js` › IND-06 fechamento<br>`metas.test.js` › IND-06 tela de Metas<br>`datas.test.js` › IND-06 metas<br>`funil-agendamentos.test.js` › IND-06 metas: mês fechado | ✅ |
 | IND-07 | Inadimplência = em atraso ÷ o que já venceu | `indicadores.js` | `indicadores-formulas.test.js` › IND-07 recebimentos | ✅ |
 | TAG-01 | Entrar numa etapa tira a anterior | `contatos.js` | `contatos-mensagens.test.js` › TAG-01 tags do funil | ✅ |
+| PAG-01 | Sábado por aula (R$ 35 para quem deu cada aula) a partir do mês escolhido | `pagamento/calculo.js`, `pagamento/config.js`, `pagamento/painel.js` | `pagamento-sabado.test.js` › PAG-01 sábado por aula: R$ 35<br>`pagamento-sabado.test.js` › PAG-01 sábado por aula: antes<br>`pagamento-sabado.test.js` › PAG-01 sábado por aula: mês inválido | ✅ |
 | TAG-02 | Presença semanal: "Fez aula" / "sem presença" | `comparecimento.js` | — | ❌ |
 
 ## Dados e segredos (`dados-e-segredos.md`)

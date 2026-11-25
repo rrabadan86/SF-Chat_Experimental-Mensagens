@@ -13,6 +13,7 @@ paths:
   - "Experimental/src/contatos.js"
   - "Experimental/src/painel-automacao.js"
   - "Experimental/src/agendamento_evo/run_ativas_foto.py"
+  - "Experimental/src/pagamento/**"
 ---
 
 # Indicadores, metas e tags do funil
@@ -36,3 +37,6 @@ O resumo no WhatsApp e as telas usam os mesmos módulos (`ativas-dados.js`, `age
 ## Tags do funil
 - **TAG-01** Entrar numa etapa do funil tira a etapa anterior; a tag que chega fica.
 - **TAG-02** Presença semanal (sábado 16h): compareceu → "Fez aula"; faltou → "sem presença"; só mexe em quem está com a tag "Agendou". (decisão do dono, 23/11/2026)
+
+## Pagamento dos professores (só no Bueno; `src/pagamento/`)
+- **PAG-01** Sábado: a partir do mês escolhido em Regras ("Sábado por aula a partir de"), **cada aula de sábado paga R$ 35** (valor editável) **a quem deu aquela aula** — duas professoras no mesmo sábado, 35 cada; a mesma nas duas, 70 — inclusive em feriado ou aula vazia. Antes desse mês vale a diária antiga (R$ 70 por sábado para cada professor). (decisão do dono, 25/11/2026)
