@@ -22,7 +22,7 @@ o teste que a garante e a cobertura.
 | Área | Regras | ✅ | parcial | ❌ | processo |
 |---|---|---|---|---|---|
 | Envios a clientes | 30 | 14 | 7 | 9 | 0 |
-| Painel | 11 | 4 | 2 | 3 | 2 |
+| Painel | 12 | 5 | 2 | 3 | 2 |
 | Padrão visual | 7 | 2 | 3 | 1 | 1 |
 | SoFIA | 13 | 0 | 10 | 3 | 0 |
 | EVO e aula experimental | 10 | 2 | 1 | 7 | 0 |
@@ -31,11 +31,11 @@ o teste que a garante e a cobertura.
 | Demonstração | 4 | 3 | 0 | 0 | 1 |
 | Publicar e atualizar | 11 | 2 | 4 | 2 | 3 |
 | Testes | 10 | 5 | 0 | 0 | 5 |
-| **Total** | 113 | 45 | 28 | 26 | 14 |
+| **Total** | 114 | 46 | 28 | 26 | 14 |
 
-Regras de código (sem as de processo): **73 de 99** com teste (45 inteiras, 28 em parte); **26** sem teste.
+Regras de código (sem as de processo): **74 de 100** com teste (46 inteiras, 28 em parte); **26** sem teste.
 
-Testes: 177 no total, 139 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
+Testes: 178 no total, 140 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
 <!-- resumo:fim -->
 
 ## Envios a clientes (`envio.md`)
@@ -88,6 +88,7 @@ Testes: 177 no total, 139 ligados a uma regra. Os outros 38 conferem funções q
 | PAI-09 | `fetch` responde `{ ok, erro }`; formulário responde 303 | `painel-mensagens.js`, `painel-componentes.js` | `componentes.test.js` › VIS-06 erro ao salvar | parcial: só a janela de erro; as respostas das rotas não |
 | PAI-10 | Demonstração: nenhum POST executa | `painel-mensagens.js`, `demo-guard.js` | — | ❌ |
 | PAI-11 | Tela nova entra em `TELAS` de `telas.js` | `testes/tela/telas.js` | — | processo |
+| PAI-12 | Usuário criado/redefinido cria a própria senha no primeiro acesso | `usuarios.js`, `painel-mensagens.js`, `painel-publicas.js` | `trocar-senha.test.js` › PAI-12 primeiro acesso | ✅ |
 
 ## Padrão visual (`visual.md`)
 

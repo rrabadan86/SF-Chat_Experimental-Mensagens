@@ -248,6 +248,37 @@ function paginaTermos() {
     <p>${contato}.</p>`);
 }
 
+// PAI-12: primeiro acesso (ou senha redefinida pelo admin) — a pessoa cria a própria senha.
+function paginaTrocarSenha(usuario, erro, campo) {
+  const inp = (nome, rot, auto) => `<label for="ts_${nome}">${rot}</label>
+      <input id="ts_${nome}" type="password" name="${nome}" required minlength="8" autocomplete="${auto}"${campo === nome ? ' aria-invalid="true" style="border-color:var(--erro)"' : ''}>`;
+  return `<!doctype html><html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${HEAD_APP}
+<title>Crie sua senha · SlimFit</title>
+<style>${ESTILO}
+  .loginwrap{max-width:380px;margin:8vh auto;padding:16px}
+  .loginwrap .card{padding:22px}
+  .loginwrap h1{font-weight:700;font-size:1.2rem;margin:0 0 4px;text-align:center}
+  .loginwrap p.sub{color:var(--cinza);font-size:.86rem;text-align:center;margin:0 0 12px}
+  .loginwrap button{width:100%;margin-top:16px}
+  .loginwrap input[type=password]{width:100%}
+</style></head><body>
+<div class="loginwrap">
+  <div class="card">
+    <h1>Crie sua senha</h1>
+    <p class="sub">Olá, <b>${esc(usuario)}</b>! Este é o seu primeiro acesso (ou sua senha foi redefinida). Escolha uma senha só sua para continuar.</p>
+    ${erro ? `<div class="aviso err" style="margin:0 0 12px">${esc(erro)}</div>` : ''}
+    <form method="POST" action="/trocar-senha">
+      ${inp('nova', 'Senha nova (pelo menos 8 caracteres)', 'new-password')}
+      ${inp('confirma', 'Repita a senha nova', 'new-password')}
+      <button type="submit" class="save">Salvar e entrar</button>
+    </form>
+    <p class="sub" style="margin:14px 0 0"><a href="/logout" style="color:var(--teal-esc)">Sair</a></p>
+  </div>
+  <footer>SlimFit · painel do Studio</footer>
+</div></body></html>`;
+}
+
 module.exports = {
-  GOOGLE_ID, GOOGLE_SECRET, googleAtivo, paginaLogin, paginaUnidades, docLegal, paginaPrivacidade, paginaTermos,
+  paginaTrocarSenha, GOOGLE_ID, GOOGLE_SECRET, googleAtivo, paginaLogin, paginaUnidades, docLegal, paginaPrivacidade, paginaTermos,
 };

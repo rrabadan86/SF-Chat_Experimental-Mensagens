@@ -50,7 +50,7 @@ test('PAI-01..04 cada perfil vê só o que foi liberado e o servidor nega o rest
     fs.writeFileSync(path.join(amb.exp, '.env'), `PAINEL_PORT=${porta}\nPAINEL_HOST=127.0.0.1\nPAINEL_USER=dono\nPAINEL_SENHA=exemplo-do-dono-123\nSOFIA_DIR=${amb.sofia}\n`);
     amb.gravarSofia('sofia-prompt.txt', 'prompt de exemplo');
     const usuarios = amb.req('usuarios');
-    for (const p of PERFIS) usuarios.criar({ usuario: p.nome, senha: 'exemplo-1234', telas: p.telas });
+    for (const p of PERFIS) usuarios.criar({ usuario: p.nome, senha: 'exemplo-1234', telas: p.telas, trocarSenha: false });
     const env = { ...process.env }; for (const k of ['PAINEL_DEMO', 'PAINEL_PORT', 'PAINEL_USER', 'PAINEL_SENHA', 'SOFIA_DIR']) delete env[k];
     painel = spawn(process.execPath, ['-r', path.resolve(__dirname, '..', 'bloqueios.js'), 'src/painel-mensagens.js'], { cwd: amb.exp, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let log = ''; painel.stdout.on('data', d => { log += d; }); painel.stderr.on('data', d => { log += d; });
