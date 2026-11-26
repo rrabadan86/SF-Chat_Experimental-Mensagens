@@ -35,7 +35,7 @@ o teste que a garante e a cobertura.
 
 Regras de código (sem as de processo): **75 de 101** com teste (47 inteiras, 28 em parte); **26** sem teste.
 
-Testes: 182 no total, 144 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
+Testes: 183 no total, 144 ligados a uma regra. Os outros 39 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (13).
 <!-- resumo:fim -->
 
 ## Envios a clientes (`envio.md`)

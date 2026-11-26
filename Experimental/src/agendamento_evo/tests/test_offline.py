@@ -208,6 +208,28 @@ def test_book_raises_when_no_session_at_time():
     print("test_book_raises_when_no_session_at_time OK")
 
 
+def test_book_fora_da_janela_mostra_o_texto_do_evo():
+    """EVO recusa por antecedência: vira "fora da janela" COM o texto do EVO (diz a janela)."""
+    from evo_agendamento.evo_client import EvoError
+    schedule = [_session("2026-07-10", "19:00", 3, 9, 100)]
+    evo, calls = _client_with({("GET", "/api/v1/activities/schedule"): schedule,
+                               ("GET", "/api/v1/prospects"): [],
+                               ("POST", "/api/v1/prospects"): {"idProspect": 777},
+                               ("POST", "/api/v1/sales"): {}})
+
+    def recusa(*a, **k):
+        raise EvoError("EVO POST /api/v1/activities/schedule/enroll -> HTTP 400: Out of booking hours (24h)")
+    evo.enroll_schedule = recusa
+    try:
+        book_experimental(name="Maria", when="2026-07-10 19:00", id_activity=122, id_service=128, evo=evo)
+        raise AssertionError("Deveria ter levantado TurmaLotadaError")
+    except TurmaLotadaError as e:
+        assert e.reason.startswith("fora da janela de agendamento"), e.reason
+        assert "Out of booking hours (24h)" in e.reason, e.reason
+        assert not e.alternatives
+    print("test_book_fora_da_janela_mostra_o_texto_do_evo OK")
+
+
 def test_notify_studio_full_builds_message():
     from evo_agendamento.orchestrator import notify_studio_full
 
@@ -475,6 +497,7 @@ if __name__ == "__main__":
     test_book_reuses_existing_prospect()
     test_book_raises_when_full_with_alternatives()
     test_book_raises_when_no_session_at_time()
+    test_book_fora_da_janela_mostra_o_texto_do_evo()
     test_notify_studio_full_builds_message()
     test_notify_studio_skips_without_phone()
     test_process_pending_loop()
