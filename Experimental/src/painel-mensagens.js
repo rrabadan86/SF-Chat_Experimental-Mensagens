@@ -110,7 +110,7 @@ const {
   SESSAO_DIAS_FILE, SESSAO_DIAS_DEFAULT, lerSessaoDias, PERFIS_SUBS, subnavPerfis, paginaPerfis,
 } = require('./painel-perfis');
 const {
-  GOOGLE_ID, GOOGLE_SECRET, googleAtivo, paginaLogin, paginaUnidades, docLegal, paginaPrivacidade, paginaTermos,
+  paginaTrocarSenha, GOOGLE_ID, GOOGLE_SECRET, googleAtivo, paginaLogin, paginaUnidades, docLegal, paginaPrivacidade, paginaTermos,
 } = require('./painel-publicas');
 const unidadesRede = require('./unidades-rede');
 const push = require('./push');
@@ -643,6 +643,27 @@ const server = http.createServer(protegido((req, res) => {
   if (!sess) {
     if (req.method === 'GET') { res.writeHead(303, { Location: '/login' }); return res.end(); }
     res.writeHead(401, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Faça login.');
+  }
+  // PAI-12: entrou com a senha inicial (ou redefinida pelo admin) → só a tela de criar a
+  // senha (e sair) até trocar. Conferido aqui, antes de qualquer outra rota.
+  if (url === '/trocar-senha') {
+    if (!sess.trocarSenha) { res.writeHead(303, { Location: primeiraTela(sess) || '/hoje' }); return res.end(); }
+    if (req.method === 'POST') {
+      return lerCorpo(req, 4e3, corpo => {
+        const p = new URLSearchParams(corpo);
+        try {
+          usuarios.trocarPropriaSenha(sess.usuario, p.get('nova') || '', p.get('confirma') || '');
+          try { auditoria.registrar(sess.usuario, 'perfil.senha.propria', sess.usuario, 'criou a própria senha'); } catch (_) {}
+          res.writeHead(303, { Location: primeiraTela({ ...sess, trocarSenha: false }) || '/hoje' }); return res.end();
+        } catch (e) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(paginaTrocarSenha(sess.usuario, e.message, e.campo || '')); }
+      });
+    }
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(paginaTrocarSenha(sess.usuario, '', ''));
+  }
+  if (sess.trocarSenha) {
+    if (req.method === 'GET') { res.writeHead(303, { Location: '/trocar-senha' }); return res.end(); }
+    res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: false, erro: 'Crie sua senha antes de continuar.' }));
   }
   E._navSess = sess;
   try { acessos.registrarAcesso(sess.usuario); } catch (_) {} // marca "último acesso" (com trava de tempo)

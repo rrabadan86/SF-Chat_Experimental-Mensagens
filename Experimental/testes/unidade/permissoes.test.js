@@ -40,7 +40,8 @@ function rotas() {
   return out;
 }
 // Páginas públicas por natureza (cadastro/listagem do Slim Club, formulário de campanha, termos).
-const PUBLICAS = /^\/(login|logout|termos|politicadeprivacidade|midia-publica|auth\/google|slimclub|SlimClubCadastro|formulario\/|f\/)/i;
+// /trocar-senha: aberta a qualquer usuário logado (só cria a própria senha — PAI-12).
+const PUBLICAS = /^\/(login|logout|trocar-senha|termos|politicadeprivacidade|midia-publica|auth\/google|slimclub|SlimClubCadastro|formulario\/|f\/)/i;
 
 test('PAI-01 PAI-02 usuário sem nenhuma permissão não acessa rota nenhuma do painel', { timeout: 180000 }, async () => {
   const amb = ambienteIsolado();
@@ -48,7 +49,7 @@ test('PAI-01 PAI-02 usuário sem nenhuma permissão não acessa rota nenhuma do 
   let painel;
   try {
     fs.writeFileSync(path.join(amb.exp, '.env'), `PAINEL_PORT=${porta}\nPAINEL_HOST=127.0.0.1\nPAINEL_USER=dono\nPAINEL_SENHA=senha-do-teste-123\nSOFIA_DIR=${amb.sofia}\n`);
-    amb.req('usuarios').criar({ usuario: 'semacesso', senha: 'teste-1234', telas: [] });
+    amb.req('usuarios').criar({ usuario: 'semacesso', senha: 'teste-1234', telas: [], trocarSenha: false });
     const env = { ...process.env }; for (const k of ['PAINEL_DEMO', 'PAINEL_PORT', 'PAINEL_USER', 'PAINEL_SENHA', 'SOFIA_DIR']) delete env[k];
     painel = spawn(process.execPath, ['-r', path.resolve(__dirname, '..', 'bloqueios.js'), 'src/painel-mensagens.js'], { cwd: amb.exp, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let log = ''; painel.stdout.on('data', d => { log += d; }); painel.stderr.on('data', d => { log += d; });
@@ -80,7 +81,7 @@ test('PAI-01 PAI-02 usuário sem nenhuma permissão não acessa rota nenhuma do 
       }
     }
     // Perfil parcial: recepção que só vê as Conversas da SoFIA. (O Funil é liberado para ela de propósito — podeFunil.)
-    amb.req('usuarios').criar({ usuario: 'recepcao', senha: 'teste-1234', telas: ['sofia_conversas'] });
+    amb.req('usuarios').criar({ usuario: 'recepcao', senha: 'teste-1234', telas: ['sofia_conversas'], trocarSenha: false });
     const rec = await pedir(porta, 'POST', '/login', '', 'usuario=recepcao&senha=teste-1234');
     const cookieRec = String((rec.cookie || [])[0] || '').split(';')[0];
     assert.strictEqual((await pedir(porta, 'GET', '/sofia?view=conversas', cookieRec)).st, 200, 'a recepção não abriu as Conversas');

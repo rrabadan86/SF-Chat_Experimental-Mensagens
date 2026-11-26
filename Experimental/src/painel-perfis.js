@@ -151,6 +151,7 @@ function paginaPerfis(aviso, erro, view, filtroAud = {}) {
         ${u.email ? `<span class="quando" style="margin:0">📧 ${esc(u.email)}</span>` : '<span class="quando" style="margin:0;color:var(--faint)">sem e-mail</span>'}
         <span class="quando" style="margin:0">· ${u.admin ? 'vê todas as telas' : (u.telas || []).length + ' tela(s)'}</span>
         ${seloAcesso(u.usuario)}
+        ${u.trocarSenha ? '<span class="sd-pill sd-warn" style="margin-left:0" title="Entrou (ou vai entrar) com a senha que você deu: no próximo acesso cria a própria senha">🔑 vai criar a senha</span>' : ''}
         <span class="u-caret" style="margin-left:auto;color:var(--faint);font-size:.9rem">▸</span>
       </summary>
       <div style="display:flex;gap:8px;align-items:flex-end;margin:12px 0 0">
@@ -198,7 +199,7 @@ function paginaPerfis(aviso, erro, view, filtroAud = {}) {
         <div class="perf-telas"><label style="margin:0">Telas que este usuário pode acessar</label>
         <div style="margin:4px 0 2px">${chkTelas([], 'telas')}</div></div>
         <div class="acts"><button type="submit" class="save">Criar usuário</button></div>
-        <p class="quando" style="margin:8px 0 0">O usuário entra com esse login e senha na hora — sem reiniciar. A senha pode ser trocada depois aqui mesmo.</p>
+        <p class="quando" style="margin:8px 0 0">O usuário entra com esse login e senha na hora — sem reiniciar. <b>No primeiro acesso ele cria a própria senha</b> (pelo menos 8 caracteres); se você redefinir a senha aqui, ele cria de novo.</p>
       </form>
     </div>
     <script>function perfAdminTgl(cb){var f=cb.closest('form');if(!f)return;var t=f.querySelector('.perf-telas');if(t)t.style.display=cb.checked?'none':'';}</script>

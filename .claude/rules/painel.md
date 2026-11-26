@@ -31,5 +31,6 @@ cada aba monta o HTML no servidor (`painel-<aba>.js`), com o kit de `painel-base
 - **PAI-09** Ação por `fetch` responde JSON `{ ok, erro }`; formulário clássico responde 303 de volta à tela com `?ok=` / `?erro=`.
 - **PAI-10** Demonstração: nenhum POST executa (`demoBloqueado`) — regras em `demo.md`.
 - **PAI-11** Tela nova entra em `TELAS` de `testes/tela/telas.js` (ver `testes.md`).
+- **PAI-12** Usuário criado em Perfis (ou com a senha redefinida pelo admin) **cria a própria senha no primeiro acesso**: até trocar, o servidor só abre `/trocar-senha` e sair (o resto vai para lá ou dá 403). Senha nova: 8+ caracteres, diferente da recebida e do usuário. O admin do sistema (`PAINEL_SENHA` do `.env`) não entra nessa regra. Fonte: `usuarios.js` (`trocarSenha`, `trocarPropriaSenha`). (decisão do dono, 26/11/2026)
 
 Indicadores e suas contas: `indicadores.md`. Dados e segredos: `dados-e-segredos.md`.

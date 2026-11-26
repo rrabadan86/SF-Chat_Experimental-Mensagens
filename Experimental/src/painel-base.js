@@ -104,8 +104,8 @@ function usuarioDaReq(req) {
   if (SENHA && usuarios.normU(o.u) === usuarios.normU(USER)) return { usuario: USER, admin: true, telas: TODAS_TELAS, sid };
   const u = usuarios.obter(o.u);
   if (!u) return null; // usuário apagado depois de logar
-  if (u.admin) return { usuario: u.usuario, admin: true, telas: TODAS_TELAS, sid }; // admin promovido pela checkbox → vê tudo
-  return { usuario: u.usuario, admin: false, telas: u.telas || [], sid };
+  if (u.admin) return { usuario: u.usuario, admin: true, telas: TODAS_TELAS, sid, trocarSenha: !!u.trocarSenha }; // admin promovido pela checkbox → vê tudo
+  return { usuario: u.usuario, admin: false, telas: u.telas || [], sid, trocarSenha: !!u.trocarSenha };
 }
 const ADMIN_EMAIL = usuarios.normEmail(process.env.PAINEL_ADMIN_EMAIL || '');
 // Sofia é dividida em três sub-abas com permissão própria.

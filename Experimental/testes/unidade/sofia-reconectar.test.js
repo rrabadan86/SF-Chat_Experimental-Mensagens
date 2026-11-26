@@ -132,7 +132,7 @@ test('SOF-03 PAI-02 no painel: o botão dispara o procedimento na SoFIA desta un
     amb.gravarSofia('sofia-wa-status.json', { estado: 'desconectado', atualizadoEm: new Date(Date.now() - 3600e3).toISOString() });
     fs.writeFileSync(path.join(amb.sofia, '.sofia-boot-fails'), '8');
     fs.writeFileSync(path.join(amb.exp, '.env'), `PAINEL_PORT=${porta}\nPAINEL_HOST=127.0.0.1\nPAINEL_USER=dono\nPAINEL_SENHA=${PAINEL}\nSOFIA_DIR=${amb.sofia}\nPM2_SLUG=unidade\n`);
-    amb.req('usuarios').criar({ usuario: 'recepcao', senha: 'teste-1234', telas: ['sofia_conversas'] });
+    amb.req('usuarios').criar({ usuario: 'recepcao', senha: 'teste-1234', telas: ['sofia_conversas'], trocarSenha: false });
     const env = { ...process.env }; for (const k of ['PAINEL_DEMO', 'PAINEL_PORT', 'PAINEL_USER', 'PAINEL_SENHA', 'SOFIA_DIR', 'PM2_BIN', 'PM2_SLUG']) delete env[k];
     // (o painel do teste roda com os comandos do sistema bloqueados — bloqueios.js)
     painel = spawn(process.execPath, ['-r', path.resolve(__dirname, '..', 'bloqueios.js'), 'src/painel-mensagens.js'], { cwd: amb.exp, env, stdio: ['ignore', 'pipe', 'pipe'] });

@@ -95,7 +95,7 @@ test('DAD-05 PAI-03 no painel: a senha salva pelo administrador é a que o robô
     const arq = path.join(amb.exp, '.env');
     fs.writeFileSync(arq, `PAINEL_PORT=${porta}\nPAINEL_HOST=127.0.0.1\nPAINEL_USER=dono\nPAINEL_SENHA=${PAINEL}\nSOFIA_DIR=${amb.sofia}\nEVO_EMAIL=velho@exemplo.com.br\nEVO_PASSWORD=${ANTIGA}\n`);
     amb.gravarSofia('sofia-prompt.txt', 'prompt de teste'); // para a tela de Configuração da SoFIA abrir
-    amb.req('usuarios').criar({ usuario: 'recepcao', senha: 'teste-1234', telas: ['sofia_conversas'] });
+    amb.req('usuarios').criar({ usuario: 'recepcao', senha: 'teste-1234', telas: ['sofia_conversas'], trocarSenha: false });
     const env = { ...process.env }; for (const k of ['PAINEL_DEMO', 'PAINEL_PORT', 'PAINEL_USER', 'PAINEL_SENHA', 'SOFIA_DIR', 'EVO_EMAIL', 'EVO_PASSWORD']) delete env[k];
     painel = spawn(process.execPath, ['-r', path.resolve(__dirname, '..', 'bloqueios.js'), 'src/painel-mensagens.js'], { cwd: amb.exp, env, stdio: ['ignore', 'pipe', 'pipe'] });
     for (let i = 0; i < 60; i++) { const r = await pedir(porta, 'GET', '/login'); if (r.st) break; await new Promise(r => setTimeout(r, 300)); }

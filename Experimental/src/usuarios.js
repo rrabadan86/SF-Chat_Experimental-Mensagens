@@ -96,7 +96,7 @@ function conferirSenha(senha, armazenado) {
 }
 
 // ── API pública (só o essencial; sem devolver o hash) ───────────────────────
-function semSenha(c) { return { usuario: c.usuario, email: c.email || '', admin: !!c.admin, telas: c.telas || [], criadoEm: c.criadoEm, atualizadoEm: c.atualizadoEm }; }
+function semSenha(c) { return { usuario: c.usuario, email: c.email || '', admin: !!c.admin, telas: c.telas || [], criadoEm: c.criadoEm, atualizadoEm: c.atualizadoEm, trocarSenha: !!c.trocarSenha }; }
 
 function listar() {
   return Object.values(carregar()).map(semSenha).sort((a, b) => a.usuario.localeCompare(b.usuario, 'pt-BR'));
@@ -110,7 +110,9 @@ function emailEmUso(map, email, exceto) {
   for (const k in map) { if (k === normU(exceto)) continue; if (normEmail(map[k].email) === e) return true; }
   return false;
 }
-function criar({ usuario, senha, telas, email, admin }) {
+// PAI-12: quem o admin cria entra com a senha inicial e TROCA no primeiro acesso
+// (trocarSenha:false só para quem não deve trocar — ex.: testes).
+function criar({ usuario, senha, telas, email, admin, trocarSenha = true }) {
   const u = normU(usuario);
   if (!u || u.length < 3) throw new Error('Usuário precisa de pelo menos 3 caracteres.');
   if (!/^[a-z0-9._-]+$/.test(u)) throw new Error('Use só letras, números, ponto, hífen ou sublinhado no usuário.');
@@ -121,7 +123,7 @@ function criar({ usuario, senha, telas, email, admin }) {
   if (map[u]) throw new Error('Já existe um usuário com esse nome.');
   if (em && emailEmUso(map, em)) throw new Error('Esse e-mail já está em outro usuário.');
   // Admin vê tudo — as telas ficam vazias (não são usadas quando admin=true).
-  map[u] = { usuario: u, email: em, senha: hashSenha(senha), admin: !!admin, telas: admin ? [] : limparTelas(telas), criadoEm: Date.now(), atualizadoEm: Date.now() };
+  map[u] = { usuario: u, email: em, senha: hashSenha(senha), admin: !!admin, telas: admin ? [] : limparTelas(telas), criadoEm: Date.now(), atualizadoEm: Date.now(), trocarSenha: !!trocarSenha };
   salvar(map);
   return semSenha(map[u]);
 }
@@ -157,11 +159,25 @@ function definirTelas(usuario, telas) {
   map[u].telas = limparTelas(telas); map[u].atualizadoEm = Date.now();
   salvar(map); return true;
 }
+// O admin redefine a senha de alguém: a pessoa troca de novo no próximo acesso (PAI-12).
 function definirSenha(usuario, senha) {
   if (!senha || String(senha).length < 4) throw new Error('A senha precisa de pelo menos 4 caracteres.');
   const map = carregar(); const u = normU(usuario);
   if (!map[u]) return false;
-  map[u].senha = hashSenha(senha); map[u].atualizadoEm = Date.now();
+  map[u].senha = hashSenha(senha); map[u].atualizadoEm = Date.now(); map[u].trocarSenha = true;
+  salvar(map); return true;
+}
+const SENHA_MIN_PROPRIA = 8;
+// A própria pessoa cria a senha dela (primeiro acesso / depois de redefinida). → true; erro com o motivo.
+function trocarPropriaSenha(usuario, nova, confirmacao) {
+  const map = carregar(); const u = normU(usuario);
+  if (!map[u]) throw new Error('Usuário não encontrado.');
+  nova = String(nova || '');
+  if (nova.length < SENHA_MIN_PROPRIA) throw Object.assign(new Error(`A senha nova precisa ter pelo menos ${SENHA_MIN_PROPRIA} caracteres.`), { campo: 'nova' });
+  if (confirmacao !== undefined && nova !== String(confirmacao || '')) throw Object.assign(new Error('As duas senhas não são iguais.'), { campo: 'confirma' });
+  if (conferirSenha(nova, map[u].senha)) throw Object.assign(new Error('Escolha uma senha diferente da que você recebeu.'), { campo: 'nova' });
+  if (normU(nova) === u) throw Object.assign(new Error('A senha não pode ser igual ao usuário.'), { campo: 'nova' });
+  map[u].senha = hashSenha(nova); map[u].trocarSenha = false; map[u].atualizadoEm = Date.now();
   salvar(map); return true;
 }
 function remover(usuario) {
@@ -178,5 +194,5 @@ function verificar(usuario, senha) {
 
 module.exports = {
   TELAS, TELAS_KEYS, normU, normEmail, emailValido, listar, existe, obter, criar,
-  definirTelas, definirSenha, definirEmail, definirAdmin, porEmail, remover, verificar, ARQUIVO,
+  definirTelas, definirSenha, trocarPropriaSenha, SENHA_MIN_PROPRIA, definirEmail, definirAdmin, porEmail, remover, verificar, ARQUIVO,
 };
