@@ -72,7 +72,7 @@ function secaoNovaLoja({ demo = false } = {}) {
       <h3 class="nl-t">4. EVO da loja</h3>
       <div class="cfg-grid">
         ${campo('evoUrl', 'Link do EVO', { ph: 'https://…/#/app/slimfit/22/…', obrig: true, dica: 'Abra o EVO da loja no navegador e copie o endereço da barra: o painel tira dali a rede e o número da unidade.' })}
-        ${campo('evoDns', 'DNS da integração', { dica: 'EVO → Configurações → Integração (API). Pode deixar para depois.' })}
+        ${campo('evoDns', 'DNS da integração', { dica: 'EVO → Configurações → Integração (API). Obrigatório: sem ele a instalação não liga a loja.' })}
         ${campo('evoToken', 'Secret Key da integração', { tipo: 'password' })}
         ${campo('evoEmail', 'E-mail do robô no EVO', { ph: 'robo@loja.com.br' })}
         ${campo('evoSenha', 'Senha do robô no EVO', { tipo: 'password' })}
