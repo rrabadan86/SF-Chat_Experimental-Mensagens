@@ -410,7 +410,12 @@ function initWhatsApp() {
         try {
           const s = await client.getState();
           log('estado(check): ' + s);
-          if (s === 'CONNECTED') { clearInterval(poll); marcarPronto('getState CONNECTED'); }
+          if (s === 'CONNECTED') {
+            clearInterval(poll);
+            // sem o 'ready', as peças da biblioteca podem não ter carregado: confere antes
+            try { const g = await garantirPecas(); if (!g.ok) log('⚠️  conectado sem as peças do whatsapp-web.js: ' + g.erro); } catch (_) {}
+            marcarPronto('getState CONNECTED');
+          }
         } catch (_) { /* ainda inicializando o Store */ }
       }, 5000);
     };
@@ -644,6 +649,23 @@ async function garantirChat(id) {
   } catch (e) { return 'evaluate-erro:' + ((e && e.message) || e); }
 }
 
+// Peças da biblioteca DENTRO da página (window.WWebJS). A whatsapp-web.js só as carrega
+// quando o WhatsApp termina de sincronizar; se essa carga falha, o 'ready' não vem, mas o
+// getState diz CONNECTED e o robô se dá por pronto — e nada sai ("sem WWebJS.getChat/
+// sendMessage", Sorocaba, 26/11/2026). Aqui confere e, se faltar, carrega de novo com o
+// mesmo LoadUtils da biblioteca. → { ok, recarregou?, erro? }. `page`/`carregar` só nos testes.
+let LoadUtilsLib = null;
+try { ({ LoadUtils: LoadUtilsLib } = require('whatsapp-web.js/src/util/Injected/Utils')); } catch (_) { /* versão sem esse arquivo */ }
+async function garantirPecas(page = client && client.pupPage, carregar = LoadUtilsLib) {
+  if (!page) return { ok: false, erro: 'página do WhatsApp indisponível' };
+  const tem = () => page.evaluate(() => !!(window.WWebJS && window.WWebJS.getChat && window.WWebJS.sendMessage));
+  try { if (await tem()) return { ok: true }; } catch (e) { return { ok: false, erro: 'página não respondeu: ' + ((e && e.message) || e) }; }
+  if (typeof carregar !== 'function') return { ok: false, erro: 'a biblioteca não tem o LoadUtils' };
+  try { await page.evaluate(carregar); } catch (e) { return { ok: false, erro: 'carregar as peças falhou: ' + String((e && e.message) || e).slice(0, 200) }; }
+  try { if (await tem()) { log('🔧 as peças do whatsapp-web.js faltavam na página — recarregadas.'); return { ok: true, recarregou: true }; } } catch (_) {}
+  return { ok: false, erro: 'as peças não apareceram depois de carregar' };
+}
+
 // Envia TEXTO direto pelo helper interno do whatsapp-web.js (window.WWebJS),
 // contornando o client.sendMessage — que passou a estourar o erro do getter
 // memoizado ao enviar para "@lid". O getChat (que já funciona, ver garantirChat)
@@ -651,6 +673,8 @@ async function garantirChat(id) {
 async function sendRawTexto(id, texto) {
   const page = client.pupPage;
   if (!page) throw new Error('página do WhatsApp indisponível');
+  const pecas = await garantirPecas(page);
+  if (!pecas.ok) throw new Error('o WhatsApp do robô conectou mas ficou incompleto (' + pecas.erro + ') — reinicie o robô; se continuar, reconecte o WhatsApp');
   const res = await page.evaluate(async (chatId, body) => {
     try {
       if (!(window.WWebJS && window.WWebJS.getChat && window.WWebJS.sendMessage)) {
@@ -749,6 +773,7 @@ async function sendTexto(telefone, texto, contexto, chaveFoto) {
   if (chaveFoto) { try { fotoPath = require('./mensagens').fotoPath(chaveFoto); } catch (_) {} }
   try {
     const id = await resolverId(telefone);
+    try { await garantirPecas(); } catch (_) {} // a foto vai pelo client.sendMessage, que também precisa delas
     try { const gc = await garantirChat(id); log(`garantirChat(${id}) → ${gc}`); } catch (_) {}
     let r;
     if (fotoPath) {
@@ -1075,7 +1100,10 @@ function iniciarKeepAlive(minutos = 15) {
     try {
       const s = await client.getState();
       log('💓 keep-alive — estado: ' + s);
-      r = avaliarKeepAlive(keepAliveEstado, true);
+      // conectado mas sem as peças da biblioteca (e sem conseguir recarregar) = não envia nada
+      const pecas = s === 'CONNECTED' ? await garantirPecas() : { ok: true };
+      if (!pecas.ok) log('⚠️  keep-alive: conectado, mas sem as peças do whatsapp-web.js (' + pecas.erro + ').');
+      r = avaliarKeepAlive(keepAliveEstado, pecas.ok, false);
     } catch (e) {
       log('⚠️  keep-alive falhou: ' + e.message);
       r = avaliarKeepAlive(keepAliveEstado, false, ehTransiente(e));
@@ -1109,7 +1137,7 @@ module.exports = {
   sendTexto, sendMidia, sendGrupo, acharGrupo, listarGrupos,
   getCommonGroups, removerDoGrupo, sendGrupoComMencao, sendGrupoMidia, sendGrupoMidiaComMencao,
   iniciarKeepAlive, destroy, toChatId, MessageMedia, conferirResposta,
-  avaliarKeepAlive,
+  avaliarKeepAlive, garantirPecas,
 };
 
 // ── Standalone: escanear o QR pela 1ª vez e deixar a sessão salva ────────────

@@ -35,7 +35,7 @@ o teste que a garante e a cobertura.
 
 Regras de código (sem as de processo): **74 de 100** com teste (46 inteiras, 28 em parte); **26** sem teste.
 
-Testes: 178 no total, 140 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
+Testes: 179 no total, 141 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
 <!-- resumo:fim -->
 
 ## Envios a clientes (`envio.md`)
@@ -50,7 +50,7 @@ Testes: 178 no total, 140 ligados a uma regra. Os outros 38 conferem funções q
 | ENV-06 | Texto de `mensagens.js`; `{nome}` some quando não há nome | `mensagens.js` | `contatos-mensagens.test.js` › ENV-06 mensagens: preenche<br>`contatos-mensagens.test.js` › ENV-06 mensagens: todo texto padrão | ✅ |
 | ENV-07 | Contato achado pelo telefone com ou sem o 9 | `contatos.js` | `contatos-mensagens.test.js` › ENV-07 telefone: normaliza<br>`contatos-mensagens.test.js` › ENV-07 contato é achado | ✅ |
 | ENV-08 | Trancada não recebe avisos de ausência nem de vencimento | `suspensoes.js`, `sentimos-falta.js`, `ausentes-10-dias.js` | — | ❌ |
-| ENV-09 | WhatsApp do robô sem responder: 2 verificações seguidas avisam a equipe e religam | `wa-client.js` | `whatsapp-keepalive.test.js` › ENV-09 WhatsApp oco<br>`whatsapp-keepalive.test.js` › ENV-09 uma falha solta | ✅ |
+| ENV-09 | WhatsApp do robô sem responder: 2 verificações seguidas avisam a equipe e religam | `wa-client.js` | `whatsapp-keepalive.test.js` › ENV-09 WhatsApp oco<br>`whatsapp-keepalive.test.js` › ENV-09 conectado sem as peças<br>`whatsapp-keepalive.test.js` › ENV-09 uma falha solta | ✅ |
 | CONF-01 | Confirmação da aula: hoje 08:30 e amanhã 15:30; anota quem recebeu | `scheduler.js`, `whatsapp-sender.js`, `horarios.js` | `confirmacao-envio.test.js` › CONF-01 confirmação | parcial: os horários padrão não têm teste |
 | CONF-02 | 2ª mensagem 1h30+ depois, aula ainda longe, sem resposta | `confirmacao-sem-resposta.js` | `confirmacao-sem-resposta.test.js` › CONF-02 2ª mensagem<br>`datas.test.js` › CONF-02 confirmação: a hora da aula | ✅ |
 | CONF-03 | Quem segue sem responder entra uma vez na lista da equipe | `confirmacao-sem-resposta.js` | `confirmacao-sem-resposta.test.js` › CONF-03 lista da equipe | ✅ |
@@ -215,6 +215,7 @@ Erros e lacunas encontrados. Cada um sai daqui quando for resolvido (com PR).
 - **R8** Regras repetidas: horários padrão em `config.js` e `horarios.js`; tolerância de 7 dias no Python e em 5 lugares do JS (IND-01); identificação de navegador e versão reserva no robô e na SoFIA (SOF-04); dois `patch-wwebjs.js` diferentes.
 - **R11** `painel-mensagens.js` e `painel-sofia.js` (~3 mil linhas cada) misturam rota, regra e HTML.
 - **R12** IA, transcrição e envio real não têm simulação de teste (SOF-01, SOF-02).
+- **R18** A biblioteca do WhatsApp (`whatsapp-web.js`) não tem versão fixa: o `package.json` pede `#main` e o `package-lock.json` aponta outro repositório, então cada `npm install` (loja nova, ou `slimfit-atualizar` quando as dependências mudam) baixa a versão do dia — cada loja pode ficar com uma diferente. Sorocaba (26/11/2026) subiu sem as peças da biblioteca na página (ENV-09).
 
 **Regras de envio sem teste** — pedem separar a leitura do EVO da decisão, como foi feito
 na cobrança (`inadimplentes.enfileirar`):
