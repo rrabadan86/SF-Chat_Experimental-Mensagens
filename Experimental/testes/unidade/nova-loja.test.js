@@ -163,6 +163,8 @@ test('NOV-01 nova loja: atividade e serviço da experimental (nome ou número) e
   const sh = fs.readFileSync(require('path').resolve(__dirname, '..', '..', 'setup-novo-studio.sh'), 'utf8');
   assert.match(sh, /CIRCUITO_SERVICO\) CIRCUITO_SERVICO_IN="\$_d"/);
   assert.match(sh, /> "\$EXP_DIR\/data\/circuito-servico\.txt"/, 'o script grava o serviço onde o painel e o formulário leem');
+  assert.match(sh, /scripts\/atualizar\.js" --instalar/, 'a loja nova já sai com o comando slimfit-atualizar');
+  assert.match(sh, /scripts\/sofia\.js" --instalar/, 'e com o slimfit-sofia');
 }));
 
 test('NOV-01 nova loja: só no painel do Bueno (NOVA_LOJA liga/desliga; sem ela, segue o Pagamento dos professores)', () => comAmb(async (amb) => {
