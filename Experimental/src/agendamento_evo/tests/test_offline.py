@@ -386,6 +386,37 @@ def test_booking_data_from_summary_json():
     print("test_booking_data_from_summary_json OK")
 
 
+def test_slimfit_evo_painel_vale_antes_do_env():
+    """AGE-07: atividade/serviço do SlimFit salvos no painel valem antes do .env."""
+    from evo_agendamento import config as cfg
+    import json, tempfile
+    orig = (cfg.SLIMFIT_EVO_FILE, cfg.EVO_ACTIVITY, cfg.EVO_ACTIVITY_ID, cfg.EVO_SERVICE, cfg.EVO_SERVICE_ID)
+    d = tempfile.mkdtemp(prefix="sf-")
+    try:
+        cfg.SLIMFIT_EVO_FILE = os.path.join(d, "slimfit-evo.json")
+        cfg.EVO_ACTIVITY, cfg.EVO_ACTIVITY_ID, cfg.EVO_SERVICE, cfg.EVO_SERVICE_ID = "SLIMFIT", None, None, "128"
+        # sem o arquivo: vale o .env
+        assert cfg.slimfit_atividade() == ("SLIMFIT", None)
+        assert cfg.slimfit_servico() == (None, "128")
+        # com o arquivo: número = id, texto = nome; campo vazio segue o .env
+        with open(cfg.SLIMFIT_EVO_FILE, "w", encoding="utf-8") as f:
+            json.dump({"atividade": "45", "servico": ""}, f)
+        assert cfg.slimfit_atividade() == (None, "45")
+        assert cfg.slimfit_servico() == (None, "128")
+        with open(cfg.SLIMFIT_EVO_FILE, "w", encoding="utf-8") as f:
+            json.dump({"atividade": "SLIMFIT B", "servico": "Aula Experimental"}, f)
+        assert cfg.slimfit_atividade() == ("SLIMFIT B", None)
+        assert cfg.slimfit_servico() == ("Aula Experimental", None)
+        # arquivo estragado: volta para o .env, sem quebrar
+        with open(cfg.SLIMFIT_EVO_FILE, "w", encoding="utf-8") as f:
+            f.write("{quebrado")
+        assert cfg.slimfit_atividade() == ("SLIMFIT", None)
+    finally:
+        cfg.SLIMFIT_EVO_FILE, cfg.EVO_ACTIVITY, cfg.EVO_ACTIVITY_ID, cfg.EVO_SERVICE, cfg.EVO_SERVICE_ID = orig
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def test_clean_ignores_inline_comment():
     from evo_agendamento.config import _clean
     os.environ["_X_TEST_BRANCH"] = "            # obrigatório só em chave multi-filial"
@@ -410,4 +441,5 @@ if __name__ == "__main__":
     test_confirm_outbox_writes_queue()
     test_booking_data_from_summary_json()
     test_clean_ignores_inline_comment()
+    test_slimfit_evo_painel_vale_antes_do_env()
     print("\nTodos os testes offline passaram. ✅")

@@ -263,7 +263,7 @@ def _booking_remove(ids):
 
 def _ja_tem_experimental(evo, id_prospect):
     """True se o prospect já tem o serviço da aula experimental vendido (por id ou nome)."""
-    sid = str(getattr(config, "EVO_SERVICE_ID", "") or "")
+    sid = str(config.slimfit_servico()[1] or "")
     for s in (evo.prospect_services(id_prospect) or []):
         if sid and str(s.get("idService")) == sid:
             return True

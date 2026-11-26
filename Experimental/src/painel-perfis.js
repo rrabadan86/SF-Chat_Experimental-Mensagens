@@ -44,7 +44,7 @@ const ROT_ACAO_EXTRA = {
   'audio.salvar': '🎙️ Salvou áudio de professora', 'audio.remover': '🗑️ Removeu áudio de professora',
   'campanha.iniciar': '▶️ Iniciou campanha', 'campanha.pausar': '⏸️ Pausou campanha', 'campanha.cancelar': '🚫 Cancelou campanha', 'campanha.reenviar': '🔁 Reenviou campanha para um número', 'campanha.remover-fila': '➖ Tirou número da fila da campanha', 'campanha.variacao-excluir': '🗑️ Excluiu variação da campanha',
   'contato.excluir-lote': '🗑️ Excluiu contatos em lote', 'evo.2fa': '🔐 Digitou o código do EVO (2FA)', 'evo.credenciais': '🔑 Mudou o login do EVO',
-  'express.circuito-servico': '⚙️ Mudou o serviço do Circuito (Express)', 'free.config': '⚙️ Mudou a antecedência do Free',
+  'express.circuito-servico': '⚙️ Mudou o serviço do Circuito (Express)', 'express.servicos-evo': '⚙️ Mudou atividade/serviço da experimental no EVO (Express)', 'free.config': '⚙️ Mudou a antecedência do Free',
   'formularios.apagar-resposta': '🗑️ Apagou resposta de formulário', 'formularios.duplicar': '📄 Duplicou formulário', 'formularios.etiquetar': '🏷️ Etiquetou respostas de formulário', 'formularios.excluir': '🗑️ Excluiu formulário', 'formularios.exportar': '⬇️ Exportou respostas de formulário', 'formularios.zerar-acessos': '🔄 Zerou acessos de formulário',
   'log.reenviar': '🔁 Reenviou mensagem pelo Log', 'log.rodar-job': '▶️ Rodou um envio na hora',
   'pagamento.excluir': '✕ Excluiu aluna do pagamento', 'pagamento.inserir': '＋ Incluiu aluna numa aula (pagamento)', 'pagamento.desfazer': '↩️ Desfez ajuste do pagamento', 'pagamento.oculto': '👁️ Mostrou/ocultou horário no pagamento',
