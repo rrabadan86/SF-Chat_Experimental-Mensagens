@@ -15,6 +15,9 @@ import argparse
 import json
 from datetime import datetime
 
+import env_robo  # noqa: E402 — à mão, lê também o .env do robô (antes do config)
+env_robo.carregar()
+
 from evo_agendamento import EvoClient
 from evo_agendamento import config
 from evo_agendamento.util import session_start_datetime, agora_brasilia

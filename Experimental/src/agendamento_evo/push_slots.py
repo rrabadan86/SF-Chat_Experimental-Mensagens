@@ -21,6 +21,9 @@ import time
 
 import requests
 
+import env_robo  # noqa: E402 — à mão, lê também o .env do robô (antes do config)
+env_robo.carregar()
+
 from evo_agendamento import available_slots
 
 FORM_URL = (os.getenv("FORM_CLOUD_URL", "") or "").rstrip("/")
@@ -37,6 +40,15 @@ def main():
     # use_cache=False: queremos a grade fresca de verdade para enviar.
     slots = available_slots(days=DAYS, max_ocupacao=MAXOC, use_cache=False)
     dt = time.monotonic() - t0
+    if not slots:
+        # Grade vazia quase sempre é configuração (atividade que não bate com o nome das
+        # turmas no EVO) ou o EVO fora do ar — enviar apagaria a grade boa do formulário.
+        from evo_agendamento import config
+        nome, ident = config.slimfit_atividade()
+        print(f"push_slots: 0 horários nos próximos {DAYS} dias — NÃO enviei (o formulário segue com a grade "
+              f"anterior). Confira a atividade SlimFit em WhatsApp → Cadastro Express → ⚙️ Aula experimental "
+              f"no EVO (hoje: {ident or nome or 'qualquer'}) ou se o EVO está no ar.")
+        return 4
     try:
         r = requests.post(
             f"{FORM_URL}/api/slots/push",

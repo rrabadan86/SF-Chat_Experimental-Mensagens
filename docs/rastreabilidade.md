@@ -35,7 +35,7 @@ o teste que a garante e a cobertura.
 
 Regras de código (sem as de processo): **75 de 101** com teste (47 inteiras, 28 em parte); **26** sem teste.
 
-Testes: 181 no total, 143 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
+Testes: 182 no total, 144 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
 <!-- resumo:fim -->
 
 ## Envios a clientes (`envio.md`)
@@ -134,7 +134,7 @@ Testes: 181 no total, 143 ligados a uma regra. Os outros 38 conferem funções q
 | AGE-04 | FREE: no máximo 1 dia de antecedência; desmarca 2+ e avisa | `free-antecedencia.js`, `agendamento_evo/evo_agendamento/free_antecedencia.py` | — | ❌ |
 | AGE-05 | Turma cheia devolve alternativas; soluço do EVO não vira "lotada" | `agendamento_evo/evo_agendamento/orchestrator.py` | `test_offline.py` › test_book_raises_when_full_with_alternatives | parcial: "soluço do EVO não vira lotada" sem teste |
 | AGE-06 | Rotas internas do formulário exigem token | `agendamento_evo/formulario_web/app.py` | — | ❌ |
-| AGE-07 | Atividade e serviço da experimental (SlimFit e Circuito) editados no painel; valem antes do `.env` | `painel-whatsapp.js`, `painel-mensagens.js`, `agendamento_evo/evo_agendamento/config.py` | `servicos-evo.test.js` › AGE-07 atividade e serviço<br>`test_offline.py` › test_slimfit_evo_painel_vale_antes_do_env | ✅ |
+| AGE-07 | Atividade e serviço da experimental (SlimFit e Circuito) editados no painel; valem antes do `.env` | `painel-whatsapp.js`, `painel-mensagens.js`, `agendamento_evo/evo_agendamento/config.py` | `servicos-evo.test.js` › AGE-07 atividade e serviço<br>`test_offline.py` › test_slimfit_evo_painel_vale_antes_do_env<br>`test_offline.py` › test_push_slots_nao_envia_grade_vazia | ✅ |
 
 ## Indicadores e tags (`indicadores.md`)
 

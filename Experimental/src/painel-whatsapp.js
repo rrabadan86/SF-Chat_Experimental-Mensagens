@@ -654,13 +654,13 @@ function paginaExpress(aviso, erro) {
       ${sess.admin ? `<details class="ex-cfg"${circId && slim.servico && slim.atividade ? '' : ' open'}><summary>⚙️ Aula experimental no EVO — atividade e serviço (SlimFit e Circuito)</summary>
         <form method="POST" action="/agendar/servicos-evo" style="margin:8px 0 4px">
           <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <div style="flex:1 1 180px;min-width:0"><label style="margin:0 0 4px">SlimFit — atividade</label><input type="text" name="slimAtividade" maxlength="80" value="${esc(slim.atividade)}" placeholder="ex.: SLIMFIT B ou 122"></div>
+            <div style="flex:1 1 180px;min-width:0"><label style="margin:0 0 4px">SlimFit — atividade</label><input type="text" name="slimAtividade" maxlength="80" value="${esc(slim.atividade)}" placeholder="ex.: 207 ou Aula - SlimFit"></div>
             <div style="flex:1 1 180px;min-width:0"><label style="margin:0 0 4px">SlimFit — serviço da experimental</label><input type="text" name="slimServico" maxlength="80" value="${esc(slim.servico)}" placeholder="ex.: 128"></div>
             <div style="flex:1 1 140px;min-width:0"><label style="margin:0 0 4px">Circuito Slim — serviço</label><input type="text" name="id" inputmode="numeric" maxlength="9" value="${circId || ''}" placeholder="ex.: 316"></div>
           </div>
           <div class="acts" style="margin-top:10px"><button type="submit" class="save" style="width:auto;padding:9px 16px">Salvar</button></div>
         </form>
-        <p class="quando" style="margin:4px 0 6px">Números do EVO desta unidade — <b>cada unidade tem os seus</b>. Na atividade e no serviço do SlimFit vale o <b>número (id)</b> ou o <b>nome</b> como está no EVO. ${(slim.atividadeDoEnv && slim.atividade) || (slim.servicoDoEnv && slim.servico) ? 'O que está preenchido e ainda não foi salvo aqui veio da instalação (.env). ' : ''}Vale na hora, sem reiniciar; os horários do Cadastro Express mudam no próximo <b>🔄 atualizar</b>. Circuito vazio desliga a opção Circuito Slim.</p>
+        <p class="quando" style="margin:4px 0 6px">Números do EVO desta unidade — <b>cada unidade tem os seus</b>. Na atividade e no serviço do SlimFit vale o <b>número (id)</b> ou o <b>nome</b> como está no EVO — a atividade é a das <b>turmas</b> (ex.: “Aula - SlimFit”), não o nome da loja; com o número não tem erro. ${(slim.atividadeDoEnv && slim.atividade) || (slim.servicoDoEnv && slim.servico) ? 'O que está preenchido e ainda não foi salvo aqui veio da instalação (.env). ' : ''}Vale na hora, sem reiniciar; os horários do Cadastro Express mudam no próximo <b>🔄 atualizar</b>. Circuito vazio desliga a opção Circuito Slim.</p>
       </details>` : ''}
       </div>
     </section>`;

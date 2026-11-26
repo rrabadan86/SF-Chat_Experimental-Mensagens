@@ -79,7 +79,7 @@ function secaoNovaLoja({ demo = false } = {}) {
       </div>
       <p class="quando" style="margin:14px 0 8px"><b>Aula experimental no EVO</b> — pode deixar para depois (WhatsApp → Express, no painel da loja).</p>
       <div class="cfg-grid">
-        ${campo('evoAtividade', 'Atividade SlimFit', { ph: 'SLIMFIT B', dica: 'A atividade das turmas SlimFit no EVO, onde a aula experimental é marcada. O nome (como aparece no EVO) ou o número.' })}
+        ${campo('evoAtividade', 'Atividade SlimFit', { ph: 'ex.: Aula - SlimFit ou 207', dica: 'A atividade das TURMAS SlimFit no EVO (o nome que aparece em cada turma da agenda), não o nome da loja. Melhor o número: dá para trocar depois em WhatsApp → Cadastro Express.' })}
         ${campo('evoServico', 'Serviço da aula experimental', { ph: 'Aula experimental', dica: 'O serviço que o EVO "vende" (grátis) na aula experimental do SlimFit. O nome ou o número.' })}
         ${campo('circuitoServico', 'Serviço do Circuito Slim (número)', { ph: '316', dica: 'O número do serviço da aula experimental do Circuito Slim no EVO (cada loja tem o seu). Sem ele, o Express não marca Circuito. Loja sem Circuito: deixe em branco.' })}
       </div>

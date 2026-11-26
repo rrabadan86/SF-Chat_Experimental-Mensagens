@@ -12,6 +12,9 @@ Uso (na pasta agendamento_evo):
 import json
 import sys
 
+import env_robo  # noqa: E402 — à mão, lê também o .env do robô (antes do config)
+env_robo.carregar()
+
 from evo_agendamento import EvoClient
 
 
