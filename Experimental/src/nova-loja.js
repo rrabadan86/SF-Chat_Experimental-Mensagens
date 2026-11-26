@@ -108,7 +108,7 @@ function iniciar(form, { duckFn = duck, remotoFn = remoto } = {}) {
 async function status(slug, { remotoFn = remoto, agora = Date.now() } = {}) {
   const est = remotoFn.lerEstado(slug);
   const job = emAndamento.get(slug);
-  const base = { ok: true, slug, studio: est && est.studio, dominio: est && est.dominio, host: est && est.host, passos: (est && est.passos) || {}, painel: job ? { linhas: job.linhas.slice(), terminou: !!job.fim, resultado: job.resultado } : null };
+  const base = { ok: true, slug, studio: est && est.studio, dominio: est && est.dominio, host: est && est.host, passos: (est && est.passos) || {}, dados: (est && est.dados) || null, painel: job ? { linhas: job.linhas.slice(), terminou: !!job.fim, resultado: job.resultado } : null };
   if (job && !job.fim) return { ...base, fase: 'painel' };
   if (!est) return job ? { ...base, fase: 'painel' } : { ok: false, erro: 'Instalação não encontrada.' };
   if (!est.passos.lancada) return { ...base, fase: job && job.resultado && !job.resultado.ok ? 'parou' : 'nao-iniciada' };

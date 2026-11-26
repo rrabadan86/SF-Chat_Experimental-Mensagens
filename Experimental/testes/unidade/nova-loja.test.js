@@ -79,7 +79,7 @@ test('NOV-01 nova loja: endereço primeiro, depois o servidor; DuckDNS recusou =
 
 test('NOV-01 nova loja: andamento — instalando, concluída, parou e sem contato (lê no servidor no máximo a cada 5 s)', () => comAmb(async (amb) => {
   const nl = amb.req('nova-loja');
-  let est = { slug: 'marista', studio: 'Studio SlimFit Marista', dominio: 'painel-marista.duckdns.org', host: '203.0.113.10', passos: { chave: {}, lancada: {} } };
+  let est = { slug: 'marista', studio: 'Studio SlimFit Marista', dominio: 'painel-marista.duckdns.org', host: '203.0.113.10', passos: { chave: {}, lancada: {} }, dados: { slug: 'marista' } };
   let leituras = 0, resp = { ok: true, terminou: false, codigo: null, linhas: ['📦 instalando'] };
   const remotoFn = { lerEstado: () => est, acompanhar: async () => { leituras++; return resp; } };
   assert.strictEqual((await nl.status('marista', { remotoFn, agora: 1000 })).fase, 'instalando');
@@ -89,7 +89,9 @@ test('NOV-01 nova loja: andamento — instalando, concluída, parou e sem contat
   const fim = await nl.status('marista', { remotoFn, agora: 7000 });
   assert.deepStrictEqual([fim.fase, fim.remoto.linhas], ['concluida', ['fim']]);
   resp = { ok: true, terminou: true, codigo: 1, linhas: ['❌'] };
-  assert.strictEqual((await nl.status('marista', { remotoFn, agora: 13000 })).fase, 'parou');
+  const parou = await nl.status('marista', { remotoFn, agora: 13000 });
+  assert.strictEqual(parou.fase, 'parou');
+  assert.deepStrictEqual(parou.dados, { slug: 'marista' }, 'o andamento traz os dados (sem segredo) para o botão "Continuar daqui"');
   resp = { ok: false, erro: 'Não consegui alcançar o servidor' };
   const sc = await nl.status('marista', { remotoFn, agora: 19000 });
   assert.deepStrictEqual([sc.fase, sc.erro], ['sem-contato', 'Não consegui alcançar o servidor']);
