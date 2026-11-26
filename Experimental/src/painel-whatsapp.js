@@ -660,7 +660,7 @@ function paginaExpress(aviso, erro) {
           </div>
           <div class="acts" style="margin-top:10px"><button type="submit" class="save" style="width:auto;padding:9px 16px">Salvar</button></div>
         </form>
-        <p class="quando" style="margin:4px 0 6px">Números do EVO desta unidade — <b>cada unidade tem os seus</b>. Na atividade e no serviço do SlimFit vale o <b>número (id)</b> ou o <b>nome</b> como está no EVO. ${slim.atividadeDoEnv || slim.servicoDoEnv ? 'O que está preenchido e ainda não foi salvo aqui veio da instalação (.env). ' : ''}Vale na hora, sem reiniciar; os horários do Cadastro Express mudam no próximo <b>🔄 atualizar</b>. Circuito vazio desliga a opção Circuito Slim.</p>
+        <p class="quando" style="margin:4px 0 6px">Números do EVO desta unidade — <b>cada unidade tem os seus</b>. Na atividade e no serviço do SlimFit vale o <b>número (id)</b> ou o <b>nome</b> como está no EVO. ${(slim.atividadeDoEnv && slim.atividade) || (slim.servicoDoEnv && slim.servico) ? 'O que está preenchido e ainda não foi salvo aqui veio da instalação (.env). ' : ''}Vale na hora, sem reiniciar; os horários do Cadastro Express mudam no próximo <b>🔄 atualizar</b>. Circuito vazio desliga a opção Circuito Slim.</p>
       </details>` : ''}
       </div>
     </section>`;
