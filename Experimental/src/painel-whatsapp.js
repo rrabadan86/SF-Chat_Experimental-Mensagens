@@ -685,12 +685,12 @@ function paginaExpress(aviso, erro) {
   }
   // Motivo real da recusa (vem do EVO) em português claro.
   function exMotivoLotada(res){
-    var m=String(res.motivo||''), r=(m.match(/^Turma de .*?\\d{1,2}:\\d{2}\\s*:\\s*([^.]+)/)||[])[1]||'';
+    var m=String(res.motivo||''), r=(m.match(/^Turma de .*?\\d{1,2}:\\d{2}\\s*:\\s*(.+?)\\.(?:\\s+Horários com vaga:|\\s*$)/)||[])[1]||'';
     var alt=(res.alternativas||[]).join('  ·  ');
     var dica='';
     if(/experimenta/i.test(r)) dica=' O limite de experimentais por turma fica em <b>SoFIA → Configuração</b>.';
     else if(/fechada/i.test(r)) dica=' A turma está fechada (cadeado) no EVO.';
-    else if(/janela/i.test(r)) dica=' O EVO ainda não abriu a agenda dessa data — o cadastro e a venda foram feitos; matricule à mão no EVO.';
+    else if(/janela/i.test(r)) dica=' O EVO só deixa marcar com a antecedência configurada na atividade (o texto do EVO está acima). O cadastro e a venda foram feitos: matricule à mão no EVO quando abrir, ou aumente essa antecedência na atividade, no EVO.';
     else if(/não há turma/i.test(r)) dica=' Não existe turma nesse dia/horário no EVO.';
     return '⚠️ Não deu para agendar nesse horário'+(r?': <b>'+exEsc(r)+'</b>.':' (turma cheia).')+dica+'<br>Horários com vaga: '+(alt?exEsc(alt):'nenhum encontrado na semana')+'.';
   }

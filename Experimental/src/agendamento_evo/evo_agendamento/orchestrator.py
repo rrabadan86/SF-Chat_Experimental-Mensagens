@@ -429,9 +429,13 @@ def book_experimental(
             # Turma existe e tem vaga, mas o EVO não deixa agendar com essa antecedência.
             # Cadastro + venda já foram feitos: avisamos o Studio p/ matrícula manual e
             # marcamos como resolvido (senão o job revende o serviço a cada ciclo).
+            # O texto do EVO diz qual é a janela (ex.: "até 24h antes") — vai junto para a
+            # recepção/dono saberem o que ajustar no EVO (Sorocaba, 26/11/2026).
+            evo_disse = str(e).split(": ", 1)[-1].strip()[:200]
+            log.warning("EVO recusou a matrícula (janela de agendamento): %s", e)
             raise TurmaLotadaError(
                 fmt_datetime_evo(when),
-                reason="fora da janela de agendamento",
+                reason=f"fora da janela de agendamento (o EVO disse: {evo_disse})" if evo_disse else "fora da janela de agendamento",
             ) from e
         if any(h in emsg for h in _JA_MATRICULADO_HINTS):
             # A aluna JÁ está matriculada nessa turma (tentativa anterior matriculou).
