@@ -47,7 +47,7 @@ def main():
         print("activityGroups:", json.dumps(s.get("activityGroups"), ensure_ascii=False)[:1500])
         # Para comparar: o serviço da experimental do SlimFit (o que funciona)
         from evo_agendamento import config
-        sf = next((x for x in servs if str(x.get("idService")) == str(config.EVO_SERVICE_ID or "")), None)
+        sf = next((x for x in servs if str(x.get("idService")) == str(config.slimfit_servico()[1] or "")), None)
         if sf:
             print(f"\nComparação — serviço do SlimFit {sf.get('idService')} · {sf.get('nameService')}")
             print("activityGroups:", json.dumps(sf.get("activityGroups"), ensure_ascii=False)[:1500])

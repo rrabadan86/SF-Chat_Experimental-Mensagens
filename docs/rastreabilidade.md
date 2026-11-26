@@ -25,17 +25,17 @@ o teste que a garante e a cobertura.
 | Painel | 12 | 5 | 2 | 3 | 2 |
 | Padrão visual | 7 | 2 | 3 | 1 | 1 |
 | SoFIA | 13 | 0 | 10 | 3 | 0 |
-| EVO e aula experimental | 10 | 2 | 1 | 7 | 0 |
+| EVO e aula experimental | 11 | 3 | 1 | 7 | 0 |
 | Indicadores e tags | 10 | 9 | 0 | 1 | 0 |
 | Dados e segredos | 7 | 4 | 1 | 0 | 2 |
 | Demonstração | 4 | 3 | 0 | 0 | 1 |
 | Publicar e atualizar | 11 | 2 | 4 | 2 | 3 |
 | Testes | 10 | 5 | 0 | 0 | 5 |
-| **Total** | 114 | 46 | 28 | 26 | 14 |
+| **Total** | 115 | 47 | 28 | 26 | 14 |
 
-Regras de código (sem as de processo): **74 de 100** com teste (46 inteiras, 28 em parte); **26** sem teste.
+Regras de código (sem as de processo): **75 de 101** com teste (47 inteiras, 28 em parte); **26** sem teste.
 
-Testes: 179 no total, 141 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
+Testes: 181 no total, 143 ligados a uma regra. Os outros 38 conferem funções que ainda não têm regra com código: `cpu-carga.test.js` (3), `metas.test.js` (3), `push-eventos.test.js` (5), `push.test.js` (5), `retencao-atendimento.test.js` (4), `senha-evo.test.js` (1), `unidades-rede.test.js` (1), `visao-cliente.test.js` (2), `whatsapp-inicio.test.js` (2), `test_offline.py` (12).
 <!-- resumo:fim -->
 
 ## Envios a clientes (`envio.md`)
@@ -134,6 +134,7 @@ Testes: 179 no total, 141 ligados a uma regra. Os outros 38 conferem funções q
 | AGE-04 | FREE: no máximo 1 dia de antecedência; desmarca 2+ e avisa | `free-antecedencia.js`, `agendamento_evo/evo_agendamento/free_antecedencia.py` | — | ❌ |
 | AGE-05 | Turma cheia devolve alternativas; soluço do EVO não vira "lotada" | `agendamento_evo/evo_agendamento/orchestrator.py` | `test_offline.py` › test_book_raises_when_full_with_alternatives | parcial: "soluço do EVO não vira lotada" sem teste |
 | AGE-06 | Rotas internas do formulário exigem token | `agendamento_evo/formulario_web/app.py` | — | ❌ |
+| AGE-07 | Atividade e serviço da experimental (SlimFit e Circuito) editados no painel; valem antes do `.env` | `painel-whatsapp.js`, `painel-mensagens.js`, `agendamento_evo/evo_agendamento/config.py` | `servicos-evo.test.js` › AGE-07 atividade e serviço<br>`test_offline.py` › test_slimfit_evo_painel_vale_antes_do_env | ✅ |
 
 ## Indicadores e tags (`indicadores.md`)
 

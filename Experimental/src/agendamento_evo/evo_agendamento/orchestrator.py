@@ -297,10 +297,10 @@ def book_experimental(
                              "(WhatsApp → Express → id do serviço do Circuito no EVO).")
         ids_circ, nomes_circ, grupos_circ = atividades_do_servico(evo, id_service, branch_id)
     else:
-        activity = activity or config.EVO_ACTIVITY or None
-        service = service or config.EVO_SERVICE or None
-        id_activity = id_activity or (config.EVO_ACTIVITY_ID or None)
-        id_service = id_service or (config.EVO_SERVICE_ID or None)
+        if not (activity or id_activity):
+            activity, id_activity = config.slimfit_atividade()
+        if not (service or id_service):
+            service, id_service = config.slimfit_servico()
 
     # Para vender, precisamos do id do serviço (resolve pelo nome se só veio o nome).
     if sell_service and not id_service:
@@ -513,8 +513,8 @@ def available_slots(evo=None, days=10, activity=None, id_activity=None, branch_i
         activity, id_activity = "circuito", None
         ids_circ, _, _ = atividades_do_servico(evo, config.circuito_service_id(), branch_id)
     else:
-        activity = activity or config.EVO_ACTIVITY or None
-        id_activity = id_activity or (config.EVO_ACTIVITY_ID or None)
+        if not (activity or id_activity):
+            activity, id_activity = config.slimfit_atividade()
     now = now or agora_brasilia()
     inicio = now.replace(hour=0, minute=0, second=0, microsecond=0)
     fim = inicio + timedelta(days=days)          # exclusivo

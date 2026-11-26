@@ -144,6 +144,15 @@ function gravarCircuitoServico(v) {
   fs.writeFileSync(CIRC_SERV_FILE, String(+n), 'utf8');
   return +n;
 }
+// AGE-07: atividade/serviço da experimental do SlimFit (número = id, texto = nome).
+function gravarSlimfitEvo(atividade, servico) {
+  const limpa = (v) => String(v || '').replace(/[\u0000-\u001f"\\<>]/g, '').trim().slice(0, 80);
+  const d = { atividade: limpa(atividade), servico: limpa(servico) };
+  const arq = require('./painel-whatsapp').SLIM_EVO_FILE;
+  try { fs.mkdirSync(path.dirname(arq), { recursive: true }); } catch (_) {}
+  fs.writeFileSync(arq, JSON.stringify(d), 'utf8');
+  return d;
+}
 function gravarAntecedenciaHoras(n) {
   const v = parseFloat(String(n).replace(',', '.'));
   if (!Number.isFinite(v) || v < 0 || v > 168) return false; // teto de 7 dias
@@ -2280,6 +2289,17 @@ const server = http.createServer(protegido((req, res) => {
     return lerCorpo(req, 2000, corpo => {
       const v = gravarCircuitoServico(new URLSearchParams(corpo).get('id'));
       try { auditoria.registrar(sess.usuario, 'express.circuito-servico', String(v || 'desligado'), ''); } catch (_) {}
+      E._circSlots = { em: 0, dados: null };
+      res.writeHead(303, { Location: '/?view=express' }); res.end();
+    });
+  }
+  if (req.method === 'POST' && url === '/agendar/servicos-evo') {
+    if (!sess || !sess.admin) { res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Só administradores.'); }
+    return lerCorpo(req, 2000, corpo => {
+      const q = new URLSearchParams(corpo);
+      const sl = gravarSlimfitEvo(q.get('slimAtividade'), q.get('slimServico'));
+      const v = gravarCircuitoServico(q.get('id'));
+      try { auditoria.registrar(sess.usuario, 'express.servicos-evo', `SlimFit: atividade ${sl.atividade || '(.env)'}, serviço ${sl.servico || '(.env)'} · Circuito: ${v || 'desligado'}`, ''); } catch (_) {}
       E._circSlots = { em: 0, dados: null };
       res.writeHead(303, { Location: '/?view=express' }); res.end();
     });

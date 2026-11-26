@@ -615,6 +615,12 @@ if [ "$START" = "1" ]; then
 
   pm2 save
 
+  # ── Atalhos do servidor: slimfit-atualizar e slimfit-sofia (um por servidor) ──
+  # Sem eles a loja nova não tinha o comando de atualizar (Sorocaba, 26/11/2026).
+  [ -e /usr/local/bin/slimfit-atualizar ] || node "$REPO_DIR/scripts/atualizar.js" --instalar >/dev/null 2>&1 \
+    && echo "   ✔ atalho slimfit-atualizar pronto" || echo "   ⚠️  não consegui criar o atalho (rode: node $REPO_DIR/scripts/atualizar.js --instalar)"
+  [ -e /usr/local/bin/slimfit-sofia ] || node "$REPO_DIR/scripts/sofia.js" --instalar >/dev/null 2>&1 || true
+
   # ── Logs do PM2 com tamanho limitado (pm2-logrotate) ──────────────────────
   # Sem isso os logs crescem para sempre (meses de histórico). Um por servidor:
   # se já estiver instalado (ex.: 2ª loja no mesmo VPS), só reaplica os limites.

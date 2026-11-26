@@ -112,8 +112,7 @@ def montar_grade(evo=None, semana_offset=0, branch_id=None, now=None,
     monday = hoje - timedelta(days=hoje.weekday()) + timedelta(days=7 * off)
     dias_semana = [monday + timedelta(days=i) for i in range(7)]   # Seg..Dom
     inicio, fim = monday, monday + timedelta(days=5)               # exibe Seg..Sáb
-    activity = config.EVO_ACTIVITY or None
-    id_activity = config.EVO_ACTIVITY_ID or None
+    activity, id_activity = config.slimfit_atividade()
 
     # cache: grade da semana (list_schedule) e detail por (idConfig, data).
     week_cache = {}

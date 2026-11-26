@@ -36,7 +36,7 @@ const PERFIS = [
     nega: [['GET', '/sofia?view=conversas'], ['GET', '/?view=config'], ['GET', '/perfis'], ['GET', '/clube'], ['POST', '/sofia/salvar'], ['POST', '/salvar'], ['POST', '/perfis/criar'], ['POST', '/envio/ativo']] },
   { nome: 'whatsapp', telas: ['msg_config', 'msg_express', 'msg_hoje'], menu: ['msg'],
     abre: ['/?view=config', '/?view=express', '/hoje'],
-    nega: [['GET', '/sofia?view=conversas'], ['GET', '/funil'], ['GET', '/perfis'], ['GET', '/grade'], ['POST', '/sofia/campanhas/criar'], ['POST', '/sofia/salvar'], ['POST', '/perfis/criar']] },
+    nega: [['GET', '/sofia?view=conversas'], ['GET', '/funil'], ['GET', '/perfis'], ['GET', '/grade'], ['POST', '/sofia/campanhas/criar'], ['POST', '/sofia/salvar'], ['POST', '/perfis/criar'], ['POST', '/agendar/servicos-evo'], ['POST', '/agendar/circuito-servico']] },
   { nome: 'clube', telas: ['slimclub', 'formularios'], menu: ['ind', 'slimclub'],
     abre: ['/clube?view=pendentes', '/formularios'],
     nega: [['GET', '/sofia?view=conversas'], ['GET', '/funil'], ['GET', '/?view=config'], ['GET', '/perfis'], ['POST', '/sofia/salvar'], ['POST', '/salvar']] },

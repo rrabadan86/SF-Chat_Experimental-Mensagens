@@ -35,8 +35,7 @@ def main():
     now = agora_brasilia()
     alvo = datetime.strptime(args.data, "%Y-%m-%d")
 
-    activity = config.EVO_ACTIVITY or None
-    id_activity = config.EVO_ACTIVITY_ID or None
+    activity, id_activity = config.slimfit_atividade()
     lim_exp = config.max_experimentais()
     antec = config.antecedencia_horas()
 

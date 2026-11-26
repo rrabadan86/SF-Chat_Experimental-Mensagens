@@ -27,6 +27,16 @@ const {
 // data/circuito-servico.txt; o agendamento (Python) lê este arquivo. Vazio = desligado.
 const CIRC_SERV_FILE = path.join(__dirname, '..', 'data', 'circuito-servico.txt');
 function lerCircuitoServico() { try { const v = String(fs.readFileSync(CIRC_SERV_FILE, 'utf8')).trim(); return /^\d+$/.test(v) && +v > 0 ? +v : null; } catch (_) { return null; } }
+// Aula experimental do SLIMFIT no EVO: atividade e serviço (número = id, texto = nome).
+// O painel grava em data/slimfit-evo.json e o agendamento (Python, config.slimfit_*)
+// usa esse antes do .env (EVO_ACTIVITY/_ID, EVO_SERVICE/_ID) — AGE-07.
+const SLIM_EVO_FILE = path.join(__dirname, '..', 'data', 'slimfit-evo.json');
+function lerSlimfitEvo(env = process.env) {
+  let d = {}; try { d = JSON.parse(fs.readFileSync(SLIM_EVO_FILE, 'utf8')) || {}; } catch (_) {}
+  const doEnv = (nome, id) => String(env[id] || env[nome] || '').trim();
+  const at = String(d.atividade || '').trim(), sv = String(d.servico || '').trim();
+  return { atividade: at || doEnv('EVO_ACTIVITY', 'EVO_ACTIVITY_ID'), servico: sv || doEnv('EVO_SERVICE', 'EVO_SERVICE_ID'), atividadeDoEnv: !at, servicoDoEnv: !sv };
+}
 // Horários dos envios agendados vêm dos jobs (podem ter sido editados no painel).
 function horaAg(turno) { return horaTurno(turno === 'manha' ? 'agendadosManha' : 'agendadosTarde') || (turno === 'manha' ? '10:45' : '15:45'); }
 function turnoLabel(turno) { return (turno === 'manha' ? '☀️ Manhã · ' : '🌇 Tarde · ') + horaAg(turno); }
@@ -611,6 +621,7 @@ function paginaExpress(aviso, erro) {
   const podeExpress = podeTela, podeAgendar = podeTela;
   const hoje = hojeSP();
   const circId = lerCircuitoServico();
+  const slim = lerSlimfitEvo();
   // Cabeçalho de seção (ícone + título + subtítulo) — fica DENTRO do painel colorido.
   const cab = (ic, tit, sub) => `<div style="display:flex;align-items:center;gap:12px;margin:2px 2px 12px"><span style="font-size:1.5rem;line-height:1;flex:none">${ic}</span><div style="min-width:0"><div style="font-family:'Manrope','Inter',sans-serif;font-weight:800;font-size:1.05rem;color:var(--tinta);line-height:1.15">${tit}</div><div style="font-size:.82rem;color:var(--cinza)">${sub}</div></div></div>`;
 
@@ -640,12 +651,16 @@ function paginaExpress(aviso, erro) {
         <div class="acts" style="margin-top:18px"><button type="button" class="save" id="exBtn" onclick="exAgendar()" style="width:100%;padding:12px 20px;font-size:1rem;font-weight:600">📅 Agendar no EVO</button></div>
         <div id="exMsg" class="aviso" style="display:none"></div>
       </div>
-      ${sess.admin ? `<details class="ex-cfg"${circId ? '' : ' open'}><summary>⚙️ Circuito Slim — serviço da aula experimental no EVO</summary>
-        <form method="POST" action="/agendar/circuito-servico" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:8px 0 4px">
-          <div><label style="margin:0 0 4px">Id do serviço no EVO</label><input type="text" name="id" inputmode="numeric" value="${circId || ''}" placeholder="ex.: 316" style="width:140px"></div>
-          <button type="submit" class="save" style="width:auto;padding:9px 16px">Salvar</button>
+      ${sess.admin ? `<details class="ex-cfg"${circId && slim.servico && slim.atividade ? '' : ' open'}><summary>⚙️ Aula experimental no EVO — atividade e serviço (SlimFit e Circuito)</summary>
+        <form method="POST" action="/agendar/servicos-evo" style="margin:8px 0 4px">
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div style="flex:1 1 180px;min-width:0"><label style="margin:0 0 4px">SlimFit — atividade</label><input type="text" name="slimAtividade" maxlength="80" value="${esc(slim.atividade)}" placeholder="ex.: SLIMFIT B ou 122"></div>
+            <div style="flex:1 1 180px;min-width:0"><label style="margin:0 0 4px">SlimFit — serviço da experimental</label><input type="text" name="slimServico" maxlength="80" value="${esc(slim.servico)}" placeholder="ex.: 128"></div>
+            <div style="flex:1 1 140px;min-width:0"><label style="margin:0 0 4px">Circuito Slim — serviço</label><input type="text" name="id" inputmode="numeric" maxlength="9" value="${circId || ''}" placeholder="ex.: 316"></div>
+          </div>
+          <div class="acts" style="margin-top:10px"><button type="submit" class="save" style="width:auto;padding:9px 16px">Salvar</button></div>
         </form>
-        <p class="quando" style="margin:4px 0 6px">É o serviço que o EVO vende na experimental do circuito — <b>cada unidade tem o seu número</b>. Deixe vazio para desligar a opção Circuito Slim.</p>
+        <p class="quando" style="margin:4px 0 6px">Números do EVO desta unidade — <b>cada unidade tem os seus</b>. Na atividade e no serviço do SlimFit vale o <b>número (id)</b> ou o <b>nome</b> como está no EVO. ${(slim.atividadeDoEnv && slim.atividade) || (slim.servicoDoEnv && slim.servico) ? 'O que está preenchido e ainda não foi salvo aqui veio da instalação (.env). ' : ''}Vale na hora, sem reiniciar; os horários do Cadastro Express mudam no próximo <b>🔄 atualizar</b>. Circuito vazio desliga a opção Circuito Slim.</p>
       </details>` : ''}
       </div>
     </section>`;
@@ -1543,5 +1558,5 @@ ${scriptPreviewTeste()}`;
 }
 
 module.exports = {
-  CIRC_SERV_FILE, lerCircuitoServico, horaAg, turnoLabel, barraTeste, card2FA, blocoWaRobo, subnavMensagens, cardGrupos, paginaMensagens, itemHtml, cardHorariosAgendados, blocoAgendarMsg, paginaExpress, paginaWa, HORARIOS_DA_MSG, TOGGLE_EXTRA_DA_MSG, jobsDoCard, cardDeMsg, blocoAnivExcluir, blocoSaidas, blocoVenceHoje, blocoSentimos, blocoRenovDias, OUTROS_JOBS, switchEnvio, horaTurno, FOTO_POR_CONTEXTO, JOBS_DO_LOG, jobDoLog, RODAR_JOB_ST, statusRodarJob, LOG_REFEITOS, lerRefeitos, hhmm, fotoDoEnvio, paginaHoje, paginaCobranca,
+  CIRC_SERV_FILE, lerCircuitoServico, SLIM_EVO_FILE, lerSlimfitEvo, horaAg, turnoLabel, barraTeste, card2FA, blocoWaRobo, subnavMensagens, cardGrupos, paginaMensagens, itemHtml, cardHorariosAgendados, blocoAgendarMsg, paginaExpress, paginaWa, HORARIOS_DA_MSG, TOGGLE_EXTRA_DA_MSG, jobsDoCard, cardDeMsg, blocoAnivExcluir, blocoSaidas, blocoVenceHoje, blocoSentimos, blocoRenovDias, OUTROS_JOBS, switchEnvio, horaTurno, FOTO_POR_CONTEXTO, JOBS_DO_LOG, jobDoLog, RODAR_JOB_ST, statusRodarJob, LOG_REFEITOS, lerRefeitos, hhmm, fotoDoEnvio, paginaHoje, paginaCobranca,
 };

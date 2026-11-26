@@ -105,6 +105,34 @@ def max_experimentais():
         pass
     return EVO_MAX_EXPERIMENTAIS
 
+# Aula experimental do SLIMFIT: atividade e serviço no EVO. O painel grava em
+# Experimental/data/slimfit-evo.json ({"atividade": ..., "servico": ...}; número = id,
+# texto = nome) e vale ANTES do .env (EVO_ACTIVITY/_ID, EVO_SERVICE/_ID). Lido a cada
+# uso: trocar pelo painel não pede reiniciar nada.
+SLIMFIT_EVO_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "slimfit-evo.json")
+def _slimfit_painel():
+    try:
+        import json
+        with open(SLIMFIT_EVO_FILE, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+def _nome_ou_id(v):
+    v = str(v or "").strip()
+    if not v:
+        return None
+    return (None, v) if v.isdigit() else (v, None)
+
+def slimfit_atividade():
+    """(nome, id) da atividade SlimFit: o do painel, senão o do .env."""
+    return _nome_ou_id(_slimfit_painel().get("atividade")) or (EVO_ACTIVITY or None, EVO_ACTIVITY_ID or None)
+
+def slimfit_servico():
+    """(nome, id) do serviço da aula experimental SlimFit: o do painel, senão o do .env."""
+    return _nome_ou_id(_slimfit_painel().get("servico")) or (EVO_SERVICE or None, EVO_SERVICE_ID or None)
+
 # Aula experimental do CIRCUITO SLIM (Cadastro Express): usa um serviço próprio no
 # EVO (cada unidade tem o seu id — ex.: 316 no Lago Sul 2). O painel grava o id em
 # Experimental/data/circuito-servico.txt (WhatsApp → Express); vale também
