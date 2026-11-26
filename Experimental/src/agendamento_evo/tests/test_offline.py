@@ -417,6 +417,46 @@ def test_slimfit_evo_painel_vale_antes_do_env():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def test_push_slots_nao_envia_grade_vazia():
+    """AGE-07: grade vazia (atividade que não bate com o EVO) não apaga a do formulário;
+    à mão, os scripts leem também o .env do robô sem passar por cima do ambiente."""
+    import importlib, tempfile, shutil
+    import env_robo
+    d = tempfile.mkdtemp(prefix="sf-")
+    salvo = {k: os.environ.get(k) for k in ("FORM_CLOUD_URL", "FORM_SLOTS_TOKEN", "SF_TESTE_A", "SF_TESTE_B")}
+    try:
+        arq = os.path.join(d, ".env")
+        with open(arq, "w", encoding="utf-8") as f:
+            f.write("SF_TESTE_A=do-robo\nSF_TESTE_B='com aspas'\n# comentario\n")
+        os.environ["SF_TESTE_A"] = "do-ambiente"
+        os.environ.pop("SF_TESTE_B", None)
+        env_robo.carregar(arq)
+        assert os.environ["SF_TESTE_A"] == "do-ambiente", "o que o robô/painel passam continua valendo"
+        assert os.environ["SF_TESTE_B"] == "com aspas"
+
+        os.environ["FORM_CLOUD_URL"] = "https://exemplo.invalid/form"
+        os.environ["FORM_SLOTS_TOKEN"] = "exemplo"
+        import push_slots
+        push_slots = importlib.reload(push_slots)
+        enviados = []
+        class _R:
+            ok, status_code, text = True, 200, "{}"
+        post_original = push_slots.requests.post
+        push_slots.requests.post = lambda *a, **k: enviados.append(k.get("json")) or _R()
+        push_slots.available_slots = lambda **k: []
+        assert push_slots.main() == 4 and enviados == [], "0 horários: não envia"
+        push_slots.available_slots = lambda **k: [{"date": "2026-11-27", "time": "08:40"}]
+        assert push_slots.main() == 0 and len(enviados) == 1 and len(enviados[0]["slots"]) == 1
+        push_slots.requests.post = post_original
+    finally:
+        for k, v in salvo.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def test_clean_ignores_inline_comment():
     from evo_agendamento.config import _clean
     os.environ["_X_TEST_BRANCH"] = "            # obrigatório só em chave multi-filial"
@@ -442,4 +482,5 @@ if __name__ == "__main__":
     test_booking_data_from_summary_json()
     test_clean_ignores_inline_comment()
     test_slimfit_evo_painel_vale_antes_do_env()
+    test_push_slots_nao_envia_grade_vazia()
     print("\nTodos os testes offline passaram. ✅")

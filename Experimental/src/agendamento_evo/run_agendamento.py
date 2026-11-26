@@ -22,6 +22,9 @@ import json
 import logging
 import sys
 
+import env_robo  # noqa: E402 — à mão, lê também o .env do robô (antes do config)
+env_robo.carregar()
+
 from evo_agendamento import (
     EvoClient, TurmaLotadaError, ZeeClient, book_experimental, config, process_pending,
 )
