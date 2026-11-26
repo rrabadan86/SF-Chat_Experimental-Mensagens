@@ -12,12 +12,19 @@ const { ambienteIsolado } = require('../ajuda');
 // (15 min) é capturado e disparado à mão. OCO = quantas verificações falham; ERRO = a falha.
 const ROTEIRO = `
 const path = require('path');
-const fake = { criados: 0, alertas: [], oco: +process.env.OCO };
+const fake = { criados: 0, alertas: [], oco: +process.env.OCO, pecas: !process.env.CARGA_FALHA, cargaFalha: +(process.env.CARGA_FALHA || 0) };
+// a página: "tem as peças?" responde fake.pecas; carregar (LoadUtils) falha CARGA_FALHA vezes
+const avaliarPagina = async (fn) => {
+  if (fn === LoadUtils) { if (fake.cargaFalha > 0) { fake.cargaFalha--; throw new Error('x is not a function'); } fake.pecas = true; return; }
+  if (/WWebJS\.sendMessage/.test(String(fn))) return fake.pecas;
+  return { versao: '2.3000.1055865300', socket: 'CONNECTED', stream: '', online: true };
+};
+function LoadUtils() {}
 const ERRO = process.env.ERRO;
 class Client {
   constructor() { fake.criados++; this.ev = {};
     this.pupBrowser = { process: () => ({ exitCode: 0, killed: true, kill: () => {} }) };
-    this.pupPage = { evaluate: async () => ({ versao: '2.3000.1055865300', socket: 'CONNECTED', stream: '', online: true }) }; }
+    this.pupPage = { evaluate: avaliarPagina }; }
   on(e, f) { this.ev[e] = f; }
   async initialize() { setTimeout(() => this.ev.ready && this.ev.ready(), 5); }
   async destroy() {}
@@ -26,6 +33,7 @@ class Client {
 const por = (m, exp) => { const f = require.resolve(m); require.cache[f] = { id: f, filename: f, loaded: true, exports: exp }; };
 por('whatsapp-web.js', { Client, LocalAuth: class { constructor(o) { this.o = o; } }, MessageMedia: class {} });
 por(path.resolve('src/patch-wwebjs.js'), {});
+for (const m of [require.resolve('whatsapp-web.js/src/util/Injected/Utils')]) require.cache[m] = { id: m, filename: m, loaded: true, exports: { LoadUtils } };
 por(path.resolve('src/notificar.js'), { alertar: async (t) => { fake.alertas.push(t); return true; }, alertarResumo: async () => false });
 let verificar = null;
 const setIntervalReal = global.setInterval;
@@ -67,6 +75,29 @@ test('ENV-09 WhatsApp oco: na 2ª verificação seguida avisa a equipe UMA vez e
     assert.match(saida, /WhatsApp voltou a responder/);
     assert.strictEqual(r.pronto, true);
   } finally { amb.limpar(); }
+});
+
+test('ENV-09 conectado sem as peças da biblioteca (window.WWebJS): recarrega sozinho; sem conseguir, conta como falha e avisa na 2ª', { timeout: 60000 }, () => {
+  const amb = ambienteIsolado();
+  try {
+    // a carga falha nas 2 primeiras verificações e dá certo na 3ª
+    const { r, saida } = rodar(amb, { OCO: '0', CARGA_FALHA: '2', RODADAS: '3' });
+    assert.deepStrictEqual(r.passos.map(p => p.avisou), [false, true, false], 'aviso só na 2ª falha');
+    assert.deepStrictEqual(r.alertas, ['WhatsApp do robo parou de responder']);
+    assert.match(saida, /sem as peças do whatsapp-web\.js \(carregar as peças falhou: x is not a function\)/);
+    assert.match(saida, /peças do whatsapp-web\.js faltavam na página — recarregadas/);
+    assert.match(saida, /WhatsApp voltou a responder/);
+  } finally { amb.limpar(); }
+  // a peça em si, com uma página de mentira
+  const { garantirPecas } = require(path.resolve(__dirname, '..', '..', 'src', 'wa-client.js'));
+  const pagina = (tem, falha) => { const p = { cargas: 0, evaluate: async (fn) => { if (fn === carregar) { p.cargas++; if (falha) throw new Error('quebrou'); tem = true; return; } return tem; } }; return p; };
+  function carregar() {}
+  return (async () => {
+    const ja = pagina(true); assert.deepStrictEqual(await garantirPecas(ja, carregar), { ok: true }); assert.strictEqual(ja.cargas, 0, 'já tem: não recarrega');
+    const falta = pagina(false); assert.deepStrictEqual(await garantirPecas(falta, carregar), { ok: true, recarregou: true });
+    const ruim = await garantirPecas(pagina(false, true), carregar); assert.strictEqual(ruim.ok, false); assert.match(ruim.erro, /carregar as peças falhou: quebrou/);
+    assert.match((await garantirPecas(null, carregar)).erro, /indisponível/);
+  })();
 });
 
 test('ENV-09 uma falha solta só registra; erro passageiro religa na hora, sem alarme', { timeout: 60000 }, () => {

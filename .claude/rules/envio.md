@@ -40,7 +40,7 @@ no painel (`horarios.js`, `jobs-ativos.js`). Regra → código → teste: `docs/
 - **ENV-06** Texto vem de `mensagens.js` (editável no painel): variáveis preenchidas; `{nome}` some quando não há nome.
 - **ENV-07** Contato é achado pelo telefone com ou sem o 9 (`contatos.js`).
 - **ENV-08** Trancada não recebe avisos de ausência nem de vencimento. (decisão do dono, 23/11/2026)
-- **ENV-09** WhatsApp do robô sem responder (verificação a cada 15 min, `wa-client.js`): 1 falha só registra; **2 seguidas** (~30 min) avisam a equipe **uma vez** por episódio e o robô tenta religar; enquanto não volta, tenta religar de hora em hora. Erro passageiro religa na hora, sem alarme.
+- **ENV-09** WhatsApp do robô sem responder (verificação a cada 15 min, `wa-client.js`): 1 falha só registra; **2 seguidas** (~30 min) avisam a equipe **uma vez** por episódio e o robô tenta religar; enquanto não volta, tenta religar de hora em hora. Erro passageiro religa na hora, sem alarme. Conectado mas sem as peças da biblioteca na página (`window.WWebJS`): o robô recarrega antes de enviar e na verificação; sem conseguir, conta como falha.
 
 ## Confirmação e follow-up da aula experimental
 - **CONF-01** Confirmação da aula de hoje 08:30 (seg–sáb) e de amanhã 15:30 (dom–sex). (decisão do dono, 23/11/2026)
