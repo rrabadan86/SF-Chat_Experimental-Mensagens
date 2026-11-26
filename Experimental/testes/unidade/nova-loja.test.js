@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const { ambienteIsolado } = require('../ajuda');
 
-const FORM = { host: '203.0.113.10', usuario: 'root', senha: 'exemplo-senha-root', studio: 'Studio SlimFit Marista', slug: 'marista', endereco: 'painel-marista', contaDuck: '1', evoUrl: 'https://evo.w12app.com.br/#/app/slimfit/22/inicio', evoEmail: 'robo@x.com', evoSenha: 'exemplo-evo-1', painelSenha: 'exemplo-painel-1' };
+const FORM = { host: '203.0.113.10', usuario: 'root', senha: 'exemplo-senha-root', studio: 'Studio SlimFit Marista', slug: 'marista', endereco: 'painel-marista', contaDuck: '1', evoUrl: 'https://evo.w12app.com.br/#/app/slimfit/22/inicio', evoEmail: 'robo@x.com', evoSenha: 'exemplo-evo-1', painelSenha: 'exemplo-painel-1', evoDns: 'exemplo-dns', evoToken: 'exemplo-token-1' };
 const TOKEN = '00000000-0000-0000-0000-000000000000'; // token de exemplo (só zeros)
 
 async function comAmb(fn) { const amb = ambienteIsolado(); try { return await fn(amb); } finally { delete process.env.DUCKDNS_TOKEN_1; delete process.env.DUCKDNS_NOME_1; try { fs.rmSync(amb.raiz, { recursive: true, force: true }); } catch (_) {} } }
@@ -79,7 +79,7 @@ test('NOV-01 nova loja: endereço primeiro, depois o servidor; DuckDNS recusou =
 
 test('NOV-01 nova loja: andamento — instalando, concluída, parou e sem contato (lê no servidor no máximo a cada 5 s)', () => comAmb(async (amb) => {
   const nl = amb.req('nova-loja');
-  let est = { slug: 'marista', studio: 'Studio SlimFit Marista', dominio: 'painel-marista.duckdns.org', host: '203.0.113.10', passos: { chave: {}, lancada: {} } };
+  let est = { slug: 'marista', studio: 'Studio SlimFit Marista', dominio: 'painel-marista.duckdns.org', host: '203.0.113.10', passos: { chave: {}, lancada: {} }, dados: { slug: 'marista' } };
   let leituras = 0, resp = { ok: true, terminou: false, codigo: null, linhas: ['📦 instalando'] };
   const remotoFn = { lerEstado: () => est, acompanhar: async () => { leituras++; return resp; } };
   assert.strictEqual((await nl.status('marista', { remotoFn, agora: 1000 })).fase, 'instalando');
@@ -89,7 +89,9 @@ test('NOV-01 nova loja: andamento — instalando, concluída, parou e sem contat
   const fim = await nl.status('marista', { remotoFn, agora: 7000 });
   assert.deepStrictEqual([fim.fase, fim.remoto.linhas], ['concluida', ['fim']]);
   resp = { ok: true, terminou: true, codigo: 1, linhas: ['❌'] };
-  assert.strictEqual((await nl.status('marista', { remotoFn, agora: 13000 })).fase, 'parou');
+  const parou = await nl.status('marista', { remotoFn, agora: 13000 });
+  assert.strictEqual(parou.fase, 'parou');
+  assert.deepStrictEqual(parou.dados, { slug: 'marista' }, 'o andamento traz os dados (sem segredo) para o botão "Continuar daqui"');
   resp = { ok: false, erro: 'Não consegui alcançar o servidor' };
   const sc = await nl.status('marista', { remotoFn, agora: 19000 });
   assert.deepStrictEqual([sc.fase, sc.erro], ['sem-contato', 'Não consegui alcançar o servidor']);
@@ -173,4 +175,21 @@ test('NOV-01 nova loja: só no painel do Bueno (NOVA_LOJA liga/desliga; sem ela,
   assert.match(perfis, /require\('\.\/nova-loja'\)\.ativa\(\) \? item\('novaloja'/, 'a aba só aparece onde está ligada');
   const rotas = fs.readFileSync(require('path').join(amb.exp, 'src', 'painel-mensagens.js'), 'utf8');
   assert.match(rotas, /url\.startsWith\('\/perfis\/novaloja\/'\) && !require\('\.\/nova-loja'\)\.ativa\(\)\) \{ res\.writeHead\(404/, 'e as rotas respondem 404 fora do Bueno');
+}));
+
+test('NOV-01 nova loja: na 1ª vez pede o que o script exige (login e integração do EVO); IA e grupo podem ficar para depois', () => comAmb(async (amb) => {
+  process.env.DUCKDNS_TOKEN_1 = TOKEN;
+  const nl = amb.req('nova-loja');
+  const remotoFn = { lerEstado: () => null, instalar: async () => ({ ok: true }) };
+  const duckFn = { subdominioDe: () => '', tokenDa: () => TOKEN };
+  for (const [campo] of [['evoDns'], ['evoToken'], ['evoEmail'], ['evoSenha']]) {
+    const r = nl.iniciar({ ...FORM, slug: 'x' + campo.toLowerCase(), [campo]: '' }, { duckFn, remotoFn });
+    assert.strictEqual(r.campo, campo, campo + ' é obrigatório na 1ª vez');
+  }
+  assert.strictEqual(nl.iniciar({ ...FORM, slug: 'semia', iaChave: '', grupoEquipe: '' }, { duckFn, remotoFn }).ok, true, 'sem IA e sem grupo instala');
+  // no "Continuar" (já lançada) não pede de novo: o que já foi gravado vale
+  assert.strictEqual(nl.iniciar({ ...FORM, slug: 'cont', evoDns: '', evoToken: '', evoSenha: '', senha: '', painelSenha: '' }, { duckFn, remotoFn: { ...remotoFn, lerEstado: () => ({ host: FORM.host, passos: { chave: {}, lancada: {} } }) } }).ok, true);
+  const sh = fs.readFileSync(require('path').resolve(__dirname, '..', '..', 'setup-novo-studio.sh'), 'utf8');
+  assert.doesNotMatch(sh, /\n\s*req ANTHROPIC_API_KEY/, 'a chave da IA vazia não reprova a instalação');
+  assert.match(sh, /ANTHROPIC_API_KEY vazio — a SoFIA só responde depois/);
 }));

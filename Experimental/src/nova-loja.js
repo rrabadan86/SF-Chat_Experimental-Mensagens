@@ -71,6 +71,11 @@ function iniciar(form, { duckFn = duck, remotoFn = remoto } = {}) {
   const est = remotoFn.lerEstado(d.slug);
   if (!senha && !(est && est.passos && est.passos.chave)) return { ok: false, erro: 'Falta a senha do servidor (só é pedida na primeira vez).', campo: 'senha' };
   if (!segredos.PAINEL_SENHA && !(est && est.passos && est.passos.lancada)) return { ok: false, erro: 'Escolha a senha do painel da loja nova (é com ela que você entra lá, usuário admin).', campo: 'painelSenha' };
+  // o que a conferência do script exige para ligar a loja (sem isso ela para antes de subir)
+  if (!(est && est.passos && est.passos.lancada)) {
+    for (const [k, campo, nome] of [['EVO_DNS', 'evoDns', 'o DNS da integração do EVO'], ['EVO_TOKEN', 'evoToken', 'a Secret Key da integração do EVO'], ['EVO_EMAIL', 'evoEmail', 'o e-mail do robô no EVO'], ['EVO_PASSWORD', 'evoSenha', 'a senha do robô no EVO']])
+      if (!segredos[k]) return { ok: false, erro: `Falta ${nome}: sem ele a instalação para antes de ligar a loja.`, campo };
+  }
   if (est && est.host && est.host !== d.host) return { ok: false, erro: `O apelido "${d.slug}" já foi usado para outro servidor (${est.host}). Escolha outro apelido.`, campo: 'slug' };
   if (emAndamento.has(d.slug) && !emAndamento.get(d.slug).fim) return { ok: false, erro: 'Essa instalação já está em andamento.', campo: 'slug' };
   const job = { linhas: [], inicio: Date.now(), fim: null, resultado: null };
@@ -103,7 +108,7 @@ function iniciar(form, { duckFn = duck, remotoFn = remoto } = {}) {
 async function status(slug, { remotoFn = remoto, agora = Date.now() } = {}) {
   const est = remotoFn.lerEstado(slug);
   const job = emAndamento.get(slug);
-  const base = { ok: true, slug, studio: est && est.studio, dominio: est && est.dominio, host: est && est.host, passos: (est && est.passos) || {}, painel: job ? { linhas: job.linhas.slice(), terminou: !!job.fim, resultado: job.resultado } : null };
+  const base = { ok: true, slug, studio: est && est.studio, dominio: est && est.dominio, host: est && est.host, passos: (est && est.passos) || {}, dados: (est && est.dados) || null, painel: job ? { linhas: job.linhas.slice(), terminou: !!job.fim, resultado: job.resultado } : null };
   if (job && !job.fim) return { ...base, fase: 'painel' };
   if (!est) return job ? { ...base, fase: 'painel' } : { ok: false, erro: 'Instalação não encontrada.' };
   if (!est.passos.lancada) return { ...base, fase: job && job.resultado && !job.resultado.ok ? 'parou' : 'nao-iniciada' };

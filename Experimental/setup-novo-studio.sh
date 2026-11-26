@@ -454,7 +454,11 @@ run_check() {
   else echo "   ✔ GRUPO_EQUIPE"; fi
 
   echo "▸ ChatBot/.env — SoFIA (IA no WhatsApp):"
-  req ANTHROPIC_API_KEY     "$CENV" "sem a chave da IA a SoFIA não responde."
+  # Chave da IA: opcional na instalação (decisão do dono, 26/11/2026) — dá para pôr depois no
+  # painel (SoFIA → Configuração → Credenciais); até lá a SoFIA não responde.
+  local ia; ia="$(envget ANTHROPIC_API_KEY "$CENV")"
+  if [ -z "$ia" ]; then echo "   ⚠️  ANTHROPIC_API_KEY vazio — a SoFIA só responde depois que a chave for posta no painel (SoFIA → Configuração → Credenciais)."; avisos=1
+  else echo "   ✔ ANTHROPIC_API_KEY"; fi
   req SOFIA_DIR             "$CENV" "a SoFIA grava as conversas aqui."
   req SOFIA_TOKEN           "$CENV" "sem ele o formulário recusa o agendamento da SoFIA."
   naoplaceholder SOFIA_BOOK_URL "$CENV" "SEU-PAINEL"

@@ -72,7 +72,7 @@ function secaoNovaLoja({ demo = false } = {}) {
       <h3 class="nl-t">4. EVO da loja</h3>
       <div class="cfg-grid">
         ${campo('evoUrl', 'Link do EVO', { ph: 'https://…/#/app/slimfit/22/…', obrig: true, dica: 'Abra o EVO da loja no navegador e copie o endereço da barra: o painel tira dali a rede e o número da unidade.' })}
-        ${campo('evoDns', 'DNS da integração', { dica: 'EVO → Configurações → Integração (API). Pode deixar para depois.' })}
+        ${campo('evoDns', 'DNS da integração', { dica: 'EVO → Configurações → Integração (API). Obrigatório: sem ele a instalação não liga a loja.' })}
         ${campo('evoToken', 'Secret Key da integração', { tipo: 'password' })}
         ${campo('evoEmail', 'E-mail do robô no EVO', { ph: 'robo@loja.com.br' })}
         ${campo('evoSenha', 'Senha do robô no EVO', { tipo: 'password' })}
@@ -94,6 +94,7 @@ function secaoNovaLoja({ demo = false } = {}) {
     <div id="nlAnd" class="card" hidden>
       <div class="ui-linha"><b id="nlTit">Andamento</b><span id="nlPill" class="sd-pill sd-warn">⏳</span></div>
       <ol id="nlPassos" class="quando" style="margin:10px 0 0;padding-left:20px"></ol>
+      <div id="nlCont" class="ui-linha" hidden style="margin-top:10px"><button type="button" class="ui-btn" id="nlContBt">Continuar daqui</button><span class="quando">Preenche o formulário acima com os dados desta loja (sem as senhas). Corrija o que faltou e clique em <b>Instalar a loja</b>.</span></div>
       <div id="nlConf" hidden style="margin-top:12px"></div>
       <pre id="nlLog" style="margin:10px 0 0;max-height:360px;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.78rem;background:var(--fundo,transparent);border:1px solid var(--linha);border-radius:10px;padding:10px"></pre>
     </div>`;
@@ -116,6 +117,7 @@ function secaoNovaLoja({ demo = false } = {}) {
       var fim=s.fase==='concluida'||s.fase==='parou'||s.fase==='nao-iniciada';timer=setTimeout(puxa,fim?30000:3000);}).catch(function(){if(minha===vez)timer=setTimeout(puxa,5000);});})();};
   function mostra(s){if(!s.ok){t('nlLog').textContent=s.erro||'Erro.';return;}
     t('nlTit').textContent=(s.studio||s.slug)+(s.dominio?' — '+s.dominio:'');
+    var ct=t('nlCont');ct.hidden=!(s.dados&&(s.fase==='parou'||s.fase==='nao-iniciada'));if(!ct.hidden)t('nlContBt').onclick=function(){nlContinuar(s.dados);};
     var f=FASES[s.fase]||['sd-warn',s.fase];t('nlPill').className='sd-pill '+f[0];t('nlPill').textContent=f[1];
     var p=s.passos||{},itens=[['conexao','Entrou no servidor'],['diagnostico','Servidor conferido'],['chave','Chave do painel instalada (senha esquecida)'],['lancada','Instalação iniciada'],['instalacao','Instalação concluída']];
     var ol=t('nlPassos');ol.textContent='';itens.forEach(function(i){var li=document.createElement('li');var x=p[i[0]];li.textContent=(x?(x.ok===false?'✗ ':'✓ '):'· ')+i[1];ol.appendChild(li);});
